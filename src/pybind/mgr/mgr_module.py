@@ -324,15 +324,20 @@ class CLICommand(object):
         if full_argspec.defaults:
             first_default -= len(full_argspec.defaults)
         args = []
+        positional = True
         for index, arg in enumerate(full_argspec.args):
             if arg in CLICommand.KNOWN_ARGS:
+                continue
+            if arg == '_end_positional_':
+                positional = False
                 continue
             assert arg in arg_spec, \
                 f"'{arg}' is not annotated for {f}: {full_argspec}"
             has_default = index >= first_default
             args.append(CephArgtype.to_argdesc(arg_spec[arg],
                                                dict(name=arg),
-                                               has_default))
+                                               has_default,
+                                               positional))
         return desc, arg_spec, first_default, ' '.join(args)
 
     def store_func_metadata(self, f: HandlerFuncType) -> None:
