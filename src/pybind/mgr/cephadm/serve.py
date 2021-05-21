@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import uuid
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
@@ -695,6 +696,28 @@ class CephadmServe:
             self.log.debug('cannot scale mon|mgr below 1)')
             return False
 
+        # progress
+        progress_id = str(uuid.uuid4())
+        delta: List[str] = []
+        if slots_to_add:
+            delta += [f'+{len(slots_to_add)}']
+        if daemons_to_remove:
+            delta += [f'-{len(daemons_to_remove)}']
+        progress_title = f'Updating {spec.service_name()} deployment ({" ".join(delta)} -> {len(all_slots)})'
+        progress_total = len(slots_to_add) + len(daemons_to_remove)
+        progress_done = 0
+
+        def update_progress() -> None:
+            self.mgr.remote(
+                'progress', 'update', progress_id,
+                ev_msg=progress_title,
+                ev_progress=(progress_done / progress_total),
+                add_to_ceph_s=True,
+            )
+
+        if progress_total:
+            update_progress()
+
         # add any?
         did_config = False
 
@@ -718,6 +741,7 @@ class CephadmServe:
                     # there is only 1 gateway.
                     self._remove_daemon(d.name(), d.hostname)
                     daemons_to_remove.remove(d)
+                    progress_done += 1
                     break
 
             # deploy new daemon
@@ -745,6 +769,8 @@ class CephadmServe:
                 daemon_spec = svc.prepare_create(daemon_spec)
                 self._create_daemon(daemon_spec)
                 r = True
+                progress_done += 1
+                update_progress()
             except (RuntimeError, OrchestratorError) as e:
                 self.mgr.events.for_service(
                     spec, 'ERROR',
@@ -754,6 +780,8 @@ class CephadmServe:
                 # later successes will also change to True
                 if r is None:
                     r = False
+                progress_done += 1
+                update_progress()
                 continue
 
             # add to daemon list so next name(s) will also be unique
@@ -779,6 +807,11 @@ class CephadmServe:
             r = True
             assert d.hostname is not None
             self._remove_daemon(d.name(), d.hostname)
+
+            progress_done += 1
+            update_progress()
+
+        self.mgr.remote('progress', 'complete', progress_id)
 
         if r is None:
             r = False
