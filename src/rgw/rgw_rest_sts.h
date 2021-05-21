@@ -33,10 +33,19 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   std::string get_role_tenant(const string& role_arn) const;
 
-  std::string get_cert_url(const string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
+  std::string get_jwks_url(const string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
 
   boost::optional<WebTokenEngine::token_t>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
+
+  vector<string>
+  get_x5c_certs_from_x5u_url(const DoutPrefixProvider* dpp, const string& x5u_url, optional_yield y) const;
+
+  void
+  validate_signature_using_cert(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const vector<string>& certs, const vector<string>& thumbprints, bool add_pem_str=true) const;
+
+  void
+  validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& n, const string& e, const string &algorithm) const;
 
   void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const;
 
