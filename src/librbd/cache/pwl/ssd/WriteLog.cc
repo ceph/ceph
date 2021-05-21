@@ -852,6 +852,12 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
     m_bytes_allocated -= bytes_to_free;
   }
 
+  {
+    std::lock_guard locker1(m_lock);
+    m_first_free_entry = *new_first_free_entry;
+    m_bytes_allocated -= bytes_to_free;
+  }
+
   bdev->aio_submit(&aio->ioc);
   *new_first_free_entry = pool_root.first_free_entry;
 }
