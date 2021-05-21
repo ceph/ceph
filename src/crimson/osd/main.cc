@@ -37,7 +37,10 @@ auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_e
   // collect all options consumed by seastar::app_template
   auto parsed = bpo::command_line_parser(std::distance(argv_begin, argv_end),
                                          argv_begin)
-    .options(app.get_options_description()).allow_unregistered().run();
+    .options(app.get_options_description())
+    .style(bpo::command_line_style::default_style &
+           ~bpo::command_line_style::allow_guessing)
+    .allow_unregistered().run();
   auto unknown_args = bpo::collect_unrecognized(parsed.options,
                                                 bpo::include_positional);
   std::vector<const char*> ceph_args, app_args;
