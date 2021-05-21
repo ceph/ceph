@@ -145,15 +145,18 @@ def _downgrade_packages(ctx, remote, pkgs, pkg_version, config):
     remote.run(args='sudo yum -y downgrade {}'.format(' '.join(pkgs_opt)))
     return [pkg for pkg in pkgs if pkg not in downgrade_pkgs]
 
-def _retry_if_503_in_output(remote, args):
+def _retry_if_failures_are_recoverable(remote, args):
     # wait at most 5 minutes
     with safe_while(sleep=10, tries=30) as proceed:
         while proceed():
             stdout = StringIO()
+            stderr = StringIO()
             try:
-                return remote.run(args=args, stdout=stdout)
+                return remote.run(args=args, stderr=stderr, stdout=stdout)
             except run.CommandFailedError:
                 if "status code: 503" in stdout.getvalue().lower():
+                    continue
+                if "failed to download metadata for repo" in stderr.getvalue().lower():
                     continue
                 else:
                     raise
@@ -250,14 +253,14 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
         rpm = _downgrade_packages(ctx, remote, rpm, pkg_version, config)
 
     if system_pkglist:
-        _retry_if_503_in_output(remote,
+        _retry_if_failures_are_recoverable(remote,
             args='{install_cmd} {rpms}'
                  .format(install_cmd=install_cmd, rpms=' '.join(rpm))
             )
     else:
         for cpack in rpm:
             if ldir:
-                _retry_if_503_in_output(remote,
+                _retry_if_failures_are_recoverable(remote,
                   args='''
                   if test -e {pkg} ; then
                     {remove_cmd} {pkg} ;
@@ -270,7 +273,7 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
                              pkg=os.path.join(ldir, cpack),
                              cpack=cpack))
             else:
-                _retry_if_503_in_output(remote,
+                _retry_if_failures_are_recoverable(remote,
                     args='{install_cmd} {cpack}'
                          .format(install_cmd=install_cmd, cpack=cpack)
                     )
