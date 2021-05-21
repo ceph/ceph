@@ -690,23 +690,23 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     pool_root.first_valid_entry = first_valid_entry;
 
     Context *ctx = new LambdaContext(
-          [this, flushed_sync_gen, first_valid_entry,
-          initial_first_valid_entry, retiring_entries](int r) {
-          uint64_t allocated_bytes = 0;
-          uint64_t cached_bytes = 0;
-          uint64_t former_log_pos = 0;
-          for (auto &entry : retiring_entries) {
-            ceph_assert(entry->log_entry_index != 0);
-            if (entry->log_entry_index != former_log_pos ) {
-              // Space for control blocks
-              allocated_bytes  += MIN_WRITE_ALLOC_SSD_SIZE;
-              former_log_pos = entry->log_entry_index;
-            }
-            if (entry->is_write_entry()) {
-              cached_bytes += entry->write_bytes();
-              //space for userdata
-              allocated_bytes += entry->get_aligned_data_size();
-            }
+      [this, first_valid_entry, initial_first_valid_entry,
+       retiring_entries](int r) {
+        uint64_t allocated_bytes = 0;
+        uint64_t cached_bytes = 0;
+        uint64_t former_log_pos = 0;
+        for (auto &entry : retiring_entries) {
+          ceph_assert(entry->log_entry_index != 0);
+          if (entry->log_entry_index != former_log_pos ) {
+            // Space for control blocks
+            allocated_bytes += MIN_WRITE_ALLOC_SSD_SIZE;
+            former_log_pos = entry->log_entry_index;
+          }
+          if (entry->is_write_entry()) {
+            cached_bytes += entry->write_bytes();
+            // space for userdata
+            allocated_bytes += entry->get_aligned_data_size();
+          }
         }
         {
           std::lock_guard locker(m_lock);
@@ -736,8 +736,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           this->process_writeback_dirty_entries();
         });
 
-      std::lock_guard locker(m_lock);
-      schedule_update_root(new_root, ctx);
+    std::lock_guard locker(m_lock);
+    schedule_update_root(new_root, ctx);
   } else {
     ldout(cct, 20) << "Nothing to retire" << dendl;
     return false;
