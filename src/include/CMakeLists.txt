@@ -36,3 +36,10 @@ if(WITH_RADOSGW)
     rados/rgw_file.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rados)
 endif()
+
+if(WITH_LIBCEPHFS)
+  install(FILES
+    cephfs/libcephfs.h
+    cephfs/ceph_ll_client.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cephfs)
+endif()
