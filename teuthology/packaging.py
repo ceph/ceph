@@ -1001,7 +1001,7 @@ class ShamanProject(GitbuilderProject):
                 build['distro'] == search_result['distro'] and
                 build['distro_version'] == search_result['distro_version'] and
                 build['flavor'] == search_result['flavor'] and
-                build['distro_arch'] in search_result['archs']
+                build['distro_arch'] == 'x86_64'
                ):
                 return build['status'] == 'completed'
         return False
