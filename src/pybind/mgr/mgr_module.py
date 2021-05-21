@@ -331,6 +331,14 @@ class CLICommand(object):
             if arg == '_end_positional_':
                 positional = False
                 continue
+            if (
+                arg == 'format'
+                or arg_spec[arg] is Optional[bool]
+                or arg_spec[arg] is bool
+            ):
+                # implicit switch to non-positional on any
+                # Optional[bool] or the --format option
+                positional = False
             assert arg in arg_spec, \
                 f"'{arg}' is not annotated for {f}: {full_argspec}"
             has_default = index >= first_default
