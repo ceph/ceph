@@ -434,14 +434,7 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
       }
     });
   // Append logs and update first_free_update
-  uint64_t bytes_allocated_updated;
-  append_ops(ops, append_ctx, new_first_free_entry, bytes_allocated_updated);
-
-  {
-    std::lock_guard locker1(m_lock);
-    m_first_free_entry = *new_first_free_entry;
-    m_bytes_allocated -= bytes_allocated_updated;
-  }
+  append_ops(ops, append_ctx, new_first_free_entry);
 
   if (ops.size()) {
     this->dispatch_deferred_writes();
@@ -717,12 +710,11 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
 
 template <typename I>
 void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
-                             uint64_t* new_first_free_entry,
-                             uint64_t &bytes_allocated) {
+                             uint64_t* new_first_free_entry) {
   GenericLogEntriesVector log_entries;
   CephContext *cct = m_image_ctx.cct;
   uint64_t span_payload_len = 0;
-  bytes_allocated = 0;
+  uint64_t bytes_to_free = 0;
   ldout(cct, 20) << "Appending " << ops.size() << " log entries." << dendl;
 
   *new_first_free_entry = pool_root.first_free_entry;
@@ -736,7 +728,7 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
     if (log_entries.size() == CONTROL_BLOCK_MAX_LOG_ENTRIES ||
         span_payload_len >= SPAN_MAX_DATA_LEN) {
       if (log_entries.size() > 1) {
-        bytes_allocated += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
+        bytes_to_free += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
       }
       write_log_entries(log_entries, aio, new_first_free_entry);
       log_entries.clear();
@@ -747,9 +739,15 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
   }
   if (!span_payload_len || !log_entries.empty()) {
     if (log_entries.size() > 1) {
-      bytes_allocated += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
+      bytes_to_free += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
     }
     write_log_entries(log_entries, aio, new_first_free_entry);
+  }
+
+  {
+    std::lock_guard locker1(m_lock);
+    m_first_free_entry = *new_first_free_entry;
+    m_bytes_allocated -= bytes_to_free;
   }
 
   bdev->aio_submit(&aio->ioc);
