@@ -499,6 +499,7 @@ class InternalNode final : public Node {
     auto& child_pos = child.parent_info().position;
     auto found = tracked_child_nodes.find(child_pos);
     if (found != tracked_child_nodes.end() && found->second == &child) {
+      assert(child.parent_info().ptr == this);
       return true;
     } else {
       return false;
@@ -647,6 +648,7 @@ class LeafNode final : public Node {
     auto& cursor_pos = cursor.get_position();
     auto found = tracked_cursors.find(cursor_pos);
     if (found != tracked_cursors.end() && found->second == &cursor) {
+      assert(cursor.ref_leaf_node == this);
       return true;
     } else {
       return false;
