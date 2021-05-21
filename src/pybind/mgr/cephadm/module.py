@@ -1383,10 +1383,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             )
         ]
 
-    def _check_valid_addr(self, host: str, addr: str) -> None:
+    def _check_valid_addr(self, host: str, addr: str) -> str:
         # make sure hostname is resolvable before trying to make a connection
         try:
-            utils.resolve_ip(addr)
+            ip_addr = utils.resolve_ip(addr)
         except OrchestratorError as e:
             msg = str(e) + f'''
 You may need to supply an address for {addr}
@@ -1417,6 +1417,7 @@ Then run the following:
             errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
             raise OrchestratorError('Host %s (%s) failed check(s): %s' % (
                 host, addr, errors))
+        return ip_addr
 
     def _add_host(self, spec):
         # type: (HostSpec) -> str
@@ -1426,7 +1427,9 @@ Then run the following:
         :param host: host name
         """
         assert_valid_host(spec.hostname)
-        self._check_valid_addr(spec.hostname, spec.addr)
+        ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+        if spec.addr == spec.hostname and ip_addr:
+            spec.addr = ip_addr
 
         # prime crush map?
         if spec.location:
@@ -1443,7 +1446,7 @@ Then run the following:
         self.offline_hosts_remove(spec.hostname)
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
-        return "Added host '{}'".format(spec.hostname)
+        return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
 
     @handle_orch_error
     def add_host(self, spec: HostSpec) -> str:
