@@ -7,13 +7,12 @@ Vulnerability Management Process
    information regarding the reported issue.
 #. If the team does not confirm the report, no further action will be
    taken and the issue will be closed.
-#. If the team confirms the report, a unique CVE identifier will be
-   assigned and shared with the reporter. The team will take action to
-   fix the issue.
-#. In cases in which a reporter has not chosen a date to disclose the
-   vulnerability, a Ceph security team member will work with the list members
-   to coordinate a release date (CRD). The agreed upon release date
-   will be shared with the reporter.
+#. If the report is confirmed by Ceph team members, a unique CVE identifier
+   will be assigned to the report and then shared with the reporter. The Ceph
+   security team will start working on a fix. 
+#. If a reporter has no disclosure date in mind, a Ceph security team
+   member will coordinate a release date (CRD) with the list members
+   and share the mutually agreed disclosure date with the reporter.
 #. The vulnerability disclosure / release date is set excluding Friday and
    holiday periods.
 #. Embargoes are preferred for Critical and High impact
