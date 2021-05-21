@@ -9,9 +9,9 @@
 #if __has_include(<filesystem>)
 #include <filesystem>
 namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
+#else
+#include <boost/filesystem.hpp>
+namespace fs = boost::filesystem;
 #endif
 #include <iostream>
 #include <fstream>
@@ -249,8 +249,8 @@ static void bluefs_import(
 
   BlueFS::FileWriter *h;
   fs::path file_path(dest_file);
-  const string dir = file_path.parent_path();
-  const string file_name = file_path.filename();
+  const string dir = file_path.parent_path().native();
+  const string file_name = file_path.filename().native();
   bs->open_for_write(dir, file_name, &h, false);
   uint64_t max_block = 4096;
   char buf[max_block];
