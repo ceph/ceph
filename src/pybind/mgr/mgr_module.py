@@ -1369,6 +1369,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_mgr_id()
 
+    def get_ceph_conf_path(self) -> str:
+        return self._ceph_get_ceph_conf_path()
+
     def get_ceph_option(self, key: str) -> OptionValue:
         return self._ceph_get_option(key)
 
