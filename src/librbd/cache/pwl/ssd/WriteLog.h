@@ -125,7 +125,7 @@ private:
                   uint64_t* new_first_free_entry,
                   uint64_t &bytes_allocated);
   void write_log_entries(GenericLogEntriesVector log_entries,
-                         AioTransContext *aio);
+                         AioTransContext *aio, uint64_t *pos);
   void schedule_update_root(std::shared_ptr<WriteLogPoolRoot> root,
                             Context *ctx);
   void enlist_op_update_root();
