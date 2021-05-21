@@ -66,12 +66,21 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return ret;
   }
 
-  static ertr::future<typename parent_t::fresh_impl_t> allocate(
+  static eagain_future<typename parent_t::fresh_impl_t> allocate(
       context_t c, bool is_level_tail, level_t level) {
+    LOG_PREFIX(OTree::Layout::allocate);
     // NOTE: Currently, all the node types have the same size for simplicity.
     // But depending on the requirement, we may need to make node size
     // configurable by field_type_t and node_type_t, or totally flexible.
     return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::input_output_error::handle(
+          [FNAME, c, is_level_tail, level] {
+        ERRORT("EIO -- node_size={}, is_level_tail={}, level={}",
+               c.t, node_stage_t::EXTENT_SIZE, is_level_tail, level);
+        ceph_abort("fatal error");
+      })
     ).safe_then([is_level_tail, level](auto extent) {
       assert(extent->is_initial_pending());
       auto mut = extent->get_mutable();
@@ -111,7 +120,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   level_t level() const override { return extent.read().level(); }
   node_offset_t free_size() const override { return extent.read().free_size(); }
   node_offset_t total_size() const override { return extent.read().total_size(); }
-  bool is_extent_valid() const override { return extent.is_valid(); }
+  bool is_extent_retired() const override { return extent.is_retired(); }
 
   std::optional<key_view_t> get_pivot_index() const override {
     if (is_level_tail()) {
@@ -258,7 +267,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return normalize(std::move(left_last_pos));
   }
 
-  ertr::future<NodeExtentMutable>
+  eagain_future<NodeExtentMutable>
   rebuild_extent(context_t c) override {
     return extent.rebuild(c).safe_then([this] (auto mut) {
       // addr may change
@@ -267,7 +276,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     });
   }
 
-  ertr::future<> retire_extent(context_t c) override {
+  eagain_future<> retire_extent(context_t c) override {
     return extent.retire(c);
   }
 

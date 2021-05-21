@@ -301,6 +301,7 @@ class NodeExtentAccessorT {
              extent->get_recorder()->is_empty());
       recorder = nullptr;
     } else {
+      // extent is invalid or retired
       ceph_abort("impossible path");
     }
 #ifndef NDEBUG
@@ -319,25 +320,26 @@ class NodeExtentAccessorT {
   const node_stage_t& read() const { return node_stage; }
   laddr_t get_laddr() const { return extent->get_laddr(); }
   nextent_state_t get_state() const {
-    assert(extent->is_valid());
+    assert(!is_retired());
     // we cannot rely on the underlying extent state because
     // FRESH/MUTATION_PENDING can become DIRTY after transaction submission.
     return state;
   }
 
-  bool is_valid() const {
+  bool is_retired() const {
     if (extent) {
-      assert(extent->is_valid());
-      return true;
-    } else {
+      // XXX SeaStore extent cannot distinguish between invalid and retired.
+      // assert(extent->is_valid());
       return false;
+    } else {
+      return true;
     }
   }
 
   // must be called before any mutate attempes.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
-    assert(extent->is_valid());
+    assert(!is_retired());
     if (state == nextent_state_t::READ_ONLY) {
       assert(!extent->is_pending());
       auto ref_recorder = recorder_t::create_for_encode(c.vb);
@@ -492,17 +494,24 @@ class NodeExtentAccessorT {
     std::memcpy(to.get_write(), extent->get_read(), extent->get_length());
   }
 
-  using ertr = NodeExtentManager::tm_ertr;
-  ertr::future<NodeExtentMutable> rebuild(context_t c) {
+  eagain_future<NodeExtentMutable> rebuild(context_t c) {
     LOG_PREFIX(OTree::Extent::rebuild);
-    assert(extent->is_valid());
+    assert(!is_retired());
     if (state == nextent_state_t::FRESH) {
       assert(extent->is_initial_pending());
       // already fresh and no need to record
-      return ertr::make_ready_future<NodeExtentMutable>(*mut);
+      return eagain_ertr::make_ready_future<NodeExtentMutable>(*mut);
     }
     assert(!extent->is_initial_pending());
     return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::input_output_error::handle(
+          [FNAME, c, l_to_discard = extent->get_laddr()] {
+        ERRORT("EIO during allocate -- node_size={}, to_discard={:x}",
+               c.t, node_stage_t::EXTENT_SIZE, l_to_discard);
+        ceph_abort("fatal error");
+      })
     ).safe_then([this, c, FNAME] (auto fresh_extent) {
       DEBUGT("update addr from {:#x} to {:#x} ...",
              c.t, extent->get_laddr(), fresh_extent->get_laddr());
@@ -520,15 +529,47 @@ class NodeExtentAccessorT {
       mut.emplace(fresh_mut);
       recorder = nullptr;
 
-      return c.nm.retire_extent(c.t, to_discard);
+      return c.nm.retire_extent(c.t, to_discard
+      ).handle_error(
+        eagain_ertr::pass_further{},
+        crimson::ct_error::input_output_error::handle(
+            [FNAME, c, l_to_discard = to_discard->get_laddr(),
+             l_fresh = fresh_extent->get_laddr()] {
+          ERRORT("EIO during retire -- to_disgard={:x}, fresh={:x}",
+                 c.t, l_to_discard, l_fresh);
+          ceph_abort("fatal error");
+        }),
+        crimson::ct_error::enoent::handle(
+            [FNAME, c, l_to_discard = to_discard->get_laddr(),
+             l_fresh = fresh_extent->get_laddr()] {
+          ERRORT("ENOENT during retire -- to_disgard={:x}, fresh={:x}",
+                 c.t, l_to_discard, l_fresh);
+          ceph_abort("fatal error");
+        })
+      );
     }).safe_then([this] {
       return *mut;
     });
   }
 
-  ertr::future<> retire(context_t c) {
-    assert(extent->is_valid());
-    return c.nm.retire_extent(c.t, std::move(extent));
+  eagain_future<> retire(context_t c) {
+    LOG_PREFIX(OTree::Extent::retire);
+    assert(!is_retired());
+    auto addr = extent->get_laddr();
+    return c.nm.retire_extent(c.t, std::move(extent)
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::input_output_error::handle(
+          [FNAME, c, addr] {
+        ERRORT("EIO -- addr={:x}", c.t, addr);
+        ceph_abort("fatal error");
+      }),
+      crimson::ct_error::enoent::handle(
+          [FNAME, c, addr] {
+        ERRORT("ENOENT -- addr={:x}", c.t, addr);
+        ceph_abort("fatal error");
+      })
+    );
   }
 
  private:

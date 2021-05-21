@@ -12,10 +12,6 @@
 
 namespace crimson::os::seastore::onode {
 
-using ertr = Value::ertr;
-template <class ValueT=void>
-using future = Value::future<ValueT>;
-
 ceph::bufferlist&
 ValueDeltaRecorder::get_encoded(NodeExtentMutable& payload_mut)
 {
@@ -40,7 +36,12 @@ bool Value::is_tracked() const
   return p_cursor->is_tracked();
 }
 
-future<> Value::extend(Transaction& t, value_size_t extend_size)
+void Value::invalidate()
+{
+  p_cursor.reset();
+}
+
+eagain_future<> Value::extend(Transaction& t, value_size_t extend_size)
 {
   assert(is_tracked());
   [[maybe_unused]] auto target_size = get_payload_size() + extend_size;
@@ -53,7 +54,7 @@ future<> Value::extend(Transaction& t, value_size_t extend_size)
   ;
 }
 
-future<> Value::trim(Transaction& t, value_size_t trim_size)
+eagain_future<> Value::trim(Transaction& t, value_size_t trim_size)
 {
   assert(is_tracked());
   assert(get_payload_size() > trim_size);

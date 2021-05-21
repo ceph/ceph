@@ -44,20 +44,12 @@ static DeltaRecorderURef create_replay_recorder(
   }
 }
 
-void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr)
-{
-  DEBUGT("update root {:#x} ...", c.t, addr);
-  root_addr = addr;
-  auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
-  nm->get_tm().write_onode_root(c.t, addr);
-}
-
 NodeExtentRef SeastoreNodeExtent::mutate(
     context_t c, DeltaRecorderURef&& _recorder)
 {
   DEBUGT("mutate {:#x} ...", c.t, get_laddr());
-  auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
-  auto extent = nm->get_tm().get_mutable_extent(c.t, this);
+  auto p_handle = static_cast<TransactionManagerHandle*>(&c.nm);
+  auto extent = p_handle->tm.get_mutable_extent(c.t, this);
   auto ret = extent->cast<SeastoreNodeExtent>();
   // A replayed extent may already have an empty recorder, we discard it for
   // simplicity.

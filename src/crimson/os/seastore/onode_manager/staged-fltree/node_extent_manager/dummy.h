@@ -74,7 +74,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
  protected:
   bool is_read_isolated() const override { return false; }
 
-  tm_future<NodeExtentRef> read_extent(
+  read_ertr::future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr, extent_len_t len) override {
     TRACET("reading {}B at {:#x} ...", t, len, addr);
     if constexpr (SYNC) {
@@ -87,7 +87,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     }
   }
 
-  tm_future<NodeExtentRef> alloc_extent(
+  alloc_ertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) override {
     TRACET("allocating {}B ...", t, len);
     if constexpr (SYNC) {
@@ -100,7 +100,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     }
   }
 
-  tm_future<> retire_extent(
+  retire_ertr::future<> retire_extent(
       Transaction& t, NodeExtentRef extent) override {
     TRACET("retiring {}B at {:#x} ...",
            t, extent->get_length(), extent->get_laddr());
@@ -114,7 +114,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     }
   }
 
-  tm_future<Super::URef> get_super(
+  getsuper_ertr::future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
     TRACET("get root ...", t);
     if constexpr (SYNC) {
@@ -132,7 +132,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   }
 
  private:
-  tm_future<NodeExtentRef> read_extent_sync(
+  read_ertr::future<NodeExtentRef> read_extent_sync(
       Transaction& t, laddr_t addr, extent_len_t len) {
     auto iter = allocate_map.find(addr);
     assert(iter != allocate_map.end());
@@ -140,10 +140,10 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     TRACET("read {}B at {:#x}", t, extent->get_length(), extent->get_laddr());
     assert(extent->get_laddr() == addr);
     assert(extent->get_length() == len);
-    return tm_ertr::make_ready_future<NodeExtentRef>(extent);
+    return read_ertr::make_ready_future<NodeExtentRef>(extent);
   }
 
-  tm_future<NodeExtentRef> alloc_extent_sync(
+  alloc_ertr::future<NodeExtentRef> alloc_extent_sync(
       Transaction& t, extent_len_t len) {
     assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
@@ -155,10 +155,10 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     allocate_map.insert({extent->get_laddr(), extent});
     DEBUGT("allocated {}B at {:#x}", t, extent->get_length(), extent->get_laddr());
     assert(extent->get_length() == len);
-    return tm_ertr::make_ready_future<NodeExtentRef>(extent);
+    return alloc_ertr::make_ready_future<NodeExtentRef>(extent);
   }
 
-  tm_future<> retire_extent_sync(
+  retire_ertr::future<> retire_extent_sync(
       Transaction& t, NodeExtentRef _extent) {
     auto& extent = static_cast<DummyNodeExtent&>(*_extent.get());
     auto addr = extent.get_laddr();
@@ -168,13 +168,13 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     assert(iter != allocate_map.end());
     allocate_map.erase(iter);
     DEBUGT("retired {}B at {:#x}", t, len, addr);
-    return tm_ertr::now();
+    return retire_ertr::now();
   }
 
-  tm_future<Super::URef> get_super_sync(
+  getsuper_ertr::future<Super::URef> get_super_sync(
       Transaction& t, RootNodeTracker& tracker) {
     TRACET("got root {:#x}", t, root_laddr);
-    return tm_ertr::make_ready_future<Super::URef>(
+    return getsuper_ertr::make_ready_future<Super::URef>(
         Super::URef(new DummySuper(t, tracker, &root_laddr)));
   }
 
