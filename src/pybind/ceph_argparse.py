@@ -836,34 +836,61 @@ class argdesc(object):
         like str(), but omit parameter names (except for CephString,
         which really needs them)
         """
-        if self.t == CephBool:
-            chunk = "--{0}".format(self.name.replace("_", "-"))
-        elif self.t == CephPrefix:
-            chunk = str(self.instance)
-        elif self.t == CephChoices:
-            if self.name == 'format':
-                chunk = f'--{self.name} {{{str(self.instance)}}}'
-            else:
+        if self.positional:
+            if self.t == CephBool:
+                chunk = "--{0}".format(self.name.replace("_", "-"))
+            elif self.t == CephPrefix:
                 chunk = str(self.instance)
-        elif self.t == CephOsdName:
-            # it just so happens all CephOsdName commands are named 'id' anyway,
-            # so <id|osd.id> is perfect.
-            chunk = '<id|osd.id>'
-        elif self.t == CephName:
-            # CephName commands similarly only have one arg of the
-            # type, so <type.id> is good.
-            chunk = '<type.id>'
-        elif self.t == CephInt:
-            chunk = '<{0}:int>'.format(self.name)
-        elif self.t == CephFloat:
-            chunk = '<{0}:float>'.format(self.name)
+            elif self.t == CephChoices:
+                if self.name == 'format':
+                    # this is for talking to legacy clusters only; new clusters
+                    # should properly mark format args as non-positional.
+                    chunk = f'--{self.name} {{{str(self.instance)}}}'
+                else:
+                    chunk = f'<{self.name}:{self.instance}>'
+            elif self.t == CephOsdName:
+                # it just so happens all CephOsdName commands are named 'id' anyway,
+                # so <id|osd.id> is perfect.
+                chunk = '<id|osd.id>'
+            elif self.t == CephName:
+                # CephName commands similarly only have one arg of the
+                # type, so <type.id> is good.
+                chunk = '<type.id>'
+            elif self.t == CephInt:
+                chunk = '<{0}:int>'.format(self.name)
+            elif self.t == CephFloat:
+                chunk = '<{0}:float>'.format(self.name)
+            else:
+                chunk = '<{0}>'.format(self.name)
+            s = chunk
+            if self.N:
+                s += '...'
+            if not self.req:
+                s = '[' + s + ']'
         else:
-            chunk = '<{0}>'.format(self.name)
-        s = chunk
-        if self.N:
-            s += '...'
-        if not self.req:
-            s = '[' + s + ']'
+            # non-positional
+            if self.t == CephBool:
+                chunk = "--{0}".format(self.name.replace("_", "-"))
+            elif self.t == CephPrefix:
+                chunk = str(self.instance)
+            elif self.t == CephChoices:
+                chunk = f'--{self.name} {{{str(self.instance)}}}'
+            elif self.t == CephOsdName:
+                chunk = f'--{self.name} <id|osd.id>'
+            elif self.t == CephName:
+                chunk = f'--{self.name} <type.id>'
+            elif self.t == CephInt:
+                chunk = f'--{self.name} <int>'
+            elif self.t == CephFloat:
+                chunk = f'--{self.name} <float>'
+            else:
+                chunk = f'--{self.name} <value>'
+            s = chunk
+            if self.N:
+                s += '...'
+            if not self.req:  # req should *always* be false
+                s = '[' + s + ']'
+
         return s
 
     def complete(self, s):
