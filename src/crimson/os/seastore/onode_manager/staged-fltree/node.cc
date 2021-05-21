@@ -15,11 +15,6 @@
 #include "stages/node_stage_layout.h"
 
 namespace crimson::os::seastore::onode {
-
-using node_ertr = Node::node_ertr;
-template <class ValueT=void>
-using node_future = Node::node_future<ValueT>;
-
 /*
  * tree_cursor_t
  */
@@ -55,7 +50,7 @@ tree_cursor_t::~tree_cursor_t()
   }
 }
 
-tree_cursor_t::future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 tree_cursor_t::get_next(context_t c)
 {
   assert(is_tracked());
@@ -88,15 +83,15 @@ void tree_cursor_t::assert_next_to(
 }
 
 template <bool FORCE_MERGE>
-tree_cursor_t::future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 tree_cursor_t::erase(context_t c, bool get_next)
 {
   assert(is_tracked());
   return ref_leaf_node->erase<FORCE_MERGE>(c, position, get_next);
 }
-template tree_cursor_t::future<Ref<tree_cursor_t>>
+template eagain_future<Ref<tree_cursor_t>>
 tree_cursor_t::erase<true>(context_t, bool);
-template tree_cursor_t::future<Ref<tree_cursor_t>>
+template eagain_future<Ref<tree_cursor_t>>
 tree_cursor_t::erase<false>(context_t, bool);
 
 MatchKindCMP tree_cursor_t::compare_to(
@@ -128,14 +123,14 @@ MatchKindCMP tree_cursor_t::compare_to(
   return ret;
 }
 
-tree_cursor_t::future<>
+eagain_future<>
 tree_cursor_t::extend_value(context_t c, value_size_t extend_size)
 {
   assert(is_tracked());
   return ref_leaf_node->extend_value(c, position, extend_size);
 }
 
-tree_cursor_t::future<>
+eagain_future<>
 tree_cursor_t::trim_value(context_t c, value_size_t trim_size)
 {
   assert(is_tracked());
@@ -282,20 +277,13 @@ Node::Node(NodeImplURef&& impl) : impl{std::move(impl)} {}
 
 Node::~Node()
 {
-  // XXX: tolerate failure between allocate() and as_child()
-  if (!super && !_parent_info.has_value()) {
-    // To erase a node:
-    // 1. I'm not tracking any children or cursors
-    // 2. unlink parent/super --ptr-> me
-    // 3. unlink me --ref-> parent/super
-    // 4. extent is retired
-    assert(!impl->is_extent_valid());
-
-    // TODO: maybe its possible when eagain happens internally, we should
-    // revisit to make sure tree operations can be aborted normally,
-    // without resource leak or hitting unexpected asserts.
+  if (!is_tracked()) {
+    // possible scenarios:
+    //   a. I'm erased;
+    //   b. Eagain happened after the node extent is allocated/loaded
+    //      and before the node is initialized correctly;
   } else {
-    assert(impl->is_extent_valid());
+    assert(!impl->is_extent_retired());
     if (is_root()) {
       super->do_untrack_root(*this);
     } else {
@@ -309,7 +297,7 @@ level_t Node::level() const
   return impl->level();
 }
 
-node_future<Node::search_result_t> Node::lower_bound(
+eagain_future<Node::search_result_t> Node::lower_bound(
     context_t c, const key_hobj_t& key)
 {
   return seastar::do_with(
@@ -319,7 +307,7 @@ node_future<Node::search_result_t> Node::lower_bound(
   );
 }
 
-node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
+eagain_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
     context_t c, const key_hobj_t& key, value_config_t vconf)
 {
   return seastar::do_with(
@@ -327,14 +315,14 @@ node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
       return lower_bound_tracked(c, key, history
       ).safe_then([c, &key, vconf, &history](auto result) {
         if (result.match() == MatchKindBS::EQ) {
-          return node_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
+          return eagain_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
               std::make_pair(result.p_cursor, false));
         } else {
           auto leaf_node = result.p_cursor->get_leaf_node();
           return leaf_node->insert_value(
               c, key, vconf, result.p_cursor->get_position(), history, result.mstat
           ).safe_then([](auto p_cursor) {
-            return node_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
+            return seastar::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
                 std::make_pair(p_cursor, true));
           });
         }
@@ -343,12 +331,12 @@ node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
   );
 }
 
-node_future<std::size_t> Node::erase(
+eagain_future<std::size_t> Node::erase(
     context_t c, const key_hobj_t& key)
 {
   return lower_bound(c, key).safe_then([c] (auto result) {
     if (result.match() != MatchKindBS::EQ) {
-      return node_ertr::make_ready_future<std::size_t>(0);
+      return eagain_ertr::make_ready_future<std::size_t>(0);
     }
     auto ref_cursor = result.p_cursor;
     return ref_cursor->erase(c, false
@@ -360,7 +348,7 @@ node_future<std::size_t> Node::erase(
   });
 }
 
-node_future<tree_stats_t> Node::get_tree_stats(context_t c)
+eagain_future<tree_stats_t> Node::get_tree_stats(context_t c)
 {
   return seastar::do_with(
     tree_stats_t(), [this, c](auto& stats) {
@@ -393,7 +381,7 @@ void Node::test_make_destructable(
   make_root(c, std::move(_super));
 }
 
-node_future<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
+eagain_future<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::Node::mkfs);
   return LeafNode::allocate_root(c, root_tracker
@@ -402,10 +390,16 @@ node_future<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
   });
 }
 
-node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracker)
+eagain_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::Node::load_root);
   return c.nm.get_super(c.t, root_tracker
+  ).handle_error(
+    eagain_ertr::pass_further{},
+    crimson::ct_error::input_output_error::handle([FNAME, c] {
+      ERRORT("EIO during get_super()", c.t);
+      ceph_abort("fatal error");
+    })
   ).safe_then([c, &root_tracker, FNAME](auto&& _super) {
     auto root_addr = _super->get_root_laddr();
     assert(root_addr != L_ADDR_NULL);
@@ -418,7 +412,7 @@ node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracke
       std::ignore = c; // as only used in an assert
       std::ignore = root_tracker;
       assert(root == root_tracker.get_root(c.t));
-      return node_ertr::make_ready_future<Ref<Node>>(root);
+      return seastar::make_ready_future<Ref<Node>>(root);
     });
   });
 }
@@ -431,21 +425,32 @@ void Node::make_root(context_t c, Super::URef&& _super)
 
 void Node::as_root(Super::URef&& _super)
 {
-  assert(!super && !_parent_info);
+  assert(!is_tracked());
   assert(_super->get_root_laddr() == impl->laddr());
   assert(impl->is_level_tail());
   super = std::move(_super);
   super->do_track_root(*this);
+  assert(is_root());
 }
 
-node_future<> Node::upgrade_root(context_t c)
+Super::URef Node::deref_super()
+{
+  assert(is_root());
+  assert(super->get_root_laddr() == impl->laddr());
+  assert(impl->is_level_tail());
+  super->do_untrack_root(*this);
+  auto ret = std::move(super);
+  assert(!is_tracked());
+  return ret;
+}
+
+eagain_future<> Node::upgrade_root(context_t c)
 {
   LOG_PREFIX(OTree::Node::upgrade_root);
-  assert(is_root());
-  assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
-  super->do_untrack_root(*this);
-  return InternalNode::allocate_root(c, impl->level(), impl->laddr(), std::move(super)
+  auto super_to_move = deref_super();
+  return InternalNode::allocate_root(
+      c, impl->level(), impl->laddr(), std::move(super_to_move)
   ).safe_then([this, c, FNAME](auto new_root) {
     as_child(search_position_t::end(), new_root);
     INFOT("upgraded from {} to {}",
@@ -456,20 +461,32 @@ node_future<> Node::upgrade_root(context_t c)
 template <bool VALIDATE>
 void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node)
 {
-  // I must be already untracked.
-  assert(!super);
+  assert(!is_tracked() || !is_root());
 #ifndef NDEBUG
+  // Although I might have an outdated _parent_info during fixing,
+  // I must be already untracked.
   if (_parent_info.has_value()) {
     assert(!_parent_info->ptr->check_is_tracking(*this));
   }
 #endif
   _parent_info = parent_info_t{pos, parent_node};
   parent_info().ptr->do_track_child<VALIDATE>(*this);
+  assert(!is_root());
 }
 template void Node::as_child<true>(const search_position_t&, Ref<InternalNode>);
 template void Node::as_child<false>(const search_position_t&, Ref<InternalNode>);
 
-node_future<> Node::apply_split_to_parent(
+Ref<InternalNode> Node::deref_parent()
+{
+  assert(!is_root());
+  auto parent_ref = std::move(parent_info().ptr);
+  parent_ref->do_untrack_child(*this);
+  _parent_info.reset();
+  assert(!is_tracked());
+  return parent_ref;
+}
+
+eagain_future<> Node::apply_split_to_parent(
     context_t c,
     Ref<Node>&& this_ref,
     Ref<Node>&& split_right,
@@ -482,7 +499,7 @@ node_future<> Node::apply_split_to_parent(
       c, std::move(this_ref), std::move(split_right), update_right_index);
 }
 
-node_future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 Node::get_next_cursor_from_parent(context_t c)
 {
   assert(!impl->is_level_tail());
@@ -491,7 +508,7 @@ Node::get_next_cursor_from_parent(context_t c)
 }
 
 template <bool FORCE_MERGE>
-node_future<>
+eagain_future<>
 Node::try_merge_adjacent(
     context_t c, bool update_parent_index, Ref<Node>&& this_ref)
 {
@@ -505,14 +522,14 @@ Node::try_merge_adjacent(
         return fix_parent_index(c, std::move(this_ref), false);
       } else {
         parent_info().ptr->validate_child_tracked(*this);
-        return node_ertr::now();
+        return eagain_ertr::now();
       }
     }
   }
 
   return parent_info().ptr->get_child_peers(c, parent_info().position
   ).safe_then([c, this_ref = std::move(this_ref), this, FNAME,
-               update_parent_index] (auto lr_nodes) mutable -> node_future<> {
+               update_parent_index] (auto lr_nodes) mutable -> eagain_future<> {
     auto& [lnode, rnode] = lr_nodes;
     Ref<Node> left_for_merge;
     Ref<Node> right_for_merge;
@@ -595,16 +612,22 @@ Node::try_merge_adjacent(
       return fix_parent_index(c, std::move(*p_this_ref), false);
     } else {
       parent_info().ptr->validate_child_tracked(*this);
-      return node_ertr::now();
+      return eagain_ertr::now();
     }
     // XXX: rebalance
   });
 }
-template node_future<> Node::try_merge_adjacent<true>(context_t, bool, Ref<Node>&&);
-template node_future<> Node::try_merge_adjacent<false>(context_t, bool, Ref<Node>&&);
+template eagain_future<> Node::try_merge_adjacent<true>(context_t, bool, Ref<Node>&&);
+template eagain_future<> Node::try_merge_adjacent<false>(context_t, bool, Ref<Node>&&);
 
-node_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
+eagain_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
 {
+  // To erase a node:
+  // 1. I'm supposed to have already untracked any children or cursors
+  // 2. unlink parent/super --ptr-> me
+  // 3. unlink me --ref-> parent/super
+  // 4. retire extent
+  // 5. destruct node
   assert(this_ref.get() == this);
   assert(!is_tracking());
   assert(!is_root());
@@ -613,29 +636,52 @@ node_future<> Node::erase_node(context_t c, Ref<Node>&& this_ref)
 }
 
 template <bool FORCE_MERGE>
-node_future<> Node::fix_parent_index(
+eagain_future<> Node::fix_parent_index(
     context_t c, Ref<Node>&& this_ref, bool check_downgrade)
 {
   assert(!is_root());
   assert(this == this_ref.get());
-  auto& parent = parent_info().ptr;
-  // one-way unlink
-  parent->do_untrack_child(*this);
-  // the rest of parent tracks should be correct
-  parent->validate_tracked_children();
-  return parent->fix_index<FORCE_MERGE>(c, std::move(this_ref), check_downgrade);
+  return parent_info().ptr->fix_index<FORCE_MERGE>(
+      c, std::move(this_ref), check_downgrade);
 }
-template node_future<> Node::fix_parent_index<true>(context_t, Ref<Node>&&, bool);
-template node_future<> Node::fix_parent_index<false>(context_t, Ref<Node>&&, bool);
+template eagain_future<> Node::fix_parent_index<true>(context_t, Ref<Node>&&, bool);
+template eagain_future<> Node::fix_parent_index<false>(context_t, Ref<Node>&&, bool);
 
-node_future<Ref<Node>> Node::load(
+eagain_future<Ref<Node>> Node::load(
     context_t c, laddr_t addr, bool expect_is_level_tail)
 {
+  LOG_PREFIX(OTree::Node::load);
   // NOTE:
   // *option1: all types of node have the same length;
   // option2: length is defined by node/field types;
   // option3: length is totally flexible;
   return c.nm.read_extent(c.t, addr, NODE_BLOCK_SIZE
+  ).handle_error(
+    eagain_ertr::pass_further{},
+    crimson::ct_error::input_output_error::handle(
+        [FNAME, c, addr, expect_is_level_tail] {
+      ERRORT("EIO -- addr={:x}, is_level_tail={}",
+             c.t, addr, expect_is_level_tail);
+      ceph_abort("fatal error");
+    }),
+    crimson::ct_error::invarg::handle(
+        [FNAME, c, addr, expect_is_level_tail] {
+      ERRORT("EINVAL -- addr={:x}, is_level_tail={}",
+             c.t, addr, expect_is_level_tail);
+      ceph_abort("fatal error");
+    }),
+    crimson::ct_error::enoent::handle(
+        [FNAME, c, addr, expect_is_level_tail] {
+      ERRORT("ENOENT -- addr={:x}, is_level_tail={}",
+             c.t, addr, expect_is_level_tail);
+      ceph_abort("fatal error");
+    }),
+    crimson::ct_error::erange::handle(
+        [FNAME, c, addr, expect_is_level_tail] {
+      ERRORT("ERANGE -- addr={:x}, is_level_tail={}",
+             c.t, addr, expect_is_level_tail);
+      ceph_abort("fatal error");
+    })
   ).safe_then([expect_is_level_tail](auto extent) {
     auto [node_type, field_type] = extent->get_types();
     if (node_type == node_type_t::LEAF) {
@@ -650,7 +696,7 @@ node_future<Ref<Node>> Node::load(
   });
 }
 
-node_future<NodeExtentMutable> Node::rebuild_extent(context_t c)
+eagain_future<NodeExtentMutable> Node::rebuild_extent(context_t c)
 {
   LOG_PREFIX(OTree::Node::rebuild_extent);
   DEBUGT("{} ...", c.t, get_name());
@@ -662,15 +708,13 @@ node_future<NodeExtentMutable> Node::rebuild_extent(context_t c)
   return impl->rebuild_extent(c);
 }
 
-node_future<> Node::retire(context_t c, Ref<Node>&& this_ref)
+eagain_future<> Node::retire(context_t c, Ref<Node>&& this_ref)
 {
   LOG_PREFIX(OTree::Node::retire);
   DEBUGT("{} ...", c.t, get_name());
   assert(this_ref.get() == this);
   assert(!is_tracking());
-  assert(!super);
-  // make sure the parent also has untracked this node
-  assert(!_parent_info.has_value());
+  assert(!is_tracked());
   assert(this_ref->use_count() == 1);
 
   return impl->retire_extent(c
@@ -698,7 +742,7 @@ void Node::make_tail(context_t c)
 InternalNode::InternalNode(InternalNodeImpl* impl, NodeImplURef&& impl_ref)
   : Node(std::move(impl_ref)), impl{impl} {}
 
-node_future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
 {
   impl->validate_non_empty();
@@ -724,7 +768,7 @@ InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
   }
 }
 
-node_future<> InternalNode::apply_child_split(
+eagain_future<> InternalNode::apply_child_split(
     context_t c, Ref<Node>&& left_child, Ref<Node>&& right_child,
     bool update_right_index)
 {
@@ -739,6 +783,9 @@ node_future<> InternalNode::apply_child_split(
     assert(right_child->impl->is_level_tail());
     assert(!update_right_index);
   }
+
+  // right_child has not assigned parent yet
+  assert(!right_child->is_tracked());
 #endif
 
   impl->prepare_mutate(c);
@@ -769,24 +816,23 @@ node_future<> InternalNode::apply_child_split(
       return apply_split_to_parent(
           c, std::move(this_ref), std::move(split_right), false);
     } else {
-      return node_ertr::now();
+      return eagain_ertr::now();
     }
   }).safe_then([c, update_right_index,
                 right_child = std::move(right_child)] () mutable {
     if (update_right_index) {
-      // right_child must be already untracked by insert_or_split()
-      return right_child->parent_info().ptr->fix_index(
-          c, std::move(right_child), false);
+      // XXX: might not need to call validate_tracked_children() in fix_index()
+      return right_child->fix_parent_index(c, std::move(right_child), false);
     } else {
       // there is no need to call try_merge_adjacent() because
       // the filled size of the inserted node or the split right node
       // won't be reduced if update_right_index is false.
-      return node_ertr::now();
+      return eagain_ertr::now();
     }
   });
 }
 
-node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
+eagain_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
 {
   LOG_PREFIX(OTree::InternalNode::erase_child);
   // this is a special version of recursive merge
@@ -798,14 +844,14 @@ node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
   // and trigger prv_child_ref->try_merge_adjacent() at the end
   bool fix_tail = (child_ref->parent_info().position.is_end() &&
                    !impl->is_keys_empty());
-  return node_ertr::now().safe_then([c, this, fix_tail] {
+  return seastar::now().then([c, this, fix_tail] {
     if (fix_tail) {
       search_position_t new_tail_pos;
       const laddr_packed_t* new_tail_p_addr = nullptr;
       impl->get_largest_slot(&new_tail_pos, nullptr, &new_tail_p_addr);
       return get_or_track_child(c, new_tail_pos, new_tail_p_addr->value);
     } else {
-      return node_ertr::make_ready_future<Ref<Node>>();
+      return eagain_ertr::make_ready_future<Ref<Node>>();
     }
   }).safe_then([c, this, child_ref = std::move(child_ref), FNAME]
                (auto&& new_tail_child) mutable {
@@ -827,9 +873,8 @@ node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
             c.t, get_name(), child_ref->get_name(), child_pos);
     }
 
-    do_untrack_child(*child_ref);
-    Ref<Node> this_ref = this;
-    child_ref->_parent_info.reset();
+    Ref<Node> this_ref = child_ref->deref_parent();
+    assert(this_ref == this);
     return child_ref->retire(c, std::move(child_ref)
     ).safe_then([c, this, child_pos, FNAME,
                  this_ref = std::move(this_ref)] () mutable {
@@ -901,23 +946,24 @@ node_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
         return new_tail_child->try_merge_adjacent(
             c, false, std::move(new_tail_child));
       } else {
-        return node_ertr::now();
+        return eagain_ertr::now();
       }
     });
   });
 }
 
 template <bool FORCE_MERGE>
-node_future<> InternalNode::fix_index(
+eagain_future<> InternalNode::fix_index(
     context_t c, Ref<Node>&& child, bool check_downgrade)
 {
   LOG_PREFIX(OTree::InternalNode::fix_index);
   impl->validate_non_empty();
 
-  auto& child_pos = child->parent_info().position;
-  // child must already be untracked before calling fix_index()
-  assert(tracked_child_nodes.find(child_pos) == tracked_child_nodes.end());
   validate_child_inconsistent(*child);
+  auto& child_pos = child->parent_info().position;
+  Ref<Node> this_ref = child->deref_parent();
+  assert(this_ref == this);
+  validate_tracked_children();
 
   impl->prepare_mutate(c);
 
@@ -939,7 +985,6 @@ node_future<> InternalNode::fix_index(
                       : update_parent_index = false;
   }
 
-  Ref<Node> this_ref = this;
   return insert_or_split(c, next_pos, new_key, child
   ).safe_then([this, c, update_parent_index, check_downgrade,
                this_ref = std::move(this_ref)] (auto split_right) mutable {
@@ -957,7 +1002,7 @@ node_future<> InternalNode::fix_index(
           // no need to call try_downgrade_root() because the number of keys
           // has not changed, and I must have at least 2 keys.
           assert(!impl->is_keys_empty());
-          return node_ertr::now();
+          return eagain_ertr::now();
         }
       } else {
         // for non-root, maybe need merge adjacent or fix parent,
@@ -970,7 +1015,7 @@ node_future<> InternalNode::fix_index(
 }
 
 template <bool FORCE_MERGE>
-node_future<> InternalNode::apply_children_merge(
+eagain_future<> InternalNode::apply_children_merge(
     context_t c, Ref<Node>&& left_child, laddr_t origin_left_addr,
     Ref<Node>&& right_child, bool update_index)
 {
@@ -1015,7 +1060,7 @@ node_future<> InternalNode::apply_children_merge(
   impl->replace_child_addr(right_pos, left_addr, right_addr);
 
   // update track from right_pos => right_child to left_child
-  do_untrack_child(*left_child);
+  left_child->deref_parent();
   replace_track(left_child, right_child, update_index);
 
   // erase left_pos from layout
@@ -1049,12 +1094,12 @@ node_future<> InternalNode::apply_children_merge(
     }
   });
 }
-template node_future<> InternalNode::apply_children_merge<true>(
+template eagain_future<> InternalNode::apply_children_merge<true>(
     context_t, Ref<Node>&&, laddr_t, Ref<Node>&&, bool);
-template node_future<> InternalNode::apply_children_merge<false>(
+template eagain_future<> InternalNode::apply_children_merge<false>(
     context_t, Ref<Node>&&, laddr_t, Ref<Node>&&, bool);
 
-node_future<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
+eagain_future<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
     context_t c, const search_position_t& pos)
 {
   // assume I'm already ref counted by caller
@@ -1103,27 +1148,27 @@ node_future<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
     }
   }
 
-  return node_ertr::now().safe_then([this, c, prev_pos, prev_p_child_addr] {
+  return seastar::now().then([this, c, prev_pos, prev_p_child_addr] {
     if (prev_p_child_addr != nullptr) {
       return get_or_track_child(c, prev_pos, prev_p_child_addr->value);
     } else {
-      return node_ertr::make_ready_future<Ref<Node>>();
+      return eagain_ertr::make_ready_future<Ref<Node>>();
     }
   }).safe_then([this, c, next_pos, next_p_child_addr] (Ref<Node> lnode) {
     if (next_p_child_addr != nullptr) {
       return get_or_track_child(c, next_pos, next_p_child_addr->value
       ).safe_then([lnode] (Ref<Node> rnode) {
-        return node_ertr::make_ready_future<std::pair<Ref<Node>, Ref<Node>>>(
+        return seastar::make_ready_future<std::pair<Ref<Node>, Ref<Node>>>(
             lnode, rnode);
       });
     } else {
-      return node_ertr::make_ready_future<std::pair<Ref<Node>, Ref<Node>>>(
+      return eagain_ertr::make_ready_future<std::pair<Ref<Node>, Ref<Node>>>(
           lnode, nullptr);
     }
   });
 }
 
-node_future<Ref<InternalNode>> InternalNode::allocate_root(
+eagain_future<Ref<InternalNode>> InternalNode::allocate_root(
     context_t c, level_t old_root_level,
     laddr_t old_root_addr, Super::URef&& super)
 {
@@ -1140,7 +1185,7 @@ node_future<Ref<InternalNode>> InternalNode::allocate_root(
   });
 }
 
-node_future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 InternalNode::lookup_smallest(context_t c)
 {
   impl->validate_non_empty();
@@ -1153,7 +1198,7 @@ InternalNode::lookup_smallest(context_t c)
   });
 }
 
-node_future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 InternalNode::lookup_largest(context_t c)
 {
   // NOTE: unlike LeafNode::lookup_largest(), this only works for the tail
@@ -1167,7 +1212,7 @@ InternalNode::lookup_largest(context_t c)
   });
 }
 
-node_future<Node::search_result_t>
+eagain_future<Node::search_result_t>
 InternalNode::lower_bound_tracked(
     context_t c, const key_hobj_t& key, MatchHistory& history)
 {
@@ -1179,7 +1224,7 @@ InternalNode::lower_bound_tracked(
   });
 }
 
-node_future<> InternalNode::do_get_tree_stats(
+eagain_future<> InternalNode::do_get_tree_stats(
     context_t c, tree_stats_t& stats)
 {
   impl->validate_non_empty();
@@ -1199,24 +1244,24 @@ node_future<> InternalNode::do_get_tree_stats(
       pos = search_position_t::begin();
       impl->get_slot(pos, nullptr, &p_child_addr);
       return crimson::do_until(
-          [this, this_ref, c, &stats, &pos, &p_child_addr]() -> node_future<bool> {
+          [this, this_ref, c, &stats, &pos, &p_child_addr]() -> eagain_future<bool> {
         return get_or_track_child(c, pos, p_child_addr->value
         ).safe_then([c, &stats](auto child) {
           return child->do_get_tree_stats(c, stats);
         }).safe_then([this, this_ref, &pos, &p_child_addr] {
           if (pos.is_end()) {
-            return node_ertr::make_ready_future<bool>(true);
+            return seastar::make_ready_future<bool>(true);
           } else {
             impl->get_next_slot(pos, nullptr, &p_child_addr);
             if (pos.is_end()) {
               if (impl->is_level_tail()) {
                 p_child_addr = impl->get_tail_value();
-                return node_ertr::make_ready_future<bool>(false);
+                return seastar::make_ready_future<bool>(false);
               } else {
-                return node_ertr::make_ready_future<bool>(true);
+                return seastar::make_ready_future<bool>(true);
               }
             } else {
-              return node_ertr::make_ready_future<bool>(false);
+              return seastar::make_ready_future<bool>(false);
             }
           }
         });
@@ -1279,7 +1324,7 @@ void InternalNode::track_merge(
   validate_tracked_children();
 }
 
-node_future<> InternalNode::test_clone_root(
+eagain_future<> InternalNode::test_clone_root(
     context_t c_other, RootNodeTracker& tracker_other) const
 {
   assert(is_root());
@@ -1291,6 +1336,9 @@ node_future<> InternalNode::test_clone_root(
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
     return c_other.nm.get_super(c_other.t, tracker_other
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::assert_all{"Invalid error during test clone"}
     ).safe_then([c_other, cloned_root](auto&& super_other) {
       cloned_root->make_root_new(c_other, std::move(super_other));
       return cloned_root;
@@ -1310,7 +1358,7 @@ node_future<> InternalNode::test_clone_root(
   });
 }
 
-node_future<> InternalNode::try_downgrade_root(
+eagain_future<> InternalNode::try_downgrade_root(
     context_t c, Ref<Node>&& this_ref)
 {
   LOG_PREFIX(OTree::InternalNode::try_downgrade_root);
@@ -1319,7 +1367,7 @@ node_future<> InternalNode::try_downgrade_root(
   assert(impl->is_level_tail());
   if (!impl->is_keys_empty()) {
     // I have more than 1 values, no need to downgrade
-    return node_ertr::now();
+    return eagain_ertr::now();
   }
 
   // proceed downgrade root to the only child
@@ -1336,16 +1384,15 @@ node_future<> InternalNode::try_downgrade_root(
       ceph_assert(!child->impl->is_keys_empty());
     }
 
-    this->super->do_untrack_root(*this);
     assert(tracked_child_nodes.size() == 1);
-    do_untrack_child(*child);
-    child->_parent_info.reset();
-    child->make_root_from(c, std::move(this->super), impl->laddr());
+    child->deref_parent();
+    auto super_to_move = deref_super();
+    child->make_root_from(c, std::move(super_to_move), impl->laddr());
     return retire(c, std::move(this_ref));
   });
 }
 
-node_future<Ref<InternalNode>> InternalNode::insert_or_split(
+eagain_future<Ref<InternalNode>> InternalNode::insert_or_split(
     context_t c,
     const search_position_t& pos,
     const key_view_t& insert_key,
@@ -1377,22 +1424,23 @@ node_future<Ref<InternalNode>> InternalNode::insert_or_split(
 
     if (outdated_child) {
       track_insert<false>(insert_pos, insert_stage, insert_child);
-      // untrack the inaccurate child after updated its position
-      // before validate, and before fix_index()
       validate_child_inconsistent(*outdated_child);
-      // we will need its parent_info valid for the following fix_index()
+#ifndef NDEBUG
       do_untrack_child(*outdated_child);
+      validate_tracked_children();
+      do_track_child<false>(*outdated_child);
+#endif
     } else {
       track_insert(insert_pos, insert_stage, insert_child);
+      validate_tracked_children();
     }
 
-    validate_tracked_children();
-    return node_ertr::make_ready_future<Ref<InternalNode>>(nullptr);
+    return eagain_ertr::make_ready_future<Ref<InternalNode>>(nullptr);
   }
 
   // proceed to split with insert
   // assume I'm already ref-counted by caller
-  return (is_root() ? upgrade_root(c) : node_ertr::now()
+  return (is_root() ? upgrade_root(c) : eagain_ertr::now()
   ).safe_then([this, c] {
     return InternalNode::allocate(
         c, impl->field_type(), impl->is_level_tail(), impl->level());
@@ -1419,27 +1467,28 @@ node_future<Ref<InternalNode>> InternalNode::insert_or_split(
       } else {
         right_node->template track_insert<false>(insert_pos, insert_stage, insert_child);
       }
-      // untrack the inaccurate child after updated its position
-      // before validate, and before fix_index()
+#ifndef NDEBUG
       auto& _parent = outdated_child->parent_info().ptr;
       _parent->validate_child_inconsistent(*outdated_child);
-      // we will need its parent_info valid for the following fix_index()
       _parent->do_untrack_child(*outdated_child);
+      validate_tracked_children();
+      right_node->validate_tracked_children();
+      _parent->do_track_child<false>(*outdated_child);
+#endif
     } else {
       if (is_insert_left) {
         track_insert(insert_pos, insert_stage, insert_child);
       } else {
         right_node->track_insert(insert_pos, insert_stage, insert_child);
       }
+      validate_tracked_children();
+      right_node->validate_tracked_children();
     }
-
-    validate_tracked_children();
-    right_node->validate_tracked_children();
     return right_node;
   });
 }
 
-node_future<Ref<Node>> InternalNode::get_or_track_child(
+eagain_future<Ref<Node>> InternalNode::get_or_track_child(
     context_t c, const search_position_t& position, laddr_t child_addr)
 {
   LOG_PREFIX(OTree::InternalNode::get_or_track_child);
@@ -1457,7 +1506,7 @@ node_future<Ref<Node>> InternalNode::get_or_track_child(
        }))
     : (TRACET("loaded child tracked {} at pos({})",
               c.t, found->second->get_name(), position),
-       node_ertr::make_ready_future<Ref<Node>>(found->second))
+       eagain_ertr::make_ready_future<Ref<Node>>(found->second))
   ).safe_then([this_ref, this, position, child_addr] (auto child) {
     assert(child_addr == child->impl->laddr());
     assert(position == child->parent_info().position);
@@ -1507,9 +1556,10 @@ template void InternalNode::track_insert<false>(const search_position_t&, match_
 void InternalNode::replace_track(
     Ref<Node> new_child, Ref<Node> old_child, bool is_new_child_outdated)
 {
-  assert(old_child->parent_info().ptr == this);
+  assert(!new_child->is_tracked());
   auto& pos = old_child->parent_info().position;
-  do_untrack_child(*old_child);
+  auto this_ref = old_child->deref_parent();
+  assert(this_ref == this);
   if (is_new_child_outdated) {
     // we need to keep track of the outdated child through
     // insert and split.
@@ -1517,8 +1567,6 @@ void InternalNode::replace_track(
   } else {
     new_child->as_child(pos, this);
   }
-  // ok, safe to release ref
-  old_child->_parent_info.reset();
 
 #ifndef NDEBUG
   if (is_new_child_outdated) {
@@ -1613,7 +1661,7 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
 {
 #ifndef NDEBUG
   assert(impl->level() - 1 == child.impl->level());
-  assert(this == child.parent_info().ptr);
+  assert(check_is_tracking(child));
   auto& child_pos = child.parent_info().position;
   // the tail value has no key to fix
   assert(!child_pos.is_end());
@@ -1628,7 +1676,7 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
 #endif
 }
 
-node_future<InternalNode::fresh_node_t> InternalNode::allocate(
+eagain_future<InternalNode::fresh_node_t> InternalNode::allocate(
     context_t c, field_type_t field_type, bool is_level_tail, level_t level)
 {
   return InternalNodeImpl::allocate(c, field_type, is_level_tail, level
@@ -1670,7 +1718,7 @@ LeafNode::get_kv(const search_position_t& pos) const
   return {key_view, p_value_header};
 }
 
-node_future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
 {
   impl->validate_non_empty();
@@ -1680,19 +1728,19 @@ LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
   impl->get_next_slot(next_pos, &index_key, &p_value_header);
   if (next_pos.is_end()) {
     if (unlikely(is_level_tail())) {
-      return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+      return eagain_ertr::make_ready_future<Ref<tree_cursor_t>>(
           tree_cursor_t::create_end(this));
     } else {
       return get_next_cursor_from_parent(c);
     }
   } else {
-    return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+    return eagain_ertr::make_ready_future<Ref<tree_cursor_t>>(
         get_or_track_cursor(next_pos, index_key, p_value_header));
   }
 }
 
 template <bool FORCE_MERGE>
-node_future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
 {
   LOG_PREFIX(OTree::LeafNode::erase);
@@ -1703,11 +1751,11 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
          c.t, get_name(), pos, get_next);
 
   // get the next cursor
-  return node_ertr::now().safe_then([c, &pos, get_next, this] {
+  return seastar::now().then([c, &pos, get_next, this] {
     if (get_next) {
       return get_next_cursor(c, pos);
     } else {
-      return node_ertr::make_ready_future<Ref<tree_cursor_t>>();
+      return eagain_ertr::make_ready_future<Ref<tree_cursor_t>>();
     }
   }).safe_then([c, &pos, this_ref = std::move(this_ref),
                 this, FNAME] (Ref<tree_cursor_t> next_cursor) {
@@ -1715,9 +1763,8 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
       // reset the node reference from the end cursor
       next_cursor.reset();
     }
-    return node_ertr::now(
-    ).safe_then([c, &pos, this_ref = std::move(this_ref),
-                 this, FNAME] () mutable {
+    return seastar::now().then(
+        [c, &pos, this_ref = std::move(this_ref), this, FNAME] () mutable {
 #ifndef NDEBUG
       assert(!impl->is_keys_empty());
       if (impl->is_keys_one()) {
@@ -1747,7 +1794,7 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
       validate_tracked_cursors();
 
       if (is_root()) {
-        return node_ertr::now();
+        return eagain_ertr::now();
       } else {
         bool update_parent_index;
         if (impl->is_level_tail()) {
@@ -1764,23 +1811,23 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
     });
   });
 }
-template node_future<Ref<tree_cursor_t>>
+template eagain_future<Ref<tree_cursor_t>>
 LeafNode::erase<true>(context_t, const search_position_t&, bool);
-template node_future<Ref<tree_cursor_t>>
+template eagain_future<Ref<tree_cursor_t>>
 LeafNode::erase<false>(context_t, const search_position_t&, bool);
 
-node_future<> LeafNode::extend_value(
+eagain_future<> LeafNode::extend_value(
     context_t c, const search_position_t& pos, value_size_t extend_size)
 {
   ceph_abort("not implemented");
-  return node_ertr::now();
+  return seastar::now();
 }
 
-node_future<> LeafNode::trim_value(
+eagain_future<> LeafNode::trim_value(
     context_t c, const search_position_t& pos, value_size_t trim_size)
 {
   ceph_abort("not implemented");
-  return node_ertr::now();
+  return seastar::now();
 }
 
 std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
@@ -1789,39 +1836,39 @@ LeafNode::prepare_mutate_value_payload(context_t c)
   return impl->prepare_mutate_value_payload(c);
 }
 
-node_future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 LeafNode::lookup_smallest(context_t)
 {
   if (unlikely(impl->is_keys_empty())) {
     assert(is_root());
-    return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+    return seastar::make_ready_future<Ref<tree_cursor_t>>(
         tree_cursor_t::create_end(this));
   }
   auto pos = search_position_t::begin();
   key_view_t index_key;
   const value_header_t* p_value_header;
   impl->get_slot(pos, &index_key, &p_value_header);
-  return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+  return seastar::make_ready_future<Ref<tree_cursor_t>>(
       get_or_track_cursor(pos, index_key, p_value_header));
 }
 
-node_future<Ref<tree_cursor_t>>
+eagain_future<Ref<tree_cursor_t>>
 LeafNode::lookup_largest(context_t)
 {
   if (unlikely(impl->is_keys_empty())) {
     assert(is_root());
-    return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+    return seastar::make_ready_future<Ref<tree_cursor_t>>(
         tree_cursor_t::create_end(this));
   }
   search_position_t pos;
   key_view_t index_key;
   const value_header_t* p_value_header = nullptr;
   impl->get_largest_slot(&pos, &index_key, &p_value_header);
-  return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
+  return seastar::make_ready_future<Ref<tree_cursor_t>>(
       get_or_track_cursor(pos, index_key, p_value_header));
 }
 
-node_future<Node::search_result_t>
+eagain_future<Node::search_result_t>
 LeafNode::lower_bound_tracked(
     context_t c, const key_hobj_t& key, MatchHistory& history)
 {
@@ -1836,10 +1883,10 @@ LeafNode::lower_bound_tracked(
   }
   search_result_t ret{cursor, result.mstat};
   ret.validate_input_key(key, c.vb.get_header_magic());
-  return node_ertr::make_ready_future<search_result_t>(ret);
+  return seastar::make_ready_future<search_result_t>(ret);
 }
 
-node_future<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats)
+eagain_future<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats)
 {
   auto nstats = impl->get_stats();
   stats.size_persistent_leaf += nstats.size_persistent;
@@ -1849,7 +1896,7 @@ node_future<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats)
   stats.size_value_leaf += nstats.size_value;
   stats.num_kvs_leaf += nstats.num_kvs;
   stats.num_nodes_leaf += 1;
-  return node_ertr::now();
+  return seastar::now();
 }
 
 void LeafNode::track_merge(
@@ -1895,7 +1942,7 @@ void LeafNode::track_merge(
   validate_tracked_cursors();
 }
 
-node_future<> LeafNode::test_clone_root(
+eagain_future<> LeafNode::test_clone_root(
     context_t c_other, RootNodeTracker& tracker_other) const
 {
   assert(is_root());
@@ -1907,13 +1954,16 @@ node_future<> LeafNode::test_clone_root(
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
     return c_other.nm.get_super(c_other.t, tracker_other
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::assert_all{"Invalid error during test clone"}
     ).safe_then([c_other, cloned_root](auto&& super_other) {
       cloned_root->make_root_new(c_other, std::move(super_other));
     });
   }).safe_then([this_ref]{});
 }
 
-node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
+eagain_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     context_t c, const key_hobj_t& key, value_config_t vconf,
     const search_position_t& pos, const MatchHistory& history,
     match_stat_t mstat)
@@ -1941,11 +1991,11 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     assert(p_value_header->payload_size == vconf.payload_size);
     auto ret = track_insert(insert_pos, insert_stage, p_value_header);
     validate_tracked_cursors();
-    return node_ertr::make_ready_future<Ref<tree_cursor_t>>(ret);
+    return eagain_ertr::make_ready_future<Ref<tree_cursor_t>>(ret);
   }
   // split and insert
   Ref<Node> this_ref = this;
-  return (is_root() ? upgrade_root(c) : node_ertr::now()
+  return (is_root() ? upgrade_root(c) : eagain_ertr::now()
   ).safe_then([this, c] {
     return LeafNode::allocate(c, impl->field_type(), impl->is_level_tail());
   }).safe_then([this_ref = std::move(this_ref), this, c, &key, vconf, FNAME,
@@ -1980,13 +2030,20 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
   });
 }
 
-node_future<Ref<LeafNode>> LeafNode::allocate_root(
+eagain_future<Ref<LeafNode>> LeafNode::allocate_root(
     context_t c, RootNodeTracker& root_tracker)
 {
+  LOG_PREFIX(OTree::LeafNode::allocate_root);
   return LeafNode::allocate(c, field_type_t::N0, true
-  ).safe_then([c, &root_tracker](auto fresh_node) {
+  ).safe_then([c, &root_tracker, FNAME](auto fresh_node) {
     auto root = fresh_node.node;
     return c.nm.get_super(c.t, root_tracker
+    ).handle_error(
+      eagain_ertr::pass_further{},
+      crimson::ct_error::input_output_error::handle([FNAME, c] {
+        ERRORT("EIO during get_super()", c.t);
+        ceph_abort("fatal error");
+      })
     ).safe_then([c, root](auto&& super) {
       root->make_root_new(c, std::move(super));
       return root;
@@ -2018,6 +2075,11 @@ void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
 #ifndef NDEBUG
   assert(this == cursor.get_leaf_node().get());
   assert(cursor.is_tracked());
+  assert(!impl->is_extent_retired());
+
+  // We need to make sure user has freed all the cursors before submitting the
+  // according transaction. Otherwise the below checks will have undefined
+  // behaviors.
   auto [key, p_value_header] = get_kv(cursor.get_position());
   auto magic = p_value_header->magic;
   assert(key.compare_to(cursor.get_key_view(magic)) == MatchKindCMP::EQ);
@@ -2092,7 +2154,7 @@ void LeafNode::track_erase(
   }
 }
 
-node_future<LeafNode::fresh_node_t> LeafNode::allocate(
+eagain_future<LeafNode::fresh_node_t> LeafNode::allocate(
     context_t c, field_type_t field_type, bool is_level_tail)
 {
   return LeafNodeImpl::allocate(c, field_type, is_level_tail

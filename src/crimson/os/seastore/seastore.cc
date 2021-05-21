@@ -129,7 +129,7 @@ SeaStore::list_objects(CollectionRef ch,
   return seastar::do_with(
       RetType(),
       [this, start, end, limit] (auto& ret) {
-    return repeat_eagain([this, start, end, limit, &ret] {
+    return repeat_eagain2([this, start, end, limit, &ret] {
       return seastar::do_with(
           transaction_manager->create_transaction(),
           [this, start, end, limit, &ret] (auto& t) {
@@ -138,14 +138,10 @@ SeaStore::list_objects(CollectionRef ch,
           ret = std::move(_ret);
         });
       });
-    }).safe_then([&ret] {
+    }).then([&ret] {
       return std::move(ret);
     });
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStore::list_objects"
-    }
-  );
+  });
 }
 
 seastar::future<CollectionRef> SeaStore::create_new_collection(const coll_t& cid)
@@ -618,6 +614,10 @@ seastar::future<> SeaStore::do_transaction(
       }).safe_then([this, &ctx] {
 	return onode_manager->write_dirty(*ctx.transaction, ctx.onodes);
       }).safe_then([this, &ctx] {
+        // There are some validations in onode tree during onode value
+        // destruction in debug mode, which need to be done before calling
+        // submit_transaction().
+        ctx.onodes.clear();
 	return transaction_manager->submit_transaction(std::move(ctx.transaction));
       }).safe_then([&ctx]() {
 	for (auto i : {
