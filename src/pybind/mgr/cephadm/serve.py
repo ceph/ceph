@@ -636,10 +636,10 @@ class CephadmServe:
         self._apply_service_config(spec)
 
         if service_type == 'osd':
-            self.mgr.osd_service.create_from_spec(cast(DriveGroupSpec, spec))
-            # TODO: return True would result in a busy loop
-            # can't know if daemon count changed; create_from_spec doesn't
-            # return a solid indication
+            osd_svc_spec = cast(DriveGroupSpec, spec)
+            osd_distribution = self.mgr.osd_service.create_from_spec(osd_svc_spec)
+            osd_svc_spec.update_daemon_distribution(osd_distribution)
+            self.mgr.spec_store.save(osd_svc_spec, update_create=False)
             return False
 
         svc = self.mgr.cephadm_services[service_type]

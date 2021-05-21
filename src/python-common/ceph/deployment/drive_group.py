@@ -144,7 +144,7 @@ class DriveGroupSpec(ServiceSpec):
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size", "unmanaged", "filter_logic", "preview_only",
-        "data_allocate_fraction"
+        "data_allocate_fraction", "daemons_distribution"
     ]
 
     def __init__(self,
@@ -169,6 +169,7 @@ class DriveGroupSpec(ServiceSpec):
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
                  data_allocate_fraction=None,  # type: Optional[float]
+                 daemons_distribution={},  # type: Dict
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -230,6 +231,9 @@ class DriveGroupSpec(ServiceSpec):
         #: Allocate a fraction of the data device (0,1.0]
         self.data_allocate_fraction = data_allocate_fraction
 
+        #: Number of daemons created in each host using this spec
+        self.daemons_distribution = daemons_distribution
+
     @classmethod
     def _from_json_impl(cls, json_drive_group):
         # type: (dict) -> DriveGroupSpec
@@ -275,6 +279,7 @@ class DriveGroupSpec(ServiceSpec):
         try:
             args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
                     json_drive_group.items()}
+            args["daemons_distribution"] = json_drive_group.get("daemons_distribution", {})
             if not args:
                 raise DriveGroupValidationError("Didn't find Drivegroup specs")
             return args
@@ -315,6 +320,12 @@ class DriveGroupSpec(ServiceSpec):
 
         if self.filter_logic not in ['AND', 'OR']:
             raise DriveGroupValidationError('filter_logic must be either <AND> or <OR>')
+
+    def update_daemon_distribution(self, hosts: Dict) -> None:
+        self.daemons_distribution.update(hosts)
+
+    def get_size(self) -> int:
+        return sum(self.daemons_distribution.values())
 
     def __repr__(self) -> str:
         keys = [

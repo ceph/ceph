@@ -803,8 +803,9 @@ Usage:
             host_name, block_device = svc_arg.split(":")
             block_devices = block_device.split(',')
             devs = DeviceSelection(paths=block_devices)
-            drive_group = DriveGroupSpec(placement=PlacementSpec(
-                host_pattern=host_name), data_devices=devs)
+            drive_group = DriveGroupSpec(service_id='unmanaged',
+                                         placement=PlacementSpec(host_pattern=host_name),
+                                         data_devices=devs)
         except (TypeError, KeyError, ValueError):
             msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)

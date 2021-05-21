@@ -1224,7 +1224,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         @forall_hosts
         def run(h: str) -> str:
-            return self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd')
+            number_of_osds_created = self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd')
+            return f"Created {number_of_osds_created} OSD on host '{h}'"
 
         return HandleCommandResult(stdout='\n'.join(run(host)))
 
@@ -1714,15 +1715,28 @@ Then run the following:
 
         sm: Dict[str, orchestrator.ServiceDescription] = {}
 
+        # Refresh spec store:
+        self.spec_store.load()
+
         # known services
         for nm, spec in self.spec_store.all_specs.items():
             if service_type is not None and service_type != spec.service_type:
                 continue
             if service_name is not None and service_name != nm:
                 continue
+
+            # placement object cannot infere the number of osds in a osd spec
+            # the size for osds is updated in the spec when changes are
+            # detected in drive_group/hosts/devices.
+            if spec.service_type == "osd":
+                spec = cast(DriveGroupSpec, spec)
+                size = spec.get_size()
+            else:
+                size = spec.placement.get_target_count(self._schedulable_hosts())
+
             sm[nm] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=spec.placement.get_target_count(self._schedulable_hosts()),
+                size=size,
                 running=0,
                 events=self.events.get_for_service(spec.service_name()),
                 created=self.spec_store.spec_created[nm],
@@ -1770,17 +1784,16 @@ Then run the following:
 
                 if dd.status == DaemonDescriptionStatus.running:
                     sm[n].running += 1
-                if dd.daemon_type == 'osd':
-                    # The osd count can't be determined by the Placement spec.
-                    # Showing an actual/expected representation cannot be determined
-                    # here. So we're setting running = size for now.
-                    sm[n].size += 1
                 if (
                     not sm[n].last_refresh
                     or not dd.last_refresh
                     or dd.last_refresh < sm[n].last_refresh  # type: ignore
                 ):
                     sm[n].last_refresh = dd.last_refresh
+
+        # OSD unmanaged service size matchs with the number of unmanaged OSD daemons running
+        if 'osd.unmanaged' in sm:
+            sm['osd.unmanaged'].size = sm['osd.unmanaged'].running
 
         return list(sm.values())
 
@@ -2100,7 +2113,8 @@ Then run the following:
 
     @handle_orch_error
     def create_osds(self, drive_group: DriveGroupSpec) -> str:
-        return self.osd_service.create_from_spec(drive_group)
+        created_osds = json.dumps(self.osd_service.create_from_spec(drive_group))
+        return f"Number of OSDs summary: {created_osds}"
 
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None

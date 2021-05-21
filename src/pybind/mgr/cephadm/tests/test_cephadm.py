@@ -678,7 +678,7 @@ spec:
                                 data_devices=DeviceSelection(paths=['']))
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
-            assert out == "Created no osd(s) on host test; already created?"
+            assert out == 'Number of OSDs summary: {"test": 0}'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_noncollocated_osd(self, cephadm_module):
@@ -687,7 +687,7 @@ spec:
                                 data_devices=DeviceSelection(paths=['']))
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
-            assert out == "Created no osd(s) on host test; already created?"
+            assert out == 'Number of OSDs summary: {"test": 0}'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_prepare_drivegroup(self, cephadm_module):
@@ -1340,7 +1340,7 @@ Traceback (most recent call last):
             _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
             _run_cephadm.reset_mock()
             assert cephadm_module._osd_activate(
-                ['test']).stdout == "Created osd(s) 1 on host 'test'"
+                ['test']).stdout == "Created 1 OSD on host 'test'"
             assert _run_cephadm.mock_calls == [
                 mock.call('test', 'osd', 'ceph-volume',
                           ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image=''),
@@ -1382,7 +1382,7 @@ Traceback (most recent call last):
             _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
             _run_cephadm.reset_mock()
             assert cephadm_module._osd_activate(
-                ['test']).stdout == "Created osd(s) 1 on host 'test'"
+                ['test']).stdout == "Created 1 OSD on host 'test'"
             assert _run_cephadm.mock_calls == [
                 mock.call('test', 'osd', 'ceph-volume',
                           ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image=''),

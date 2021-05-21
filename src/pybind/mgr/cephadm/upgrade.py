@@ -772,6 +772,10 @@ class CephadmUpgrade:
                 'who': name_to_config_section(daemon_type),
             })
 
+        # Force an update of OSD Services status
+        for host in self.mgr.cache.get_hosts():
+            self.mgr.cache.invalidate_host_devices(host)
+
         logger.info('Upgrade: Complete!')
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
