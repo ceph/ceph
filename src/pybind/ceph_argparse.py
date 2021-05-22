@@ -1196,6 +1196,10 @@ def validate(args: List[str],
                     store_arg(kwarg_desc, d)
                     continue
 
+            if not desc.positional:
+                # No more positional args!
+                raise ArgumentValid(f"Unexpected argument '{myarg}'")
+
             # Don't handle something as a positional argument if it
             # has a leading "--" unless it's a CephChoices (used for
             # "--yes-i-really-mean-it")
