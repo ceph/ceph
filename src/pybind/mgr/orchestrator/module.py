@@ -329,7 +329,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return cast(str, self.get_module_option("orchestrator"))
 
     @_cli_write_command('orch host add')
-    def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None, maintenance: Optional[bool] = False) -> HandleCommandResult:
+    def _add_host(self,
+                  hostname: str,
+                  addr: Optional[str] = None,
+                  labels: Optional[List[str]] = None,
+                  maintenance: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
 
@@ -970,7 +974,9 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch daemon redeploy')
-    def _daemon_action_redeploy(self, name: str, image: Optional[str] = None) -> HandleCommandResult:
+    def _daemon_action_redeploy(self,
+                                name: str,
+                                image: Optional[str] = None) -> HandleCommandResult:
         """Redeploy a daemon (with a specifc image)"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
