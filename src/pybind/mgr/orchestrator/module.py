@@ -611,6 +611,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     @_cli_read_command('orch ps')
     def _list_daemons(self,
                       hostname: Optional[str] = None,
+                      _end_positional_: int = 0,
                       service_name: Optional[str] = None,
                       daemon_type: Optional[str] = None,
                       daemon_id: Optional[str] = None,
@@ -1342,6 +1343,7 @@ Usage:
     @_cli_write_command('orch upgrade start')
     def _upgrade_start(self,
                        image: Optional[str] = None,
+                       _end_positional_: int = 0,
                        ceph_version: Optional[str] = None) -> HandleCommandResult:
         """Initiate upgrade"""
         self._upgrade_check_image_name(image, ceph_version)
