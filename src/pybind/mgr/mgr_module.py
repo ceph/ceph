@@ -317,7 +317,7 @@ class CLICommand(object):
 
     @staticmethod
     def load_func_metadata(f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
-        desc = inspect.getdoc(f) or ''
+        desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
         arg_spec = full_argspec.annotations
         first_default = len(arg_spec)
