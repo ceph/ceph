@@ -1159,10 +1159,6 @@ def validate(args: List[str],
                 # argdesc for the keyword argument, if we find one
                 kwarg_desc = None
 
-                # Track whether we need to push value back onto
-                # myargs in the case that this isn't a valid k=v
-                consumed_next = False
-
                 # Try both styles of keyword argument
                 kwarg_match = re.match(KWARG_EQUALS, myarg)
                 if kwarg_match:
