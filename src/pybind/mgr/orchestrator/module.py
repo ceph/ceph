@@ -907,9 +907,9 @@ Usage:
     @_cli_write_command('orch daemon add rgw')
     def _rgw_add(self,
                  svc_id: str,
+                 placement: Optional[str] = None,
                  port: Optional[int] = None,
                  ssl: bool = False,
-                 placement: Optional[str] = None,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start RGW daemon(s)"""
         if inbuf:
@@ -1097,11 +1097,11 @@ Usage:
     @_cli_write_command('orch apply rgw')
     def _apply_rgw(self,
                    svc_id: str,
+                   placement: Optional[str] = None,
                    realm: Optional[str] = None,
                    zone: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
-                   placement: Optional[str] = None,
                    dry_run: bool = False,
                    format: Format = Format.plain,
                    unmanaged: bool = False,
