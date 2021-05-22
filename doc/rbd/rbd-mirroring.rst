@@ -353,7 +353,7 @@ an optional pool or image name. Additionally, the ``--recursive`` option can
 be specified to list all schedules at the specified level and below. For
 example::
 
-        $ rbd --cluster site-a mirror schedule ls --pool image-pool --recursive
+        $ rbd --cluster site-a mirror snapshot schedule ls --pool image-pool --recursive
         POOL        NAMESPACE IMAGE  SCHEDULE                            
         image-pool  -         -      every 1d starting at 14:00:00-05:00 
         image-pool            image1 every 6h                            
@@ -367,7 +367,7 @@ image name::
 
 For example::
 
-        $ rbd --cluster site-a mirror schedule status
+        $ rbd --cluster site-a mirror snapshot schedule status
         SCHEDULE TIME       IMAGE             
         2020-02-26 18:00:00 image-pool/image1 
 
