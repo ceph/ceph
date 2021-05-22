@@ -1445,7 +1445,6 @@ OPTION(rgw_data_log_num_shards, OPT_INT) // number of objects to keep data chang
 OPTION(rgw_data_log_obj_prefix, OPT_STR) //
 
 OPTION(rgw_bucket_quota_ttl, OPT_INT) // time for cached bucket stats to be cached within rgw instance
-OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE) // threshold from which we don't rely on cached info for quota decisions
 OPTION(rgw_bucket_quota_cache_size, OPT_INT) // number of entries in bucket quota cache
 OPTION(rgw_bucket_default_quota_max_objects, OPT_INT) // number of objects allowed
 OPTION(rgw_bucket_default_quota_max_size, OPT_LONGLONG) // Max size of object in bytes
