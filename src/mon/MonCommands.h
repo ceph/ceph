@@ -474,7 +474,7 @@ COMMAND_WITH_FLAG("mon remove "
 	"remove monitor named <name>", "mon", "rw",
     FLAG(DEPRECATED))
 COMMAND("mon feature ls "
-        "name=with_value,type=CephChoices,strings=--with-value,req=false",
+        "name=with_value,type=CephBool,req=false",
         "list available mon map features to be set/unset",
         "mon", "r")
 COMMAND("mon feature set "
@@ -750,7 +750,7 @@ COMMAND("osd crush rule rename "
         "rename crush rule <srcname> to <dstname>",
         "osd", "rw")
 COMMAND("osd crush tree "
-        "name=shadow,type=CephChoices,strings=--show-shadow,req=false",
+        "name=show_shadow,type=CephBool,req=false",
 	"dump crush buckets and items in a tree view",
 	"osd", "r")
 COMMAND("osd crush ls name=node,type=CephString,goodchars=[A-Za-z0-9-_.]",
@@ -1166,7 +1166,7 @@ COMMAND("osd force_recovery_stretch_mode " \
 COMMAND("osd tier add "
 	"name=pool,type=CephPoolname "
 	"name=tierpool,type=CephPoolname "
-	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
+	"name=force_nonempty,type=CephBool,req=false",
 	"add the tier <tierpool> (the second one) to base pool <pool> (the first one)",
 	"osd", "rw")
 COMMAND("osd tier rm "
@@ -1256,7 +1256,7 @@ COMMAND("mgr services",
         "mgr", "r")
 COMMAND("mgr module enable "
 	"name=module,type=CephString "
-	"name=force,type=CephChoices,strings=--force,req=false",
+	"name=force,type=CephBool,req=false",
 	"enable mgr module", "mgr", "rw")
 COMMAND("mgr module disable "
 	"name=module,type=CephString",
@@ -1352,7 +1352,7 @@ COMMAND_WITH_FLAG("connection scores reset",
 		  "mon", "rwx",
 		  FLAG(TELL))
 COMMAND_WITH_FLAG("sync_force "
-            "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
+            "name=yes_i_really_mean_it,type=CephBool,req=false",
             "force sync of and clear monitor store",
             "mon", "rw",
             FLAG(TELL))
