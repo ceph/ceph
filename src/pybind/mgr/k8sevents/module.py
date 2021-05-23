@@ -1026,12 +1026,12 @@ class Module(MgrModule):
         },
         {
             "cmd": "k8sevents set-access name=key,type=CephString",
-            "desc": "Set kubernetes access credentials. <key> must be cacrt or token and use -i <filename> syntax.\ne.g. ceph k8sevents set-access cacrt -i /root/ca.crt",
+            "desc": "Set kubernetes access credentials. <key> must be cacrt or token and use -i <filename> syntax (e.g., ceph k8sevents set-access cacrt -i /root/ca.crt).",
             "perm": "rw"
         },
         {
             "cmd": "k8sevents set-config name=key,type=CephString name=value,type=CephString",
-            "desc": "Set kubernetes config paramters. <key> must be server or namespace.\ne.g. ceph k8sevents set-config server https://localhost:30433",
+            "desc": "Set kubernetes config paramters. <key> must be server or namespace (e.g., ceph k8sevents set-config server https://localhost:30433).",
             "perm": "rw"
         },
         {
