@@ -5203,7 +5203,7 @@ options:
   with_legacy: true
 # rocksdb ssts (hot/warm)
 - name: bluestore_block_db_size
-  type: uint
+  type: size
   level: dev
   desc: Size of file to create for bluestore_block_db_path
   default: 0
