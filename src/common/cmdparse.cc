@@ -682,4 +682,23 @@ bool cmd_getval(const cmdmap_t& cmdmap,
   return false;
 }
 
+bool cmd_getval_compat_cephbool(
+  const cmdmap_t& cmdmap,
+  const std::string& k, bool& val)
+{
+  try {
+    return cmd_getval(cmdmap, k, val);
+  } catch (bad_cmd_get& e) {
+    // try as legacy/compat CephChoices
+    std::string t;
+    if (!cmd_getval(cmdmap, k, t)) {
+      return false;
+    }
+    std::string expected = "--"s + k;
+    std::replace(expected.begin(), expected.end(), '_', '-');
+    val = (t == expected);
+    return true;
+  }
+}
+
 }
