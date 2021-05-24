@@ -111,7 +111,7 @@ COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,req=false " \
 	"name=max_change,type=CephFloat,req=false "			\
 	"name=max_osds,type=CephInt,req=false "			\
-	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
+	"name=no_increasing,type=CephBool,req=false",\
 	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw")
 COMMAND("osd test-reweight-by-utilization " \
