@@ -106,7 +106,7 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
         requested_slots = fast_slots_per_device
 
     requested_size = getattr(args, '{}_size'.format(type_), 0)
-    if requested_size == 0:
+    if not requested_size or requested_size == 0:
         # no size argument was specified, check ceph.conf
         get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
         requested_size = get_size_fct(lv_format=False)
