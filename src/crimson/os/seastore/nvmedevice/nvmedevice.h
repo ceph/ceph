@@ -125,6 +125,9 @@ using open_ertr = crimson::errorator<
 using nvme_command_ertr = crimson::errorator<
   crimson::ct_error::input_output_error>;
 
+using discard_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
+
 struct io_context_t {
   iocb cb;
   bool done = false;
@@ -194,7 +197,9 @@ public:
     uint16_t stream = 0) = 0;
 
   // TODO
-  virtual int discard(uint64_t offset, uint64_t len) { return 0; }
+  virtual discard_ertr::future<> discard(
+    uint64_t offset,
+    uint64_t len) { return seastar::now(); }
 
   virtual open_ertr::future<> open(
       const std::string& path,
