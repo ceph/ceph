@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <memory>
 #include <vector>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -143,7 +144,7 @@ struct io_context_t {
 class NVMeBlockDevice {
 protected:
   uint64_t size = 0;
-  uint64_t block_size = 0;
+  uint64_t block_size = 4096;
 
   uint64_t write_granularity = 4096;
   uint64_t write_alignment = 4096;
@@ -172,6 +173,7 @@ public:
    */
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
+
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
   uint64_t get_preffered_write_alignment() const { return write_alignment; }
 
@@ -255,7 +257,7 @@ public:
 class NormalNBD : public NVMeBlockDevice {
 public:
   NormalNBD() {}
-  ~NormalNBD() override {}
+  ~NormalNBD() = default;
 
   open_ertr::future<> open(
     const std::string &in_path,
@@ -270,31 +272,13 @@ public:
     uint64_t offset,
     bufferptr &bptr) override;
 
-  nvme_command_ertr::future<> pass_through_io(
-    NVMePassThroughCommand& command) override;
-
-  nvme_command_ertr::future<> pass_admin(
-    nvme_admin_command_t& command) override;
-
   seastar::future<> close() override;
 
+  // TODO Servicing NVMe features (multi-stream, protected write etc..) should
+  // be followed by upstreaming ioctl to seastar.
+
 private:
-  seastar::file_desc fd = seastar::file_desc::from_fd(-1);
-  std::vector<seastar::file_desc> stream_fd;
-  nvme_version_t protocol_version;
-  bool support_multistream = false;
-  std::vector<::io_context_t> ctx;
-  std::thread completion_poller;
-  bool exit = false;
-
-  uint32_t write_life_not_set = 0;
-  uint32_t write_life_max = 1;
-
-  nvme_command_ertr::future<> identify_controller(
-    identify_controller_data_t& controller_data);
-  nvme_command_ertr::future<> identify_namespace(
-    identify_namespace_data_t& namespace_data);
-  void open_for_io(const std::string& in_path, seastar::open_flags mode);
+  seastar::file device;
 };
 
 
@@ -309,7 +293,9 @@ public:
     }
   }
 
-  open_ertr::future<> open(const std::string &in_path, seastar::open_flags mode) override;
+  open_ertr::future<> open(
+    const std::string &in_path,
+    seastar::open_flags mode) override;
 
   write_ertr::future<> write(
     uint64_t offset,
