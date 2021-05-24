@@ -7,7 +7,9 @@ from mgr_module import MgrModule, CLICommand, HandleCommandResult, Option
 
 from typing import cast, Any, Optional, Sequence
 
-log = logging.getLogger(__name__)
+from . import *
+from .types import RGWAMException
+from .rgwam import CephCommonArgs, RGWAM
 
 
 class Module(MgrModule):
@@ -25,6 +27,11 @@ class Module(MgrModule):
 
         # ensure config options members are initialized; see config_notify()
         self.config_notify()
+
+        self.ceph_common_args = CephCommonArgs(str(self.get_ceph_conf_path()),
+                                 f'mgr.{self.get_mgr_id()}',
+                                 str(self.get_ceph_option('keyring')))
+
 
     def config_notify(self) -> None:
         """
@@ -46,10 +53,10 @@ class Module(MgrModule):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
+
     @CLICommand('rgw admin', perm='rw')
     def _cmd_rgw_admin(self, params: Sequence[str]):
         """rgw admin"""
-        log.error('self.config=%s' % str(self.get_ceph_conf_path()))
         run_cmd = [ './bin/radosgw-admin',
                     '-c', str(self.get_ceph_conf_path()),
                     '-k', str(self.get_ceph_option('keyring')),
@@ -65,6 +72,27 @@ class Module(MgrModule):
         self.log.error('err=%s' % err)
 
         return HandleCommandResult(retval=result.returncode, stdout=out, stderr=err)
+
+    @CLICommand('rgw realm bootstrap', perm='rw')
+    def _cmd_rgw_realm_bootstrap(self,
+                                 realm_name : Optional[str] = None,
+                                 zonegroup_name: Optional[str] = None,
+                                 zone_name: Optional[str] = None,
+                                 endpoints: Optional[str] = None,
+                                 sys_uid: Optional[str] = None,
+                                 uid: Optional[str] = None,
+                                 start_radosgw: Optional[bool] = False):
+        """Bootstrap new rgw realm, zonegroup, and zone"""
+
+
+        try:
+            retval, out, err = RGWAM(self.ceph_common_args).realm_bootstrap(realm_name, zonegroup_name,
+                    zone_name, endpoints, sys_uid, uid, start_radosgw)
+        except RGWAMException as e:
+            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            return (e.retcode, e.message, e.stderr)
+
+        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
     def shutdown(self) -> None:
         """
