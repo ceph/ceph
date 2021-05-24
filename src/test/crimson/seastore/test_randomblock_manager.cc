@@ -223,10 +223,102 @@ TEST_F(rbm_test_t, block_alloc_test)
    ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
 
    auto t2 = tm->create_transaction();
-   alloc_extent(*t2, DEFAULT_BLOCK_SIZE);
-   alloc_ids = get_allocated_blk_ids(*t);
+   alloc_extent(*t2, DEFAULT_BLOCK_SIZE * 3);
    alloc_ids = get_allocated_blk_ids(*t2);
    ASSERT_TRUE(submit_transaction(*t2));
    complete_allocation(*t2);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+ });
+}
+
+TEST_F(rbm_test_t, block_alloc_free_test)
+{
+ run_async([this] {
+   mkfs();
+   open();
+   auto t = tm->create_transaction();
+   alloc_extent(*t, DEFAULT_BLOCK_SIZE);
+   auto alloc_ids = get_allocated_blk_ids(*t);
+   free_extent(*t, alloc_ids);
+   ASSERT_TRUE(submit_transaction(*t));
+   complete_allocation(*t);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
+
+   auto t2 = tm->create_transaction();
+   alloc_extent(*t2, DEFAULT_BLOCK_SIZE * 4);
+   alloc_ids = get_allocated_blk_ids(*t2);
+   free_extent(*t2, alloc_ids);
+   ASSERT_TRUE(submit_transaction(*t2));
+   complete_allocation(*t2);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
+
+   auto t3 = tm->create_transaction();
+   alloc_extent(*t3, DEFAULT_BLOCK_SIZE * 8);
+   alloc_ids = get_allocated_blk_ids(*t3);
+   ASSERT_TRUE(submit_transaction(*t3));
+   complete_allocation(*t3);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+
+   auto t4 = tm->create_transaction();
+   free_extent(*t4, alloc_ids);
+   ASSERT_TRUE(submit_transaction(*t4));
+   complete_allocation(*t4);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
+ });
+}
+
+TEST_F(rbm_test_t, many_block_alloc)
+{
+ run_async([this] {
+   config.start = 0;
+   config.end = DEFAULT_TEST_SIZE * 1024;
+   config.block_size = DEFAULT_BLOCK_SIZE;
+   config.total_size = DEFAULT_TEST_SIZE * 1024;
+   mkfs();
+   open();
+   auto max = rbm_manager->max_block_by_bitmap_block();
+   rbm_manager->rbm_sync_block_bitmap_by_range(max + 10, max + 14, bitmap_op_types_t::ALL_SET).unsafe_get0();
+   interval_set<blk_id_t> alloc_ids;
+   alloc_ids.insert(max + 12, 2);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   alloc_ids.clear();
+   alloc_ids.insert(max + 10, 4);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   rbm_manager->rbm_sync_block_bitmap_by_range(max + 10, max + 14, bitmap_op_types_t::ALL_CLEAR).unsafe_get0();
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
+   rbm_manager->rbm_sync_block_bitmap_by_range(max + 10, max + max + 10, bitmap_op_types_t::ALL_SET).unsafe_get0();
+   alloc_ids.clear();
+   alloc_ids.insert(max + 10000, 10);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   alloc_ids.clear();
+   alloc_ids.insert(max + max, 10);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   rbm_manager->rbm_sync_block_bitmap_by_range(max, max * 3, bitmap_op_types_t::ALL_SET).unsafe_get0();
+   alloc_ids.clear();
+   alloc_ids.insert(max * 3 - 1, 1);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   alloc_ids.clear();
+   alloc_ids.insert(max * 3, 1);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   alloc_ids.clear();
+   alloc_ids.insert(max, 1);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   rbm_manager->rbm_sync_block_bitmap_by_range(max, max * 6, bitmap_op_types_t::ALL_SET).unsafe_get0();
+   alloc_ids.clear();
+   alloc_ids.insert(max * 5, 10);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   alloc_ids.clear();
+   alloc_ids.insert(max * 6, 1);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
+   rbm_manager->rbm_sync_block_bitmap_by_range(max, max * 6, bitmap_op_types_t::ALL_CLEAR).unsafe_get0();
+   alloc_ids.clear();
+   alloc_ids.insert(max * 3, 10);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
+   alloc_ids.clear();
+   alloc_ids.insert(max * 5, 10);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
+   alloc_ids.clear();
+   alloc_ids.insert(max * 6, 1);
+   ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
  });
 }
