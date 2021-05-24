@@ -90,6 +90,11 @@ struct rbm_bitmap_block_header_t {
 std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header);
 std::ostream &operator<<(std::ostream &out, const rbm_bitmap_block_header_t &header);
 
+enum class bitmap_op_types_t : uint8_t {
+  ALL_CLEAR = 1,
+  ALL_SET = 2
+};
+
 struct rbm_bitmap_block_t {
   rbm_bitmap_block_header_t header;
   bufferlist buf;
@@ -111,6 +116,16 @@ struct rbm_bitmap_block_t {
     char mask = BIT_CHAR_MASK(nr);
     char *p = buf.c_str() + (nr >> BITS_PER_CHAR);
     *p |= mask;
+  }
+
+  void set_all_bits() {
+    ceph_assert(buf.length());
+    ::memset(buf.c_str(), std::numeric_limits<unsigned char>::max(), buf.length());
+  }
+
+  void set_clear_bits() {
+    ceph_assert(buf.length());
+    ::memset(buf.c_str(), 0, buf.length());
   }
 
   void clear_bit(uint64_t nr) {
@@ -350,6 +365,29 @@ public:
   blk_paddr_t get_blk_paddr_by_block_no(blk_id_t id) {
     return (id * super.block_size) + super.start;
   }
+
+  int num_block_between_blk_ids(blk_id_t start, blk_id_t end) {
+    auto max = max_block_by_bitmap_block();
+    auto block_start = start / max;
+    auto block_end = end / max;
+    return block_end - block_start + 1;
+  }
+
+  write_ertr::future<> rbm_sync_block_bitmap_by_range(blk_id_t start, blk_id_t end, bitmap_op_types_t op);
+  void add_cont_bitmap_blocks_to_buf(bufferlist& buf, int num_block, bitmap_op_types_t op) {
+    rbm_bitmap_block_t b_block(super.block_size);
+    alloc_rbm_bitmap_block_buf(b_block);
+    if (op == bitmap_op_types_t::ALL_SET) {
+      b_block.set_all_bits();
+    } else {
+      b_block.set_clear_bits();
+    }
+    for (int i = 0; i < num_block; i++) {
+      encode(b_block, buf);
+    }
+  }
+
+  write_ertr::future<> write(blk_paddr_t addr, bufferlist &bl);
 
 private:
   rbm_metadata_header_t super; // this contains the number of bitmap blocks, free blocks and rbm specific information

@@ -310,6 +310,105 @@ RandomBlockManager::free_extent(Transaction &t, blk_paddr_t blk_paddr)
 }
 
 RandomBlockManager::write_ertr::future<>
+RandomBlockManager::rbm_sync_block_bitmap_by_range(blk_id_t start, blk_id_t end, bitmap_op_types_t op)
+{
+  auto addr = super.start_alloc_area +
+	      (start / max_block_by_bitmap_block())
+	      * super.block_size;
+  // aligned write
+  if (start % max_block_by_bitmap_block() == 0 &&
+      end % (max_block_by_bitmap_block() - 1) == 0) {
+      auto num_block = num_block_between_blk_ids(start, end);
+      bufferlist bl_bitmap_block;
+      add_cont_bitmap_blocks_to_buf(bl_bitmap_block, num_block, op);
+      return write(
+	  addr,
+	  bl_bitmap_block);
+  }
+  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  // try to read first block, then check the block is aligned
+  return device->read(
+      addr,
+      bp).safe_then([bp, start, end, op, addr, this]() {
+	rbm_bitmap_block_t b_block(super.block_size);
+	bufferlist bl_bitmap_block;
+	bl_bitmap_block.append(bp);
+	decode(b_block, bl_bitmap_block);
+	auto max = max_block_by_bitmap_block();
+	auto loop_end = end < (start / max + 1) * max ?
+			end % max : max - 1;
+	for (uint64_t i = (start % max); i <= loop_end; i++) {
+	  if (op == bitmap_op_types_t::ALL_SET) {
+	    b_block.set_bit(i);
+	  } else {
+	    b_block.clear_bit(i);
+	  }
+	}
+	auto num_block = num_block_between_blk_ids(start, end);
+	logger().debug("rbm_sync_block_bitmap_by_range: start {}, end {}, loop_end {}, num_block {}",
+			start, end, loop_end, num_block);
+
+	bl_bitmap_block.clear();
+	encode(b_block, bl_bitmap_block);
+	if (num_block == 1) {
+	  // | front (unaligned) |
+	  return write(
+	      addr,
+	      bl_bitmap_block);
+	} else if (!((end + 1) % max)) {
+	  // | front (unaligned) | middle (aligned) |
+	  add_cont_bitmap_blocks_to_buf(bl_bitmap_block, num_block - 1, op);
+	  logger().debug("partially aligned write: addr {} length {}",
+			  addr, bl_bitmap_block.length());
+	  return write(
+	      addr,
+	      bl_bitmap_block);
+	} else if (num_block > 2) {
+	  // | front (unaligned) | middle | end (unaligned) |
+	  // fill up the middle
+	  add_cont_bitmap_blocks_to_buf(bl_bitmap_block, num_block - 2, op);
+	}
+
+	auto next_addr = super.start_alloc_area +
+		    (end / max_block_by_bitmap_block())
+		    * super.block_size;
+	auto bptr = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+	// | front (unaligned) | middle | end (unaligned) | or | front (unaligned) | end (unaligned) |
+	return device->read(
+	    next_addr,
+	    bptr).safe_then([bptr, bl_bitmap_block, start, end, op, addr, this]() mutable {
+	      rbm_bitmap_block_t b_block(super.block_size);
+	      bufferlist block;
+	      block.append(bptr);
+	      decode(b_block, block);
+	      auto max = max_block_by_bitmap_block();
+	      for (uint64_t i = (end - (end % max)) % max; i <= (end % max); i++) {
+		if (op == bitmap_op_types_t::ALL_SET) {
+		  b_block.set_bit(i);
+		} else {
+		  b_block.clear_bit(i);
+		}
+	      }
+	      logger().debug("start {} end {} ", end - (end % max), end);
+	      bl_bitmap_block.claim_append(block);
+	      return write(
+		addr,
+		bl_bitmap_block);
+	      }).handle_error(
+		write_ertr::pass_further{},
+		crimson::ct_error::assert_all{
+		  "Invalid error in RandomBlockManager::rbm_sync_block_bitmap_by_range"
+		}
+	      );
+	}).handle_error(
+	  write_ertr::pass_further{},
+	  crimson::ct_error::assert_all{
+	    "Invalid error in RandomBlockManager::rbm_sync_block_bitmap_by_range"
+	  }
+	);
+}
+
+RandomBlockManager::write_ertr::future<>
 RandomBlockManager::complete_allocation(Transaction &t)
 {
   const auto alloc_blocks = t.get_rbm_allocated_blocks();
@@ -478,6 +577,30 @@ RandomBlockManager::read_rbm_header(blk_paddr_t addr)
       "Invalid error in RandomBlockManager::read_rbm_header"
     }
     );
+}
+
+RandomBlockManager::write_ertr::future<>
+RandomBlockManager::write(
+  blk_paddr_t addr,
+  bufferlist &bl)
+{
+  ceph_assert(device);
+  bufferptr bptr;
+  try {
+    bptr = bufferptr(ceph::buffer::create_page_aligned(bl.length()));
+    auto iter = bl.cbegin();
+    iter.copy(bl.length(), bptr.c_str());
+  } catch (const std::exception &e) {
+    logger().error(
+      "write: "
+      "exception creating aligned buffer {}",
+      e
+    );
+    ceph_assert(0 == "unhandled exception");
+  }
+  return device->write(
+      addr,
+      bptr);
 }
 
 std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
