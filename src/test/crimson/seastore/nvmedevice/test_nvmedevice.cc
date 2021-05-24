@@ -18,7 +18,7 @@ struct nvdev_test_t : seastar_test_suite_t {
   static const uint64_t DEV_SIZE = 1024 * 1024 * 1024;
 
   nvdev_test_t() :
-    device(NVMeBlockDevice::create<NormalNBD>()),
+    device(nullptr),
     dev_path("randomblock_manager.test_nvmedevice" + stringify(getpid())) {
     int fd = ::open(dev_path.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0644);
     ceph_assert(fd >= 0);
@@ -27,11 +27,11 @@ struct nvdev_test_t : seastar_test_suite_t {
   }
   ~nvdev_test_t() {
     ::unlink(dev_path.c_str());
-    delete device;
   }
 };
 
-static const uint64_t BUF_SIZE = 8192;
+static const uint64_t BUF_SIZE = 1024;
+static const uint64_t BLK_SIZE = 4096;
 
 struct nvdev_test_block_t {
   uint8_t data[BUF_SIZE];
@@ -53,6 +53,7 @@ WRITE_CLASS_DENC_BOUNDED(
 TEST_F(nvdev_test_t, write_and_verify_test)
 {
   run_async([this] {
+    device = NVMeBlockDevice::create<PosixNVMeDevice>();
     device->open(dev_path, seastar::open_flags::rw).unsafe_get();
     nvdev_test_block_t original_data;
     std::minstd_rand0 generator;
@@ -63,14 +64,14 @@ TEST_F(nvdev_test_t, write_and_verify_test)
       bufferlist bl;
       encode(original_data, bl);
       bl_length = bl.length();
-      auto write_buf = ceph::bufferptr(buffer::create_page_aligned(bl_length));
-      bl.begin().copy(bl.length(), write_buf.c_str());
+      auto write_buf = ceph::bufferptr(buffer::create_page_aligned(BLK_SIZE));
+      bl.begin().copy(bl_length, write_buf.c_str());
       device->write(0, write_buf).unsafe_get();
     }
 
     nvdev_test_block_t read_data;
     {
-      auto read_buf = ceph::bufferptr(buffer::create_page_aligned(bl_length));
+      auto read_buf = ceph::bufferptr(buffer::create_page_aligned(BLK_SIZE));
       device->read(0, read_buf).unsafe_get();
       bufferlist bl;
       bl.push_back(read_buf);
@@ -81,5 +82,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
     int ret = memcmp(original_data.data, read_data.data, BUF_SIZE);
     device->close().wait();
     ASSERT_TRUE(ret == 0);
+    device.reset(nullptr);
   });
 }
+
