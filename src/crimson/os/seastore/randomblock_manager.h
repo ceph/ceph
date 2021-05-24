@@ -249,7 +249,13 @@ public:
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg
     >;
-  free_block_ertr::future<> free_extent(Transaction &t, blk_paddr_t blk_paddr); // TODO: will include trim if necessary
+  /*
+   * free_extent
+   *
+   * add a range of free blocks to transaction
+   *
+   */
+  free_block_ertr::future<> free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to); // TODO: will include trim if necessary
 
   using complete_allocation_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,

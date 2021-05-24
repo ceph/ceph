@@ -266,47 +266,20 @@ RandomBlockManager::alloc_extent(Transaction &t, size_t size)
 }
 
 RandomBlockManager::free_block_ertr::future<>
-RandomBlockManager::free_extent(Transaction &t, blk_paddr_t blk_paddr)
+RandomBlockManager::free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to)
 {
+  blk_id_t blk_id_start = from / super.block_size;
+  blk_id_t blk_id_end = to / super.block_size;
 
-  blk_id_t block_no = blk_paddr / super.block_size;
-  auto addr = (super.start_alloc_area +
-	      block_no / max_block_by_bitmap_block())
-	      * super.block_size;
-  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
-  return device->read(
-      addr,
-      bp
-      ).safe_then([&, this]() {
-	logger().debug("free_extent: addr {}", addr);
-	rbm_bitmap_block_t b_block(super.block_size);
-	bufferlist bl_bitmap_block;
-	bl_bitmap_block.append(bp);
-	encode(b_block, bl_bitmap_block);
-
-	auto remain_offset = block_no % max_block_by_bitmap_block();
-	b_block.clear_bit(remain_offset);
-	bufferlist bl;
-	encode(b_block, bl);
-	logger().debug("free_extent: free block no {}",
-		       convert_bitmap_block_no_to_block_id(remain_offset, addr));
-	std::vector<blk_id_t> ids;
-	ids.push_back(convert_bitmap_block_no_to_block_id(remain_offset, addr));
-	rbm_extent_t extent{
-	  extent_types_t::RBM_ALLOC_INFO,
-	  ids,
-	  addr,
-	  bl
-	};
-	t.add_rbm_allocated_blocks(extent);
-	return free_block_ertr::now();
-	}
-  ).handle_error(
-    free_block_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in RandomBlockManager::free_extent"
-    }
-    );
+  interval_set<blk_id_t> free_extent;
+  free_extent.insert(blk_id_start, blk_id_end - blk_id_start + 1);
+  rbm_alloc_delta_t alloc_info {
+    extent_types_t::RBM_ALLOC_INFO,
+    free_extent,
+    rbm_alloc_delta_t::op_types_t::CLEAR
+  };
+  t.add_rbm_allocated_blocks(alloc_info);
+  return free_block_ertr::now();
 }
 
 RandomBlockManager::write_ertr::future<>
