@@ -410,19 +410,17 @@ default proto ra metric 100
 
         # test normal valid login with url, username and password specified
         call_throws.return_value = '', '', 0
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'sample-url',
             '--registry-username', 'sample-user', '--registry-password',
             'sample-pass'])
         ctx.container_engine = self.mock_docker()
-        assert ctx
         retval = cd.command_registry_login(ctx)
         assert retval == 0
 
         # test bad login attempt with invalid arguments given
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'bad-args-url'])
-        assert ctx
         with pytest.raises(Exception) as e:
             assert cd.command_registry_login(ctx)
         assert str(e.value) == ('Invalid custom registry arguments received. To login to a custom registry include '
@@ -430,18 +428,16 @@ default proto ra metric 100
 
         # test normal valid login with json file
         get_parm.return_value = {"url": "sample-url", "username": "sample-username", "password": "sample-password"}
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-json', 'sample-json'])
         ctx.container_engine = self.mock_docker()
-        assert ctx
         retval = cd.command_registry_login(ctx)
         assert retval == 0
 
         # test bad login attempt with bad json file
         get_parm.return_value = {"bad-json": "bad-json"}
-        ctx: Optional[cd.CephadmContext] =  cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext =  cd.cephadm_init_ctx(
             ['registry-login', '--registry-json', 'sample-json'])
-        assert ctx
         with pytest.raises(Exception) as e:
             assert cd.command_registry_login(ctx)
         assert str(e.value) == ("json provided for custom registry login did not include all necessary fields. "
@@ -454,11 +450,10 @@ default proto ra metric 100
 
         # test login attempt with valid arguments where login command fails
         call_throws.side_effect = Exception
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'sample-url',
             '--registry-username', 'sample-user', '--registry-password',
             'sample-pass'])
-        assert ctx
         with pytest.raises(Exception) as e:
             cd.command_registry_login(ctx)
         assert str(e.value) == "Failed to login to custom registry @ sample-url as sample-user with given password"
