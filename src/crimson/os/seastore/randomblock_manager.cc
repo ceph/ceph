@@ -10,6 +10,7 @@
 #include "randomblock_manager.h"
 #include "crimson/os/seastore/nvmedevice/nvmedevice.h"
 #include "include/interval_set.h"
+#include "include/intarith.h"
 
 namespace {
   seastar::logger& logger() {
@@ -45,18 +46,12 @@ RandomBlockManager::rbm_sync_block_bitmap(rbm_bitmap_block_t &block, blk_id_t bl
 
 RandomBlockManager::mkfs_ertr::future<>
 RandomBlockManager::initialize_blk_alloc_area() {
-  auto bp = ceph::bufferptr(buffer::create_page_aligned(super.block_size));
-  bp.zero();
-  /* initialize alloc area to zero */
-  for (uint64_t i = 0; i < super.alloc_area_size / super.block_size; i++) {
-    device->write(super.start_alloc_area + (i * super.block_size), bp);
-  }
+  auto start = super.start_data_area / super.block_size;
+  logger().debug("initialize_alloc_area: start to read at {} ", start);
 
   /* write allocated bitmap info to rbm meta block */
-  auto start = super.start_data_area / super.block_size;
   rbm_bitmap_block_t b_block(super.block_size);
   alloc_rbm_bitmap_block_buf(b_block);
-  logger().debug(" start {} ", start);
   for (uint64_t i = 0; i < start; i++) {
     b_block.set_bit(i);
   }
@@ -64,41 +59,58 @@ RandomBlockManager::initialize_blk_alloc_area() {
 
   return rbm_sync_block_bitmap(b_block,
     super.start_alloc_area / super.block_size
-    ).safe_then([this, b_block] () mutable {
+    ).safe_then([this, b_block, start] () mutable {
+
+    /* initialize bitmap blocks as unused */
+    auto max = max_block_by_bitmap_block();
+    auto max_block = super.size / super.block_size;
+    blk_id_t end = round_up_to(max_block, max) - 1;
+    logger().debug(" init start {} end {} ", start, end);
+    return rbm_sync_block_bitmap_by_range(
+            start,
+            end,
+            bitmap_op_types_t::ALL_CLEAR).safe_then([this, b_block, start]() mutable {
       /*
-       * Set rest of the block bitmap to 1
-       * To do so, we only mark 1 to the byte, which is the last byte of bitmap-blocks
+       * Set rest of the block bitmap, which is not used, to 1
+       * To do so, we only mark 1 to empty bitmap blocks
        */
-      uint64_t last_block_no = super.size/super.block_size - 1;
-      uint64_t remain_block = last_block_no % max_block_by_bitmap_block();
-      logger().debug(" last_block_no: {}, remain_block: {} ",
-		     last_block_no, remain_block);
+      uint64_t na_block_no = super.size/super.block_size;
+      uint64_t remain_block = na_block_no % max_block_by_bitmap_block();
+      logger().debug(" na_block_no: {}, remain_block: {} ",
+                     na_block_no, remain_block);
       if (remain_block) {
-	logger().debug(" try to remained write alloc info ");
-	if (last_block_no > max_block_by_bitmap_block()) {
-	  b_block.buf.clear();
-	  alloc_rbm_bitmap_block_buf(b_block);
-	}
-	for (uint64_t i = remain_block; i < max_block_by_bitmap_block(); i++) {
-	  b_block.set_bit(i);
-	}
-	b_block.set_crc();
-	return rbm_sync_block_bitmap(b_block, last_block_no
-	    ).handle_error(
-		mkfs_ertr::pass_further{},
-		crimson::ct_error::assert_all{
-		  "Invalid error rbm_sync_block_bitmap to update last bitmap block \
-		   in RandomBlockManager::initialize_blk_alloc_area"
-		}
-	      );
+        logger().debug(" try to remained write alloc info ");
+        if (na_block_no > max_block_by_bitmap_block()) {
+          b_block.buf.clear();
+          alloc_rbm_bitmap_block_buf(b_block);
+        }
+        for (uint64_t i = remain_block; i < max_block_by_bitmap_block(); i++) {
+          b_block.set_bit(i);
+        }
+        b_block.set_crc();
+        return rbm_sync_block_bitmap(b_block, na_block_no
+            ).handle_error(
+                mkfs_ertr::pass_further{},
+                crimson::ct_error::assert_all{
+                  "Invalid error rbm_sync_block_bitmap to update last bitmap block \
+                   in RandomBlockManager::initialize_blk_alloc_area"
+                }
+              );
       }
       return mkfs_ertr::now();
     }).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-	"Invalid error rbm_sync_block_bitmap in RandomBlockManager::initialize_blk_alloc_area"
+        "Invalid error rbm_sync_block_bitmap in RandomBlockManager::initialize_blk_alloc_area"
       }
       );
+  }).handle_error(
+    mkfs_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error rbm_sync_block_bitmap_by_range in RandomBlockManager::initialize_blk_alloc_area"
+    }
+    );
+
 }
 
 RandomBlockManager::mkfs_ertr::future<>
