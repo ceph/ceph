@@ -1630,8 +1630,6 @@ log viewer page:
 
 .. code-block:: python
 
-  from __future__ import absolute_import
-
   import collections
 
   import cherrypy
@@ -2022,7 +2020,6 @@ updates its progress:
 
 .. code-block:: python
 
-  from __future__ import absolute_import
   import random
   import time
   import cherrypy
