@@ -3176,6 +3176,18 @@ void BlueFS::_close_writer(FileWriter *h)
   delete h;
 }
 
+uint64_t BlueFS::debug_get_dirty_seq(FileWriter *h)
+{
+  std::lock_guard l(lock);
+  return h->file->dirty_seq;
+}
+
+bool BlueFS::debug_get_is_dev_dirty(FileWriter *h, uint8_t dev)
+{
+  std::lock_guard l(lock);
+  return h->dirty_devs[dev];
+}
+
 int BlueFS::open_for_read(
   const string& dirname,
   const string& filename,

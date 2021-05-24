@@ -633,6 +633,8 @@ public:
   const PerfCounters* get_perf_counters() const {
     return logger;
   }
+  uint64_t debug_get_dirty_seq(FileWriter *h);
+  bool debug_get_is_dev_dirty(FileWriter *h, uint8_t dev);
 
 private:
   // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)
