@@ -18,7 +18,7 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <clusterid> [<placement>]
+    $ ceph nfs cluster create <clusterid> [<placement>] [--ingress --virtual-ip <ip>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
 ``clusterid``, and a common NFS Ganesha config RADOS object.
@@ -46,6 +46,11 @@ on nodes host1 and host2 (for a total of two NFS Ganesha daemons in the
 cluster)::
 
     "2 host1,host2"
+
+To deploy NFS with an HA front-end (virtual IP and load balancer), add the
+``--ingress`` flag and specify a virtual IP address. This will deploy a combination
+of keepalived and haproxy to provide an high-availability NFS frontend for the NFS
+service.
 
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
