@@ -412,36 +412,47 @@ RandomBlockManager::write_ertr::future<>
 RandomBlockManager::complete_allocation(Transaction &t)
 {
   const auto alloc_blocks = t.get_rbm_allocated_blocks();
+  if (alloc_blocks.empty()) {
+    return write_ertr::now();
+  }
   return seastar::do_with(alloc_blocks,
 	  [&, this] (auto &alloc_blocks) mutable {
     return crimson::do_for_each(
 	alloc_blocks,
 	[this, &alloc_blocks](auto &alloc) {
-	  logger().debug(
-	      "complete_allocation: addr {}",
-	      alloc.addr);
-	  bufferptr bptr;
-	  try {
-	    bptr = bufferptr(ceph::buffer::create_page_aligned(alloc.bl.length()));
-	    auto iter = alloc.bl.cbegin();
-	    iter.copy(alloc.bl.length(), bptr.c_str());
-	  } catch (const std::exception &e) {
-	    logger().error(
-		"RandomBlockManager::complete_allocation: "
-		"exception creating aligned buffer {}",
-		e
-		);
-	    ceph_assert(0 == "unhandled exception");
-	  }
-	  return device->write(
-	      alloc.addr,
-	      bptr);
+	  return crimson::do_for_each(
+	      alloc.alloc_blk_ids,
+	      [this, &alloc] (auto &range) -> write_ertr::future<> {
+		logger().debug("range {} ~ {}", range.first, range.second);
+		bitmap_op_types_t op = (alloc.op == rbm_alloc_delta_t::op_types_t::SET) ?
+				    bitmap_op_types_t::ALL_SET : bitmap_op_types_t::ALL_CLEAR;
+		return rbm_sync_block_bitmap_by_range(
+			range.first,
+			range.first + range.second - 1,
+			op);
+	      });
 	}).safe_then([this, &alloc_blocks]() mutable {
-	  auto alloc_block_count = 0;
+	  int alloc_block_count = 0;
 	  for (const auto b : alloc_blocks) {
-	    alloc_block_count += b.blk_ids.size();
+	    for (interval_set<blk_id_t>::const_iterator r = b.alloc_blk_ids.begin();
+		 r != b.alloc_blk_ids.end(); ++r) {
+	      if (b.op == rbm_alloc_delta_t::op_types_t::SET) {
+		alloc_block_count += r.get_len();
+		logger().debug(" complete alloc block: start {} len {} ",
+				r.get_start(), r.get_len());
+	      } else {
+		alloc_block_count -= r.get_len();
+		logger().debug(" complete free block:  start {} len {} ",
+				r.get_start(), r.get_len());
+	      }
+	    }
 	  }
-	  super.free_block_count -= alloc_block_count;
+	  logger().debug("complete_alloction: complete to allocate {} blocks", alloc_block_count);
+	  if (alloc_block_count > 0) {
+	    super.free_block_count -= alloc_block_count;
+	  } else {
+	    super.free_block_count += alloc_block_count;
+	  }
 	  return write_ertr::now();
 	  });
   });
