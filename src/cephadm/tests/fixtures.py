@@ -3,7 +3,9 @@ import os
 import pytest
 import time
 
+from contextlib import contextmanager
 from pyfakefs import fake_filesystem
+from typing import Dict, List, Optional
 
 
 with mock.patch('builtins.open', create=True):
@@ -62,3 +64,26 @@ def cephadm_fs(
             fs.create_dir(cd.UNIT_DIR)
 
             yield fs
+
+
+@contextmanager
+def with_cephadm_ctx(
+    cmd: List[str],
+    list_networks: Optional[Dict[str,Dict[str,List[str]]]] = None
+):
+    """
+    :param cmd: cephadm command argv
+    :param list_networks: mock 'list-networks' return
+    """
+    if not list_networks:
+        list_networks = {}
+
+    with mock.patch('cephadm.get_parm'), \
+         mock.patch('cephadm.attempt_bind'), \
+         mock.patch('cephadm.call', return_value=('', '', 0)), \
+         mock.patch('cephadm.find_executable', return_value='foo'), \
+         mock.patch('cephadm.is_available', return_value=True), \
+         mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \
+         mock.patch('cephadm.list_networks', return_value=list_networks):
+             ctx: cd.CephadmContext = cd.cephadm_init_ctx(cmd)
+             yield ctx
