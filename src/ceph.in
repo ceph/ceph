@@ -83,6 +83,9 @@ def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
         lib_path_var = "LD_LIBRARY_PATH"
 
     ld_paths_changed = 0
+    preload_libcxx = os.environ.get('CEPH_PRELOAD_LIBCXX')
+    if preload_libcxx:
+        ld_paths_changed += add_to_ld_path('LD_PRELOAD', preload_libcxx)
     if asan_lib_path:
         ld_paths_changed += add_to_ld_path('LD_PRELOAD', asan_lib_path)
     ld_paths_changed += add_to_ld_path(lib_path_var, lib_path)
