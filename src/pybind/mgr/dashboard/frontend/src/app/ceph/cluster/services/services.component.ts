@@ -8,7 +8,6 @@ import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -95,20 +94,6 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         name: $localize`Service`,
         prop: 'service_name',
         flexGrow: 1
-      },
-      {
-        name: $localize`Container image name`,
-        prop: 'status.container_image_name',
-        flexGrow: 3
-      },
-      {
-        name: $localize`Container image ID`,
-        prop: 'status.container_image_id',
-        flexGrow: 1.5,
-        cellTransformation: CellTemplate.truncate,
-        customTemplateConfig: {
-          length: 12
-        }
       },
       {
         name: $localize`Placement`,
