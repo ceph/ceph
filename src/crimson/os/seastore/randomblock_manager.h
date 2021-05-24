@@ -114,7 +114,7 @@ struct rbm_bitmap_block_t {
   void set_bit(uint64_t nr) {
     ceph_assert(buf.length());
     char mask = BIT_CHAR_MASK(nr);
-    char *p = buf.c_str() + (nr >> BITS_PER_CHAR);
+    char *p = buf.c_str() + (nr / BITS_PER_CHAR);
     *p |= mask;
   }
 
@@ -131,14 +131,14 @@ struct rbm_bitmap_block_t {
   void clear_bit(uint64_t nr) {
     ceph_assert(buf.length());
     char mask = ~BIT_CHAR_MASK(nr);
-    char *p = buf.c_str() + (nr >> BITS_PER_CHAR);
+    char *p = buf.c_str() + (nr / BITS_PER_CHAR);
     *p &= mask;
   }
 
   bool is_allocated(uint64_t nr) {
     ceph_assert(buf.length());
     char mask = BIT_CHAR_MASK(nr);
-    char *p = buf.c_str() + (nr >> BITS_PER_CHAR);
+    char *p = buf.c_str() + (nr / BITS_PER_CHAR);
     return *p & mask;
   }
 
