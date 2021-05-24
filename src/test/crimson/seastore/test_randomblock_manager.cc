@@ -91,63 +91,63 @@ struct rbm_test_t : public  seastar_test_suite_t,
     return rbm_manager->alloc_extent(t, size).unsafe_get0();
   }
 
+  auto free_extent(Transaction &t, interval_set<blk_id_t> range) {
+    for (auto r : range) {
+      logger().debug("free_extent: start {} end {}", r.first * DEFAULT_BLOCK_SIZE,
+		      (r.first + r.second - 1) * DEFAULT_BLOCK_SIZE);
+      return rbm_manager->free_extent(t, r.first * DEFAULT_BLOCK_SIZE,
+	      (r.first + r.second - 1) * DEFAULT_BLOCK_SIZE).unsafe_get0();
+    }
+  }
+
   auto submit_transaction(Transaction &t) {
     auto record = cache.try_construct_record(t);
     if (!record) {
       return false;
     }
-
-    auto allocated_blocks = t.get_rbm_allocated_blocks();
-
-    bufferlist bl;
-    uint32_t iter_cnt = 0;
-    for (auto &&block : record->extents) {
-      if (block.type == extent_types_t::RBM_ALLOC_INFO) {
-	rbm_bitmap_block_t b_block(DEFAULT_BLOCK_SIZE);
-	for (auto id : allocated_blocks[iter_cnt].blk_ids) {
-	  logger().debug("submit allocated block id {}", id);
-	  decode(b_block, block.bl);
-	  iter_cnt++;
-	  if (!b_block.is_allocated(id % rbm_manager->max_block_by_bitmap_block())) {
-	    return false;
-	  }
-	}
-      }
-    }
+    // TODO: write record on journal
     return true;
   }
 
-  vector<blk_id_t> get_allocated_blk_ids(Transaction &t) {
-    vector<blk_id_t> ids;
+  interval_set<blk_id_t> get_allocated_blk_ids(Transaction &t) {
     auto allocated_blocks = t.get_rbm_allocated_blocks();
+    interval_set<blk_id_t> alloc_ids;
     for (auto p : allocated_blocks) {
-      ids.insert(ids.end(), p.blk_ids.begin(), p.blk_ids.end());
+      alloc_ids.insert(p.alloc_blk_ids);
     }
-    logger().debug(" get allocated id {}", ids);
-    return ids;
+    logger().debug(" get allocated blockid {}", alloc_ids);
+    return alloc_ids;
   }
 
-  bool check_ids_are_allocated(vector<blk_id_t> &ids) {
-
+  bool check_ids_are_allocated(interval_set<blk_id_t> &ids, bool allocated = true) {
     bool ret = true;
-    for (auto id : ids) {
-      auto addr = rbm_manager->get_start_block_alloc_area() +
-		   (id / rbm_manager->max_block_by_bitmap_block())
-		   * DEFAULT_BLOCK_SIZE;
-      logger().debug(" addr {} id {} ", addr, id);
-      auto bp = bufferptr(ceph::buffer::create_page_aligned(DEFAULT_BLOCK_SIZE));
-      rbm_manager->read(addr, bp).unsafe_get0();
-      rbm_bitmap_block_t b_block(DEFAULT_BLOCK_SIZE);
-      bufferlist bl;
-      bl.append(bp);
-      auto b_bl = bl.cbegin();
-      decode(b_block, b_bl);
-      logger().debug(" offset {} ", id % rbm_manager->max_block_by_bitmap_block());
-      if (!b_block.is_allocated(id % rbm_manager->max_block_by_bitmap_block())) {
-	ret = false;
-	break;
+    for (auto r : ids) {
+      for (blk_id_t id = r.first; id < r.first + r.second; id++) {
+	auto addr = rbm_manager->get_start_block_alloc_area() +
+		     (id / rbm_manager->max_block_by_bitmap_block())
+		     * DEFAULT_BLOCK_SIZE;
+	logger().debug(" addr {} id {} ", addr, id);
+	auto bp = bufferptr(ceph::buffer::create_page_aligned(DEFAULT_BLOCK_SIZE));
+	rbm_manager->read(addr, bp).unsafe_get0();
+	rbm_bitmap_block_t b_block(DEFAULT_BLOCK_SIZE);
+	bufferlist bl;
+	bl.append(bp);
+	auto b_bl = bl.cbegin();
+	decode(b_block, b_bl);
+	if (!b_block.is_allocated(id % rbm_manager->max_block_by_bitmap_block())) {
+	  logger().debug(" block id {} is not allocated", id);
+	  if (allocated) {
+	    ret = false;
+	    return ret;
+	  }
+	} else {
+	  logger().debug(" block id {} allocated", id);
+	  if (!allocated) {
+	    ret = false;
+	    return ret;
+	  }
+	}
       }
-
     }
     return ret;
   }
