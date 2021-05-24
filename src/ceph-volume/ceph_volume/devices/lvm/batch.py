@@ -126,6 +126,7 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
         if requested_size:
             if requested_size <= abs_size:
                 abs_size = requested_size
+                relative_size = int(abs_size) / dev_size
             else:
                 mlogger.error(
                     '{} was requested for {}, but only {} can be fulfilled'.format(
