@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 
 from pecan import request, response
 from base64 import b64decode
