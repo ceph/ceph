@@ -739,6 +739,7 @@ $BLUESTORE_OPTS
 $COSDSHORT
         $(format_conf "${extra_conf}")
 [mon]
+        mon_data_avail_crit = 1
         mgr initial modules = $mgr_modules
         mgr disabled modules = rook
 $DAEMONOPTS
