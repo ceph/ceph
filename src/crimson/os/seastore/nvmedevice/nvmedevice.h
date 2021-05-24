@@ -251,13 +251,13 @@ public:
 /*
  * Implementation of NVMeBlockDevice with POSIX APIs
  *
- * NormalNBD provides NVMe SSD interfaces through POSIX APIs which is generally
+ * PosixNVMeDevice provides NVMe SSD interfaces through POSIX APIs which is generally
  * available at most operating environment.
  */
-class NormalNBD : public NVMeBlockDevice {
+class PosixNVMeDevice : public NVMeBlockDevice {
 public:
-  NormalNBD() {}
-  ~NormalNBD() = default;
+  PosixNVMeDevice() {}
+  ~PosixNVMeDevice() = default;
 
   open_ertr::future<> open(
     const std::string &in_path,

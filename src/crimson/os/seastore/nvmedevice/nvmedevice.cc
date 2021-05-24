@@ -19,7 +19,7 @@ namespace {
 
 namespace crimson::os::seastore::nvme_device {
 
-open_ertr::future<> NormalNBD::open(
+open_ertr::future<> PosixNVMeDevice::open(
   const std::string &in_path,
   seastar::open_flags mode) {
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
@@ -38,7 +38,7 @@ open_ertr::future<> NormalNBD::open(
   });
 }
 
-write_ertr::future<> NormalNBD::write(
+write_ertr::future<> PosixNVMeDevice::write(
   uint64_t offset,
   bufferptr &bptr,
   uint16_t stream) {
@@ -63,7 +63,7 @@ write_ertr::future<> NormalNBD::write(
     });
 }
 
-read_ertr::future<> NormalNBD::read(
+read_ertr::future<> PosixNVMeDevice::read(
   uint64_t offset,
   bufferptr &bptr) {
   logger().debug(
@@ -87,7 +87,7 @@ read_ertr::future<> NormalNBD::read(
     });
 }
 
-seastar::future<> NormalNBD::close() {
+seastar::future<> PosixNVMeDevice::close() {
   logger().debug(" close ");
   return device.close();
 }
