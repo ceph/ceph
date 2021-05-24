@@ -313,7 +313,7 @@ class TreeBuilder {
         return cursor;
       });
 #else
-      return eagain_ertr::make_ready_future<BtreeCrusor>(cursor);
+      return eagain_ertr::make_ready_future<BtreeCursor>(cursor);
 #endif
     });
   }
