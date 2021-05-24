@@ -94,6 +94,24 @@ class Module(MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
+    @CLICommand('rgw zone create', perm='rw')
+    def _cmd_rgw_zone_create(self,
+                             realm_token : Optional[str] = None,
+                             zonegroup_name: Optional[str] = None,
+                             zone_name: Optional[str] = None,
+                             endpoints: Optional[str] = None,
+                             start_radosgw: Optional[bool] = False):
+        """Bootstrap new rgw zone that syncs with existing zone"""
+
+        try:
+            retval, out, err = RGWAM(self.ceph_common_args).zone_create(realm_token, zonegroup_name,
+                    zone_name, endpoints, start_radosgw)
+        except RGWAMException as e:
+            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            return (e.retcode, e.message, e.stderr)
+
+        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
+
     def shutdown(self) -> None:
         """
         This method is called by the mgr when the module needs to shut
