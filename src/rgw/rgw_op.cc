@@ -500,16 +500,16 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
       if (policy) {
         r = policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket->get_key()));
         if (r == Effect::Allow)
-          return -ENOENT;
+          return upload_id.empty() ? -ENOENT : -ERR_NO_SUCH_UPLOAD;
         if (r == Effect::Deny)
           return -EACCES;
       }
       if (! bucket_policy.verify_permission(s, *s->auth.identity, s->perm_mask, RGW_PERM_READ))
         ret = -EACCES;
       else
-        ret = -ENOENT;
+        ret = upload_id.empty() ? -ENOENT : -ERR_NO_SUCH_UPLOAD;
     } else {
-      ret = -ENOENT;
+      ret = upload_id.empty() ? -ENOENT : -ERR_NO_SUCH_UPLOAD;
     }
   }
 
