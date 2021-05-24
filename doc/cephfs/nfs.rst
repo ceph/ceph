@@ -70,12 +70,15 @@ to get the benefit of sessions.
 Conventions for mounting NFS resources are platform-specific. The
 following conventions work on Linux and some Unix platforms:
 
-From the command line::
+.. code:: bash
 
-  mount -t nfs -o nfsvers=4.1,proto=tcp <ganesha-host-name>:<ganesha-pseudo-path> <mount-point>
+    mount -t nfs -o nfsvers=4.1,proto=tcp <ganesha-host-name>:<ganesha-pseudo-path> <mount-point>
 
 Current limitations
 ===================
 
-- Per running ganesha daemon, FSAL_CEPH can only export one Ceph file system
+- Per running ganesha daemon, FSAL_CEPH_ can only export one Ceph file system
   although multiple directories in a Ceph file system may be exported.
+.. _FSAL_CEPH: https://github.com/nfs-ganesha/nfs-ganesha/tree/next/src/FSAL/FSAL_CEPH
+.. _NFS-Ganesha NFS server: https://github.com/nfs-ganesha/nfs-ganesha/wiki
+.. _sample ganesha.conf: https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/config_samples/ceph.conf
