@@ -77,24 +77,22 @@ def add_to_ld_path(path_name, path):
 
 
 def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
-    execv_cmd = []
-    if 'CEPH_DBG' in os.environ:
-        execv_cmd += ['@Python3_EXECUTABLE@', '-mpdb']
-
     if platform.system() == "Darwin":
         lib_path_var = "DYLD_LIBRARY_PATH"
     else:
         lib_path_var = "LD_LIBRARY_PATH"
 
-    execv_cmd += sys.argv
     ld_paths_changed = 0
     if asan_lib_path:
         ld_paths_changed += add_to_ld_path('LD_PRELOAD', asan_lib_path)
-    if add_to_ld_path(lib_path_var, lib_path) > 0:
+    ld_paths_changed += add_to_ld_path(lib_path_var, lib_path)
+    if ld_paths_changed > 0:
         if "CEPH_DEV" not in os.environ:
             print(DEVMODEMSG, file=sys.stderr)
-        ld_paths_changed += 1
-    if ld_paths_changed > 0:
+        execv_cmd = []
+        if 'CEPH_DBG' in os.environ:
+            execv_cmd += ['@Python3_EXECUTABLE@', '-mpdb']
+        execv_cmd += sys.argv
         os.execvp(execv_cmd[0], execv_cmd)
     else:
         sys.path.insert(0, pybind_path)
