@@ -33,7 +33,6 @@ add_library(crimson-seastore STATIC
   object_data_handler.cc
   seastore.cc
   randomblock_manager.cc
-  nvmedevice/memory.cc
   nvmedevice/nvmedevice.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
