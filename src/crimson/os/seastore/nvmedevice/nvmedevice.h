@@ -154,8 +154,8 @@ public:
   virtual ~NVMeBlockDevice() = default;
 
   template <typename T>
-  static NVMeBlockDevice *create() {
-    return new T();
+  static std::unique_ptr<T> create() {
+    return std::make_unique<T>();
   }
 
   /*

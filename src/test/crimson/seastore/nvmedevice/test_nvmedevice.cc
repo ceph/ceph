@@ -12,7 +12,7 @@ using namespace crimson::os::seastore;
 using namespace nvme_device;
 
 struct nvdev_test_t : seastar_test_suite_t {
-  NVMeBlockDevice* device;
+  std::unique_ptr<NVMeBlockDevice> device;
   std::string dev_path;
 
   static const uint64_t DEV_SIZE = 1024 * 1024 * 1024;
