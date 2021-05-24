@@ -2482,6 +2482,33 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   return 0;
 }
 
+int BlueFS::_signal_dirty_to_log(FileWriter *h)
+{
+  h->file->fnode.mtime = ceph_clock_now();
+  ceph_assert(h->file->fnode.ino >= 1);
+  if (h->file->dirty_seq == 0) {
+    h->file->dirty_seq = log_seq + 1;
+    dirty_files[h->file->dirty_seq].push_back(*h->file);
+    dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	     << " (was clean)" << dendl;
+  } else {
+    if (h->file->dirty_seq != log_seq + 1) {
+      // need re-dirty, erase from list first
+      ceph_assert(dirty_files.count(h->file->dirty_seq));
+      auto it = dirty_files[h->file->dirty_seq].iterator_to(*h->file);
+      dirty_files[h->file->dirty_seq].erase(it);
+      h->file->dirty_seq = log_seq + 1;
+      dirty_files[h->file->dirty_seq].push_back(*h->file);
+      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	       << " (was " << h->file->dirty_seq << ")" << dendl;
+    } else {
+      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	       << " (unchanged, do nothing) " << dendl;
+    }
+  }
+  return 0;
+}
+
 int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ << " " << h << " pos 0x" << std::hex << h->pos
@@ -2517,7 +2544,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   vselector->sub_usage(h->file->vselector_hint, h->file->fnode);
   // do not bother to dirty the file if we are overwriting
   // previously allocated extents.
-  bool must_dirty = false;
+
   if (allocated < offset + length) {
     // we should never run out of log space here; see the min runway check
     // in _flush_and_sync_log.
@@ -2534,17 +2561,17 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       return r;
     }
     if (cct->_conf->bluefs_preextend_wal_files &&
-	h->writer_type == WRITER_WAL) {
+      h->writer_type == WRITER_WAL) {
       // NOTE: this *requires* that rocksdb also has log recycling
       // enabled and is therefore doing robust CRCs on the log
       // records.  otherwise, we will fail to reply the rocksdb log
       // properly due to garbage on the device.
       h->file->fnode.size = h->file->fnode.get_allocated();
       dout(10) << __func__ << " extending WAL size to 0x" << std::hex
-	       << h->file->fnode.size << std::dec << " to include allocated"
-	       << dendl;
+               << h->file->fnode.size << std::dec << " to include allocated"
+               << dendl;
     }
-    must_dirty = true;
+    h->file->is_dirty = true;
   }
   if (h->file->fnode.size < offset + length) {
     h->file->fnode.size = offset + length;
@@ -2552,34 +2579,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       // we do not need to dirty the log file (or it's compacting
       // replacement) when the file size changes because replay is
       // smart enough to discover it on its own.
-      must_dirty = true;
+      h->file->is_dirty = true;
     }
   }
-  if (must_dirty) {
-    h->file->fnode.mtime = ceph_clock_now();
-    ceph_assert(h->file->fnode.ino >= 1);
-    if (h->file->dirty_seq == 0) {
-      h->file->dirty_seq = log_seq + 1;
-      dirty_files[h->file->dirty_seq].push_back(*h->file);
-      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
-	       << " (was clean)" << dendl;
-    } else {
-      if (h->file->dirty_seq != log_seq + 1) {
-        // need re-dirty, erase from list first
-        ceph_assert(dirty_files.count(h->file->dirty_seq));
-        auto it = dirty_files[h->file->dirty_seq].iterator_to(*h->file);
-        dirty_files[h->file->dirty_seq].erase(it);
-        h->file->dirty_seq = log_seq + 1;
-        dirty_files[h->file->dirty_seq].push_back(*h->file);
-        dout(20) << __func__ << " dirty_seq = " << log_seq + 1
-                 << " (was " << h->file->dirty_seq << ")" << dendl;
-      } else {
-        dout(20) << __func__ << " dirty_seq = " << log_seq + 1
-                 << " (unchanged, do nothing) " << dendl;
-      }
-    }
-  }
-  dout(20) << __func__ << " file now " << h->file->fnode << dendl;
+  dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
 
   uint64_t x_off = 0;
   auto p = h->file->fnode.seek(offset, &x_off);
@@ -2811,6 +2814,10 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l)
   int r = _flush(h, true);
   if (r < 0)
      return r;
+  if (h->file->is_dirty) {
+    _signal_dirty_to_log(h);
+    h->file->is_dirty = false;
+  }
   uint64_t old_dirty_seq = h->file->dirty_seq;
 
   _flush_bdev_safely(h);
