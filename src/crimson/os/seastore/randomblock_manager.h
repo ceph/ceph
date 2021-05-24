@@ -257,6 +257,12 @@ public:
    */
   free_block_ertr::future<> free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to); // TODO: will include trim if necessary
 
+  using abort_allocation_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::invarg
+    >;
+  abort_allocation_ertr::future<> abort_allocation(Transaction &t);
+
   using complete_allocation_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,

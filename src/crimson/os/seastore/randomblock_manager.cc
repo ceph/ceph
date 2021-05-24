@@ -393,6 +393,16 @@ RandomBlockManager::rbm_sync_block_bitmap_by_range(blk_id_t start, blk_id_t end,
 	);
 }
 
+RandomBlockManager::abort_allocation_ertr::future<>
+RandomBlockManager::abort_allocation(Transaction &t)
+{
+  /*
+   * TODO: clear all allocation infos associated with transaction in in-memory allocator
+   */
+  t.clear_rbm_allocated_blocks();
+  return abort_allocation_ertr::now();
+}
+
 RandomBlockManager::write_ertr::future<>
 RandomBlockManager::complete_allocation(Transaction &t)
 {
