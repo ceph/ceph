@@ -8160,18 +8160,15 @@ def _parse_args(av):
     return args
 
 
-def cephadm_init_ctx(args: List[str]) -> Optional[CephadmContext]:
-
+def cephadm_init_ctx(args: List[str]) -> CephadmContext:
     ctx = CephadmContext()
     ctx.set_args(_parse_args(args))
     return ctx
 
 
-def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
-
+def cephadm_init(args: List[str]) -> CephadmContext:
     global logger
     ctx = cephadm_init_ctx(args)
-    assert ctx is not None
 
     # Logger configuration
     if not os.path.exists(LOG_DIR):
@@ -8196,10 +8193,6 @@ def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
             if handler.name == 'console':
                 handler.setLevel(logging.DEBUG)
 
-    if not ctx.has_function():
-        sys.stderr.write('No command specified; pass -h or --help for usage\n')
-        return None
-
     return ctx
 
 
@@ -8214,7 +8207,8 @@ def main():
     av = sys.argv[1:]
 
     ctx = cephadm_init(av)
-    if not ctx:  # error, exit
+    if not ctx.has_function():
+        sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
 
     try:
