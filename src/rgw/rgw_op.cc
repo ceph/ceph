@@ -4695,38 +4695,11 @@ void RGWDeleteObj::execute()
     }
 
     if (check_obj_lock) {
-      auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
-      if (aiter != attrs.end()) {
-        RGWObjectRetention obj_retention;
-        try {
-          decode(obj_retention, aiter->second);
-        } catch (buffer::error& err) {
-          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
-          op_ret = -EIO;
-          return;
-        }
-        if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) > ceph_clock_now()) {
-          if (obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
-            op_ret = -EACCES;
-            return;
-          }
-        }
-      }
-      aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
-      if (aiter != attrs.end()) {
-        RGWObjectLegalHold obj_legal_hold;
-        try {
-          decode(obj_legal_hold, aiter->second);
-        } catch (buffer::error& err) {
-          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
-          op_ret = -EIO;
-          return;
-        }
-        if (obj_legal_hold.is_enabled()) {
-          op_ret = -EACCES;
-          return;
-        }
-      }
+      int object_lock_response = verify_object_lock(this, attrs, bypass_perm, bypass_governance_mode);
+      if (object_lock_response != 0) {
+        op_ret = object_lock_response;
+        return;
+       }
     }
 
     if (multipart_delete) {
@@ -6311,10 +6284,33 @@ void RGWGetHealthCheck::execute()
 
 int RGWDeleteMultiObj::verify_permission()
 {
+  int op_ret = get_params();
+  if (op_ret) {
+    return op_ret;
+  }
+
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
+    if (s->bucket_info.obj_lock_enabled()  && bypass_governance_mode) {
+      auto r = eval_user_policies(s->iam_user_policies, s->env, boost::none,
+				  rgw::IAM::s3BypassGovernanceRetention,
+				  ARN(s->bucket));
+      if (r == Effect::Deny) {
+        bypass_perm = false;
+      } else if (r == Effect::Pass && s->iam_policy) {
+        r = s->iam_policy->eval(s->env, *s->auth.identity,
+				rgw::IAM::s3BypassGovernanceRetention,
+				ARN(s->bucket));
+        if (r == Effect::Deny) {
+          bypass_perm = false;
+        }
+      }
+    }
+
+    bool not_versioned = s->object.instance.empty();
+
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
-                                              s->object.instance.empty() ?
+                                              not_versioned ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
                                               ARN(s->bucket));
@@ -6325,7 +6321,7 @@ int RGWDeleteMultiObj::verify_permission()
     rgw::IAM::Effect r = Effect::Pass;
     if (s->iam_policy) {
       r = s->iam_policy->eval(s->env, *s->auth.identity,
-				 s->object.instance.empty() ?
+				 not_versioned ?
 				 rgw::IAM::s3DeleteObject :
 				 rgw::IAM::s3DeleteObjectVersion,
 				 ARN(s->bucket));
@@ -6357,11 +6353,6 @@ void RGWDeleteMultiObj::execute()
   RGWMultiDelXMLParser parser;
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
   char* buf;
-
-  op_ret = get_params();
-  if (op_ret < 0) {
-    goto error;
-  }
 
   buf = data.c_str();
   if (!buf) {
@@ -6423,6 +6414,7 @@ void RGWDeleteMultiObj::execute()
         iter != multi_delete->objects.end();
         ++iter) {
     rgw_obj obj(bucket, *iter);
+    map<string, bufferlist> attrs;
     if (s->iam_policy || ! s->iam_user_policies.empty()) {
       auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
                                               boost::none,
@@ -6448,6 +6440,30 @@ void RGWDeleteMultiObj::execute()
 	  (usr_policy_res == Effect::Pass && e == Effect::Pass && !acl_allowed)) {
 	send_partial_response(*iter, false, "", -EACCES);
 	continue;
+      }
+    }
+
+    // verify_object_lock
+    bool check_obj_lock = obj.key.have_instance() && s->bucket_info.obj_lock_enabled();
+    if (check_obj_lock) {
+      int get_attrs_response = get_obj_attrs(store, s, obj, attrs);
+      if (get_attrs_response < 0) {
+        if (get_attrs_response == -ENOENT) {
+          // object maybe delete_marker, skip check_obj_lock
+          check_obj_lock = false;
+        } else {
+          // Something went wrong.
+          send_partial_response(*iter, false, "", get_attrs_response);
+          continue;
+        }
+      }
+    }
+
+    if (check_obj_lock) {
+      int object_lock_response = verify_object_lock(this, attrs, bypass_perm, bypass_governance_mode);
+      if (object_lock_response != 0) {
+        send_partial_response(*iter, false, "", object_lock_response);
+        continue;
       }
     }
 

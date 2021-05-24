@@ -2569,6 +2569,9 @@ extern bool verify_object_permission_no_policy(
   int perm);
 extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state *s,
 					       int perm);
+
+int verify_object_lock(const DoutPrefixProvider* dpp, const map<string, buffer::list>& attrs, const bool bypass_perm, const bool bypass_governance_mode);
+
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);

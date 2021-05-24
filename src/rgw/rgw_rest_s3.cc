@@ -3188,6 +3188,12 @@ int RGWDeleteMultiObj_ObjStore_S3::get_params()
     return ret;
   }
 
+  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
+  if (bypass_gov_header) {
+    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
+    bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
+  }
+
   return do_aws4_auth_completion();
 }
 
