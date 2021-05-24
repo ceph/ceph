@@ -74,7 +74,7 @@ private:
   PGPipeline &pp(PG &pg);
 
   OpSequencer& sequencer;
-  uint64_t prev_op_id = 0;
+  std::optional<uint64_t> prev_op_id;
 
   template <typename Errorator>
   using interruptible_errorator =
