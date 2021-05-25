@@ -369,7 +369,7 @@ int main(int argc, const char **argv)
       forker.exit(-EINVAL);
     }
 
-    int err = OSD::mkfs(g_ceph_context, store.release(), g_conf().get_val<uuid_d>("fsid"),
+    int err = OSD::mkfs(g_ceph_context, std::move(store), g_conf().get_val<uuid_d>("fsid"),
                         whoami, osdspec_affinity);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
