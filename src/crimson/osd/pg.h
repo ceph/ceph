@@ -562,11 +562,6 @@ private:
   void fill_op_params_bump_pg_version(
     osd_op_params_t& osd_op_p,
     const bool user_modify);
-  interruptible_future<Ref<MOSDOpReply>> handle_failed_op(
-    const std::error_code& e,
-    ObjectContextRef obc,
-    const OpsExecuter& ox,
-    const MOSDOp& m) const;
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
   using do_osd_ops_iertr =

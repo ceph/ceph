@@ -639,53 +639,6 @@ void PG::fill_op_params_bump_pg_version(
   }
 }
 
-PG::interruptible_future<Ref<MOSDOpReply>> PG::handle_failed_op(
-  const std::error_code& e,
-  ObjectContextRef obc,
-  const OpsExecuter& ox,
-  const MOSDOp& m) const
-{
-  // Oops, an operation had failed. do_osd_ops() altogether with
-  // OpsExecuter already dropped the ObjectStore::Transaction if
-  // there was any. However, this is not enough to completely
-  // rollback as we gave OpsExecuter the very single copy of `obc`
-  // we maintain and we did it for both reading and writing.
-  // Now all modifications must be reverted.
-  //
-  // Let's just reload from the store. Evicting from the shared
-  // LRU would be tricky as next MOSDOp (the one at `get_obc`
-  // phase) could actually already finished the lookup. Fortunately,
-  // this is supposed to live on cold  paths, so performance is not
-  // a concern -- simplicity wins.
-  //
-  // The conditional's purpose is to efficiently handle hot errors
-  // which may appear as a result of e.g. CEPH_OSD_OP_CMPXATTR or
-  // CEPH_OSD_OP_OMAP_CMP. These are read-like ops and clients
-  // typically append them before any write. If OpsExecuter hasn't
-  // seen any modifying operation, `obc` is supposed to be kept
-  // unchanged.
-  assert(e.value() > 0);
-  const bool need_reload_obc = ox.has_seen_write();
-  logger().debug(
-    "{}: {} - object {} got error code {}, {}; need_reload_obc {}",
-    __func__,
-    m,
-    obc->obs.oi.soid,
-    e.value(),
-    e.message(),
-    need_reload_obc);
-  return (need_reload_obc ? reload_obc(*obc)
-                          : interruptor::make_interruptible(load_obc_ertr::now())
-  ).safe_then_interruptible([e, &m, obc = std::move(obc), this] {
-    auto reply = make_message<MOSDOpReply>(
-      &m, -e.value(), get_osdmap_epoch(), 0, false);
-    reply->set_enoent_reply_versions(
-      peering_state.get_info().last_update,
-      peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  }, load_obc_ertr::assert_all{ "can't live with object state messed up" });
-}
-
 PG::interruptible_future<> PG::repair_object(
   const hobject_t& oid,
   eversion_t& v) 
