@@ -2024,7 +2024,11 @@ private:
   ~OSD() override;
 
   // static bits
-  static int mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami, std::string osdspec_affinity);
+  static int mkfs(CephContext *cct,
+		  std::unique_ptr<ObjectStore> store,
+		  uuid_d fsid,
+		  int whoami,
+		  std::string osdspec_affinity);
 
   /* remove any non-user xattrs from a std::map of them */
   void filter_xattrs(std::map<std::string, ceph::buffer::ptr>& attrs) {
