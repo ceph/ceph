@@ -34,6 +34,7 @@ import { ErrorComponent } from './core/error/error.component';
 import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.component';
 import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
+import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
@@ -77,6 +78,7 @@ export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
 const routes: Routes = [
   // Dashboard
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+  { path: 'api-docs', component: ApiDocsComponent },
   {
     path: '',
     component: WorkbenchLayoutComponent,
