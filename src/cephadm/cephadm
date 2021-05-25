@@ -3150,10 +3150,6 @@ class CephContainer:
         ]
 
         if isinstance(self.ctx.container_engine, Podman):
-            # podman adds the container *name* to /etc/hosts (for 127.0.1.1)
-            # by default, which makes python's socket.getfqdn() return that
-            # instead of a valid hostname.
-            cmd_args.append('--no-hosts')
             if os.path.exists('/etc/ceph/podman-auth.json'):
                 cmd_args.append('--authfile=/etc/ceph/podman-auth.json')
 
