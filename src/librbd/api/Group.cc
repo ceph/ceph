@@ -1243,6 +1243,59 @@ int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 }
 
 template <typename I>
+int Group<I>::image_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
+			const char *group_snap_name,
+      std::vector<group_image_snap_info_t> *image_snaps)
+{
+  CephContext *cct = (CephContext *)group_ioctx.cct();
+
+  if (!group_snap_name) {
+    lderr(cct) << "io_ctx=" << &group_ioctx << " group snap name is null." << dendl;
+    return -EINVAL;
+  }
+
+  ldout(cct, 20) << "io_ctx=" << &group_ioctx
+		 << " group name " << group_name
+     << ", group snap name " << (group_snap_name ? group_snap_name : "") << dendl;
+
+  int r = 0;
+  std::vector<cls::rbd::GroupSnapshot> cls_snaps;
+
+  r = group_snap_list(group_ioctx, group_name, &cls_snaps);
+  if (r < 0) {
+    return r;
+  }
+
+  for (auto snap : cls_snaps) {
+    if (0 == snap.name.compare(group_snap_name)) {
+      for (auto image_snap: snap.snaps) {
+        IoCtx ioctx;
+        int r = util::create_ioctx(group_ioctx, "image", image_snap.pool, {},
+                                  &ioctx);
+        if (r < 0) {
+          return r;
+        }
+
+        string image_name;
+        r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY,
+            image_snap.image_id, &image_name);
+        if (r < 0) {
+          return r;
+        }
+
+        image_snaps->push_back(group_image_snap_info_t{image_snap.pool,
+                                                      image_name,
+                                                      image_snap.snap_id});
+      }
+
+      break;
+    }
+  }
+
+  return r;
+}
+
+template <typename I>
 int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
                             const char *group_name, const char *snap_name,
                             ProgressContext& pctx)

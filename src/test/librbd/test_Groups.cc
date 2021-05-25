@@ -280,12 +280,33 @@ TEST_F(TestGroup, add_snapshot)
                                          &num_snaps));
   ASSERT_EQ(1U, num_snaps);
 
+  size_t group_image_num_snaps = 0;
+  ASSERT_EQ(-ERANGE, rbd_group_image_snap_list(ioctx, group_name, snap_name, NULL,
+                                         sizeof(rbd_group_image_snap_info_t),
+                                         &group_image_num_snaps));
+  ASSERT_EQ(1U, group_image_num_snaps);
+
   rbd_group_snap_info_t snaps[1];
   ASSERT_EQ(1, rbd_group_snap_list(ioctx, group_name, snaps,
                                    sizeof(rbd_group_snap_info_t),
                                    &num_snaps));
 
   ASSERT_STREQ(snap_name, snaps[0].name);
+
+  rbd_group_image_snap_info_t group_image_snaps[1];
+  ASSERT_EQ(1, rbd_group_image_snap_list(ioctx, group_name, snap_name,
+                                        group_image_snaps,
+                                        sizeof(rbd_group_image_snap_info_t),
+                                        &group_image_num_snaps));
+
+  ASSERT_EQ(rbd_get_data_pool_id(image), group_image_snaps[0].pool_id);
+
+  ASSERT_EQ(0, strcmp(m_image_name.c_str(), group_image_snaps[0].image_name));
+
+  int image_max_snaps = 2;
+  rbd_snap_info_t image_snaps[2];
+  ASSERT_EQ(1, rbd_snap_list(image, image_snaps, &image_max_snaps));
+  ASSERT_EQ(image_snaps[0].id, group_image_snaps[0].snap_id);
 
   ASSERT_EQ(10, rbd_write(image, 11, 10, test_data));
   ASSERT_EQ(10, rbd_read(image, 11, 10, read_data));
@@ -297,12 +318,21 @@ TEST_F(TestGroup, add_snapshot)
 
   ASSERT_EQ(0, rbd_group_snap_list_cleanup(snaps, sizeof(rbd_group_snap_info_t),
                                            num_snaps));
+  ASSERT_EQ(0, rbd_group_image_snap_list_cleanup(group_image_snaps,
+                                          sizeof(rbd_group_image_snap_info_t),
+                                          group_image_num_snaps));
   ASSERT_EQ(0, rbd_group_snap_remove(ioctx, group_name, snap_name));
 
   ASSERT_EQ(0, rbd_group_snap_list(ioctx, group_name, snaps,
                                    sizeof(rbd_group_snap_info_t),
                                    &num_snaps));
   ASSERT_EQ(0U, num_snaps);
+
+  ASSERT_EQ(0, rbd_group_image_snap_list(ioctx, group_name, snap_name,
+                                    group_image_snaps,
+                                    sizeof(rbd_group_image_snap_info_t),
+                                    &group_image_num_snaps));
+  ASSERT_EQ(0U, group_image_num_snaps);
 
   ASSERT_EQ(-EINVAL, rbd_group_snap_create2(ioctx, group_name, snap_name,
                                             RBD_SNAP_CREATE_SKIP_QUIESCE |
@@ -315,6 +345,12 @@ TEST_F(TestGroup, add_snapshot)
                                    sizeof(rbd_group_snap_info_t),
                                    &num_snaps));
 
+  group_image_num_snaps = 1;
+  ASSERT_EQ(0, rbd_group_image_snap_list(ioctx, group_name, snap_name,
+                                    group_image_snaps,
+                                    sizeof(rbd_group_image_snap_info_t),
+                                    &group_image_num_snaps));
+
   watcher.quiesce_count = 0;
   watcher.unquiesce_count = 0;
   ASSERT_EQ(0, rbd_group_snap_create2(ioctx, group_name, snap_name,
@@ -324,8 +360,16 @@ TEST_F(TestGroup, add_snapshot)
   ASSERT_EQ(1, rbd_group_snap_list(ioctx, group_name, snaps,
                                    sizeof(rbd_group_snap_info_t),
                                    &num_snaps));
+  group_image_num_snaps = 1;
+  ASSERT_EQ(1, rbd_group_image_snap_list(ioctx, group_name, snap_name,
+                                    group_image_snaps,
+                                    sizeof(rbd_group_image_snap_info_t),
+                                    &group_image_num_snaps));
   ASSERT_EQ(0, rbd_group_snap_list_cleanup(snaps, sizeof(rbd_group_snap_info_t),
                                            num_snaps));
+  ASSERT_EQ(0, rbd_group_image_snap_list_cleanup(group_image_snaps,
+                                          sizeof(rbd_group_image_snap_info_t),
+                                          group_image_num_snaps));
   ASSERT_EQ(0, rbd_group_snap_remove(ioctx, group_name, snap_name));
 
   ASSERT_EQ(0, rbd_group_snap_create2(ioctx, group_name, snap_name,
@@ -333,8 +377,15 @@ TEST_F(TestGroup, add_snapshot)
   ASSERT_EQ(1, rbd_group_snap_list(ioctx, group_name, snaps,
                                    sizeof(rbd_group_snap_info_t),
                                    &num_snaps));
+  ASSERT_EQ(1, rbd_group_image_snap_list(ioctx, group_name, snap_name,
+                                    group_image_snaps,
+                                    sizeof(rbd_group_image_snap_info_t),
+                                    &group_image_num_snaps));
   ASSERT_EQ(0, rbd_group_snap_list_cleanup(snaps, sizeof(rbd_group_snap_info_t),
                                            num_snaps));
+  ASSERT_EQ(0, rbd_group_image_snap_list_cleanup(group_image_snaps,
+                                          sizeof(rbd_group_image_snap_info_t),
+                                          group_image_num_snaps));
   ASSERT_EQ(0, rbd_group_snap_remove(ioctx, group_name, snap_name));
 
   ASSERT_EQ(0, rbd_quiesce_unwatch(image, watcher.handle));
@@ -375,6 +426,20 @@ TEST_F(TestGroup, add_snapshotPP)
 
   ASSERT_EQ(snap_name, snaps[0].name);
 
+  std::vector<librbd::group_image_snap_info_t> group_image_snaps;
+  ASSERT_EQ(0, rbd.group_image_snap_list(ioctx, group_name, snap_name,
+                                    &group_image_snaps,
+                                    sizeof(librbd::group_image_snap_info_t)));
+  ASSERT_EQ(1U, group_image_snaps.size());
+
+  ASSERT_EQ(ioctx.get_id(), group_image_snaps[0].pool_id);
+
+  ASSERT_EQ(m_image_name.c_str(), group_image_snaps[0].image_name);
+
+  std::vector<librbd::snap_info_t> image_snaps;
+  ASSERT_EQ(0, image.snap_list(image_snaps));
+  ASSERT_EQ(image_snaps[0].id, group_image_snaps[0].snap_id);
+
   bufferlist write_bl;
   write_bl.append(std::string(1024, '2'));
   ASSERT_EQ(1024, image.write(513, write_bl.length(), write_bl));
@@ -397,10 +462,20 @@ TEST_F(TestGroup, add_snapshotPP)
                                    sizeof(librbd::group_snap_info_t)));
   ASSERT_EQ(0U, snaps.size());
 
+  group_image_snaps.clear();
+  ASSERT_EQ(0, rbd.group_image_snap_list(ioctx, group_name, snap_name,
+                                    &group_image_snaps,
+                                    sizeof(librbd::group_image_snap_info_t)));
+  ASSERT_EQ(0U, group_image_snaps.size());
+
   ASSERT_EQ(0, rbd.group_snap_create(ioctx, group_name, snap_name));
   ASSERT_EQ(0, rbd.group_snap_list(ioctx, group_name, &snaps,
                                    sizeof(librbd::group_snap_info_t)));
   ASSERT_EQ(1U, snaps.size());
+  ASSERT_EQ(0, rbd.group_image_snap_list(ioctx, group_name, snap_name,
+                                    &group_image_snaps,
+                                    sizeof(librbd::group_image_snap_info_t)));
+  ASSERT_EQ(1U, group_image_snaps.size());
   ASSERT_EQ(0, rbd.group_snap_remove(ioctx, group_name, snap_name));
 
   ASSERT_EQ(-EINVAL, rbd.group_snap_create2(ioctx, group_name, snap_name,
@@ -411,12 +486,24 @@ TEST_F(TestGroup, add_snapshotPP)
                                    sizeof(librbd::group_snap_info_t)));
   ASSERT_EQ(0U, snaps.size());
 
+  group_image_snaps.clear();
+  ASSERT_EQ(0, rbd.group_image_snap_list(ioctx, group_name, snap_name,
+                                    &group_image_snaps,
+                                    sizeof(librbd::group_image_snap_info_t)));
+  ASSERT_EQ(0U, group_image_snaps.size());
+
   ASSERT_EQ(0, rbd.group_snap_create2(ioctx, group_name, snap_name,
                                       RBD_SNAP_CREATE_SKIP_QUIESCE));
   snaps.clear();
   ASSERT_EQ(0, rbd.group_snap_list(ioctx, group_name, &snaps,
                                    sizeof(librbd::group_snap_info_t)));
   ASSERT_EQ(1U, snaps.size());
+
+  group_image_snaps.clear();
+  ASSERT_EQ(0, rbd.group_image_snap_list(ioctx, group_name, snap_name,
+                                    &group_image_snaps,
+                                    sizeof(librbd::group_image_snap_info_t)));
+  ASSERT_EQ(1U, group_image_snaps.size());
 
   ASSERT_EQ(0, rbd.group_snap_remove(ioctx, group_name, snap_name));
   ASSERT_EQ(0, rbd.group_remove(ioctx, group_name));
