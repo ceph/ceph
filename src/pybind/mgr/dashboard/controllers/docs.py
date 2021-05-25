@@ -393,74 +393,13 @@ class Docs(BaseController):
 
         return spec
 
-    @Endpoint(path="api.json", version=None)
-    def api_json(self):
+    @Endpoint(path="openapi.json", version=None)
+    def open_api_json(self):
         return self._gen_spec(False, "/")
 
     @Endpoint(path="api-all.json", version=None)
     def api_all_json(self):
         return self._gen_spec(True, "/")
-
-    def _swagger_ui_page(self, all_endpoints=False):
-        base = cherrypy.request.base
-        if all_endpoints:
-            spec_url = "{}/docs/api-all.json".format(base)
-        else:
-            spec_url = "{}/docs/api.json".format(base)
-
-        page = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="referrer" content="no-referrer" />
-            <link rel="stylesheet" type="text/css"
-                  href="/swagger-ui.css" >
-            <style>
-                html
-                {{
-                    box-sizing: border-box;
-                    overflow: -moz-scrollbars-vertical;
-                    overflow-y: scroll;
-                }}
-                *,
-                *:before,
-                *:after
-                {{
-                    box-sizing: inherit;
-                }}
-                body {{
-                    margin:0;
-                    background: #fafafa;
-                }}
-            </style>
-        </head>
-        <body>
-        <div id="swagger-ui"></div>
-        <script src="/swagger-ui-bundle.js">
-        </script>
-        <script>
-            window.onload = function() {{
-                const ui = SwaggerUIBundle({{
-                    url: '{}',
-                    dom_id: '#swagger-ui',
-                    presets: [
-                        SwaggerUIBundle.presets.apis
-                    ],
-                    layout: "BaseLayout"
-                }})
-                window.ui = ui
-            }}
-        </script>
-        </body>
-        </html>
-        """.format(spec_url)
-
-        return page
-
-    @Endpoint(json_response=False, version=None)
-    def __call__(self, all_endpoints=False):
-        return self._swagger_ui_page(all_endpoints)
 
 
 if __name__ == "__main__":
