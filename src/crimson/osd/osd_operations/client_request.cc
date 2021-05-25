@@ -122,7 +122,7 @@ seastar::future<> ClientRequest::start()
             sequencer.finish_op(get_id());
             return seastar::stop_iteration::yes;
           });
-	}, [this, pgref](std::exception_ptr eptr) {
+	}, [pgref](std::exception_ptr eptr) {
           if (should_abort_request(std::move(eptr))) {
             return seastar::stop_iteration::yes;
           } else {
