@@ -178,6 +178,7 @@ fi
 filestore_path=
 kstore_path=
 bluestore_dev=
+seastore_dev=
 
 VSTART_SEC="client.vstart.sh"
 
@@ -239,6 +240,7 @@ usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
 usage=$usage"\t--jaeger: use jaegertracing for tracing\n"
+usage=$usage"\t--seastore-devs: comma-separated list of blockdevs to use for seastore\n"
 
 usage_exit() {
     printf "$usage"
@@ -432,6 +434,16 @@ case $1 in
         ;;
     --without-dashboard)
         with_mgr_dashboard=false
+        ;;
+    --seastore-devs)
+        IFS=',' read -r -a seastore_dev <<< "$2"
+        for dev in "${seastore_dev[@]}"; do
+            if [ ! -b $dev -o ! -w $dev ]; then
+                echo "All --seastore-devs must refer to writable block devices"
+                exit 1
+            fi
+        done
+        shift
         ;;
     --bluestore-spdk)
         [ -z "$2" ] && usage_exit
@@ -903,6 +915,10 @@ EOF
                 ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
             elif [ -n "$kstore_path" ]; then
                 ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
+            elif [ -n "${seastore_dev[$osd]}" ]; then
+                mkdir -p $CEPH_DEV_DIR/osd$osd
+                dd if=/dev/zero of=${seastore_dev[$osd]} bs=1M count=1
+                ln -s ${seastore_dev[$osd]} $CEPH_DEV_DIR/osd$osd/block
             else
                 mkdir -p $CEPH_DEV_DIR/osd$osd
                 if [ -n "${bluestore_dev[$osd]}" ]; then
