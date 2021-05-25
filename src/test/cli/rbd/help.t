@@ -26,7 +26,8 @@
       config pool set                   Set a pool-level configuration override.
       copy (cp)                         Copy src image to dest.
       create                            Create an empty image.
-      deep copy (deep cp)               Deep copy src image to dest.
+      deep copy (deep cp)               Deep copy (including snapshots) src image
+                                        to dest.
       device attach                     Attach image to device.
       device detach                     Detach image from device.
       device list (showmapped)          List mapped rbd images.
@@ -533,7 +534,7 @@
                        [--no-progress] 
                        <source-image-or-snap-spec> <dest-image-spec> 
   
-  Deep copy src image to dest.
+  Deep copy (including snapshots) src image to dest.
   
   Positional arguments
     <source-image-or-snap-spec>  source image or snapshot specification
