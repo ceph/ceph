@@ -54,7 +54,7 @@ write_ertr::future<> PosixNVMeDevice::write(
     [length](auto e) -> write_ertr::future<size_t> {
       logger().error("write: dma_write got error{}", e);
       return crimson::ct_error::input_output_error::make();
-    }).then([=](auto result) -> write_ertr::future<> {
+    }).then([length](auto result) -> write_ertr::future<> {
       if (result != length) {
         logger().error("write: dma_write got error with not proper length");
         return crimson::ct_error::input_output_error::make();
@@ -78,7 +78,7 @@ read_ertr::future<> PosixNVMeDevice::read(
     [length](auto e) -> read_ertr::future<size_t> {
       logger().error("read: dma_read got error{}", e);
       return crimson::ct_error::input_output_error::make();
-    }).then([=](auto result) -> read_ertr::future<> {
+    }).then([length](auto result) -> read_ertr::future<> {
       if (result != length) {
         logger().error("read: dma_read got error with not proper length");
         return crimson::ct_error::input_output_error::make();
@@ -100,7 +100,7 @@ open_ertr::future<> TestMemory::open(
   }
 
   logger().debug(
-    "Initializing test memory divice {}",
+    "Initializing test memory device {}",
     size);
 
   void* addr = ::mmap(
