@@ -1,5 +1,6 @@
 import datetime
 from copy import copy
+import ipaddress
 import json
 import logging
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
@@ -10,6 +11,8 @@ from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
+
+from .utils import resolve_ip
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -28,6 +31,7 @@ class Inventory:
 
     def __init__(self, mgr: 'CephadmOrchestrator'):
         self.mgr = mgr
+        adjusted_addrs = False
         # load inventory
         i = self.mgr.get_store('inventory')
         if i:
@@ -36,6 +40,22 @@ class Inventory:
             for k, v in self._inventory.items():
                 if 'hostname' not in v:
                     v['hostname'] = k
+
+                # convert legacy non-IP addr?
+                try:
+                    ipaddress.ip_address(v.get('addr'))
+                except ValueError:
+                    ip = resolve_ip(cast(str, v.get('addr')))
+                    try:
+                        ipaddress.ip_address(ip)
+                        if not ip.startswith('127.0.'):
+                            self.mgr.log.info(f"inventory: adjusted host {v['hostname']} addr '{v['addr']}' -> '{ip}'")
+                            v['addr'] = ip
+                            adjusted_addrs = True
+                    except ValueError:
+                        pass
+            if adjusted_addrs:
+                self.save()
         else:
             self._inventory = dict()
         logger.debug('Loaded inventory %s' % self._inventory)
