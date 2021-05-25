@@ -55,7 +55,7 @@ public:
 
 TEST(TestOSDScrub, scrub_time_permit) {
   ceph::async::io_context_pool icp(1);
-  ObjectStore *store = ObjectStore::create(g_ceph_context,
+  std::unique_ptr<ObjectStore> store = ObjectStore::create(g_ceph_context,
              g_conf()->osd_objectstore,
              g_conf()->osd_data,
              g_conf()->osd_journal);
@@ -68,7 +68,7 @@ TEST(TestOSDScrub, scrub_time_permit) {
   ms->bind(g_conf()->public_addr);
   MonClient mc(g_ceph_context, icp);
   mc.build_initial_monmap();
-  TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store, 0, ms, ms, ms, ms, ms, ms, ms, &mc, "", "", icp);
+  TestOSDScrub* osd = new TestOSDScrub(g_ceph_context, store.release(), 0, ms, ms, ms, ms, ms, ms, ms, &mc, "", "", icp);
 
   // These are now invalid
   int err = g_ceph_context->_conf.set_val("osd_scrub_begin_hour", "24");

@@ -3513,7 +3513,7 @@ int main(int argc, char **argv)
     }
   }
 
-  ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
+  ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags).release();
   if (fs == NULL) {
     cerr << "Unable to create store of type " << type << std::endl;
     return 1;
@@ -3577,14 +3577,14 @@ int main(int argc, char **argv)
       target_type = string(bl.c_str(), bl.length() - 1);  // drop \n
     }
     ::close(fd);
-    ObjectStore *targetfs = ObjectStore::create(
+    unique_ptr<ObjectStore> targetfs = ObjectStore::create(
       g_ceph_context, target_type,
       target_data_path, "", 0);
     if (targetfs == NULL) {
       cerr << "Unable to open store of type " << target_type << std::endl;
       return 1;
     }
-    int r = dup(dpath, fs, target_data_path, targetfs);
+    int r = dup(dpath, fs, target_data_path, targetfs.get());
     if (r < 0) {
       cerr << "dup failed: " << cpp_strerror(r) << std::endl;
       return 1;
