@@ -116,6 +116,69 @@ class NFSCluster:
             return exception_handler(e, f"NFS Cluster {cluster_id} could not be created")
 
     @cluster_setter
+    def update_nfs_cluster(self,
+                           cluster_id: str,
+                           placement: Optional[str],
+                           virtual_ip: Optional[str],
+                           ingress: Optional[bool] = None):
+        try:
+            invalid_str = re.search('[^A-Za-z0-9-_.]', cluster_id)
+            if invalid_str:
+                raise NFSInvalidOperation(f"cluster id {cluster_id} is invalid. "
+                                          f"{invalid_str.group()} is char not permitted")
+            msg = 'No change'
+
+            nfs_name = f"nfs.{cluster_id}"
+            sc = self.mgr.describe_service(service_name=nfs_name)
+            orchestrator.raise_if_exception(sc)
+            if not sc.result:
+                raise NFSInvalidOperation(f"{nfs_name} does not exist")
+            nfs_svc = sc.result[0]
+
+            if placement is not None:
+                nspec = nfs_svc.spec
+                nspec.placement = PlacementSpec.from_string(placement)
+                completion = self.mgr.apply_nfs(nspec)
+                orchestrator.raise_if_exception(completion)
+                msg = f'Updated {nfs_name} placement'
+
+            if ingress is not None or virtual_ip is not None:
+                ingress_name = f"ingress.{nfs_name}"
+                sc = self.mgr.describe_service(service_name=ingress_name)
+                orchestrator.raise_if_exception(sc)
+                ingress_svc = sc.result[0] if sc.result else None
+
+                if ingress_svc:
+                    if ingress == False:
+                        self.mgr.remove_service(ingress_name)
+                        msg = f'Removed {nfs_name} ingress'
+                    elif virtual_ip is not None:
+                        ispec = ingress_svc.spec
+                        ispec.virtual_ip = virtual_ip
+                        completion = self.mgr.apply_ingress(ispec)
+                        msg = f'Updated {ingress_name} virtual_ip'
+                elif ingress == False:
+                    if virtual_ip:
+                        raise NFSInvalidOperation('virtual_ip can only be provided with ingress enabled')
+                else:
+                    if not ingress:
+                        raise NFSInvalidOperation('virtual_ip can only be provided with ingress enabled')
+                    if not virtual_ip:
+                        raise NFSInvalidOperation('ingress currently requires a virtual_ip')
+                    ispec = IngressSpec(service_type='ingress',
+                                        service_id=nfs_name,
+                                        backend_service=nfs_name,
+                                        frontend_port=2049,  # default nfs port
+                                        monitor_port=9049,
+                                        virtual_ip=virtual_ip)
+                    completion = self.mgr.apply_ingress(ispec)
+                    orchestrator.raise_if_exception(completion)
+                    msg = f'Added {ingress_name}'
+            return 0, "", msg
+        except Exception as e:
+            return exception_handler(e, f"NFS Cluster {cluster_id} could not be updated")
+
+    @cluster_setter
     def delete_nfs_cluster(self, cluster_id):
         try:
             cluster_list = available_clusters(self.mgr)
