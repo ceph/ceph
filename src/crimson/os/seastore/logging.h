@@ -12,8 +12,8 @@
 
 #ifdef NDEBUG
 
-#define LOG(level_, MSG, ...) LOGGER.log(level_, "{}: " MSG, FNAME __VA_OPT__(,) __VA_ARGS__)
-#define LOGT(level_, MSG, t, ...) LOGGER.log(level_, "{}({}): " MSG, FNAME, (void*)&t __VA_OPT__(,) __VA_ARGS__)
+#define LOG(level_, MSG, ...) LOGGER.log(level_, "{}: " MSG, FNAME , ##__VA_ARGS__)
+#define LOGT(level_, MSG, t, ...) LOGGER.log(level_, "{}({}): " MSG, FNAME, (void*)&t , ##__VA_ARGS__)
 
 #define TRACE(...) LOG(seastar::log_level::trace, __VA_ARGS__)
 #define TRACET(...) LOGT(seastar::log_level::trace, __VA_ARGS__)
@@ -37,18 +37,18 @@ template<seastar::log_level lv>
 void LOG(std::string_view info) {
   crimson::get_logger(ceph_subsys_seastore).log(lv, info.data());
 }
-#define TRACE(MSG_, ...) LOG<seastar::log_level::trace>("{}: " MSG_ ## _format(FNAME __VA_OPT__(,) __VA_ARGS__))
-#define TRACET(MSG_, t_, ...) LOG<seastar::log_level::trace>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ __VA_OPT__(,) __VA_ARGS__))
+#define TRACE(MSG_, ...) LOG<seastar::log_level::trace>("{}: " MSG_ ## _format(FNAME , ##__VA_ARGS__))
+#define TRACET(MSG_, t_, ...) LOG<seastar::log_level::trace>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ , ##__VA_ARGS__))
 
-#define DEBUG(MSG_, ...) LOG<seastar::log_level::debug>("{}: " MSG_ ## _format(FNAME __VA_OPT__(,) __VA_ARGS__))
-#define DEBUGT(MSG_, t_, ...) LOG<seastar::log_level::debug>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ __VA_OPT__(,) __VA_ARGS__))
+#define DEBUG(MSG_, ...) LOG<seastar::log_level::debug>("{}: " MSG_ ## _format(FNAME , ##__VA_ARGS__))
+#define DEBUGT(MSG_, t_, ...) LOG<seastar::log_level::debug>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ , ##__VA_ARGS__))
 
-#define INFO(MSG_, ...) LOG<seastar::log_level::info>("{}: " MSG_ ## _format(FNAME __VA_OPT__(,) __VA_ARGS__))
-#define INFOT(MSG_, t_, ...) LOG<seastar::log_level::info>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ __VA_OPT__(,) __VA_ARGS__))
+#define INFO(MSG_, ...) LOG<seastar::log_level::info>("{}: " MSG_ ## _format(FNAME , ##__VA_ARGS__))
+#define INFOT(MSG_, t_, ...) LOG<seastar::log_level::info>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ , ##__VA_ARGS__))
 
-#define WARN(MSG_, ...) LOG<seastar::log_level::warn>("{}: " MSG_ ## _format(FNAME __VA_OPT__(,) __VA_ARGS__))
-#define WARNT(MSG_, t_, ...) LOG<seastar::log_level::warn>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ __VA_OPT__(,) __VA_ARGS__))
+#define WARN(MSG_, ...) LOG<seastar::log_level::warn>("{}: " MSG_ ## _format(FNAME , ##__VA_ARGS__))
+#define WARNT(MSG_, t_, ...) LOG<seastar::log_level::warn>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ , ##__VA_ARGS__))
 
-#define ERROR(MSG_, ...) LOG<seastar::log_level::error>("{}: " MSG_ ## _format(FNAME __VA_OPT__(,) __VA_ARGS__))
-#define ERRORT(MSG_, t_, ...) LOG<seastar::log_level::error>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ __VA_OPT__(,) __VA_ARGS__))
+#define ERROR(MSG_, ...) LOG<seastar::log_level::error>("{}: " MSG_ ## _format(FNAME , ##__VA_ARGS__))
+#define ERRORT(MSG_, t_, ...) LOG<seastar::log_level::error>("{}({}): " MSG_ ## _format(FNAME, (void*)&t_ , ##__VA_ARGS__))
 #endif
