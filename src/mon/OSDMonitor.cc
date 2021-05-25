@@ -2904,8 +2904,9 @@ bool OSDMonitor::check_failures(utime_t now)
   auto p = failure_info.begin();
   while (p != failure_info.end()) {
     auto& [target_osd, fi] = *p;
-    if (can_mark_down(target_osd)) {
-      found_failure |= check_failure(now, target_osd, fi);
+    if (can_mark_down(target_osd) &&
+	check_failure(now, target_osd, fi)) {
+      found_failure = true;
       ++p;
     } else if (is_failure_stale(now, fi)) {
       dout(10) << " dropping stale failure_info for osd." << target_osd
