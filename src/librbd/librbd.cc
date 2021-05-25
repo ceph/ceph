@@ -2577,6 +2577,17 @@ namespace librbd {
     return r;
   }
 
+  int Image::diff_iterate_group_image_snap(const char *from_snap_name, uint64_t ofs,
+        uint64_t len, bool include_parent, bool whole_object,
+        int (*cb)(uint64_t, size_t, int, void *), void *arg)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
+                cls::rbd::GroupSnapshotNamespace(), from_snap_name, ofs, len,
+                include_parent, whole_object, cb, arg);
+    return r;
+  }
+
   ssize_t Image::write(uint64_t ofs, size_t len, bufferlist& bl)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -6013,6 +6024,18 @@ extern "C" int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
                                                    include_parent, whole_object,
                                                    cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
+  return r;
+}
+
+extern "C" int rbd_diff_iterate_group_image_snap(rbd_image_t image,
+                        const char *from_snap_name, uint64_t ofs, uint64_t len,
+                        uint8_t include_parent, uint8_t whole_object,
+                        int (*cb)(uint64_t, size_t, int, void *), void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
+              cls::rbd::GroupSnapshotNamespace(), from_snap_name, ofs, len,
+              include_parent, whole_object, cb, arg);
   return r;
 }
 

@@ -1146,6 +1146,10 @@ CEPH_RBD_API int rbd_diff_iterate2(rbd_image_t image,
                                    uint8_t include_parent, uint8_t whole_object,
 		                   int (*cb)(uint64_t, size_t, int, void *),
                                    void *arg);
+CEPH_RBD_API int rbd_diff_iterate_group_image_snap(rbd_image_t image,
+                      const char *from_snap_name, uint64_t ofs, uint64_t len,
+                      uint8_t include_parent, uint8_t whole_object,
+                      int (*cb)(uint64_t, size_t, int, void *), void *arg);
 CEPH_RBD_API ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
                                const char *buf);
 /*

@@ -497,6 +497,7 @@ public:
     _pool_names.clear();
     _unique_pool_names.clear();
     _image_number = 0;
+    _group_number = 0;
     ASSERT_EQ("", connect_cluster(&_cluster));
     ASSERT_EQ("", connect_cluster_pp(_rados));
 
@@ -561,6 +562,11 @@ public:
   static std::string get_temp_image_name() {
     ++_image_number;
     return "image" + stringify(_image_number);
+  }
+
+  static std::string get_temp_group_name() {
+    ++_group_number;
+    return "group" + stringify(_image_number);
   }
 
   static void create_optional_data_pool() {
@@ -729,6 +735,7 @@ public:
   static rados_t _cluster;
   static librados::Rados _rados;
   static uint64_t _image_number;
+  static uint64_t _group_number;
 
   std::string m_pool_name;
   uint32_t m_pool_number;
@@ -740,6 +747,7 @@ std::vector<std::string> TestLibRBD::_unique_pool_names;
 rados_t TestLibRBD::_cluster;
 librados::Rados TestLibRBD::_rados;
 uint64_t TestLibRBD::_image_number = 0;
+uint64_t TestLibRBD::_group_number = 0;
 
 TEST_F(TestLibRBD, CreateAndStat)
 {
@@ -4283,6 +4291,75 @@ TYPED_TEST(DiffIterateTest, DiffIterate)
     interval_set<uint64_t> diff;
     ASSERT_EQ(0, image.diff_iterate2("one", 0, size, true, this->whole_object,
                                      iterate_cb, (void *)&diff));
+    cout << " diff was " << diff << std::endl;
+    if (!two.subset_of(diff)) {
+      interval_set<uint64_t> i;
+      i.intersection_of(two, diff);
+      interval_set<uint64_t> l = two;
+      l.subtract(i);
+      cout << " ... two - (two*diff) = " << l << std::endl;
+    }
+    ASSERT_TRUE(two.subset_of(diff));
+  }
+  ioctx.close();
+}
+
+TYPED_TEST(DiffIterateTest, GroupImageDiffIterate)
+{
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+  librados::IoCtx group_ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), group_ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = this->get_temp_image_name();
+    std::string group_name = this->get_temp_image_name();
+    std::string group_snap_name("one");
+    uint64_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    bool skip_discard = this->is_skip_partial_discard_enabled(image);
+
+    uint64_t object_size = 0;
+    if (this->whole_object) {
+      object_size = 1 << order;
+    }
+
+    interval_set<uint64_t> exists;
+    interval_set<uint64_t> one, two;
+    scribble(image, 10, 102400, skip_discard, &exists, &one);
+    cout << " wrote " << one << std::endl;
+
+    ASSERT_EQ(0, rbd.group_create(group_ioctx, group_name.c_str()));
+    ASSERT_EQ(0, rbd.group_image_add(group_ioctx, group_name.c_str(),
+                                    ioctx, name.c_str()));
+    ASSERT_EQ(0, rbd.group_snap_create(group_ioctx, group_name.c_str(),
+                                      group_snap_name.c_str()));
+    std::vector<librbd::group_image_snap_info_t> group_image_snaps;
+    ASSERT_EQ(0, rbd.group_image_snap_list(group_ioctx, group_name.c_str(),
+                                      group_snap_name.c_str(), &group_image_snaps,
+                                      sizeof(librbd::group_image_snap_info_t)));
+    ASSERT_EQ(1U, group_image_snaps.size());
+    std::string image_snap_name;
+    ASSERT_EQ(0, image.snap_get_name(group_image_snaps[0].snap_id,
+                                    &image_snap_name));
+
+    scribble(image, 10, 102400, skip_discard, &exists, &two);
+
+    two = round_diff_interval(two, object_size);
+    cout << " wrote " << two << std::endl;
+
+    interval_set<uint64_t> diff;
+    ASSERT_EQ(0, image.diff_iterate_group_image_snap(image_snap_name.c_str(),
+                            0, size, true, this->whole_object, iterate_cb,
+                            (void *)&diff));
     cout << " diff was " << diff << std::endl;
     if (!two.subset_of(diff)) {
       interval_set<uint64_t> i;
