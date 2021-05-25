@@ -110,7 +110,20 @@ def download_cephadm(ctx, config, ref):
         ref = config.get('cephadm_branch', ref)
         git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
         log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
-        if git_url.startswith('https://github.com/'):
+        if ctx.config.get('redhat'):
+            log.info("Install cephadm using RPM")
+            # cephadm already installed from redhat.install task
+            ctx.cluster.run(
+                args=[
+                    'cp',
+                    run.Raw('$(which cephadm)'),
+                    ctx.cephadm,
+                    run.Raw('&&'),
+                    'ls', '-l',
+                    ctx.cephadm,
+                ]
+            )
+        elif git_url.startswith('https://github.com/'):
             # git archive doesn't like https:// URLs, which we use with github.
             rest = git_url.split('https://github.com/', 1)[1]
             rest = re.sub(r'\.git/?$', '', rest).strip() # no .git suffix
@@ -387,6 +400,15 @@ def ceph_bootstrap(ctx, config):
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             '--output-pub-ssh-key', '{}/{}.pub'.format(testdir, cluster_name),
         ]
+
+        if config.get('registry-login'):
+            registry = config['registry-login']
+            cmd += [
+                "--registry-url", registry['url'],
+                "--registry-username", registry['username'],
+                "--registry-password", registry['password'],
+            ]
+
         if not ctx.ceph[cluster_name].roleless:
             cmd += [
                 '--mon-id', first_mon,
@@ -394,6 +416,7 @@ def ceph_bootstrap(ctx, config):
                 '--orphan-initial-daemons',   # we will do it explicitly!
                 '--skip-monitoring-stack',    # we'll provision these explicitly
             ]
+
         if mons[first_mon_role].startswith('['):
             cmd += ['--mon-addrv', mons[first_mon_role]]
         else:
@@ -1346,6 +1369,10 @@ def task(ctx, config):
           cephadm:
             containers:
               image: 'quay.io/ceph-ci/ceph'
+            registry-login:
+              url:  registry-url
+              username: registry-user
+              password: registry-password
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
@@ -1379,7 +1406,6 @@ def task(ctx, config):
 
     containers = config.get('containers', {})
     container_image_name = containers.get('image', container_image_name)
-
 
     if not hasattr(ctx.ceph[cluster_name], 'image'):
         ctx.ceph[cluster_name].image = config.get('image')
