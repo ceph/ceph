@@ -406,11 +406,11 @@ RandomBlockManager::abort_allocation(Transaction &t)
 RandomBlockManager::write_ertr::future<>
 RandomBlockManager::complete_allocation(Transaction &t)
 {
-  const auto alloc_blocks = t.get_rbm_allocated_blocks();
+  auto alloc_blocks = t.get_rbm_allocated_blocks();
   if (alloc_blocks.empty()) {
     return write_ertr::now();
   }
-  return seastar::do_with(alloc_blocks,
+  return seastar::do_with(move(alloc_blocks),
 	  [&, this] (auto &alloc_blocks) mutable {
     return crimson::do_for_each(
 	alloc_blocks,
