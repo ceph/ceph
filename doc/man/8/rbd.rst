@@ -237,6 +237,8 @@ Commands
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.
+  Note: snapshots are not copied, use `deep cp` command to include
+  snapshots.
 
 :command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--thick-provision] [--no-progress] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The

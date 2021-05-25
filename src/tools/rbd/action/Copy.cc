@@ -187,7 +187,7 @@ int execute_deep(const po::variables_map &vm,
 }
 
 Shell::Action action_deep(
-  {"deep", "copy"}, {"deep", "cp"}, "Deep copy src image to dest.",
+  {"deep", "copy"}, {"deep", "cp"}, "Deep copy (including snapshots) src image to dest.",
   at::get_long_features_help(), &get_arguments_deep, &execute_deep);
 
 } // namespace copy
