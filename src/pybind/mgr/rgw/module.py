@@ -94,6 +94,20 @@ class Module(MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
+    @CLICommand('rgw realm create zone-creds', perm='rw')
+    def _cmd_rgw_realm_bootstrap(self,
+                                 endpoints: Optional[str] = None,
+                                 sys_uid: Optional[str] = None):
+        """Create credentials for new zone creation"""
+
+        try:
+            retval, out, err = RGWAM(self.ceph_common_args).realm_new_zone_creds(endpoints, sys_uid)
+        except RGWAMException as e:
+            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            return (e.retcode, e.message, e.stderr)
+
+        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
+
     @CLICommand('rgw zone create', perm='rw')
     def _cmd_rgw_zone_create(self,
                              realm_token : Optional[str] = None,
