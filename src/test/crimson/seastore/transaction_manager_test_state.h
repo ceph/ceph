@@ -146,7 +146,7 @@ protected:
   }
 };
 
-class TestSegmentManagerWrapper : public SegmentManager {
+class TestSegmentManagerWrapper final : public SegmentManager {
   SegmentManager &sm;
 public:
   TestSegmentManagerWrapper(SegmentManager &sm) : sm(sm) {}
