@@ -23,6 +23,16 @@ def task(ctx, config):
     It stops and fails with the first command that does not return on success. It means
     that if the first command fails, the second won't run at all.
 
+    You can run a command on all hosts `all-hosts`, or all roles with `all-roles`:
+
+        tasks:
+        - exec:
+            all-hosts:
+              - touch /etc/passwd
+        - exec:
+            all-roles:
+              - pwd
+
     To avoid confusion it is recommended to explicitly enclose the commands in 
     double quotes. For instance if the command is false (without double quotes) it will
     be interpreted as a boolean by the YAML parser.
@@ -38,6 +48,14 @@ def task(ctx, config):
     if 'all' in config and len(config) == 1:
         a = config['all']
         roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles)
+    elif 'all-roles' in config and len(config) == 1:
+        a = config['all-roles']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles)
+    elif 'all-hosts' in config and len(config) == 1:
+        a = config['all-hosts']
+        roles = [roles[0] for roles in ctx.cluster.remotes.values()]
         config = dict((id_, a) for id_ in roles)
 
     for role, ls in config.items():
