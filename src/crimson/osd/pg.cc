@@ -824,7 +824,12 @@ PG::do_osd_ops(
         peering_state.get_info().last_user_version);
       return do_osd_ops_iertr::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
     }
-  ).finally([ox_deleter=std::move(ox)] {});
+  ).safe_then_unpack_interruptible(
+    [ox_deleter=std::move(ox)](auto submitted, auto all_completed) mutable {
+    return do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ref<MOSDOpReply>>>(
+      std::move(submitted),
+      all_completed.finally([ox_deleter=std::move(ox_deleter)] {}));
+  });
 }
 
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<>>
@@ -844,7 +849,12 @@ PG::do_osd_ops(
     std::as_const(op_info),
     std::move(success_func),
     std::move(failure_func)
-  ).finally([ox_deleter=std::move(ox)] {});
+  ).safe_then_unpack_interruptible(
+    [ox_deleter=std::move(ox)](auto submitted, auto all_completed) mutable {
+    return do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<>>(
+      std::move(submitted),
+      all_completed.finally([ox_deleter=std::move(ox_deleter)] {}));
+  });
 }
 
 PG::interruptible_future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
