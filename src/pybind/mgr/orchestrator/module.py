@@ -372,7 +372,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table.right_padding_width = 2
             for host in sorted(hosts, key=lambda h: h.hostname):
                 table.add_row((host.hostname, host.addr, ' '.join(
-                    host.labels), host.status.capitalize()))
+                    host.labels), host.status.capitalize() if host.status else 'ONLINE'))
             output = table.get_string()
         return HandleCommandResult(stdout=output)
 
