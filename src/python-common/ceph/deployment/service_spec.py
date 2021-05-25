@@ -660,16 +660,19 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
+    DEFAULT_POOL = 'nfs-ganesha'
+
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
-                 pool: Optional[str] = None,
-                 namespace: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 pool: Optional[str] = None,
+                 namespace: Optional[str] = None,
+                 port: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -678,10 +681,17 @@ class NFSServiceSpec(ServiceSpec):
             config=config, networks=networks)
 
         #: RADOS pool where NFS client recovery data is stored.
-        self.pool = pool
+        self.pool = pool or self.DEFAULT_POOL
 
         #: RADOS namespace where NFS client recovery data is stored in the pool.
-        self.namespace = namespace
+        self.namespace = namespace or self.service_id
+
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        if self.port:
+            return [self.port]
+        return []
 
     def validate(self) -> None:
         super(NFSServiceSpec, self).validate()
@@ -937,6 +947,9 @@ class IngressSpec(ServiceSpec):
         if not self.virtual_ip:
             raise SpecValidationError(
                 'Cannot add ingress: No virtual_ip provided')
+
+
+yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
 
 
 class CustomContainerSpec(ServiceSpec):
