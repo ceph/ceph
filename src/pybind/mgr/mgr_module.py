@@ -19,6 +19,7 @@ from collections import defaultdict
 from enum import IntEnum
 import rados
 import re
+import socket
 import sys
 import time
 from ceph_argparse import CephArgtype
@@ -791,6 +792,21 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_active_uri(self) -> str:
         return self._ceph_get_active_uri()
 
+    def get_mgr_ip(self) -> str:
+        hostname = socket.gethostname()
+        try:
+            r = socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME,
+                                   type=socket.SOCK_STREAM)
+            # pick first v4 IP, if present, as long as it is not 127.0.{0,1}.1
+            for a in r:
+                if a[4][0] in ['127.0.1.1', '127.0.0.1']:
+                    continue
+                if a[0] == socket.AF_INET:
+                    return a[4][0]
+        except socket.gaierror as e:
+            pass
+        return hostname
+
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
@@ -1371,6 +1387,21 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def get_ceph_conf_path(self) -> str:
         return self._ceph_get_ceph_conf_path()
+
+    def get_mgr_ip(self) -> str:
+        hostname = socket.gethostname()
+        try:
+            r = socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME,
+                                   type=socket.SOCK_STREAM)
+            # pick first v4 IP, if present, as long as it is not 127.0.{0,1}.1
+            for a in r:
+                if a[4][0] in ['127.0.1.1', '127.0.0.1']:
+                    continue
+                if a[0] == socket.AF_INET:
+                    return a[4][0]
+        except socket.gaierror as e:
+            pass
+        return hostname
 
     def get_ceph_option(self, key: str) -> OptionValue:
         return self._ceph_get_option(key)
