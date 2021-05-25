@@ -150,6 +150,12 @@ namespace librbd {
   } group_image_info_t;
 
   typedef struct {
+    int64_t pool_id;
+    std::string image_name;
+    uint64_t snap_id;
+  } group_image_snap_info_t;
+
+  typedef struct {
     std::string name;
     int64_t pool;
   } group_info_t;
@@ -428,6 +434,10 @@ public:
                         const char *old_snap_name, const char *new_snap_name);
   int group_snap_list(IoCtx& group_ioctx, const char *group_name,
                       std::vector<group_snap_info_t> *snaps,
+                      size_t group_snap_info_size);
+  int group_image_snap_list(IoCtx& group_ioctx, const char *group_name,
+                      const char *group_snap_name,
+                      std::vector<group_image_snap_info_t> *snaps,
                       size_t group_snap_info_size);
   int group_snap_rollback(IoCtx& io_ctx, const char *group_name,
                           const char *snap_name);

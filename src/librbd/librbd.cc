@@ -228,6 +228,13 @@ void group_snap_info_cpp_to_c(const librbd::group_snap_info_t &cpp_info,
   c_info->state = cpp_info.state;
 }
 
+void group_image_snap_info_cpp_to_c(const librbd::group_image_snap_info_t &cpp_info,
+			      rbd_group_image_snap_info_t *c_info) {
+  c_info->pool_id = cpp_info.pool_id;
+  c_info->image_name = strdup(cpp_info.image_name.c_str());
+  c_info->snap_id = cpp_info.snap_id;
+}
+
 void mirror_image_info_cpp_to_c(const librbd::mirror_image_info_t &cpp_info,
 				rbd_mirror_image_info_t *c_info) {
   c_info->global_id = strdup(cpp_info.global_id.c_str());
@@ -1378,6 +1385,20 @@ namespace librbd {
 
     int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, snaps);
     tracepoint(librbd, group_snap_list_exit, r);
+    return r;
+  }
+
+  int RBD::group_image_snap_list(IoCtx& group_ioctx, const char *group_name,
+          const char *group_snap_name,
+          std::vector<group_image_snap_info_t> *snaps,
+          size_t group_snap_info_size)
+  {
+    if (group_snap_info_size != sizeof(group_image_snap_info_t)) {
+      return -ERANGE;
+    }
+
+    int r = librbd::api::Group<>::image_snap_list(group_ioctx, group_name,
+                                      group_snap_name, snaps);
     return r;
   }
 
@@ -7117,6 +7138,60 @@ extern "C" int rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
 
   for (size_t i = 0; i < len; ++i) {
     free(snaps[i].name);
+  }
+  return 0;
+}
+
+extern "C" int rbd_group_image_snap_list(rados_ioctx_t group_p,
+                      const char *group_name,
+                      const char *group_snap_name,
+                      rbd_group_image_snap_info_t *snaps,
+                      size_t group_snap_info_size,
+                      size_t *snaps_size)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  if (group_snap_info_size != sizeof(rbd_group_image_snap_info_t)) {
+    return -ERANGE;
+  }
+
+  std::vector<librbd::group_image_snap_info_t> cpp_snaps;
+  int r = librbd::api::Group<>::image_snap_list(group_ioctx, group_name,
+                                    group_snap_name, &cpp_snaps);
+
+  if (r == -ENOENT) {
+    *snaps_size = 0;
+    return 0;
+  }
+
+  if (r < 0) {
+    return r;
+  }
+
+  if (*snaps_size < cpp_snaps.size()) {
+    *snaps_size = cpp_snaps.size();
+    return -ERANGE;
+  }
+
+  for (size_t i = 0; i < cpp_snaps.size(); ++i) {
+    group_image_snap_info_cpp_to_c(cpp_snaps[i], &snaps[i]);
+  }
+
+  r = *snaps_size = cpp_snaps.size();
+
+  return r;
+}
+
+extern "C" int rbd_group_image_snap_list_cleanup(rbd_group_image_snap_info_t *snaps,
+                                           size_t group_image_snap_info_size,
+                                           size_t len) {
+  if (group_image_snap_info_size != sizeof(rbd_group_image_snap_info_t)) {
+    return -ERANGE;
+  }
+
+  for (size_t i = 0; i < len; ++i) {
+    free(snaps[i].image_name), snaps[i].image_name = NULL;
   }
   return 0;
 }
