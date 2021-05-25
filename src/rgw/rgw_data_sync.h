@@ -749,7 +749,8 @@ public:
 				     const rgw_bucket& source_bucket,
 				     const rgw_bucket& dest_bucket);
   static std::string inc_status_oid(const rgw_zone_id& source_zone,
-				    const rgw_bucket_sync_pair_info& bs);
+				    const rgw_bucket_sync_pair_info& bs,
+				    uint64_t gen);
   // specific source obj sync status, can be used by sync modules
   static std::string obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
                                const rgw_zone_id& source_zone, const rgw::sal::Object* obj); /* specific source obj sync status,
@@ -777,6 +778,7 @@ int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
                                     const rgw_sync_bucket_pipe& pipe,
                                     const RGWBucketInfo& dest_bucket_info,
                                     const RGWBucketInfo *psource_bucket_info,
+                                    uint64_t gen,
                                     std::vector<rgw_bucket_shard_sync_info> *status);
 
 class RGWDefaultSyncModule : public RGWSyncModule {
