@@ -122,6 +122,7 @@ class Inventory:
 
 class SpecDescription(NamedTuple):
     spec: ServiceSpec
+    rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]
     created: datetime.datetime
     deleted: Optional[datetime.datetime]
 
@@ -131,6 +132,8 @@ class SpecStore():
         # type: (CephadmOrchestrator) -> None
         self.mgr = mgr
         self._specs = {}  # type: Dict[str, ServiceSpec]
+        # service_name -> rank -> gen -> daemon_id
+        self._rank_maps = {}    # type: Dict[str, Dict[int, Dict[int, Optional[str]]]]
         self.spec_created = {}  # type: Dict[str, datetime.datetime]
         self.spec_deleted = {}  # type: Dict[str, datetime.datetime]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
@@ -149,6 +152,7 @@ class SpecStore():
         if name not in self._specs:
             raise OrchestratorError(f'Service {name} not found.')
         return SpecDescription(self._specs[name],
+                               self._rank_maps.get(name),
                                self.spec_created[name],
                                self.spec_deleted.get(name, None))
 
@@ -167,9 +171,28 @@ class SpecStore():
                 self._specs[service_name] = spec
                 self.spec_created[service_name] = created
 
-                if 'deleted' in v:
+                if 'deleted' in j:
                     deleted = str_to_datetime(cast(str, j['deleted']))
                     self.spec_deleted[service_name] = deleted
+
+                if 'rank_map' in j and isinstance(j['rank_map'], dict):
+                    self._rank_maps[service_name] = {}
+                    for rank_str, m in j['rank_map'].items():
+                        try:
+                            rank = int(rank_str)
+                        except ValueError:
+                            logger.exception(f"failed to parse rank in {j['rank_map']}")
+                            continue
+                        if isinstance(m, dict):
+                            self._rank_maps[service_name][rank] = {}
+                            for gen_str, name in m.items():
+                                try:
+                                    gen = int(gen_str)
+                                except ValueError:
+                                    logger.exception(f"failed to parse gen in {j['rank_map']}")
+                                    continue
+                                if isinstance(name, str) or m is None:
+                                    self._rank_maps[service_name][rank][gen] = name
 
                 self.mgr.log.debug('SpecStore: loaded spec for %s' % (
                     service_name))
@@ -178,7 +201,11 @@ class SpecStore():
                     service_name, e))
                 pass
 
-    def save(self, spec: ServiceSpec, update_create: bool = True) -> None:
+    def save(
+            self,
+            spec: ServiceSpec,
+            update_create: bool = True,
+    ) -> None:
         name = spec.service_name()
         if spec.preview_only:
             self.spec_preview[name] = spec
@@ -187,11 +214,21 @@ class SpecStore():
 
         if update_create:
             self.spec_created[name] = datetime_now()
+        self._save(name)
 
-        data = {
-            'spec': spec.to_json(),
+    def save_rank_map(self,
+                      name: str,
+                      rank_map: Dict[int, Dict[int, Optional[str]]]) -> None:
+        self._rank_maps[name] = rank_map
+        self._save(name)
+
+    def _save(self, name: str) -> None:
+        data: Dict[str, Any] = {
+            'spec': self._specs[name].to_json(),
             'created': datetime_to_str(self.spec_created[name]),
         }
+        if name in self._rank_maps:
+            data['rank_map'] = self._rank_maps[name]
         if name in self.spec_deleted:
             data['deleted'] = datetime_to_str(self.spec_deleted[name])
 
@@ -199,7 +236,9 @@ class SpecStore():
             SPEC_STORE_PREFIX + name,
             json.dumps(data, sort_keys=True),
         )
-        self.mgr.events.for_service(spec, OrchestratorEvent.INFO, 'service was created')
+        self.mgr.events.for_service(self._specs[name],
+                                    OrchestratorEvent.INFO,
+                                    'service was created')
 
     def rm(self, service_name: str) -> bool:
         if service_name not in self._specs:
@@ -218,6 +257,8 @@ class SpecStore():
         found = service_name in self._specs
         if found:
             del self._specs[service_name]
+            if service_name in self._rank_maps:
+                del self._rank_maps[service_name]
             del self.spec_created[service_name]
             if service_name in self.spec_deleted:
                 del self.spec_deleted[service_name]

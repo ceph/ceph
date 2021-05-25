@@ -1121,10 +1121,11 @@ Usage:
     @_cli_write_command('orch apply nfs')
     def _apply_nfs(self,
                    svc_id: str,
-                   pool: str,
-                   namespace: Optional[str] = None,
                    placement: Optional[str] = None,
                    format: Format = Format.plain,
+                   pool: Optional[str] = None,
+                   namespace: Optional[str] = None,
+                   port: Optional[int] = None,
                    dry_run: bool = False,
                    unmanaged: bool = False,
                    no_overwrite: bool = False,
@@ -1137,6 +1138,7 @@ Usage:
             service_id=svc_id,
             pool=pool,
             namespace=namespace,
+            port=port,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run

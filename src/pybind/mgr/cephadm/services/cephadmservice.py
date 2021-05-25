@@ -34,7 +34,9 @@ class CephadmDaemonDeploySpec:
                  extra_files: Optional[Dict[str, Any]] = None,
                  daemon_type: Optional[str] = None,
                  ip: Optional[str] = None,
-                 ports: Optional[List[int]] = None):
+                 ports: Optional[List[int]] = None,
+                 rank: Optional[int] = None,
+                 rank_generation: Optional[int] = None):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -66,6 +68,9 @@ class CephadmDaemonDeploySpec:
         self.final_config: Dict[str, Any] = {}
         self.deps: List[str] = []
 
+        self.rank: Optional[int] = rank
+        self.rank_generation: Optional[int] = rank_generation
+
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
@@ -88,17 +93,22 @@ class CephadmDaemonDeploySpec:
             service_name=dd.service_name(),
             ip=dd.ip,
             ports=dd.ports,
+            rank=dd.rank,
+            rank_generation=dd.rank_generation,
         )
 
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
         return DaemonDescription(
             daemon_type=self.daemon_type,
             daemon_id=self.daemon_id,
+            service_name=self.service_name,
             hostname=self.host,
             status=status,
             status_desc=status_desc,
             ip=self.ip,
             ports=self.ports,
+            rank=self.rank,
+            rank_generation=self.rank_generation,
         )
 
 
@@ -116,22 +126,49 @@ class CephadmService(metaclass=ABCMeta):
         self.mgr: "CephadmOrchestrator" = mgr
 
     def allow_colo(self) -> bool:
+        """
+        Return True if multiple daemons of the same type can colocate on
+        the same host.
+        """
         return False
 
-    def per_host_daemon_type(self) -> Optional[str]:
-        return None
-
     def primary_daemon_type(self) -> str:
+        """
+        This is the type of the primary (usually only) daemon to be deployed.
+        """
         return self.TYPE
 
+    def per_host_daemon_type(self) -> Optional[str]:
+        """
+        If defined, this type of daemon will be deployed once for each host
+        containing one or more daemons of the primary type.
+        """
+        return None
+
+    def ranked(self) -> bool:
+        """
+        If True, we will assign a stable rank (0, 1, ...) and monotonically increasing
+        generation (0, 1, ...) to each daemon we create/deploy.
+        """
+        return False
+
+    def fence_old_ranks(self,
+                        spec: ServiceSpec,
+                        rank_map: Dict[int, Dict[int, Optional[str]]],
+                        num_ranks: int) -> None:
+        assert False
+
     def make_daemon_spec(
-            self, host: str,
+            self,
+            host: str,
             daemon_id: str,
             network: str,
             spec: ServiceSpecs,
             daemon_type: Optional[str] = None,
             ports: Optional[List[int]] = None,
             ip: Optional[str] = None,
+            rank: Optional[int] = None,
+            rank_generation: Optional[int] = None,
     ) -> CephadmDaemonDeploySpec:
         return CephadmDaemonDeploySpec(
             host=host,
@@ -141,6 +178,8 @@ class CephadmService(metaclass=ABCMeta):
             daemon_type=daemon_type,
             ports=ports,
             ip=ip,
+            rank=rank,
+            rank_generation=rank_generation,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
