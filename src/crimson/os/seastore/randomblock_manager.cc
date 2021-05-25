@@ -481,7 +481,8 @@ RandomBlockManager::write(
   bufferptr &bptr)
 {
   ceph_assert(device);
-  if (addr > super.end - super.start) {
+  if (addr > super.end || addr < super.start ||
+      bptr.length() > super.end - super.start) {
     return crimson::ct_error::erange::make();
   }
   return device->write(
@@ -492,16 +493,16 @@ RandomBlockManager::write(
 RandomBlockManager::read_ertr::future<>
 RandomBlockManager::read(
   blk_paddr_t addr,
-  bufferptr &buffer)
+  bufferptr &bptr)
 {
   ceph_assert(device);
-  if (addr > super.end - super.start ||
-      buffer.length() > super.end - super.start) {
+  if (addr > super.end || addr < super.start ||
+      bptr.length() > super.end - super.start) {
     return crimson::ct_error::erange::make();
   }
   return device->read(
       addr,
-      buffer);
+      bptr);
 }
 
 RandomBlockManager::close_ertr::future<>
