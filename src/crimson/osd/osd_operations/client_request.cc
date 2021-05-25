@@ -63,8 +63,8 @@ bool ClientRequest::is_pg_op() const
 void ClientRequest::may_set_prev_op()
 {
   // set prev_op_id if it's not set yet
-  if (__builtin_expect(prev_op_id == 0, true)) {
-    prev_op_id = sequencer.get_last_issued();
+  if (__builtin_expect(!prev_op_id.has_value(), true)) {
+    prev_op_id.emplace(sequencer.get_last_issued());
   }
 }
 
@@ -88,8 +88,9 @@ seastar::future<> ClientRequest::start()
           epoch_t same_interval_since = pgref->get_interval_start_epoch();
           logger().debug("{} same_interval_since: {}", *this, same_interval_since);
           may_set_prev_op();
+          assert(prev_op_id.has_value());
           return sequencer.start_op(
-            handle, prev_op_id, get_id(),
+            handle, *prev_op_id, get_id(),
             interruptor::wrap_function(
               [this, pgref]() mutable -> interruptible_future<> {
               PG &pg = *pgref;
