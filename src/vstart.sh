@@ -194,53 +194,55 @@ inc_osd_num=0
 
 msgr="21"
 
-usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 NFS=1 $0 -n -d\n"
-usage=$usage"options:\n"
-usage=$usage"\t-d, --debug\n"
-usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
-usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
-usage=$usage"\t-i <ip>: bind to specific ip\n"
-usage=$usage"\t-n, --new\n"
-usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
-usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
-usage=$usage"\t--redirect-output: only useful with nodaemon, directs output to log file\n"
-usage=$usage"\t--smallmds: limit mds cache memory limit\n"
-usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
-usage=$usage"\t-k keep old configuration files (default)\n"
-usage=$usage"\t-x enable cephx (on by default)\n"
-usage=$usage"\t-X disable cephx\n"
-usage=$usage"\t-g --gssapi enable Kerberos/GSSApi authentication\n"
-usage=$usage"\t-G disable Kerberos/GSSApi authentication\n"
-usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
-usage=$usage"\t-e : create an erasure pool\n";
-usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
-usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
-usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
-usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
-usage=$usage"\t--seastore use seastore as crimson osd backend\n"
-usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend (default)\n"
-usage=$usage"\t-f, --filestore use filestore as the osd objectstore backend\n"
-usage=$usage"\t-K, --kstore use kstore as the osd objectstore backend\n"
-usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
-usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
-usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
-usage=$usage"\t--nolockdep disable lockdep\n"
-usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
-usage=$usage"\t--without-dashboard: do not run using mgr dashboard\n"
-usage=$usage"\t--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)\n"
-usage=$usage"\t--msgr1: use msgr1 only\n"
-usage=$usage"\t--msgr2: use msgr2 only\n"
-usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
-usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
-usage=$usage"\t--osd-args: specify any extra osd specific options\n"
-usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
-usage=$usage"\t--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)\n"
-usage=$usage"\t--bluestore-io-uring: enable io_uring backend\n"
-usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
-usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
-usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
-usage=$usage"\t--jaeger: use jaegertracing for tracing\n"
-usage=$usage"\t--seastore-devs: comma-separated list of blockdevs to use for seastore\n"
+read -r -d '' usage <<EOF || true
+usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 NFS=1 $0 -n -d
+options:
+	-d, --debug
+	-s, --standby_mds: Generate standby-replay MDS for each active
+	-l, --localhost: use localhost instead of hostname
+	-i <ip>: bind to specific ip
+	-n, --new
+	--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'
+	--nodaemon: use ceph-run as wrapper for mon/osd/mds
+	--redirect-output: only useful with nodaemon, directs output to log file
+	--smallmds: limit mds cache memory limit
+	-m ip:port		specify monitor address
+	-k keep old configuration files (default)
+	-x enable cephx (on by default)
+	-X disable cephx
+	-g --gssapi enable Kerberos/GSSApi authentication
+	-G disable Kerberos/GSSApi authentication
+	--hitset <pool> <hit_set_type>: enable hitset tracking
+	-e : create an erasure pool\
+	-o config		 add extra config parameters to all sections
+	--rgw_port specify ceph rgw http listen port
+	--rgw_frontend specify the rgw frontend configuration
+	--rgw_compression specify the rgw compression plugin
+	--seastore use seastore as crimson osd backend
+	-b, --bluestore use bluestore as the osd objectstore backend (default)
+	-f, --filestore use filestore as the osd objectstore backend
+	-K, --kstore use kstore as the osd objectstore backend
+	--memstore use memstore as the osd objectstore backend
+	--cache <pool>: enable cache tiering on pool
+	--short: short object names only; necessary for ext4 dev
+	--nolockdep disable lockdep
+	--multimds <count> allow multimds with maximum active count
+	--without-dashboard: do not run using mgr dashboard
+	--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)
+	--msgr1: use msgr1 only
+	--msgr2: use msgr2 only
+	--msgr21: use msgr2 and msgr1
+	--crimson: use crimson-osd instead of ceph-osd
+	--osd-args: specify any extra osd specific options
+	--bluestore-devs: comma-separated list of blockdevs to use for bluestore
+	--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)
+	--bluestore-io-uring: enable io_uring backend
+	--inc-osd: append some more osds into existing vcluster
+	--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]
+	--no-parallel: dont start all OSDs in parallel
+	--jaeger: use jaegertracing for tracing
+	--seastore-devs: comma-separated list of blockdevs to use for seastore
+EOF
 
 usage_exit() {
     printf "$usage"
