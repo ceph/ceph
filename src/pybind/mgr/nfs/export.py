@@ -187,9 +187,9 @@ class ExportMgr:
                 log.info(f"Exports parsed successfully {self.exports.items()}")
         return self._exports
 
-    def _fetch_export(self, pseudo_path):
+    def _fetch_export(self, cluster_id, pseudo_path):
         try:
-            for ex in self.exports[self.rados_namespace]:
+            for ex in self.exports[cluster_id]:
                 if ex.pseudo == pseudo_path:
                     return ex
         except KeyError:
@@ -239,7 +239,7 @@ class ExportMgr:
             if export_obj:
                 export = export_obj
             else:
-                export = self._fetch_export(pseudo_path)
+                export = self._fetch_export(cluster_id, pseudo_path)
 
             if export:
                 if pseudo_path:
@@ -322,7 +322,7 @@ class ExportMgr:
     @export_cluster_checker
     def get_export(self, cluster_id, pseudo_path):
         try:
-            export = self._fetch_export(pseudo_path)
+            export = self._fetch_export(cluster_id, pseudo_path)
             if export:
                 return 0, json.dumps(export.to_dict(), indent=2), ''
             log.warning(f"No {pseudo_path} export to show for {cluster_id}")
@@ -350,7 +350,8 @@ class FSExport(ExportMgr):
         if new_export_dict['cluster_id'] not in available_clusters(self.mgr):
             raise ClusterNotFound()
 
-        export = self._fetch_export(new_export_dict['pseudo'])
+        export = self._fetch_export(new_export_dict['cluster_id'],
+                                    new_export_dict['pseudo'])
         out_msg = ''
         if export:
             # Check if export id matches
@@ -441,7 +442,7 @@ class FSExport(ExportMgr):
         if cluster_id not in self.exports:
             self.exports[cluster_id] = []
 
-        if not self._fetch_export(pseudo_path):
+        if not self._fetch_export(cluster_id, pseudo_path):
             ex_id = self._gen_export_id()
             user_id = f"nfs.{cluster_id}.{ex_id}"
             user_out, key = self._create_user_key(user_id, path, fs_name, read_only)
@@ -485,7 +486,7 @@ class FSExport(ExportMgr):
         export_ls = self.exports[self.rados_namespace]
         if old_export not in export_ls:
             # This happens when export is fetched by ID
-            old_export = self._fetch_export(old_export.pseudo)
+            old_export = self._fetch_export(old_export.cluster_id, old_export.pseudo)
         export_ls.remove(old_export)
         restart_nfs_service(self.mgr, new_export.cluster_id)
         return 0, "Successfully updated export", ""
