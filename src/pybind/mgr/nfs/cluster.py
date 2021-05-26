@@ -146,9 +146,21 @@ class NFSCluster:
         for cluster in completion.result:
             if self.cluster_id == cluster.service_id():
                 try:
+                    if cluster.ip:
+                        ip = cluster.ip
+                    else:
+                        c = self.mgr.get_hosts()
+                        orchestrator.raise_if_exception(c)
+                        hosts = [h for h in c.result
+                                 if h.hostname == cluster.hostname]
+                        if hosts:
+                            ip = resolve_ip(hosts[0].addr)
+                        else:
+                            # sigh
+                            ip = resolve_ip(cluster.hostname)
                     backends.append({
                             "hostname": cluster.hostname,
-                            "ip": cluster.ip or resolve_ip(cluster.hostname),
+                            "ip": ip,
                             "port": cluster.ports[0]
                             })
                 except orchestrator.OrchestratorError:
