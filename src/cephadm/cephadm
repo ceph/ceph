@@ -4019,14 +4019,15 @@ def command_bootstrap(ctx):
 
     image_ver = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run().strip()
     logger.info(f'Ceph version: {image_ver}')
-    image_release = image_ver.split()[4]
-    if (
-        not ctx.allow_mismatched_release
-        and image_release not in [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]
-    ):
-        raise Error(
-            f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE}; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
-        )
+
+    if not ctx.allow_mismatched_release:
+        image_release = image_ver.split()[4]
+        if image_release not in \
+                [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]:
+            raise Error(
+                f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE};'
+                ' please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+            )
 
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid(ctx)
