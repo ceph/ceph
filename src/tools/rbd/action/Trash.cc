@@ -446,6 +446,15 @@ int execute_purge(const po::variables_map &vm,
   r = rbd.trash_purge_with_progress(io_ctx, expire_ts, threshold, pc);
   if (r < 0) {
     pc.fail();
+    if (r == -ENOTEMPTY || r == -EBUSY || r == -EMLINK || r == -EUCLEAN) {
+      std::cerr << "rbd: some expired images could not be removed"
+                << std::endl
+                << "Ensure that they are closed/unmapped, do not have "
+                << "snapshots (including trashed snapshots with linked "
+                << "clones), are not in a group and were moved to the "
+                << "trash successfully."
+                << std::endl;
+    }
     return r;
   }
 
