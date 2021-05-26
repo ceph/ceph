@@ -1,12 +1,10 @@
-
 import mock
-from mock import patch
-import pytest
-
 import os
+import pytest
 import time
 
-with patch('builtins.open', create=True):
+
+with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
