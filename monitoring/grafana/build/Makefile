@@ -74,14 +74,15 @@ providers: \\n\
 push:
 	sudo podman tag ${LOCALTAG} docker.io/${TAG}
 	sudo podman tag ${LOCALTAG} quay.io/${TAG}
-	sudo podman login -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD} docker.io
-	sudo podman login -u $(CONTAINER_REPO_USERNAME) -p $(CONTAINER_REPO_PASSWORD) quay.io
-	sudo podman push --format v2s2 docker.io/${TAG}
-	sudo podman push --format v2s2 quay.io/${TAG}
+	# sudo podman has issues with auth.json; just override it
+	sudo podman login --authfile=auth.json -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD} docker.io
+	sudo podman login --authfile=auth.json -u $(CONTAINER_REPO_USERNAME) -p $(CONTAINER_REPO_PASSWORD) quay.io
+	sudo podman push --authfile=auth.json --format v2s2 docker.io/${TAG}
+	sudo podman push --authfile=auth.json --format v2s2 quay.io/${TAG}
 
 clean:
 	sudo podman rmi ${LOCALTAG} || true
 	sudo podman rmi docker.io/${TAG} || true
 	sudo podman rmi quay.io/${TAG} || true
-	rm -f grafana-*.rpm*
+	rm -f grafana-*.rpm* auth.json
 	rm -f ${DASHBOARD_PROVISIONING}
