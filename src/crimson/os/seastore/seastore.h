@@ -195,6 +195,22 @@ private:
       });
   }
 
+  using _omap_get_value_ertr = OMapManager::base_ertr::extend<
+    crimson::ct_error::enodata
+    >;
+  using _omap_get_value_ret = _omap_get_value_ertr::future<ceph::bufferlist>;
+  _omap_get_value_ret _omap_get_value(
+    Transaction &t,
+    omap_root_t &&root,
+    std::string_view key) const;
+
+  using _omap_get_values_ertr = OMapManager::base_ertr;
+  using _omap_get_values_ret = _omap_get_values_ertr::future<omap_values_t>;
+  _omap_get_values_ret _omap_get_values(
+    Transaction &t,
+    omap_root_t &&root,
+    const omap_keys_t &keys) const;
+
   using _omap_list_bare_ret = OMapManager::omap_list_bare_ret;
   using _omap_list_ret = OMapManager::omap_list_ret;
   _omap_list_ret _omap_list(
