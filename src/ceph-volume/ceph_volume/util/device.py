@@ -257,7 +257,9 @@ class Device(object):
             # retrieve device_id on FreeBSD. Still figuring out if/how the
             # python ioctl implementation does that on FreeBSD
             dev_id = ''
-        dev_id.replace(' ', '_')
+        dev_id = dev_id.replace(' ', '_')
+        while '__' in dev_id:
+            dev_id = dev_id.replace('__', '_')
         return dev_id
 
     def _set_lvm_membership(self):
