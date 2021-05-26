@@ -109,6 +109,8 @@ struct Config {
   bool readonly = false;
   bool set_max_part = false;
   bool try_netlink = false;
+  bool unmap_on_last_close = false;
+  bool unmap_delete_on_disconnect = false;
 
   std::string poolname;
   std::string nsname;
@@ -165,6 +167,8 @@ static void usage()
             << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
             << "                                (default: " << Config().reattach_timeout << ")\n"
             << "  --try-netlink                 Use the nbd netlink interface\n"
+            << "  --unmap-on-last-close         Disconnect the nbd device on close by last opener, Used with netlink\n"
+            << "  --unmap-delete-on-disconnect  Delete the nbd device on disconnect, Used with netlink\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -178,6 +182,13 @@ static int nbd_index = -1;
 static EventSocket terminate_event_sock;
 
 #define RBD_NBD_BLKSIZE 512UL
+
+/* These are client behavior specific flags. see kernel include/uapi/linux/nbd.h */
+#define NBD_CFLAG_DESTROY_ON_DISCONNECT (1 << 0) /* delete the nbd device on
+                                                    disconnect. */
+#define NBD_CFLAG_DISCONNECT_ON_CLOSE (1 << 1) /* disconnect the nbd device on
+                                                *  close by last opener.
+                                                */
 
 #define HELP_INFO 1
 #define VERSION_INFO 2
@@ -1286,6 +1297,7 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
   struct nlattr *sock_opt;
   struct nl_msg *msg;
   int ret;
+  uint64_t client_flags = 0;
 
   if (reconnect) {
     dout(10) << "netlink try reconnect for " << cfg->devpath << dendl;
@@ -1326,6 +1338,14 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
   NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES, RBD_NBD_BLKSIZE);
   NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
   NLA_PUT_U64(msg, NBD_ATTR_DEAD_CONN_TIMEOUT, cfg->reattach_timeout);
+
+  if (cfg->unmap_on_last_close)
+    client_flags |= NBD_CFLAG_DISCONNECT_ON_CLOSE;
+
+  if (cfg->unmap_delete_on_disconnect)
+    client_flags |= NBD_CFLAG_DESTROY_ON_DISCONNECT;
+
+  NLA_PUT_U64(msg, NBD_ATTR_CLIENT_FLAGS, client_flags);
 
   sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
   if (!sock_attr) {
@@ -2053,6 +2073,10 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
       cfg->try_netlink = true;
+    } else if (ceph_argparse_flag(args, i, "--unmap-on-last-close", (char *)NULL)) {
+      cfg->unmap_on_last_close = true;
+    } else if (ceph_argparse_flag(args, i, "--unmap-delete-on-disconnect", (char *)NULL)) {
+      cfg->unmap_delete_on_disconnect = true;
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
