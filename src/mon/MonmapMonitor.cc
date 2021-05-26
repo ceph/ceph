@@ -308,8 +308,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "mon stat") {
@@ -344,8 +343,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
              prefix == "mon dump") {
 
     epoch_t epoch;
-    int64_t epochnum;
-    cmd_getval(cmdmap, "epoch", epochnum, (int64_t)0);
+    int64_t epochnum = cmd_getval_or<int64_t>(cmdmap, "epoch", 0);
     epoch = epochnum;
 
     MonMap *p = mon.monmap;
