@@ -2463,6 +2463,23 @@ TEST(LibCephFS, Lseek) {
   ceph_shutdown(cmount);
 }
 
+static int ceph_mksnap(struct ceph_mount_info *cmount, const char *path, const char *name,
+		       mode_t mode, void *unused, size_t nr_unused)
+{
+  char snap_path[PATH_MAX];
+
+  sprintf(snap_path, "%s/.snap/%s", path, name);
+  return ceph_mkdir(cmount, snap_path, mode);
+}
+
+static int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, const char *name)
+{
+  char snap_path[PATH_MAX];
+
+  sprintf(snap_path, "%s/.snap/%s", path, name);
+  return ceph_rmdir(cmount, snap_path);
+}
+
 TEST(LibCephFS, LookupVino) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
