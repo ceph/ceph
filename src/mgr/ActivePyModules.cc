@@ -173,7 +173,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     PyObject *injected_map = Injector::get_python(what);
     // Structures which have no injection implemented should
     // return the usual PyObject*
-    if (injected_map != nullptr) return injected_map;
+    if (injected_map != Py_None) return injected_map;
   }
   PyFormatter f;
 
