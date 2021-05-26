@@ -5735,7 +5735,13 @@ std::vector<Option> get_global_options() {
     // blk specific options
     Option("bdev_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("Explicitly set the device type to select the driver if it's needed")
-    .set_enum_allowed({"aio", "spdk", "pmem", "hm_smr"})
+    .set_enum_allowed({"aio", "spdk", "pmem", "hm_smr"}),
+
+    Option("mgr_ttl_cache_expire_seconds", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Set the time to live in seconds - set to 0 to disable the cache.")
+    .set_flag(Option::FLAG_STARTUP)
+    .add_service("mgr")
 
   });
 }
