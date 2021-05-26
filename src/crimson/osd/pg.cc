@@ -657,28 +657,29 @@ PG::interruptible_future<> PG::repair_object(
 template <class Ret, class SuccessFunc, class FailureFunc>
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<Ret>>
 PG::do_osd_ops_execute(
-  OpsExecuter&& ox,
+  seastar::lw_shared_ptr<OpsExecuter> ox,
   std::vector<OSDOp>& ops,
   const OpInfo &op_info,
   SuccessFunc&& success_func,
   FailureFunc&& failure_func)
 {
-  auto rollbacker = ox.create_rollbacker([this] (auto& obc) {
+  assert(ox);
+  auto rollbacker = ox->create_rollbacker([this] (auto& obc) {
     return reload_obc(obc).handle_error_interruptible(
       load_obc_ertr::assert_all{"can't live with object state messed up"});
   });
   auto failure_func_ptr = seastar::make_lw_shared(std::move(failure_func));
-  return interruptor::do_for_each(ops, [&ox](OSDOp& osd_op) {
+  return interruptor::do_for_each(ops, [ox](OSDOp& osd_op) {
     logger().debug(
       "do_osd_ops_execute: object {} - handling op {}",
-      ox.get_target(),
+      ox->get_target(),
       ceph_osd_op_name(osd_op.op.op));
-    return ox.execute_op(osd_op);
-  }).safe_then_interruptible([this, &ox, &op_info, &ops] {
+    return ox->execute_op(osd_op);
+  }).safe_then_interruptible([this, ox, &op_info, &ops] {
     logger().debug(
       "do_osd_ops_execute: object {} all operations successful",
-      ox.get_target());
-    return std::move(ox).flush_changes_n_do_ops_effects(
+      ox->get_target());
+    return std::move(*ox).flush_changes_n_do_ops_effects(
       Ref<PG>{this},
       [this, &op_info, &ops] (auto&& txn,
                               auto&& obc,
@@ -745,10 +746,11 @@ PG::do_osd_ops(
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
-  auto ox = std::make_unique<OpsExecuter>(
-    std::move(obc), op_info, get_pool().info, get_backend(), *m);
   return do_osd_ops_execute<Ref<MOSDOpReply>>(
-    std::move(*ox), m->ops, op_info,
+    seastar::make_lw_shared<OpsExecuter>(
+      std::move(obc), op_info, get_pool().info, get_backend(), *m),
+    m->ops,
+    op_info,
     [this, m, rvec = op_info.allows_returnvec()] {
       // TODO: should stop at the first op which returns a negative retval,
       //       cmpext uses it for returning the index of first unmatched byte
@@ -776,13 +778,7 @@ PG::do_osd_ops(
         peering_state.get_info().last_update,
         peering_state.get_info().last_user_version);
       return do_osd_ops_iertr::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-    }
-  ).safe_then_unpack_interruptible(
-    [ox_deleter=std::move(ox)](auto submitted, auto all_completed) mutable {
-    return do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ref<MOSDOpReply>>>(
-      std::move(submitted),
-      all_completed.finally([ox_deleter=std::move(ox_deleter)] {}));
-  });
+    });
 }
 
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<>>
@@ -794,20 +790,13 @@ PG::do_osd_ops(
   do_osd_ops_success_func_t success_func,
   do_osd_ops_failure_func_t failure_func)
 {
-  auto ox = std::make_unique<OpsExecuter>(
-    std::move(obc), op_info, get_pool().info, get_backend(), msg_params);
   return do_osd_ops_execute<void>(
-    std::move(*ox),
+    seastar::make_lw_shared<OpsExecuter>(
+      std::move(obc), op_info, get_pool().info, get_backend(), msg_params),
     ops,
     std::as_const(op_info),
     std::move(success_func),
-    std::move(failure_func)
-  ).safe_then_unpack_interruptible(
-    [ox_deleter=std::move(ox)](auto submitted, auto all_completed) mutable {
-    return do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<>>(
-      std::move(submitted),
-      all_completed.finally([ox_deleter=std::move(ox_deleter)] {}));
-  });
+    std::move(failure_func));
 }
 
 PG::interruptible_future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
