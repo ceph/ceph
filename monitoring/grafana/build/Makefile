@@ -72,8 +72,15 @@ providers: \\n\
 	sudo buildah commit --format docker --squash $(CONTAINER) $(LOCALTAG)
 
 push:
-	sudo podman tag ${LOCALTAG} docker.io/${TAG}
-	sudo podman tag ${LOCALTAG} quay.io/${TAG}
+	# this transition-through-oci image is a workaround for
+	# https://github.com/containers/buildah/issues/3253 and
+	# can be removed when that is fixed and released.  The
+	# --format v2s2 on push is to convert oci back to docker format.
+	sudo podman push $(LOCALTAG) --format=oci dir://tmp/oci-image
+	sudo podman pull dir://tmp/oci-image
+	sudo rm -rf /tmp/oci-image
+	sudo podman tag localhost/tmp/oci-image docker.io/${TAG}
+	sudo podman tag localhost/tmp/oci-image quay.io/${TAG}
 	# sudo podman has issues with auth.json; just override it
 	sudo podman login --authfile=auth.json -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD} docker.io
 	sudo podman login --authfile=auth.json -u $(CONTAINER_REPO_USERNAME) -p $(CONTAINER_REPO_PASSWORD) quay.io
@@ -84,5 +91,6 @@ clean:
 	sudo podman rmi ${LOCALTAG} || true
 	sudo podman rmi docker.io/${TAG} || true
 	sudo podman rmi quay.io/${TAG} || true
+	sudo podman rmi localhost/tmp/oci-image || true
 	rm -f grafana-*.rpm* auth.json
 	rm -f ${DASHBOARD_PROVISIONING}
