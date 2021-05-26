@@ -1,25 +1,27 @@
 # type: ignore
-from typing import List, Optional
-import mock
-from mock import patch, call
-import os
-import sys
-import unittest
-import threading
-import time
+
 import errno
+import mock
+import os
+import pytest
 import socket
+import sys
+import time
+import threading
+import unittest
+
 from http.server import HTTPServer
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-import pytest
-
+from typing import List, Optional
 from .fixtures import exporter
 
-with patch('builtins.open', create=True):
+
+with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
+
 
 class TestCephAdm(object):
 
@@ -107,7 +109,7 @@ class TestCephAdm(object):
             except:
                 assert False
             else:
-                assert _socket.call_args == call(address_family, socket.SOCK_STREAM)
+                assert _socket.call_args == mock.call(address_family, socket.SOCK_STREAM)
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -1019,10 +1021,10 @@ class TestMonitoring(object):
             daemon_id=daemon_id
         )
         assert _open.call_args_list == [
-            call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
+            mock.call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
                  encoding='utf-8'),
-            call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
+            mock.call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
                  encoding='utf-8'),
         ]
-        assert call().__enter__().write('foo') in _open.mock_calls
-        assert call().__enter__().write('bar') in _open.mock_calls
+        assert mock.call().__enter__().write('foo') in _open.mock_calls
+        assert mock.call().__enter__().write('bar') in _open.mock_calls
