@@ -464,7 +464,9 @@ RandomBlockManager::open(const std::string &path, blk_paddr_t addr)
 	  return crimson::ct_error::enoent::make();
 	}
 	super = s;
-	return open_ertr::now();
+	return check_bitmap_blocks().safe_then([]() {
+	  return open_ertr::now();
+	    });
       }
       ).handle_error(
 	open_ertr::pass_further{},
@@ -584,6 +586,49 @@ RandomBlockManager::read_rbm_header(blk_paddr_t addr)
       "Invalid error in RandomBlockManager::read_rbm_header"
     }
     );
+}
+
+RandomBlockManager::check_bitmap_blocks_ertr::future<>
+RandomBlockManager::check_bitmap_blocks()
+{
+  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  return seastar::do_with(uint64_t(super.start_alloc_area), uint64_t(0), bp,
+	  [&, this] (auto &addr, auto &free_blocks, auto &bp) mutable {
+    return crimson::do_until(
+	[&, this] () mutable {
+	return device->read(
+	    addr,
+	    bp
+	    ).safe_then([&bp, &addr, &free_blocks, this]() mutable {
+	      logger().debug("verify_bitmap_blocks: addr {}", addr);
+	      rbm_bitmap_block_t b_block(super.block_size);
+	      bufferlist bl_bitmap_block;
+	      bl_bitmap_block.append(bp);
+	      decode(b_block, bl_bitmap_block);
+	      auto max = max_block_by_bitmap_block();
+	      for (uint64_t i = 0; i < max; i++) {
+		if (!b_block.is_allocated(i)) {
+		  free_blocks++;
+		}
+	      }
+	      addr += super.block_size;
+	      if (addr >= super.start_data_area) {
+		return find_block_ertr::make_ready_future<bool>(true);
+	      }
+	      return find_block_ertr::make_ready_future<bool>(false);
+	      });
+	}).safe_then([&free_blocks, this] () {
+	  logger().debug(" free_blocks: {} ", free_blocks);
+	  super.free_block_count = free_blocks;
+	  return check_bitmap_blocks_ertr::now();
+	  }).handle_error(
+	      check_bitmap_blocks_ertr::pass_further{},
+	      crimson::ct_error::assert_all{
+		"Invalid error in RandomBlockManager::find_free_block"
+	      }
+	    );
+
+    });
 }
 
 RandomBlockManager::write_ertr::future<>

@@ -337,6 +337,13 @@ public:
    */
   write_ertr::future<> rbm_sync_block_bitmap(rbm_bitmap_block_t &block, blk_id_t block_no);
 
+  using check_bitmap_blocks_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::invarg>;
+  check_bitmap_blocks_ertr::future<> check_bitmap_blocks();
+  uint64_t get_free_blocks() {
+    return super.free_block_count;
+  }
   /*
    * We will have mulitple partitions (circularjournals and randbomblockmanagers) on a device,
    * so start and end location of the device  are needed to support such case.
