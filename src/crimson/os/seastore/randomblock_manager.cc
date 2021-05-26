@@ -20,8 +20,7 @@ namespace {
 
 namespace crimson::os::seastore {
 
-RandomBlockManager::write_ertr::future<>
-RandomBlockManager::rbm_sync_block_bitmap(rbm_bitmap_block_t &block, blk_id_t block_no)
+RandomBlockManager::write_ertr::future<> RandomBlockManager::rbm_sync_block_bitmap(rbm_bitmap_block_t &block, blk_id_t block_no)
 {
   bufferptr bptr;
   try {
@@ -44,8 +43,7 @@ RandomBlockManager::rbm_sync_block_bitmap(rbm_bitmap_block_t &block, blk_id_t bl
 		       bptr);
 }
 
-RandomBlockManager::mkfs_ertr::future<>
-RandomBlockManager::initialize_blk_alloc_area() {
+RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::initialize_blk_alloc_area() {
   auto start = super.start_data_area / super.block_size;
   logger().debug("initialize_alloc_area: start to read at {} ", start);
 
@@ -113,8 +111,7 @@ RandomBlockManager::initialize_blk_alloc_area() {
 
 }
 
-RandomBlockManager::mkfs_ertr::future<>
-RandomBlockManager::mkfs(mkfs_config_t config)
+RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::mkfs(mkfs_config_t config)
 {
   logger().debug("path {}", path);
   return _open_device(path).safe_then([this, &config]() {
@@ -169,8 +166,7 @@ RandomBlockManager::mkfs(mkfs_config_t config)
 
 }
 
-RandomBlockManager::find_block_ret
-RandomBlockManager::find_free_block(Transaction &t, size_t size)
+RandomBlockManager::find_block_ret RandomBlockManager::find_free_block(Transaction &t, size_t size)
 {
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   return seastar::do_with(uint64_t(0), uint64_t(super.start_alloc_area), interval_set<blk_id_t>(), bp,
@@ -241,8 +237,7 @@ RandomBlockManager::find_free_block(Transaction &t, size_t size)
 }
 
 /* TODO : block allocator */
-RandomBlockManager::allocate_ertr::future<>
-RandomBlockManager::alloc_extent(Transaction &t, size_t size)
+RandomBlockManager::allocate_ertr::future<> RandomBlockManager::alloc_extent(Transaction &t, size_t size)
 {
 
   /*
@@ -277,8 +272,7 @@ RandomBlockManager::alloc_extent(Transaction &t, size_t size)
 	);
 }
 
-RandomBlockManager::free_block_ertr::future<>
-RandomBlockManager::free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to)
+RandomBlockManager::free_block_ertr::future<> RandomBlockManager::free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to)
 {
   blk_id_t blk_id_start = from / super.block_size;
   blk_id_t blk_id_end = to / super.block_size;
@@ -294,8 +288,7 @@ RandomBlockManager::free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to
   return free_block_ertr::now();
 }
 
-RandomBlockManager::write_ertr::future<>
-RandomBlockManager::rbm_sync_block_bitmap_by_range(blk_id_t start, blk_id_t end, bitmap_op_types_t op)
+RandomBlockManager::write_ertr::future<> RandomBlockManager::rbm_sync_block_bitmap_by_range(blk_id_t start, blk_id_t end, bitmap_op_types_t op)
 {
   auto addr = super.start_alloc_area +
 	      (start / max_block_by_bitmap_block())
@@ -393,8 +386,7 @@ RandomBlockManager::rbm_sync_block_bitmap_by_range(blk_id_t start, blk_id_t end,
 	);
 }
 
-RandomBlockManager::abort_allocation_ertr::future<>
-RandomBlockManager::abort_allocation(Transaction &t)
+RandomBlockManager::abort_allocation_ertr::future<> RandomBlockManager::abort_allocation(Transaction &t)
 {
   /*
    * TODO: clear all allocation infos associated with transaction in in-memory allocator
@@ -403,8 +395,7 @@ RandomBlockManager::abort_allocation(Transaction &t)
   return abort_allocation_ertr::now();
 }
 
-RandomBlockManager::write_ertr::future<>
-RandomBlockManager::complete_allocation(Transaction &t)
+RandomBlockManager::write_ertr::future<> RandomBlockManager::complete_allocation(Transaction &t)
 {
   auto alloc_blocks = t.get_rbm_allocated_blocks();
   if (alloc_blocks.empty()) {
@@ -453,8 +444,7 @@ RandomBlockManager::complete_allocation(Transaction &t)
   });
 }
 
-RandomBlockManager::open_ertr::future<>
-RandomBlockManager::open(const std::string &path, blk_paddr_t addr)
+RandomBlockManager::open_ertr::future<> RandomBlockManager::open(const std::string &path, blk_paddr_t addr)
 {
   logger().debug("open: path{}", path);
   return _open_device(path
@@ -477,8 +467,7 @@ RandomBlockManager::open(const std::string &path, blk_paddr_t addr)
     });
 }
 
-RandomBlockManager::write_ertr::future<>
-RandomBlockManager::write(
+RandomBlockManager::write_ertr::future<> RandomBlockManager::write(
   blk_paddr_t addr,
   bufferptr &bptr)
 {
@@ -492,8 +481,7 @@ RandomBlockManager::write(
     bptr);
 }
 
-RandomBlockManager::read_ertr::future<>
-RandomBlockManager::read(
+RandomBlockManager::read_ertr::future<> RandomBlockManager::read(
   blk_paddr_t addr,
   bufferptr &bptr)
 {
@@ -507,15 +495,13 @@ RandomBlockManager::read(
       bptr);
 }
 
-RandomBlockManager::close_ertr::future<>
-RandomBlockManager::close()
+RandomBlockManager::close_ertr::future<> RandomBlockManager::close()
 {
   ceph_assert(device);
   return device->close();
 }
 
-RandomBlockManager::open_ertr::future<>
-RandomBlockManager::_open_device(const std::string path)
+RandomBlockManager::open_ertr::future<> RandomBlockManager::_open_device(const std::string path)
 {
   ceph_assert(device);
   return device->open(path, seastar::open_flags::rw
@@ -524,8 +510,7 @@ RandomBlockManager::_open_device(const std::string path)
   });
 }
 
-RandomBlockManager::write_ertr::future<>
-RandomBlockManager::write_rbm_header()
+RandomBlockManager::write_ertr::future<> RandomBlockManager::write_rbm_header()
 {
   bufferlist meta_b_header;
   super.crc = 0;
@@ -545,8 +530,7 @@ RandomBlockManager::write_rbm_header()
 	});
 }
 
-RandomBlockManager::read_ertr::future<rbm_metadata_header_t>
-RandomBlockManager::read_rbm_header(blk_paddr_t addr)
+RandomBlockManager::read_ertr::future<rbm_metadata_header_t> RandomBlockManager::read_rbm_header(blk_paddr_t addr)
 {
   ceph_assert(device);
   bufferptr bptr = bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
@@ -588,8 +572,7 @@ RandomBlockManager::read_rbm_header(blk_paddr_t addr)
     );
 }
 
-RandomBlockManager::check_bitmap_blocks_ertr::future<>
-RandomBlockManager::check_bitmap_blocks()
+RandomBlockManager::check_bitmap_blocks_ertr::future<> RandomBlockManager::check_bitmap_blocks()
 {
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   return seastar::do_with(uint64_t(super.start_alloc_area), uint64_t(0), bp,
@@ -631,8 +614,7 @@ RandomBlockManager::check_bitmap_blocks()
     });
 }
 
-RandomBlockManager::write_ertr::future<>
-RandomBlockManager::write(
+RandomBlockManager::write_ertr::future<> RandomBlockManager::write(
   blk_paddr_t addr,
   bufferlist &bl)
 {
