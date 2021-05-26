@@ -400,6 +400,22 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
     });
 }
 
+seastar::future<> AlienStore::inject_data_error(const ghobject_t& o)
+{
+  logger().debug("{}", __func__);
+  return tp->submit([=] {
+    return store->inject_data_error(o);
+  });
+}
+
+seastar::future<> AlienStore::inject_mdata_error(const ghobject_t& o)
+{
+  logger().debug("{}", __func__);
+  return tp->submit([=] {
+    return store->inject_mdata_error(o);
+  });
+}
+
 seastar::future<> AlienStore::write_meta(const std::string& key,
                                          const std::string& value)
 {

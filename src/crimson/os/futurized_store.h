@@ -131,6 +131,14 @@ public:
 
   virtual seastar::future<> do_transaction(CollectionRef ch,
 					   ceph::os::Transaction&& txn) = 0;
+  // error injection
+  virtual seastar::future<> inject_data_error(const ghobject_t& o) {
+    return seastar::now();
+  }
+  virtual seastar::future<> inject_mdata_error(const ghobject_t& o) {
+    return seastar::now();
+  }
+
   virtual seastar::future<OmapIteratorRef> get_omap_iterator(
     CollectionRef ch,
     const ghobject_t& oid) = 0;
