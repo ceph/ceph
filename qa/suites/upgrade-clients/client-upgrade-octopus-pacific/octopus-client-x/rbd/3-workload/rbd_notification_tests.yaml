@@ -8,25 +8,23 @@ tasks:
       env:
         RBD_FEATURES: "61"
   - workunit:
-      #The line below to change to 'pacific'
-      branch: master
+      branch: pacific
       clients:
         client.1:
           - rbd/notify_slave.sh
       env:
         RBD_FEATURES: "61"
+        RBD_DISABLE_UPDATE_FEATURES: "1"
 - print: "**** done rbd: old librbd -> new librbd"
 - parallel:
   - workunit:
-      #The line below to change to 'pacific'
-      branch: master
+      branch: octopus
       clients:
         client.0:
           - rbd/notify_slave.sh
       env:
         RBD_FEATURES: "61"
   - workunit:
-      #The line below to change to 'pacific'
       branch: pacific
       clients:
         client.1:
