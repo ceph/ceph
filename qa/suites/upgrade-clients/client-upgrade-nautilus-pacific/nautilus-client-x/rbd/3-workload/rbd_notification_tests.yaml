@@ -8,12 +8,13 @@ tasks:
       env:
         RBD_FEATURES: "61"
   - workunit:
-      branch: octopus
+      branch: pacific
       clients:
         client.1:
           - rbd/notify_slave.sh
       env:
         RBD_FEATURES: "61"
+        RBD_DISABLE_UPDATE_FEATURES: "1"
 - print: "**** done rbd: old librbd -> new librbd"
 - parallel:
   - workunit:
