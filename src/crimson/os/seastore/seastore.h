@@ -195,7 +195,6 @@ private:
       });
   }
 
-
   friend class SeaStoreOmapIterator;
   omap_get_values_ret_t omap_list(
     CollectionRef ch,
