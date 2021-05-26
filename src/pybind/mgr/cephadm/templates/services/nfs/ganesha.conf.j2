@@ -9,10 +9,6 @@ NFS_CORE_PARAM {
 {% endif %}
 }
 
-EXPORT_DEFAULTS {
-        Attr_Expiration_Time = 0;
-}
-
 NFSv4 {
         Delegations = false;
         RecoveryBackend = 'rados_cluster';
