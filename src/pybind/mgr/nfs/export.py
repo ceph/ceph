@@ -45,9 +45,6 @@ class NFSRados:
         return {'block_name': '%url', 'value': self._make_rados_url(obj_name)}
 
     def write_obj(self, conf_block, obj, config_obj=''):
-        if 'export-' in obj:
-            conf_block = GaneshaConfParser.write_block(conf_block)
-
         with self.mgr.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
@@ -231,8 +228,11 @@ class ExportMgr:
 
     def _save_export(self, export):
         self.exports[self.rados_namespace].append(export)
-        NFSRados(self.mgr, self.rados_namespace).write_obj(export.to_export_block(),
-                 f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
+        NFSRados(self.mgr, self.rados_namespace).write_obj(
+            GaneshaConfParser.write_block(export.to_export_block()),
+            f'export-{export.export_id}',
+            f'conf-nfs.{export.cluster_id}'
+        )
 
     def _delete_export(self, cluster_id, pseudo_path, export_obj=None):
         try:
