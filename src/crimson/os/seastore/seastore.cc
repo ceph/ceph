@@ -293,9 +293,9 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
     c, oid, [=](auto &t, auto& onode) {
     auto& layout = onode.get_layout();
     return _omap_list(layout.xattr_root, t, std::nullopt,
-      OMapManager::omap_list_config_t::with_inclusive(false)).safe_then(
-      [&layout](auto p) {
-      auto& attrs = p.second;
+      OMapManager::omap_list_config_t::with_inclusive(false)
+    ).safe_then([&layout](auto p) {
+      auto& attrs = std::get<1>(p);
       ceph::bufferlist bl;
       if (layout.oi_size) {
         bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
@@ -399,17 +399,16 @@ SeaStore::omap_get_values(
       }
     });
 }
-OMapManager::omap_list_ret SeaStore::_omap_list(
+
+SeaStore::_omap_list_ret SeaStore::_omap_list(
   const omap_root_le_t& omap_root,
   Transaction& t,
   const std::optional<std::string>& start,
-  OMapManager::omap_list_config_t config)
+  OMapManager::omap_list_config_t config) const
 {
-  using ret_bare_t = std::pair<bool, SeaStore::omap_values_t>;
-  using int_ret_t = OMapManager::omap_list_ertr::future<ret_bare_t>;
   auto root = omap_root.get();
   if (root.is_null()) {
-    return seastar::make_ready_future<ret_bare_t>(
+    return seastar::make_ready_future<_omap_list_bare_ret>(
       true, omap_values_t{}
     );
   }
@@ -417,7 +416,7 @@ OMapManager::omap_list_ret SeaStore::_omap_list(
     BtreeOMapManager(*transaction_manager),
     root,
     start,
-    [&t, config](auto &manager, auto& root, auto& start) -> int_ret_t {
+    [&t, config](auto &manager, auto& root, auto& start) {
     return manager.omap_list(root, t, start, config);
   });
 }
@@ -432,16 +431,14 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_list(
   LOG_PREFIX(SeaStore::omap_list);
   DEBUG("{} {}", c->get_cid(), oid);
   using ret_bare_t = std::tuple<bool, SeaStore::omap_values_t>;
-  using int_ret_t = omap_int_ertr_t::future<ret_bare_t>;
   return repeat_with_onode<ret_bare_t>(
     c,
     oid,
-    [this, config, &start](auto &t, auto &onode) -> int_ret_t {
-      return _omap_list(onode.get_layout().omap_root, t, start, config)
-      .safe_then([](auto&& p) {
-        return seastar::make_ready_future<ret_bare_t>(
-          p.first, p.second);
-      });
+    [this, config, &start](auto &t, auto &onode) {
+      return _omap_list(
+	onode.get_layout().omap_root,
+	t, start, config
+      );
     });
 }
 
