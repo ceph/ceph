@@ -517,7 +517,9 @@ Node::try_merge_adjacent(
   impl->validate_non_empty();
   assert(!is_root());
   if constexpr (!FORCE_MERGE) {
-    if (!impl->is_size_underflow()) {
+    if (!impl->is_size_underflow() &&
+        !impl->has_single_value()) {
+      // skip merge
       if (update_parent_index) {
         return fix_parent_index(c, std::move(this_ref), false);
       } else {
