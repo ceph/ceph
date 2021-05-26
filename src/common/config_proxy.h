@@ -341,6 +341,9 @@ public:
     std::lock_guard l{lock};
     config.get_defaults_bl(values, bl);
   }
+  const std::string& get_conf_path() const {
+    return config.get_conf_path();
+  }
 };
 
 }

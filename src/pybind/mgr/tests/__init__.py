@@ -183,6 +183,7 @@ if 'UNITTEST' in os.environ:
 
             super(M, self).__init__()
             self._ceph_get_version = mock.Mock()
+            self._ceph_get_ceph_conf_path = mock.MagicMock()
             self._ceph_get_option = mock.MagicMock()
             self._ceph_get_context = mock.MagicMock()
             self._ceph_register_client = mock.MagicMock()

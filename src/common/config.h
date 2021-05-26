@@ -319,10 +319,15 @@ public:  // for global_init
 					    const char *conf_files,
 					    std::ostream *warnings,
 					    int flags) const;
+
+  const std::string& get_conf_path() const {
+    return conf_path;
+  }
 private:
   static std::string get_cluster_name(const char* conffile_path);
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
+  std::string conf_path;
 public:
   std::string parse_error;
 private:
