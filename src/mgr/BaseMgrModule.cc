@@ -375,7 +375,7 @@ ceph_state_get(BaseMgrModule *self, PyObject *args)
     return NULL;
   }
 
-  return self->py_modules->get_python(what);
+  return self->py_modules->cacheable_get_python(what);
 }
 
 
@@ -1592,4 +1592,3 @@ PyTypeObject BaseMgrModuleType = {
   0,                         /* tp_alloc */
   BaseMgrModule_new,     /* tp_new */
 };
-
