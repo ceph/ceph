@@ -18,7 +18,7 @@
 
     <button type="button"
             class="navbar-toggler"
-            (click)="isCollapsed = !isCollapsed">
+            (click)="toggleRightSidebar()">
       <span i18n
             class="sr-only">Toggle navigation</span>
       <span class="">
@@ -26,7 +26,8 @@
       </span>
     </button>
 
-    <div class="collapse navbar-collapse">
+    <div class="collapse navbar-collapse"
+         [ngClass]="{'show': rightSidebarOpen}">
       <ul class="nav navbar-nav cd-navbar-utility my-2 my-md-0">
         <ng-container *ngTemplateOutlet="cd_utilities"> </ng-container>
       </ul>
@@ -57,7 +58,8 @@
     <cd-language-selector class="cd-navbar"></cd-language-selector>
   </li>
   <li class="nav-item ">
-    <cd-notifications class="cd-navbar"></cd-notifications>
+    <cd-notifications class="cd-navbar"
+                      (click)="toggleRightSidebar()"></cd-notifications>
   </li>
   <li class="nav-item ">
     <cd-dashboard-help class="cd-navbar"></cd-dashboard-help>
