@@ -443,7 +443,7 @@ class FSExport(ExportMgr):
 
         if not self._fetch_export(pseudo_path):
             ex_id = self._gen_export_id()
-            user_id = f"{cluster_id}{ex_id}"
+            user_id = f"nfs.{cluster_id}.{ex_id}"
             user_out, key = self._create_user_key(user_id, path, fs_name, read_only)
             if clients:
                 access_type = "none"
