@@ -855,7 +855,7 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     bool is_keys_empty() const override {
       ceph_abort("impossible path"); }
-    bool is_keys_one() const override {
+    bool has_single_value() const override {
       ceph_abort("impossible path"); }
     node_offset_t free_size() const override {
       ceph_abort("impossible path"); }

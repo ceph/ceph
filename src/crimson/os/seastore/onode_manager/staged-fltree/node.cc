@@ -878,9 +878,7 @@ eagain_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
     return child_ref->retire(c, std::move(child_ref)
     ).safe_then([c, this, child_pos, FNAME,
                  this_ref = std::move(this_ref)] () mutable {
-      if ((impl->is_level_tail() && impl->is_keys_empty()) ||
-          (!impl->is_level_tail() && impl->is_keys_one())) {
-        // there is only one value left
+      if (impl->has_single_value()) {
         // fast path without mutating the extent
         DEBUGT("{} has one value left, erase ...", c.t, get_name());
 #ifndef NDEBUG
@@ -1767,11 +1765,11 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
         [c, &pos, this_ref = std::move(this_ref), this, FNAME] () mutable {
 #ifndef NDEBUG
       assert(!impl->is_keys_empty());
-      if (impl->is_keys_one()) {
+      if (impl->has_single_value()) {
         assert(pos == search_position_t::begin());
       }
 #endif
-      if (!is_root() && impl->is_keys_one()) {
+      if (!is_root() && impl->has_single_value()) {
         // we need to keep the root as an empty leaf node
         // fast path without mutating the extent
         // track_erase

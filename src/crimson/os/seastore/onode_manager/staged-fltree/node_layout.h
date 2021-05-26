@@ -111,10 +111,17 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     }
     assert(!is_keys_empty());
   }
+
   bool is_keys_empty() const override { return extent.read().keys() == 0; }
-  bool is_keys_one() const override {
-    assert(!is_keys_empty());
-    return STAGE_T::is_keys_one(extent.read());
+
+  bool has_single_value() const override {
+    validate_non_empty();
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      return ((is_level_tail() && is_keys_empty()) ||
+              (!is_level_tail() && STAGE_T::is_keys_one(extent.read())));
+    } else {
+      return STAGE_T::is_keys_one(extent.read());
+    }
   }
 
   level_t level() const override { return extent.read().level(); }
