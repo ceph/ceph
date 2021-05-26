@@ -104,7 +104,7 @@ public:
     CollectionRef c,
     const ghobject_t& oid) = 0;
 
-  using omap_values_t = std::map<std::string, bufferlist, std::less<>>;
+  using omap_values_t = std::map<std::string, ceph::bufferlist, std::less<>>;
   using omap_keys_t = std::set<std::string>;
   virtual read_errorator::future<omap_values_t> omap_get_values(
     CollectionRef c,
