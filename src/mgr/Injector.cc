@@ -11,6 +11,8 @@
 
 using namespace std;
 
+int num_osds = 0;
+OSDMap *osd_map_global = nullptr;
 int64_t Injector::get_num_osds() {
   return g_conf().get_val<int64_t>("mgr_inject_num_osds");
 }
@@ -24,20 +26,24 @@ void Injector::mark_exists_osds(OSDMap *osdmap) {
 }
 
 PyObject *Injector::get_python(const std::string &what) {
-  PyFormatter f;
+  PyJSONFormatter f;
 
+  f.open_object_section("");
   if (what == "osd_map") {
-    int64_t num_osds = Injector::get_num_osds();
-    OSDMap *osdmap = new OSDMap;
-    uuid_d id = uuid_d();
-    osdmap->build_simple(g_ceph_context, 1, id, num_osds);
-    Injector::mark_exists_osds(osdmap);
-    osdmap->dump(&f);
+    int64_t new_num_osds = Injector::get_num_osds();
+    if (osd_map_global == nullptr || new_num_osds != num_osds) {
+      osd_map_global = new OSDMap;
+      uuid_d id = uuid_d();
+      osd_map_global->build_simple(g_ceph_context, 1, id, new_num_osds);
+      Injector::mark_exists_osds(osd_map_global);
+      num_osds = new_num_osds;
+    }
+    osd_map_global->dump(&f);
+    f.close_section();
   } else {
     Py_RETURN_NONE;
   }
-  PyObject *obj = f.get();
-  return obj;
+  return f.get();
 }
 
 OSDMap *Injector::get_osdmap() {

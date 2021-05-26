@@ -6107,3 +6107,10 @@ options:
   with_legacy: true
   services:
   - mgr
+- name: mgr_ttl_cache_expire_seconds
+  type: uint
+  level: dev
+  desc: Set the time to live in seconds - set to 0 to disable the cache.
+  default: 0
+  services:
+  - mgr
