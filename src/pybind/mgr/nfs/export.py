@@ -430,7 +430,7 @@ class FSExport(ExportMgr):
         log.info("Export user created is {}".format(json_res[0]['entity']))
         return json_res[0]['entity'], json_res[0]['key']
 
-    def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path):
+    def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path, squash):
         if not check_fs(self.mgr, fs_name):
             raise FSNotFound(fs_name)
 
@@ -448,24 +448,25 @@ class FSExport(ExportMgr):
             if read_only:
                 access_type = "RO"
             ex_dict = {
-                    'path': self.format_path(path),
-                    'pseudo': pseudo_path,
-                    'cluster_id': cluster_id,
-                    'access_type': access_type,
-                    'fsal': {"name": "CEPH", "user_id": user_id,
-                             "fs_name": fs_name, "sec_label_xattr": ""},
-                    'clients': []
-                    }
+                'path': self.format_path(path),
+                'pseudo': pseudo_path,
+                'cluster_id': cluster_id,
+                'access_type': access_type,
+                'squash': squash,
+                'fsal': {"name": "CEPH", "user_id": user_id,
+                         "fs_name": fs_name, "sec_label_xattr": ""},
+                'clients': []
+            }
             export = Export.from_dict(ex_id, ex_dict)
             export.fsal.cephx_key = key
             self._save_export(export)
             result = {
-                    "bind": pseudo_path,
-                    "fs": fs_name,
-                    "path": path,
-                    "cluster": cluster_id,
-                    "mode": access_type,
-                    }
+                "bind": pseudo_path,
+                "fs": fs_name,
+                "path": path,
+                "cluster": cluster_id,
+                "mode": access_type,
+            }
             return (0, json.dumps(result, indent=4), '')
         return 0, "", "Export already exists"
 
