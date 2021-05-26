@@ -11,6 +11,11 @@ v15.2.13 Octopus
 This is the 13th backport release in the Octopus series. We recommend all
 users update to this release.
 
+Notable Changes
+---------------
+
+* RADOS: Ability to dynamically adjust trimming rate in the monitor and several other bug fixes.
+
 Changelog
 ---------
 
