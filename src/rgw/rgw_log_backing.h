@@ -115,6 +115,10 @@ struct logback_generation {
   }
 };
 WRITE_CLASS_ENCODER(logback_generation)
+inline std::ostream& operator <<(std::ostream& m, const logback_generation& g) {
+  return m << "[" << g.gen_id << "," << g.type << ","
+	   << (g.pruned ? "PRUNED" : "NOT PRUNED") << "]";
+}
 
 class logback_generations : public librados::WatchCtx2 {
 public:
