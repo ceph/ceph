@@ -35,7 +35,9 @@ PyObject* Injector::get_python(const std::string& what) {
     Injector::mark_exists_osds(osdmap);
     osdmap->dump(&f);
   } else {
-    return nullptr;
+    Py_RETURN_NONE
   }
-  return f.get();
+  PyObject *obj = f.get();
+  Py_INCREF(obj);
+  return obj;
 }
