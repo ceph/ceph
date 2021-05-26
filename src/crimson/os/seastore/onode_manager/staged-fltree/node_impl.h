@@ -76,8 +76,8 @@ class NodeImpl {
    */
   virtual void validate_non_empty() const = 0;
   virtual bool is_keys_empty() const = 0;
-  // under the assumption that keys are not empty, check whether num_keys == 1
-  virtual bool is_keys_one() const = 0;
+  // under the assumption that node is not empty
+  virtual bool has_single_value() const = 0;
 
   virtual level_t level() const = 0;
   virtual node_offset_t free_size() const = 0;
