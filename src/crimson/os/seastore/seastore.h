@@ -195,16 +195,19 @@ private:
       });
   }
 
+  using _omap_list_bare_ret = OMapManager::omap_list_bare_ret;
+  using _omap_list_ret = OMapManager::omap_list_ret;
+  _omap_list_ret _omap_list(
+    const omap_root_le_t& omap_root,
+    Transaction& t,
+    const std::optional<std::string>& start,
+    OMapManager::omap_list_config_t config) const;
+
   friend class SeaStoreOmapIterator;
   omap_get_values_ret_t omap_list(
     CollectionRef ch,
     const ghobject_t &oid,
     const std::optional<string> &_start,
-    OMapManager::omap_list_config_t config);
-  OMapManager::omap_list_ret _omap_list(
-    const omap_root_le_t& omap_root,
-    Transaction& t,
-    const std::optional<std::string>& start,
     OMapManager::omap_list_config_t config);
 
   SegmentManagerRef segment_manager;
