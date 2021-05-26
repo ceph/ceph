@@ -221,6 +221,9 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
     def find_takes(self) -> List[int]:
         return self._find_takes().get('takes', [])
 
+    def find_roots(self) -> List[int]:
+        return self._find_roots().get('roots', [])
+
     def get_take_weight_osd_map(self, root: int) -> Dict[int, float]:
         uglymap = self._get_take_weight_osd_map(root)
         return {int(k): v for k, v in uglymap.get('weights', {}).items()}
