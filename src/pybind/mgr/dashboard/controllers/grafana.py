@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
-
 from .. import mgr
 from ..exceptions import DashboardException
 from ..grafana import GrafanaRestClient, push_local_dashboards

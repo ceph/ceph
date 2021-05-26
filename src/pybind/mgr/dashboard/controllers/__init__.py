@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=protected-access,too-many-branches,too-many-lines
-from __future__ import absolute_import
 
 import collections
 import importlib

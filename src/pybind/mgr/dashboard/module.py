@@ -2,8 +2,6 @@
 """
 ceph dashboard mgr plugin (based on CherryPy)
 """
-from __future__ import absolute_import
-
 import collections
 import errno
 import logging

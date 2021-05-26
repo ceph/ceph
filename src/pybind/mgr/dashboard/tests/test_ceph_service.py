@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=dangerous-default-value,too-many-public-methods
-from __future__ import absolute_import
 
 import logging
 import unittest

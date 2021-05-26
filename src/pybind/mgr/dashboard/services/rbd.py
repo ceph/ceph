@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=unused-argument
-from __future__ import absolute_import
 
 import cherrypy
 import rbd
