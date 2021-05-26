@@ -251,7 +251,9 @@ usage_exit() {
 parse_block_devs() {
     local opt_name=$1
     shift
-    IFS=',' read -r -a block_devs <<< "$2"
+    local devs=$1
+    shift
+    IFS=',' read -r -a block_devs <<< "$devs"
     for dev in "${block_devs[@]}"; do
         if [ ! -b $dev -o ! -w $dev ]; then
             echo "All $opt_name must refer to writable block devices"
@@ -449,7 +451,7 @@ case $1 in
         with_mgr_dashboard=false
         ;;
     --seastore-devs)
-        parse_block_devs --seastore-devs
+        parse_block_devs --seastore-devs "$2"
         shift
         ;;
     --bluestore-spdk)
@@ -459,7 +461,7 @@ case $1 in
         shift
         ;;
     --bluestore-devs)
-        parse_block_devs --bluestore-devs
+        parse_block_devs --bluestore-devs "$2"
         shift
         ;;
     --bluestore-zoned)
