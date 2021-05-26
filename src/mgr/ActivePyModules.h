@@ -27,6 +27,7 @@
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
+#include "mgr/TTLCache.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -55,6 +56,7 @@ class ActivePyModules
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
+  TTLCache<string ,PyObject*> ttl_cache;
 public:
   Finisher cmd_finisher;
 private:
@@ -81,6 +83,7 @@ public:
   Objecter  &get_objecter() {return objecter;}
   Client    &get_client() {return client;}
   PyObject *get_python(const std::string &what);
+  PyObject *_get_python(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
   PyObject *get_metadata_python(
@@ -218,3 +221,4 @@ public:
   void cluster_log(const std::string &channel, clog_type prio,
     const std::string &message);
 };
+
