@@ -3340,8 +3340,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   dout(0) << "handle_command " << *m << dendl;
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   get_str_vec(prefix, fullcmd);

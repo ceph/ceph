@@ -1046,7 +1046,7 @@ bool DaemonServer::_handle_command(
     if (boost::algorithm::ends_with(prefix, "_json")) {
       format = "json";
     } else {
-      cmd_getval(cmdctx->cmdmap, "format", format, string("plain"));
+      format = cmd_getval_or<string>(cmdctx->cmdmap, "format", "plain");
     }
     f.reset(Formatter::create(format));
   }
@@ -1408,8 +1408,7 @@ bool DaemonServer::_handle_command(
     bool dry_run =
       prefix == "osd test-reweight-by-pg" ||
       prefix == "osd test-reweight-by-utilization";
-    int64_t oload;
-    cmd_getval(cmdctx->cmdmap, "oload", oload, int64_t(120));
+    int64_t oload = cmd_getval_or<int64_t>(cmdctx->cmdmap, "oload", 120);
     set<int64_t> pools;
     vector<string> poolnames;
     cmd_getval(cmdctx->cmdmap, "pools", poolnames);

@@ -638,35 +638,37 @@ bool validate_cmd(CephContext* cct,
 }
 
 bool cmd_getval(const cmdmap_t& cmdmap,
-		const std::string& k, bool& val)
+		std::string_view k, bool& val)
 {
   /*
    * Specialized getval for booleans.  CephBool didn't exist before Nautilus,
    * so earlier clients are sent a CephChoices argdesc instead, and will
    * send us a "--foo-bar" value string for boolean arguments.
    */
-  if (cmdmap.count(k)) {
+  auto found = cmdmap.find(k);
+  if (found == cmdmap.end()) {
+    return false;
+  }
+  try {
+    val = boost::get<bool>(found->second);
+    return true;
+  } catch (boost::bad_get&) {
     try {
-      val = boost::get<bool>(cmdmap.find(k)->second);
-      return true;
-    } catch (boost::bad_get&) {
-      try {
-        std::string expected = "--" + k;
-        std::replace(expected.begin(), expected.end(), '_', '-');
+      std::string expected{"--"};
+      expected += k;
+      std::replace(expected.begin(), expected.end(), '_', '-');
 
-        std::string v_str = boost::get<std::string>(cmdmap.find(k)->second);
-        if (v_str == expected) {
-          val = true;
-          return true;
-        } else {
-          throw bad_cmd_get(k, cmdmap);
-        }
-      } catch (boost::bad_get&) {
-        throw bad_cmd_get(k, cmdmap);
+      std::string v_str = boost::get<std::string>(found->second);
+      if (v_str == expected) {
+	val = true;
+	return true;
+      } else {
+	throw bad_cmd_get(k, cmdmap);
       }
+    } catch (boost::bad_get&) {
+      throw bad_cmd_get(k, cmdmap);
     }
   }
-  return false;
 }
 
 }

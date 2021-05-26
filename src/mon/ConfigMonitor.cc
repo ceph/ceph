@@ -180,8 +180,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;

@@ -976,8 +976,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "mgr dump") {
-    int64_t epoch = 0;
-    cmd_getval(cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
+    int64_t epoch = cmd_getval_or<int64_t>(cmdmap, "epoch", map.get_epoch());
     if (epoch == (int64_t)map.get_epoch()) {
       f->dump_object("mgrmap", map);
     } else {
@@ -1110,8 +1109,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
