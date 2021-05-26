@@ -4684,8 +4684,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       if (results->backtrace.ondisk_read_retval != 0) {
         results->backtrace.error_str << "failed to read off disk; see retval";
         // we probably have a new unwritten file!
+        // or backtrace for root inode (inode 0x1) doesn't make sense
         // so skip the backtrace scrub for this entry and say that all's well
-        if (in->is_dirty_parent()) {
+        if (in->is_dirty_parent() || in->ino() == CEPH_INO_ROOT) {
           dout(20) << "forcing backtrace as passed since inode is dirty parent" << dendl;
           results->backtrace.passed = true;
         }
@@ -4708,8 +4709,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         results->backtrace.error_str << "failed to decode on-disk backtrace ("
                                      << bl.length() << " bytes)!";
         // we probably have a new unwritten file!
+        // or backtrace for root inode (inode 0x1) doesn't make sense
         // so skip the backtrace scrub for this entry and say that all's well
-        if (in->is_dirty_parent()) {
+        if (in->is_dirty_parent() || in->ino() == CEPH_INO_ROOT) {
           dout(20) << "decode failed; forcing backtrace as passed since "
                       "inode is dirty parent" << dendl;
           results->backtrace.passed = true;
