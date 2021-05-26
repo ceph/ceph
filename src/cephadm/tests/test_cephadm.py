@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 from typing import List, Optional
-from .fixtures import exporter
+from .fixtures import exporter, mock_docker, mock_podman
 
 
 with mock.patch('builtins.open', create=True):
@@ -25,25 +25,12 @@ with mock.patch('builtins.open', create=True):
 
 class TestCephAdm(object):
 
-    @staticmethod
-    def mock_docker():
-        docker = mock.Mock(cd.Docker)
-        docker.path = '/usr/bin/docker'
-        return docker
-
-    @staticmethod
-    def mock_podman():
-        podman = mock.Mock(cd.Podman)
-        podman.path = '/usr/bin/podman'
-        podman.version = (2, 1, 0)
-        return podman
-
     def test_docker_unit_file(self):
         ctx = mock.Mock()
-        ctx.container_engine = self.mock_docker()
+        ctx.container_engine = mock_docker()
         r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
         assert 'Requires=docker.service' in r
-        ctx.container_engine = self.mock_podman()
+        ctx.container_engine = mock_podman()
         r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
         assert 'Requires=docker.service' not in r
 
@@ -416,7 +403,7 @@ default proto ra metric 100
             ['registry-login', '--registry-url', 'sample-url',
             '--registry-username', 'sample-user', '--registry-password',
             'sample-pass'])
-        ctx.container_engine = self.mock_docker()
+        ctx.container_engine = mock_docker()
         retval = cd.command_registry_login(ctx)
         assert retval == 0
 
@@ -432,7 +419,7 @@ default proto ra metric 100
         get_parm.return_value = {"url": "sample-url", "username": "sample-username", "password": "sample-password"}
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-json', 'sample-json'])
-        ctx.container_engine = self.mock_docker()
+        ctx.container_engine = mock_docker()
         retval = cd.command_registry_login(ctx)
         assert retval == 0
 
