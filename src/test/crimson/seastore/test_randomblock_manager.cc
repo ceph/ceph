@@ -322,3 +322,14 @@ TEST_F(rbm_test_t, many_block_alloc)
    ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
  });
 }
+
+TEST_F(rbm_test_t, check_free_blocks)
+{
+ run_async([this] {
+   mkfs();
+   open();
+   rbm_manager->rbm_sync_block_bitmap_by_range(10, 12, bitmap_op_types_t::ALL_SET).unsafe_get0();
+   rbm_manager->check_bitmap_blocks().unsafe_get0();
+   ASSERT_TRUE(rbm_manager->get_free_blocks() == DEFAULT_TEST_SIZE/DEFAULT_BLOCK_SIZE - 5);
+ });
+}
