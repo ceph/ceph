@@ -132,7 +132,7 @@ class GaneshaConfParser:
             elif key == '_blocks_':
                 for blo in val:
                     conf_str += GaneshaConfParser.write_block(blo, depth)
-            elif val:
+            elif val is not None:
                 conf_str += GaneshaConfParser._indentation(depth)
                 conf_str += '{} = {};\n'.format(key, format_val(key, val))
         return conf_str
