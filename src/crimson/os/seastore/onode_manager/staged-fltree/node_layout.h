@@ -625,24 +625,27 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        * - I > 2
        * This means the largest possible insert_size must be smaller than 1/2 of
        * the node_block_size, which is better than strategy A.
-
+       *
        * In order to avoid "double split", there is another side-effect we need
        * to take into consideration: if split happens with snap-gen indexes, the
        * according ns-oid string needs to be copied to the right node. That is
        * to say: right_node_size + string_size < node_block_size.
        *
        * Say that the largest allowed string size is 1/S of the largest allowed
-       * insert_size N/I KiB. If we go with stragety B, the equation should be
-       * changed to:
-       * - right_node_size ~= (I+2)/2I + 1/(I*S) < 1
-       * - I > 2 + 2/S (S > 1)
+       * insert_size N/I KiB. If we go with stragety B, and when split happens
+       * with snap-gen indexes and split just overflow the target_split_size:
+       * - left_node_size  ~= target_split_size - 1/2 * (1/I - 1/IS)
+       *                   ~= 1/2 + 1/2IS
+       * - right_node_size ~= 1 + 1/I - left_node_size + 1/IS
+       *                   ~= 1/2 + 1/I + 1/2IS < 1
+       * - I > 2 + 1/S (S > 1)
        *
        * Now back to NODE_BLOCK_SIZE calculation, if we have limits of at most
        * X KiB ns-oid string and Y KiB of value to store in this BTree, then:
        * - largest_insert_size ~= X+Y KiB
        * - 1/S == X/(X+Y)
-       * - I > (4X+2Y)/(X+Y)
-       * - node_block_size(N) == I * insert_size > 4X+2Y KiB
+       * - I > (3X+2Y)/(X+Y)
+       * - node_block_size(N) == I * insert_size > 3X+2Y KiB
        *
        * In conclusion,
        * (TODO) the current node block size (4 KiB) is too small to
