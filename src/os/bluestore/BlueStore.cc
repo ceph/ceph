@@ -34,6 +34,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/PriorityCache.h"
+#include "common/url_escape.h"
 #include "Allocator.h"
 #include "FreelistManager.h"
 #include "BlueFS.h"
@@ -8702,9 +8703,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
         if (used_omap_head.count(omap_head) == 0 &&
            omap_head != last_omap_head) {
+          pair<string,string> rk = it->raw_key();
           fsck_derr(errors, MAX_FSCK_ERROR_LINES)
             << "fsck error: found stray omap data on omap_head "
-            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
+            << omap_head << " " << last_omap_head
+            << " prefix/key: " << url_escape(rk.first)
+            << " " << url_escape(rk.second)
+            << fsck_dendl;
           ++errors;
           last_omap_head = omap_head;
         }
@@ -8718,9 +8723,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         _key_decode_u64(it->key().c_str(), &omap_head);
         if (used_omap_head.count(omap_head) == 0 &&
 	    omap_head != last_omap_head) {
+          pair<string,string> rk = it->raw_key();
           fsck_derr(errors, MAX_FSCK_ERROR_LINES)
             << "fsck error: found stray (pgmeta) omap data on omap_head "
-            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
+            << omap_head << " " << last_omap_head
+            << " prefix/key: " << url_escape(rk.first)
+            << " " << url_escape(rk.second)
+            << fsck_dendl;
           last_omap_head = omap_head;
 	  ++errors;
         }
@@ -8738,9 +8747,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         c = _key_decode_u64(c, &omap_head);
         if (used_omap_head.count(omap_head) == 0 &&
           omap_head != last_omap_head) {
+          pair<string,string> rk = it->raw_key();
           fsck_derr(errors, MAX_FSCK_ERROR_LINES)
             << "fsck error: found stray (per-pool) omap data on omap_head "
-            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
+            << omap_head << " " << last_omap_head
+            << " prefix/key: " << url_escape(rk.first)
+            << " " << url_escape(rk.second)
+            << fsck_dendl;
           ++errors;
           last_omap_head = omap_head;
         }
@@ -9013,6 +9026,19 @@ void BlueStore::inject_legacy_omap(coll_t cid, ghobject_t oid)
   db->submit_transaction_sync(txn);
 }
 
+void BlueStore::inject_stray_omap(uint64_t head, const string& name)
+{
+  dout(1) << __func__ << dendl;
+  KeyValueDB::Transaction txn = db->get_transaction();
+
+  string key;
+  bufferlist bl;
+  _key_encode_u64(head, &key);
+  key.append(name);
+  txn->set(PREFIX_OMAP, key, bl);
+
+  db->submit_transaction_sync(txn);
+}
 
 void BlueStore::inject_statfs(const string& key, const store_statfs_t& new_statfs)
 {

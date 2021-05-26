@@ -8585,6 +8585,42 @@ TEST_P(StoreTest, BluestoreStatistics) {
   cout << std::endl;
 }
 
+TEST_P(StoreTest, BluestoreStrayOmapDetection)
+{
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  ghobject_t oid = make_object("Object 1", pool);
+  ghobject_t oid2 = make_object("Object 2", pool);
+  // fill the store with some data
+  auto ch = store->create_new_collection(cid);
+  bufferlist h;
+  h.append("header");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, oid);
+    t.omap_setheader(cid, oid, h);
+    t.touch(cid, oid2);
+    t.omap_setheader(cid, oid2, h);
+    int r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // inject stray omap
+  bstore->inject_stray_omap(123456, "somename");
+
+  bstore->umount();
+  // check we detect injected stray omap..
+
+  ASSERT_EQ(bstore->fsck(false), 1);
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  bstore->mount();
+}
+
 TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
 {
   if (string(GetParam()) != "bluestore")

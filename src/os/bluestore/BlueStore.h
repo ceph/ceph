@@ -2996,6 +2996,7 @@ public:
   void inject_legacy_omap();
   // resets per_pool_omap | pgmeta_omap for onode
   void inject_legacy_omap(coll_t cid, ghobject_t oid);
+  void inject_stray_omap(uint64_t head, const std::string& name);
 
   void compact() override {
     ceph_assert(db);
