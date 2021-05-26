@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-arguments,too-many-return-statements
 # pylint: disable=too-many-branches, too-many-locals, too-many-statements
-from __future__ import absolute_import
 
 import errno
 import json
