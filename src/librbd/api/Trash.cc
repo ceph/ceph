@@ -532,26 +532,6 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
   for (const auto &entry_id : to_be_removed) {
     r = librbd::api::Trash<I>::remove(io_ctx, entry_id, true, remove_pctx);
     if (r < 0) {
-      if (r == -ENOTEMPTY) {
-        ldout(cct, 5) << "image has snapshots - these must be deleted "
-                      << "with 'rbd snap purge' before the image can be "
-                      << "removed." << dendl;
-      } else if (r == -EBUSY) {
-        ldout(cct, 5) << "error: image still has watchers" << std::endl
-                      << "This means the image is still open or the client "
-                      << "using it crashed. Try again after closing/unmapping "
-                      << "it or waiting 30s for the crashed client to timeout."
-                      << dendl;
-      } else if (r == -EUCLEAN) {
-        ldout(cct, 5) << "Image is not in the expected state. Ensure moving "
-                      << "the image to the trash completed successfully."
-                      << dendl;
-      } else if (r == -EMLINK) {
-        ldout(cct, 5) << "Remove the image from the group and try again."
-                      << dendl;
-      } else {
-        lderr(cct) << "remove error: " << cpp_strerror(r) << dendl;
-      }
       return r;
     }
     pctx.update_progress(++i, list_size);
