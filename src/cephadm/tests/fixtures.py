@@ -5,12 +5,26 @@ import time
 
 from contextlib import contextmanager
 from pyfakefs import fake_filesystem
-from typing import Dict, List, Optional
+
+from typing import Callable, Dict, List, Optional
 
 
 with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
+
+
+def mock_docker():
+    docker = mock.Mock(cd.Docker)
+    docker.path = '/usr/bin/docker'
+    return docker
+
+
+def mock_podman():
+    podman = mock.Mock(cd.Podman)
+    podman.path = '/usr/bin/podman'
+    podman.version = (2, 1, 0)
+    return podman
 
 
 def _daemon_path():
@@ -69,10 +83,12 @@ def cephadm_fs(
 @contextmanager
 def with_cephadm_ctx(
     cmd: List[str],
+    container_engine: Callable = mock_podman(),
     list_networks: Optional[Dict[str,Dict[str,List[str]]]] = None
 ):
     """
     :param cmd: cephadm command argv
+    :param container_engine: container engine mock (podman or docker)
     :param list_networks: mock 'list-networks' return
     """
     if not list_networks:
@@ -86,4 +102,5 @@ def with_cephadm_ctx(
          mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \
          mock.patch('cephadm.list_networks', return_value=list_networks):
              ctx: cd.CephadmContext = cd.cephadm_init_ctx(cmd)
+             ctx.container_engine = container_engine
              yield ctx
