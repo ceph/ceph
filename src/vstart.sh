@@ -177,8 +177,7 @@ fi
 
 filestore_path=
 kstore_path=
-bluestore_dev=
-seastore_dev=
+declare -a block_devs
 
 VSTART_SEC="client.vstart.sh"
 
@@ -438,8 +437,8 @@ case $1 in
         with_mgr_dashboard=false
         ;;
     --seastore-devs)
-        IFS=',' read -r -a seastore_dev <<< "$2"
-        for dev in "${seastore_dev[@]}"; do
+        IFS=',' read -r -a block_devs <<< "$2"
+        for dev in "${block_devs[@]}"; do
             if [ ! -b $dev -o ! -w $dev ]; then
                 echo "All --seastore-devs must refer to writable block devices"
                 exit 1
@@ -454,8 +453,8 @@ case $1 in
         shift
         ;;
     --bluestore-devs)
-        IFS=',' read -r -a bluestore_dev <<< "$2"
-        for dev in "${bluestore_dev[@]}"; do
+        IFS=',' read -r -a block_devs <<< "$2"
+        for dev in "${block_devs[@]}"; do
             if [ ! -b $dev -o ! -w $dev ]; then
                 echo "All --bluestore-devs must refer to writable block devices"
                 exit 1
@@ -917,19 +916,17 @@ EOF
                 ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
             elif [ -n "$kstore_path" ]; then
                 ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
-            elif [ -n "${seastore_dev[$osd]}" ]; then
-                mkdir -p $CEPH_DEV_DIR/osd$osd
-                dd if=/dev/zero of=${seastore_dev[$osd]} bs=1M count=1
-                ln -s ${seastore_dev[$osd]} $CEPH_DEV_DIR/osd$osd/block
             else
                 mkdir -p $CEPH_DEV_DIR/osd$osd
-                if [ -n "${bluestore_dev[$osd]}" ]; then
-                    dd if=/dev/zero of=${bluestore_dev[$osd]} bs=1M count=1
-                    ln -s ${bluestore_dev[$osd]} $CEPH_DEV_DIR/osd$osd/block
-                    wconf <<EOF
+                if [ -n "${block_devs[$osd]}" ]; then
+                    dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
+                    ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
+                fi
+            fi
+            if [ "$objectstore" == "bluestore" ]; then
+                wconf <<EOF
         bluestore fsck on mount = false
 EOF
-                fi
             fi
 
             local uuid=`uuidgen`
