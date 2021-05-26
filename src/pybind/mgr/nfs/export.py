@@ -430,7 +430,8 @@ class FSExport(ExportMgr):
         log.info("Export user created is {}".format(json_res[0]['entity']))
         return json_res[0]['entity'], json_res[0]['key']
 
-    def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path, squash):
+    def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path, squash,
+                      clients=[]):
         if not check_fs(self.mgr, fs_name):
             raise FSNotFound(fs_name)
 
@@ -444,9 +445,12 @@ class FSExport(ExportMgr):
             ex_id = self._gen_export_id()
             user_id = f"{cluster_id}{ex_id}"
             user_out, key = self._create_user_key(user_id, path, fs_name, read_only)
-            access_type = "RW"
-            if read_only:
+            if clients:
+                access_type = "none"
+            elif read_only:
                 access_type = "RO"
+            else:
+                access_type = "RW"
             ex_dict = {
                 'path': self.format_path(path),
                 'pseudo': pseudo_path,
@@ -455,7 +459,7 @@ class FSExport(ExportMgr):
                 'squash': squash,
                 'fsal': {"name": "CEPH", "user_id": user_id,
                          "fs_name": fs_name, "sec_label_xattr": ""},
-                'clients': []
+                'clients': clients
             }
             export = Export.from_dict(ex_id, ex_dict)
             export.fsal.cephx_key = key
