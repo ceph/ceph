@@ -44,15 +44,19 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
       return offset;
     }
   }
-  /*
-   * If we know we've searched the whole tree (*cursor == 0), give up.
-   * Otherwise, reset the cursor to the beginning and try again.
-   */
-   if (*cursor == 0 || rs_start == t.begin()) {
-     return -1ULL;
-   }
-   *cursor = 0;
-   return _block_picker(t, cursor, size, align);
+  if (*cursor == 0) {
+    // If we already started from beginning, don't bother with searching from beginning
+    return -1ULL;
+  }
+  // If we reached end, start from beginning till cursor.
+  for (auto rs = t.begin(); rs != rs_start; ++rs) {
+    uint64_t offset = p2roundup(rs->start, align);
+    if (offset + size <= rs->end) {
+      *cursor = offset + size;
+      return offset;
+    }
+  }
+  return -1ULL;
 }
 
 void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
