@@ -1,19 +1,22 @@
 
-GRAFANA_VERSION := 6.7.4-1
-PIECHART_VERSION := "1.4.0"
-STATUS_PANEL_VERSION := "1.0.9"
+GRAFANA_VERSION ?= 6.7.4-1
+PIECHART_VERSION ?= "1.4.0"
+STATUS_PANEL_VERSION ?= "1.0.9"
 DASHBOARD_DIR := "../dashboards"
 DASHBOARD_PROVISIONING := "ceph-dashboard.yml"
 IMAGE := "docker.io/centos:8"
-VERSION := "${IMAGE: -1}"
 PKGMGR := "dnf"
 GF_CONFIG := "/etc/grafana/grafana.ini"
-ceph_version := "master"
+# clip off "-<whatever> from the end of GRAFANA_VERSION
+CONTAINER_VERSION := $(shell /bin/echo $(GRAFANA_VERSION) | /bin/sed 's/-.*//')
 
 ARCH ?= x86_64
 ifeq "$(ARCH)" "arm64"
 	override ARCH := aarch64
 endif
+
+LOCALTAG=ceph-grafana:$(CONTAINER_VERSION)-$(ARCH)
+TAG=ceph/ceph-grafana:$(CONTAINER_VERSION)-$(ARCH)
 
 # Build a grafana instance - preconfigured for use within Ceph's dashboard UI
 
@@ -66,20 +69,19 @@ providers: \\n\
 	sudo buildah config --label maintainer="Paul Cuzner <pcuzner@redhat.com>" $(CONTAINER)
 	sudo buildah config --label description="Ceph Grafana Container" $(CONTAINER)
 	sudo buildah config --label summary="Grafana Container configured for Ceph mgr/dashboard integration" $(CONTAINER)
-	sudo buildah commit --format docker --squash $(CONTAINER) ceph-grafana:${ceph_version}
-	sudo buildah tag ceph-grafana:${ceph_version} ceph/ceph-grafana:${ceph_version}
+	sudo buildah commit --format docker --squash $(CONTAINER) $(LOCALTAG)
 
-clean :
+push:
+	sudo podman tag ${LOCALTAG} docker.io/${TAG}
+	sudo podman tag ${LOCALTAG} quay.io/${TAG}
+	sudo podman login -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD} docker.io
+	sudo podman login -u $(CONTAINER_REPO_USERNAME) -p $(CONTAINER_REPO_PASSWORD) quay.io
+	sudo podman push --format v2s2 docker.io/${TAG}
+	sudo podman push --format v2s2 quay.io/${TAG}
+
+clean:
+	sudo podman rmi ${LOCALTAG} || true
+	sudo podman rmi docker.io/${TAG} || true
+	sudo podman rmi quay.io/${TAG} || true
 	rm -f grafana-*.rpm*
 	rm -f ${DASHBOARD_PROVISIONING}
-
-
-nautilus : 
-	$(MAKE) ceph_version="nautilus" build
-octopus : 
-	$(MAKE) ceph_version="octopus" build
-master : 
-	$(MAKE) ceph_version="master" build
-
-all : nautilus octopus master
-.PHONY : all 
