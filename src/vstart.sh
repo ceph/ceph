@@ -253,9 +253,10 @@ parse_block_devs() {
     shift
     local devs=$1
     shift
+    local dev
     IFS=',' read -r -a block_devs <<< "$devs"
     for dev in "${block_devs[@]}"; do
-        if [ ! -b $dev -o ! -w $dev ]; then
+        if [ ! -b $dev ] || [ ! -w $dev ]; then
             echo "All $opt_name must refer to writable block devices"
             exit 1
         fi
