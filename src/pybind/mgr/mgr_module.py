@@ -22,6 +22,7 @@ import rados
 import re
 import socket
 import sqlite3
+import pickle
 import sys
 import time
 from ceph_argparse import CephArgtype
@@ -1253,7 +1254,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             All these structures have their own JSON representations: experiment
             or look at the C++ ``dump()`` methods to learn about them.
         """
-        return self._ceph_get(data_name)
+        obj =  self._ceph_get(data_name)
+        if data_name == "mgr_ips":
+            return obj
+        return pickle.loads(pickle.dumps(obj))
 
     def _stattype_to_str(self, stattype: int) -> str:
 

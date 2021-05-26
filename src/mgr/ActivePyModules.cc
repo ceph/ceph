@@ -23,6 +23,7 @@
 #include "mon/MonMap.h"
 
 #include "mgr/MgrContext.h"
+#include "mgr/TTLCache.h"
 
 // For ::mgr_store_prefix
 #include "PyModule.h"
@@ -167,7 +168,27 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
+bool ttl_cache_on() {
+  return g_conf().get_val<int64_t>("mgr_ttl_cache_expire_seconds") > 0;
+}
+
 PyObject *ActivePyModules::get_python(const std::string &what)
+{
+  if(ttl_cache_on()) {
+    PyObject *cached = ttl_cache.get(what);
+    if (cached) {
+      return cached;
+    }
+  }
+  PyObject *obj = _get_python(what);
+  if(ttl_cache_on()) {
+    ttl_cache.insert(what, obj);
+    Py_INCREF(obj);
+  }
+  return obj;
+}
+
+PyObject *ActivePyModules::_get_python(const std::string &what)
 {
   PyFormatter f;
 

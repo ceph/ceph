@@ -36,8 +36,7 @@ PyObject *Injector::get_python(const std::string &what) {
   } else {
     Py_RETURN_NONE;
   }
-  PyObject *obj = f.get();
-  return obj;
+  return f.get();
 }
 
 OSDMap *Injector::get_osdmap() {
