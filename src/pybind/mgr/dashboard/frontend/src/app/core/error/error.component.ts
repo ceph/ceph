@@ -22,6 +22,7 @@ export class ErrorComponent implements OnDestroy, OnInit {
   routerSubscription: Subscription;
 
   constructor(private router: Router, private docService: DocService) {}
+  
   ngOnInit() {
     this.fetchData();
     this.routerSubscription = this.router.events

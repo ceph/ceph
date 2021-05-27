@@ -41,7 +41,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   constructor(
     private logsService: LogsService,
     private datePipe: DatePipe,
-    private ngZone: NgZone,
+    private ngZone: NgZone
   ) {}
   
   ngOnInit() {

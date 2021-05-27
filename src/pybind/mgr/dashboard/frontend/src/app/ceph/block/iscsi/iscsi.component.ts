@@ -28,7 +28,7 @@ export class IscsiComponent implements OnInit {
     private dimlessPipe: DimlessPipe,
     private iscsiBackstorePipe: IscsiBackstorePipe
   ) {}
-  
+
   ngOnInit() {
     this.gatewaysColumns = [
       {
