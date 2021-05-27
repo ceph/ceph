@@ -300,7 +300,8 @@ class TreeBuilder {
     return tree->insert(
         t, p_kv->key, {p_kv->value.get_payload_size()}
     ).safe_then([&t, this, p_kv](auto ret) {
-      auto& [cursor, success] = ret;
+      auto success = ret.second;
+      auto cursor = std::move(ret.first);
       initialize_cursor_from_item(t, p_kv->key, p_kv->value, cursor, success);
 #ifndef NDEBUG
       validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
