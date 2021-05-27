@@ -3,6 +3,7 @@
 # pylint: disable=too-many-statements,too-many-branches
 from __future__ import absolute_import
 
+import errno
 import math
 from functools import partial
 from datetime import datetime
@@ -189,19 +190,39 @@ class Rbd(RESTController):
 
             return stat
 
+    # pylint: disable=inconsistent-return-statements
+    @classmethod
+    def _rbd_image_removing(cls, ioctx, pool_name, image_id):
+        rbd_inst = rbd.RBD()
+        img = rbd_inst.trash_get(ioctx, image_id)
+        img_spec = '{}/{}'.format(pool_name, image_id)
+
+        if img['source'] == 'REMOVING':
+            img['unique_id'] = img_spec
+            img['pool_name'] = pool_name
+            img['deletion_time'] = "{}Z".format(img['deletion_time'].isoformat())
+            img['deferment_end_time'] = "{}Z".format(img['deferment_end_time'].isoformat())
+            return img
+        raise rbd.ImageNotFound('No image {} in status `REMOVING` found.'.format(img_spec),
+                                errno=errno.ENOENT)
+
     @classmethod
     @ViewCache()
     def _rbd_pool_list(cls, pool_name):
         rbd_inst = rbd.RBD()
         with mgr.rados.open_ioctx(pool_name) as ioctx:
-            names = rbd_inst.list(ioctx)
+            image_refs = rbd_inst.list2(ioctx)
             result = []
-            for name in names:
+            for image_ref in image_refs:
                 try:
-                    stat = cls._rbd_image(ioctx, pool_name, name)
+                    stat = cls._rbd_image(ioctx, pool_name, image_ref['name'])
                 except rbd.ImageNotFound:
-                    # may have been removed in the meanwhile
-                    continue
+                    # Check if the RBD has been deleted partially. This happens for example if
+                    # the deletion process of the RBD has been started and was interrupted.
+                    try:
+                        stat = cls._rbd_image_removing(ioctx, pool_name, image_ref['id'])
+                    except rbd.ImageNotFound:
+                        continue
                 result.append(stat)
             return result
 
