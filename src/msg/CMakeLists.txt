@@ -3,7 +3,8 @@ set(msg_srcs
   Message.cc
   Messenger.cc
   Connection.cc
-  msg_types.cc)
+  msg_types.cc
+  compressor_registry.cc)
 
 list(APPEND msg_srcs
   async/AsyncConnection.cc
@@ -16,6 +17,7 @@ list(APPEND msg_srcs
   async/PosixStack.cc
   async/Stack.cc
   async/crypto_onwire.cc
+  async/compression_onwire.cc
   async/frames_v2.cc
   async/net_handler.cc)
 
