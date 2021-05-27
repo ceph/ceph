@@ -50,7 +50,7 @@ class IscsiTestCli(unittest.TestCase, CLICommandTestMixin):
                           inbuf='')
 
         self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
-        self.assertEqual(str(ctx.exception), ERROR_MSG_NO_INPUT_FILE)
+        self.assertIn(ERROR_MSG_NO_INPUT_FILE, str(ctx.exception))
 
     def test_cli_add_gateway(self):
         self.exec_cmd('iscsi-gateway-add', name='node1',

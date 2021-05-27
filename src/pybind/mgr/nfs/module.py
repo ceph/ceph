@@ -1,9 +1,8 @@
-import errno
 import logging
 import threading
 from typing import Tuple, Optional, List
 
-from mgr_module import MgrModule, CLICommand, Option
+from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import orchestrator
 
 from .export import ExportMgr
@@ -58,6 +57,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.get_export(cluster_id=clusterid, pseudo_path=binding)
 
     @CLICommand('nfs export update', perm='rw')
+    @CLICheckNonemptyFileInput(desc='CephFS Export configuration')
     def _cmd_nfs_export_update(self, inbuf: str) -> Tuple[int, str, str]:
         """Update an export of a NFS cluster by `-i <json_file>`"""
         # The export <json_file> is passed to -i and it's processing is handled by the Ceph CLI.
@@ -94,6 +94,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.nfs.show_nfs_cluster_info(cluster_id=clusterid)
 
     @CLICommand('nfs cluster config set', perm='rw')
+    @CLICheckNonemptyFileInput(desc='NFS-Ganesha Configuration')
     def _cmd_nfs_cluster_config_set(self, clusterid: str, inbuf: str) -> Tuple[int, str, str]:
         """Set NFS-Ganesha config by `-i <config_file>`"""
         return self.nfs.set_nfs_cluster_config(cluster_id=clusterid, nfs_config=inbuf)
