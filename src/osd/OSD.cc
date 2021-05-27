@@ -254,7 +254,7 @@ CompatSet OSD::get_osd_compat_set() {
 OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
   osd(osd),
   cct(osd->cct),
-  whoami(osd->whoami), store(osd->store),
+  whoami(osd->whoami), store(osd->store.get()),
   log_client(osd->log_client), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
   cluster_messenger(osd->cluster_messenger),
@@ -2219,7 +2219,8 @@ int OSD::peek_meta(ObjectStore *store,
 
 // cons/des
 
-OSD::OSD(CephContext *cct_, ObjectStore *store_,
+OSD::OSD(CephContext *cct_,
+	 std::unique_ptr<ObjectStore> store_,
 	 int id,
 	 Messenger *internal_messenger,
 	 Messenger *external_messenger,
@@ -2242,7 +2243,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   mgrc(cct_, client_messenger, &mc->monmap),
   logger(create_logger()),
   recoverystate_perf(create_recoverystate_perf()),
-  store(store_),
+  store(std::move(store_)),
   log_client(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel()),
   whoami(id),
@@ -2334,7 +2335,6 @@ OSD::~OSD()
   cct->get_perfcounters_collection()->remove(logger);
   delete recoverystate_perf;
   delete logger;
-  delete store;
 }
 
 double OSD::get_tick_interval() const
@@ -3306,7 +3306,7 @@ int OSD::enable_disable_fuse(bool stop)
 	   << cpp_strerror(r) << dendl;
       return r;
     }
-    fuse_store = new FuseStore(store, mntpath);
+    fuse_store = new FuseStore(store.get(), mntpath);
     r = fuse_store->start();
     if (r < 0) {
       derr << __func__ << " unable to start fuse: " << cpp_strerror(r) << dendl;
@@ -3551,7 +3551,7 @@ int OSD::init()
       auto ch = service.meta_ch;
       auto hoid = make_snapmapper_oid();
       unsigned max = cct->_conf->osd_target_transaction_size;
-      r = SnapMapper::convert_legacy(cct, store, ch, hoid, max);
+      r = SnapMapper::convert_legacy(cct, store.get(), ch, hoid, max);
       if (r < 0)
 	goto out;
     }
@@ -3788,8 +3788,7 @@ int OSD::init()
 out:
   enable_disable_fuse(true);
   store->umount();
-  delete store;
-  store = NULL;
+  store.reset();
   return r;
 }
 
@@ -3933,7 +3932,7 @@ void OSD::final_init()
     "Dump store's statistics for the given pool");
   ceph_assert(r == 0);
 
-  test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
+  test_ops_hook = new TestOpsSocketHook(&(this->service), this->store.get());
   // Note: pools are CephString instead of CephPoolname because
   // these commands traditionally support both pool names and numbers
   r = admin_socket->register_command(
@@ -4352,8 +4351,7 @@ int OSD::shutdown()
 
   std::lock_guard lock(osd_lock);
   store->umount();
-  delete store;
-  store = nullptr;
+  store.reset();
   dout(10) << "Store synced" << dendl;
 
   op_tracker.on_shutdown();
@@ -4793,10 +4791,10 @@ void OSD::load_pgs()
        ++it) {
     spg_t pgid;
     if (it->is_temp(&pgid) ||
-       (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
+       (it->is_pg(&pgid) && PG::_has_removal_flag(store.get(), pgid))) {
       dout(10) << "load_pgs " << *it
 	       << " removing, legacy or flagged for removal pg" << dendl;
-      recursive_remove_collection(cct, store, pgid, *it);
+      recursive_remove_collection(cct, store.get(), pgid, *it);
       continue;
     }
 
@@ -4807,7 +4805,7 @@ void OSD::load_pgs()
 
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     epoch_t map_epoch = 0;
-    int r = PG::peek_map_epoch(store, pgid, &map_epoch);
+    int r = PG::peek_map_epoch(store.get(), pgid, &map_epoch);
     if (r < 0) {
       derr << __func__ << " unable to peek at " << pgid << " metadata, skipping"
 	   << dendl;
@@ -4837,7 +4835,7 @@ void OSD::load_pgs()
       pg = _make_pg(get_osdmap(), pgid);
     }
     if (!pg) {
-      recursive_remove_collection(cct, store, pgid, *it);
+      recursive_remove_collection(cct, store.get(), pgid, *it);
       continue;
     }
 
@@ -4847,13 +4845,13 @@ void OSD::load_pgs()
     pg->ch = store->open_collection(pg->coll);
 
     // read pg state, log
-    pg->read_state(store);
+    pg->read_state(store.get());
 
     if (pg->dne())  {
       dout(10) << "load_pgs " << *it << " deleting dne" << dendl;
       pg->ch = nullptr;
       pg->unlock();
-      recursive_remove_collection(cct, store, pgid, *it);
+      recursive_remove_collection(cct, store.get(), pgid, *it);
       continue;
     }
     {
@@ -6484,7 +6482,7 @@ void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
       m->last < superblock.purged_snaps_last) {
     goto out;
   }
-  SnapMapper::record_purged_snaps(cct, store, service.meta_ch,
+  SnapMapper::record_purged_snaps(cct, store.get(), service.meta_ch,
 				  make_purged_snaps_oid(), &t,
 				  m->purged_snaps);
   superblock.purged_snaps_last = m->last;
@@ -6916,7 +6914,7 @@ void OSD::scrub_purged_snaps()
 {
   dout(10) << __func__ << dendl;
   ceph_assert(ceph_mutex_is_locked(osd_lock));
-  SnapMapper::Scrubber s(cct, store, service.meta_ch,
+  SnapMapper::Scrubber s(cct, store.get(), service.meta_ch,
 			 make_snapmapper_oid(),
 			 make_purged_snaps_oid());
   clog->debug() << "purged_snaps scrub starts";
@@ -8213,7 +8211,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // record new purged_snaps
   if (superblock.purged_snaps_last == start - 1) {
-    SnapMapper::record_purged_snaps(cct, store, service.meta_ch,
+    SnapMapper::record_purged_snaps(cct, store.get(), service.meta_ch,
 				    make_purged_snaps_oid(), &t,
 				    purged_snaps);
     superblock.purged_snaps_last = last;

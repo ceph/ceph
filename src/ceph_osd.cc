@@ -678,7 +678,7 @@ flushjournal_out:
   }
 
   osdptr = new OSD(g_ceph_context,
-		   store.release(),
+		   std::move(store),
 		   whoami,
 		   ms_cluster,
 		   ms_public,
