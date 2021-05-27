@@ -83,7 +83,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 
   for (auto pg_shard : pg_shards) {
     if (pg_shard != whoami) {
-      auto m = crimson::net::make_message<MOSDRepOp>(
+      auto m = crimson::make_message<MOSDRepOp>(
 	osd_op_p.req_id,
 	whoami,
 	spg_t{pgid, pg_shard.shard},

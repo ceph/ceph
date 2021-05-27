@@ -92,7 +92,7 @@ seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
 seastar::future<> Watch::send_notify_msg(NotifyRef notify)
 {
   logger().info("{} for notify(id={})", __func__, notify->ninfo.notify_id);
-  return conn->send(crimson::net::make_message<MWatchNotify>(
+  return conn->send(crimson::make_message<MWatchNotify>(
     winfo.cookie,
     notify->user_version,
     notify->ninfo.notify_id,
@@ -131,7 +131,7 @@ seastar::future<> Watch::send_disconnect_msg()
     return seastar::now();
   }
   ceph::bufferlist empty;
-  return conn->send(crimson::net::make_message<MWatchNotify>(
+  return conn->send(crimson::make_message<MWatchNotify>(
     winfo.cookie,
     0,
     0,
@@ -259,7 +259,7 @@ seastar::future<> Notify::send_completion(
   logger().debug("{} sending notify replies: {}", __func__, notify_replies);
 
   ceph::bufferlist empty;
-  auto reply = crimson::net::make_message<MWatchNotify>(
+  auto reply = crimson::make_message<MWatchNotify>(
     ninfo.cookie,
     user_version,
     ninfo.notify_id,

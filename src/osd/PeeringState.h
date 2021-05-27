@@ -265,8 +265,13 @@ public:
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
+    #if defined(WITH_SEASTAR)
+    virtual void send_cluster_message(
+      int osd, MessageURef m, epoch_t epoch, bool share_map_update=false) = 0;
+    #else
     virtual void send_cluster_message(
       int osd, MessageRef m, epoch_t epoch, bool share_map_update=false) = 0;
+    #endif
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 
