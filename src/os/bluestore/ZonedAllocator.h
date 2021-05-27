@@ -70,7 +70,7 @@ class ZonedAllocator : public Allocator {
 
 public:
   ZonedAllocator(CephContext* cct, int64_t size, int64_t block_size,
-                 const std::string& name);
+                 std::string_view name);
   ~ZonedAllocator() override;
 
   const char *get_type() const override {

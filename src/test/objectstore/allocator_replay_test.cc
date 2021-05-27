@@ -202,7 +202,7 @@ int replay_and_check_for_duplicate(char* fname)
 	std::cerr << "error: invalid init: " << s << std::endl;
       return -1;
       }
-      alloc.reset(Allocator::create(g_ceph_context, string("bitmap"), total,
+      alloc.reset(Allocator::create(g_ceph_context, "bitmap", total,
 				    alloc_unit));
       owned_by_app.insert(0, total);
 

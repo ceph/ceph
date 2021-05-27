@@ -28,7 +28,7 @@ public:
   AllocTest(): alloc(0) { }
   void init_alloc(int64_t size, uint64_t min_alloc_size) {
     std::cout << "Creating alloc type " << string(GetParam()) << " \n";
-    alloc.reset(Allocator::create(g_ceph_context, string(GetParam()), size,
+    alloc.reset(Allocator::create(g_ceph_context, GetParam(), size,
 				  min_alloc_size));
   }
 
@@ -333,7 +333,7 @@ TEST_P(AllocTest, mempoolAccounting)
 
   uint64_t alloc_size = 4 * 1024;
   uint64_t capacity = 512ll * 1024 * 1024 * 1024;
-  Allocator* alloc = Allocator::create(g_ceph_context, string(GetParam()),
+  Allocator* alloc = Allocator::create(g_ceph_context, GetParam(),
 				       capacity, alloc_size);
   ASSERT_NE(alloc, nullptr);
   alloc->init_add_free(0, capacity);

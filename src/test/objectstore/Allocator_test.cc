@@ -23,7 +23,7 @@ public:
   AllocTest(): alloc(0) { }
   void init_alloc(int64_t size, uint64_t min_alloc_size) {
     std::cout << "Creating alloc type " << string(GetParam()) << " \n";
-    alloc.reset(Allocator::create(g_ceph_context, string(GetParam()), size,
+    alloc.reset(Allocator::create(g_ceph_context, GetParam(), size,
 				  min_alloc_size));
   }
 
