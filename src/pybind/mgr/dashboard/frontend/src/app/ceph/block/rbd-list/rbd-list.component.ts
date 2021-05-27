@@ -10,7 +10,6 @@ import { ConfirmationModalComponent } from '../../../shared/components/confirmat
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
@@ -54,6 +53,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   flattenTpl: TemplateRef<any>;
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
+  @ViewChild('removingStatTpl', { static: true })
+  removingStatTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -62,6 +63,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   retries: number;
   viewCacheStatusList: any[];
   selection = new CdTableSelection();
+  icons = Icons;
 
   modalRef: BsModalRef;
 
@@ -131,7 +133,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       permission: 'update',
       icon: Icons.edit,
       routerLink: () => this.urlBuilder.getEdit(getImageUri()),
-      name: this.actionLabels.EDIT
+      name: this.actionLabels.EDIT,
+      disable: (selection: CdTableSelection) =>
+        !selection.hasSingleSelection || this.getRemovingStatusDesc(selection)
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
@@ -144,7 +148,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        !selection.hasSingleSelection || selection.first().cdExecuting,
+        !selection.hasSingleSelection ||
+        selection.first().cdExecuting ||
+        this.getRemovingStatusDesc(selection),
       icon: Icons.copy,
       routerLink: () => `/block/rbd/copy/${getImageUri()}`,
       name: this.actionLabels.COPY
@@ -152,7 +158,10 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const flattenAction: CdTableAction = {
       permission: 'update',
       disable: (selection: CdTableSelection) =>
-        !selection.hasSingleSelection || selection.first().cdExecuting || !selection.first().parent,
+        !selection.hasSingleSelection ||
+        selection.first().cdExecuting ||
+        !selection.first().parent ||
+        this.getRemovingStatusDesc(selection),
       icon: Icons.flatten,
       click: () => this.flattenRbdModal(),
       name: this.actionLabels.FLATTEN
@@ -165,7 +174,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       disable: (selection: CdTableSelection) =>
         !selection.first() ||
         !selection.hasSingleSelection ||
-        selection.first().image_format === RBDImageFormat.V1
+        selection.first().image_format === RBDImageFormat.V1 ||
+        this.getRemovingStatusDesc(selection)
     };
     this.tableActions = [
       addAction,
@@ -183,7 +193,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         name: this.i18n('Name'),
         prop: 'name',
         flexGrow: 2,
-        cellTransformation: CellTemplate.executing
+        cellTemplate: this.removingStatTpl
       },
       {
         name: this.i18n('Pool'),
@@ -440,5 +450,13 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       !selection.hasSingleSelection ||
       this.hasClonedSnapshots(selection.first())
     );
+  }
+
+  getRemovingStatusDesc(selection: CdTableSelection): string | boolean {
+    const first = selection.first();
+    if (first && first.source && first.source === 'REMOVING') {
+      return this.i18n(`Action not possible for an RBD in status 'Removing'`);
+    }
+    return false;
   }
 }

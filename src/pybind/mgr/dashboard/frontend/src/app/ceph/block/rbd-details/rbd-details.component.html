@@ -2,7 +2,7 @@
   <ng-container i18n>Only available for RBD images with <strong>fast-diff</strong> enabled</ng-container>
 </ng-template>
 
-<tabset *ngIf="selection">
+<tabset *ngIf="selection && selection.source !== 'REMOVING'">
   <tab i18n-heading
        heading="Details">
     <table class="table table-striped table-bordered">
@@ -137,6 +137,10 @@
     </cd-grafana>
   </tab>
 </tabset>
+<ng-container *ngIf="selection && selection.source === 'REMOVING'">
+  <cd-alert-panel type="warning"
+                  i18n>Information can not be displayed for RBD in status 'Removing'.</cd-alert-panel>
+</ng-container>
 
 <ng-template
   #poolConfigurationSourceTpl

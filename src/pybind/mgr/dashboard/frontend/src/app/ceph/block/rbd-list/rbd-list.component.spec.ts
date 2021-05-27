@@ -306,4 +306,34 @@ describe('RbdListComponent', () => {
       }
     });
   });
+
+  const getActionDisable = (name: string) =>
+    component.tableActions.find((o) => o.name === name).disable;
+
+  const testActions = (selection: any, expected: { [action: string]: string | boolean }) => {
+    expect(getActionDisable('Edit')(selection)).toBe(expected.edit || false);
+    expect(getActionDisable('Delete')(selection)).toBe(expected.delete || false);
+    expect(getActionDisable('Copy')(selection)).toBe(expected.copy || false);
+    expect(getActionDisable('Flatten')(selection)).toBeTruthy();
+    expect(getActionDisable('Move to Trash')(selection)).toBe(expected.moveTrash || false);
+  };
+
+  it('should disable edit, copy, flatten and move action if RBD is in status `Removing`', () => {
+    component.selection.selected = [
+      {
+        name: 'foobar',
+        pool_name: 'rbd',
+        snapshots: [],
+        source: 'REMOVING'
+      }
+    ];
+
+    const message = `Action not possible for an RBD in status 'Removing'`;
+    const expected = {
+      edit: message,
+      copy: message,
+      moveTrash: message
+    };
+    testActions(component.selection, expected);
+  });
 });
