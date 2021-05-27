@@ -171,35 +171,6 @@ private:
   auto repeat_with_onode(
     CollectionRef ch,
     const ghobject_t &oid,
-    F &&f) {
-    return seastar::do_with(
-      oid,
-      Ret{},
-      TransactionRef(),
-      OnodeRef(),
-      std::forward<F>(f),
-      [=](auto &oid, auto &ret, auto &t, auto &onode, auto &f) {
-	return repeat_eagain([&, this] {
-	  t = transaction_manager->create_transaction();
-	  return onode_manager->get_onode(
-	    *t, oid
-	  ).safe_then([&](auto onode_ret) {
-	    onode = std::move(onode_ret);
-	    return f(*t, *onode);
-	  }).safe_then([&ret](auto _ret) {
-	    ret = _ret;
-	  });
-	}).safe_then([&ret] {
-	  return seastar::make_ready_future<Ret>(ret);
-	});
-      });
-  }
-
-
-  template <typename Ret, typename F>
-  auto repeat_with_onode(
-    CollectionRef ch,
-    const ghobject_t &oid,
     F &&f) const {
     return seastar::do_with(
       oid,
@@ -224,17 +195,35 @@ private:
       });
   }
 
+  using _omap_get_value_ertr = OMapManager::base_ertr::extend<
+    crimson::ct_error::enodata
+    >;
+  using _omap_get_value_ret = _omap_get_value_ertr::future<ceph::bufferlist>;
+  _omap_get_value_ret _omap_get_value(
+    Transaction &t,
+    omap_root_t &&root,
+    std::string_view key) const;
+
+  using _omap_get_values_ertr = OMapManager::base_ertr;
+  using _omap_get_values_ret = _omap_get_values_ertr::future<omap_values_t>;
+  _omap_get_values_ret _omap_get_values(
+    Transaction &t,
+    omap_root_t &&root,
+    const omap_keys_t &keys) const;
+
+  using _omap_list_bare_ret = OMapManager::omap_list_bare_ret;
+  using _omap_list_ret = OMapManager::omap_list_ret;
+  _omap_list_ret _omap_list(
+    const omap_root_le_t& omap_root,
+    Transaction& t,
+    const std::optional<std::string>& start,
+    OMapManager::omap_list_config_t config) const;
 
   friend class SeaStoreOmapIterator;
   omap_get_values_ret_t omap_list(
     CollectionRef ch,
     const ghobject_t &oid,
     const std::optional<string> &_start,
-    OMapManager::omap_list_config_t config);
-  OMapManager::omap_list_ret _omap_list(
-    const omap_root_le_t& omap_root,
-    Transaction& t,
-    const std::optional<std::string>& start,
     OMapManager::omap_list_config_t config);
 
   SegmentManagerRef segment_manager;

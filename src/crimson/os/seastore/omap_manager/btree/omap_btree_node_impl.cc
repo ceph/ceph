@@ -207,8 +207,8 @@ OMapInnerNode::list(
     iter_cend(),
     list_bare_ret(false, {}),
     [=, &start](auto &biter, auto &eiter, auto &ret) {
-      auto &complete = ret.first;
-      auto &result = ret.second;
+      auto &complete = std::get<0>(ret);
+      auto &result = std::get<1>(ret);
       return crimson::do_until(
 	[&, config, oc, this]() -> list_ertr::future<bool> {
 	  if (biter == eiter  || result.size() == config.max_result_size) {
