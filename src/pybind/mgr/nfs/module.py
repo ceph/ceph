@@ -49,6 +49,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                              read_only=readonly, path=path,
                                              squash=squash, clients=clients)
 
+    @CLICommand('nfs export import', perm='rw')
+    def _cmd_nfs_export_import(self,
+                               inbuf: str) -> Tuple[int, str, str]:
+        """Create one or more exports from JSON specification"""
+        return self.export_mgr.import_export(inbuf)
+
     @CLICommand('nfs export rm', perm='rw')
     def _cmd_nfs_export_rm(self, clusterid: str, binding: str) -> Tuple[int, str, str]:
         """Remove a cephfs export"""
