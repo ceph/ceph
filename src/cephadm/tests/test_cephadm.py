@@ -1055,3 +1055,70 @@ class TestBootstrap(TestCephAdm):
         with with_cephadm_ctx(cmd, list_networks={}) as ctx:
             retval = cd.command_bootstrap(ctx)
             assert retval == 0
+
+    @pytest.mark.parametrize('mon_ip, list_networks, result',
+        [
+            # IPv4
+            (
+                'eth0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '0.0.0.0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '192.168.1.0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '192.168.1.1',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            (
+                '192.168.1.1:1234',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            # IPv6
+            (
+                '::',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '::ffff:192.168.1.0',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                False,
+            ),
+            (
+                '::ffff:192.168.1.1',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+            (
+                '::ffff:c0a8:101',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+            (
+                '0000:0000:0000:0000:0000:FFFF:C0A8:0101',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+        ])
+    def test_mon_ip(self, mon_ip, list_networks, result, cephadm_fs):
+        cmd = self._get_cmd('--mon-ip', mon_ip)
+        if not result:
+            with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+                msg = r'Failed to infer CIDR network'
+                with pytest.raises(cd.Error, match=msg):
+                    cd.command_bootstrap(ctx)
+        else:
+            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+                retval = cd.command_bootstrap(ctx)
+                assert retval == 0
