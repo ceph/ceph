@@ -39,7 +39,7 @@
 #define dout_prefix *_dout << "rbd::mirror::image_replayer::snapshot::" \
                            << "Replayer: " << this << " " << __func__ << ": "
 
-extern PerfCounters *g_perf_counters;
+extern PerfCounters *g_snapshot_perf_counters;
 
 namespace rbd {
 namespace mirror {
@@ -127,6 +127,12 @@ Replayer<I>::Replayer(
 template <typename I>
 Replayer<I>::~Replayer() {
   dout(10) << dendl;
+
+  {
+    std::unique_lock locker{m_lock};
+    unregister_perf_counters();
+  }
+
   ceph_assert(m_state == STATE_COMPLETE);
   ceph_assert(m_update_watch_ctx == nullptr);
   ceph_assert(m_deep_copy_handler == nullptr);
@@ -150,6 +156,18 @@ void Replayer<I>::init(Context* on_finish) {
 
   m_remote_mirror_peer_uuid = remote_pool_meta.mirror_peer_uuid;
   dout(10) << "remote_mirror_peer_uuid=" << m_remote_mirror_peer_uuid << dendl;
+
+  {
+    auto local_image_ctx = m_state_builder->local_image_ctx;
+    std::shared_lock image_locker{local_image_ctx->image_lock};
+    m_image_spec = image_replayer::util::compute_image_spec(
+      local_image_ctx->md_ctx, local_image_ctx->name);
+  }
+
+  {
+    std::unique_lock locker{m_lock};
+    register_perf_counters();
+  }
 
   ceph_assert(m_on_init_shutdown == nullptr);
   m_on_init_shutdown = on_finish;
@@ -301,6 +319,24 @@ void Replayer<I>::load_local_image_meta() {
     // reset state in case new snapshot is added while we are scanning
     std::unique_lock locker{m_lock};
     m_image_updated = false;
+  }
+
+  bool update_status = false;
+  {
+    auto local_image_ctx = m_state_builder->local_image_ctx;
+    std::shared_lock image_locker{local_image_ctx->image_lock};
+    auto image_spec = image_replayer::util::compute_image_spec(
+      local_image_ctx->md_ctx, local_image_ctx->name);
+    if (m_image_spec != image_spec) {
+      m_image_spec = image_spec;
+      update_status = true;
+    }
+  }
+  if (update_status) {
+    std::unique_lock locker{m_lock};
+    unregister_perf_counters();
+    register_perf_counters();
+    notify_status_updated();
   }
 
   ceph_assert(m_state_builder->local_image_meta != nullptr);
@@ -1046,6 +1082,7 @@ void Replayer<I>::copy_image() {
            << "snap_seqs=" << m_local_mirror_snap_ns.snap_seqs << dendl;
 
   m_snapshot_bytes = 0;
+  m_snapshot_replay_start = ceph_clock_now();
   m_deep_copy_handler = new DeepCopyHandler(this);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_copy_image>(this);
@@ -1077,6 +1114,19 @@ void Replayer<I>::handle_copy_image(int r) {
   {
     std::unique_lock locker{m_lock};
     m_bytes_per_snapshot(m_snapshot_bytes);
+    auto time = ceph_clock_now() - m_snapshot_replay_start;
+    if (g_snapshot_perf_counters) {
+      g_snapshot_perf_counters->inc(l_rbd_mirror_snapshot_replay_bytes,
+                                    m_snapshot_bytes);
+      g_snapshot_perf_counters->inc(l_rbd_mirror_snapshot_replay_snapshots);
+      g_snapshot_perf_counters->tinc(
+        l_rbd_mirror_snapshot_replay_snapshots_time, time);
+    }
+    if (m_perf_counters) {
+      m_perf_counters->inc(l_rbd_mirror_snapshot_replay_bytes, m_snapshot_bytes);
+      m_perf_counters->inc(l_rbd_mirror_snapshot_replay_snapshots);
+      m_perf_counters->tinc(l_rbd_mirror_snapshot_replay_snapshots_time, time);
+    }
     m_snapshot_bytes = 0;
   }
 
@@ -1498,6 +1548,43 @@ bool Replayer<I>::is_replay_interrupted(std::unique_lock<ceph::mutex>* locker) {
     return true;
   }
   return false;
+}
+
+template <typename I>
+void Replayer<I>::register_perf_counters() {
+  dout(5) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(m_perf_counters == nullptr);
+
+  auto cct = static_cast<CephContext *>(m_state_builder->local_image_ctx->cct);
+  auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_image_perf_stats_prio");
+  PerfCountersBuilder plb(g_ceph_context,
+                          "rbd_mirror_snapshot_image_" + m_image_spec,
+                          l_rbd_mirror_snapshot_first,
+                          l_rbd_mirror_snapshot_last);
+  plb.add_u64_counter(l_rbd_mirror_snapshot_replay_snapshots,
+                      "snapshots", "Snapshots", "r", prio);
+  plb.add_time_avg(l_rbd_mirror_snapshot_replay_snapshots_time,
+                   "snapshots_time", "Snapshots time", "rl", prio);
+  plb.add_u64_counter(l_rbd_mirror_snapshot_replay_bytes, "replay_bytes",
+                      "Replayed data", "rb", prio, unit_t(UNIT_BYTES));
+  m_perf_counters = plb.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(m_perf_counters);
+}
+
+template <typename I>
+void Replayer<I>::unregister_perf_counters() {
+  dout(5) << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  PerfCounters *perf_counters = nullptr;
+  std::swap(perf_counters, m_perf_counters);
+
+  if (perf_counters != nullptr) {
+    g_ceph_context->get_perfcounters_collection()->remove(perf_counters);
+    delete perf_counters;
+  }
 }
 
 } // namespace snapshot
