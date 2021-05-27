@@ -37,14 +37,18 @@ To add each new host to the cluster, perform two steps:
 
    .. prompt:: bash #
 
-     ceph orch host add *newhost* [*<label1> ...*]
+     ceph orch host add *<newhost>* [*<ip>*] [*<label1> ...*]
 
    For example:
 
    .. prompt:: bash #
 
-     ceph orch host add host2
-     ceph orch host add host3
+     ceph orch host add host2 10.10.0.102
+     ceph orch host add host3 10.10.0.103
+
+   It is best to explicitly provide the host IP address.  If an IP is
+   not provided, then the host name will be immediately resolved via
+   DNS and that IP will be used.
 
    One or more labels can also be included to immediately label the
    new host.  For example, by default the ``_admin`` label will make
@@ -53,7 +57,7 @@ To add each new host to the cluster, perform two steps:
 
    .. prompt:: bash #
 
-       ceph orch host add host4 _admin
+       ceph orch host add host4 10.10.0.104 --labels _admin
 
 .. _cephadm-removing-hosts:
 
@@ -174,21 +178,21 @@ Many hosts can be added at once using
 
     ---
     service_type: host
-    addr: node-00
     hostname: node-00
+    addr: 192.168.0.10
     labels:
     - example1
     - example2
     ---
     service_type: host
-    addr: node-01
     hostname: node-01
+    addr: 192.168.0.11
     labels:
     - grafana
     ---
     service_type: host
-    addr: node-02
     hostname: node-02
+    addr: 192.168.0.12
 
 This can be combined with service specifications (below) to create a cluster spec
 file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec``
@@ -286,23 +290,12 @@ There are two ways to customize this configuration for your environment:
 Fully qualified domain names vs bare host names
 ===============================================
 
-cephadm has very minimal requirements when it comes to resolving host
-names etc. When cephadm initiates an ssh connection to a remote host,
-the host name  can be resolved in four different ways:
-
--  a custom ssh config resolving the name to an IP
--  via explicitly providing an IP address to cephadm: ``ceph orch host add <hostname> <IP>``
--  automatic name resolution via DNS.
-
-Ceph itself uses the command ``hostname`` to determine the name of the
-current host.
-
 .. note::
 
   cephadm demands that the name of the host given via ``ceph orch host add`` 
   equals the output of ``hostname`` on remote hosts.
 
-Otherwise cephadm can't be sure, the host names returned by
+Otherwise cephadm can't be sure that names returned by
 ``ceph * metadata`` match the hosts known to cephadm. This might result
 in a :ref:`cephadm-stray-host` warning.
 
