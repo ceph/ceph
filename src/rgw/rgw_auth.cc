@@ -804,15 +804,17 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
     }
   }
 
-  try {
-    string policy = this->token_policy;
-    bufferlist bl = bufferlist::static_from_string(policy);
-    const rgw::IAM::Policy p(s->cct, role.tenant, bl);
-    s->iam_user_policies.push_back(std::move(p));
-  } catch (rgw::IAM::PolicyParseException& e) {
-    //Control shouldn't reach here as the policy has already been
-    //verified earlier
-    ldpp_dout(dpp, 20) << "failed to parse token policy: " << e.what() << dendl;
+  if (!this->token_policy.empty()) {
+    try {
+      string policy = this->token_policy;
+      bufferlist bl = bufferlist::static_from_string(policy);
+      const rgw::IAM::Policy p(s->cct, role.tenant, bl);
+      s->session_policies.push_back(std::move(p));
+    } catch (rgw::IAM::PolicyParseException& e) {
+      //Control shouldn't reach here as the policy has already been
+      //verified earlier
+      ldpp_dout(dpp, 20) << "failed to parse token policy: " << e.what() << dendl;
+    }
   }
 
   string condition = "aws:userid";
