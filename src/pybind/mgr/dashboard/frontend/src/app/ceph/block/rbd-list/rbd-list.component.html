@@ -62,3 +62,25 @@
     </ng-container>
   </div>
 </ng-template>
+
+<ng-template #removingStatTpl
+             let-column="column"
+             let-value="value"
+             let-row="row">
+
+  <i [ngClass]="[icons.spinner, icons.spin]"
+     *ngIf="row.cdExecuting"></i>
+  <span [ngClass]="column?.customTemplateConfig?.valueClass">
+    {{ value }}
+  </span>
+  <span *ngIf="row.cdExecuting"
+        [ngClass]="column?.customTemplateConfig?.executingClass ?
+        column.customTemplateConfig.executingClass :
+        'text-muted italic'">
+    ({{ row.cdExecuting }})
+  </span>
+  <i *ngIf="row.source && row.source === 'REMOVING'"
+     i18n-title
+     title="RBD in status 'Removing'"
+     class="{{ icons.warning }} warn"></i>
+</ng-template>

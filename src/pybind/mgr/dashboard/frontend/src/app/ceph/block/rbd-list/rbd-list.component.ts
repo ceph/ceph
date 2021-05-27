@@ -10,7 +10,6 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -55,6 +54,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   flattenTpl: TemplateRef<any>;
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
+  @ViewChild('removingStatTpl', { static: true })
+  removingStatTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -63,6 +64,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   retries: number;
   tableStatus = new TableStatusViewCache();
   selection = new CdTableSelection();
+  icons = Icons;
 
   modalRef: NgbModalRef;
 
@@ -132,7 +134,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       icon: Icons.edit,
       routerLink: () => this.urlBuilder.getEdit(getImageUri()),
       name: this.actionLabels.EDIT,
-      disable: this.getInvalidNameDisable
+      disable: (selection: CdTableSelection) =>
+        this.getRemovingStatusDesc(selection) || this.getInvalidNameDisable(selection)
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
@@ -145,7 +148,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        this.getInvalidNameDisable(selection) || !!selection.first().cdExecuting,
+        this.getRemovingStatusDesc(selection) ||
+        this.getInvalidNameDisable(selection) ||
+        !!selection.first().cdExecuting,
       icon: Icons.copy,
       routerLink: () => `/block/rbd/copy/${getImageUri()}`,
       name: this.actionLabels.COPY
@@ -153,6 +158,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const flattenAction: CdTableAction = {
       permission: 'update',
       disable: (selection: CdTableSelection) =>
+        this.getRemovingStatusDesc(selection) ||
         this.getInvalidNameDisable(selection) ||
         selection.first().cdExecuting ||
         !selection.first().parent,
@@ -166,6 +172,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       click: () => this.trashRbdModal(),
       name: this.actionLabels.TRASH,
       disable: (selection: CdTableSelection) =>
+        this.getRemovingStatusDesc(selection) ||
         this.getInvalidNameDisable(selection) ||
         selection.first().image_format === RBDImageFormat.V1
     };
@@ -185,7 +192,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         name: $localize`Name`,
         prop: 'name',
         flexGrow: 2,
-        cellTransformation: CellTemplate.executing
+        cellTemplate: this.removingStatTpl
       },
       {
         name: $localize`Pool`,
@@ -455,5 +462,13 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     }
 
     return !selection.first() || !selection.hasSingleSelection;
+  }
+
+  getRemovingStatusDesc(selection: CdTableSelection): string | boolean {
+    const first = selection.first();
+    if (first?.source === 'REMOVING') {
+      return $localize`Action not possible for an RBD in status 'Removing'`;
+    }
+    return false;
   }
 }
