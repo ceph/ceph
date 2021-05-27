@@ -272,15 +272,23 @@ struct btree_lba_manager_test :
 
   void check_mappings(test_transaction_t &t) {
     for (auto &&i: t.mappings) {
+      auto laddr = i.first;
+      auto len = i.second.len;
+
       auto ret_list = lba_manager->get_mappings(
-	*t.t, i.first, i.second.len
+	*t.t, laddr, len
       ).unsafe_get0();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
       EXPECT_EQ(i.second.addr, ret->get_paddr());
-      EXPECT_EQ(i.first, ret->get_laddr());
-      EXPECT_EQ(i.second.len, ret->get_length());
-      // TODO: test get_mapping()
+      EXPECT_EQ(laddr, ret->get_laddr());
+      EXPECT_EQ(len, ret->get_length());
+
+      auto ret_pin = lba_manager->get_mapping(
+        *t.t, laddr).unsafe_get0();
+      EXPECT_EQ(i.second.addr, ret_pin->get_paddr());
+      EXPECT_EQ(laddr, ret_pin->get_laddr());
+      EXPECT_EQ(len, ret_pin->get_length());
     }
     lba_manager->scan_mappings(
       *t.t,
