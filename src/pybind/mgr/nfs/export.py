@@ -268,7 +268,7 @@ class ExportMgr:
         try:
             new_export = json.loads(export_config)
             # check export type
-            return FSExport(self).update_export(new_export)
+            return FSExport(self).update_export(new_export, False)
         except NotImplementedError:
             return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
         except Exception as e:
@@ -280,7 +280,7 @@ class ExportMgr:
                 raise NFSInvalidOperation("Empty Config!!")
             new_export = json.loads(export_config)
             # check export type
-            return FSExport(self).import_export(new_export)
+            return FSExport(self).update_export(new_export, True)
         except NotImplementedError:
             return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
         except Exception as e:
@@ -366,7 +366,7 @@ class FSExport(ExportMgr):
             return (0, json.dumps(result, indent=4), '')
         return 0, "", "Export already exists"
 
-    def update_export(self, new_export):
+    def update_export(self, new_export, can_create):
         for k in ['cluster_id', 'path', 'pseudo']:
             if k not in new_export:
                 raise NFSInvalidOperation(f'Export missing required field {k}')
@@ -381,16 +381,23 @@ class FSExport(ExportMgr):
                                         new_export['pseudo'])
         if old_export:
             # Check if export id matches
-            if old_export.export_id != new_export['export_id']:
+            if old_export.export_id != new_export.get('export_id'):
                 raise NFSInvalidOperation('Export ID changed, Cannot update export')
-        else:
-            # Fetch export based on export id object
+        elif new_export.get('export_id'):
             old_export = self._fetch_export_obj(new_export['export_id'])
-            if not old_export:
-                raise NFSObjectNotFound('Export does not exist')
 
-        new_export = Export.from_dict(new_export['export_id'], new_export)
+        if not old_export and not can_create:
+            raise NFSObjectNotFound('Export does not exist')
+
+        new_export = Export.from_dict(
+            new_export.get('export_id', self._gen_export_id()),
+            new_export
+        )
         new_export.validate(self.mgr)
+
+        if not old_export:
+            self._save_export(new_export)
+            return 0, f'Added export {new_export.pseudo}', ''
 
         if old_export.fsal.name != new_export.fsal.name:
             raise NFSInvalidOperation('FSAL change not allowed')
@@ -400,8 +407,8 @@ class FSExport(ExportMgr):
             raise NFSInvalidOperation('Security label xattr cannot be changed')
 
         if (
-                old_export.fsal.fs_name != new_export.fsal.fs_name
-                or old_export.path != new_export.path
+            old_export.fsal.fs_name != new_export.fsal.fs_name
+            or old_export.path != new_export.path
         ):
             self._update_user_id(new_export.path, new_export.access_type,
                                  new_export.fsal.fs_name, new_export.fsal.user_id)
@@ -414,17 +421,4 @@ class FSExport(ExportMgr):
             old_export = self._fetch_export(old_export.cluster_id, old_export.pseudo)
         export_ls.remove(old_export)
         restart_nfs_service(self.mgr, new_export.cluster_id)
-        return 0, "Successfully updated export", ""
-
-    def import_export(self, new_export):
-        for k in ['cluster_id', 'path', 'pseudo']:
-            if k not in new_export:
-                raise NFSInvalidOperation(f'Export missing required field {k}')
-        if new_export.get('cluster_id') not in self.exports:
-            raise ClusterNotFound()
-        self.rados_namespace = new_export['cluster_id']
-
-        export = Export.from_dict(self._gen_export_id(), new_export)
-        export.validate(self.mgr)
-        self._save_export(export)
-        return f'Added export {export.pseudo}'
+        return 0, f"Updated export {new_export.pseudo}", ""
