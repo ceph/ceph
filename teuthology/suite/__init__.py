@@ -112,10 +112,13 @@ def main(args):
         teuthology.log.setLevel(logging.DEBUG)
 
     if not conf.machine_type or conf.machine_type == 'None':
-        schedule_fail("Must specify a machine_type")
+        if not config.default_machine_type or config.default_machine_type == 'None':
+            schedule_fail("Must specify a machine_type")
+        else:
+           conf.machine_type = config.default_machine_type
     elif 'multi' in conf.machine_type:
         schedule_fail("'multi' is not a valid machine_type. " +
-                      "Maybe you want 'plana,mira,burnupi' or similar")
+                      "Maybe you want 'gibba,smithi,mira' or similar")
 
     if conf.email:
         config.results_email = conf.email
