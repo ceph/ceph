@@ -1,5 +1,5 @@
 tasks:
 - s3tests:
     client.0:
-      force-branch: tethology_s3select_apr19
+      force-branch: s3select_error_response_tlg_run
       rgw_server: client.0
