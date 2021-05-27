@@ -14389,8 +14389,6 @@ int Client::ll_sync_inode(Inode *in, bool syncdataonly)
   return _fsync(in, syncdataonly);
 }
 
-#ifdef FALLOC_FL_PUNCH_HOLE
-
 int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -14512,15 +14510,6 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   put_cap_ref(in, CEPH_CAP_FILE_WR);
   return r;
 }
-#else
-
-int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
-{
-  return -CEPHFS_EOPNOTSUPP;
-}
-
-#endif
-
 
 int Client::ll_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 {
