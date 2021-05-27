@@ -325,8 +325,13 @@ class FullnessTestCase(CephFSTestCase):
                     bytes += os.write(f, b'x' * 1024 * 1024)
                     print("wrote bytes via buffered write, moving on to fsync")
                 except OSError as e:
-                    print("Unexpected error %s from write() instead of fsync()" % e)
-                    raise
+                    if {is_fuse}:
+                        print("Unexpected error %s from write() instead of fsync()" % e)
+                        raise
+                    else:
+                        print("Reached fullness after %.2f MB" % (bytes / (1024.0 * 1024.0)))
+                        full = True
+                        break
 
                 try:
                     os.fsync(f)
