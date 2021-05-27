@@ -1,5 +1,4 @@
 import { Component } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import _ from 'lodash';
 
@@ -18,8 +17,8 @@ export class MonitorComponent {
 
   interval: any;
 
-  constructor(private monitorService: MonitorService, private titleService: Title) {
-    this.titleService.setTitle('Cluster/Monitors');
+  constructor(private monitorService: MonitorService) {
+
     this.inQuorum = {
       columns: [
         { prop: 'name', name: $localize`Name`, cellTransformation: CellTemplate.routerLink },

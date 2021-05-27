@@ -1,5 +1,4 @@
 import { Component, Inject, OnInit } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -26,11 +25,10 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
 
   constructor(
     public prometheusAlertService: PrometheusAlertService,
-    @Inject(PrometheusService) prometheusService: PrometheusService,
-    private titleService: Title
+    @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
     super(prometheusService);
-    this.titleService.setTitle('Alerts');
+
   }
 
   ngOnInit() {

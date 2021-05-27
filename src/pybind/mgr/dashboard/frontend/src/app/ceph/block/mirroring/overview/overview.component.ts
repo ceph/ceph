@@ -1,5 +1,4 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription } from 'rxjs';
@@ -35,10 +34,8 @@ export class OverviewComponent implements OnInit, OnDestroy {
   constructor(
     private authStorageService: AuthStorageService,
     private rbdMirroringService: RbdMirroringService,
-    private modalService: ModalService,
-    private titleService: Title
+    private modalService: ModalService
   ) {
-    this.titleService.setTitle('Mirroring/Overview');
     this.permission = this.authStorageService.getPermissions().rbdMirroring;
 
     const editSiteNameAction: CdTableAction = {

@@ -1,5 +1,4 @@
 import { Component, OnInit } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -21,11 +20,10 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
 
   constructor(
     private cephfsService: CephfsService,
-    private cdDatePipe: CdDatePipe,
-    private titleService: Title
+    private cdDatePipe: CdDatePipe
   ) {
     super();
-    this.titleService.setTitle('File Systems');
+
   }
 
   ngOnInit() {

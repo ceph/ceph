@@ -1,5 +1,4 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -65,11 +64,9 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     private notAvailablePipe: NotAvailablePipe,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
-    public actionLabels: ActionLabelsI18n,
-    private titleService: Title
+    public actionLabels: ActionLabelsI18n
   ) {
     super();
-    this.titleService.setTitle('iSCSI/Targets');
     this.permission = this.authStorageService.getPermissions().iscsi;
 
     this.tableActions = [

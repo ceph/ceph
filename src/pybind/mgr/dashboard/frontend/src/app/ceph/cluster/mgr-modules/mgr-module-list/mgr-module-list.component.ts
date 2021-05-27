@@ -1,5 +1,4 @@
 import { Component, ViewChild } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { timer as observableTimer } from 'rxjs';
@@ -37,11 +36,9 @@ export class MgrModuleListComponent extends ListWithDetails {
   constructor(
     private authStorageService: AuthStorageService,
     private mgrModuleService: MgrModuleService,
-    private notificationService: NotificationService,
-    private titleService: Title
+    private notificationService: NotificationService
   ) {
     super();
-    this.titleService.setTitle('Cluster/Manager Modules');
     this.permission = this.authStorageService.getPermissions().configOpt;
     this.columns = [
       {

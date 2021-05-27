@@ -1,6 +1,5 @@
 import { DatePipe } from '@angular/common';
 import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
 
@@ -43,9 +42,9 @@ export class LogsComponent implements OnInit, OnDestroy {
     private logsService: LogsService,
     private datePipe: DatePipe,
     private ngZone: NgZone,
-    private titleService: Title
+
   ) {
-    this.titleService.setTitle('Cluster/Logs');
+
   }
   ngOnInit() {
     this.getInfo();

@@ -1,5 +1,4 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import {
   ITreeOptions,
@@ -45,9 +44,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
   constructor(
     private crushRuleService: CrushRuleService,
     private timerService: TimerService,
-    private titleService: Title
   ) {
-    this.titleService.setTitle('Cluster/CRUSH map');
   }
 
   ngOnInit() {

@@ -1,5 +1,4 @@
 import { Component, Inject } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
@@ -53,11 +52,9 @@ export class SilenceListComponent extends PrometheusListHelper {
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n,
-    @Inject(PrometheusService) prometheusService: PrometheusService,
-    private titleService: Title
+    @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
     super(prometheusService);
-    this.titleService.setTitle('Silences');
     this.permission = this.authStorageService.getPermissions().prometheus;
     const selectionExpired = (selection: CdTableSelection) =>
       selection.first() && selection.first().status && selection.first().status.state === 'expired';

@@ -1,6 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl } from '@angular/forms';
-import { Title } from '@angular/platform-browser';
+
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
@@ -107,11 +107,9 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
-    private orchService: OrchestratorService,
-    private titleService: Title
+    private orchService: OrchestratorService
   ) {
     super();
-    this.titleService.setTitle('Cluster/OSDs');
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {

@@ -1,5 +1,4 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { Title } from '@angular/platform-browser';
 
 import { IscsiService } from '~/app/shared/api/iscsi.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -27,10 +26,9 @@ export class IscsiComponent implements OnInit {
   constructor(
     private iscsiService: IscsiService,
     private dimlessPipe: DimlessPipe,
-    private iscsiBackstorePipe: IscsiBackstorePipe,
-    private titleService: Title
+    private iscsiBackstorePipe: IscsiBackstorePipe
   ) {
-    this.titleService.setTitle('iSCSI/Overview');
+
   }
 
   ngOnInit() {

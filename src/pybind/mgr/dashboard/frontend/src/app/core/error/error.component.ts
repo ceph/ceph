@@ -1,5 +1,5 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import { Title } from '@angular/platform-browser';
+
 import { NavigationEnd, Router, RouterEvent } from '@angular/router';
 
 import { Subscription } from 'rxjs';
@@ -22,8 +22,8 @@ export class ErrorComponent implements OnDestroy, OnInit {
   source: string;
   routerSubscription: Subscription;
 
-  constructor(private router: Router, private docService: DocService, private titleService: Title) {
-    this.titleService.setTitle('Error');
+  constructor(private router: Router, private docService: DocService) {
+
   }
   ngOnInit() {
     this.fetchData();
