@@ -415,3 +415,16 @@ class FSExport(ExportMgr):
         export_ls.remove(old_export)
         restart_nfs_service(self.mgr, new_export.cluster_id)
         return 0, "Successfully updated export", ""
+
+    def import_export(self, new_export):
+        for k in ['cluster_id', 'path', 'pseudo']:
+            if k not in new_export:
+                raise NFSInvalidOperation(f'Export missing required field {k}')
+        if new_export.get('cluster_id') not in self.exports:
+            raise ClusterNotFound()
+        self.rados_namespace = new_export['cluster_id']
+
+        export = Export.from_dict(self._gen_export_id(), new_export)
+        export.validate(self.mgr)
+        self._save_export(export)
+        return f'Added export {export.pseudo}'
