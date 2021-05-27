@@ -321,7 +321,8 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
     }
 
     if (is_logical_type(type)) {
-      return lba_manager->get_mapping(
+      // TODO: switch to get_mapping()
+      return lba_manager->get_mappings(
 	t,
 	laddr,
 	len).safe_then([=, &t](lba_pin_list_t pins) {

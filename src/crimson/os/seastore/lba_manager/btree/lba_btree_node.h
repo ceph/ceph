@@ -50,8 +50,8 @@ using BtreeLBAPinRef = std::unique_ptr<BtreeLBAPin>;
  */
 struct LBANode : CachedExtent {
   using LBANodeRef = TCachedExtentRef<LBANode>;
-  using lookup_range_ertr = LBAManager::get_mapping_ertr;
-  using lookup_range_ret = LBAManager::get_mapping_ret;
+  using lookup_range_ertr = LBAManager::get_mappings_ertr;
+  using lookup_range_ret = LBAManager::get_mappings_ret;
 
   btree_range_pin_t pin;
 

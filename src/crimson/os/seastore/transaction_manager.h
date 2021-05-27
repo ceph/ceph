@@ -126,13 +126,13 @@ public:
    *
    * Get logical pins overlapping offset~length
    */
-  using get_pins_ertr = LBAManager::get_mapping_ertr;
+  using get_pins_ertr = LBAManager::get_mappings_ertr;
   using get_pins_ret = get_pins_ertr::future<lba_pin_list_t>;
   get_pins_ret get_pins(
     Transaction &t,
     laddr_t offset,
     extent_len_t length) {
-    return lba_manager->get_mapping(
+    return lba_manager->get_mappings(
       t, offset, length);
   }
 
