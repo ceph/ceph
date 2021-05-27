@@ -15,7 +15,14 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 from typing import List, Optional
-from .fixtures import exporter, mock_docker, mock_podman
+
+from .fixtures import (
+    cephadm_fs,
+    exporter,
+    mock_docker,
+    mock_podman,
+    with_cephadm_ctx,
+)
 
 
 with mock.patch('builtins.open', create=True):
@@ -1015,3 +1022,23 @@ class TestMonitoring(object):
         ]
         assert mock.call().__enter__().write('foo') in _open.mock_calls
         assert mock.call().__enter__().write('bar') in _open.mock_calls
+
+
+class TestBootstrap(TestCephAdm):
+
+    @staticmethod
+    def _get_cmd(*args):
+        return [
+            'bootstrap',
+            '--allow-mismatched-release',
+            '--skip-prepare-host',
+            '--skip-dashboard',
+            *args,
+        ]
+
+    def test_no_mon_addr(self, cephadm_fs):
+        cmd = self._get_cmd()
+        with with_cephadm_ctx(cmd) as ctx:
+            msg = r'must specify --mon-ip or --mon-addrv'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
