@@ -18,7 +18,8 @@ exceeded the system can suffer from performance issues. The dynamic
 resharding feature detects this situation and automatically increases
 the number of shards used by the bucket index, resulting in a
 reduction of the number of entries in each bucket index shard. This
-process is transparent to the user.
+process is transparent to the user. Write I/Os to the target bucket
+are blocked and read I/Os are not during resharding process.
 
 By default dynamic bucket index resharding can only increase the
 number of bucket index shards to 1999, although this upper-bound is a
