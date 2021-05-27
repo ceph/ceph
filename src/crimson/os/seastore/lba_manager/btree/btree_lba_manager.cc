@@ -107,7 +107,16 @@ BtreeLBAManager::get_mapping(
   Transaction &t,
   laddr_t offset)
 {
-  ceph_abort("not implemented");
+  logger().debug("BtreeLBAManager::get_mapping: {}", offset);
+  return get_root(t
+  ).safe_then([this, &t, offset] (auto extent) {
+    return extent->lookup_pin(get_context(t), offset);
+  }).safe_then([] (auto &&e) {
+    logger().debug("BtreeLBAManager::get_mapping: got mapping {}", *e);
+    return get_mapping_ret(
+      get_mapping_ertr::ready_future_marker{},
+      std::move(e));
+  });
 }
 
 BtreeLBAManager::find_hole_ret
