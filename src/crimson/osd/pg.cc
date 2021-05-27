@@ -405,12 +405,11 @@ void PG::init(
   const vector<int>& newacting, int new_acting_primary,
   const pg_history_t& history,
   const PastIntervals& pi,
-  bool backfill,
   ObjectStore::Transaction &t)
 {
   peering_state.init(
     role, newup, new_up_primary, newacting,
-    new_acting_primary, history, pi, backfill, t);
+    new_acting_primary, history, pi, t);
 }
 
 seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
