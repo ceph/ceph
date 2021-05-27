@@ -31,6 +31,13 @@ add_executable(unittest_frames_v2 test_frames_v2.cc)
 add_ceph_unittest(unittest_frames_v2)
 target_link_libraries(unittest_frames_v2 os global ${UNITTEST_LIBS})
 
+add_executable(unittest_comp_registry
+  test_comp_registry.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_comp_registry)
+target_link_libraries(unittest_comp_registry global)
+
 # test_userspace_event
 if(HAVE_DPDK)
   add_executable(ceph_test_userspace_event
