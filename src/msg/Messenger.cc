@@ -58,9 +58,11 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
     socket_priority(-1),
     cct(cct_),
     crcflags(get_default_crc_flags(cct->_conf)),
-    auth_registry(cct)
+    auth_registry(cct),
+    comp_registry(cct)
 {
   auth_registry.refresh_config();
+  comp_registry.refresh_config();
 }
 
 void Messenger::set_endpoint_addr(const entity_addr_t& a,

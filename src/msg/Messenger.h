@@ -34,6 +34,7 @@
 #include "auth/Crypto.h"
 #include "common/item_history.h"
 #include "auth/AuthRegistry.h"
+#include "compressor_registry.h"
 #include "include/ceph_assert.h"
 
 #include <errno.h>
@@ -77,7 +78,9 @@ struct Interceptor {
     READY,
     HANDLE_MESSAGE,
     READ_MESSAGE_COMPLETE,
-    SESSION_RETRY
+    SESSION_RETRY,
+    SEND_COMPRESSION_REQUEST,
+    HANDLE_COMPRESSION_REQUEST
   };
 
   virtual ~Interceptor() {}
@@ -227,6 +230,9 @@ public:
   void set_auth_server(AuthServer *as) {
     auth_server = as;
   }
+
+  // for compression
+  CompressorRegistry comp_registry;
 
 protected:
   /**
