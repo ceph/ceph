@@ -2993,10 +2993,6 @@ class InitBucketShardStatusCR : public RGWCoroutine {
   const uint64_t latest_gen;
   const BucketIndexShardsManager& marker_mgr;
 
-  int tries = 10; // retry on racing writes
-  bool exclusive = true; // first try is exclusive
-  using ReadCR = RGWReadBucketPipeSyncStatusCoroutine;
-  using InitCR = RGWInitBucketShardSyncStatusCoroutine;
  public:
   InitBucketShardStatusCR(RGWDataSyncCtx* sc,
                          const rgw_bucket_sync_pair_info& pair,
@@ -3006,32 +3002,14 @@ class InitBucketShardStatusCR : public RGWCoroutine {
   {}
   int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
-      // try exclusive create with empty status
+      // non exclusive create with empty status
       objv.generate_new_write_ver(cct);
-      yield call(new InitCR(sc, pair, status, latest_gen, marker_mgr, objv, exclusive));
-      if (retcode >= 0) {
-        return set_cr_done();
-      } else if (retcode != -EEXIST) {
+      yield call(new RGWInitBucketShardSyncStatusCoroutine(sc, pair, status, latest_gen, marker_mgr, objv, false));
+      if (retcode < 0) {
+        assert(retcode != -EEXIST && retcode != -ECANCELED);
         return set_cr_error(retcode);
       }
-
-      exclusive = false;
-      // retry loop to reinitialize
-      while (--tries) {
-        objv.clear();
-        // read current status and objv
-        yield call(new ReadCR(sc, pair, &status, &objv, latest_gen));
-        if (retcode < 0) {
-          return set_cr_error(retcode);
-        }
-        yield call(new InitCR(sc, pair, status, latest_gen, marker_mgr, objv, exclusive));
-        if (retcode >= 0) {
-          return set_cr_done();
-        } else if (retcode != -ECANCELED) {
-          return set_cr_error(retcode);
-        }
-      }
-      return set_cr_error(retcode);
+      return set_cr_done();
     }
     return 0;
   }
