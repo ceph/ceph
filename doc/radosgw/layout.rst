@@ -103,7 +103,7 @@ is controlled by a 'policy' setting.[3]
 An RGW object may consist of several RADOS objects, the first of which
 is the head that contains the metadata, such as manifest, ACLs, content type,
 ETag, and user-defined metadata. The metadata is stored in xattrs.
-The head may also contain up to 512 kilobytes of object data, for efficiency
+The head may also contain up to :confval:`rgw_max_chunk_size` of object data, for efficiency
 and atomicity. The manifest describes how each object is laid out in RADOS
 objects.
 
