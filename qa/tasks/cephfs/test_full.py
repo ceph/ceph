@@ -125,7 +125,7 @@ class FullnessTestCase(CephFSTestCase):
         # how soon the cluster recognises its own fullness
         self.mount_a.write_n_mb("large_file_a", self.fill_mb // 2)
         try:
-            self.mount_a.write_n_mb("large_file_b", self.fill_mb // 2)
+            self.mount_a.write_n_mb("large_file_b", (self.fill_mb * 1.1) // 2)
         except CommandFailedError:
             log.info("Writing file B failed (full status happened already)")
             assert self.is_full()
@@ -395,9 +395,7 @@ class TestClusterFull(FullnessTestCase):
         super(TestClusterFull, self).setUp()
 
         if self.pool_capacity is None:
-            max_avail = self.fs.get_pool_df(self._data_pool_name())['max_avail']
-            full_ratio = float(self.fs.get_config("mon_osd_full_ratio", service_type="mon"))
-            TestClusterFull.pool_capacity = int(max_avail * full_ratio)
+            TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
             TestClusterFull.fill_mb = (self.pool_capacity // (1024 * 1024))
 
 # Hide the parent class so that unittest.loader doesn't try to run it.
