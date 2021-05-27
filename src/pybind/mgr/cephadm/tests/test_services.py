@@ -16,6 +16,11 @@ from orchestrator import OrchestratorError
 from orchestrator._interface import DaemonDescription
 
 
+class FakeInventory:
+    def get_addr(self, name: str) -> str:
+        return '1.2.3.4'
+
+
 class FakeMgr:
     def __init__(self):
         self.config = ''
@@ -23,6 +28,7 @@ class FakeMgr:
         self.mon_command = MagicMock(side_effect=self._check_mon_command)
         self.template = MagicMock()
         self.log = MagicMock()
+        self.inventory = FakeInventory()
 
     def _check_mon_command(self, cmd_dict, inbuf=None):
         prefix = cmd_dict.get('prefix')

@@ -96,7 +96,7 @@ class IscsiService(CephService):
                 if not spec:
                     logger.warning('No ServiceSpec found for %s', dd)
                     continue
-                ip = utils.resolve_ip(dd.hostname)
+                ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
                 # IPv6 URL encoding requires square brackets enclosing the ip
                 if type(ip_address(ip)) is IPv6Address:
                     ip = f'[{ip}]'
