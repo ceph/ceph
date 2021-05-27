@@ -122,6 +122,19 @@ public:
   }
 
   /**
+   * get_pin
+   *
+   * Get the logical pin at offset
+   */
+  using get_pin_ertr = LBAManager::get_mapping_ertr;
+  using get_pin_ret = LBAManager::get_mapping_ret;
+  get_pin_ret get_pin(
+    Transaction &t,
+    laddr_t offset) {
+    return lba_manager->get_mapping(t, offset);
+  }
+
+  /**
    * get_pins
    *
    * Get logical pins overlapping offset~length
@@ -141,7 +154,7 @@ public:
    *
    * Get extent mapped at pin.
    */
-  using pin_to_extent_ertr = get_pins_ertr::extend_ertr<
+  using pin_to_extent_ertr = get_pin_ertr::extend_ertr<
     SegmentManager::read_ertr>;
   template <typename T>
   using pin_to_extent_ret = pin_to_extent_ertr::future<
@@ -178,7 +191,7 @@ public:
    *
    * Read extent of type T at offset~length
    */
-  using read_extent_ertr = get_pins_ertr::extend_ertr<
+  using read_extent_ertr = get_pin_ertr::extend_ertr<
     SegmentManager::read_ertr>;
   template <typename T>
   using read_extent_ret = read_extent_ertr::future<
@@ -189,19 +202,15 @@ public:
     laddr_t offset,
     extent_len_t length) {
     LOG_PREFIX(TransactionManager::read_extent);
-    return get_pins(
-      t, offset, length
-    ).safe_then([this, FNAME, &t, offset, length](auto pins) {
-      if (pins.size() != 1 || !pins.front()->get_paddr().is_real()) {
-	ERRORT(
-	  "offset {} len {} got {} extents:",
-	  t, offset, length, pins.size());
-	for (auto &i: pins) {
-	  ERRORT("\t{}", t, *i);
-	}
-	ceph_assert(0 == "Should be impossible");
+    return get_pin(
+      t, offset
+    ).safe_then([this, FNAME, &t, offset, length] (auto pin) {
+      if (length != pin->get_length() || !pin->get_paddr().is_real()) {
+        ERRORT("offset {} len {} got wrong pin {}",
+               t, offset, length, *pin);
+        ceph_assert(0 == "Should be impossible");
       }
-      return this->pin_to_extent<T>(t, std::move(pins.front()));
+      return this->pin_to_extent<T>(t, std::move(pin));
     });
   }
 
