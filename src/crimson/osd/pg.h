@@ -465,7 +465,6 @@ public:
     int acting_primary,
     const pg_history_t& history,
     const PastIntervals& pim,
-    bool backfill,
     ceph::os::Transaction &t);
 
   seastar::future<> read_state(crimson::os::FuturizedStore* store);
