@@ -1042,3 +1042,16 @@ class TestBootstrap(TestCephAdm):
             msg = r'must specify --mon-ip or --mon-addrv'
             with pytest.raises(cd.Error, match=msg):
                 cd.command_bootstrap(ctx)
+
+    def test_skip_mon_network(self, cephadm_fs):
+        cmd = self._get_cmd('--mon-ip', '192.168.1.1')
+
+        with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+            msg = r'Failed to infer CIDR network'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cmd += ['--skip-mon-network']
+        with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0
