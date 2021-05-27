@@ -940,6 +940,11 @@ private:
     RECORDS,
     OCTET_STREAM,
     EVENT,
+    CONT,
+    PROGRESS,
+    END,
+    XML,
+    STATS,
     ENGINE_ERROR,
     ERROR_TYPE
   };
@@ -947,7 +952,7 @@ private:
   const char *PAYLOAD_LINE= "\n<Payload>\n<Records>\n<Payload>\n";
   const char *END_PAYLOAD_LINE= "\n</Payload></Records></Payload>";
   const char *header_name_str[5] =  {":event-type", ":content-type", ":message-type",":error-code",":error-message"};
-  const char *header_value_str[5] = {"Records", "application/octet-stream", "event","s3select-engine-error","error"};
+  const char *header_value_str[10] = {"Records", "application/octet-stream", "event", "Cont", "Progress", "End", "text/xml", "Stats", "s3select-engine-error","error"};
 
   void push_header(const char * header_name,const char* header_value);
 
@@ -965,15 +970,35 @@ public:
 
   int create_header_records();
 
+  int create_header_continuation();
+
+  int create_header_progress();
+
+  int create_header_stats();
+
+  int create_header_end();
+
   int create_error_header_records(const char* error_message);
 
   void init_response();
 
   void init_success_response();
 
+  void init_continuation_response();
+
+  void init_progress_response();
+
+  void init_end_response();
+
+  void init_stats_response();
+
   void init_error_response(const char* error_message);
 
   void send_success_response();
+
+  void send_progress_response( uint64_t bytes_scanned, uint64_t bytes_processed, uint64_t bytes_returned);
+
+  void send_stats_response( uint64_t bytes_scanned, uint64_t bytes_processed, uint64_t bytes_returned);
 
   void send_error_response(const char* error_code,
                           const char* error_message,
