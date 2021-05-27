@@ -346,13 +346,14 @@ expect_false grep 'quiesce failed' ${LOG_FILE}
 DEV=`_sudo rbd device --device-type nbd --options try-netlink map ${POOL}/${IMAGE}`
 get_pid ${POOL}
 _sudo mount ${DEV} ${TEMPDIR}/mnt
-_sudo rbd-nbd detach ${POOL}/${IMAGE}
+_sudo rbd device detach ${POOL}/${IMAGE} --device-type nbd
 expect_false get_pid ${POOL}
-_sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
+expect_false _sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd
+_sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd --force
 get_pid ${POOL}
-_sudo rbd-nbd detach ${DEV}
+_sudo rbd device detach ${DEV} --device-type nbd
 expect_false get_pid ${POOL}
-_sudo rbd-nbd attach --device ${DEV} ${POOL}/${IMAGE}
+_sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd --force
 get_pid ${POOL}
 ls ${TEMPDIR}/mnt/
 dd if=${TEMPDIR}/mnt/test of=/dev/null bs=1M count=1
