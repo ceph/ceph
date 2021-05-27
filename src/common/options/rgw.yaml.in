@@ -61,8 +61,8 @@ options:
   level: advanced
   desc: Set RGW max chunk size
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
-    accessing data objects. RGW read and write operation will never request more than
-    this amount in a single request. This also defines the rgw object head size, as
+    accessing data objects. RGW read and write operations will never request more than
+    this amount in a single request. This also defines the RGW object head size, as
     head operations need to be atomic, and anything larger than this would require
     more than a single operation.
   default: 4_M
@@ -74,9 +74,9 @@ options:
   level: advanced
   desc: The minimum RADOS write window size (in bytes).
   long_desc: The window size determines the total concurrent RADOS writes of a single
-    rgw object. When writing an object RGW will send multiple chunks to RADOS. The
-    total size of the writes does not exceed the window size. The window size can
-    be automatically in order to better utilize the pipe.
+    RGW object. When writing an object RGW will send multiple chunks to RADOS. The
+    total size of the writes does not exceed the window size. The window size may
+    be adjusted dynamically in order to better utilize the pipe.
   default: 16_M
   services:
   - rgw
