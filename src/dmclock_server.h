@@ -31,10 +31,12 @@
 #include <map>
 #include <deque>
 #include <queue>
+#ifndef WITH_SEASTAR
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#endif
 #include <iostream>
 #include <sstream>
 #include <limits>
@@ -759,8 +761,13 @@ namespace crimson {
       ClientInfoFunc        client_info_f;
       static constexpr bool is_dynamic_cli_info_f = U1;
 
+#ifdef WITH_SEASTAR
+      static constexpr int data_mtx = 0;
+      struct DataGuard { DataGuard(int) {} };
+#else
       mutable std::mutex data_mtx;
       using DataGuard = std::lock_guard<decltype(data_mtx)>;
+#endif
 
       // stable mapping between client ids and client queues
       std::map<C,ClientRecRef> client_map;
@@ -800,9 +807,11 @@ namespace crimson {
       RejectThreshold  reject_threshold = 0;
 
       double           anticipation_timeout;
-
+#ifdef WITH_SEASTAR
+      bool finishing;
+#else
       std::atomic_bool finishing;
-
+#endif
       // every request creates a tick
       Counter tick = 0;
 
@@ -1500,7 +1509,8 @@ namespace crimson {
       }
     }; // class PullPriorityQueue
 
-
+#ifndef WITH_SEASTAR
+    // TODO: PushPriorityQueue is not ported to seastar yet
     // PUSH version
     template<typename C, typename R, bool IsDelayed=false, bool U1=false, unsigned B=2>
     class PushPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
@@ -1801,6 +1811,6 @@ namespace crimson {
 	}
       }
     }; // class PushPriorityQueue
-
+#endif // !WITH_SEASTAR
   } // namespace dmclock
 } // namespace crimson
