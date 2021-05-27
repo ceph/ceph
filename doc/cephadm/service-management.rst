@@ -5,31 +5,38 @@ Service Management
 Service Status
 ==============
 
-A service is a group of daemons that are configured together.
+A service is a group of daemons configured together. To see the status of one
+of the services running in the Ceph cluster, do the following:
 
-Print a list of services known to the orchestrator. The list can be limited to
-services on a particular host with the optional --host parameter and/or
-services of a particular type via optional --type parameter
-(mon, osd, mgr, mds, rgw):
+#. Use the command line to print a list of services. 
+#. Locate the service whose status you want to check. 
+#. Print the status of the service.
 
-   .. prompt:: bash #
-
-    ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
-
-Discover the status of a particular service or daemons:
-
-   .. prompt:: bash #
-
-    ceph orch ls --service_type type --service_name <name> [--refresh]
-
-Export the service specs known to the orchestrator as yaml in format
-that is compatible to ``ceph orch apply -i``:
+The following command prints a list of services known to the orchestrator. To
+limit the output to services only on a specified host, use the optional
+``--host`` parameter. To limit the output to services of only a particular
+type, use the optional ``--type`` parameter (mon, osd, mgr, mds, rgw):
 
    .. prompt:: bash #
 
-    ceph orch ls --export
+     ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
 
-For examples about retrieving specs of single services see :ref:`orchestrator-cli-service-spec-retrieve`.
+Discover the status of a particular service or daemon:
+
+   .. prompt:: bash #
+
+     ceph orch ls --service_type type --service_name <name> [--refresh]
+
+To export the service specifications knows to the orchestrator, run the following command.
+
+   .. prompt:: bash #
+
+     ceph orch ls --export
+
+The service specifications exported with this command will be exported as yaml
+and that yaml can be used with the ``ceph orch apply -i`` command.
+
+For information about retrieving the specifications of single services (including examples of commands), see :ref:`orchestrator-cli-service-spec-retrieve`.
 
 Daemon Status
 =============
