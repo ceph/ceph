@@ -2,9 +2,10 @@ import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterModule } from '@angular/router';
+
 
 import { ToastrModule } from 'ngx-toastr';
-
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
@@ -29,7 +30,7 @@ import { SharedModule } from './shared/shared.module';
     SharedModule,
     CephModule
   ],
-  exports: [SharedModule],
+  exports: [SharedModule, RouterModule],
   providers: [
     {
       provide: ErrorHandler,

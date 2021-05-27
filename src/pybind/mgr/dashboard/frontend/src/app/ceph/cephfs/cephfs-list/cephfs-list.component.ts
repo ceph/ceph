@@ -18,12 +18,8 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
   filesystems: any = [];
   selection = new CdTableSelection();
 
-  constructor(
-    private cephfsService: CephfsService,
-    private cdDatePipe: CdDatePipe
-  ) {
+  constructor(private cephfsService: CephfsService, private cdDatePipe: CdDatePipe) {
     super();
-
   }
 
   ngOnInit() {

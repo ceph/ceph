@@ -18,7 +18,6 @@ export class MonitorComponent {
   interval: any;
 
   constructor(private monitorService: MonitorService) {
-
     this.inQuorum = {
       columns: [
         { prop: 'name', name: $localize`Name`, cellTransformation: CellTemplate.routerLink },

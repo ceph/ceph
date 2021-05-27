@@ -28,7 +28,6 @@ export class RulesListComponent extends PrometheusListHelper implements OnInit {
     @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
     super(prometheusService);
-
   }
 
   ngOnInit() {

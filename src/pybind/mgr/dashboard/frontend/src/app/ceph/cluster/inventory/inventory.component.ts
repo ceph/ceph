@@ -32,9 +32,7 @@ export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
     private orchService: OrchestratorService,
     private hostService: HostService,
     private ngZone: NgZone
-  ) {
-
-  }
+  ) {}
 
   ngOnInit() {
     this.orchService.status().subscribe((status) => {

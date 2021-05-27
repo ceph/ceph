@@ -66,7 +66,6 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     private taskListService: TaskListService,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
-
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().nfs;

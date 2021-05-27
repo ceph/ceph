@@ -41,11 +41,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
   metadataKeyMap: { [key: number]: any } = {};
   data$: Observable<object>;
 
-  constructor(
-    private crushRuleService: CrushRuleService,
-    private timerService: TimerService,
-  ) {
-  }
+  constructor(private crushRuleService: CrushRuleService, private timerService: TimerService) {}
 
   ngOnInit() {
     this.sub = this.timerService

@@ -1,6 +1,5 @@
 import { Component, OnInit } from '@angular/core';
 import { ValidatorFn, Validators } from '@angular/forms';
-
 import { Router } from '@angular/router';
 
 import _ from 'lodash';

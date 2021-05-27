@@ -73,10 +73,9 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     private dimlessPipe: DimlessPipe,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
-    public actionLabels: ActionLabelsI18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     super();
-
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
