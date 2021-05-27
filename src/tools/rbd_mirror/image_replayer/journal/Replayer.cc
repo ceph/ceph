@@ -27,7 +27,7 @@
 #define dout_prefix *_dout << "rbd::mirror::image_replayer::journal::" \
                            << "Replayer: " << this << " " << __func__ << ": "
 
-extern PerfCounters *g_perf_counters;
+extern PerfCounters *g_journal_perf_counters;
 
 namespace rbd {
 namespace mirror {
@@ -1158,10 +1158,10 @@ void Replayer<I>::handle_process_entry_safe(
   }
 
   auto latency = ceph_clock_now() - replay_start_time;
-  if (g_perf_counters) {
-    g_perf_counters->inc(l_rbd_mirror_replay);
-    g_perf_counters->inc(l_rbd_mirror_replay_bytes, replay_bytes);
-    g_perf_counters->tinc(l_rbd_mirror_replay_latency, latency);
+  if (g_journal_perf_counters) {
+    g_journal_perf_counters->inc(l_rbd_mirror_replay);
+    g_journal_perf_counters->inc(l_rbd_mirror_replay_bytes, replay_bytes);
+    g_journal_perf_counters->tinc(l_rbd_mirror_replay_latency, latency);
   }
 
   auto ctx = new LambdaContext(
@@ -1271,7 +1271,7 @@ void Replayer<I>::register_perf_counters() {
   auto cct = static_cast<CephContext *>(m_state_builder->local_image_ctx->cct);
   auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_image_perf_stats_prio");
   PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_image_" + m_image_spec,
-                          l_rbd_mirror_first, l_rbd_mirror_last);
+                          l_rbd_mirror_journal_first, l_rbd_mirror_journal_last);
   plb.add_u64_counter(l_rbd_mirror_replay, "replay", "Replays", "r", prio);
   plb.add_u64_counter(l_rbd_mirror_replay_bytes, "replay_bytes",
                       "Replayed data", "rb", prio, unit_t(UNIT_BYTES));

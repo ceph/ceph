@@ -9,7 +9,8 @@
 #include <iostream>
 #include <string>
 
-PerfCounters *g_perf_counters = nullptr;
+PerfCounters *g_journal_perf_counters = nullptr;
+PerfCounters *g_snapshot_perf_counters = nullptr;
 
 extern void register_test_cluster_watcher();
 extern void register_test_image_policy();
