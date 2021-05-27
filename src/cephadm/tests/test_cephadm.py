@@ -1016,6 +1016,24 @@ class TestBootstrap(TestCephAdm):
             *args,
         ]
 
+    def test_config(self, cephadm_fs):
+        conf_file = 'foo'
+        cmd = self._get_cmd(
+            '--mon-ip', '192.168.1.1',
+            '--skip-mon-network',
+            '--config', conf_file,
+        )
+
+        with with_cephadm_ctx(cmd) as ctx:
+            msg = r'No such file or directory'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cephadm_fs.create_file(conf_file)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0
+
     def test_no_mon_addr(self, cephadm_fs):
         cmd = self._get_cmd()
         with with_cephadm_ctx(cmd) as ctx:
