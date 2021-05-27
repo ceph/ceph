@@ -1930,18 +1930,6 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_bucket_quota_soft_threshold
-  type: float
-  level: basic
-  desc: RGW quota soft threshold
-  long_desc: Threshold from which RGW doesn't rely on cached info for quota decisions.
-    This is done for higher accuracy of the quota mechanism at cost of performance,
-    when getting close to the quota limit. The value configured here is the ratio
-    between the data usage to the max usage as specified by the quota.
-  default: 0.95
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_bucket_quota_cache_size
   type: int
   level: advanced
