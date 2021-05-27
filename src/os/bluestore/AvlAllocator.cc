@@ -301,7 +301,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
                            int64_t device_size,
                            int64_t block_size,
                            uint64_t max_mem,
-                           const std::string& name) :
+                           std::string_view name) :
   Allocator(name, device_size, block_size),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
@@ -314,7 +314,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
 AvlAllocator::AvlAllocator(CephContext* cct,
 			   int64_t device_size,
 			   int64_t block_size,
-			   const std::string& name) :
+			   std::string_view name) :
   Allocator(name, device_size, block_size),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
