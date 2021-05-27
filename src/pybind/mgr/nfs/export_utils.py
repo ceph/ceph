@@ -1,10 +1,14 @@
+from typing import cast, List, Dict, Any, Optional
+from os.path import isabs
+
+from .exception import NFSInvalidOperation, FSNotFound
+from .utils import check_fs
+
+
 class GaneshaConfParser:
-    def __init__(self, raw_config):
+    def __init__(self, raw_config: str):
         self.pos = 0
         self.text = ""
-        self.clean_config(raw_config)
-
-    def clean_config(self, raw_config):
         for line in raw_config.split("\n"):
             self.text += line
             if line.startswith("%"):
@@ -152,24 +156,52 @@ class GaneshaConfParser:
         return conf_str
 
 
-class CephFSFSal:
-    def __init__(self, name, user_id=None, fs_name=None, sec_label_xattr=None,
-                 cephx_key=None):
+class FSAL(object):
+    def __init__(self, name: str):
         self.name = name
+
+    @classmethod
+    def from_dict(cls, fsal_dict: Dict[str, Any]) -> 'FSAL':
+        if fsal_dict.get('name') == 'CEPH':
+            return CephFSFSAL.from_dict(fsal_dict)
+        raise NFSInvalidOperation(f'Unknown FSAL {fsal_dict.get("name")}')
+
+    @classmethod
+    def from_fsal_block(cls, fsal_block: Dict[str, Any]) -> 'FSAL':
+        if fsal_block.get('name') == 'CEPH':
+            return CephFSFSAL.from_fsal_block(fsal_block)
+        raise NFSInvalidOperation(f'Unknown FSAL {fsal_block.get("name")}')
+
+    def to_fsal_block(self) -> Dict[str, Any]:
+        raise NotImplemented
+
+    def to_dict(self) -> Dict[str, Any]:
+        raise NotImplemented
+
+
+class CephFSFSAL(FSAL):
+    def __init__(self,
+                 name: str,
+                 user_id: Optional[str] = None,
+                 fs_name: Optional[str] = None,
+                 sec_label_xattr: Optional[str] = None,
+                 cephx_key: Optional[str] = None):
+        super().__init__(name)
+        assert name == 'CEPH'
         self.fs_name = fs_name
         self.user_id = user_id
         self.sec_label_xattr = sec_label_xattr
         self.cephx_key = cephx_key
 
     @classmethod
-    def from_fsal_block(cls, fsal_block):
+    def from_fsal_block(cls, fsal_block: Dict[str, str]) -> 'CephFSFSAL':
         return cls(fsal_block['name'],
-                   fsal_block.get('user_id', None),
-                   fsal_block.get('filesystem', None),
-                   fsal_block.get('sec_label_xattr', None),
-                   fsal_block.get('secret_access_key', None))
+                   fsal_block.get('user_id'),
+                   fsal_block.get('filesystem'),
+                   fsal_block.get('sec_label_xattr'),
+                   fsal_block.get('secret_access_key'))
 
-    def to_fsal_block(self):
+    def to_fsal_block(self) -> Dict[str, str]:
         result = {
             'block_name': 'FSAL',
             'name': self.name,
@@ -185,29 +217,37 @@ class CephFSFSal:
         return result
 
     @classmethod
-    def from_dict(cls, fsal_dict):
-        return cls(fsal_dict['name'], fsal_dict['user_id'],
-                   fsal_dict['fs_name'], fsal_dict['sec_label_xattr'], None)
+    def from_dict(cls, fsal_dict: Dict[str, str]) -> 'CephFSFSAL':
+        return cls(fsal_dict['name'],
+                   fsal_dict.get('user_id'),
+                   fsal_dict.get('fs_name'),
+                   fsal_dict.get('sec_label_xattr'),
+                   fsal_dict.get('cephx_key'))
 
-    def to_dict(self):
-        return {
-            'name': self.name,
-            'user_id': self.user_id,
-            'fs_name': self.fs_name,
-            'sec_label_xattr': self.sec_label_xattr
-        }
+    def to_dict(self) -> Dict[str, str]:
+        r = {'name': self.name}
+        if self.user_id:
+            r['user_id'] = self.user_id
+        if self.fs_name:
+            r['fs_name'] = self.fs_name
+        if self.sec_label_xattr:
+            r['sec_label_xattr'] = self.sec_label_xattr
+        return r
 
 
 class Client:
-    def __init__(self, addresses, access_type=None, squash=None):
+    def __init__(self,
+                 addresses: List[str],
+                 access_type: Optional[str] = None,
+                 squash: Optional[str] = None):
         self.addresses = addresses
         self.access_type = access_type
         self.squash = squash
 
     @classmethod
-    def from_client_block(cls, client_block):
-        addresses = client_block['clients']
-        if not isinstance(addresses, list):
+    def from_client_block(cls, client_block) -> 'Client':
+        addresses = client_block.get('clients', [])
+        if isinstance(addresses, str):
             addresses = [addresses]
         return cls(addresses,
                    client_block.get('access_type', None),
@@ -225,7 +265,7 @@ class Client:
         return result
 
     @classmethod
-    def from_dict(cls, client_dict):
+    def from_dict(cls, client_dict) -> 'Client':
         return cls(client_dict['addresses'], client_dict['access_type'],
                    client_dict['squash'])
 
@@ -238,8 +278,19 @@ class Client:
 
 
 class Export:
-    def __init__(self, export_id, path, cluster_id, pseudo, access_type, squash, security_label,
-            protocols, transports, fsal, clients=None):
+    def __init__(
+            self,
+            export_id: int,
+            path: str,
+            cluster_id: str,
+            pseudo: str,
+            access_type: str,
+            squash: str,
+            security_label: bool,
+            protocols: List[int],
+            transports: List[str],
+            fsal: FSAL,
+            clients=None):
         self.export_id = export_id
         self.path = path
         self.fsal = fsal
@@ -255,8 +306,8 @@ class Export:
 
     @classmethod
     def from_export_block(cls, export_block, cluster_id):
-        fsal_block = [b for b in export_block['_blocks_']
-                      if b['block_name'] == "FSAL"]
+        fsal_blocks = [b for b in export_block['_blocks_']
+                       if b['block_name'] == "FSAL"]
 
         client_blocks = [b for b in export_block['_blocks_']
                          if b['block_name'] == "CLIENT"]
@@ -278,7 +329,7 @@ class Export:
                    export_block['security_label'],
                    protocols,
                    transports,
-                   CephFSFSal.from_fsal_block(fsal_block[0]),
+                   FSAL.from_fsal_block(fsal_blocks[0]),
                    [Client.from_client_block(client)
                     for client in client_blocks])
 
@@ -295,15 +346,18 @@ class Export:
             'protocols': self.protocols,
             'transports': self.transports,
         }
-        result['_blocks_'] = [self.fsal.to_fsal_block()]
-        result['_blocks_'].extend([client.to_client_block()
-                                   for client in self.clients])
+        result['_blocks_'] = [
+            self.fsal.to_fsal_block()
+        ] + [
+            client.to_client_block()
+            for client in self.clients
+        ]
         return result
 
     @classmethod
     def from_dict(cls, export_id, ex_dict):
         return cls(export_id,
-                   ex_dict['path'],
+                   ex_dict.get('path', '/'),
                    ex_dict['cluster_id'],
                    ex_dict['pseudo'],
                    ex_dict.get('access_type', 'R'),
@@ -311,8 +365,8 @@ class Export:
                    ex_dict.get('security_label', True),
                    ex_dict.get('protocols', [4]),
                    ex_dict.get('transports', ['TCP']),
-                   CephFSFSal.from_dict(ex_dict['fsal']),
-                   [Client.from_dict(client) for client in ex_dict['clients']])
+                   FSAL.from_dict(ex_dict.get('fsal', {})),
+                   [Client.from_dict(client) for client in ex_dict.get('clients', [])])
 
     def to_dict(self):
         return {
@@ -328,3 +382,57 @@ class Export:
             'fsal': self.fsal.to_dict(),
             'clients': [client.to_dict() for client in self.clients]
         }
+
+    @staticmethod
+    def validate_access_type(access_type):
+        valid_access_types = ['rw', 'ro', 'none']
+        if access_type.lower() not in valid_access_types:
+            raise NFSInvalidOperation(
+                f'{access_type} is invalid, valid access type are'
+                f'{valid_access_types}'
+            )
+
+    @staticmethod
+    def validate_squash(squash):
+        valid_squash_ls = [
+            "root", "root_squash", "rootsquash", "rootid", "root_id_squash",
+            "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
+            "allanonymous", "no_root_squash", "none", "noidsquash",
+        ]
+        if squash not in valid_squash_ls:
+            raise NFSInvalidOperation(
+                f"squash {squash} not in valid list {valid_squash_ls}"
+            )
+
+    def validate(self, mgr):
+        if not isabs(self.pseudo) or self.pseudo == "/":
+            raise NFSInvalidOperation(
+                f"pseudo path {self.pseudo} is invalid. It should be an absolute "
+                "path and it cannot be just '/'."
+            )
+
+        self.validate_squash(self.squash)
+        self.validate_access_type(self.access_type)
+
+        if not isinstance(self.security_label, bool):
+            raise NFSInvalidOperation('security_label must be a boolean value')
+
+        for p in self.protocols:
+            if p not in [3, 4]:
+                raise NFSInvalidOperation(f"Invalid protocol {p}")
+
+        valid_transport = ["UDP", "TCP"]
+        for trans in self.transports:
+            if trans.upper() not in valid_transport:
+                raise NFSInvalidOperation(f'{trans} is not a valid transport protocol')
+
+        for client in self.clients:
+            self.validate_squash(client.squash)
+            self.validate_access_type(client.access_type)
+
+        if self.fsal.name == 'CEPH':
+            fs = cast(CephFSFSAL, self.fsal)
+            if not check_fs(mgr, fs.fs_name):
+                raise FSNotFound(fs.fs_name)
+        else:
+            raise NFSInvalidOperation('FSAL {self.fsal.name} not supported')
