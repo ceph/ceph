@@ -343,7 +343,7 @@ private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
   template<class T, typename... Args>
-  friend MURef<T> crimson::net::make_message(Args&&... args);
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 #endif

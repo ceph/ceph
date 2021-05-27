@@ -164,9 +164,9 @@ public:
   }
 
   void send_cluster_message(
-    int osd, MessageRef m,
+    int osd, MessageURef m,
     epoch_t epoch, bool share_map_update=false) final {
-    (void)shard_services.send_to_osd(osd, m, epoch);
+    (void)shard_services.send_to_osd(osd, std::move(m), epoch);
   }
 
   void send_pg_created(pg_t pgid) final {
