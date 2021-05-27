@@ -95,72 +95,6 @@ class NFSRados:
         return False
 
 
-class ValidateExport:
-    @staticmethod
-    def pseudo_path(path):
-        if not isabs(path) or path == "/":
-            raise NFSInvalidOperation(f"pseudo path {path} is invalid. It should be an absolute "
-                                      "path and it cannot be just '/'.")
-
-    @staticmethod
-    def squash(squash):
-        valid_squash_ls = ["root", "root_squash", "rootsquash", "rootid", "root_id_squash",
-                           "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
-                           "allanonymous", "no_root_squash", "none", "noidsquash"]
-        if squash not in valid_squash_ls:
-            raise NFSInvalidOperation(f"squash {squash} not in valid list {valid_squash_ls}")
-
-    @staticmethod
-    def security_label(label):
-        if not isinstance(label, bool):
-            raise NFSInvalidOperation('Only boolean values allowed')
-
-    @staticmethod
-    def protocols(proto):
-        for p in proto:
-            if p not in [3, 4]:
-                raise NFSInvalidOperation(f"Invalid protocol {p}")
-        if 3 in proto:
-            log.warning("NFS V3 is an old version, it might not work")
-
-    @staticmethod
-    def transport(transport):
-        valid_transport = ["UDP", "TCP"]
-        for trans in transport:
-            if trans.upper() not in valid_transport:
-                raise NFSInvalidOperation(f'{trans} is not a valid transport protocol')
-
-    @staticmethod
-    def access_type(access_type):
-        valid_ones = ['RW', 'RO']
-        if access_type not in valid_ones:
-            raise NFSInvalidOperation(f'{access_type} is invalid, valid access type are'
-                                      f'{valid_ones}')
-
-    @staticmethod
-    def fsal(mgr, old, new):
-        if old.name != new['name']:
-            raise NFSInvalidOperation('FSAL name change not allowed')
-        if old.user_id != new['user_id']:
-            raise NFSInvalidOperation('User ID modification is not allowed')
-        if new['sec_label_xattr']:
-            raise NFSInvalidOperation('Security label xattr cannot be changed')
-        if old.fs_name != new['fs_name']:
-            if not check_fs(mgr, new['fs_name']):
-                raise FSNotFound(new['fs_name'])
-            return 1
-
-    @staticmethod
-    def _client(client):
-        ValidateExport.access_type(client['access_type'])
-        ValidateExport.squash(client['squash'])
-
-    @staticmethod
-    def clients(clients_ls):
-        for client in clients_ls:
-            ValidateExport._client(client)
-
-
 class ExportMgr:
     def __init__(self, mgr, namespace=None, export_ls=None):
         self.mgr = mgr
@@ -270,7 +204,7 @@ class ExportMgr:
                 GaneshaConfParser.write_block(export.to_export_block()),
                 f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
 
-    def format_path(self, path):
+    def format_path(self, path: str):
         if path:
             path = normpath(path.strip())
             if path[:2] == "//":
@@ -340,65 +274,23 @@ class ExportMgr:
         except Exception as e:
             return exception_handler(e, f'Failed to update export: {e}')
 
+    def import_export(self, export_config):
+        try:
+            if not export_config:
+                raise NFSInvalidOperation("Empty Config!!")
+            new_export = json.loads(export_config)
+            # check export type
+            return FSExport(self).import_export(new_export)
+        except NotImplementedError:
+            return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
+        except Exception as e:
+            return exception_handler(e, f'Failed to import export: {e}')
+
 
 class FSExport(ExportMgr):
     def __init__(self, export_mgr_obj):
         super().__init__(export_mgr_obj.mgr, export_mgr_obj.rados_namespace,
                          export_mgr_obj._exports)
-
-    def _validate_export(self, new_export_dict):
-        if new_export_dict['cluster_id'] not in available_clusters(self.mgr):
-            raise ClusterNotFound()
-
-        export = self._fetch_export(new_export_dict['cluster_id'],
-                                    new_export_dict['pseudo'])
-        out_msg = ''
-        if export:
-            # Check if export id matches
-            if export.export_id != new_export_dict['export_id']:
-                raise NFSInvalidOperation('Export ID changed, Cannot update export')
-        else:
-            # Fetch export based on export id object
-            export = self._fetch_export_obj(new_export_dict['export_id'])
-            if not export:
-                raise NFSObjectNotFound('Export does not exist')
-            else:
-                new_export_dict['pseudo'] = self.format_path(new_export_dict['pseudo'])
-                ValidateExport.pseudo_path(new_export_dict['pseudo'])
-                log.debug(f"Pseudo path has changed from {export.pseudo} to "
-                          f"{new_export_dict['pseudo']}")
-        # Check if squash changed
-        if export.squash != new_export_dict['squash']:
-            if new_export_dict['squash']:
-                new_export_dict['squash'] = new_export_dict['squash'].lower()
-                ValidateExport.squash(new_export_dict['squash'])
-            log.debug(f"squash has changed from {export.squash} to {new_export_dict['squash']}")
-        # Security label check
-        if export.security_label != new_export_dict['security_label']:
-            ValidateExport.security_label(new_export_dict['security_label'])
-        # Protocol Checking
-        if export.protocols != new_export_dict['protocols']:
-            ValidateExport.protocols(new_export_dict['protocols'])
-        # Transport checking
-        if export.transports != new_export_dict['transports']:
-            ValidateExport.transport(new_export_dict['transports'])
-        # Path check
-        if export.path != new_export_dict['path']:
-            new_export_dict['path'] = self.format_path(new_export_dict['path'])
-            out_msg = 'update caps'
-        # Check Access Type
-        if export.access_type != new_export_dict['access_type']:
-            ValidateExport.access_type(new_export_dict['access_type'])
-        # Fsal block check
-        if export.fsal != new_export_dict['fsal']:
-            ret = ValidateExport.fsal(self.mgr, export.fsal, new_export_dict['fsal'])
-            if ret == 1 and not out_msg:
-                out_msg = 'update caps'
-        # Check client block
-        if export.clients != new_export_dict['clients']:
-            ValidateExport.clients(new_export_dict['clients'])
-        log.debug(f'Validation succeeded for Export {export.pseudo}')
-        return export, out_msg
 
     def _update_user_id(self, path, access_type, fs_name, user_id):
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
@@ -437,7 +329,6 @@ class FSExport(ExportMgr):
             raise FSNotFound(fs_name)
 
         pseudo_path = self.format_path(pseudo_path)
-        ValidateExport.pseudo_path(pseudo_path)
 
         if cluster_id not in self.exports:
             self.exports[cluster_id] = []
@@ -459,11 +350,11 @@ class FSExport(ExportMgr):
                 'access_type': access_type,
                 'squash': squash,
                 'fsal': {"name": "CEPH", "user_id": user_id,
-                         "fs_name": fs_name, "sec_label_xattr": ""},
+                         "fs_name": fs_name, "sec_label_xattr": "",
+                         "cephx_key": key},
                 'clients': clients
             }
             export = Export.from_dict(ex_id, ex_dict)
-            export.fsal.cephx_key = key
             self._save_export(export)
             result = {
                 "bind": pseudo_path,
@@ -476,12 +367,46 @@ class FSExport(ExportMgr):
         return 0, "", "Export already exists"
 
     def update_export(self, new_export):
-        old_export, update_user_caps = self._validate_export(new_export)
-        if update_user_caps:
-            self._update_user_id(new_export['path'], new_export['access_type'],
-                                 new_export['fsal']['fs_name'], new_export['fsal']['user_id'])
+        for k in ['cluster_id', 'path', 'pseudo']:
+            if k not in new_export:
+                raise NFSInvalidOperation(f'Export missing required field {k}')
+        if new_export['cluster_id'] not in available_clusters(self.mgr):
+            raise ClusterNotFound()
+        self.rados_namespace = new_export['cluster_id']
+
+        new_export['path'] = self.format_path(new_export['path'])
+        new_export['pseudo'] = self.format_path(new_export['pseudo'])
+
+        old_export = self._fetch_export(new_export['cluster_id'],
+                                        new_export['pseudo'])
+        if old_export:
+            # Check if export id matches
+            if old_export.export_id != new_export['export_id']:
+                raise NFSInvalidOperation('Export ID changed, Cannot update export')
+        else:
+            # Fetch export based on export id object
+            old_export = self._fetch_export_obj(new_export['export_id'])
+            if not old_export:
+                raise NFSObjectNotFound('Export does not exist')
+
         new_export = Export.from_dict(new_export['export_id'], new_export)
+        new_export.validate(self.mgr)
+
+        if old_export.fsal.name != new_export.fsal.name:
+            raise NFSInvalidOperation('FSAL change not allowed')
+        if old_export.fsal.user_id != new_export.fsal.user_id:
+            raise NFSInvalidOperation('user_id change is not allowed')
+        if old_export.fsal.sec_label_xattr != new_export.fsal.sec_label_xattr:
+            raise NFSInvalidOperation('Security label xattr cannot be changed')
+
+        if (
+                old_export.fsal.fs_name != new_export.fsal.fs_name
+                or old_export.path != new_export.path
+        ):
+            self._update_user_id(new_export.path, new_export.access_type,
+                                 new_export.fsal.fs_name, new_export.fsal.user_id)
         new_export.fsal.cephx_key = old_export.fsal.cephx_key
+
         self._update_export(new_export)
         export_ls = self.exports[self.rados_namespace]
         if old_export not in export_ls:
