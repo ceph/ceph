@@ -84,15 +84,19 @@ def cephadm_fs(
 def with_cephadm_ctx(
     cmd: List[str],
     container_engine: Callable = mock_podman(),
-    list_networks: Optional[Dict[str,Dict[str,List[str]]]] = None
+    list_networks: Optional[Dict[str,Dict[str,List[str]]]] = None,
+    hostname: Optional[str] = None,
 ):
     """
     :param cmd: cephadm command argv
     :param container_engine: container engine mock (podman or docker)
     :param list_networks: mock 'list-networks' return
+    :param hostname: mock 'socket.gethostname' return
     """
     if not list_networks:
         list_networks = {}
+    if not hostname:
+        hostname = 'host1'
 
     with mock.patch('cephadm.get_parm'), \
          mock.patch('cephadm.attempt_bind'), \
@@ -100,7 +104,8 @@ def with_cephadm_ctx(
          mock.patch('cephadm.find_executable', return_value='foo'), \
          mock.patch('cephadm.is_available', return_value=True), \
          mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \
-         mock.patch('cephadm.list_networks', return_value=list_networks):
+         mock.patch('cephadm.list_networks', return_value=list_networks), \
+         mock.patch('socket.gethostname', return_value=hostname):
              ctx: cd.CephadmContext = cd.cephadm_init_ctx(cmd)
              ctx.container_engine = container_engine
              yield ctx
