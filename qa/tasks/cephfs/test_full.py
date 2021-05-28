@@ -132,7 +132,7 @@ class FullnessTestCase(CephFSTestCase):
         else:
             log.info("Writing file B succeeded (full status will happen soon)")
             self.wait_until_true(lambda: self.is_full(),
-                                 timeout=osd_mon_report_interval * 5)
+                                 timeout=osd_mon_report_interval * 120)
 
         # Attempting to write more data should give me ENOSPC
         with self.assertRaises(CommandFailedError) as ar:
@@ -167,7 +167,7 @@ class FullnessTestCase(CephFSTestCase):
         # * The MDS to purge the stray folder and execute object deletions
         #  * The OSDs to inform the mon that they are no longer full
         self.wait_until_true(lambda: not self.is_full(),
-                             timeout=osd_mon_report_interval * 5)
+                             timeout=osd_mon_report_interval * 120)
 
         # Wait for the MDS to see the latest OSD map so that it will reliably
         # be applying the free space policy
