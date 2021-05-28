@@ -1120,3 +1120,20 @@ class TestBootstrap(TestCephAdm):
             with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
                 retval = cd.command_bootstrap(ctx)
                 assert retval == 0
+
+    def test_allow_fqdn_hostname(self, cephadm_fs):
+        hostname = 'foo.bar'
+        cmd = self._get_cmd(
+            '--mon-ip', '192.168.1.1',
+            '--skip-mon-network',
+        )
+
+        with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
+            msg = r'--allow-fqdn-hostname'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cmd += ['--allow-fqdn-hostname']
+        with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0
