@@ -42,22 +42,32 @@ public:
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
    */
-  using get_mapping_ertr = base_ertr;
-  using get_mapping_ret = get_mapping_ertr::future<lba_pin_list_t>;
-  virtual get_mapping_ret get_mapping(
+  using get_mappings_ertr = base_ertr;
+  using get_mappings_ret = get_mappings_ertr::future<lba_pin_list_t>;
+  virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
 
   /**
-   * Fetches mappings for laddr_t in range [offset, offset + len)
+   * Fetches mappings for a list of laddr_t in range [offset, offset + len)
    *
-   * Future will not result until all pins have resolved (set_paddr called)
+   * Future will not resolve until all pins have resolved (set_paddr called)
    */
-  using get_mappings_ertr = base_ertr;
-  using get_mappings_ret = get_mapping_ertr::future<lba_pin_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_list_t &&extent_lisk) = 0;
+
+  /**
+   * Fetches the mapping for laddr_t
+   *
+   * Future will not resolve until the pin has resolved (set_paddr called)
+   */
+  using get_mapping_ertr = base_ertr::extend<
+    crimson::ct_error::enoent>;
+  using get_mapping_ret = get_mapping_ertr::future<LBAPinRef>;
+  virtual get_mapping_ret get_mapping(
+    Transaction &t,
+    laddr_t offset) = 0;
 
   /**
    * Finds unmapped laddr extent of len len
