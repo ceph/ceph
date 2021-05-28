@@ -43,7 +43,7 @@ export class LogsComponent implements OnInit, OnDestroy {
     private datePipe: DatePipe,
     private ngZone: NgZone
   ) {}
-  
+
   ngOnInit() {
     this.getInfo();
     this.ngZone.runOutsideAngular(() => {
