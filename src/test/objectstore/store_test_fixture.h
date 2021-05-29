@@ -1,6 +1,6 @@
 #include <string>
 #include <stack>
-#include <boost/scoped_ptr.hpp>
+#include <memory>
 #include <gtest/gtest.h>
 #include "common/config_fwd.h"
 
@@ -16,7 +16,7 @@ class StoreTestFixture : virtual public ::testing::Test {
   std::string orig_death_test_style;
 
 public:
-  boost::scoped_ptr<ObjectStore> store;
+  std::unique_ptr<ObjectStore> store;
   ObjectStore::CollectionHandle ch;
 
   explicit StoreTestFixture(const std::string& type)

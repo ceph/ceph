@@ -16,9 +16,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
+#include <memory>
 #include <time.h>
 #include <sys/mount.h>
-#include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
@@ -6622,7 +6622,7 @@ INSTANTIATE_TEST_SUITE_P(
 #endif
     "kstore"));
 
-void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
+void doMany4KWritesTest(ObjectStore* store,
                         unsigned max_objects,
                         unsigned max_ops,
                         unsigned max_object_size,
@@ -6634,7 +6634,7 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
   store_statfs_t res_stat;
 
-  SyntheticWorkloadState test_obj(store.get(),
+  SyntheticWorkloadState test_obj(store,
                                   &gen,
                                   &rng,
                                   cid,
@@ -6675,7 +6675,7 @@ TEST_P(StoreTestSpecificAUSize, Many4KWritesTest) {
   StartDeferred(0x10000);
 
   const unsigned max_object = 4*1024*1024;
-  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0);
+  doMany4KWritesTest(store.get(), 1, 1000, max_object, 4*1024, 0);
 }
 
 TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
@@ -6686,7 +6686,7 @@ TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
   g_ceph_context->_conf.apply_changes(nullptr);
   const unsigned max_object = 4*1024*1024;
 
-  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0 );
+  doMany4KWritesTest(store.get(), 1, 1000, max_object, 4*1024, 0 );
 }
 
 TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
@@ -6694,7 +6694,7 @@ TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
     return;
   StartDeferred(0x10000);
   const unsigned max_object = 4*1024*1024;
-  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0);
+  doMany4KWritesTest(store.get(), 1, 1000, max_object, 4*1024, 0);
 }
 
 #if defined(WITH_BLUESTORE)
