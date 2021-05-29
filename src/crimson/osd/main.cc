@@ -202,75 +202,81 @@ int main(int argc, char* argv[])
   using crimson::common::sharded_conf;
   using crimson::common::sharded_perf_coll;
   try {
-    return app.run_deprecated(app_args.size(), const_cast<char**>(app_args.data()),
+    return app.run(app_args.size(), const_cast<char**>(app_args.data()),
       [&, &ceph_args=ceph_args] {
       auto& config = app.configuration();
       return seastar::async([&] {
-        FatalSignal fatal_signal;
-	if (config.count("debug")) {
-	    seastar::global_logger_registry().set_all_loggers_level(
-	      seastar::log_level::debug
-	    );
-	}
-        sharded_conf().start(init_params.name, cluster_name).get();
-        seastar::engine().at_exit([] {
-          return sharded_conf().stop();
-        });
-        sharded_perf_coll().start().get();
-        seastar::engine().at_exit([] {
-          return sharded_perf_coll().stop();
-        });
-        local_conf().parse_config_files(conf_file_list).get();
-        local_conf().parse_argv(ceph_args).get();
-        if (const auto ret = pidfile_write(local_conf()->pid_file);
-            ret == -EACCES || ret == -EAGAIN) {
-          ceph_abort_msg(
-            "likely there is another crimson-osd instance with the same id");
-        } else if (ret < 0) {
-          ceph_abort_msg(fmt::format("pidfile_write failed with {} {}",
-                                     ret, cpp_strerror(-ret)));
+        try {
+          FatalSignal fatal_signal;
+          if (config.count("debug")) {
+            seastar::global_logger_registry().set_all_loggers_level(
+              seastar::log_level::debug
+            );
+          }
+          sharded_conf().start(init_params.name, cluster_name).get();
+          seastar::engine().at_exit([] {
+            return sharded_conf().stop();
+          });
+          sharded_perf_coll().start().get();
+          seastar::engine().at_exit([] {
+            return sharded_perf_coll().stop();
+          });
+          local_conf().parse_config_files(conf_file_list).get();
+          local_conf().parse_argv(ceph_args).get();
+          if (const auto ret = pidfile_write(local_conf()->pid_file);
+              ret == -EACCES || ret == -EAGAIN) {
+            ceph_abort_msg(
+              "likely there is another crimson-osd instance with the same id");
+          } else if (ret < 0) {
+            ceph_abort_msg(fmt::format("pidfile_write failed with {} {}",
+                                       ret, cpp_strerror(-ret)));
+          }
+          // just ignore SIGHUP, we don't reread settings. keep in mind signals
+          // handled by S* must be blocked for alien threads (see AlienStore).
+          seastar::engine().handle_signal(SIGHUP, [] {});
+          const int whoami = std::stoi(local_conf()->name.get_id());
+          const auto nonce = get_nonce();
+          crimson::net::MessengerRef cluster_msgr, client_msgr;
+          crimson::net::MessengerRef hb_front_msgr, hb_back_msgr;
+          for (auto [msgr, name] : {make_pair(std::ref(cluster_msgr), "cluster"s),
+                                    make_pair(std::ref(client_msgr), "client"s),
+                                    make_pair(std::ref(hb_front_msgr), "hb_front"s),
+                                    make_pair(std::ref(hb_back_msgr), "hb_back"s)}) {
+            msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami),
+                                                   name,
+                                                   nonce);
+            configure_crc_handling(*msgr);
+          }
+          osd.start_single(whoami, nonce,
+                           cluster_msgr, client_msgr,
+                           hb_front_msgr, hb_back_msgr).get();
+          if (config.count("mkkey")) {
+            make_keyring().get();
+          }
+          if (config.count("no-mon-config") == 0) {
+            fetch_config().get();
+          }
+          if (config.count("mkfs")) {
+            osd.invoke_on(
+              0,
+              &crimson::osd::OSD::mkfs,
+              local_conf().get_val<uuid_d>("osd_uuid"),
+              local_conf().get_val<uuid_d>("fsid")).get();
+          }
+          seastar::engine().at_exit([&] {
+            return osd.stop();
+          });
+          if (config.count("mkkey") || config.count("mkfs")) {
+            return EXIT_SUCCESS;
+          } else {
+            osd.invoke_on(0, &crimson::osd::OSD::start).get();
+          }
+        } catch (...) {
+          seastar::fprint(std::cerr, "FATAL: startup failed: %s\n", std::current_exception());
+          return EXIT_FAILURE;
         }
-        // just ignore SIGHUP, we don't reread settings. keep in mind signals
-        // handled by S* must be blocked for alien threads (see AlienStore).
-        seastar::engine().handle_signal(SIGHUP, [] {});
-        const int whoami = std::stoi(local_conf()->name.get_id());
-        const auto nonce = get_nonce();
-        crimson::net::MessengerRef cluster_msgr, client_msgr;
-        crimson::net::MessengerRef hb_front_msgr, hb_back_msgr;
-        for (auto [msgr, name] : {make_pair(std::ref(cluster_msgr), "cluster"s),
-                                  make_pair(std::ref(client_msgr), "client"s),
-                                  make_pair(std::ref(hb_front_msgr), "hb_front"s),
-                                  make_pair(std::ref(hb_back_msgr), "hb_back"s)}) {
-          msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami), name,
-                                                 nonce);
-          configure_crc_handling(*msgr);
-        }
-        osd.start_single(whoami, nonce,
-                         cluster_msgr, client_msgr,
-                         hb_front_msgr, hb_back_msgr).get();
-        if (config.count("mkkey")) {
-          make_keyring().handle_exception([](std::exception_ptr) {
-            seastar::engine().exit(1);
-          }).get();
-        }
-        if (config.count("no-mon-config") == 0) {
-          fetch_config().get();
-        }
-        if (config.count("mkfs")) {
-          osd.invoke_on(
-	    0,
-	    &crimson::osd::OSD::mkfs,
-	    local_conf().get_val<uuid_d>("osd_uuid"),
-	    local_conf().get_val<uuid_d>("fsid")).get();
-        }
-        seastar::engine().at_exit([&] {
-          return osd.stop();
-        });
-        if (config.count("mkkey") || config.count("mkfs")) {
-          seastar::engine().exit(0);
-        } else {
-          osd.invoke_on(0, &crimson::osd::OSD::start).get();
-        }
+        seastar::fprint(std::cout, "crimson shutdown complete");
+        return EXIT_SUCCESS;
       });
     });
   } catch (...) {
