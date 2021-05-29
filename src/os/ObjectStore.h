@@ -29,8 +29,9 @@
 
 #include <errno.h>
 #include <sys/stat.h>
-#include <vector>
 #include <map>
+#include <memory>
+#include <vector>
 
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__sun) || defined(_WIN32)
 #include <sys/statvfs.h>
@@ -77,11 +78,12 @@ public:
    * @param journal path (or other descriptor) for journal (optional)
    * @param flags which filestores should check if applicable
    */
-  static ObjectStore *create(CephContext *cct,
-			     const std::string& type,
-			     const std::string& data,
-			     const std::string& journal,
-			     osflagbits_t flags = 0);
+  static std::unique_ptr<ObjectStore> create(
+    CephContext *cct,
+    const std::string& type,
+    const std::string& data,
+    const std::string& journal,
+    osflagbits_t flags = 0);
 
   /**
    * probe a block device to learn the uuid of the owning OSD
