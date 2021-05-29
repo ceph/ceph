@@ -95,7 +95,10 @@ seastar::future<> AlienStore::start()
 
 seastar::future<> AlienStore::stop()
 {
-  assert(tp);
+  if (!tp) {
+    // not really started yet
+    return seastar::now();
+  }
   return tp->submit([this] {
     for (auto [cid, ch]: coll_map) {
       static_cast<AlienCollection*>(ch.get())->collection.reset();
@@ -123,7 +126,10 @@ seastar::future<> AlienStore::mount()
 seastar::future<> AlienStore::umount()
 {
   logger().info("{}", __func__);
-  assert(tp);
+  if (!tp) {
+    // not really started yet
+    return seastar::now();
+  }
   return transaction_gate.close().then([this] {
     return tp->submit([this] {
       return store->umount();
