@@ -65,11 +65,11 @@ protected:
   */
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
     uint64_t max_mem,
-    const std::string& name);
+    std::string_view name);
 
 public:
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
-	       const std::string& name);
+	       std::string_view name);
   ~AvlAllocator();
   const char* get_type() const override
   {
