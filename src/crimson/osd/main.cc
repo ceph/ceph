@@ -153,11 +153,17 @@ seastar::future<> fetch_config()
     msgr->set_auth_client(&monc);
     msgr->start({&monc}).get();
     auto stop_msgr = seastar::defer([&] {
+      // stop msgr here also, in case monc fails to start.
       msgr->stop();
       msgr->shutdown().get();
     });
-    monc.start().get();
+    monc.start().handle_exception([] (auto ep) {
+      seastar::fprint(std::cerr, "FATAL: unable to connect to cluster: {}\n", ep);
+      return seastar::make_exception_future<>(ep);
+    }).get();
     auto stop_monc = seastar::defer([&] {
+      // unregister me from msgr first.
+      msgr->stop();
       monc.stop().get();
     });
     monc.sub_want("config", 0, 0);
