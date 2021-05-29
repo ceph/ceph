@@ -250,6 +250,9 @@ int main(int argc, char* argv[])
           osd.start_single(whoami, nonce,
                            cluster_msgr, client_msgr,
                            hb_front_msgr, hb_back_msgr).get();
+          auto stop_osd = seastar::defer([&] {
+            osd.stop().get();
+          });
           if (config.count("mkkey")) {
             make_keyring().get();
           }
@@ -263,9 +266,6 @@ int main(int argc, char* argv[])
               local_conf().get_val<uuid_d>("osd_uuid"),
               local_conf().get_val<uuid_d>("fsid")).get();
           }
-          auto stop_osd = seastar::defer([&] {
-            osd.stop().get();
-          });
           if (config.count("mkkey") || config.count("mkfs")) {
             return EXIT_SUCCESS;
           } else {
