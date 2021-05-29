@@ -22,7 +22,7 @@ from ceph.utils import str_to_datetime, datetime_now
 import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, RgwService
 from cephadm.schedule import HostAssignment
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
@@ -37,6 +37,8 @@ if TYPE_CHECKING:
     from remoto.backends import BaseConnection
 
 logger = logging.getLogger(__name__)
+
+REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw']
 
 
 class CephadmServe:
@@ -78,6 +80,11 @@ class CephadmServe:
                 self._check_for_strays()
 
                 self._update_paused_health()
+
+                if self.mgr.need_connect_dashboard_rgw and self.mgr.config_dashboard:
+                    self.mgr.need_connect_dashboard_rgw = False
+                    if 'dashboard' in self.mgr.get('mgr_map')['modules']:
+                        cast(RgwService, self.mgr.cephadm_services['rgw']).connect_dashboard_rgw()
 
                 if not self.mgr.paused:
                     self.mgr.to_remove_osds.process_removal_queue()
@@ -878,7 +885,7 @@ class CephadmServe:
                 continue
 
             # These daemon types require additional configs after creation
-            if dd.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
+            if dd.daemon_type in REQUIRES_POST_ACTIONS:
                 daemons_post[dd.daemon_type].append(dd)
 
             if self.mgr.cephadm_services[daemon_type_to_service(dd.daemon_type)].get_active_daemon(
@@ -1055,9 +1062,7 @@ class CephadmServe:
                         sd = daemon_spec.to_daemon_description(
                             DaemonDescriptionStatus.running, 'starting')
                         self.mgr.cache.add_daemon(daemon_spec.host, sd)
-                        if daemon_spec.daemon_type in [
-                            'grafana', 'iscsi', 'prometheus', 'alertmanager'
-                        ]:
+                        if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
                             self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
                     self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
 

@@ -2,6 +2,7 @@ import errno
 import json
 import logging
 import re
+import subprocess
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
     Optional, Dict, Any, Tuple, NewType, cast
@@ -882,6 +883,7 @@ class RgwService(CephService):
             'who': utils.name_to_config_section(daemon.name()),
             'name': 'rgw_frontends',
         })
+        self.mgr.trigger_connect_dashboard_rgw()
 
     def ok_to_stop(
             self,
@@ -917,6 +919,105 @@ class RgwService(CephService):
         # Provide warning
         warn_message = "WARNING: Removing RGW daemons can cause clients to lose connectivity. "
         return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
+        self.mgr.trigger_connect_dashboard_rgw()
+
+    def connect_dashboard_rgw(self) -> None:
+        """
+        Configure the dashboard to talk to RGW
+        """
+        self.mgr.log.info('Checking dashboard <-> RGW connection')
+        try:
+            self._connect_dashboard_rgw()
+        except Exception as e:
+            self.mgr.log.error(f'Failed to configure dashboard <-> RGW connection: {e}')
+
+    def _connect_dashboard_rgw(self) -> None:
+        def radosgw_admin(args: List[str]) -> Tuple[int, str, str]:
+            try:
+                result = subprocess.run(
+                    [
+                        'radosgw-admin',
+                        '-c', str(self.mgr.get_ceph_conf_path()),
+                        '-k', str(self.mgr.get_ceph_option('keyring')),
+                        '-n', f'mgr.{self.mgr.get_mgr_id()}',
+                    ] + args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=10,
+                )
+                return result.returncode, result.stdout.decode('utf-8'), result.stderr.decode('utf-8')
+            except subprocess.CalledProcessError as ex:
+                self.mgr.log.error(f'Error executing radosgw-admin {ex.cmd}: {ex.output}')
+                raise
+            except subprocess.TimeoutExpired as ex:
+                self.mgr.log.error(f'Timeout (10s) executing radosgw-admin {ex.cmd}')
+                raise
+
+        def get_secrets(user: str, out: str) -> Tuple[Optional[str], Optional[str]]:
+            r = json.loads(out)
+            for k in r.get('keys', []):
+                if k.get('user') == user and r.get('system') in ['true', True]:
+                    access_key = k.get('access_key')
+                    secret_key = k.get('secret_key')
+                    return access_key, secret_key
+            return None, None
+
+        def update_dashboard(what: str, value: str) -> None:
+            _, out, _ = self.mgr.check_mon_command({'prefix': f'dashboard get-{what}'})
+            if out.strip() != value:
+                if what.endswith('-key'):
+                    self.mgr.check_mon_command(
+                        {'prefix': f'dashboard set-{what}'},
+                        inbuf=value
+                    )
+                else:
+                    self.mgr.check_mon_command({'prefix': f'dashboard set-{what}',
+                                                "value": value})
+                self.mgr.log.info(f'Updated dashboard {what}')
+
+        def setup_user(realm: Optional[str]) -> Tuple[str, str]:
+            user = f'dashboard-{realm}' if realm else 'dashboard'
+            access_key = None
+            secret_key = None
+            rc, out, _ = radosgw_admin(['user', 'info', '--uid', user])
+            if not rc:
+                access_key, secret_key = get_secrets(user, out)
+                if not access_key or not secret_key:
+                    rc, out, err = radosgw_admin([
+                        'user', 'create', '--uid', user,
+                        '--display-name', 'Ceph Dashboard {realm}',
+                        '--system',
+                    ])
+                    if not rc:
+                        access_key, secret_key = get_secrets(user, out)
+            if not access_key or not secret_key:
+                self.mgr.log.error(f'Unable to get/create rgw {user} user: {err}')
+                raise RuntimeError(f'Unable to get/create rgw {user} user: {err}')
+            return access_key, secret_key
+
+        ret, out, err = radosgw_admin(['realm', 'list'])
+        if ret:
+            self.mgr.log.error(f'Failed to list RGW realms: {err}')
+            return
+        realms = json.loads(out).get('realms', [])
+        try:
+            if realms:
+                # multisite! we need creds for each realm
+                a: Dict[str, str] = {}
+                s: Dict[str, str] = {}
+                for realm in realms:
+                    a[realm], s[realm] = setup_user(realm)
+                update_dashboard('rgw-api-access-key', json.dumps(a))
+                update_dashboard('rgw-api-secret-key', json.dumps(s))
+            else:
+                # legacy (no multisite)
+                access_key, secret_key = setup_user(None)
+                update_dashboard('rgw-api-access-key', access_key)
+                update_dashboard('rgw-api-secret-key', secret_key)
+        except RuntimeError:
+            pass
 
 
 class RbdMirrorService(CephService):
