@@ -214,12 +214,12 @@ int main(int argc, char* argv[])
             );
           }
           sharded_conf().start(init_params.name, cluster_name).get();
-          seastar::engine().at_exit([] {
-            return sharded_conf().stop();
+          auto stop_conf = seastar::defer([] {
+            sharded_conf().stop().get();
           });
           sharded_perf_coll().start().get();
-          seastar::engine().at_exit([] {
-            return sharded_perf_coll().stop();
+          auto stop_perf_coll = seastar::defer([] {
+            sharded_perf_coll().stop().get();
           });
           local_conf().parse_config_files(conf_file_list).get();
           local_conf().parse_argv(ceph_args).get();
@@ -263,8 +263,8 @@ int main(int argc, char* argv[])
               local_conf().get_val<uuid_d>("osd_uuid"),
               local_conf().get_val<uuid_d>("fsid")).get();
           }
-          seastar::engine().at_exit([&] {
-            return osd.stop();
+          auto stop_osd = seastar::defer([&] {
+            osd.stop().get();
           });
           if (config.count("mkkey") || config.count("mkfs")) {
             return EXIT_SUCCESS;
