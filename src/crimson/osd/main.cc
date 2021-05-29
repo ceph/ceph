@@ -10,6 +10,7 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/util/defer.hh>
 #include <seastar/util/std-compat.hh>
 
 #include "auth/KeyRing.h"
@@ -142,32 +143,29 @@ seastar::future<> fetch_config()
                                const AuthCapsInfo& caps)
     {}
   };
-  auto auth_handler = std::make_unique<DummyAuthHandler>();
-  auto msgr = crimson::net::Messenger::create(entity_name_t::CLIENT(),
-                                              "temp_mon_client",
-                                              get_nonce());
-  configure_crc_handling(*msgr);
-  auto monc = std::make_unique<crimson::mon::Client>(*msgr, *auth_handler);
-  msgr->set_auth_client(monc.get());
-  return msgr->start({monc.get()}).then([monc=monc.get()] {
-    return monc->start();
-  }).then([monc=monc.get()] {
-    monc->sub_want("config", 0, 0);
-    return monc->renew_subs();
-  }).then([monc=monc.get()] {
+  return seastar::async([] {
+    auto auth_handler = std::make_unique<DummyAuthHandler>();
+    auto msgr = crimson::net::Messenger::create(entity_name_t::CLIENT(),
+                                                "temp_mon_client",
+                                                get_nonce());
+    configure_crc_handling(*msgr);
+    crimson::mon::Client monc{*msgr, *auth_handler};
+    msgr->set_auth_client(&monc);
+    msgr->start({&monc}).get();
+    auto stop_msgr = seastar::defer([&] {
+      msgr->stop();
+      msgr->shutdown().get();
+    });
+    monc.start().get();
+    auto stop_monc = seastar::defer([&] {
+      monc.stop().get();
+    });
+    monc.sub_want("config", 0, 0);
+    monc.renew_subs().get();
     // wait for monmap and config
-    return monc->wait_for_config();
-  }).then([monc=monc.get()] {
-    return local_conf().set_val("fsid", monc->get_fsid().to_string());
-  }).then([monc=monc.get(), msgr=msgr.get()] {
-    msgr->stop();
-    return monc->stop();
-  }).then([msgr=msgr.get()] {
-    return msgr->shutdown();
-  }).then([msgr=std::move(msgr),
-           auth_handler=std::move(auth_handler),
-           monc=std::move(monc)]
-  {});
+    monc.wait_for_config().get();
+    local_conf().set_val("fsid", monc.get_fsid().to_string()).get();
+  });
 }
 
 int main(int argc, char* argv[])
