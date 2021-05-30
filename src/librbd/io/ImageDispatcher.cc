@@ -279,7 +279,7 @@ void ImageDispatcher<I>::remap_to_physical(Extents& image_extents,
     return;
   }
   auto crypto_image_dispatch = static_cast<crypto::CryptoImageDispatch*>(
-      it->second.dispatch);
+      it->second);
   crypto_image_dispatch->remap_to_physical(image_extents, area);
 }
 
@@ -291,7 +291,7 @@ ImageArea ImageDispatcher<I>::remap_to_logical(Extents& image_extents) {
     return ImageArea::DATA;
   }
   auto crypto_image_dispatch = static_cast<crypto::CryptoImageDispatch*>(
-      it->second.dispatch);
+      it->second);
   return crypto_image_dispatch->remap_to_logical(image_extents);
 }
 
