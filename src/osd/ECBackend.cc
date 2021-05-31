@@ -941,7 +941,7 @@ void ECBackend::handle_sub_write(
     msg->mark_event("sub_op_started");
   trace.event("handle_sub_write");
 #ifdef HAVE_JAEGER
-  if (msg->osd_parent_span) {
+  if (msg && msg->osd_parent_span) {
     auto ec_sub_trans = jaeger_tracing::child_span(__func__, msg->osd_parent_span);
   }
 #endif
@@ -1544,7 +1544,7 @@ void ECBackend::submit_transaction(
     op->trace = client_op->pg_trace;
 
 #ifdef HAVE_JAEGER
-  if (client_op->osd_parent_span) {
+  if (client_op && client_op->osd_parent_span) {
     auto ec_sub_trans = jaeger_tracing::child_span("ECBackend::submit_transaction", client_op->osd_parent_span);
   }
 #endif
@@ -2118,7 +2118,7 @@ bool ECBackend::try_reads_to_commit()
   }
 
 #ifdef HAVE_JAEGER
-   if (op->client_op->osd_parent_span) {
+   if (op->client_op && op->client_op->osd_parent_span) {
       auto sub_write_span = jaeger_tracing::child_span("EC sub write", op->client_op->osd_parent_span);
     }
 #endif
