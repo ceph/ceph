@@ -17,6 +17,7 @@
 #include "common/ceph_argparse.h"
 #include <fstream>
 #include "include/util.h"
+#include "include/ceph_fs.h"
 
 #include "mds/CInode.h"
 #include "mds/InoTable.h"
@@ -368,7 +369,7 @@ int MetadataDriver::inject_unlinked_inode(
   // be ignoring dirfrags that exist
   inode.damage_flags |= (DAMAGE_STATS | DAMAGE_RSTATS | DAMAGE_FRAGTREE);
 
-  if (inono == MDS_INO_ROOT || MDS_INO_IS_MDSDIR(inono)) {
+  if (inono == CEPH_INO_ROOT || MDS_INO_IS_MDSDIR(inono)) {
     sr_t srnode;
     srnode.seq = 1;
     encode(srnode, inode.snap_blob);
@@ -409,7 +410,7 @@ int MetadataDriver::root_exists(inodeno_t ino, bool *result)
 int MetadataDriver::init_roots(int64_t data_pool_id)
 {
   int r = 0;
-  r = inject_unlinked_inode(MDS_INO_ROOT, S_IFDIR|0755, data_pool_id);
+  r = inject_unlinked_inode(CEPH_INO_ROOT, S_IFDIR|0755, data_pool_id);
   if (r != 0) {
     return r;
   }
@@ -429,7 +430,7 @@ int MetadataDriver::init_roots(int64_t data_pool_id)
 int MetadataDriver::check_roots(bool *result)
 {
   int r;
-  r = root_exists(MDS_INO_ROOT, result);
+  r = root_exists(CEPH_INO_ROOT, result);
   if (r != 0) {
     return r;
   }
@@ -895,8 +896,8 @@ bool DataScan::valid_ino(inodeno_t ino) const
   return (ino >= inodeno_t((1ull << 40)))
     || (MDS_INO_IS_STRAY(ino))
     || (MDS_INO_IS_MDSDIR(ino))
-    || ino == MDS_INO_ROOT
-    || ino == MDS_INO_CEPH;
+    || ino == CEPH_INO_ROOT
+    || ino == CEPH_INO_CEPH;
 }
 
 int DataScan::scan_links()
