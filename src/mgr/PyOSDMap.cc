@@ -575,6 +575,19 @@ static PyObject *crush_get_item_weight(BasePyCRUSH *self, PyObject *args)
   return PyFloat_FromDouble(self->crush->get_item_weightf(item));
 }
 
+static PyObject *crush_find_roots(BasePyCRUSH *self)
+{
+  set<int> roots;
+  self->crush->find_roots(&roots);
+  PyFormatter f;
+  f.open_array_section("roots");
+  for (auto root : roots) {
+    f.dump_int("root", root);
+  }
+  f.close_section();
+  return f.get();
+}
+
 static PyObject *crush_find_takes(BasePyCRUSH *self, PyObject *obj)
 {
   set<int> takes;
@@ -618,6 +631,8 @@ PyMethodDef BasePyCRUSH_methods[] = {
     "Get item name"},
   {"_get_item_weight", (PyCFunction)crush_get_item_weight, METH_VARARGS,
     "Get item weight"},
+  {"_find_roots", (PyCFunction)crush_find_roots, METH_NOARGS,
+   "Find all tree roots"},
   {"_find_takes", (PyCFunction)crush_find_takes, METH_NOARGS,
     "Find distinct TAKE roots"},
   {"_get_take_weight_osd_map", (PyCFunction)crush_get_take_weight_osd_map,
