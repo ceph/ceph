@@ -23,7 +23,6 @@
 #include "mon/MonMap.h"
 
 #include "mgr/MgrContext.h"
-#include "mgr/Injector.h"
 
 // For ::mgr_store_prefix
 #include "PyModule.h"
@@ -164,17 +163,8 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
-bool inject_python_on() {
-  return g_conf().get_val<bool>("mgr_inject");
-}
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
-  if(inject_python_on()) {
-    PyObject *injected_map = Injector::get_python(what);
-    // Structures which have no injection implemented should
-    // return the usual PyObject*
-    if (injected_map != Py_None) return injected_map;
-  }
   PyFormatter f;
 
   // Drop the GIL, as most of the following blocks will block on
