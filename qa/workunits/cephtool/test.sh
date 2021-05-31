@@ -2729,6 +2729,11 @@ function test_osd_compact()
   $SUDO ceph daemon osd.1 compact
 }
 
+function test_osd_daemon_histogram()
+{
+  $SUDO ceph daemonhistogram osd.all osd.op_r_latency_out_bytes_histogram batch 1 3
+}
+
 function test_mds_tell_help_command()
 {
   local FS_NAME=cephfs
@@ -2857,6 +2862,7 @@ OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
 OSD_TESTS+=" osd_tell_help_command"
 OSD_TESTS+=" osd_compact"
+OSD_TESTS+=" osd_daemon_histogram"
 OSD_TESTS+=" per_pool_scrub_status"
 
 MDS_TESTS+=" mds_tell"

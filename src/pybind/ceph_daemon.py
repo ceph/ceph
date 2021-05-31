@@ -15,6 +15,7 @@ import json
 import socket
 import struct
 import time
+import datetime
 from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
@@ -121,6 +122,59 @@ class Termsize(object):
         return '%s(%d,%d,%s)' % (self.__class__,
                                  self.rows, self.cols, self.changed)
 
+def shorten_bytes(val):
+    if isinstance(val, str):
+        return val
+    for u in ((10, ''), (20, 'K'), (30, 'M'), (40, 'G'), (50, 'T')):
+        if val < 2**u[0]:
+            return "{}{}".format(int(val / (2 ** (u[0]-10))), u[1])
+    return val
+
+def shorten_count(val):
+    if isinstance(val, str):
+        return val
+    for u in ((3, ''), (6, 'k'), (9, 'm'), (12, 'b'), (50, 't')):
+        if val < 10**u[0]:
+            return "{}{}".format(int(val / (10 ** (u[0]-3))), u[1])
+    return val
+
+def which_time_unit(val):
+    if isinstance(val, str):
+        return 0, ""
+    if val < 10**6:
+        return 10**3, "us"
+    val = val / 10**6
+    if val < 2000:
+        return 10**6, "ms"
+    val = val / 10**3
+    if val < 120:
+        return 10**9, "sec"
+    return 60 * 10**9, "min"
+
+def shorten_time(start, end):
+    start_div, start_unit = which_time_unit(start)
+    end_div, end_unit = which_time_unit(end)
+    if isinstance(start, str) and isinstance(end, str):
+        return "{}-{}".format(start, end)
+    elif isinstance(start, str):
+        return "{}-{} {}".format(start, int(end / end_div), end_unit)
+    elif isinstance(end, str):
+        return "{}-{} {}".format(int(start / start_div), end, start_unit)
+
+    if (start_div < end_div) :
+        end_div = start_div
+        end_unit = start_unit
+    return "{}-{} {}".format(
+        int(start / start_div), int(end / end_div), end_unit)
+
+def shorten(axis_name, v):
+    val_min = v['min'] if 'min' in v else '*'
+    val_max = v['max'] if 'max' in v else '*'
+    if '(bytes)' in axis_name:
+      return "{0: >4} ".format(shorten_bytes(val_min))
+    elif '(usec)' in axis_name:
+      return "{0: >5} ".format(shorten_time(val_min, val_max))
+    return val_min
 
 class DaemonWatcher(object):
     """
@@ -429,3 +483,147 @@ class DaemonWatcher(object):
                 prio = self._schema[section_name][name].get('priority') or 0
                 table.add_row((section_name, name, nick, prio))
         ostr.write(table.get_string(hrules=HEADER) + '\n')
+
+class DaemonHistogramWatcher(object):
+    """
+    Given a Ceph daemons'' admin socket paths, poll their performance histogram
+    and show the momentary values of chosen counter of interest in either live
+    or batch mode.
+    """
+    def __init__(self) -> None:
+        self.termsize = Termsize()
+
+    def _handle_sigwinch(self, signo, frame) -> None:
+        self.termsize.update()
+
+    def create_histogram(self, sockets, counter, last, batch):
+
+        current_datasets = {}
+        json_d = {}
+        c = counter.split('.')
+        if len(c) != 2:
+           return (last,
+               "Counter name should be formatted as <component>.<name>," +
+               " e.g. osd.op_w_latency_in_bytes_histogram\n")
+        for socket in sockets:
+           try:
+               json_d = json.loads(admin_socket(socket, ["perf", "histogram", "dump"]).decode('utf-8'))
+           except Exception as e:
+               return (last,
+                       "Couldn't connect to admin socket, result: \n{}".format(e))
+           current_datasets[socket] = json_d[c[0]][c[1]]['values']
+
+        axes = json_d[c[0]][c[1]]['axes']
+
+        x_name = axes[1]['name']
+        content = "{}, greater or equal\n".format(x_name)
+        x_col_skipped = []
+        x = 0
+        num_col = 0
+        for r in axes[1]['ranges']:
+            if 'min' not in r:
+                x_col_skipped.append(x)
+                continue;
+            content += shorten(x_name,r)
+            x += 1
+            num_col += 1
+        content += "\n"
+
+        y_name = axes[0]['name']
+        content += ("{0: >"+str(num_col * 5 + len(y_name))+"}\n").format(y_name)
+
+        if batch:
+            COL = ''
+            ENDC = ''
+        else:
+            COL = '\033[91m'
+            ENDC = '\033[0m'
+
+        current = []
+
+        # initalize with zeros
+        for i in range(len(current_datasets[socket])):
+           current.append([])
+           for j in range(len(current_datasets[socket][i])):
+                  current[i].append(0)
+
+        # combine data
+        for socket, data in current_datasets.items():
+           for i in range(len(data)):
+               for j in range(len(data[i])):
+                  current[i][j] += data[i][j]
+
+        for i in range(len(current)):
+            r = axes[0]['ranges'][i]
+            if 'min' not in r:
+                continue;
+            for j in range(len(current[i])):
+                if j in x_col_skipped:
+                    continue
+                try:
+                    diff = current[i][j] - last[i][j]
+                except IndexError:
+                    diff = '-'
+
+                if diff != "-" and diff != 0:
+                    content += "{0}{1: >4}{2} ".format(COL,shorten_count(diff),ENDC)
+                else:
+                    content += "{0: >4} ".format(shorten_count(diff))
+            content += shorten(y_name, r) + '\n'
+        return current, content
+
+    def _print_vals_histogram(self,
+                    sockets,
+                    counter,
+                    last,
+                    batch,
+                    ostr: TextIO) -> None:
+
+        last, content = self.create_histogram(sockets, counter, last, batch)
+
+        ostr.write(content)
+        return last
+
+    def run_histogram(self,
+            batch,
+            for_whom,
+            sockets,
+            counter,
+            interval: int,
+            count: Optional[int] = None,
+            ostr: TextIO = sys.stdout) -> None:
+        """
+        Print output at regular intervals until interrupted.
+        :param batch: show in live or batch mode
+        :param for_whom: monitored daemons names
+        :param sockets: monitored daemons admin socket paths
+        :param interval: polling interval
+        :param counter: times to repeat
+        :param ostr: Stream to which to send output
+        """
+
+        try:
+            last = []
+            signal(SIGWINCH, self._handle_sigwinch)
+
+            while True:
+                if batch:
+                    content = "{} : Counter: {} for {}\n".format(
+                            datetime.datetime.now().isoformat(), counter, for_whom)
+                    ostr.write(content)
+                else:
+                    ostr.write(chr(27) + "[2J")
+                last = self._print_vals_histogram(sockets, counter, last, batch, ostr)
+
+                if count is not None:
+                    count -= 1
+                    if count <= 0:
+                        break
+
+                # time.sleep() is interrupted by SIGWINCH; avoid that
+                end = time.time() + interval
+                while time.time() < end:
+                    time.sleep(end - time.time())
+
+        except KeyboardInterrupt:
+            return

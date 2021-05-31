@@ -159,7 +159,8 @@ from ceph_argparse import \
     validate_command, find_cmd_target, \
     json_command, run_in_thread, Flag
 
-from ceph_daemon import admin_socket, DaemonWatcher, Termsize
+from ceph_daemon import admin_socket, DaemonWatcher, Termsize, \
+    DaemonHistogramWatcher
 
 # just a couple of globals
 
@@ -172,15 +173,15 @@ def raw_write(buf):
     sys.stdout.buffer.write(buf)
 
 
-def osdids():
-    ret, outbuf, outs = json_command(cluster_handle, prefix='osd ls')
+def osdids(h):
+    ret, outbuf, outs = json_command(h, prefix='osd ls')
     if ret:
         raise RuntimeError('Can\'t contact mon for osd list')
     return [line.decode('utf-8') for line in outbuf.split(b'\n') if line]
 
 
-def monids():
-    ret, outbuf, outs = json_command(cluster_handle, prefix='mon dump',
+def monids(h):
+    ret, outbuf, outs = json_command(h, prefix='mon dump',
                                      argdict={'format': 'json'})
     if ret:
         raise RuntimeError('Can\'t contact mon for mon list')
@@ -188,8 +189,8 @@ def monids():
     return [m['name'] for m in d['mons']]
 
 
-def mdsids():
-    ret, outbuf, outs = json_command(cluster_handle, prefix='fs dump',
+def mdsids(h):
+    ret, outbuf, outs = json_command(h, prefix='fs dump',
                                      argdict={'format': 'json'})
     if ret:
         raise RuntimeError('Can\'t contact mon for mds list')
@@ -203,8 +204,8 @@ def mdsids():
     return l
 
 
-def mgrids():
-    ret, outbuf, outs = json_command(cluster_handle, prefix='mgr dump',
+def mgrids(h):
+    ret, outbuf, outs = json_command(h, prefix='mgr dump',
                                      argdict={'format': 'json'})
     if ret:
         raise RuntimeError('Can\'t contact mon for mgr list')
@@ -218,13 +219,38 @@ def mgrids():
     return l
 
 
-def ids_by_service(service):
+def ids_by_service(service, h):
     ids = {"mon": monids,
            "osd": osdids,
            "mds": mdsids,
            "mgr": mgrids}
-    return ids[service]()
+    return ids[service](h)
 
+
+def ids_by_service_for_cluster(name, cluster_name, conffile, service):
+    # rados.Rados() will call rados_create2, and then read the conf file,
+    # and then set the keys from the dict.  So we must do these
+    # "pre-file defaults" first (see common_preinit in librados)
+    conf_defaults = {
+        'log_to_stderr': 'true',
+        'err_to_stderr': 'true',
+        'log_flush_on_exit': 'true',
+    }
+
+    cluster_handle = None
+    try:
+        cluster_handle = run_in_thread(rados.Rados,
+                                       name=name, clustername=cluster_name,
+                                       conf_defaults=conf_defaults,
+                                       conffile=conffile)
+        run_in_thread(cluster_handle.connect, [])
+    except rados.Error as e:
+        print('Error initializing cluster client: {0!r}'.format(e), file=sys.stderr)
+        return []
+
+    targets = [(service, o) for o in ids_by_service(service, cluster_handle)]
+    run_in_thread(cluster_handle.shutdown)
+    return targets
 
 def validate_target(target):
     """
@@ -239,7 +265,7 @@ def validate_target(target):
         # for case "service.id"
         service_name, service_id = target[0], target[1]
         try:
-            exist_ids = ids_by_service(service_name)
+            exist_ids = ids_by_service(service_name, cluster_handle)
         except KeyError:
             print('WARN: {0} is not a legal service name, should be one of mon/osd/mds/mgr'.format(service_name),
                   file=sys.stderr)
@@ -384,6 +410,20 @@ daemonperf {type.id | path} list|ls [stat-pats] [priority]
                         List shows a table of all available stats
                         Run <count> times (default forever),
                          once per <interval> seconds (default 1)
+daemonhistogram {daemons} {name} [{mode} [{interval} [{count}]]]
+                        Visualize Ceph daemons' performance histogram.
+                        {daemons} specify where collect data from. This can be
+                          either 'daemon_type.all' specification to use every
+                          daemon of a specific type. Or a comma separated list
+                          of daemon ids or admin socket paths.
+                        {name} is a fully qualified perf histogram name,
+                          full list of names is available through
+                           'ceph daemon <daemon_name> perf histogram schema'
+                        {mode} is either live(default) or batch output mode.
+                        {interval} is a period (in seconds) to update the
+                          histogram, 1 sec if omitted
+                        {count} determines how many times to print,
+                          infinite if omitted
     """, file=sys.stdout)
 
 
@@ -772,7 +812,6 @@ def get_admin_socket(parsed_args, name):
     else:
         return path
 
-
 def maybe_daemon_command(parsed_args, childargs):
     """
     Check if --admin-socket, daemon, or daemonperf command
@@ -817,6 +856,64 @@ def maybe_daemon_command(parsed_args, childargs):
 
     return False, 0
 
+def maybe_daemonhistogram_command(parsed_args, childargs, name, cluster_name, conffile):
+    """
+    Check if daemonhistogram command
+    if it is, returns (boolean handled, return code if handled == True)
+    """
+
+    sockpaths = []
+    for_whom = None
+    if len(childargs) > 0 and childargs[0] in ["daemonhistogram"]:
+        # Treat "daemonhistogram <path>" or "daemonhistogram <name>" like --admin_daemon <path>
+        require_args = 3
+        if len(childargs) >= require_args:
+            mask = childargs[1]
+            for_all = False
+            if mask.endswith(".all"):
+                target = mask.split('.', 1)
+                service = target[0]
+                targets = ids_by_service_for_cluster(name, cluster_name, conffile, service)
+                if len(targets) <= 0:
+                    return True, errno.EFAULT
+                for_all = True
+                for s, id in targets:
+                  sockpaths.append("{}.{}".format(s,id))
+            else:
+                sockpaths = childargs[1].split(',')
+            sockpaths.sort()
+            for i, sp in enumerate(sockpaths):
+                if for_whom:
+                  for_whom += ", "
+                else:
+                  for_whom = ""
+
+                if sp.find('/') >= 0:
+                    for_whom += os.path.splitext(os.path.basename(sp))[0]
+                else:
+                    # try resolve daemon name
+                    try:
+                        sockpaths[i] = get_admin_socket(parsed_args, sp)
+                        for_whom += sp
+                    except Exception as e:
+                        print('Can\'t get admin socket path: ' + str(e), file=sys.stderr)
+                        return True, errno.EINVAL
+            #do not show every daemon but use short spec instead
+            if for_all:
+                for_whom = childargs[1]
+            childargs = childargs[2:]
+        else:
+            print('{0} requires at least {1} arguments'.format(childargs[0], require_args),
+                  file=sys.stderr)
+            return True, errno.EINVAL
+
+        if len(sockpaths) > 0:
+            counter = childargs.pop(0)
+            return True, daemonhistogram(childargs, for_whom, sockpaths, counter)
+        else:
+            print('Target daemon list is empty', file=sys.stderr)
+            return True,  errno.EINVAL
+    return False, 0
 
 def isnum(s):
     try:
@@ -900,6 +997,44 @@ def daemonperf(childargs: Sequence[str], sockpath: str):
 
     return 0
 
+def daemonhistogram(childargs: Sequence[str], for_whom, sockets, counter):
+    """
+    Handle daemonhistogram command; returns errno or 0
+
+    daemonhistogram <all-spec|some-spec> counter_name [batch|live] [interval] [count]
+      all-spec is TYPE.all, where TYPE=osd|mds|mgr|mon, e.g. osd.all
+      some-spec is a comma separated list of specific daemons provided
+        in a form of TYPE.ID pair or admin socket filepath, e.g.
+          osd.0,/tmp/ceph-asok.4QuLqw/osd.1.asok,osd.3,/tmp/ceph-asok.4QuLqw/osd.3.asok
+
+    """
+    interval = 1
+    count = None
+    batch = False
+
+    if len(childargs) > 0:
+        batch = childargs.pop(0) == 'batch'
+
+    if len(childargs) > 0:
+        try:
+            interval = float(childargs.pop(0))
+            if interval < 0:
+                raise ValueError
+        except ValueError:
+            print('daemonperf: interval should be a positive number', file=sys.stderr)
+            return errno.EINVAL
+
+    if len(childargs) > 0:
+        arg = childargs.pop(0)
+        if (not isnum(arg)) or (int(arg) < 0):
+            print('daemonperf: count should be a positive integer', file=sys.stderr)
+            return errno.EINVAL
+        count = int(arg)
+
+    watcher = DaemonHistogramWatcher()
+    watcher.run_histogram(batch, for_whom, sockets, counter, interval, count)
+
+    return 0
 
 def get_scrub_timestamps(childargs: Sequence[str]) -> Dict[str,
                                                            Tuple[str, str]]:
@@ -985,10 +1120,18 @@ def main():
     conffile = rados.Rados.DEFAULT_CONF_FILES
     if parsed_args.cephconf:
         conffile = parsed_args.cephconf
+
+    clustername = None
+    if parsed_args.cluster:
+        clustername = parsed_args.cluster
+
     # For now, --admin-daemon is handled as usual.  Try it
     # first in case we can't connect() to the cluster
 
     done, ret = maybe_daemon_command(parsed_args, childargs)
+    if done:
+        return ret
+    done, ret = maybe_daemonhistogram_command(parsed_args, childargs, name, clustername, conffile)
     if done:
         return ret
 
@@ -1021,10 +1164,6 @@ def main():
                   file=sys.stderr)
     else:
         injectargs = None
-
-    clustername = None
-    if parsed_args.cluster:
-        clustername = parsed_args.cluster
 
     try:
         cluster_handle = run_in_thread(rados.Rados,
@@ -1220,7 +1359,7 @@ def main():
 
     if target[1] == '*':
         service = target[0]
-        targets = [(service, o) for o in ids_by_service(service)]
+        targets = [(service, o) for o in ids_by_service(service, cluster_handle)]
     else:
         targets = [target]
 
