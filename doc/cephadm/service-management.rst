@@ -62,8 +62,8 @@ name:
 Service Specification
 =====================
 
-A *Service Specification* is a data structure
-to specify the deployment of services.  For example in YAML:
+A *Service Specification* is a data structure that is used to specify the
+deployment of services.  Here is an example of a service specification in YAML:
 
 .. code-block:: yaml
 
@@ -77,7 +77,7 @@ to specify the deployment of services.  For example in YAML:
     unmanaged: false
     ...
 
-where the properties of a service specification are:
+In this example, the the properties this service specification are:
 
 * ``service_type``
     The type of the service. Needs to be either a Ceph
@@ -89,21 +89,20 @@ where the properties of a service specification are:
     The name of the service.
 * ``placement``
     See :ref:`orchestrator-cli-placement-spec`.
-* ``unmanaged``
-    If set to ``true``, the orchestrator will not deploy nor
-    remove any daemon associated with this service. Placement and all other
-    properties will be ignored. This is useful, if this service should not
-    be managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
+* ``unmanaged`` If set to ``true``, the orchestrator will not deploy nor remove
+    any daemon associated with this service. Placement and all other properties
+    will be ignored. This is useful, if you do not want this service to be
+    managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
 
-Each service type can have additional service specific properties.
+Each service type can have additional service-specific properties.
 
 Service specifications of type ``mon``, ``mgr``, and the monitoring
 types do not require a ``service_id``.
 
 A service of type ``osd`` is described in :ref:`drivegroups`
 
-Many service specifications can be applied at once using
-``ceph orch apply -i`` by submitting a multi-document YAML file::
+Many service specifications can be applied at once using ``ceph orch apply -i``
+by submitting a multi-document YAML file::
 
     cat <<EOF | ceph orch apply -i -
     service_type: mon
