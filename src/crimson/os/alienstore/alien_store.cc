@@ -308,7 +308,7 @@ AlienStore::get_attr(CollectionRef ch,
       // to `std::string` for the sake of extending life-time not only of
       // a _ptr-to-data_ but _data_ as well. Otherwise we would run into a use-
       // after-free issue.
-      auto c =static_cast<AlienCollection*>(ch.get());
+      auto c = static_cast<AlienCollection*>(ch.get());
       return store->getattr(c->collection, oid, name.c_str(), value);
     }).then([oid, &value] (int r) -> get_attr_errorator::future<ceph::bufferlist> {
       if (r == -ENOENT) {
