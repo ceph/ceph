@@ -301,11 +301,15 @@ AlienStore::get_attr(CollectionRef ch,
 {
   logger().debug("{}", __func__);
   assert(tp);
-  return seastar::do_with(ceph::bufferlist{}, [=] (auto &value) {
-    return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, &value] {
+  return seastar::do_with(ceph::bufferlist{}, std::string{name},
+                          [=] (auto &value, const auto& name) {
+    return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, &value, &name] {
+      // XXX: `name` isn't a `std::string_view` anymore! it had to be converted
+      // to `std::string` for the sake of extending life-time not only of
+      // a _ptr-to-data_ but _data_ as well. Otherwise we would run into a use-
+      // after-free issue.
       auto c =static_cast<AlienCollection*>(ch.get());
-      return store->getattr(c->collection, oid,
-		            static_cast<std::string>(name).c_str(), value);
+      return store->getattr(c->collection, oid, name.c_str(), value);
     }).then([oid, &value] (int r) -> get_attr_errorator::future<ceph::bufferlist> {
       if (r == -ENOENT) {
         return crimson::ct_error::enoent::make();
