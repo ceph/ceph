@@ -8,11 +8,39 @@
 
 namespace crimson::os::seastore::onode {
 
+struct test_item_t {
+  using id_t = uint16_t;
+  using magic_t = uint32_t;
+
+  value_size_t size;
+  id_t id;
+  magic_t magic;
+
+  value_size_t get_payload_size() const {
+    assert(size > sizeof(value_header_t));
+    return static_cast<value_size_t>(size - sizeof(value_header_t));
+  }
+
+  static test_item_t create(std::size_t _size, std::size_t _id) {
+    ceph_assert(_size <= std::numeric_limits<value_size_t>::max());
+    ceph_assert(_size > sizeof(value_header_t));
+    value_size_t size = _size;
+
+    ceph_assert(_id <= std::numeric_limits<id_t>::max());
+    id_t id = _id;
+
+    return {size, id, (magic_t)id * 137};
+  }
+};
+inline std::ostream& operator<<(std::ostream& os, const test_item_t& item) {
+  return os << "TestItem(#" << item.id << ", " << item.size << "B)";
+}
+
 class TestValue final : public Value {
  public:
   static constexpr auto HEADER_MAGIC = value_magic_t::TEST;
-  using id_t = uint16_t;
-  using magic_t = uint32_t;
+  using id_t = test_item_t::id_t;
+  using magic_t = test_item_t::magic_t;
   struct magic_packed_t {
     magic_t value;
   } __attribute__((packed));
@@ -138,45 +166,24 @@ class TestValue final : public Value {
     }
     Replayable::set_tail_magic(value_mutable.first, magic);
   }
-};
 
-struct test_item_t {
-  using ValueType = TestValue;
+  /*
+   * tree_util.h related interfaces
+   */
 
-  value_size_t size;
-  TestValue::id_t id;
-  TestValue::magic_t magic;
+  using item_t = test_item_t;
 
-  value_size_t get_payload_size() const {
-    assert(size > sizeof(value_header_t));
-    return static_cast<value_size_t>(size - sizeof(value_header_t));
+  void initialize(Transaction& t, const item_t& item) {
+    ceph_assert(get_payload_size() + sizeof(value_header_t) == item.size);
+    set_id_replayable(t, item.id);
+    set_tail_magic_replayable(t, item.magic);
   }
 
-  void initialize(Transaction& t, TestValue& value) const {
-    ceph_assert(value.get_payload_size() + sizeof(value_header_t) == size);
-    value.set_id_replayable(t, id);
-    value.set_tail_magic_replayable(t, magic);
-  }
-
-  void validate(TestValue& value) const {
-    ceph_assert(value.get_payload_size() + sizeof(value_header_t) == size);
-    ceph_assert(value.get_id() == id);
-    ceph_assert(value.get_tail_magic() == magic);
-  }
-
-  static test_item_t create(std::size_t _size, std::size_t _id) {
-    ceph_assert(_size <= std::numeric_limits<value_size_t>::max());
-    ceph_assert(_size > sizeof(value_header_t));
-    value_size_t size = _size;
-
-    ceph_assert(_id <= std::numeric_limits<TestValue::id_t>::max());
-    TestValue::id_t id = _id;
-
-    return {size, id, (TestValue::magic_t)id * 137};
+  void validate(const item_t& item) const {
+    ceph_assert(get_payload_size() + sizeof(value_header_t) == item.size);
+    ceph_assert(get_id() == item.id);
+    ceph_assert(get_tail_magic() == item.magic);
   }
 };
-inline std::ostream& operator<<(std::ostream& os, const test_item_t& item) {
-  return os << "TestItem(#" << item.id << ", " << item.size << "B)";
-}
 
 }

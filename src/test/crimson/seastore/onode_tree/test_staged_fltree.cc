@@ -1526,7 +1526,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     auto moved_nm = (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
                                    : NodeExtentManager::create_dummy(IS_DUMMY_SYNC));
     auto p_nm = moved_nm.get();
-    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, test_item_t>>(
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, TestValue>>(
         kvs, std::move(moved_nm));
     {
       auto t = tm->create_transaction();
@@ -1623,7 +1623,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
     auto moved_nm = NodeExtentManager::create_seastore(
         *tm, L_ADDR_MIN, EAGAIN_PROBABILITY);
     auto p_nm = static_cast<SeastoreNodeExtentManager<true>*>(moved_nm.get());
-    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, test_item_t>>(
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, TestValue>>(
         kvs, std::move(moved_nm));
     unsigned num_ops = 0;
     unsigned num_ops_eagain = 0;
