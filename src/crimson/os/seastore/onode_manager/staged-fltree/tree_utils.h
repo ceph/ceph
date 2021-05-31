@@ -26,44 +26,50 @@
 namespace crimson::os::seastore::onode {
 
 /**
- * ValueItem template to work with tree utility classes:
+ * templates to work with tree utility classes:
  *
  * struct ValueItem {
- *   using ValueType = ConcreteValueType;
  *   <public members>
  *
  *   value_size_t get_payload_size() const;
- *   void initialize(Transaction& t, ValueType& value) const;
- *   void validate(ValueType& value) const;
  *   static ValueItem create(std::size_t expected_size, std::size_t id);
  * };
  * std::ostream& operator<<(std::ostream& os, const ValueItem& item);
+ *
+ * class ValueImpl final : public Value {
+ *   ...
+ *
+ *   using item_t = ValueItem;
+ *   void initialize(Transaction& t, const item_t& item);
+ *   void validate(const item_t& item);
+ * };
+ *
  */
 
-template <typename ValueItem>
+template <typename CursorType>
 void initialize_cursor_from_item(
     Transaction& t,
     const ghobject_t& key,
-    const ValueItem& item,
-    typename Btree<typename ValueItem::ValueType>::Cursor& cursor,
+    const typename decltype(std::declval<CursorType>().value())::item_t& item,
+    CursorType& cursor,
     bool insert_success) {
   ceph_assert(insert_success);
   ceph_assert(!cursor.is_end());
   ceph_assert(cursor.get_ghobj() == key);
   auto tree_value = cursor.value();
-  item.initialize(t, tree_value);
+  tree_value.initialize(t, item);
 }
 
 
-template <typename ValueItem>
+template <typename CursorType>
 void validate_cursor_from_item(
     const ghobject_t& key,
-    const ValueItem& item,
-    typename Btree<typename ValueItem::ValueType>::Cursor& cursor) {
+    const typename decltype(std::declval<CursorType>().value())::item_t& item,
+    CursorType& cursor) {
   ceph_assert(!cursor.is_end());
   ceph_assert(cursor.get_ghobj() == key);
-  auto value = cursor.value();
-  item.validate(value);
+  auto tree_value = cursor.value();
+  tree_value.validate(item);
 }
 
 template <typename ValueItem>
@@ -256,11 +262,12 @@ class KVPool {
   kvptr_vector_t random_p_kvs;
 };
 
-template <bool TRACK, typename ValueItem>
+template <bool TRACK, typename ValueImpl>
 class TreeBuilder {
  public:
-  using BtreeImpl = Btree<typename ValueItem::ValueType>;
+  using BtreeImpl = Btree<ValueImpl>;
   using BtreeCursor = typename BtreeImpl::Cursor;
+  using ValueItem = typename ValueImpl::item_t;
   using iterator_t = typename KVPool<ValueItem>::iterator_t;
 
   TreeBuilder(KVPool<ValueItem>& kvs, NodeExtentManagerURef&& nm)
