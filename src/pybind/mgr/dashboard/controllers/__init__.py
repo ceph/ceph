@@ -811,14 +811,14 @@ class RESTController(BaseController):
     }
 
     _method_mapping = collections.OrderedDict([
-        ('list', {'method': 'GET', 'resource': False, 'status': 200}),
-        ('create', {'method': 'POST', 'resource': False, 'status': 201}),
-        ('bulk_set', {'method': 'PUT', 'resource': False, 'status': 200}),
-        ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204}),
-        ('get', {'method': 'GET', 'resource': True, 'status': 200}),
-        ('delete', {'method': 'DELETE', 'resource': True, 'status': 204}),
-        ('set', {'method': 'PUT', 'resource': True, 'status': 200}),
-        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200})
+        ('list', {'method': 'GET', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('create', {'method': 'POST', 'resource': False, 'status': 201, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('bulk_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('get', {'method': 'GET', 'resource': True, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('delete', {'method': 'DELETE', 'resource': True, 'status': 204, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('set', {'method': 'PUT', 'resource': True, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION})  # noqa E501 #pylint: disable=line-too-long
     ])
 
     @classmethod
@@ -857,10 +857,10 @@ class RESTController(BaseController):
                 cls._update_endpoint_params_method_map(
                     func, res_id_params, endpoint_params)
 
-            elif hasattr(func, "_collection_method_"):
+            elif hasattr(func, "__collection_method__"):
                 cls._update_endpoint_params_collection_map(func, endpoint_params)
 
-            elif hasattr(func, "_resource_method_"):
+            elif hasattr(func, "__resource_method__"):
                 cls._update_endpoint_params_resource_method(
                     res_id_params, endpoint_params, func)
 
@@ -899,27 +899,27 @@ class RESTController(BaseController):
         else:
             path_params = ["{{{}}}".format(p) for p in res_id_params]
             endpoint_params['path'] += "/{}".format("/".join(path_params))
-            if func._resource_method_['path']:
-                endpoint_params['path'] += func._resource_method_['path']
+            if func.__resource_method__['path']:
+                endpoint_params['path'] += func.__resource_method__['path']
             else:
                 endpoint_params['path'] += "/{}".format(func.__name__)
-        endpoint_params['status'] = func._resource_method_['status']
-        endpoint_params['method'] = func._resource_method_['method']
-        endpoint_params['version'] = func._resource_method_['version']
-        endpoint_params['query_params'] = func._resource_method_['query_params']
+        endpoint_params['status'] = func.__resource_method__['status']
+        endpoint_params['method'] = func.__resource_method__['method']
+        endpoint_params['version'] = func.__resource_method__['version']
+        endpoint_params['query_params'] = func.__resource_method__['query_params']
         if not endpoint_params['sec_permissions']:
             endpoint_params['permission'] = cls._permission_map[endpoint_params['method']]
 
     @classmethod
     def _update_endpoint_params_collection_map(cls, func, endpoint_params):
-        if func._collection_method_['path']:
-            endpoint_params['path'] = func._collection_method_['path']
+        if func.__collection_method__['path']:
+            endpoint_params['path'] = func.__collection_method__['path']
         else:
             endpoint_params['path'] = "/{}".format(func.__name__)
-        endpoint_params['status'] = func._collection_method_['status']
-        endpoint_params['method'] = func._collection_method_['method']
-        endpoint_params['query_params'] = func._collection_method_['query_params']
-        endpoint_params['version'] = func._collection_method_['version']
+        endpoint_params['status'] = func.__collection_method__['status']
+        endpoint_params['method'] = func.__collection_method__['method']
+        endpoint_params['query_params'] = func.__collection_method__['query_params']
+        endpoint_params['version'] = func.__collection_method__['version']
         if not endpoint_params['sec_permissions']:
             endpoint_params['permission'] = cls._permission_map[endpoint_params['method']]
 
@@ -936,6 +936,8 @@ class RESTController(BaseController):
 
         endpoint_params['status'] = meth['status']
         endpoint_params['method'] = meth['method']
+        if hasattr(func, "__method_map_method__"):
+            endpoint_params['version'] = func.__method_map_method__['version']
         if not endpoint_params['sec_permissions']:
             endpoint_params['permission'] = cls._permission_map[endpoint_params['method']]
 
@@ -958,11 +960,26 @@ class RESTController(BaseController):
             status = 200
 
         def _wrapper(func):
-            func._resource_method_ = {
+            func.__resource_method__ = {
                 'method': method,
                 'path': path,
                 'status': status,
                 'query_params': query_params,
+                'version': version
+            }
+            return func
+        return _wrapper
+
+    @staticmethod
+    def MethodMap(resource=False, status=None, version=DEFAULT_VERSION):  # noqa: N802
+
+        if status is None:
+            status = 200
+
+        def _wrapper(func):
+            func.__method_map_method__ = {
+                'resource': resource,
+                'status': status,
                 'version': version
             }
             return func
@@ -978,7 +995,7 @@ class RESTController(BaseController):
             status = 200
 
         def _wrapper(func):
-            func._collection_method_ = {
+            func.__collection_method__ = {
                 'method': method,
                 'path': path,
                 'status': status,
