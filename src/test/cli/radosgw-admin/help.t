@@ -56,10 +56,18 @@
     quota set                  set quota params
     quota enable               enable quota
     quota disable              disable quota
+    ratelimit get              get ratelimit params
+    ratelimit set              set ratelimit params
+    ratelimit enable           enable ratelimit
+    ratelimit disable          disable ratelimit
     global quota get           view global quota params
     global quota set           set global quota params
     global quota enable        enable a global quota
     global quota disable       disable a global quota
+    global ratelimit get       view global ratelimit params
+    global ratelimit set       set global ratelimit params
+    global ratelimit enable    enable a ratelimit quota
+    global ratelimit disable   disable a ratelimit quota
     realm create               create a new realm
     realm rm                   remove a realm
     realm get                  show realm info
@@ -309,6 +317,14 @@
      --max-objects             specify max objects (negative value to disable)
      --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
+  
+  Rate limiting options:
+     --max-read-ops            specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
+     --max-read-bytes          specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
+     --max-write-ops           specify max requests per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --max-write-bytes         specify max bytes per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --ratelimit-scope         scope of rate limiting: bucket, user, anonymous
+                               anonymous can be configured only with global rate limit
   
   Orphans search options:
      --num-shards              num of shards to use for keeping the temporary scan info

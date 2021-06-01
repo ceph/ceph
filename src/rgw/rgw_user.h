@@ -173,9 +173,13 @@ struct RGWUserAdminOpState {
 
   bool bucket_quota_specified{false};
   bool user_quota_specified{false};
+  bool bucket_ratelimit_specified{false};
+  bool user_ratelimit_specified{false};
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
+  RGWRateLimitInfo user_ratelimit;
+  RGWRateLimitInfo bucket_ratelimit;
 
   // req parameters for listing user
   std::string marker{""};
@@ -337,6 +341,16 @@ struct RGWUserAdminOpState {
   void set_user_quota(RGWQuotaInfo& quota) {
     user_quota = quota;
     user_quota_specified = true;
+  }
+
+  void set_bucket_ratelimit(RGWRateLimitInfo& ratelimit) {
+    bucket_ratelimit = ratelimit;
+    bucket_ratelimit_specified = true;
+  }
+
+  void set_user_ratelimit(RGWRateLimitInfo& ratelimit) {
+    user_ratelimit = ratelimit;
+    user_ratelimit_specified = true;
   }
 
   void set_mfa_ids(const std::set<std::string>& ids) {

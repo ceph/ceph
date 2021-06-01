@@ -199,7 +199,13 @@ namespace rgw::sal {
 
     return ret;
   }
-
+  int DBUser::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
+  {
+    for(auto& it : new_attrs) {
+  	  attrs[it.first] = it.second;
+    }
+    return store_user(dpp, y, false);
+  }
   int DBUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
   {
     int ret = 0;
@@ -322,7 +328,9 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    Bucket::merge_and_store_attrs(dpp, new_attrs, y);
+    for(auto& it : new_attrs) {
+	    attrs[it.first] = it.second;
+    }
 
     /* XXX: handle has_instance_obj like in set_bucket_instance_attrs() */
 
@@ -1751,6 +1759,11 @@ namespace rgw::sal {
       const map<string, string>& meta)
   {
     return 0;
+  }
+
+  void DBStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)
+  {
+    return;
   }
 
   void DBStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
