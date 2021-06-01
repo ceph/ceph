@@ -291,14 +291,14 @@ class Docs(BaseController):
                 resp = {}
                 p_info = []
 
-                if hasattr(func, 'method_map_method'):
-                    version = func.method_map_method['version']
+                if hasattr(func, '__method_map_method__'):
+                    version = func.__method_map_method__['version']
 
-                elif hasattr(func, 'resource_method'):
-                    version = func.resource_method['version']
+                elif hasattr(func, '__resource_method__'):
+                    version = func.__resource_method__['version']
 
-                elif hasattr(func, 'collection_method'):
-                    version = func.collection_method['version']
+                elif hasattr(func, '__collection_method__'):
+                    version = func.__collection_method__['version']
 
                 if hasattr(func, 'doc_info'):
                     if func.doc_info['summary']:
