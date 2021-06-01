@@ -201,17 +201,10 @@ void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
   }
 }
 
-void KeyRing::decode(bufferlist::const_iterator& bl) {
-  __u8 struct_v;
+void KeyRing::decode(bufferlist::const_iterator& bl)
+{
   auto start_pos = bl;
-  try {
-    using ceph::decode;
-    decode(struct_v, bl);
-    decode(keys, bl);
-  } catch (ceph::buffer::error& err) {
-    keys.clear();
-    decode_plaintext(start_pos);
-  }
+  decode_plaintext(start_pos);
 }
 
 int KeyRing::load(CephContext *cct, const std::string &filename)
