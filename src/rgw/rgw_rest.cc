@@ -28,6 +28,7 @@
 #include "rgw_resolve.h"
 #include "rgw_sal_rados.h"
 
+#include "rgw_ratelimit.h"
 #include <numeric>
 
 #define dout_subsys ceph_subsys_rgw
@@ -759,6 +760,16 @@ int dump_body(struct req_state* const s,
               const char* const buf,
               const size_t len)
 {
+  bool healthchk = false;
+  // we dont want to limit health checks
+  if(s->op_type == RGW_OP_GET_HEALTH_CHECK)
+    healthchk = true;
+  if(len > 0 && !healthchk) {
+    const char *method = s->info.method;
+    s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
+    if(!rgw::sal::Bucket::empty(s->bucket.get()))
+      s->ratelimit_data->decrease_bytes(method, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
+  }
   try {
     return RESTFUL_IO(s)->send_body(buf, len);
   } catch (rgw::io::Exception& e) {
@@ -780,11 +791,24 @@ int recv_body(struct req_state* const s,
               char* const buf,
               const size_t max)
 {
+  int len;
   try {
-    return RESTFUL_IO(s)->recv_body(buf, max);
+    len = RESTFUL_IO(s)->recv_body(buf, max);
   } catch (rgw::io::Exception& e) {
     return -e.code().value();
   }
+  bool healthchk = false;
+  // we dont want to limit health checks
+  if(s->op_type ==  RGW_OP_GET_HEALTH_CHECK)
+    healthchk = true;
+  if(len > 0 && !healthchk) {
+    const char *method = s->info.method;
+    s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
+    if(!rgw::sal::Bucket::empty(s->bucket.get()))
+      s->ratelimit_data->decrease_bytes(method, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
+  }
+  return len;
+
 }
 
 int RGWGetObj_ObjStore::get_params(optional_yield y)
