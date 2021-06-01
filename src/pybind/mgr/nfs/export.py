@@ -216,7 +216,9 @@ class ExportMgr:
         try:
             fsal_type = kwargs.pop('fsal_type')
             if fsal_type == 'cephfs':
-                return FSExport(self).create_export(**kwargs)
+                return FSExport(self).create_cephfs_export(**kwargs)
+            if fsal_type == 'rgw':
+                return FSExport(self).create_rgw_export(**kwargs)
             raise NotImplementedError()
         except Exception as e:
             return exception_handler(e, f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
@@ -323,8 +325,9 @@ class FSExport(ExportMgr):
         log.info("Export user created is {}".format(json_res[0]['entity']))
         return json_res[0]['entity'], json_res[0]['key']
 
-    def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path, squash,
-                      clients=[]):
+    def create_cephfs_export(self, fs_name, cluster_id, pseudo_path,
+                             read_only, path, squash,
+                             clients=[]):
         if not check_fs(self.mgr, fs_name):
             raise FSNotFound(fs_name)
 
@@ -352,6 +355,49 @@ class FSExport(ExportMgr):
                 'fsal': {"name": "CEPH", "user_id": user_id,
                          "fs_name": fs_name, "sec_label_xattr": "",
                          "cephx_key": key},
+                'clients': clients
+            }
+            export = Export.from_dict(ex_id, ex_dict)
+            self._save_export(export)
+            result = {
+                "bind": pseudo_path,
+                "fs": fs_name,
+                "path": path,
+                "cluster": cluster_id,
+                "mode": access_type,
+            }
+            return (0, json.dumps(result, indent=4), '')
+        return 0, "", "Export already exists"
+
+    def create_rgw_export(self, bucket, cluster_id, pseudo_path, read_only, squash,
+                          client=[]):
+        pseudo_path = self.format_path(pseudo_path)
+
+        if cluster_id not in self.exports:
+            self.exports[cluster_id] = []
+
+        if not self._fetch_export(cluster_id, pseudo_path):
+            # generate access+secret keys
+            
+            ex_id = self._gen_export_id()
+            if clients:
+                access_type = "none"
+            elif read_only:
+                access_type = "RO"
+            else:
+                access_type = "RW"
+            ex_dict = {
+                'path': self.format_path(path),
+                'pseudo': pseudo_path,
+                'cluster_id': cluster_id,
+                'access_type': access_type,
+                'squash': squash,
+                'fsal': {
+                    "name": "RGW",
+                    "user_id": user_id,
+                    "access_key_id": access_key_id,
+                    "secret_access_key": secret_access_key,
+                },
                 'clients': clients
             }
             export = Export.from_dict(ex_id, ex_dict)
@@ -403,16 +449,15 @@ class FSExport(ExportMgr):
             raise NFSInvalidOperation('FSAL change not allowed')
         if old_export.fsal.user_id != new_export.fsal.user_id:
             raise NFSInvalidOperation('user_id change is not allowed')
-        if old_export.fsal.sec_label_xattr != new_export.fsal.sec_label_xattr:
-            raise NFSInvalidOperation('Security label xattr cannot be changed')
 
-        if (
-            old_export.fsal.fs_name != new_export.fsal.fs_name
-            or old_export.path != new_export.path
-        ):
-            self._update_user_id(new_export.path, new_export.access_type,
-                                 new_export.fsal.fs_name, new_export.fsal.user_id)
-        new_export.fsal.cephx_key = old_export.fsal.cephx_key
+        if old_export.fsal.name == 'CEPH':
+            if (
+                old_export_path != new_export_path
+                or cast(old_export.fsal, CephFSFSAL).fs_name != cast(new_export.fsal, CephFSFSAL).fs_name
+            ):
+                self._update_user_id(new_export.path, new_export.access_type,
+                                     new_export.fsal.fs_name, new_export.fsal.user_id)
+            cast(new_export.fsal, CephFSFSAL).cephx_key = cast(old_export.fsal, CephFSFSAL).cephx_key
 
         self._update_export(new_export)
         export_ls = self.exports[self.rados_namespace]

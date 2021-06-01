@@ -35,7 +35,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash: str = 'none',
     ) -> Tuple[int, str, str]:
         """Create a cephfs export"""
-        # TODO Extend export creation for rgw.
         clients = []
         if addr:
             clients = [{
@@ -48,6 +47,32 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                              cluster_id=clusterid, pseudo_path=binding,
                                              read_only=readonly, path=path,
                                              squash=squash, clients=clients)
+
+    @CLICommand('nfs export create rgw', perm='rw')
+    def _cmd_nfs_export_create_cephfs(
+            self,
+            bucket: str,
+            clusterid: str,
+            binding: str,
+            readonly: Optional[bool] = False,
+            addr: Optional[str] = None,
+            realm: Optional[str] = None,
+    ) -> Tuple[int, str, str]:
+        """Create an RGW export"""
+        clients = None
+        squash = 'none'
+        if addr:
+            clients = [{
+                'addresses': [addr],
+                'access_type': 'ro' if readonly else 'rw',
+                'squash': squash,
+            }]
+            squash = 'none'
+        return self.export_mgr.create_export(fsal_type='rgw', bucket=bucket,
+                                             realm=realm,
+                                             cluster_id=clusterid, pseudo_path=binding,
+                                             read_only=readonly, squash=squash,
+                                             clients=clients)
 
     @CLICommand('nfs export import', perm='rw')
     def _cmd_nfs_export_import(self,
