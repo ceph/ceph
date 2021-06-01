@@ -1294,7 +1294,7 @@ COMMAND("config rm"
 	"config", "rw")
 COMMAND("config get "
 	"name=who,type=CephString "
-	"name=key,type=CephString,req=False",
+	"name=key,type=CephString,req=false",
 	"Show configuration option(s) for an entity",
 	"config", "r")
 COMMAND("config dump",
@@ -1310,7 +1310,7 @@ COMMAND("config ls",
 COMMAND("config assimilate-conf",
 	"Assimilate options from a conf, and return a new, minimal conf file",
 	"config", "rw")
-COMMAND("config log name=num,type=CephInt,req=False",
+COMMAND("config log name=num,type=CephInt,req=false",
 	"Show recent history of config changes",
 	"config", "r")
 COMMAND("config reset "
