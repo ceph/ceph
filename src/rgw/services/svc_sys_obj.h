@@ -231,7 +231,7 @@ public:
       Op(Pool& _source) : source(_source) {}
 
       int init(const DoutPrefixProvider *dpp, const std::string& marker, const std::string& prefix);
-      int get_next(int max, std::vector<string> *oids, bool *is_truncated);
+      int get_next(const DoutPrefixProvider *dpp, int max, std::vector<string> *oids, bool *is_truncated);
       int get_marker(string *marker);
     };
 

@@ -616,8 +616,8 @@ public:
   int initialize(const DoutPrefixProvider *dpp);
   void finalize();
 
-  int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
-  int update_service_map(std::map<std::string, std::string>&& status);
+  int register_to_service_map(const DoutPrefixProvider *dpp, const string& daemon_type, const map<string, string>& meta);
+  int update_service_map(const DoutPrefixProvider *dpp, std::map<std::string, std::string>&& status);
 
   /// list logs
   int log_list_init(const DoutPrefixProvider *dpp, const string& prefix, RGWAccessHandle *handle);
@@ -628,7 +628,7 @@ public:
 
   /// show log
   int log_show_init(const DoutPrefixProvider *dpp, const string& name, RGWAccessHandle *handle);
-  int log_show_next(RGWAccessHandle handle, rgw_log_entry *entry);
+  int log_show_next(const DoutPrefixProvider *dpp, RGWAccessHandle handle, rgw_log_entry *entry);
 
   // log bandwidth info
   int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info);
@@ -878,10 +878,10 @@ public:
       explicit Stat(RGWRados::Object *_source) : source(_source) {}
 
       int stat_async(const DoutPrefixProvider *dpp);
-      int wait();
+      int wait(const DoutPrefixProvider *dpp);
       int stat();
     private:
-      int finish();
+      int finish(const DoutPrefixProvider *dpp);
     };
   };
 
@@ -1202,7 +1202,7 @@ public:
   int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty = true);
 
   void wakeup_meta_sync_shards(set<int>& shard_ids);
-  void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids);
+  void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids);
 
   RGWMetaSyncStatusManager* get_meta_sync_manager();
   RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone);
@@ -1313,7 +1313,7 @@ public:
   int unlink_obj_instance(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,
                           uint64_t olh_epoch, optional_yield y, rgw_zone_set *zones_trace = nullptr);
 
-  void check_pending_olh_entries(map<string, bufferlist>& pending_entries, map<string, bufferlist> *rm_pending_entries);
+  void check_pending_olh_entries(const DoutPrefixProvider *dpp, map<string, bufferlist>& pending_entries, map<string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, map<string, bufferlist>& pending_attrs);
   int follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjectCtx& ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target);
   int get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh);
@@ -1333,7 +1333,7 @@ public:
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_prefetch_data(obj);
   }
-  int decode_policy(bufferlist& bl, ACLOwner *owner);
+  int decode_policy(const DoutPrefixProvider *dpp, bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
       map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *cb);
@@ -1419,7 +1419,7 @@ public:
   int bi_list(BucketShard& bs, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated);
   int bi_list(const DoutPrefixProvider *dpp, rgw_bucket& bucket, const string& obj_name, const string& marker, uint32_t max,
               list<rgw_cls_bi_entry> *entries, bool *is_truncated);
-  int bi_remove(BucketShard& bs);
+  int bi_remove(const DoutPrefixProvider *dpp, BucketShard& bs);
 
   int cls_obj_usage_log_add(const DoutPrefixProvider *dpp, const string& oid, rgw_usage_log_info& info);
   int cls_obj_usage_log_read(const DoutPrefixProvider *dpp, const string& oid, const string& user, const string& bucket, uint64_t start_epoch,
@@ -1465,7 +1465,7 @@ public:
   int fix_head_obj_locator(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, bool copy_obj, bool remove_bad, rgw_obj_key& key);
   int fix_tail_obj_locator(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, rgw_obj_key& key, bool fix, bool *need_fix, optional_yield y);
 
-  int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
+  int check_quota(const DoutPrefixProvider *dpp, const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
 		  optional_yield y, bool check_size_only = false);
 
@@ -1539,7 +1539,7 @@ public:
    * filter: if not NULL, will be used to filter returned objects
    * Returns: 0 on success, -ERR# otherwise.
    */
-  int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<rgw_bucket_dir_entry>& objs,
+  int pool_iterate(const DoutPrefixProvider *dpp, RGWPoolIterCtx& ctx, uint32_t num, vector<rgw_bucket_dir_entry>& objs,
                    bool *is_truncated, RGWAccessListFilter *filter);
 
   uint64_t next_bucket_id();

@@ -31,7 +31,7 @@ struct RadosEnv : public ::testing::Environment {
     rados.emplace(g_ceph_context);
     const NoDoutPrefix no_dpp(g_ceph_context, 1);
     ASSERT_EQ(0, rados->start(null_yield, &no_dpp));
-    int r = rados->pool({poolname}).create();
+    int r = rados->pool({poolname}).create(&no_dpp);
     if (r == -EEXIST)
       r = 0;
     ASSERT_EQ(0, r);
