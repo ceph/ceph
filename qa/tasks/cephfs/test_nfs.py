@@ -350,7 +350,8 @@ class TestNFS(MgrTestCase):
         # Export-3 for subvolume with r only
         self._cmd('fs', 'subvolume', 'create', self.fs_name, 'sub_vol')
         fs_path = self._cmd('fs', 'subvolume', 'getpath', self.fs_name, 'sub_vol').strip()
-        self._create_export(export_id='3', extra_cmd=[self.pseudo_path+'2', '--readonly', fs_path])
+        self._create_export(export_id='3', extra_cmd=[self.pseudo_path+'2', '--readonly',
+                                                      '--path', fs_path])
         # Export-4 for subvolume
         self._create_export(export_id='4', extra_cmd=[self.pseudo_path+'3', fs_path])
         # Check if exports gets listed
