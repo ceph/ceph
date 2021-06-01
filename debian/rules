@@ -63,7 +63,7 @@ override_dh_auto_install:
 	install -D -m 440 sudoers.d/ceph-osd-smartctl $(DESTDIR)/etc/sudoers.d/ceph-osd-smartctl
 	install -D -m 755 src/tools/rbd_nbd/rbd-nbd_quiesce $(DESTDIR)/usr/libexec/rbd-nbd/rbd-nbd_quiesce
 
-	install -m 755 src/cephadm/cephadm $(DESTDIR)/usr/sbin/cephadm
+	install -m 755 src/cephadm/cephadm.py $(DESTDIR)/usr/sbin/cephadm
 
 	install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml $(DESTDIR)/etc/prometheus/ceph/ceph_default_alerts.yml
 
