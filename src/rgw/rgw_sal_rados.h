@@ -448,7 +448,8 @@ class RadosStore : public Store {
 					      string tenant,
 					      string path="",
 					      string trust_policy="",
-					      string max_session_duration_str="") override;
+					      string max_session_duration_str="",
+                multimap<string,string> tags={}) override;
     virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
     virtual int get_roles(const DoutPrefixProvider *dpp,
 			  optional_yield y,
@@ -627,7 +628,8 @@ public:
           std::string tenant,
           std::string path,
           std::string trust_policy,
-          std::string max_session_duration) : RGWRole(name, tenant, path, trust_policy, max_session_duration), store(_store) {}
+          std::string max_session_duration,
+          multimap<string,string> tags) : RGWRole(name, tenant, path, trust_policy, max_session_duration, tags), store(_store) {}
   RadosRole(RadosStore* _store, std::string id) : RGWRole(id), store(_store) {}
   ~RadosRole() = default;
 
