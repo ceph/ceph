@@ -1595,7 +1595,7 @@ fi
  docker_service(){
      local service=''
      #prefer podman
-     if pgrep -f podman > /dev/null; then
+     if command -v podman > /dev/null; then
 	 service="podman"
      elif pgrep -f docker > /dev/null; then
 	 service="docker"
