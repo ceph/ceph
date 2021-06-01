@@ -38,6 +38,7 @@ class RGWRole
   map<string, string> perm_policy_map;
   string tenant;
   uint64_t max_session_duration;
+  std::multimap<std::string,std::string> tags;
 
   int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
@@ -55,13 +56,15 @@ public:
           string path,
           string trust_policy,
           string tenant,
-          string max_session_duration_str="")
+          string max_session_duration_str="",
+          std::multimap<std::string,std::string> tags={})
   : cct(cct),
     ctl(ctl),
     name(std::move(name)),
     path(std::move(path)),
     trust_policy(std::move(trust_policy)),
-    tenant(std::move(tenant)) {
+    tenant(std::move(tenant)),
+    tags(std::move(tags)) {
     if (this->path.empty())
       this->path = "/";
     extract_name_tenant(this->name);
@@ -114,7 +117,7 @@ public:
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(id, bl);
     decode(name, bl);
     decode(path, bl);
@@ -151,6 +154,9 @@ public:
   vector<string> get_role_policy_names();
   int get_role_policy(const string& policy_name, string& perm_policy);
   int delete_policy(const string& policy_name);
+  int set_tags(const DoutPrefixProvider* dpp, const std::multimap<std::string,std::string>& tags_map);
+  boost::optional<std::multimap<std::string,std::string>> get_tags();
+  void erase_tags(const std::vector<std::string>& tagKeys);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 

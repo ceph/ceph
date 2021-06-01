@@ -77,7 +77,7 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSysObjectCtx& obj_ctx, 
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
-		       boost::optional<obj_version> refresh_version = boost::none);
+		       boost::optional<obj_version> refresh_version = boost::none, bool raw_attrs=false);
 int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
                           RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y);

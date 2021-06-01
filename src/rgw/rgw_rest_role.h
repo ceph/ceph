@@ -17,11 +17,14 @@ protected:
   string perm_policy;
   string path_prefix;
   string max_session_duration;
+  std::multimap<std::string,std::string> tags;
+  std::vector<std::string> tagKeys;
   RGWRole _role;
 public:
   int verify_permission(optional_yield y) override;
   void send_response() override;
   virtual uint64_t get_op() = 0;
+  int parse_tags();
 };
 
 class RGWRoleRead : public RGWRestRole {
@@ -128,4 +131,34 @@ public:
   const char* name() const override { return "delete_role_policy"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_ROLE_POLICY; }
   uint64_t get_op() override { return rgw::IAM::iamDeleteRolePolicy; }
+};
+
+class RGWTagRole : public RGWRoleWrite {
+public:
+  RGWTagRole() = default;
+  void execute(optional_yield y) override;
+  int get_params();
+  const char* name() const override { return "tag_role"; }
+  RGWOpType get_type() override { return RGW_OP_TAG_ROLE; }
+  uint64_t get_op() override { return rgw::IAM::iamTagRole; }
+};
+
+class RGWListRoleTags : public RGWRoleRead {
+public:
+  RGWListRoleTags() = default;
+  void execute(optional_yield y) override;
+  int get_params();
+  const char* name() const override { return "list_role_tags"; }
+  RGWOpType get_type() override { return RGW_OP_LIST_ROLE_TAGS; }
+  uint64_t get_op() override { return rgw::IAM::iamListRoleTags; }
+};
+
+class RGWUntagRole : public RGWRoleWrite {
+public:
+  RGWUntagRole() = default;
+  void execute(optional_yield y) override;
+  int get_params();
+  const char* name() const override { return "untag_role"; }
+  RGWOpType get_type() override { return RGW_OP_UNTAG_ROLE; }
+  uint64_t get_op() override { return rgw::IAM::iamUntagRole; }
 };

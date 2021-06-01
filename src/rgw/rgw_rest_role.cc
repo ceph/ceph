@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <errno.h>
+#include <regex>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -52,6 +53,52 @@ int RGWRestRole::verify_permission(optional_yield y)
 
   _role = std::move(role);
 
+  return 0;
+}
+
+int RGWRestRole::parse_tags()
+{
+  vector<string> keys, vals;
+  auto val_map = s->info.args.get_params();
+  const regex pattern_key("Tags.member.([0-9]+).Key");
+  const regex pattern_value("Tags.member.([0-9]+).Value");
+  for (auto& v : val_map) {
+    string key_index="", value_index="";
+    for(sregex_iterator it = sregex_iterator(
+        v.first.begin(), v.first.end(), pattern_key);
+        it != sregex_iterator(); it++) {
+        smatch match;
+        match = *it;
+        key_index = match.str(1);
+        ldout(s->cct, 20) << "Key index: " << match.str(1) << dendl;
+        if (!key_index.empty()) {
+          int index = stoi(key_index);
+          auto pos = keys.begin() + (index-1);
+          keys.insert(pos, v.second);
+        }
+    }
+    for(sregex_iterator it = sregex_iterator(
+        v.first.begin(), v.first.end(), pattern_value);
+        it != sregex_iterator(); it++) {
+        smatch match;
+        match = *it;
+        value_index = match.str(1);
+        ldout(s->cct, 20) << "Value index: " << match.str(1) << dendl;
+        if (!value_index.empty()) {
+          int index = stoi(value_index);
+          auto pos = vals.begin() + (index-1);
+          vals.insert(pos, v.second);
+        }
+    }
+  }
+  if (keys.size() != vals.size()) {
+    ldout(s->cct, 0) << "No. of keys doesn't match with no. of values in tags" << dendl;
+    return -EINVAL;
+  }
+  for (size_t i = 0; i < keys.size(); i++) {
+    tags.emplace(keys[i], vals[i]);
+    ldout(s->cct, 0) << "Tag Key: " << keys[i] << " Tag Value is: " << vals[i] << dendl;
+  }
   return 0;
 }
 
@@ -121,6 +168,16 @@ int RGWCreateRole::get_params()
     return -ERR_MALFORMED_DOC;
   }
 
+  int ret = parse_tags();
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (tags.size() > 50) {
+    ldout(s->cct, 0) << "No. tags is greater than 50" << dendl;
+    return -EINVAL;
+  }
+
   return 0;
 }
 
@@ -132,7 +189,7 @@ void RGWCreateRole::execute(optional_yield y)
   }
   std::string user_tenant = s->user->get_tenant();
   RGWRole role(s->cct, store->getRados()->pctl, role_name, role_path, trust_policy,
-             user_tenant, max_session_duration);
+             user_tenant, max_session_duration, tags);
   if (!user_tenant.empty() && role.get_tenant() != user_tenant) {
     ldpp_dout(this, 20) << "ERROR: the tenant provided in the role name does not match with the tenant of the user creating the role"
                         << dendl;
@@ -495,4 +552,119 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
   s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->close_section();
   s->formatter->close_section();
+}
+
+int RGWTagRole::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+
+  if (role_name.empty()) {
+    ldout(s->cct, 0) << "ERROR: Role name is empty" << dendl;
+    return -EINVAL;
+  }
+  int ret = parse_tags();
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
+void RGWTagRole::execute(optional_yield y)
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  op_ret = _role.set_tags(this, tags);
+  if (op_ret == 0) {
+    op_ret = _role.update(this, y);
+  }
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section("TagRoleResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+int RGWListRoleTags::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+
+  if (role_name.empty()) {
+    ldout(s->cct, 0) << "ERROR: Role name is empty" << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWListRoleTags::execute(optional_yield y)
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  boost::optional<multimap<string,string>> tag_map = _role.get_tags();
+  s->formatter->open_object_section("ListRoleTagsResponse");
+  s->formatter->open_object_section("ListRoleTagsResult");
+  if (tag_map) {
+    s->formatter->open_array_section("Tags");
+    for (const auto& it : tag_map.get()) {
+      s->formatter->open_object_section("Key");
+      encode_json("Key", it.first, s->formatter);
+      s->formatter->close_section();
+      s->formatter->open_object_section("Value");
+      encode_json("Value", it.second, s->formatter);
+      s->formatter->close_section();
+    }
+    s->formatter->close_section();
+  }
+  s->formatter->close_section();
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->close_section();
+}
+
+int RGWUntagRole::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+
+  if (role_name.empty()) {
+    ldout(s->cct, 0) << "ERROR: Role name is empty" << dendl;
+    return -EINVAL;
+  }
+
+  auto val_map = s->info.args.get_params();
+  for (auto& it : val_map) {
+    if (it.first.find("TagKeys.member.") != string::npos) {
+        tagKeys.emplace_back(it.second);
+    }
+  }
+  return 0;
+}
+
+void RGWUntagRole::execute(optional_yield y)
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  _role.erase_tags(tagKeys);
+  op_ret = _role.update(this, y);
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section("UntagRoleResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
 }

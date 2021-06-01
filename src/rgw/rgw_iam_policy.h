@@ -126,7 +126,10 @@ static constexpr std::uint64_t iamCreateOIDCProvider = s3All + 14;
 static constexpr std::uint64_t iamDeleteOIDCProvider = s3All + 15;
 static constexpr std::uint64_t iamGetOIDCProvider = s3All + 16;
 static constexpr std::uint64_t iamListOIDCProviders = s3All + 17;
-static constexpr std::uint64_t iamAll = s3All + 18;
+static constexpr std::uint64_t iamTagRole = s3All + 18;
+static constexpr std::uint64_t iamListRoleTags = s3All + 19;
+static constexpr std::uint64_t iamUntagRole = s3All + 20;
+static constexpr std::uint64_t iamAll = s3All + 21;
 
 static constexpr std::uint64_t stsAssumeRole = iamAll + 1;
 static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = iamAll + 2;

@@ -5247,33 +5247,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     throw -EPERM;
   }
 
-  bool is_non_s3_op = false;
-  if (s->op_type == RGW_STS_GET_SESSION_TOKEN ||
-      s->op_type == RGW_STS_ASSUME_ROLE ||
-      s->op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY ||
-      s->op_type == RGW_OP_CREATE_ROLE ||
-      s->op_type == RGW_OP_DELETE_ROLE ||
-      s->op_type == RGW_OP_GET_ROLE ||
-      s->op_type == RGW_OP_MODIFY_ROLE ||
-      s->op_type == RGW_OP_LIST_ROLES ||
-      s->op_type == RGW_OP_PUT_ROLE_POLICY ||
-      s->op_type == RGW_OP_GET_ROLE_POLICY ||
-      s->op_type == RGW_OP_LIST_ROLE_POLICIES ||
-      s->op_type == RGW_OP_DELETE_ROLE_POLICY ||
-      s->op_type == RGW_OP_PUT_USER_POLICY ||
-      s->op_type == RGW_OP_GET_USER_POLICY ||
-      s->op_type == RGW_OP_LIST_USER_POLICIES ||
-      s->op_type == RGW_OP_DELETE_USER_POLICY ||
-      s->op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_GET_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_LIST_OIDC_PROVIDERS ||
-      s->op_type == RGW_OP_PUBSUB_TOPIC_CREATE ||
-      s->op_type == RGW_OP_PUBSUB_TOPICS_LIST ||
-      s->op_type == RGW_OP_PUBSUB_TOPIC_GET ||
-      s->op_type == RGW_OP_PUBSUB_TOPIC_DELETE) {
-    is_non_s3_op = true;
-  }
+  bool is_non_s3_op = rgw::auth::s3::is_non_s3_op(s->op_type);
 
   const char* exp_payload_hash = nullptr;
   string payload_hash;
