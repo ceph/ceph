@@ -181,7 +181,7 @@ rm -rf .inode_number_thrash
 
     def _setup_tree(self, path="tree", export=-1, distributed=False, random=0.0, count=100, wait=True):
         return self.mount_a.run_shell_payload(f"""
-set -e
+set -ex
 mkdir -p {path}
 {f"setfattr -n ceph.dir.pin -v {export} {path}" if export >= 0 else ""}
 {f"setfattr -n ceph.dir.pin.distributed -v 1 {path}" if distributed else ""}
@@ -316,22 +316,25 @@ done
         That ephemerally pinned subtrees are somewhat evenly distributed.
         """
 
-        self.fs.set_max_mds(3)
+        max_mds = 3
+        frags = 128
+
+        self.fs.set_max_mds(max_mds)
         self.status = self.fs.wait_for_daemons()
 
-        self.config_set('mds', 'mds_export_ephemeral_distributed_factor', 63.0 / 3)
+        self.config_set('mds', 'mds_export_ephemeral_distributed_factor', (frags-1) / max_mds)
         self._setup_tree(count=1000, distributed=True)
 
-        subtrees = self._wait_distributed_subtrees(64, status=self.status, rank="all")
+        subtrees = self._wait_distributed_subtrees(frags, status=self.status, rank="all")
         nsubtrees = len(subtrees)
 
         # Check if distribution is uniform
         rank0 = list(filter(lambda x: x['auth_first'] == 0, subtrees))
         rank1 = list(filter(lambda x: x['auth_first'] == 1, subtrees))
         rank2 = list(filter(lambda x: x['auth_first'] == 2, subtrees))
-        self.assertGreaterEqual(len(rank0)/nsubtrees, 0.2)
-        self.assertGreaterEqual(len(rank1)/nsubtrees, 0.2)
-        self.assertGreaterEqual(len(rank2)/nsubtrees, 0.2)
+        self.assertGreaterEqual(len(rank0)/nsubtrees, 0.15)
+        self.assertGreaterEqual(len(rank1)/nsubtrees, 0.15)
+        self.assertGreaterEqual(len(rank2)/nsubtrees, 0.15)
 
 
     def test_ephemeral_random(self):
