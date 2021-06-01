@@ -217,7 +217,8 @@ class Store {
 					      std::string tenant,
 					      std::string path="",
 					      std::string trust_policy="",
-					      std::string max_session_duration_str="") = 0;
+					      std::string max_session_duration_str="",
+                multimap<string,string> tags={}) = 0;
     virtual std::unique_ptr<RGWRole> get_role(std::string id) = 0;
     virtual int get_roles(const DoutPrefixProvider *dpp,
 			  optional_yield y,
