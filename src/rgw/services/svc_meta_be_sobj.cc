@@ -216,7 +216,8 @@ int RGWSI_MetaBackend_SObj::list_init(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_MetaBackend_SObj::list_next(RGWSI_MetaBackend::Context *_ctx,
+int RGWSI_MetaBackend_SObj::list_next(const DoutPrefixProvider *dpp,
+                                      RGWSI_MetaBackend::Context *_ctx,
                                       int max, list<string> *keys,
                                       bool *truncated)
 {
@@ -226,7 +227,7 @@ int RGWSI_MetaBackend_SObj::list_next(RGWSI_MetaBackend::Context *_ctx,
 
   keys->clear();
 
-  int ret = ctx->list.op->get_next(max, &oids, truncated);
+  int ret = ctx->list.op->get_next(dpp, max, &oids, truncated);
   if (ret < 0 && ret != -ENOENT)
     return ret;
   if (ret == -ENOENT) {

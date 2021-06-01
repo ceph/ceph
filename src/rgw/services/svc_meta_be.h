@@ -160,7 +160,8 @@ public:
                            optional_yield y) = 0;
 
   virtual int list_init(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const string& marker) = 0;
-  virtual int list_next(RGWSI_MetaBackend::Context *ctx,
+  virtual int list_next(const DoutPrefixProvider *dpp,
+                        RGWSI_MetaBackend::Context *ctx,
                         int max, list<string> *keys,
                         bool *truncated)  = 0;
   virtual int list_get_marker(RGWSI_MetaBackend::Context *ctx,
@@ -259,9 +260,9 @@ public:
     int list_init(const DoutPrefixProvider *dpp, const string& marker) {
       return be->list_init(dpp, be_ctx, marker);
     }
-    int list_next(int max, list<string> *keys,
+    int list_next(const DoutPrefixProvider *dpp, int max, list<string> *keys,
                   bool *truncated) {
-      return be->list_next(be_ctx, max, keys, truncated);
+      return be->list_next(dpp, be_ctx, max, keys, truncated);
     }
     int list_get_marker(string *marker) {
       return be->list_get_marker(be_ctx, marker);

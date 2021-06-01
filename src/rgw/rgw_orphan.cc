@@ -391,7 +391,7 @@ int RGWOrphanSearch::build_buckets_instance_index(const DoutPrefixProvider *dpp)
 
   do {
     list<string> keys;
-    ret = store->meta_list_keys_next(handle, max, keys, &truncated);
+    ret = store->meta_list_keys_next(dpp, handle, max, keys, &truncated);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
       return ret;
@@ -471,7 +471,7 @@ int RGWOrphanSearch::pop_and_handle_stat_op(const DoutPrefixProvider *dpp, map<i
 {
   rgw::sal::Object::StatOp* front_op = ops.front().get();
 
-  int ret = front_op->wait();
+  int ret = front_op->wait(dpp);
   if (ret < 0) {
     if (ret != -ENOENT) {
       ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " << cpp_strerror(-ret) << dendl;
@@ -1057,7 +1057,7 @@ int RGWRadosList::pop_and_handle_stat_op(
   std::set<std::string> obj_oids;
   std::unique_ptr<rgw::sal::Object::StatOp> front_op = std::move(ops.front());
 
-  int ret = front_op->wait();
+  int ret = front_op->wait(dpp);
   if (ret < 0) {
     if (ret != -ENOENT) {
       ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " <<
@@ -1324,7 +1324,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
 
   do {
     std::list<std::string> buckets;
-    ret = store->meta_list_keys_next(handle, max_keys, buckets, &truncated);
+    ret = store->meta_list_keys_next(dpp, handle, max_keys, buckets, &truncated);
 
     for (std::string& bucket_id : buckets) {
       ret = run(dpp, bucket_id);
