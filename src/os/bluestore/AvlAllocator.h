@@ -170,6 +170,12 @@ private:
    */
   const uint32_t max_search_count;
   /*
+   * Maximum distance to search forward from the last offset, without this
+   * limit, fragmented device can see lots of iterations and _block_picker()
+   * becomes the performance limiting factor on high-performance storage.
+   */
+  const uint32_t max_search_bytes;
+  /*
   * Max amount of range entries allowed. 0 - unlimited
   */
   uint64_t range_count_cap = 0;
