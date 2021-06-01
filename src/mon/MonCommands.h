@@ -77,7 +77,9 @@
  *
  * COMMAND("auth add "
  *   	   "name=entity,type=CephString "
- *   	   "name=caps,type=CephString,n=N,req=false",
+ *   	   "name=caps,type=CephString,n=N,req=false "
+ *         "-- "
+ *         "name=some_option,type=CephString,req=false",
  *   	   "add auth info for <name> from input file, or random key "
  *   	   "if no input given, and/or any caps specified in the command")
  *
@@ -88,6 +90,12 @@
  * enters auth add client.admin 'mon rwx' 'osd *'.  The result will be a
  * JSON object like {"prefix":"auth add", "entity":"client.admin",
  * "caps":["mon rwx", "osd *"]}.
+ *
+ * The -- separates positional from non-positional (and, by implication,
+ * optional) arguments.  Note that CephBool is assumed to be non-positional
+ * and will also implicitly mark that any following arguments are
+ * non-positional.
+ *
  * Note that
  * 	- string literals are accumulated into 'prefix'
  * 	- n=1 descriptors are given normal string or int object values
