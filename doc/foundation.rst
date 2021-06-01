@@ -27,7 +27,6 @@ Members
 Premier
 -------
 
-* `Amihan <https://amihan.net>`_
 * `Bloomberg <https://bloomberg.com>`_
 * `China Mobile <https://www.chinamobileltd.com/>`_
 * `DigitalOcean <https://www.digitalocean.com/>`_
@@ -111,7 +110,6 @@ Members
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
 * Sage Weil (Red Hat) - Ceph project leader
-* Winston Damarillio (Amihan)
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
 
