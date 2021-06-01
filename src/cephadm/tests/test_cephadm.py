@@ -1,12 +1,9 @@
-# type: ignore
 from typing import List, Optional
 import mock
-from mock import patch, call
+from mock import call
 import os
-import sys
 import unittest
 import threading
-import time
 import errno
 import socket
 from http.server import HTTPServer
@@ -17,9 +14,7 @@ import pytest
 
 from .fixtures import exporter
 
-with patch('builtins.open', create=True):
-    from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm').load_module()
+import cephadm as cd
 
 class TestCephAdm(object):
 
@@ -46,21 +41,21 @@ class TestCephAdm(object):
         assert 'Requires=docker.service' not in r
 
     @mock.patch('cephadm.logger')
-    def test_attempt_bind(self, logger):
-        ctx = None
-        address = None
+    def test_attempt_bind(self, _):
+        ctx = mock.Mock()
+        address = ''
         port = 0
 
-        def os_error(errno):
+        def os_error(_errno):
             _os_error = OSError()
-            _os_error.errno = errno
+            _os_error.errno = _errno
             return _os_error
 
         for side_effect, expected_exception in (
             (os_error(errno.EADDRINUSE), cd.PortOccupiedError),
             (os_error(errno.EAFNOSUPPORT), OSError),
             (os_error(errno.EADDRNOTAVAIL), OSError),
-            (None, None),
+            (None, type),
         ):
             _socket = mock.Mock()
             _socket.bind.side_effect = side_effect
@@ -69,28 +64,27 @@ class TestCephAdm(object):
             except Exception as e:
                 assert isinstance(e, expected_exception)
             else:
-                if expected_exception is not None:
-                    assert False
+                assert expected_exception is not None
 
     @mock.patch('cephadm.attempt_bind')
     @mock.patch('cephadm.logger')
-    def test_port_in_use(self, logger, attempt_bind):
-        empty_ctx = None
+    def test_port_in_use(self, _, attempt_bind):
+        empty_ctx = mock.Mock()
 
-        assert cd.port_in_use(empty_ctx, 9100) == False
+        assert cd.port_in_use(empty_ctx, 9100) is False
 
         attempt_bind.side_effect = cd.PortOccupiedError('msg')
-        assert cd.port_in_use(empty_ctx, 9100) == True
+        assert cd.port_in_use(empty_ctx, 9100) is True
 
         os_error = OSError()
         os_error.errno = errno.EADDRNOTAVAIL
         attempt_bind.side_effect = os_error
-        assert cd.port_in_use(empty_ctx, 9100) == False
+        assert cd.port_in_use(empty_ctx, 9100) is False
 
         os_error = OSError()
         os_error.errno = errno.EAFNOSUPPORT
         attempt_bind.side_effect = os_error
-        assert cd.port_in_use(empty_ctx, 9100) == False
+        assert cd.port_in_use(empty_ctx, 9100) is False
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -120,22 +114,19 @@ class TestCephAdm(object):
             _os_error.errno = errno
             return _os_error
 
-        for address, address_family in (
-            ('0.0.0.0', socket.AF_INET),
-            ('::', socket.AF_INET6),
-        ):
+        for address in ('0.0.0.0', '::'):
             for side_effect, expected_exception in (
                 (os_error(errno.EADDRINUSE), cd.PortOccupiedError),
                 (os_error(errno.EADDRNOTAVAIL), OSError),
                 (os_error(errno.EAFNOSUPPORT), OSError),
-                (None, None),
+                (None, type),
             ):
                 mock_socket_obj = mock.Mock()
                 mock_socket_obj.bind.side_effect = side_effect
                 _socket.return_value = mock_socket_obj
                 try:
                     cd.check_ip_port(ctx, address, 9100)
-                except Exception as e:
+                except Exception as e:  # ignore: broad-except
                     assert isinstance(e, expected_exception)
                 else:
                     if side_effect is not None:
@@ -152,7 +143,7 @@ class TestCephAdm(object):
         args = cd._parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
 
-    def test_CustomValidation(self):
+    def test_custom_validation(self):
         assert cd._parse_args(['deploy', '--name', 'mon.a', '--fsid', 'fsid'])
 
         with pytest.raises(SystemExit):
@@ -702,19 +693,19 @@ iMN28C2bKGao5UHvdER1rGy7
         cls.server.token = cls.token
         t = threading.Thread(target=cls.server.serve_forever)
         t.daemon = True
-        t.start() 
+        t.start()
 
     @classmethod
     def teardown_class(cls):
         cls.server.shutdown()
         assert len(cls.files_created) > 0
         for f in cls.files_created:
-            os.remove(f)      
-    
+            os.remove(f)
+
     def setup_method(self):
         # re-init the cache for every test
         TestCephadmExporter.server.cephadm_cache = cd.CephadmCache()
-    
+
     def teardown_method(self):
         pass
 
@@ -784,7 +775,7 @@ iMN28C2bKGao5UHvdER1rGy7
             urlopen(req)
         except HTTPError as e:
             assert e.code == 401
- 
+
     def test_rqst_bad_auth_401(self):
         hdrs={"Authorization":f"Bearer BogusAuthToken"}
         req=Request("http://localhost:9443/v1/metadata",headers=hdrs)
@@ -831,7 +822,7 @@ iMN28C2bKGao5UHvdER1rGy7
         assert r.status == 200
 
     def test_thread_exception(self, exporter):
-        # run is patched to invoke a mocked scrape_host thread that will raise so 
+        # run is patched to invoke a mocked scrape_host thread that will raise so
         # we check here that the exception handler updates the cache object as we'd
         # expect with the error
         exporter.run()
