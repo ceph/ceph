@@ -275,8 +275,7 @@ segment_off_t BlockSegment::get_write_capacity() const
 
 Segment::close_ertr::future<> BlockSegment::close()
 {
-  manager.segment_close(id);
-  return close_ertr::now();
+  return manager.segment_close(id);
 }
 
 Segment::write_ertr::future<> BlockSegment::write(
