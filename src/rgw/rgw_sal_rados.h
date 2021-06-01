@@ -102,7 +102,9 @@ class RGWRadosObject : public RGWObject {
     virtual int delete_object(const DoutPrefixProvider *dpp, RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
 			      ACLOwner bucket_owner, ceph::real_time unmod_since,
 			      bool high_precision_time, uint64_t epoch,
-			      std::string& version_id,optional_yield y) override;
+			      std::string& version_id,
+			      optional_yield y,
+			      bool prevent_versioning) override;
     virtual int copy_object(RGWObjectCtx& obj_ctx, RGWUser* user,
                req_info *info, const rgw_zone_id& source_zone,
                rgw::sal::RGWObject* dest_object, rgw::sal::RGWBucket* dest_bucket,
