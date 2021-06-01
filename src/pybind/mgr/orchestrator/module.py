@@ -814,24 +814,24 @@ Usage:
 
     @_cli_write_command('orch osd rm')
     def _osd_rm_start(self,
-                      svc_id: List[str],
+                      osd_id: List[str],
                       replace: bool = False,
                       force: bool = False) -> HandleCommandResult:
-        """Remove OSD services"""
-        completion = self.remove_osds(svc_id, replace=replace, force=force)
+        """Remove OSD daemons"""
+        completion = self.remove_osds(osd_id, replace=replace, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch osd rm stop')
-    def _osd_rm_stop(self, svc_id: List[str]) -> HandleCommandResult:
+    def _osd_rm_stop(self, osd_id: List[str]) -> HandleCommandResult:
         """Cancel ongoing OSD removal operation"""
-        completion = self.stop_remove_osds(svc_id)
+        completion = self.stop_remove_osds(osd_id)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch osd rm status')
     def _osd_rm_status(self, format: Format = Format.plain) -> HandleCommandResult:
-        """status of OSD removal operation"""
+        """Status of OSD removal operation"""
         completion = self.remove_osds_status()
         raise_if_exception(completion)
         report = completion.result
