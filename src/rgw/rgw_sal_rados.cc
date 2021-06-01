@@ -285,7 +285,9 @@ int RadosUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 
 int RadosUser::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
 {
-  User::merge_and_store_attrs(dpp, new_attrs, y);
+  for(auto& it : new_attrs) {
+	  attrs[it.first] = it.second;
+  }
   return store_user(dpp, y, false);
 }
 
@@ -728,7 +730,9 @@ int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_q
 
 int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
 {
-  Bucket::merge_and_store_attrs(dpp, new_attrs, y);
+  for(auto& it : new_attrs) {
+	  attrs[it.first] = it.second;
+  }
   return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
 				new_attrs, &get_info().objv_tracker, y, dpp);
 }
@@ -1211,6 +1215,13 @@ void RadosStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
 {
     bucket_quota = svc()->quota->get_bucket_quota();
     user_quota = svc()->quota->get_user_quota();
+}
+
+void RadosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)
+{
+  bucket_ratelimit = svc()->zone->get_current_period().get_config().bucket_ratelimit;
+  user_ratelimit = svc()->zone->get_current_period().get_config().user_ratelimit;
+  anon_ratelimit = svc()->zone->get_current_period().get_config().anon_ratelimit;
 }
 
 int RadosStore::set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled)
