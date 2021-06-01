@@ -4923,6 +4923,10 @@ std::vector<Option> get_global_options() {
     .set_default(100)
     .set_description("Search for this many ranges in first-fit mode before switching over to to best-fit mode. 0 to iterate through all ranges for required chunk."),
 
+    Option("bluestore_avl_alloc_ff_max_search_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
+    .set_default(16_M)
+    .set_description("Maximum distance to search in first-fit mode before switching over to to best-fit mode. 0 to iterate through all ranges for required chunk."),
+
     Option("bluestore_avl_alloc_bf_threshold", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(131072)
     .set_description("Sets threshold at which shrinking max free chunk size triggers enabling best-fit mode.")

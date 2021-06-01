@@ -35,6 +35,7 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
 {
   const auto compare = range_tree.key_comp();
   uint32_t search_count = 0;
+  uint64_t search_bytes = 0;
   auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
@@ -43,6 +44,10 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
       return offset;
     }
     if (max_search_count > 0 && ++search_count > max_search_count) {
+      return -1ULL;
+    }
+    if (search_bytes = rs->start - rs_start->start;
+	max_search_bytes > 0 && search_bytes > max_search_bytes) {
       return -1ULL;
     }
   }
@@ -58,6 +63,9 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
       return offset;
     }
     if (max_search_count > 0 && ++search_count > max_search_count) {
+      return -1ULL;
+    }
+    if (max_search_bytes > 0 && search_bytes + rs->start > max_search_bytes) {
       return -1ULL;
     }
   }
@@ -333,6 +341,8 @@ AvlAllocator::AvlAllocator(CephContext* cct,
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct")),
   max_search_count(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_ff_max_search_count")),
+  max_search_bytes(
+    cct->_conf.get_val<Option::size_t>("bluestore_avl_alloc_ff_max_search_bytes")),
   range_count_cap(max_mem / sizeof(range_seg_t)),
   cct(cct)
 {}
