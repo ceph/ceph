@@ -41,17 +41,22 @@ For information about retrieving the specifications of single services (includin
 Daemon Status
 =============
 
-A daemon is a running systemd unit and is part of a service.
+A daemon is a systemd unit that is running and part of a service.
 
-Print a list of all daemons known to the orchestrator:
+To see the status of a daemon, do the following:
+
+#. Print a list of all daemons known to the orchestrator.
+#. Query the status of the target daemon.
+
+First, print a list of all daemons known to the orchestrator:
 
    .. prompt:: bash #
 
     ceph orch ps [--hostname host] [--daemon_type type] [--service_name name] [--daemon_id id] [--format f] [--refresh]
 
-Query the status of a particular service instance (mon, osd, mds, rgw).  For
-OSDs the id is the numeric OSD ID, for MDS services it is the file system
-name:
+Then query the status of a particular service instance (mon, osd, mds, rgw).
+For OSDs the id is the numeric OSD ID. For MDS services the id is the file
+system name:
 
    .. prompt:: bash #
 
