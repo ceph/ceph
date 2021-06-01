@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
+import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
 import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
@@ -89,6 +90,19 @@ const routes: Routes = [
       { path: 'error', component: ErrorComponent },
 
       // Cluster
+      {
+        path: 'create-cluster',
+        component: CreateClusterComponent,
+        canActivate: [ModuleStatusGuardService],
+        data: {
+          moduleStatusGuardConfig: {
+            apiPath: 'orchestrator',
+            redirectTo: 'dashboard',
+            backend: 'cephadm'
+          },
+          breadcrumbs: 'Create Cluster'
+        }
+      },
       {
         path: 'hosts',
         data: { breadcrumbs: 'Cluster/Hosts' },
