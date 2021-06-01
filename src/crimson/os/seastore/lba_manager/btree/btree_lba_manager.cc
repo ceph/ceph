@@ -70,13 +70,13 @@ BtreeLBAManager::get_mappings(
       return extent->lookup_range(
 	get_context(t),
 	offset, length
-      ).safe_then([extent](auto ret) { return ret; });
-    }).safe_then([](auto &&e) {
-      logger().debug("BtreeLBAManager::get_mappings: got mappings {}", e);
-      return get_mappings_ret(
-	get_mappings_ertr::ready_future_marker{},
-	std::move(e));
-    });
+      ).safe_then([](auto &&e) {
+        logger().debug("BtreeLBAManager::get_mappings: got mappings {}", e);
+        return get_mappings_ret(
+          get_mappings_ertr::ready_future_marker{},
+          std::move(e));
+      });
+  });
 }
 
 
