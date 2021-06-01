@@ -1,7 +1,6 @@
 # # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .. import DEFAULT_VERSION
 from ..api.doc import SchemaType
 from ..controllers import ApiController, ControllerDoc, Endpoint, EndpointDoc, RESTController
 from ..controllers.docs import Docs
