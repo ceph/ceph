@@ -41,7 +41,8 @@ template <value_magic_t MAGIC,
           string_size_t MAX_OID_SIZE,
           value_size_t  MAX_VALUE_PAYLOAD_SIZE,
           extent_len_t  INTERNAL_NODE_SIZE,
-          extent_len_t  LEAF_NODE_SIZE>
+          extent_len_t  LEAF_NODE_SIZE,
+          bool          DO_SPLIT_CHECK>
 class TestValue final : public Value {
  public:
   static constexpr tree_conf_t TREE_CONF = {
@@ -50,7 +51,8 @@ class TestValue final : public Value {
     MAX_OID_SIZE,
     MAX_VALUE_PAYLOAD_SIZE,
     INTERNAL_NODE_SIZE,
-    LEAF_NODE_SIZE
+    LEAF_NODE_SIZE,
+    DO_SPLIT_CHECK
   };
 
   using id_t = test_item_t::id_t;
@@ -201,8 +203,8 @@ class TestValue final : public Value {
 };
 
 using UnboundedValue = TestValue<
-  value_magic_t::TEST_UNBOUND, 4096, 4096, 4096, 4096, 4096>;
+  value_magic_t::TEST_UNBOUND, 4096, 4096, 4096, 4096, 4096, false>;
 using BoundedValue   = TestValue<
-  value_magic_t::TEST_BOUNDED,  320,  320,  640, 4096, 4096>;
+  value_magic_t::TEST_BOUNDED,  320,  320,  640, 4096, 4096, true>;
 
 }
