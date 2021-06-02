@@ -71,7 +71,9 @@ eagain_future<> Value::trim(Transaction& t, value_size_t trim_size)
 
 const value_header_t* Value::read_value_header() const
 {
-  return p_cursor->read_value_header(vb.get_header_magic());
+  auto ret = p_cursor->read_value_header(vb.get_header_magic());
+  assert(ret->payload_size <= vb.get_max_value_payload_size());
+  return ret;
 }
 
 std::pair<NodeExtentMutable&, ValueDeltaRecorder*>

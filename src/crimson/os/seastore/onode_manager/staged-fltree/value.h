@@ -159,6 +159,7 @@ struct tree_conf_t {
   value_magic_t value_magic;
   string_size_t max_ns_size;
   string_size_t max_oid_size;
+  value_size_t max_value_payload_size;
 };
 
 class tree_cursor_t;
@@ -256,6 +257,7 @@ struct ValueBuilder {
   virtual value_magic_t get_header_magic() const = 0;
   virtual string_size_t get_max_ns_size() const = 0;
   virtual string_size_t get_max_oid_size() const = 0;
+  virtual value_size_t get_max_value_payload_size() const = 0;
   virtual std::unique_ptr<ValueDeltaRecorder>
   build_value_recorder(ceph::bufferlist&) const = 0;
 };
@@ -279,6 +281,9 @@ struct ValueBuilderImpl final : public ValueBuilder {
   }
   string_size_t get_max_oid_size() const override {
     return ValueImpl::TREE_CONF.max_oid_size;
+  }
+  value_size_t get_max_value_payload_size() const override {
+    return ValueImpl::TREE_CONF.max_value_payload_size;
   }
 
   std::unique_ptr<ValueDeltaRecorder>
