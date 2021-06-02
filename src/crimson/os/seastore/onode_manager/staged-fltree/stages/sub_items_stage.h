@@ -159,9 +159,8 @@ class internal_sub_items_t::Appender {
  */
 class leaf_sub_items_t {
  public:
-  // TODO: decide by NODE_BLOCK_SIZE, sizeof(snap_gen_t),
-  //       and the minimal size of value
-  using num_keys_t = uint8_t;
+  // should be enough to index all keys under 64 KiB node
+  using num_keys_t = uint16_t;
 
   leaf_sub_items_t(const memory_range_t& range) {
     assert(range.p_start < range.p_end);
