@@ -69,16 +69,19 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   static eagain_future<typename parent_t::fresh_impl_t> allocate(
       context_t c, bool is_level_tail, level_t level) {
     LOG_PREFIX(OTree::Layout::allocate);
-    // NOTE: Currently, all the node types have the same size for simplicity.
-    // But depending on the requirement, we may need to make node size
-    // configurable by field_type_t and node_type_t, or totally flexible.
-    return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
+    extent_len_t extent_size;
+    if constexpr (NODE_TYPE == node_type_t::LEAF) {
+      extent_size = c.vb.get_leaf_node_size();
+    } else {
+      extent_size = c.vb.get_internal_node_size();
+    }
+    return c.nm.alloc_extent(c.t, extent_size
     ).handle_error(
       eagain_ertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
-          [FNAME, c, is_level_tail, level] {
-        ERRORT("EIO -- node_size={}, is_level_tail={}, level={}",
-               c.t, node_stage_t::EXTENT_SIZE, is_level_tail, level);
+          [FNAME, c, extent_size, is_level_tail, level] {
+        ERRORT("EIO -- extent_size={}, is_level_tail={}, level={}",
+               c.t, extent_size, is_level_tail, level);
         ceph_abort("fatal error");
       })
     ).safe_then([is_level_tail, level](auto extent) {

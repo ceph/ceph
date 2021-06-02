@@ -39,14 +39,18 @@ inline std::ostream& operator<<(std::ostream& os, const test_item_t& item) {
 template <value_magic_t MAGIC,
           string_size_t MAX_NS_SIZE,
           string_size_t MAX_OID_SIZE,
-          value_size_t  MAX_VALUE_PAYLOAD_SIZE>
+          value_size_t  MAX_VALUE_PAYLOAD_SIZE,
+          extent_len_t  INTERNAL_NODE_SIZE,
+          extent_len_t  LEAF_NODE_SIZE>
 class TestValue final : public Value {
  public:
   static constexpr tree_conf_t TREE_CONF = {
     MAGIC,
     MAX_NS_SIZE,
     MAX_OID_SIZE,
-    MAX_VALUE_PAYLOAD_SIZE
+    MAX_VALUE_PAYLOAD_SIZE,
+    INTERNAL_NODE_SIZE,
+    LEAF_NODE_SIZE
   };
 
   using id_t = test_item_t::id_t;
@@ -197,8 +201,8 @@ class TestValue final : public Value {
 };
 
 using UnboundedValue = TestValue<
-  value_magic_t::TEST_UNBOUND, 4096, 4096, 4096>;
+  value_magic_t::TEST_UNBOUND, 4096, 4096, 4096, 4096, 4096>;
 using BoundedValue   = TestValue<
-  value_magic_t::TEST_BOUNDED,  320,  320,  640>;
+  value_magic_t::TEST_BOUNDED,  320,  320,  640, 4096, 4096>;
 
 }

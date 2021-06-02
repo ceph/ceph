@@ -75,14 +75,14 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   bool is_read_isolated() const override { return false; }
 
   read_ertr::future<NodeExtentRef> read_extent(
-      Transaction& t, laddr_t addr, extent_len_t len) override {
-    TRACET("reading {}B at {:#x} ...", t, len, addr);
+      Transaction& t, laddr_t addr) override {
+    TRACET("reading at {:#x} ...", t, addr);
     if constexpr (SYNC) {
-      return read_extent_sync(t, addr, len);
+      return read_extent_sync(t, addr);
     } else {
       using namespace std::chrono_literals;
-      return seastar::sleep(1us).then([this, &t, addr, len] {
-        return read_extent_sync(t, addr, len);
+      return seastar::sleep(1us).then([this, &t, addr] {
+        return read_extent_sync(t, addr);
       });
     }
   }
@@ -133,13 +133,12 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 
  private:
   read_ertr::future<NodeExtentRef> read_extent_sync(
-      Transaction& t, laddr_t addr, extent_len_t len) {
+      Transaction& t, laddr_t addr) {
     auto iter = allocate_map.find(addr);
     assert(iter != allocate_map.end());
     auto extent = iter->second;
     TRACET("read {}B at {:#x}", t, extent->get_length(), extent->get_laddr());
     assert(extent->get_laddr() == addr);
-    assert(extent->get_length() == len);
     return read_ertr::make_ready_future<NodeExtentRef>(extent);
   }
 

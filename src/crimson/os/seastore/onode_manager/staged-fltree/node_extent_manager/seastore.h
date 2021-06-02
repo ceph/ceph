@@ -97,16 +97,16 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
   bool is_read_isolated() const override { return true; }
 
   read_ertr::future<NodeExtentRef> read_extent(
-      Transaction& t, laddr_t addr, extent_len_t len) override {
-    TRACET("reading {}B at {:#x} ...", t, len, addr);
+      Transaction& t, laddr_t addr) override {
+    TRACET("reading at {:#x} ...", t, addr);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
-        DEBUGT("reading {}B at {:#x}: trigger eagain", t, len, addr);
+        DEBUGT("reading at {:#x}: trigger eagain", t, addr);
         return crimson::ct_error::eagain::make();
       }
     }
-    return tm.read_extent<SeastoreNodeExtent>(t, addr, len
-    ).safe_then([addr, len, &t](auto&& e) {
+    return tm.read_extent<SeastoreNodeExtent>(t, addr
+    ).safe_then([addr, &t](auto&& e) {
       TRACET("read {}B at {:#x} -- {}",
              t, e->get_length(), e->get_laddr(), *e);
       if (!e->is_valid()) {
@@ -114,9 +114,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         ceph_abort("fatal error");
       }
       assert(e->get_laddr() == addr);
-      assert(e->get_length() == len);
       std::ignore = addr;
-      std::ignore = len;
       return NodeExtentRef(e);
     });
   }
