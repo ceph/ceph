@@ -1,3 +1,5 @@
+# flake8: noqa
+
 from typing import Optional, Tuple, Iterator, List, Any, Dict
 
 from contextlib import contextmanager
@@ -131,7 +133,6 @@ EXPORT
         }
     }
 
-
     class RObject(object):
         def __init__(self, key: str, raw: str) -> None:
             self.key = key
@@ -224,8 +225,7 @@ EXPORT
         """
 
         with mock.patch('nfs.module.Module.describe_service') as describe_service, \
-             mock.patch('nfs.module.Module.rados') as rados:
-
+                mock.patch('nfs.module.Module.rados') as rados:
 
             rados.open_ioctx.return_value.__enter__.return_value = self.io_mock
             rados.open_ioctx.return_value.__exit__ = mock.Mock(return_value=None)
@@ -284,7 +284,7 @@ EXPORT
         assert export.fsal.sec_label_xattr == None
         assert len(export.clients) == 2
         assert export.clients[0].addresses == \
-               ["192.168.0.10", "192.168.1.0/8"]
+            ["192.168.0.10", "192.168.1.0/8"]
         # assert export.clients[0].squash ==  "no_root_squash"  # probably correct value
         assert export.clients[0].squash == "None"
         assert export.clients[0].access_type is None
@@ -315,9 +315,9 @@ EXPORT
         assert export.protocols == [4, 3]
         assert set(export.transports) == {"TCP", "UDP"}
         assert export.fsal.name == "RGW"
-        #assert export.fsal.rgw_user_id == "testuser"  # probably correct value
-        #assert export.fsal.access_key == "access_key"  # probably correct value
-        #assert export.fsal.secret_key == "secret_key"  # probably correct value
+        # assert export.fsal.rgw_user_id == "testuser"  # probably correct value
+        # assert export.fsal.access_key == "access_key"  # probably correct value
+        # assert export.fsal.secret_key == "secret_key"  # probably correct value
         assert len(export.clients) == 0
         assert export.cluster_id in ('_default_', 'foo')
 
@@ -327,7 +327,6 @@ EXPORT
         assert len(blocks) == 1
         export = Export.from_export_block(blocks[0], '_default_')
         self._validate_export_2(export)
-
 
     def test_daemon_conf_parser_a(self) -> None:
         blocks = GaneshaConfParser(self.conf_nodea).parse()
@@ -363,7 +362,6 @@ EXPORT
         self._validate_export_1([e for e in exports if e.export_id == 1][0])
         self._validate_export_2([e for e in exports if e.export_id == 2][0])
 
-
     def test_config_dict(self) -> None:
         with self._mock_orchestrator(True):
             for cluster_id, info in self.clusters.items():
@@ -377,37 +375,37 @@ EXPORT
         ex_dict = export.to_dict()
 
         assert ex_dict == {'access_type': 'RW',
-             'clients': [{'access_type': None,
-                          'addresses': ['192.168.0.10', '192.168.1.0/8'],
-                          'squash': 'None'},
-                         {'access_type': 'RO',
-                          'addresses': ['192.168.0.0/16'],
-                          'squash': 'All'}],
-             'cluster_id': 'foo',
-             'export_id': 1,
-             'fsal': {'fs_name': 'a', 'name': 'CEPH', 'user_id': 'ganesha'},
-             'path': '/',
-             'protocols': [4],
-             'pseudo': '/cephfs_a/',
-             'security_label': True,
-             'squash': 'no_root_squash',
-             'transports': [None]}
+                           'clients': [{'access_type': None,
+                                        'addresses': ['192.168.0.10', '192.168.1.0/8'],
+                                        'squash': 'None'},
+                                       {'access_type': 'RO',
+                                        'addresses': ['192.168.0.0/16'],
+                                        'squash': 'All'}],
+                           'cluster_id': 'foo',
+                           'export_id': 1,
+                           'fsal': {'fs_name': 'a', 'name': 'CEPH', 'user_id': 'ganesha'},
+                           'path': '/',
+                           'protocols': [4],
+                           'pseudo': '/cephfs_a/',
+                           'security_label': True,
+                           'squash': 'no_root_squash',
+                           'transports': [None]}
 
         export = [e for e in conf.exports['foo'] if e.export_id == 2][0]
         ex_dict = export.to_dict()
         assert ex_dict == {'access_type': 'RW',
-             'clients': [],
-             'cluster_id': 'foo',
-             'export_id': 2,
-             'fsal': {'name': 'RGW',
-                      'secret_access_key': 'secret_key',
-                      'user_id': 'testuser'},
-             'path': '/',
-             'protocols': [3, 4],
-             'pseudo': '/rgw',
-             'security_label': True,
-             'squash': 'AllAnonymous',
-             'transports': ['TCP', 'UDP']}
+                           'clients': [],
+                           'cluster_id': 'foo',
+                           'export_id': 2,
+                           'fsal': {'name': 'RGW',
+                                    'secret_access_key': 'secret_key',
+                                    'user_id': 'testuser'},
+                           'path': '/',
+                           'protocols': [3, 4],
+                           'pseudo': '/rgw',
+                           'security_label': True,
+                           'squash': 'AllAnonymous',
+                           'transports': ['TCP', 'UDP']}
 
     def test_config_from_dict(self) -> None:
         with self._mock_orchestrator(True):
@@ -459,7 +457,7 @@ EXPORT
         assert export.fsal.sec_label_xattr == 'security.selinux'
         assert len(export.clients) == 2
         assert export.clients[0].addresses == \
-                         ["192.168.0.10", "192.168.1.0/8"]
+            ["192.168.0.10", "192.168.1.0/8"]
         assert export.clients[0].squash == "no_root_squash"
         assert export.clients[0].access_type is None
         assert export.clients[1].addresses == ["192.168.0.0/16"]
@@ -565,7 +563,7 @@ EXPORT
         assert export.daemons == set(expected_exports[2])
         assert export.cluster_id == cluster_id
     """
-    
+
     def test_remove_export(self) -> None:
         with self._mock_orchestrator(True):
             for cluster_id, info in self.clusters.items():
@@ -576,7 +574,8 @@ EXPORT
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
         assert len(conf.exports[cluster_id]) == 2
-        assert conf.delete_export(cluster_id=cluster_id, pseudo_path="/rgw") == (0, "Successfully deleted export", "")
+        assert conf.delete_export(cluster_id=cluster_id,
+                                  pseudo_path="/rgw") == (0, "Successfully deleted export", "")
         exports = conf.exports[cluster_id]
         assert len(exports) == 1
         assert exports[0].export_id == 1
@@ -719,7 +718,7 @@ EXPORT
         conf.reload_daemons(['nodea', 'nodeb'])
         self.io_mock.notify.assert_has_calls(calls)
     """
-    
+
     """
     def test_list_daemons(self):
         for cluster_id, info in self.clusters.items():

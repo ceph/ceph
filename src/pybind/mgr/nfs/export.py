@@ -2,14 +2,14 @@ import errno
 import json
 import logging
 from typing import List, Any, Dict, Tuple, Optional, TYPE_CHECKING, TypeVar, Callable, cast
-from os.path import isabs, normpath
+from os.path import normpath
 
 from rados import TimedOut, ObjectNotFound
 
 from .export_utils import GaneshaConfParser, Export, RawBlock
 from .exception import NFSException, NFSInvalidOperation, NFSObjectNotFound, FSNotFound, \
-        ClusterNotFound
-from .utils import POOL_NAME, available_clusters, restart_nfs_service, check_fs
+    ClusterNotFound
+from .utils import POOL_NAME, available_clusters, check_fs
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -112,7 +112,7 @@ class ExportMgr:
         try:
             ioctx.notify(obj)
         except TimedOut:
-            log.exception(f"Ganesha timed out")
+            log.exception("Ganesha timed out")
 
     @property
     def exports(self) -> Dict[str, List[Export]]:
@@ -140,7 +140,7 @@ class ExportMgr:
         self.mgr.check_mon_command({
             'prefix': 'auth rm',
             'entity': 'client.{}'.format(entity),
-            })
+        })
         log.info(f"Export user deleted is {entity}")
 
     def _gen_export_id(self) -> int:
@@ -188,7 +188,7 @@ class ExportMgr:
             if export:
                 if pseudo_path:
                     NFSRados(self.mgr, self.rados_namespace).remove_obj(
-                             f'export-{export.export_id}', f'conf-nfs.{cluster_id}')
+                        f'export-{export.export_id}', f'conf-nfs.{cluster_id}')
                 self.exports[cluster_id].remove(export)
                 self._delete_user(export.fsal.user_id)
                 if not self.exports[cluster_id]:
@@ -204,7 +204,7 @@ class ExportMgr:
             with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
                 ioctx.set_namespace(self.rados_namespace)
                 export = Export.from_export_block(GaneshaConfParser(ioctx.read(f"export-{ex_id}"
-                    ).decode("utf-8")).parse()[0], self.rados_namespace)
+                                                                               ).decode("utf-8")).parse()[0], self.rados_namespace)
                 return export
         except ObjectNotFound:
             log.exception(f"Export ID: {ex_id} not found")
@@ -214,8 +214,8 @@ class ExportMgr:
         assert self.rados_namespace
         self.exports[self.rados_namespace].append(export)
         NFSRados(self.mgr, self.rados_namespace).update_obj(
-                GaneshaConfParser.write_block(export.to_export_block()),
-                f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
+            GaneshaConfParser.write_block(export.to_export_block()),
+            f'export-{export.export_id}', f'conf-nfs.{export.cluster_id}')
 
     def format_path(self, path: str) -> str:
         if path:
@@ -311,7 +311,7 @@ class FSExport(ExportMgr):
 
     def _update_user_id(self, path: str, access_type: str, fs_name: str, user_id: str) -> None:
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
-                self.rados_pool, self.rados_namespace, fs_name)
+            self.rados_pool, self.rados_namespace, fs_name)
         access_type = 'r' if access_type == 'RO' else 'rw'
 
         self.mgr.check_mon_command({
@@ -319,13 +319,13 @@ class FSExport(ExportMgr):
             'entity': f'client.{user_id}',
             'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow {} path={}'.format(
                 access_type, path)],
-            })
+        })
 
         log.info(f"Export user updated {user_id}")
 
     def _create_user_key(self, entity: str, path: str, fs_name: str, fs_ro: bool) -> Tuple[str, str]:
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
-                self.rados_pool, self.rados_namespace, fs_name)
+            self.rados_pool, self.rados_namespace, fs_name)
         access_type = 'r' if fs_ro else 'rw'
 
         ret, out, err = self.mgr.check_mon_command({
@@ -334,7 +334,7 @@ class FSExport(ExportMgr):
             'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow {} path={}'.format(
                 access_type, path)],
             'format': 'json',
-            })
+        })
 
         json_res = json.loads(out)
         log.info("Export user created is {}".format(json_res[0]['entity']))
@@ -396,7 +396,7 @@ class FSExport(ExportMgr):
                           pseudo_path: str,
                           read_only: bool,
                           squash: str,
-                          clients: list=[]) -> Tuple[int, str, str]:
+                          clients: list = []) -> Tuple[int, str, str]:
         pseudo_path = self.format_path(pseudo_path)
 
         if cluster_id not in self.exports:
@@ -404,7 +404,7 @@ class FSExport(ExportMgr):
 
         if not self._fetch_export(cluster_id, pseudo_path):
             # generate access+secret keys
-            
+
             ex_id = self._gen_export_id()
             if clients:
                 access_type = "none"
@@ -420,9 +420,9 @@ class FSExport(ExportMgr):
                 'squash': squash,
                 'fsal': {
                     "name": "RGW",
-                    #"user_id": user_id,
-                    #"access_key_id": access_key_id,
-                    #"secret_access_key": secret_access_key,
+                    # "user_id": user_id,
+                    # "access_key_id": access_key_id,
+                    # "secret_access_key": secret_access_key,
                 },
                 'clients': clients
             }
