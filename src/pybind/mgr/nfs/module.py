@@ -7,6 +7,7 @@ import orchestrator
 
 from .export import ExportMgr
 from .cluster import NFSCluster
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ log = logging.getLogger(__name__)
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS: List[Option] = []
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: str, **kwargs: Any) -> None:
         self.inited = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
@@ -49,7 +50,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                              squash=squash, clients=clients)
 
     @CLICommand('nfs export create rgw', perm='rw')
-    def _cmd_nfs_export_create_cephfs(
+    def _cmd_rgw_export_create_cephfs(
             self,
             bucket: str,
             clusterid: str,
