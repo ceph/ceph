@@ -29,15 +29,13 @@ namespace {
  * a suitable block to allocate. This will search the specified AVL
  * tree looking for a block that matches the specified criteria.
  */
-template<class Tree>
-uint64_t AvlAllocator::_block_picker(const Tree& t,
-				     uint64_t *cursor,
-				     uint64_t size,
-				     uint64_t align)
+uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
+					 uint64_t size,
+					 uint64_t align)
 {
-  const auto compare = t.key_comp();
-  auto rs_start = t.lower_bound(range_t{*cursor, size}, compare);
-  for (auto rs = rs_start; rs != t.end(); ++rs) {
+  const auto compare = range_tree.key_comp();
+  auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
+  for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
       *cursor = offset + size;
@@ -49,10 +47,26 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
     return -1ULL;
   }
   // If we reached end, start from beginning till cursor.
-  for (auto rs = t.begin(); rs != rs_start; ++rs) {
+  for (auto rs = range_tree.begin(); rs != rs_start; ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
       *cursor = offset + size;
+      return offset;
+    }
+  }
+  return -1ULL;
+}
+
+uint64_t AvlAllocator::_pick_block_fits(uint64_t size,
+					uint64_t align)
+{
+  // instead of searching from cursor, just pick the smallest range which fits
+  // the needs
+  const auto compare = range_size_tree.key_comp();
+  auto rs_start = range_size_tree.lower_bound(range_t{0, size}, compare);
+  for (auto rs = rs_start; rs != range_size_tree.end(); ++rs) {
+    uint64_t offset = p2roundup(rs->start, align);
+    if (offset + size <= rs->end) {
       return offset;
     }
   }
@@ -233,9 +247,8 @@ int AvlAllocator::_allocate(
   if (force_range_size_alloc ||
       max_size < range_size_alloc_threshold ||
       free_pct < range_size_alloc_free_pct) {
-    uint64_t fake_cursor = 0;
     do {
-      start = _block_picker(range_size_tree, &fake_cursor, size, unit);
+      start = _pick_block_fits(size, unit);
       dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
@@ -257,7 +270,7 @@ int AvlAllocator::_allocate(
       ceph_assert(align != 0);
       uint64_t* cursor = &lbas[cbits(align) - 1];
 
-      start = _block_picker(range_tree, cursor, size, unit);
+      start = _pick_block_after(cursor, size, unit);
       dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
