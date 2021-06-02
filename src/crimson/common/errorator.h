@@ -351,9 +351,9 @@ struct errorator {
 private:
   // see the comment for `using future = _future` below.
   template <class>
-  class _future {};
+  class [[nodiscard]] _future {};
   template <class ValueT>
-  class _future<::crimson::errorated_future_marker<ValueT>>
+  class [[nodiscard]] _future<::crimson::errorated_future_marker<ValueT>>
     : private seastar::future<ValueT> {
     using base_t = seastar::future<ValueT>;
     // we need the friendship for the sake of `get_exception() &&` when
