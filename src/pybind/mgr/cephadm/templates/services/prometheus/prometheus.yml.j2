@@ -8,7 +8,6 @@ rule_files:
 alerting:
   alertmanagers:
     - scheme: http
-      path_prefix: /alertmanager
       static_configs:
         - targets: [{{ alertmgr_targets|join(', ') }}]
 {% endif %}
