@@ -304,7 +304,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     if (!is_keys_empty()) {
       STAGE_T::get_stats(node_stage, stats, index_key);
     }
-    stats.size_persistent = node_stage_t::EXTENT_SIZE;
+    stats.size_persistent = extent.get_length();
     stats.size_filled = filled_size();
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       if (is_level_tail()) {
@@ -877,7 +877,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     std::ostringstream sos;
     sos << "Node" << NODE_TYPE << FIELD_TYPE
         << "@0x" << std::hex << extent.get_laddr()
-        << "+" << node_stage_t::EXTENT_SIZE << std::dec
+        << "+" << extent.get_length() << std::dec
         << "Lv" << (unsigned)level()
         << (is_level_tail() ? "$" : "");
     name = sos.str();

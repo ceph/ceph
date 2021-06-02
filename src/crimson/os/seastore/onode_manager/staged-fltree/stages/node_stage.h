@@ -30,8 +30,6 @@ class node_extent_t {
   using num_keys_t = typename FieldType::num_keys_t;
   static constexpr node_type_t NODE_TYPE = _NODE_TYPE;
   static constexpr field_type_t FIELD_TYPE = FieldType::FIELD_TYPE;
-  static constexpr node_offset_t EXTENT_SIZE =
-    (FieldType::SIZE + DISK_BLOCK_SIZE - 1u) / DISK_BLOCK_SIZE * DISK_BLOCK_SIZE;
 
   // TODO: remove
   node_extent_t() = default;
