@@ -323,7 +323,12 @@ class TreeBuilder {
 #else
       return eagain_ertr::make_ready_future<BtreeCursor>(cursor);
 #endif
-    });
+    }).handle_error(
+      [] (const crimson::ct_error::value_too_large& e) {
+        ceph_abort("impossible path");
+      },
+      crimson::ct_error::pass_further_all{}
+    );
   }
 
   eagain_future<> insert(Transaction& t) {

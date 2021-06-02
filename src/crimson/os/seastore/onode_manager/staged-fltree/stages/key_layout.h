@@ -144,8 +144,6 @@ inline MatchKindCMP compare_to(const snap_gen_t& l, const snap_gen_t& r) {
  */
 struct string_key_view_t {
   enum class Type {MIN, STR, MAX};
-  // presumably the maximum string length is 2KiB
-  using string_size_t = uint16_t;
   static constexpr auto MARKER_MAX = std::numeric_limits<string_size_t>::max();
   static constexpr auto MARKER_MIN = std::numeric_limits<string_size_t>::max() - 1;
   static constexpr auto VALID_UPPER_BOUND = std::numeric_limits<string_size_t>::max() - 2;
@@ -273,7 +271,6 @@ struct string_key_view_t {
  */
 class string_view_masked_t {
  public:
-  using string_size_t = string_key_view_t::string_size_t;
   using Type = string_key_view_t::Type;
   explicit string_view_masked_t(const string_key_view_t& index)
       : type{index.type()} {
@@ -392,7 +389,6 @@ inline std::ostream& operator<<(std::ostream& os, const string_view_masked_t& ma
 }
 
 struct ns_oid_view_t {
-  using string_size_t = string_key_view_t::string_size_t;
   using Type = string_key_view_t::Type;
 
   ns_oid_view_t(const char* p_end) : nspace(p_end), oid(nspace.p_next_end()) {}
@@ -596,13 +592,6 @@ inline std::ostream& operator<<(std::ostream& os, const key_hobj_t& key) {
  */
 class key_view_t {
  public:
-  //FIXME: the length of ns and oid should be defined by osd_max_object_name_len
-  //       and object_max_object_namespace_len in the future
-  static constexpr int MAX_NS_OID_LENGTH =
-    (4096 - sizeof(onode_layout_t) * 2) / 4
-    - sizeof(shard_pool_t) - sizeof(crush_t) - sizeof(snap_gen_t)
-    - 8; // size of length field of oid and ns
-
   /**
    * common interfaces as a full_key_t
    */

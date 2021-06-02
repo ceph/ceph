@@ -36,10 +36,15 @@ inline std::ostream& operator<<(std::ostream& os, const test_item_t& item) {
   return os << "TestItem(#" << item.id << ", " << item.size << "B)";
 }
 
+template <value_magic_t MAGIC,
+          string_size_t MAX_NS_SIZE,
+          string_size_t MAX_OID_SIZE>
 class TestValue final : public Value {
  public:
   static constexpr tree_conf_t TREE_CONF = {
-    value_magic_t::TEST
+    MAGIC,
+    MAX_NS_SIZE,
+    MAX_OID_SIZE
   };
 
   using id_t = test_item_t::id_t;
@@ -188,5 +193,10 @@ class TestValue final : public Value {
     ceph_assert(get_tail_magic() == item.magic);
   }
 };
+
+using UnboundedValue = TestValue<
+  value_magic_t::TEST_UNBOUND, 4096, 4096>;
+using BoundedValue   = TestValue<
+  value_magic_t::TEST_BOUNDED,  320,  320>;
 
 }

@@ -30,7 +30,7 @@ class PerfTree : public TMTestState {
   seastar::future<> run(KVPool<test_item_t>& kvs, double erase_ratio) {
     return tm_setup().then([this, &kvs, erase_ratio] {
       return seastar::async([this, &kvs, erase_ratio] {
-        auto tree = std::make_unique<TreeBuilder<TRACK, TestValue>>(kvs,
+        auto tree = std::make_unique<TreeBuilder<TRACK, BoundedValue>>(kvs,
             (is_dummy ? NodeExtentManager::create_dummy(true)
                       : NodeExtentManager::create_seastore(*tm)));
         {

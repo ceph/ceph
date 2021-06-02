@@ -64,6 +64,8 @@ using node_offset_t = uint16_t;
 constexpr node_offset_t DISK_BLOCK_SIZE = 1u << 12;
 constexpr node_offset_t NODE_BLOCK_SIZE = DISK_BLOCK_SIZE * 1u;
 
+using string_size_t = uint16_t;
+
 enum class MatchKindBS : int8_t { NE = -1, EQ = 0 };
 
 enum class MatchKindCMP : int8_t { LT = -1, EQ = 0, GT };
