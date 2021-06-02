@@ -172,7 +172,6 @@ public:
     ).finally([this] {
       current_journal_segment.reset();
       reset_soft_state();
-      return close_ertr::now();
     });
   }
 
