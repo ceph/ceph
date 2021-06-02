@@ -1,3 +1,5 @@
+# flake8: noqa
+
 import os
 if 'UNITTEST' in os.environ:
     import tests

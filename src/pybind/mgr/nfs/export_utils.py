@@ -53,7 +53,7 @@ class GaneshaConfParser:
         if idx == -1:
             raise Exception(f"Cannot find block name at {self.last_context()}")
         block_name = self.stream()[:idx]
-        self.pos += idx+1
+        self.pos += idx + 1
         return block_name
 
     def parse_block_or_section(self) -> RawBlock:
@@ -66,7 +66,7 @@ class GaneshaConfParser:
                 self.pos += len(value)
             else:
                 value = self.stream()[:idx]
-                self.pos += idx+1
+                self.pos += idx + 1
             block_dict = RawBlock('%url', values={'value': value})
             return block_dict
 
@@ -98,9 +98,9 @@ class GaneshaConfParser:
             raise Exception("Malformed stanza: no equal symbol found.")
         semicolon_idx = self.stream().find(';')
         parameter_name = self.stream()[:equal_idx].lower()
-        parameter_value = self.stream()[equal_idx+1:semicolon_idx]
+        parameter_value = self.stream()[equal_idx + 1:semicolon_idx]
         block_dict.values[parameter_name] = self.parse_parameter_value(parameter_value)
-        self.pos += semicolon_idx+1
+        self.pos += semicolon_idx + 1
 
     def parse_block_body(self, block_dict: RawBlock) -> None:
         while True:
@@ -117,8 +117,8 @@ class GaneshaConfParser:
 
             if is_semicolon and ((is_lbracket and is_semicolon_lt_lbracket) or not is_lbracket):
                 self.parse_stanza(block_dict)
-            elif is_lbracket and ((is_semicolon and not is_semicolon_lt_lbracket) or
-                                  (not is_semicolon)):
+            elif is_lbracket and ((is_semicolon and not is_semicolon_lt_lbracket)
+                                  or (not is_semicolon)):
                 block_dict.blocks.append(self.parse_block_or_section())
             else:
                 raise Exception("Malformed stanza: no semicolon found.")
@@ -135,7 +135,7 @@ class GaneshaConfParser:
     @staticmethod
     def _indentation(depth: int, size: int = 4) -> str:
         conf_str = ""
-        for _ in range(0, depth*size):
+        for _ in range(0, depth * size):
             conf_str += " "
         return conf_str
 
@@ -170,7 +170,7 @@ class GaneshaConfParser:
         conf_str += GaneshaConfParser._indentation(depth)
         conf_str += format(block.block_name)
         conf_str += " {\n"
-        conf_str += GaneshaConfParser.write_block_body(block, depth+1)
+        conf_str += GaneshaConfParser.write_block_body(block, depth + 1)
         conf_str += GaneshaConfParser._indentation(depth)
         conf_str += "}\n"
         return conf_str
@@ -197,10 +197,10 @@ class FSAL(object):
         raise NFSInvalidOperation(f'Unknown FSAL {fsal_block.values.get("name")}')
 
     def to_fsal_block(self) -> RawBlock:
-        raise NotImplemented
+        raise NotImplementedError
 
     def to_dict(self) -> Dict[str, Any]:
-        raise NotImplemented
+        raise NotImplementedError
 
 
 class CephFSFSAL(FSAL):
@@ -502,7 +502,7 @@ class Export:
             if not fs.fs_name or not check_fs(mgr, fs.fs_name):
                 raise FSNotFound(fs.fs_name)
         elif self.fsal.name == 'RGW':
-            rgw = cast(RGWFSAL, self.fsal)
+            rgw = cast(RGWFSAL, self.fsal)  # noqa
             pass
         else:
             raise NFSInvalidOperation('FSAL {self.fsal.name} not supported')
