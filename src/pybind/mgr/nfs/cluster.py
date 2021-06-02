@@ -2,7 +2,7 @@ import logging
 import socket
 import json
 import re
-from typing import cast, Dict, List, Any, Union, Optional
+from typing import cast, Dict, List, Any, Union, Optional, TypeVar, Callable, TYPE_CHECKING, Tuple
 
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
 
@@ -11,6 +11,12 @@ import orchestrator
 from .exception import NFSInvalidOperation, ClusterNotFound
 from .utils import POOL_NAME, available_clusters, restart_nfs_service
 from .export import NFSRados, exception_handler
+
+if TYPE_CHECKING:
+    from nfs.module import Module
+    from mgr_module import MgrModule
+
+FuncT = TypeVar('FuncT', bound=Callable)
 
 log = logging.getLogger(__name__)
 
@@ -28,15 +34,15 @@ def resolve_ip(hostname: str) -> str:
         raise NFSInvalidOperation(f"Cannot resolve IP for host {hostname}: {e}")
 
 
-def cluster_setter(func):
-    def set_pool_ns_clusterid(nfs, *args, **kwargs):
+def cluster_setter(func: FuncT) -> FuncT:
+    def set_pool_ns_clusterid(nfs: 'NFSCluster', *args: Any, **kwargs: Any) -> Any:
         nfs._set_pool_namespace(kwargs['cluster_id'])
         nfs._set_cluster_id(kwargs['cluster_id'])
         return func(nfs, *args, **kwargs)
-    return set_pool_ns_clusterid
+    return cast(FuncT, set_pool_ns_clusterid)
 
 
-def create_ganesha_pool(mgr, pool):
+def create_ganesha_pool(mgr: 'MgrModule', pool: str) -> None:
     pool_list = [p['pool_name'] for p in mgr.get_osdmap().dump().get('pools', [])]
     if pool not in pool_list:
         mgr.check_mon_command({'prefix': 'osd pool create', 'pool': pool})
@@ -46,24 +52,24 @@ def create_ganesha_pool(mgr, pool):
 
 
 class NFSCluster:
-    def __init__(self, mgr):
+    def __init__(self, mgr: 'Module') -> None:
         self.pool_name = POOL_NAME
         self.pool_ns = ''
         self.mgr = mgr
 
-    def _set_cluster_id(self, cluster_id):
+    def _set_cluster_id(self, cluster_id: str) -> None:
         self.cluster_id = cluster_id
 
-    def _set_pool_namespace(self, cluster_id):
+    def _set_pool_namespace(self, cluster_id: str) -> None:
         self.pool_ns = cluster_id
 
-    def _get_common_conf_obj_name(self):
+    def _get_common_conf_obj_name(self) -> str:
         return f'conf-nfs.{self.cluster_id}'
 
-    def _get_user_conf_obj_name(self):
+    def _get_user_conf_obj_name(self) -> str:
         return f'userconf-nfs.{self.cluster_id}'
 
-    def _call_orch_apply_nfs(self, placement, virtual_ip=None):
+    def _call_orch_apply_nfs(self, placement: Optional[str], virtual_ip: Optional[str] = None) -> None:
         if virtual_ip:
             # nfs + ingress
             # run NFS on non-standard port
@@ -90,12 +96,12 @@ class NFSCluster:
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
 
-    def create_empty_rados_obj(self):
+    def create_empty_rados_obj(self) -> None:
         common_conf = self._get_common_conf_obj_name()
         NFSRados(self.mgr, self.pool_ns).write_obj('', self._get_common_conf_obj_name())
         log.info(f"Created empty object:{common_conf}")
 
-    def delete_config_obj(self):
+    def delete_config_obj(self) -> None:
         NFSRados(self.mgr, self.pool_ns).remove_all_obj()
         log.info(f"Deleted {self._get_common_conf_obj_name()} object and all objects in "
                  f"{self.pool_ns}")
@@ -105,7 +111,7 @@ class NFSCluster:
                            cluster_id: str,
                            placement: Optional[str],
                            virtual_ip: Optional[str],
-                           ingress: Optional[bool] = None):
+                           ingress: Optional[bool] = None) -> Tuple[int, str, str]:
         try:
             if virtual_ip and not ingress:
                 raise NFSInvalidOperation('virtual_ip can only be provided with ingress enabled')
@@ -128,7 +134,7 @@ class NFSCluster:
             return exception_handler(e, f"NFS Cluster {cluster_id} could not be created")
 
     @cluster_setter
-    def delete_nfs_cluster(self, cluster_id):
+    def delete_nfs_cluster(self, cluster_id: str) -> Tuple[int, str, str]:
         try:
             cluster_list = available_clusters(self.mgr)
             if cluster_id in cluster_list:
@@ -143,7 +149,7 @@ class NFSCluster:
         except Exception as e:
             return exception_handler(e, f"Failed to delete NFS Cluster {cluster_id}")
 
-    def list_nfs_cluster(self):
+    def list_nfs_cluster(self) -> Tuple[int, str, str]:
         try:
             return 0, '\n'.join(available_clusters(self.mgr)), ""
         except Exception as e:
@@ -152,11 +158,13 @@ class NFSCluster:
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
         self._set_cluster_id(cluster_id)
         completion = self.mgr.list_daemons(daemon_type='nfs')
-        orchestrator.raise_if_exception(completion)
-        backends: List[Dict[str, Union[str, int]]] = []
         # Here completion.result is a list DaemonDescription objects
-        for cluster in completion.result:
+        clusters = orchestrator.raise_if_exception(completion)
+        backends: List[Dict[str, Union[Any]]] = []
+
+        for cluster in clusters:
             if self.cluster_id == cluster.service_id():
+                assert cluster.hostname
                 try:
                     if cluster.ip:
                         ip = cluster.ip
@@ -171,10 +179,10 @@ class NFSCluster:
                             # sigh
                             ip = resolve_ip(cluster.hostname)
                     backends.append({
-                            "hostname": cluster.hostname,
-                            "ip": ip,
-                            "port": cluster.ports[0]
-                            })
+                        "hostname": cluster.hostname,
+                        "ip": ip,
+                        "port": cluster.ports[0] if cluster.ports else None
+                    })
                 except orchestrator.OrchestratorError:
                     continue
 
@@ -183,18 +191,18 @@ class NFSCluster:
             'backend': backends,
         }
         sc = self.mgr.describe_service(service_type='ingress')
-        orchestrator.raise_if_exception(sc)
-        for i in sc.result:
+        services = orchestrator.raise_if_exception(sc)
+        for i in services:
             spec = cast(IngressSpec, i.spec)
             if spec.backend_service == f'nfs.{cluster_id}':
-                r['virtual_ip'] = i.virtual_ip.split('/')[0]
+                r['virtual_ip'] = i.virtual_ip.split('/')[0] if i.virtual_ip else None
                 if i.ports:
                     r['port'] = i.ports[0]
                     if len(i.ports) > 1:
                         r['monitor_port'] = i.ports[1]
         return r
 
-    def show_nfs_cluster_info(self, cluster_id=None):
+    def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
         try:
             cluster_ls = []
             info_res = {}
@@ -212,7 +220,7 @@ class NFSCluster:
             return exception_handler(e, "Failed to show info for cluster")
 
     @cluster_setter
-    def set_nfs_cluster_config(self, cluster_id, nfs_config):
+    def set_nfs_cluster_config(self, cluster_id: str, nfs_config: str) -> Tuple[int, str, str]:
         try:
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = NFSRados(self.mgr, self.pool_ns)
@@ -230,7 +238,7 @@ class NFSCluster:
             return exception_handler(e, f"Setting NFS-Ganesha Config failed for {cluster_id}")
 
     @cluster_setter
-    def reset_nfs_cluster_config(self, cluster_id):
+    def reset_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
         try:
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = NFSRados(self.mgr, self.pool_ns)
