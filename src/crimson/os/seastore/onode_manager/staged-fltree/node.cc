@@ -1176,6 +1176,8 @@ eagain_future<Ref<InternalNode>> InternalNode::allocate_root(
     context_t c, level_t old_root_level,
     laddr_t old_root_addr, Super::URef&& super)
 {
+  // support tree height up to 256
+  ceph_assert(old_root_level < MAX_LEVEL);
   return InternalNode::allocate(c, field_type_t::N0, true, old_root_level + 1
   ).safe_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
