@@ -247,18 +247,20 @@ TransactionManager::submit_transaction_direct(
       DEBUGT("journal commit to {} seq {}", tref, addr, journal_seq);
       segment_cleaner->set_journal_head(journal_seq);
       cache->complete_commit(tref, addr, journal_seq, segment_cleaner.get());
-      lba_manager->complete_transaction(tref);
-      segment_cleaner->update_journal_tail_target(
-	cache->get_oldest_dirty_from().value_or(journal_seq));
-      auto to_release = tref.get_segment_to_release();
-      if (to_release != NULL_SEG_ID) {
-	return segment_manager.release(to_release
-	).safe_then([this, to_release] {
-	  segment_cleaner->mark_segment_released(to_release);
-	});
-      } else {
-	return SegmentManager::release_ertr::now();
-      }
+      return lba_manager->complete_transaction(tref).safe_then(
+	[&tref, journal_seq=journal_seq, this] {
+	segment_cleaner->update_journal_tail_target(
+	  cache->get_oldest_dirty_from().value_or(journal_seq));
+	auto to_release = tref.get_segment_to_release();
+	if (to_release != NULL_SEG_ID) {
+	  return segment_manager.release(to_release
+	  ).safe_then([this, to_release] {
+	    segment_cleaner->mark_segment_released(to_release);
+	  });
+	} else {
+	  return SegmentManager::release_ertr::now();
+	}
+      });
     }).safe_then([&tref] {
       return tref.handle.complete();
     }).handle_error(

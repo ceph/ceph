@@ -40,8 +40,7 @@ segment_off_t EphemeralSegment::get_write_capacity() const
 
 Segment::close_ertr::future<> EphemeralSegment::close()
 {
-  manager.segment_close(id);
-  return close_ertr::now().safe_then([] {
+  return manager.segment_close(id).safe_then([] {
     return seastar::sleep(std::chrono::milliseconds(1));
   });
 }
