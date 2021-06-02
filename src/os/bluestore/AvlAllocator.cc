@@ -266,10 +266,7 @@ int AvlAllocator::_allocate(
        * not guarantee that other allocations sizes may exist in the same
        * region.
        */
-      uint64_t align = size & -size;
-      ceph_assert(align != 0);
-      uint64_t* cursor = &lbas[cbits(align) - 1];
-
+      uint64_t* cursor = &lbas[cbits(size) - 1];
       start = _pick_block_after(cursor, size, unit);
       dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
       if (start != uint64_t(-1ULL)) {
