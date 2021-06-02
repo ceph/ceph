@@ -494,3 +494,8 @@ class Export:
             pass
         else:
             raise NFSInvalidOperation('FSAL {self.fsal.name} not supported')
+
+    def __eq__(self, other):
+        if not isinstance(other, Export):
+            return False
+        return self.to_dict() == other.to_dict()
