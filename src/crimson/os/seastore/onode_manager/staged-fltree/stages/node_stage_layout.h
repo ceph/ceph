@@ -123,9 +123,8 @@ node_range_t fields_free_range_before(
  */
 template <typename SlotType>
 struct _node_fields_013_t {
-  // TODO: decide by NODE_BLOCK_SIZE, sizeof(SlotType), sizeof(laddr_t)
-  // and the minimal size of variable_key.
-  using num_keys_t = uint8_t;
+  // should be enough to index all keys under 64 KiB node
+  using num_keys_t = uint16_t;
   using key_t = typename SlotType::key_t;
   using key_get_type = const key_t&;
   using me_t = _node_fields_013_t<SlotType>;
@@ -212,9 +211,8 @@ using node_fields_1_t = _node_fields_013_t<slot_1_t>;
  *                     +-----------------------------------------------+
  */
 struct node_fields_2_t {
-  // TODO: decide by NODE_BLOCK_SIZE, sizeof(node_off_t), sizeof(laddr_t)
-  // and the minimal size of variable_key.
-  using num_keys_t = uint8_t;
+  // should be enough to index all keys under 64 KiB node
+  using num_keys_t = uint16_t;
   using key_t = ns_oid_view_t;
   using key_get_type = key_t;
   static constexpr field_type_t FIELD_TYPE = field_type_t::N2;
@@ -306,8 +304,8 @@ template <unsigned MAX_NUM_KEYS>
 struct _internal_fields_3_t {
   using key_get_type = const snap_gen_t&;
   using me_t = _internal_fields_3_t<MAX_NUM_KEYS>;
-  // TODO: decide by NODE_BLOCK_SIZE, sizeof(snap_gen_t), sizeof(laddr_t)
-  using num_keys_t = uint8_t;
+  // should be enough to index all keys under 64 KiB node
+  using num_keys_t = uint16_t;
   static constexpr field_type_t FIELD_TYPE = field_type_t::N3;
   static constexpr node_offset_t SIZE = sizeof(me_t);
   static constexpr node_offset_t HEADER_SIZE =

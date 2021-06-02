@@ -1271,7 +1271,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
-      auto padding_e = std::string(248, '_');
+      auto padding_e = std::string(247, '_');
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 2, 2));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 3, 3));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 4, 4));
@@ -1386,7 +1386,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (3):\n");
-      auto padding = std::string(420, '_');
+      auto padding = std::string(419, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding, true);
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 2, 2));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 3, 3));
@@ -1411,7 +1411,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 2, 2));
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 3, 3));
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 4, 4));
-      auto padding_s = std::string(387, '_');
+      auto padding_s = std::string(386, '_');
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
@@ -1459,7 +1459,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
                     "\nbefore internal node insert (6):\n");
       auto padding = std::string(328, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding);
-      keys.insert(make_ghobj(5, 5, 5, "ns3", "oid3" + std::string(271, '_'), 3, 3));
+      keys.insert(make_ghobj(5, 5, 5, "ns3", "oid3" + std::string(270, '_'), 3, 3));
       keys.insert(make_ghobj(9, 9, 9, "ns~last", "oid~last", 9, 9));
       pool.build_tree(keys).unsafe_get0();
 
