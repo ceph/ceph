@@ -38,7 +38,10 @@ inline std::ostream& operator<<(std::ostream& os, const test_item_t& item) {
 
 class TestValue final : public Value {
  public:
-  static constexpr auto HEADER_MAGIC = value_magic_t::TEST;
+  static constexpr tree_conf_t TREE_CONF = {
+    value_magic_t::TEST
+  };
+
   using id_t = test_item_t::id_t;
   using magic_t = test_item_t::magic_t;
   struct magic_packed_t {
@@ -94,7 +97,7 @@ class TestValue final : public Value {
 
    protected:
     value_magic_t get_header_magic() const override {
-      return HEADER_MAGIC;
+      return TREE_CONF.value_magic;
     }
 
     void apply_value_delta(ceph::bufferlist::const_iterator& delta,

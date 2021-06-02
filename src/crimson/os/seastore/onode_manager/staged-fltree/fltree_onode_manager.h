@@ -10,7 +10,9 @@
 namespace crimson::os::seastore::onode {
 
 struct FLTreeOnode final : Onode, Value {
-  static constexpr value_magic_t HEADER_MAGIC = value_magic_t::ONODE;
+  static constexpr tree_conf_t TREE_CONF = {
+    value_magic_t::ONODE
+  };
 
   enum class status_t {
     STABLE,
@@ -27,13 +29,11 @@ struct FLTreeOnode final : Onode, Value {
   template <typename... T>
   FLTreeOnode(T&&... args) : Value(std::forward<T>(args)...) {}
 
-
-
   struct Recorder : public ValueDeltaRecorder {
     Recorder(bufferlist &bl) : ValueDeltaRecorder(bl) {}
 
     value_magic_t get_header_magic() const final {
-      return value_magic_t::ONODE;
+      return TREE_CONF.value_magic;
     }
 
     void apply_value_delta(

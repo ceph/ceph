@@ -16,15 +16,15 @@ namespace crimson::os::seastore::onode {
 // value size up to 64 KiB
 using value_size_t = uint16_t;
 enum class value_magic_t : uint8_t {
-  TEST = 0x52,
-  ONODE,
+  ONODE = 0x52,
+  TEST,
 };
 inline std::ostream& operator<<(std::ostream& os, const value_magic_t& magic) {
   switch (magic) {
-  case value_magic_t::TEST:
-    return os << "TEST";
   case value_magic_t::ONODE:
     return os << "ONODE";
+  case value_magic_t::TEST:
+    return os << "TEST";
   default:
     return os << "UNKNOWN(" << magic << ")";
   }
@@ -147,6 +147,15 @@ class ValueDeltaRecorder {
   ceph::bufferlist& encoded;
 };
 
+/**
+ * tree_conf_t
+ *
+ * Hard limits and compile-time configurations.
+ */
+struct tree_conf_t {
+  value_magic_t value_magic;
+};
+
 class tree_cursor_t;
 /**
  * Value
@@ -252,7 +261,7 @@ struct ValueBuilder {
 template <typename ValueImpl>
 struct ValueBuilderImpl final : public ValueBuilder {
   value_magic_t get_header_magic() const {
-    return ValueImpl::HEADER_MAGIC;
+    return ValueImpl::TREE_CONF.value_magic;
   }
 
   std::unique_ptr<ValueDeltaRecorder>

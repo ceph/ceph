@@ -85,11 +85,11 @@ build_value_recorder_by_type(ceph::bufferlist& encoded,
 {
   std::unique_ptr<ValueDeltaRecorder> ret;
   switch (magic) {
-  case value_magic_t::TEST:
-    ret = std::make_unique<TestValue::Recorder>(encoded);
-    break;
   case value_magic_t::ONODE:
     ret = std::make_unique<FLTreeOnode::Recorder>(encoded);
+    break;
+  case value_magic_t::TEST:
+    ret = std::make_unique<TestValue::Recorder>(encoded);
     break;
   default:
     ret = nullptr;
