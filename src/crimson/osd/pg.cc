@@ -974,7 +974,7 @@ PG::with_existing_clone_obc(ObjectContextRef clone, with_obc_func_t&& func)
     assert(head == clone->get_head_obc());
     return clone->template with_lock<State>(
       [clone=std::move(clone), func=std::move(func)] {
-      std::move(func)(std::move(clone));
+      return std::move(func)(std::move(clone));
     });
   });
 }
