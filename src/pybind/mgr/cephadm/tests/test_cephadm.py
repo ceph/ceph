@@ -674,6 +674,10 @@ spec:
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_osds(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
+            inventory = Devices([
+                Device('/dev/sdb', available=True),
+            ])
+            cephadm_module.cache.update_host_devices_networks('test', inventory.devices, {})
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
                                 data_devices=DeviceSelection(paths=['']))
             c = cephadm_module.create_osds(dg)
@@ -683,6 +687,10 @@ spec:
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_noncollocated_osd(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
+            inventory = Devices([
+                Device('/dev/sdb', available=True),
+            ])
+            cephadm_module.cache.update_host_devices_networks('test', inventory.devices, {})
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
                                 data_devices=DeviceSelection(paths=['']))
             c = cephadm_module.create_osds(dg)
@@ -692,6 +700,13 @@ spec:
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_prepare_drivegroup(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
+
+            # A drive group that generates a Drive selection with one device
+            inventory = Devices([
+                Device('/dev/sdb', available=True),
+            ])
+            cephadm_module.cache.update_host_devices_networks('test', inventory.devices, {})
+
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
                                 data_devices=DeviceSelection(paths=['']))
             out = cephadm_module.osd_service.prepare_drivegroup(dg)
@@ -699,6 +714,22 @@ spec:
             f1 = out[0]
             assert f1[0] == 'test'
             assert isinstance(f1[1], DriveSelection)
+
+            # A drive group trying to create osds in non available devices
+            inventory = Devices([
+                Device('/dev/sdb', available=False),
+            ])
+            cephadm_module.cache.update_host_devices_networks('test', inventory.devices, {})
+            with pytest.raises(OrchestratorError, match="No inventory found for host: test"):
+                out = cephadm_module.osd_service.prepare_drivegroup(dg)
+
+            # all-available-devices drive group does not generate any error
+            # because available devices can appear in any moment
+            dg = DriveGroupSpec(service_id='all-available-devices',
+                                placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(paths=['']))
+            out = cephadm_module.osd_service.prepare_drivegroup(dg)
+            assert len(out) == 0
 
     @pytest.mark.parametrize(
         "devices, preview, exp_command",

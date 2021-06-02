@@ -2019,7 +2019,7 @@ Then run the following:
         self.log.info('Zap device %s:%s' % (host, path))
         out, err, code = CephadmServe(self)._run_cephadm(
             host, 'osd', 'ceph-volume',
-            ['--', 'lvm', 'zap', '--destroy', path],
+            ['--', 'lvm', 'zap', path],
             error_ok=True)
         self.cache.invalidate_host_devices(host)
         if code:

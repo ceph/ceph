@@ -6,7 +6,6 @@ from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import DriveSelection
-from ceph.deployment.inventory import Device
 from ceph.utils import datetime_to_str, str_to_datetime
 
 from datetime import datetime
@@ -156,20 +155,18 @@ class OSDService(CephService):
         # 2) Map the inventory to the InventoryHost object
         host_ds_map = []
 
-        # set osd_id_claims
-
-        def _find_inv_for_host(hostname: str, inventory_dict: dict) -> List[Device]:
-            # This is stupid and needs to be loaded with the host
-            for _host, _inventory in inventory_dict.items():
-                if _host == hostname:
-                    return _inventory
-            raise OrchestratorError("No inventory found for host: {}".format(hostname))
-
         # 3) iterate over matching_host and call DriveSelection
         logger.debug(f"Checking matching hosts -> {matching_hosts}")
         for host in matching_hosts:
-            inventory_for_host = _find_inv_for_host(host, self.mgr.cache.devices)
-            logger.debug(f"Found inventory for host {inventory_for_host}")
+            inventory_for_host = list(filter(lambda device: device.available,
+                                             self.mgr.cache.devices.get(host, [])))
+            if not inventory_for_host:
+                if drive_group.service_id == 'all-available-devices':
+                    continue
+                else:
+                    raise OrchestratorError(f"No inventory found for host: {host}")
+            else:
+                logger.debug(f"Found inventory for host {host}: {inventory_for_host}")
 
             # List of Daemons on that host
             dd_for_spec = self.mgr.cache.get_daemons_by_service(drive_group.service_name())
