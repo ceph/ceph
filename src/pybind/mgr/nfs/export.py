@@ -9,7 +9,7 @@ from rados import TimedOut, ObjectNotFound
 from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
 from .exception import NFSException, NFSInvalidOperation, NFSObjectNotFound, FSNotFound, \
     ClusterNotFound
-from .utils import POOL_NAME, available_clusters, check_fs
+from .utils import POOL_NAME, available_clusters, check_fs, restart_nfs_service
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -498,6 +498,10 @@ class FSExport(ExportMgr):
                 raise NFSInvalidOperation('Export ID changed, Cannot update export')
         elif new_export.get('export_id'):
             old_export = self._fetch_export_obj(cluster_id, new_export['export_id'])
+            if old_export:
+                # re-fetch via old pseudo
+                old_export = self._fetch_export(cluster_id, old_export.pseudo)
+                self.mgr.log.debug(f"export {old_export.export_id} pseudo {old_export.pseudo} -> {new_export_dict['pseudo']}")
 
         if not old_export and not can_create:
             raise NFSObjectNotFound('Export does not exist')
@@ -514,24 +518,29 @@ class FSExport(ExportMgr):
 
         if old_export.fsal.name != new_export.fsal.name:
             raise NFSInvalidOperation('FSAL change not allowed')
-        """
-        if old_export.fsal.user_id != new_export.fsal.user_id:
-            raise NFSInvalidOperation('user_id change is not allowed')
 
         if old_export.fsal.name == 'CEPH':
+            old_fsal = cast(CephFSFSAL, old_export.fsal)
+            new_fsal = cast(CephFSFSAL, new_export.fsal)
+            if old_fsal.user_id != new_fsal.user_id:
+                raise NFSInvalidOperation('user_id change is not allowed')
             if (
-                old_export_path != new_export_path
-                or cast(old_export.fsal, CephFSFSAL).fs_name != cast(new_export.fsal, CephFSFSAL).fs_name
+                old_export.path != new_export.path
+                or old_fsal.fs_name != new_fsal.fs_name
             ):
-                self._update_user_id(new_export.path, new_export.access_type,
-                                     new_export.fsal.fs_name, new_export.fsal.user_id)
-            cast(new_export.fsal, CephFSFSAL).cephx_key = cast(old_export.fsal, CephFSFSAL).cephx_key
-        self._update_export(new_export)
-        export_ls = self.exports[self.rados_namespace]
-        if old_export not in export_ls:
-            # This happens when export is fetched by ID
-            old_export = self._fetch_export(old_export.cluster_id, old_export.pseudo)
-        export_ls.remove(old_export)
+                self._update_user_id(
+                    cluster_id,
+                    new_export.path,
+                    new_export.access_type,
+                    cast(str, new_fsal.fs_name),
+                    cast(str, new_fsal.user_id)
+                )
+            new_fsal.cephx_key = old_fsal.cephx_key
+
+        self.exports[cluster_id].remove(old_export)
+        self._update_export(cluster_id, new_export)
+
+        # TODO: detect whether the update is such that a reload is sufficient
         restart_nfs_service(self.mgr, new_export.cluster_id)
-        """
+
         return 0, f"Updated export {new_export.pseudo}", ""
