@@ -503,13 +503,14 @@ class NodeExtentAccessorT {
       return eagain_ertr::make_ready_future<NodeExtentMutable>(*mut);
     }
     assert(!extent->is_initial_pending());
-    return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
+    auto alloc_size = extent->get_length();
+    return c.nm.alloc_extent(c.t, alloc_size
     ).handle_error(
       eagain_ertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
-          [FNAME, c, l_to_discard = extent->get_laddr()] {
+          [FNAME, c, alloc_size, l_to_discard = extent->get_laddr()] {
         ERRORT("EIO during allocate -- node_size={}, to_discard={:x}",
-               c.t, node_stage_t::EXTENT_SIZE, l_to_discard);
+               c.t, alloc_size, l_to_discard);
         ceph_abort("fatal error");
       })
     ).safe_then([this, c, FNAME] (auto fresh_extent) {

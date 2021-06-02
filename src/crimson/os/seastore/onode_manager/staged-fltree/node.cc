@@ -653,11 +653,7 @@ eagain_future<Ref<Node>> Node::load(
     context_t c, laddr_t addr, bool expect_is_level_tail)
 {
   LOG_PREFIX(OTree::Node::load);
-  // NOTE:
-  // *option1: all types of node have the same length;
-  // option2: length is defined by node/field types;
-  // option3: length is totally flexible;
-  return c.nm.read_extent(c.t, addr, NODE_BLOCK_SIZE
+  return c.nm.read_extent(c.t, addr
   ).handle_error(
     eagain_ertr::pass_further{},
     crimson::ct_error::input_output_error::handle(
@@ -684,12 +680,20 @@ eagain_future<Ref<Node>> Node::load(
              c.t, addr, expect_is_level_tail);
       ceph_abort("fatal error");
     })
-  ).safe_then([expect_is_level_tail](auto extent) {
+  ).safe_then([FNAME, c, expect_is_level_tail](auto extent) {
     auto [node_type, field_type] = extent->get_types();
     if (node_type == node_type_t::LEAF) {
+      if (extent->get_length() != c.vb.get_leaf_node_size()) {
+        ERRORT("leaf length mismatch -- {}", c.t, extent);
+        ceph_abort("fatal error");
+      }
       auto impl = LeafNodeImpl::load(extent, field_type, expect_is_level_tail);
       return Ref<Node>(new LeafNode(impl.get(), std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
+      if (extent->get_length() != c.vb.get_internal_node_size()) {
+        ERRORT("internal length mismatch -- {}", c.t, extent);
+        ceph_abort("fatal error");
+      }
       auto impl = InternalNodeImpl::load(extent, field_type, expect_is_level_tail);
       return Ref<Node>(new InternalNode(impl.get(), std::move(impl)));
     } else {

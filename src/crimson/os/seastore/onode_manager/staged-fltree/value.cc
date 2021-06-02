@@ -111,6 +111,10 @@ void validate_tree_config(const tree_conf_t& conf)
               string_key_view_t::VALID_UPPER_BOUND);
   ceph_assert(conf.max_oid_size <
               string_key_view_t::VALID_UPPER_BOUND);
+  ceph_assert(conf.internal_node_size <= MAX_NODE_SIZE);
+  ceph_assert(conf.internal_node_size % DISK_BLOCK_SIZE == 0);
+  ceph_assert(conf.leaf_node_size <= MAX_NODE_SIZE);
+  ceph_assert(conf.leaf_node_size % DISK_BLOCK_SIZE == 0);
 }
 
 }

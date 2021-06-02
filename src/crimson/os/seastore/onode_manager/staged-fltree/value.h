@@ -160,6 +160,8 @@ struct tree_conf_t {
   string_size_t max_ns_size;
   string_size_t max_oid_size;
   value_size_t max_value_payload_size;
+  extent_len_t internal_node_size;
+  extent_len_t leaf_node_size;
 };
 
 class tree_cursor_t;
@@ -258,6 +260,8 @@ struct ValueBuilder {
   virtual string_size_t get_max_ns_size() const = 0;
   virtual string_size_t get_max_oid_size() const = 0;
   virtual value_size_t get_max_value_payload_size() const = 0;
+  virtual extent_len_t get_internal_node_size() const = 0;
+  virtual extent_len_t get_leaf_node_size() const = 0;
   virtual std::unique_ptr<ValueDeltaRecorder>
   build_value_recorder(ceph::bufferlist&) const = 0;
 };
@@ -284,6 +288,12 @@ struct ValueBuilderImpl final : public ValueBuilder {
   }
   value_size_t get_max_value_payload_size() const override {
     return ValueImpl::TREE_CONF.max_value_payload_size;
+  }
+  extent_len_t get_internal_node_size() const override {
+    return ValueImpl::TREE_CONF.internal_node_size;
+  }
+  extent_len_t get_leaf_node_size() const override {
+    return ValueImpl::TREE_CONF.leaf_node_size;
   }
 
   std::unique_ptr<ValueDeltaRecorder>

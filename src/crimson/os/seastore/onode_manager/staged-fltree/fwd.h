@@ -59,10 +59,12 @@ constexpr auto INDEX_LAST = INDEX_END - 0x4;
 constexpr auto INDEX_UPPER_BOUND = INDEX_END - 0x8;
 inline bool is_valid_index(index_t index) { return index < INDEX_UPPER_BOUND; }
 
-// TODO: decide by NODE_BLOCK_SIZE
+// we support up to 64 KiB tree nodes
 using node_offset_t = uint16_t;
 constexpr node_offset_t DISK_BLOCK_SIZE = 1u << 12;
 constexpr node_offset_t NODE_BLOCK_SIZE = DISK_BLOCK_SIZE * 1u;
+constexpr auto MAX_NODE_SIZE =
+    (extent_len_t)std::numeric_limits<node_offset_t>::max() + 1;
 
 using string_size_t = uint16_t;
 
