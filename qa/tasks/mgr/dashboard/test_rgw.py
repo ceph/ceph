@@ -107,6 +107,16 @@ class RgwApiCredentialsTest(RgwTestCase):
                       data['message'])
 
 
+class RgwSiteTest(RgwTestCase):
+
+    AUTH_ROLES = ['rgw-manager']
+
+    def test_get_realms(self):
+        data = self._get('/api/rgw/site?query=realms')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(str))
+
+
 class RgwBucketTest(RgwTestCase):
 
     AUTH_ROLES = ['rgw-manager']

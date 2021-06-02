@@ -20,7 +20,7 @@ from OpenSSL import crypto
 from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
 from mgr_util import get_default_addr, ServerConfigException, verify_tls_files
 
-import _strptime  # pylint: disable=unused-import
+import _strptime  # pylint: disable=unused-import,wrong-import-order
 
 try:
     import cherrypy

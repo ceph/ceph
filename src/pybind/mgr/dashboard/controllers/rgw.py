@@ -118,6 +118,18 @@ class RgwRESTController(RESTController):
             raise DashboardException(e, http_status_code=500, component='rgw')
 
 
+@ApiController('/rgw/site', Scope.RGW)
+class RgwSite(RgwRESTController):
+    def list(self, query=None):
+        if query == 'realms':
+            result = RgwClient.admin_instance().get_realms()
+        else:
+            # @TODO: for multisite: by default, retrieve cluster topology/map.
+            raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
+
+        return result
+
+
 @ApiController('/rgw/bucket', Scope.RGW)
 class RgwBucket(RgwRESTController):
 
