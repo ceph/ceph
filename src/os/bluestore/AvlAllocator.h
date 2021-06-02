@@ -95,8 +95,14 @@ public:
   void shutdown() override;
 
 private:
-  template<class Tree>
-  uint64_t _block_picker(const Tree& t, uint64_t *cursor, uint64_t size,
+  // pick a range by search from cursor forward
+  uint64_t _pick_block_after(
+    uint64_t *cursor,
+    uint64_t size,
+    uint64_t align);
+  // pick a range with exactly the same size or larger
+  uint64_t _pick_block_fits(
+    uint64_t size,
     uint64_t align);
   int _allocate(
     uint64_t size,
