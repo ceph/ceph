@@ -198,9 +198,8 @@ EXPORT
                                                    pool=cluster_info['pool'],
                                                    namespace=cluster_info['namespace']))
         ] if enable else []
-        # pylint: disable=protected-access
-        #ganesha.Ganesha._get_orch_nfs_services = Mock(return_value=orch_nfs_services)
 
+        """
         # mock nfs daemons
         def _get_nfs_instances(service_name=None):
             if not enable:
@@ -220,6 +219,8 @@ EXPORT
             for _, daemons in instances.items():
                 result.extend(daemons)
             return result
+        """
+
         with mock.patch('nfs.module.Module.describe_service') as describe_service, \
              mock.patch('nfs.module.Module.rados') as rados:
 
@@ -232,9 +233,6 @@ EXPORT
             self._reset_temp_store()
 
             yield
-
-        #ganesha.ExportMgrOrchestrator._get_orch_nfs_instances = Mock(
-        #    side_effect=_get_nfs_instances)
 
     def test_parse_daemon_raw_config(self):
         expected_daemon_config = [
