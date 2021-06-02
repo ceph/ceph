@@ -26,6 +26,8 @@ namespace {
   constexpr bool IS_DUMMY_SYNC = false;
   using DummyManager = DummyNodeExtentManager<IS_DUMMY_SYNC>;
 
+  using UnboundedBtree = Btree<UnboundedValue>;
+
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
   }
@@ -140,7 +142,7 @@ TEST_F(a_basic_test_t, 2_node_sizes)
   run_async([this] {
     auto nm = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
     auto t = make_test_transaction();
-    ValueBuilderImpl<TestValue> vb;
+    ValueBuilderImpl<UnboundedValue> vb;
     context_t c{*nm, vb, *t};
     std::array<std::pair<NodeImplURef, NodeExtentMutable>, 16> nodes = {
       InternalNode0::allocate(c, false, 1u).unsafe_get0().make_pair(),
@@ -171,15 +173,13 @@ TEST_F(a_basic_test_t, 2_node_sizes)
   });
 }
 
-using TestBtree = Btree<TestValue>;
-
 struct b_dummy_tree_test_t : public seastar_test_suite_t {
   NodeExtentManagerURef moved_nm;
   TransactionRef ref_t;
   Transaction& t;
-  ValueBuilderImpl<TestValue> vb;
+  ValueBuilderImpl<UnboundedValue> vb;
   context_t c;
-  TestBtree tree;
+  UnboundedBtree tree;
 
   b_dummy_tree_test_t()
     : moved_nm{NodeExtentManager::create_dummy(IS_DUMMY_SYNC)},
@@ -209,7 +209,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
     ASSERT_TRUE(tree.last(t).unsafe_get0().is_end());
 
     std::map<ghobject_t,
-             std::tuple<test_item_t, TestBtree::Cursor>> insert_history;
+             std::tuple<test_item_t, UnboundedBtree::Cursor>> insert_history;
 
     auto f_validate_insert_new = [this, &insert_history] (
         const ghobject_t& key, const test_item_t& value) {
@@ -496,7 +496,7 @@ class TestTree {
       // clone
       auto ref_dummy = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
       auto p_dummy = static_cast<DummyManager*>(ref_dummy.get());
-      TestBtree tree_clone(std::move(ref_dummy));
+      UnboundedBtree tree_clone(std::move(ref_dummy));
       auto ref_t_clone = make_test_transaction();
       Transaction& t_clone = *ref_t_clone;
       tree_clone.test_clone_from(t_clone, t, tree).unsafe_get0();
@@ -577,12 +577,12 @@ class TestTree {
   NodeExtentManagerURef moved_nm;
   TransactionRef ref_t;
   Transaction& t;
-  ValueBuilderImpl<TestValue> vb;
+  ValueBuilderImpl<UnboundedValue> vb;
   context_t c;
-  TestBtree tree;
+  UnboundedBtree tree;
   Values<test_item_t> values;
   std::map<ghobject_t,
-           std::tuple<test_item_t, TestBtree::Cursor>> insert_history;
+           std::tuple<test_item_t, UnboundedBtree::Cursor>> insert_history;
 };
 
 struct c_dummy_test_t : public seastar_test_suite_t {};
@@ -1239,9 +1239,9 @@ class DummyChildPool {
   Transaction& t() const { return *ref_t; }
 
   std::set<Ref<DummyChild>> tracked_children;
-  std::optional<TestBtree> p_btree;
+  std::optional<UnboundedBtree> p_btree;
   DummyManager* p_dummy = nullptr;
-  ValueBuilderImpl<TestValue> vb;
+  ValueBuilderImpl<UnboundedValue> vb;
   TransactionRef ref_t = make_test_transaction();
 
   std::random_device rd;
@@ -1526,7 +1526,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     auto moved_nm = (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
                                    : NodeExtentManager::create_dummy(IS_DUMMY_SYNC));
     auto p_nm = moved_nm.get();
-    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, TestValue>>(
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, BoundedValue>>(
         kvs, std::move(moved_nm));
     {
       auto t = tm->create_transaction();
@@ -1623,7 +1623,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
     auto moved_nm = NodeExtentManager::create_seastore(
         *tm, L_ADDR_MIN, EAGAIN_PROBABILITY);
     auto p_nm = static_cast<SeastoreNodeExtentManager<true>*>(moved_nm.get());
-    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, TestValue>>(
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, BoundedValue>>(
         kvs, std::move(moved_nm));
     unsigned num_ops = 0;
     unsigned num_ops_eagain = 0;

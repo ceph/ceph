@@ -17,14 +17,17 @@ namespace crimson::os::seastore::onode {
 using value_size_t = uint16_t;
 enum class value_magic_t : uint8_t {
   ONODE = 0x52,
-  TEST,
+  TEST_UNBOUND,
+  TEST_BOUNDED,
 };
 inline std::ostream& operator<<(std::ostream& os, const value_magic_t& magic) {
   switch (magic) {
   case value_magic_t::ONODE:
     return os << "ONODE";
-  case value_magic_t::TEST:
-    return os << "TEST";
+  case value_magic_t::TEST_UNBOUND:
+    return os << "TEST_UNBOUND";
+  case value_magic_t::TEST_BOUNDED:
+    return os << "TEST_BOUNDED";
   default:
     return os << "UNKNOWN(" << magic << ")";
   }
@@ -154,6 +157,8 @@ class ValueDeltaRecorder {
  */
 struct tree_conf_t {
   value_magic_t value_magic;
+  string_size_t max_ns_size;
+  string_size_t max_oid_size;
 };
 
 class tree_cursor_t;
@@ -249,6 +254,8 @@ class Value {
  */
 struct ValueBuilder {
   virtual value_magic_t get_header_magic() const = 0;
+  virtual string_size_t get_max_ns_size() const = 0;
+  virtual string_size_t get_max_oid_size() const = 0;
   virtual std::unique_ptr<ValueDeltaRecorder>
   build_value_recorder(ceph::bufferlist&) const = 0;
 };
@@ -260,8 +267,18 @@ struct ValueBuilder {
  */
 template <typename ValueImpl>
 struct ValueBuilderImpl final : public ValueBuilder {
+  ValueBuilderImpl() {
+    validate_tree_config(ValueImpl::TREE_CONF);
+  }
+
   value_magic_t get_header_magic() const {
     return ValueImpl::TREE_CONF.value_magic;
+  }
+  string_size_t get_max_ns_size() const override {
+    return ValueImpl::TREE_CONF.max_ns_size;
+  }
+  string_size_t get_max_oid_size() const override {
+    return ValueImpl::TREE_CONF.max_oid_size;
   }
 
   std::unique_ptr<ValueDeltaRecorder>
@@ -279,6 +296,8 @@ struct ValueBuilderImpl final : public ValueBuilder {
     return ValueImpl(nm, vb, p_cursor);
   }
 };
+
+void validate_tree_config(const tree_conf_t& conf);
 
 /**
  * Get the value recorder by type (the magic value) when the ValueBuilder is

@@ -5,6 +5,7 @@
 
 #include "node.h"
 #include "node_delta_recorder.h"
+#include "node_layout.h"
 
 // value implementations
 #include "test/crimson/seastore/onode_tree/test_value.h"
@@ -88,8 +89,11 @@ build_value_recorder_by_type(ceph::bufferlist& encoded,
   case value_magic_t::ONODE:
     ret = std::make_unique<FLTreeOnode::Recorder>(encoded);
     break;
-  case value_magic_t::TEST:
-    ret = std::make_unique<TestValue::Recorder>(encoded);
+  case value_magic_t::TEST_UNBOUND:
+    ret = std::make_unique<UnboundedValue::Recorder>(encoded);
+    break;
+  case value_magic_t::TEST_BOUNDED:
+    ret = std::make_unique<BoundedValue::Recorder>(encoded);
     break;
   default:
     ret = nullptr;
@@ -97,6 +101,14 @@ build_value_recorder_by_type(ceph::bufferlist& encoded,
   }
   assert(!ret || ret->get_header_magic() == magic);
   return ret;
+}
+
+void validate_tree_config(const tree_conf_t& conf)
+{
+  ceph_assert(conf.max_ns_size <
+              string_key_view_t::VALID_UPPER_BOUND);
+  ceph_assert(conf.max_oid_size <
+              string_key_view_t::VALID_UPPER_BOUND);
 }
 
 }
