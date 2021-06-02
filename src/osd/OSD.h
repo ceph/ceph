@@ -2065,6 +2065,7 @@ private:
   float get_osd_snap_trim_sleep();
 
   int get_recovery_max_active();
+  bool maybe_override_options_for_qos();
 
   void scrub_purged_snaps();
   void probe_smart(const std::string& devid, std::ostream& ss);
