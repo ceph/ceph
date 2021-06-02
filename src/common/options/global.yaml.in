@@ -5029,6 +5029,12 @@ options:
   - hdd
   - ssd
   with_legacy: true
+- name: bluestore_avl_alloc_ff_max_search_count
+  type: uint
+  level: dev
+  desc: Search for this many ranges in first-fit mode before switching over to
+    to best-fit mode. 0 to iterate through all ranges for required chunk.
+  default: 100
 - name: bluestore_avl_alloc_bf_threshold
   type: uint
   level: dev
