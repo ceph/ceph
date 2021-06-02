@@ -82,7 +82,7 @@ deployment of services.  Here is an example of a service specification in YAML:
     unmanaged: false
     ...
 
-In this example, the the properties this service specification are:
+In this example, the properties of this service specification are:
 
 * ``service_type``
     The type of the service. Needs to be either a Ceph
