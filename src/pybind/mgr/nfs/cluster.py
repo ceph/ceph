@@ -36,8 +36,6 @@ def resolve_ip(hostname: str) -> str:
 
 def cluster_setter(func: FuncT) -> FuncT:
     def set_pool_ns_clusterid(nfs: 'NFSCluster', *args: Any, **kwargs: Any) -> Any:
-        nfs._set_pool_namespace(kwargs['cluster_id'])
-        nfs._set_cluster_id(kwargs['cluster_id'])
         return func(nfs, *args, **kwargs)
     return cast(FuncT, set_pool_ns_clusterid)
 
@@ -54,35 +52,28 @@ def create_ganesha_pool(mgr: 'MgrModule', pool: str) -> None:
 class NFSCluster:
     def __init__(self, mgr: 'Module') -> None:
         self.pool_name = POOL_NAME
-        self.pool_ns = ''
         self.mgr = mgr
 
-    def _set_cluster_id(self, cluster_id: str) -> None:
-        self.cluster_id = cluster_id
+    def _get_common_conf_obj_name(self, cluster_id: str) -> str:
+        return f'conf-nfs.{cluster_id}'
 
-    def _set_pool_namespace(self, cluster_id: str) -> None:
-        self.pool_ns = cluster_id
+    def _get_user_conf_obj_name(self, cluster_id: str) -> str:
+        return f'userconf-nfs.{cluster_id}'
 
-    def _get_common_conf_obj_name(self) -> str:
-        return f'conf-nfs.{self.cluster_id}'
-
-    def _get_user_conf_obj_name(self) -> str:
-        return f'userconf-nfs.{self.cluster_id}'
-
-    def _call_orch_apply_nfs(self, placement: Optional[str], virtual_ip: Optional[str] = None) -> None:
+    def _call_orch_apply_nfs(self, cluster_id: str, placement: Optional[str], virtual_ip: Optional[str] = None) -> None:
         if virtual_ip:
             # nfs + ingress
             # run NFS on non-standard port
-            spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
-                                  pool=self.pool_name, namespace=self.pool_ns,
+            spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
+                                  pool=self.pool_name, namespace=cluster_id,
                                   placement=PlacementSpec.from_string(placement),
                                   # use non-default port so we don't conflict with ingress
                                   port=12049)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
-                                service_id='nfs.' + self.cluster_id,
-                                backend_service='nfs.' + self.cluster_id,
+                                service_id='nfs.' + cluster_id,
+                                backend_service='nfs.' + cluster_id,
                                 frontend_port=2049,  # default nfs port
                                 monitor_port=9049,
                                 virtual_ip=virtual_ip)
@@ -90,21 +81,21 @@ class NFSCluster:
             orchestrator.raise_if_exception(completion)
         else:
             # standalone nfs
-            spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
-                                  pool=self.pool_name, namespace=self.pool_ns,
+            spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
+                                  pool=self.pool_name, namespace=cluster_id,
                                   placement=PlacementSpec.from_string(placement))
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
 
-    def create_empty_rados_obj(self) -> None:
-        common_conf = self._get_common_conf_obj_name()
-        NFSRados(self.mgr, self.pool_ns).write_obj('', self._get_common_conf_obj_name())
+    def create_empty_rados_obj(self, cluster_id: str) -> None:
+        common_conf = self._get_common_conf_obj_name(cluster_id)
+        NFSRados(self.mgr, cluster_id).write_obj('', self._get_common_conf_obj_name(cluster_id))
         log.info(f"Created empty object:{common_conf}")
 
-    def delete_config_obj(self) -> None:
-        NFSRados(self.mgr, self.pool_ns).remove_all_obj()
-        log.info(f"Deleted {self._get_common_conf_obj_name()} object and all objects in "
-                 f"{self.pool_ns}")
+    def delete_config_obj(self, cluster_id: str) -> None:
+        NFSRados(self.mgr, cluster_id).remove_all_obj()
+        log.info(f"Deleted {self._get_common_conf_obj_name(cluster_id)} object and all objects in "
+                 f"{cluster_id}")
 
     @cluster_setter
     def create_nfs_cluster(self,
@@ -124,10 +115,10 @@ class NFSCluster:
 
             create_ganesha_pool(self.mgr, self.pool_name)
 
-            self.create_empty_rados_obj()
+            self.create_empty_rados_obj(cluster_id)
 
             if cluster_id not in available_clusters(self.mgr):
-                self._call_orch_apply_nfs(placement, virtual_ip)
+                self._call_orch_apply_nfs(cluster_id, placement, virtual_ip)
                 return 0, "NFS Cluster Created Successfully", ""
             return 0, "", f"{cluster_id} cluster already exists"
         except Exception as e:
@@ -139,11 +130,11 @@ class NFSCluster:
             cluster_list = available_clusters(self.mgr)
             if cluster_id in cluster_list:
                 self.mgr.export_mgr.delete_all_exports(cluster_id)
-                completion = self.mgr.remove_service('ingress.nfs.' + self.cluster_id)
+                completion = self.mgr.remove_service('ingress.nfs.' + cluster_id)
                 orchestrator.raise_if_exception(completion)
-                completion = self.mgr.remove_service('nfs.' + self.cluster_id)
+                completion = self.mgr.remove_service('nfs.' + cluster_id)
                 orchestrator.raise_if_exception(completion)
-                self.delete_config_obj()
+                self.delete_config_obj(cluster_id)
                 return 0, "NFS Cluster Deleted Successfully", ""
             return 0, "", "Cluster does not exist"
         except Exception as e:
@@ -156,14 +147,13 @@ class NFSCluster:
             return exception_handler(e, "Failed to list NFS Cluster")
 
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
-        self._set_cluster_id(cluster_id)
         completion = self.mgr.list_daemons(daemon_type='nfs')
         # Here completion.result is a list DaemonDescription objects
         clusters = orchestrator.raise_if_exception(completion)
         backends: List[Dict[str, Union[Any]]] = []
 
         for cluster in clusters:
-            if self.cluster_id == cluster.service_id():
+            if cluster_id == cluster.service_id():
                 assert cluster.hostname
                 try:
                     if cluster.ip:
@@ -223,11 +213,11 @@ class NFSCluster:
     def set_nfs_cluster_config(self, cluster_id: str, nfs_config: str) -> Tuple[int, str, str]:
         try:
             if cluster_id in available_clusters(self.mgr):
-                rados_obj = NFSRados(self.mgr, self.pool_ns)
+                rados_obj = NFSRados(self.mgr, cluster_id)
                 if rados_obj.check_user_config():
                     return 0, "", "NFS-Ganesha User Config already exists"
-                rados_obj.write_obj(nfs_config, self._get_user_conf_obj_name(),
-                                    self._get_common_conf_obj_name())
+                rados_obj.write_obj(nfs_config, self._get_user_conf_obj_name(cluster_id),
+                                    self._get_common_conf_obj_name(cluster_id))
                 restart_nfs_service(self.mgr, cluster_id)
                 return 0, "NFS-Ganesha Config Set Successfully", ""
             raise ClusterNotFound()
@@ -241,11 +231,11 @@ class NFSCluster:
     def reset_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
         try:
             if cluster_id in available_clusters(self.mgr):
-                rados_obj = NFSRados(self.mgr, self.pool_ns)
+                rados_obj = NFSRados(self.mgr, cluster_id)
                 if not rados_obj.check_user_config():
                     return 0, "", "NFS-Ganesha User Config does not exist"
-                rados_obj.remove_obj(self._get_user_conf_obj_name(),
-                                     self._get_common_conf_obj_name())
+                rados_obj.remove_obj(self._get_user_conf_obj_name(cluster_id),
+                                     self._get_common_conf_obj_name(cluster_id))
                 restart_nfs_service(self.mgr, cluster_id)
                 return 0, "NFS-Ganesha Config Reset Successfully", ""
             raise ClusterNotFound()
