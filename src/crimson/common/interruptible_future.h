@@ -549,6 +549,8 @@ public:
   using core_type::failed;
   using core_type::core_type;
 
+  using value_type = typename core_type::value_type;
+
   interruptible_future_detail(seastar::future<T>&& fut)
     : core_type(std::move(fut))
   {}
@@ -963,9 +965,10 @@ public:
   }
 
   template <typename OpFunc, typename OnInterrupt,
-	    typename... InterruptCondParams>
-  static inline auto with_interruption(
-    OpFunc&& opfunc, OnInterrupt&& efunc, InterruptCondParams&&... params) {
+	    typename... Params>
+  static inline auto with_interruption_cond(
+    OpFunc&& opfunc, OnInterrupt&& efunc, InterruptCond &&cond, Params&&... params) {
+    using result_type = decltype(opfunc(std::forward<Params>(params)...));
       // there may case like:
       // 	with_interruption([] {
       // 		return ...
@@ -978,15 +981,52 @@ public:
       // so we have to avoid this scenario.
       //
       // TODO: maybe some kind of interrupt_cond stack should be implemented?
-      bool created = enable_interruption(
-	  std::forward<InterruptCondParams>(params)...);
-      auto fut = futurize<std::result_of_t<OpFunc()>>::apply(
-	    std::move(opfunc), std::make_tuple())
-	.template handle_interruption(std::move(efunc));
+      bool created = enable_interruption(std::forward<InterruptCond>(cond));
+
+      auto fut = futurize<result_type>::invoke(
+	std::move(opfunc), std::forward<Params>(params)...
+      ).template handle_interruption(std::move(efunc));
+
       if (__builtin_expect(created, true)) {
 	disable_interruption();
       }
       return fut;
+  }
+
+  template <typename OpFunc, typename OnInterrupt,
+	    typename... InterruptCondParams>
+  static inline auto with_interruption(
+    OpFunc&& opfunc, OnInterrupt&& efunc, InterruptCondParams&&... params) {
+    return with_interruption_cond(
+      std::forward<OpFunc>(opfunc),
+      std::forward<OnInterrupt>(efunc),
+      InterruptCond(std::forward<InterruptCondParams>(params)...));
+  }
+
+  template <typename Error,
+	    typename Func,
+	    typename... Params>
+  static inline auto with_interruption_to_error(
+    Func &&f, InterruptCond &&cond, Params&&... params) {
+    using func_result_t = std::invoke_result_t<Func, Params...>;
+    using func_ertr_t =
+      typename seastar::template futurize<func_result_t>::errorator_type;
+    using with_trans_ertr =
+      typename func_ertr_t::template extend_ertr<errorator<Error>>;
+
+    using value_type = typename func_result_t::value_type;
+    using ftype = typename std::conditional_t<
+      std::is_same_v<value_type, seastar::internal::monostate>,
+      typename with_trans_ertr::template future<>,
+      typename with_trans_ertr::template future<value_type>>;
+
+    return with_interruption_cond(
+      std::forward<Func>(f),
+      [](auto e) -> ftype {
+	return Error::make();
+      },
+      std::forward<InterruptCond>(cond),
+      std::forward<Params>(params)...);
   }
 
   template <typename Func>
