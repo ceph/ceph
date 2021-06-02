@@ -30,7 +30,7 @@ def restart_nfs_service(mgr: 'Module', cluster_id: str) -> None:
     This methods restarts the nfs daemons
     '''
     completion = mgr.service_action(action='restart',
-                                    service_name='nfs.'+cluster_id)
+                                    service_name='nfs.' + cluster_id)
     orchestrator.raise_if_exception(completion)
 
 
