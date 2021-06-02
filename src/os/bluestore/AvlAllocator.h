@@ -163,7 +163,12 @@ private:
    * switch to using best-fit allocations.
    */
   int range_size_alloc_free_pct = 0;
-
+  /*
+   * Maximum number of segments to check in the first-fit mode, without this
+   * limit, fragmented device can see lots of iterations and _block_picker()
+   * becomes the performance limiting factor on high-performance storage.
+   */
+  const uint32_t max_search_count;
   /*
   * Max amount of range entries allowed. 0 - unlimited
   */
