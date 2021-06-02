@@ -10,23 +10,24 @@ class GaneshaConfParser:
         self.pos = 0
         self.text = ""
         for line in raw_config.split("\n"):
-            self.text += line
-            if line.startswith("%"):
-                self.text += "\n"
+            line = line.lstrip()
 
-    def remove_whitespaces_quotes(self):
-        if self.text.startswith("%url"):
-            self.text = self.text.replace('"', "")
-        else:
-            self.text = "".join(self.text.split())
+            if line.startswith("%"):
+                self.text += line.replace('"', "")
+                self.text += "\n"
+            else:
+                self.text += "".join(line.split())
 
     def stream(self):
         return self.text[self.pos:]
 
+    def last_context(self) -> str:
+        return f'"...{self.text[max(0, self.pos - 30):self.pos]}<here>{self.stream()[:30]}"'
+
     def parse_block_name(self):
         idx = self.stream().find('{')
         if idx == -1:
-            raise Exception("Cannot find block name")
+            raise Exception(f"Cannot find block name at {self.last_context()}")
         block_name = self.stream()[:idx]
         self.pos += idx+1
         return block_name
@@ -104,7 +105,6 @@ class GaneshaConfParser:
                 raise Exception("Infinite loop while parsing block content")
 
     def parse(self):
-        self.remove_whitespaces_quotes()
         blocks = []
         while self.stream():
             blocks.append(self.parse_block_or_section())
