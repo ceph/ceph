@@ -154,19 +154,7 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
     superblock.osd_fsid = store->get_fsid();
     superblock.whoami = whoami;
     superblock.compat_features = get_osd_initial_compat_set();
-
-    logger().info(
-      "{} writing superblock cluster_fsid {} osd_fsid {}",
-      __func__,
-      cluster_fsid,
-      superblock.osd_fsid);
-    return store->create_new_collection(coll_t::meta());
-  }).then([this] (auto ch) {
-    meta_coll = make_unique<OSDMeta>(ch , store.get());
-    ceph::os::Transaction t;
-    meta_coll->create(t);
-    meta_coll->store_superblock(t, superblock);
-    return store->do_transaction(meta_coll->collection(), std::move(t));
+    return _write_superblock();
   }).then([cluster_fsid, this] {
     return when_all_succeed(
       store->write_meta("ceph_fsid", cluster_fsid.to_string()),
@@ -176,6 +164,42 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
                local_conf().get_val<std::string>("osd_data"),
                whoami, cluster_fsid);
     return seastar::now();
+  });
+}
+
+seastar::future<> OSD::_write_superblock()
+{
+  return store->open_collection(coll_t::meta()).then([this] (auto ch) {
+    if (ch) {
+      // if we already have superblock, check if it matches
+      meta_coll = make_unique<OSDMeta>(ch, store.get());
+      return meta_coll->load_superblock().then([this](OSDSuperblock&& sb) {
+        if (sb.cluster_fsid != superblock.cluster_fsid) {
+          logger().error("provided cluster fsid {} != superblock's {}",
+                         sb.cluster_fsid, superblock.cluster_fsid);
+          throw std::invalid_argument("mismatched fsid");
+        }
+        if (sb.whoami != superblock.whoami) {
+          logger().error("provided osd id {} != superblock's {}",
+                         sb.whoami, superblock.whoami);
+          throw std::invalid_argument("mismatched osd id");
+        }
+      });
+    } else {
+      // meta collection does not yet, create superblock
+      logger().info(
+        "{} writing superblock cluster_fsid {} osd_fsid {}",
+        __func__,
+        superblock.cluster_fsid,
+        superblock.osd_fsid);
+      return store->create_new_collection(coll_t::meta()).then([this] (auto ch) {
+        meta_coll = make_unique<OSDMeta>(ch , store.get());
+        ceph::os::Transaction t;
+        meta_coll->create(t);
+        meta_coll->store_superblock(t, superblock);
+        return store->do_transaction(meta_coll->collection(), std::move(t));
+      });
+    }
   });
 }
 
