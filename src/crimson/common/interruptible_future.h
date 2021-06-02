@@ -64,7 +64,7 @@ template <typename InterruptCond>
 thread_local InterruptCondRef<InterruptCond> interrupt_cond;
 
 template <typename InterruptCond, typename FutureType>
-class interruptible_future_detail {};
+class [[nodiscard]] interruptible_future_detail {};
 
 template <typename FutureType>
 struct is_interruptible_future : public std::false_type {};
@@ -233,7 +233,7 @@ Result non_futurized_call_with_interruption(
 }
 
 template <typename InterruptCond, typename T>
-class interruptible_future_detail<InterruptCond, seastar::future<T>>
+class [[nodiscard]] interruptible_future_detail<InterruptCond, seastar::future<T>>
   : private seastar::future<T> {
 public:
   using core_type = seastar::future<T>;
@@ -518,7 +518,7 @@ struct interruptible_errorator {
 template <typename InterruptCond,
 	  template <typename...> typename ErroratedFuture,
 	  typename T>
-class interruptible_future_detail<
+class [[nodiscard]] interruptible_future_detail<
   InterruptCond,
   ErroratedFuture<::crimson::errorated_future_marker<T>>>
   : private ErroratedFuture<::crimson::errorated_future_marker<T>>
