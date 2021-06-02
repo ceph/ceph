@@ -487,6 +487,16 @@ struct interruptible_errorator {
   using future = interruptible_future_detail<InterruptCond,
 	typename Errorator::template future<ValueT>>;
 
+  template <class... NewAllowedErrorsT>
+  using extend = interruptible_errorator<
+    InterruptCond,
+    typename Errorator::template extend<NewAllowedErrorsT...>>;
+
+  template <class Ertr>
+  using extend_ertr = interruptible_errorator<
+    InterruptCond,
+    typename Errorator::template extend_ertr<Ertr>>;
+
   template <typename ValueT = void, typename... A>
   static interruptible_future_detail<
     InterruptCond,
@@ -513,6 +523,10 @@ struct interruptible_errorator {
       InterruptCond, typename Errorator::template future<>>(
 	Errorator::now());
   }
+
+  using pass_further = typename Errorator::pass_further;
+  using ready_future_marker = ready_future_marker;
+  using exception_future_marker = exception_future_marker;
 };
 
 template <typename InterruptCond,
