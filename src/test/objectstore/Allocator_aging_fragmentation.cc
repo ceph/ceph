@@ -96,7 +96,7 @@ public:
   void do_free(uint64_t low_mark);
   uint32_t free_random();
 
-  static void TearDownTestCase();
+  static void TearDownTestSuite();
 };
 
 struct test_result {
@@ -299,7 +299,8 @@ void AllocTest::doAgingTest(
   r.frag_score += frag_score;
 }
 
-void AllocTest::TearDownTestCase() {
+void AllocTest::TearDownTestSuite()
+{
   std::cout << "Summary: " << std::endl;
   for (auto& r: results_per_allocator) {
     std::cout << r.first <<
