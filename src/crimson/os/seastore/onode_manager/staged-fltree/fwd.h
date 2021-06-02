@@ -52,6 +52,8 @@ using InternalNodeImplURef = std::unique_ptr<InternalNodeImpl>;
 using NodeImplURef = std::unique_ptr<NodeImpl>;
 
 using level_t = uint8_t;
+constexpr auto MAX_LEVEL = std::numeric_limits<level_t>::max();
+
 // a type only to index within a node, 32 bits should be enough
 using index_t = uint32_t;
 constexpr auto INDEX_END = std::numeric_limits<index_t>::max();
