@@ -203,8 +203,7 @@ void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
 
 void KeyRing::decode(bufferlist::const_iterator& bl)
 {
-  auto start_pos = bl;
-  decode_plaintext(start_pos);
+  decode_plaintext(bl);
 }
 
 int KeyRing::load(CephContext *cct, const std::string &filename)
