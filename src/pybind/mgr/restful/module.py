@@ -312,7 +312,7 @@ class Module(MgrModule):
         # Publish the URI that others may use to access the service we're
         # about to start serving
         self.set_uri("https://{0}:{1}/".format(
-            socket.gethostname() if server_addr == "::" else server_addr,
+            self.get_mgr_ip() if server_addr == "::" else server_addr,
             server_port
         ))
 
