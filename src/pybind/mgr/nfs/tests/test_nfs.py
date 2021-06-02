@@ -1,3 +1,5 @@
+from typing import Optional, Tuple, Iterator, List, Any, Dict
+
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import MagicMock
@@ -5,11 +7,11 @@ from unittest.mock import MagicMock
 from ceph.deployment.service_spec import NFSServiceSpec
 from nfs import Module
 from nfs.export import ExportMgr
-from nfs.export_utils import GaneshaConfParser, Export
+from nfs.export_utils import GaneshaConfParser, Export, RawBlock
 from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
 
-class TestNFS():
+class TestNFS:
     daemon_raw_config = """
 NFS_CORE_PARAM {
             Enable_NLM = false;
@@ -131,40 +133,40 @@ EXPORT
 
 
     class RObject(object):
-        def __init__(self, key, raw):
+        def __init__(self, key: str, raw: str) -> None:
             self.key = key
             self.raw = raw
 
-        def read(self, _):
+        def read(self, _: Optional[int]) -> bytes:
             return self.raw.encode('utf-8')
 
-        def stat(self):
+        def stat(self) -> Tuple[int, None]:
             return len(self.raw), None
 
-    def _ioctx_write_full_mock(self, key, content):
+    def _ioctx_write_full_mock(self, key: str, content: bytes) -> None:
         if key not in self.temp_store[self.temp_store_namespace]:
             self.temp_store[self.temp_store_namespace][key] = \
                 TestNFS.RObject(key, content.decode('utf-8'))
         else:
             self.temp_store[self.temp_store_namespace][key].raw = content.decode('utf-8')
 
-    def _ioctx_remove_mock(self, key):
+    def _ioctx_remove_mock(self, key: str) -> None:
         del self.temp_store[self.temp_store_namespace][key]
 
-    def _ioctx_list_objects_mock(self):
+    def _ioctx_list_objects_mock(self) -> List['TestNFS.RObject']:
         r = [obj for _, obj in self.temp_store[self.temp_store_namespace].items()]
         return r
 
     def _ioctl_stat_mock(self, key):
         return self.temp_store[self.temp_store_namespace][key].stat()
 
-    def _ioctl_read_mock(self, key, size=None):
+    def _ioctl_read_mock(self, key: str, size: Optional[Any] = None) -> bytes:
         return self.temp_store[self.temp_store_namespace][key].read(size)
 
-    def _ioctx_set_namespace_mock(self, namespace):
+    def _ioctx_set_namespace_mock(self, namespace: str) -> None:
         self.temp_store_namespace = namespace
 
-    def _reset_temp_store(self):
+    def _reset_temp_store(self) -> None:
         self.temp_store_namespace = None
         self.temp_store = {
             'ns': {
@@ -181,7 +183,7 @@ EXPORT
         }
 
     @contextmanager
-    def _mock_orchestrator(self, enable):
+    def _mock_orchestrator(self, enable: bool) -> Iterator:
 
         self.io_mock = MagicMock()
         self.io_mock.set_namespace.side_effect = self._ioctx_set_namespace_mock
@@ -234,40 +236,34 @@ EXPORT
 
             yield
 
-    def test_parse_daemon_raw_config(self):
+    def test_parse_daemon_raw_config(self) -> None:
         expected_daemon_config = [
-            {
-                "block_name": "NFS_CORE_PARAM",
+            RawBlock('NFS_CORE_PARAM', values={
                 "enable_nlm": False,
                 "enable_rquota": False,
                 "protocols": 4,
                 "nfs_port": 14000
-            },
-            {
-                "block_name": "MDCACHE",
+            }),
+            RawBlock('MDCACHE', values={
                 "dir_chunk": 0
-            },
-            {
-                "block_name": "NFSV4",
+            }),
+            RawBlock('NFSV4', values={
                 "recoverybackend": "rados_cluster",
                 "minor_versions": [1, 2]
-            },
-            {
-                "block_name": "RADOS_KV",
+            }),
+            RawBlock('RADOS_KV', values={
                 "pool": "nfs-ganesha",
                 "namespace": "vstart",
                 "userid": "vstart",
                 "nodeid": "a"
-            },
-            {
-                "block_name": "RADOS_URLS",
+            }),
+            RawBlock('RADOS_URLS', values={
                 "userid": "vstart",
                 "watch_url": "'rados://nfs-ganesha/vstart/conf-nfs.vstart'"
-            },
-            {
-                "block_name": "%url",
+            }),
+            RawBlock('%url', values={
                 "value": "rados://nfs-ganesha/vstart/conf-nfs.vstart"
-            }
+            })
         ]
         daemon_config = GaneshaConfParser(self.daemon_raw_config).parse()
         assert daemon_config == expected_daemon_config
@@ -301,7 +297,7 @@ EXPORT
         # assert export.security_label == False  # probably correct value
         assert export.security_label == True
 
-    def test_export_parser_1(self):
+    def test_export_parser_1(self) -> None:
         blocks = GaneshaConfParser(self.export_1).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 1
@@ -325,7 +321,7 @@ EXPORT
         assert len(export.clients) == 0
         assert export.cluster_id in ('_default_', 'foo')
 
-    def test_export_parser_2(self):
+    def test_export_parser_2(self) -> None:
         blocks = GaneshaConfParser(self.export_2).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 1
@@ -333,29 +329,29 @@ EXPORT
         self._validate_export_2(export)
 
 
-    def test_daemon_conf_parser_a(self):
+    def test_daemon_conf_parser_a(self) -> None:
         blocks = GaneshaConfParser(self.conf_nodea).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 2
-        assert blocks[0]['block_name'] == "%url"
-        assert blocks[0]['value'] == "rados://ganesha/ns/export-2"
-        assert blocks[1]['block_name'] == "%url"
-        assert blocks[1]['value'] == "rados://ganesha/ns/export-1"
+        assert blocks[0].block_name == "%url"
+        assert blocks[0].values['value'] == "rados://ganesha/ns/export-2"
+        assert blocks[1].block_name == "%url"
+        assert blocks[1].values['value'] == "rados://ganesha/ns/export-1"
 
-    def test_daemon_conf_parser_b(self):
+    def test_daemon_conf_parser_b(self) -> None:
         blocks = GaneshaConfParser(self.conf_nodeb).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 1
-        assert blocks[0]['block_name'] == "%url"
-        assert blocks[0]['value'] == "rados://ganesha/ns/export-1"
+        assert blocks[0].block_name == "%url"
+        assert blocks[0].values['value'] == "rados://ganesha/ns/export-1"
 
-    def test_ganesha_conf(self):
+    def test_ganesha_conf(self) -> None:
         with self._mock_orchestrator(True):
             for cluster_id, info in self.clusters.items():
                 self._do_test_ganesha_conf(cluster_id, info['exports'])
                 self._reset_temp_store()
 
-    def _do_test_ganesha_conf(self, cluster, expected_exports):
+    def _do_test_ganesha_conf(self, cluster: str, expected_exports: Dict[int, List[str]]) -> None:
         nfs_mod = Module('nfs', '', '')
         ganesha_conf = ExportMgr(nfs_mod)
         exports = ganesha_conf.exports['foo']
@@ -368,13 +364,13 @@ EXPORT
         self._validate_export_2([e for e in exports if e.export_id == 2][0])
 
 
-    def test_config_dict(self):
+    def test_config_dict(self) -> None:
         with self._mock_orchestrator(True):
             for cluster_id, info in self.clusters.items():
                 self._do_test_config_dict(cluster_id, info['exports'])
                 self._reset_temp_store()
 
-    def _do_test_config_dict(self, cluster, expected_exports):
+    def _do_test_config_dict(self, cluster: str, expected_exports: Dict[int, List[str]]) -> None:
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
         export = [e for e in conf.exports['foo'] if e.export_id == 1][0]
@@ -413,13 +409,13 @@ EXPORT
              'squash': 'AllAnonymous',
              'transports': ['TCP', 'UDP']}
 
-    def test_config_from_dict(self):
+    def test_config_from_dict(self) -> None:
         with self._mock_orchestrator(True):
             for cluster_id, info in self.clusters.items():
                 self._do_test_config_from_dict(cluster_id, info['exports'])
                 self._reset_temp_store()
 
-    def _do_test_config_from_dict(self, cluster_id, expected_exports):
+    def _do_test_config_from_dict(self, cluster_id: str, expected_exports: Dict[int, List[str]]) -> None:
         export = Export.from_dict(1, {
             'daemons': expected_exports[1],
             'export_id': 1,
@@ -570,13 +566,13 @@ EXPORT
         assert export.cluster_id == cluster_id
     """
     
-    def test_remove_export(self):
+    def test_remove_export(self) -> None:
         with self._mock_orchestrator(True):
             for cluster_id, info in self.clusters.items():
                 self._do_test_remove_export(cluster_id, info['exports'])
                 self._reset_temp_store()
 
-    def _do_test_remove_export(self, cluster_id, expected_exports):
+    def _do_test_remove_export(self, cluster_id: str, expected_exports: Dict[int, List[str]]) -> None:
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
         assert len(conf.exports[cluster_id]) == 2
