@@ -23,6 +23,7 @@ extern void register_test_mirroring_watcher();
 extern void register_test_object_map();
 extern void register_test_operations();
 extern void register_test_trash();
+extern void register_test_utils();
 #endif // TEST_LIBRBD_INTERNALS
 
 int main(int argc, char **argv)
@@ -43,6 +44,7 @@ int main(int argc, char **argv)
   register_test_object_map();
   register_test_operations();
   register_test_trash();
+  register_test_utils();
 #endif // TEST_LIBRBD_INTERNALS
 
   ::testing::InitGoogleTest(&argc, argv);

@@ -19,6 +19,7 @@ set(librbd_test
   test_ObjectMap.cc
   test_Operations.cc
   test_Trash.cc
+  test_Utils.cc
   journal/test_Entries.cc
   journal/test_Replay.cc)
 add_library(rbd_test STATIC ${librbd_test})

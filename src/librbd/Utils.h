@@ -154,14 +154,24 @@ std::string unique_lock_name(const std::string &name, void *address);
 
 template <typename I>
 std::string data_object_name(I* image_ctx, uint64_t object_no) {
-  char buf[RBD_MAX_OBJ_NAME_SIZE];
-  size_t length = snprintf(buf, RBD_MAX_OBJ_NAME_SIZE,
-                           image_ctx->format_string, object_no);
-  ceph_assert(length < RBD_MAX_OBJ_NAME_SIZE);
+  int object_no_width = image_ctx->old_format ? 12 : 16;
+  int prefix_length = image_ctx->object_prefix.length();
+  std::string oid(prefix_length + 1 + object_no_width, '0');
+  auto buf = oid.data();
+  memcpy(buf, image_ctx->object_prefix.c_str(), prefix_length);
+  buf[prefix_length] = '.';
 
-  std::string oid;
-  oid.reserve(RBD_MAX_OBJ_NAME_SIZE);
-  oid.append(buf, length);
+  int pos = prefix_length + object_no_width;
+  while (object_no != 0) {
+    uint8_t nibble = object_no & 0xf;
+    if (nibble < 10) {
+      buf[pos] = '0' + nibble;
+    } else {
+      buf[pos] = 'a' + nibble - 10;
+    }
+    --pos;
+    object_no >>= 4;
+  }
   return oid;
 }
 
