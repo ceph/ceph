@@ -13,7 +13,8 @@ struct FLTreeOnode final : Onode, Value {
   static constexpr tree_conf_t TREE_CONF = {
     value_magic_t::ONODE,
     128,        // max_ns_size
-    320         // max_oid_size
+    320,        // max_oid_size
+    1200        // max_value_payload_size
   };
 
   enum class status_t {
