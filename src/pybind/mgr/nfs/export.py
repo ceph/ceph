@@ -6,7 +6,7 @@ from os.path import normpath
 
 from rados import TimedOut, ObjectNotFound
 
-from .export_utils import GaneshaConfParser, Export, RawBlock
+from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
 from .exception import NFSException, NFSInvalidOperation, NFSObjectNotFound, FSNotFound, \
     ClusterNotFound
 from .utils import POOL_NAME, available_clusters, check_fs
@@ -173,10 +173,10 @@ class ExportMgr:
             f'conf-nfs.{export.cluster_id}'
         )
 
-    def _delete_export(self, cluster_id: str, pseudo_path: Optional[str], export_obj: Optional[Any] = None) -> Tuple[int, str, str]:
+    def _delete_export(self, cluster_id: str, pseudo_path: Optional[str], export_obj: Optional[Export] = None) -> Tuple[int, str, str]:
         try:
             if export_obj:
-                export = export_obj
+                export: Optional[Export] = export_obj
             else:
                 export = self._fetch_export(cluster_id, pseudo_path)
 
@@ -185,7 +185,9 @@ class ExportMgr:
                     NFSRados(self.mgr, cluster_id).remove_obj(
                         f'export-{export.export_id}', f'conf-nfs.{cluster_id}')
                 self.exports[cluster_id].remove(export)
-                self._delete_user(export.fsal.user_id)
+                if isinstance(export.fsal, CephFSFSAL) or isinstance(export.fsal, RGWFSAL):
+                    assert export.fsal.user_id
+                    self._delete_user(export.fsal.user_id)
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                 return 0, "Successfully deleted export", ""
