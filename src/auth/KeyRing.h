@@ -91,7 +91,7 @@ public:
   }
   void import(CephContext *cct, KeyRing& other);
 
-  // encoders
+  // decode as plaintext
   void decode(ceph::buffer::list::const_iterator& bl);
 
   void encode_plaintext(ceph::buffer::list& bl);

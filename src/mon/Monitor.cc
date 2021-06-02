@@ -6028,7 +6028,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 	bl.append(keyring_plaintext);
 	try {
 	  auto i = bl.cbegin();
-	  keyring.decode_plaintext(i);
+	  keyring.decode(i);
 	}
 	catch (const ceph::buffer::error& e) {
 	  derr << "error decoding keyring " << keyring_plaintext

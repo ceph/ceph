@@ -162,7 +162,7 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
   f->flush(bl);
 }
 
-void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
+void KeyRing::decode(bufferlist::const_iterator& bli)
 {
   int ret;
   bufferlist bl;
@@ -199,11 +199,6 @@ void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
       }
     }
   }
-}
-
-void KeyRing::decode(bufferlist::const_iterator& bl)
-{
-  decode_plaintext(bl);
 }
 
 int KeyRing::load(CephContext *cct, const std::string &filename)
