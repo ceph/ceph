@@ -161,7 +161,7 @@ class NFSCluster:
                     else:
                         c = self.mgr.get_hosts()
                         orchestrator.raise_if_exception(c)
-                        hosts = [h for h in c.result
+                        hosts = [h for h in c.result or []
                                  if h.hostname == cluster.hostname]
                         if hosts:
                             ip = resolve_ip(hosts[0].addr)
