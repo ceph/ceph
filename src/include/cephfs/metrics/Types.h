@@ -53,7 +53,8 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     os << "OPENED_INODES";
     break;
   default:
-    os << "Unknown metric type: " << type;
+    os << "(UNKNOWN:" << static_cast<std::underlying_type<ClientMetricType>::type>(type) << ")";
+    break;
   }
 
   return os;
