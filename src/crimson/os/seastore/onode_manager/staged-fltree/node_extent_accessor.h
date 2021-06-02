@@ -319,6 +319,7 @@ class NodeExtentAccessorT {
 
   const node_stage_t& read() const { return node_stage; }
   laddr_t get_laddr() const { return extent->get_laddr(); }
+  extent_len_t get_length() const { return extent->get_length(); }
   nextent_state_t get_state() const {
     assert(!is_retired());
     // we cannot rely on the underlying extent state because
