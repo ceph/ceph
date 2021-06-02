@@ -143,6 +143,7 @@ public:
   uint64_t send_pg_stats();
 
 private:
+  seastar::future<> _write_superblock();
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
