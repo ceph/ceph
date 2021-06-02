@@ -162,6 +162,7 @@ struct tree_conf_t {
   value_size_t max_value_payload_size;
   extent_len_t internal_node_size;
   extent_len_t leaf_node_size;
+  bool do_split_check = true;
 };
 
 class tree_cursor_t;
