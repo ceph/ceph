@@ -80,6 +80,52 @@ def _config_user(bntests_conf, section, user):
     bntests_conf[section].setdefault('secret_key',
         base64.b64encode(os.urandom(40)).decode())
 
+
+@contextlib.contextmanager
+def pre_process(ctx, config):
+    """
+    This function creates a directory which is required to run some AMQP tests.
+    """
+    assert isinstance(config, dict)
+    log.info('Pre-processing...')
+
+    for (client, _) in config.items():
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        test_dir=teuthology.get_testdir(ctx)
+
+        ctx.cluster.only(client).run(
+            args=[
+                'mkdir', '-p', '/home/ubuntu/.aws/models/s3/2006-03-01/',
+                ],
+            )
+
+        ctx.cluster.only(client).run(
+            args=[
+                'cd', '/home/ubuntu/.aws/models/s3/2006-03-01/', run.Raw('&&'), 'cp', '{tdir}/ceph/examples/boto3/service-2.sdk-extras.json'.format(tdir=test_dir), 'service-2.sdk-extras.json'
+                ],
+            )
+
+    try:
+        yield
+    finally:
+        log.info('Pre-processing completed...')
+        test_dir = teuthology.get_testdir(ctx)
+        for (client, _) in config.items():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+
+            ctx.cluster.only(client).run(
+                args=[
+                    'rm', '-rf', '/home/ubuntu/.aws/models/s3/2006-03-01/service-2.sdk-extras.json',
+                    ],
+                )
+
+            ctx.cluster.only(client).run(
+                args=[
+                    'cd', '/home/ubuntu/', run.Raw('&&'), 'rmdir', '-p', '.aws/models/s3/2006-03-01/',
+                    ],
+                )
+
+
 @contextlib.contextmanager
 def create_users(ctx, config):
     """
@@ -186,31 +232,47 @@ def run_tests(ctx, config):
     for client, client_config in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
+        attr = ["!kafka_test", "!amqp_test", "!amqp_ssl_test", "!modification_required", "!manual_test"]
+
+        if 'extra_attr' in client_config:
+            attr = client_config.get('extra_attr')
+
         args = [
             'BNTESTS_CONF={tdir}/ceph/src/test/rgw/bucket_notification/bn-tests.{client}.conf'.format(tdir=testdir, client=client),
             '{tdir}/ceph/src/test/rgw/bucket_notification/virtualenv/bin/python'.format(tdir=testdir),
             '-m', 'nose',
             '-s',
-            '{tdir}/ceph/src/test/rgw/bucket_notification/test_bn.py'.format(tdir=testdir)
+            '{tdir}/ceph/src/test/rgw/bucket_notification/test_bn.py'.format(tdir=testdir),
+            '-v',
+            '-a', ','.join(attr),
             ]
 
         remote.run(
             args=args,
-            label="bucket notification tests against kafka server"
+            label="bucket notification tests against different endpoints"
             )
     yield
 
 @contextlib.contextmanager
 def task(ctx,config):
     """
-    To run bucket notification tests the prerequisite is to run the kafka and tox task. Following is the way how to run
-    tox and then kafka and finally bucket notification tests::
+    To run bucket notification tests under Kafka endpoint the prerequisite is to run the kafka server. Also you need to pass the
+    'extra_attr' to the notification tests. Following is the way how to run kafka and finally bucket notification tests::
     tasks:
-    - tox: [ client.0 ]
     - kafka:
         client.0:
     - notification_tests:
         client.0:
+          extra_attr: ["kafka_test"]
+
+    To run bucket notification tests under AMQP endpoint the prerequisite is to run the rabbitmq server. Also you need to pass the
+    'extra_attr' to the notification tests. Following is the way how to run rabbitmq and finally bucket notification tests::
+    tasks:
+    - rabbitmq:
+        client.0:
+    - notification_tests:
+        client.0:
+          extra_attr: ["amqp_test"]
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
@@ -246,6 +308,7 @@ def task(ctx,config):
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
+        lambda: pre_process(ctx=ctx, config=config),
         lambda: create_users(ctx=ctx, config=dict(
                 clients=clients,
                 bntests_conf=bntests_conf,
@@ -256,4 +319,5 @@ def task(ctx,config):
                 )),
         lambda: run_tests(ctx=ctx, config=config),
         ):
-        yield
+        pass
+    yield
