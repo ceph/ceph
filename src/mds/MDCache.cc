@@ -441,6 +441,8 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   rootdir->commit(0, gather->new_sub());
 
   root->store(gather->new_sub());
+  root->mark_dirty_parent(mds->mdlog->get_current_segment(), true);
+  root->store_backtrace(gather->new_sub());
 }
 
 void MDCache::create_mydir_hierarchy(MDSGather *gather)
