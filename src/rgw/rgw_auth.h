@@ -375,6 +375,7 @@ protected:
   std::string role_session;
   std::string role_tenant;
   std::unordered_multimap<std::string, std::string> token_claims;
+  boost::optional<std::multimap<std::string,std::string>> role_tags;
   boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags;
 
   std::string get_idp_url() const;
@@ -389,12 +390,14 @@ public:
                       const std::string& role_session,
                       const std::string& role_tenant,
                       const std::unordered_multimap<std::string, std::string>& token_claims,
+                      boost::optional<std::multimap<std::string,std::string>> role_tags,
                       boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags)
       : cct(cct),
       store(store),
       role_session(role_session),
       role_tenant(role_tenant),
       token_claims(token_claims),
+      role_tags(role_tags),
       principal_tags(principal_tags) {
       const auto& sub = token_claims.find("sub");
       if(sub != token_claims.end()) {
@@ -479,6 +482,7 @@ public:
                                               const std::string& role_session,
                                               const std::string& role_tenant,
                                               const std::unordered_multimap<std::string, std::string>& token,
+                                              boost::optional<std::multimap<std::string, std::string>>,
                                               boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const = 0;
   };
 };
@@ -718,7 +722,7 @@ public:
   }
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
-    return RGW_PERM_NONE;
+    return RGW_PERM_NONE; 
   }
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */

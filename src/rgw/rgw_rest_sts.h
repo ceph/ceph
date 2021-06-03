@@ -36,8 +36,10 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   std::string get_role_tenant(const std::string& role_arn) const;
 
-  std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
+  std::string get_role_name(const string& role_arn) const;
 
+  std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
+  
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
@@ -91,10 +93,11 @@ class DefaultStrategy : public rgw::auth::Strategy,
                                     const req_state* s,
                                     const std::string& role_session,
                                     const std::string& role_tenant,
-                                    const std::unordered_multimap<string, string>& token,
+                                    const std::unordered_multimap<std::string, std::string>& token,
+                                    boost::optional<std::multimap<std::string, std::string>> role_tags,
                                     boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::WebIdentityApplier(cct, store, role_session, role_tenant, token, principal_tags));
+      rgw::auth::WebIdentityApplier(cct, store, role_session, role_tenant, token, role_tags, principal_tags));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
