@@ -174,6 +174,7 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
     debug echo "ceph-mgr dashboard not built - disabling."
     with_mgr_dashboard=false
 fi
+with_mgr_restful=true
 
 filestore_path=
 kstore_path=
@@ -450,6 +451,9 @@ case $1 in
     --without-dashboard)
         with_mgr_dashboard=false
         ;;
+    --without-restful)
+        with_mgr_restful=false
+        ;;
     --seastore-devs)
         parse_block_devs --seastore-devs "$2"
         shift
@@ -591,9 +595,12 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="restful iostat"
+    local mgr_modules="iostat"
     if $with_mgr_dashboard; then
-        mgr_modules="dashboard $mgr_modules"
+        mgr_modules+=" dashboard"
+    fi
+    if $with_mgr_restful; then
+        mgr_modules+=" restful"
     fi
 
     local msgr_conf=''
@@ -1056,7 +1063,9 @@ EOF
                 fi
             fi
         fi
-        create_mgr_restful_secret
+        if $with_mgr_restful; then
+            create_mgr_restful_secret
+        fi
     fi
 
     if [ "$cephadm" -eq 1 ]; then
@@ -1641,9 +1650,11 @@ if [ "$new" -eq 1 ]; then
         echo "dashboard urls: $DASH_URLS"
         echo "  w/ user/pass: admin / admin"
     fi
-    echo "restful urls: $RESTFUL_URLS"
-    echo "  w/ user/pass: admin / $RESTFUL_SECRET"
-    echo ""
+    if $with_mgr_restful; then
+        echo "restful urls: $RESTFUL_URLS"
+        echo "  w/ user/pass: admin / $RESTFUL_SECRET"
+        echo ""
+    fi
 fi
 echo ""
 # add header to the environment file
