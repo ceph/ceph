@@ -856,7 +856,7 @@ bool MonClient::ms_handle_reset(Connection *con)
   }
 }
 
-bool MonClient::ms_handle_throttle(ms_throttle_t ttype, const std::ostringstream& tinfo) {
+bool MonClient::ms_handle_throttle(ms_throttle_t ttype, const std::map<string, int64_t>& tinfo) {
   switch (ttype) {
   case ms_throttle_t::MESSAGE:
     break; // TODO
@@ -871,7 +871,9 @@ bool MonClient::ms_handle_throttle(ms_throttle_t ttype, const std::ostringstream
       LogChannelRef clog = log_client->create_channel(CLOG_CHANNEL_CLUSTER);
       clog->warn() << "Throttler Limit has been hit. "
                    << "Some message processing may be significantly delayed. "
-                   << "Additional info: " << tinfo.str();
+                   << "Additional info: " << tinfo.at("takenslots") << "/"
+                   << tinfo.at("maxslots") << " bytes used, "
+                   << tinfo.at("failedrequests") << " messages throttled.";
     }
     break;
   case ms_throttle_t::NONE:

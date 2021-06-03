@@ -220,7 +220,7 @@ public:
    * return true if handled
    * return false if not handled
    */
-  virtual bool ms_handle_throttle(ms_throttle_t ttype, const std::ostringstream& tinfo) {
+  virtual bool ms_handle_throttle(ms_throttle_t ttype, const std::map<string, int64_t>& tinfo) {
     return false;
   }
 

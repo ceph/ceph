@@ -823,7 +823,7 @@ public:
    * @param ttype Throttle type
    * @param tinfo Throttle info
    */
-  void ms_deliver_throttle(ms_throttle_t ttype, const std::ostringstream& tinfo) {
+  void ms_deliver_throttle(ms_throttle_t ttype, const std::map<string, int64_t>& tinfo) {
     for (const auto &dispatcher : dispatchers) {
       dispatcher->ms_handle_throttle(ttype, tinfo);
     }
@@ -836,8 +836,7 @@ public:
    * @param ttype Throttle type
    */
   void ms_deliver_throttle(ms_throttle_t ttype) {
-    std::ostringstream tinfo;
-    tinfo.str("");
+    std::map<string, int64_t> tinfo;
     ms_deliver_throttle(ttype, tinfo);
   }
 
