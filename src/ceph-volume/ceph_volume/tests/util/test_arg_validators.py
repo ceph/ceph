@@ -336,3 +336,28 @@ class TestValidBatchDataDevice(object):
         )
         self.validator.zap = False
         assert self.validator('/dev/foo')
+
+class TestValidFraction(object):
+
+    def setup(self):
+        self.validator = arg_validators.ValidFraction()
+
+    def test_fraction_is_valid(self, fake_call):
+        result = self.validator('0.8')
+        assert result == 0.8
+
+    def test_fraction_is_nan(self, fake_call):
+        with pytest.raises(argparse.ArgumentError):
+            self.validator('NaN')
+
+    def test_fraction_is_negative(self, fake_call):
+        with pytest.raises(argparse.ArgumentError):
+            self.validator('-1.0')
+
+    def test_fraction_is_zero(self, fake_call):
+        with pytest.raises(argparse.ArgumentError):
+            self.validator('0.0')
+
+    def test_fraction_is_greater_one(self, fake_call):
+        with pytest.raises(argparse.ArgumentError):
+            self.validator('1.1')
