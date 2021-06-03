@@ -1896,7 +1896,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size) {
+    if (actingset.size() >= pool.info.min_size) {
       ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
@@ -2208,7 +2208,7 @@ void PG::activate(ObjectStore::Transaction& t,
     release_pg_backoffs();
     projected_last_update = info.last_update;
   }
-  if (acting.size() >= pool.info.min_size) {
+  if (actingset.size() >= pool.info.min_size) {
     PGLogEntryHandler handler{this, &t};
     pg_log.roll_forward(&handler);
   }
@@ -2285,7 +2285,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
 
     i.info.history.last_epoch_started = activation_epoch;
     i.info.history.last_interval_started = i.info.history.same_interval_since;
-    if (acting.size() >= pool.info.min_size) {
+    if (actingset.size() >= pool.info.min_size) {
       state_set(PG_STATE_ACTIVE);
     } else {
       state_set(PG_STATE_PEERED);
@@ -2562,10 +2562,10 @@ unsigned PG::get_backfill_priority()
   if (state & PG_STATE_FORCED_BACKFILL) {
     ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
-    if (acting.size() < pool.info.min_size) {
+    if (actingset.size() < pool.info.min_size) {
       base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + (pool.info.min_size - acting.size());
+      ret = base + (pool.info.min_size - actingset.size());
 
     } else if (is_undersized()) {
       // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
@@ -8946,7 +8946,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 	pg->osd->set_not_ready_to_merge_source(pgid);
       }
     }
-  } else if (pg->acting.size() < pg->pool.info.min_size) {
+  } else if (pg->actingset.size() < pg->pool.info.min_size) {
     pg->state_set(PG_STATE_PEERED);
   } else {
     pg->state_set(PG_STATE_ACTIVE);
