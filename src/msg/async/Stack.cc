@@ -117,7 +117,9 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
 
   for (unsigned i = 0; i < num_workers; ++i) {
     Worker *w = create_worker(cct, type, i);
-    w->center.init(InitEventNumber, i, type);
+    int ret = w->center.init(InitEventNumber, i, type);
+    if (ret)
+      throw std::system_error(-ret, std::generic_category());
     workers.push_back(w);
   }
 }
