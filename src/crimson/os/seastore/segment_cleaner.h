@@ -437,7 +437,7 @@ public:
   }
 
   void init_mark_segment_closed(segment_id_t segment, segment_seq_t seq) final {
-    crimson::get_logger(ceph_subsys_filestore).debug(
+    crimson::get_logger(ceph_subsys_seastore).debug(
       "SegmentCleaner::init_mark_segment_closed: segment {}, seq {}",
       segment,
       seq);
@@ -501,7 +501,7 @@ public:
       }
     }
     if (ret != NULL_SEG_ID) {
-      crimson::get_logger(ceph_subsys_filestore).debug(
+      crimson::get_logger(ceph_subsys_seastore).debug(
 	"SegmentCleaner::get_next_gc_target: segment {} seq {}",
 	ret,
 	segments[ret].journal_segment_seq);
@@ -776,7 +776,7 @@ private:
   }
 
   void log_gc_state(const char *caller) const {
-    auto &logger = crimson::get_logger(ceph_subsys_filestore);
+    auto &logger = crimson::get_logger(ceph_subsys_seastore);
     if (logger.is_enabled(seastar::log_level::debug)) {
       logger.debug(
 	"SegmentCleaner::log_gc_state({}): "
@@ -877,7 +877,7 @@ private:
       assert(empty_segments > 0);
       --empty_segments;
     }
-    crimson::get_logger(ceph_subsys_filestore).debug(
+    crimson::get_logger(ceph_subsys_seastore).debug(
       "mark_closed: empty_segments: {}",
       empty_segments);
     segments[segment].state = Segment::segment_state_t::CLOSED;
