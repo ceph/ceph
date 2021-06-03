@@ -276,8 +276,8 @@ class Operation : public boost::intrusive_ref_counter<
     });
   }
 
-  void dump(ceph::Formatter *f);
-  void dump_brief(ceph::Formatter *f);
+  void dump(ceph::Formatter *f) const;
+  void dump_brief(ceph::Formatter *f) const;
   virtual ~Operation() = default;
 
  private:
