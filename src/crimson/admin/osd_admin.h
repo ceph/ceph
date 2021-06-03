@@ -13,7 +13,7 @@ class FlushPgStatsHook;
 class OsdStatusHook;
 class SendBeaconHook;
 class DumpPGStateHistory;
-class SeastarMetricsHook;
+class DumpMetricsHook;
 class DumpPerfCountersHook;
 class InjectDataErrorHook;
 class InjectMDataErrorHook;
