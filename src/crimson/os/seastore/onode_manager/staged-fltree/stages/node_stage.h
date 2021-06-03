@@ -34,7 +34,10 @@ class node_extent_t {
   // TODO: remove
   node_extent_t() = default;
 
-  node_extent_t(const FieldType* p_fields) : p_fields{p_fields} {
+  node_extent_t(const FieldType* p_fields, extent_len_t node_size)
+      : p_fields{p_fields}, node_size{node_size} {
+    assert(node_size <= MAX_NODE_SIZE);
+    assert(node_size % DISK_BLOCK_SIZE == 0);
     validate(*p_fields);
   }
 
@@ -110,9 +113,12 @@ class node_extent_t {
   }
 
   static node_extent_t decode(const char* p_node_start,
+                              extent_len_t node_size,
                               ceph::bufferlist::const_iterator& delta) {
     // nothing to decode
-    return node_extent_t(reinterpret_cast<const FieldType*>(p_node_start));
+    return node_extent_t(
+        reinterpret_cast<const FieldType*>(p_node_start),
+        node_size);
   }
 
   static void validate(const FieldType& fields) {
@@ -182,6 +188,7 @@ class node_extent_t {
  private:
   const FieldType& fields() const { return *p_fields; }
   const FieldType* p_fields;
+  extent_len_t node_size;
 };
 
 template <typename FieldType, node_type_t NODE_TYPE>

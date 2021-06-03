@@ -83,7 +83,9 @@ class internal_sub_items_t {
   }
 
   static internal_sub_items_t decode(
-      const char* p_node_start, ceph::bufferlist::const_iterator& delta) {
+      const char* p_node_start,
+      extent_len_t node_size,
+      ceph::bufferlist::const_iterator& delta) {
     node_offset_t start_offset;
     ceph::decode(start_offset, delta);
     node_offset_t end_offset;
@@ -250,7 +252,9 @@ class leaf_sub_items_t {
   }
 
   static leaf_sub_items_t decode(
-      const char* p_node_start, ceph::bufferlist::const_iterator& delta) {
+      const char* p_node_start,
+      extent_len_t node_size,
+      ceph::bufferlist::const_iterator& delta) {
     node_offset_t start_offset;
     ceph::decode(start_offset, delta);
     node_offset_t end_offset;

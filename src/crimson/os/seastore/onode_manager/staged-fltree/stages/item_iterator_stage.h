@@ -98,6 +98,7 @@ class item_iterator_t {
   }
 
   static item_iterator_t decode(const char* p_node_start,
+                                extent_len_t node_size,
                                 ceph::bufferlist::const_iterator& delta) {
     node_offset_t start_offset;
     ceph::decode(start_offset, delta);
