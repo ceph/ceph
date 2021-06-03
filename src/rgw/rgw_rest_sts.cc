@@ -62,6 +62,23 @@ WebTokenEngine::get_role_tenant(const string& role_arn) const
   return tenant;
 }
 
+std::string
+WebTokenEngine::get_role_name(const string& role_arn) const
+{
+  string role_name;
+  auto r_arn = rgw::ARN::parse(role_arn);
+  if (r_arn) {
+    role_name = r_arn->resource;
+  }
+  if (!role_name.empty()) {
+    auto pos = role_name.find_last_of('/');
+    if(pos != string::npos) {
+      role_name = role_name.substr(pos + 1);
+    }
+  }
+  return role_name;
+}
+
 std::unique_ptr<rgw::sal::RGWOIDCProvider>
 WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const
 {
@@ -472,7 +489,15 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
       }
       string role_arn = s->info.args.get("RoleArn");
       string role_tenant = get_role_tenant(role_arn);
-      auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role_tenant, *t, princ_tags);
+      string role_name = get_role_name(role_arn);
+      std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name, role_tenant);
+      int ret = role->get(dpp, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "Role not found: name:" << role_name << " tenant: " << role_tenant << dendl;
+        return result_t::deny(-EACCES);
+      }
+      boost::optional<multimap<string,string>> role_tags = role->get_tags();
+      auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role_tenant, *t, role_tags, princ_tags);
       return result_t::grant(std::move(apl));
     }
     return result_t::deny(-EACCES);
