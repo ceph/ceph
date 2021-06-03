@@ -760,11 +760,11 @@ void OSD::update_stats()
   });
 }
 
-MessageRef OSD::get_stats() const
+MessageURef OSD::get_stats() const
 {
   // todo: m-to-n: collect stats using map-reduce
   // MPGStats::had_map_for is not used since PGMonitor was removed
-  auto m = ceph::make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
+  auto m = crimson::make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
   m->osd_stat = osd_stat;
   for (auto [pgid, pg] : pg_map.get_pgs()) {
     if (pg->is_primary()) {

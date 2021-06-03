@@ -127,8 +127,6 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 
   /// send a message over a connection that has completed its handshake
   virtual seastar::future<> send(MessageURef msg) = 0;
-  // The version with MessageRef will be dropped in the future
-  virtual seastar::future<> send(MessageRef msg) = 0;
 
   /// send a keepalive message over a connection that has completed its
   /// handshake

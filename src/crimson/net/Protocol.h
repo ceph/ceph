@@ -56,7 +56,7 @@ class Protocol {
   virtual void trigger_close() = 0;
 
   virtual ceph::bufferlist do_sweep_messages(
-      const std::deque<MessageRef>& msgs,
+      const std::deque<MessageURef>& msgs,
       size_t num_msgs,
       bool require_keepalive,
       std::optional<utime_t> keepalive_ack,
@@ -90,7 +90,7 @@ class Protocol {
 
 // the write state-machine
  public:
-  seastar::future<> send(MessageRef msg);
+  seastar::future<> send(MessageURef msg);
   seastar::future<> keepalive();
 
 // TODO: encapsulate a SessionedSender class
