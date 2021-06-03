@@ -6,7 +6,7 @@
 
 namespace crimson {
 
-void Operation::dump(ceph::Formatter* f)
+void Operation::dump(ceph::Formatter* f) const
 {
   f->open_object_section("operation");
   f->dump_string("type", get_type_name());
@@ -24,7 +24,7 @@ void Operation::dump(ceph::Formatter* f)
   f->close_section();
 }
 
-void Operation::dump_brief(ceph::Formatter* f)
+void Operation::dump_brief(ceph::Formatter* f) const
 {
   f->open_object_section("operation");
   f->dump_string("type", get_type_name());
