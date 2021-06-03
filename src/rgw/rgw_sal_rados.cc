@@ -1574,13 +1574,16 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   return ret;
 }
 
-int RadosObject::delete_object(const DoutPrefixProvider* dpp, RGWObjectCtx* obj_ctx, optional_yield y)
+int RadosObject::delete_object(const DoutPrefixProvider* dpp,
+			       RGWObjectCtx* obj_ctx,
+			       optional_yield y,
+			       bool prevent_versioning)
 {
   RGWRados::Object del_target(store->getRados(), bucket->get_info(), *obj_ctx, get_obj());
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket->get_info().owner;
-  del_op.params.versioning_status = bucket->get_info().versioning_status();
+  del_op.params.versioning_status = prevent_versioning ? 0 : bucket->get_info().versioning_status();
 
   return del_op.delete_obj(y, dpp);
 }
