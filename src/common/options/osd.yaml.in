@@ -1019,19 +1019,6 @@ options:
   default: 0.011
   flags:
   - runtime
-- name: osd_mclock_max_capacity_iops
-  type: float
-  level: basic
-  desc: Max IOPs capacity (at 4KiB block size) to consider per OSD (overrides _ssd
-    and _hdd if non-zero)
-  long_desc: This option specifies the max osd capacity in iops per OSD. Helps in
-    QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue
-    = mclock_scheduler
-  fmt_desc: Max IOPS capacity (at 4KiB block size) to consider per OSD
-    (overrides _ssd and _hdd if non-zero)
-  default: 0
-  flags:
-  - runtime
 - name: osd_mclock_max_capacity_iops_hdd
   type: float
   level: basic
