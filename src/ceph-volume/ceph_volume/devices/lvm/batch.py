@@ -1,7 +1,6 @@
 import argparse
 from collections import namedtuple
 import json
-import math
 import logging
 from textwrap import dedent
 from ceph_volume import terminal, decorators
@@ -298,14 +297,9 @@ class Batch(object):
                   ' if more slots then osds-per-device are specified, slots'
                   'will stay unoccupied'),
         )
-        def data_allocate_fraction(pct):
-            pct_float = float(pct)
-            if math.isnan(pct_float) or pct_float == 0.0  or pct_float < 0.0 or pct_float > 1.0:
-                raise argparse.ArgumentTypeError('Percentage not in (0,1.0]')
-            return pct_float
         parser.add_argument(
             '--data-allocate-fraction',
-            type=data_allocate_fraction,
+            type=arg_validators.ValidFraction(),
             help='Fraction to allocate from data device (0,1.0]',
             default=1.0
         )
