@@ -200,7 +200,7 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<AssertAlwaysHook>();
 class DumpMetricsHook : public AdminSocketHook {
 public:
   DumpMetricsHook() :
-    AdminSocketHook("perf dump_seastar",
+    AdminSocketHook("dump_metrics",
                     "name=group,type=CephString,req=false",
                     "dump current configured seastar metrics and their values")
   {}
@@ -211,7 +211,7 @@ public:
     std::unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     std::string prefix;
     cmd_getval(cmdmap, "group", prefix);
-    f->open_object_section("perf_dump_seastar");
+    f->open_object_section("metrics");
     for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
       if (!prefix.empty() && full_name.compare(0, prefix.size(), prefix) != 0) {
        continue;
