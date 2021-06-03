@@ -482,6 +482,20 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
       }
     }
   }
+
+  if (role_tags) {
+    for (auto& it : role_tags.get()) {
+      std::string p_key = "aws:PrincipalTag/";
+      p_key.append(it.first);
+      s->principal_tags.emplace_back(std::make_pair(p_key, it.second));
+      ldpp_dout(dpp, 10) << "Principal Tag Key: " << p_key << " Value: " << it.second << dendl;
+
+      std::string e_key = "iam:ResourceTag/";
+      e_key.append(it.first);
+      s->env.emplace(e_key, it.second);
+      ldpp_dout(dpp, 10) << "RGW Env Tag Key: " << e_key << " Value: " << it.second << dendl;
+    }
+  }
 }
 
 bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
