@@ -1647,15 +1647,19 @@ debug echo "vstart cluster complete. Use stop.sh to stop. See out/* (e.g. 'tail 
 echo ""
 if [ "$new" -eq 1 ]; then
     if $with_mgr_dashboard; then
-        echo "dashboard urls: $DASH_URLS"
-        echo "  w/ user/pass: admin / admin"
+        cat <<EOF
+dashboard urls: $DASH_URLS
+  w/ user/pass: admin / admin
+EOF
     fi
     if $with_mgr_restful; then
-        echo "restful urls: $RESTFUL_URLS"
-        echo "  w/ user/pass: admin / $RESTFUL_SECRET"
-        echo ""
+        cat <<EOF
+restful urls: $RESTFUL_URLS
+  w/ user/pass: admin / $RESTFUL_SECRET
+EOF
     fi
 fi
+
 echo ""
 # add header to the environment file
 {
