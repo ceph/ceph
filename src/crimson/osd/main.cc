@@ -23,6 +23,7 @@
 #include "global/pidfile.h"
 
 #include "osd.h"
+#include "stop_signal.h"
 
 using config_t = crimson::common::ConfigProxy;
 
@@ -208,6 +209,7 @@ int main(int argc, char* argv[])
       return seastar::async([&] {
         try {
           FatalSignal fatal_signal;
+          StopSignal should_stop;
           if (config.count("debug")) {
             seastar::global_logger_registry().set_all_loggers_level(
               seastar::log_level::debug
@@ -271,6 +273,10 @@ int main(int argc, char* argv[])
           } else {
             osd.invoke_on(0, &crimson::osd::OSD::start).get();
           }
+          seastar::fprint(std::cout, "crimson startup completed.");
+          should_stop.wait().get();
+          seastar::fprint(std::cout, "crimson shutting down.");
+          // stop()s registered using defer() are called here
         } catch (...) {
           seastar::fprint(std::cerr, "FATAL: startup failed: %s\n", std::current_exception());
           return EXIT_FAILURE;
