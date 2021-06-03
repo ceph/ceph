@@ -214,7 +214,7 @@ public:
     f->open_object_section("metrics");
     for (const auto& [full_name, metric_family]: seastar::scollectd::get_value_map()) {
       if (!prefix.empty() && full_name.compare(0, prefix.size(), prefix) != 0) {
-       continue;
+        continue;
       }
       for (const auto& [labels, metric] : metric_family) {
         if (metric && metric->is_enabled()) {
