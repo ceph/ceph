@@ -56,7 +56,7 @@ struct btree_lba_manager_test :
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t committed) final {}
 
-  auto submit_transaction(TransactionRef t)
+  seastar::future<> submit_transaction(TransactionRef t)
   {
     auto record = cache.try_construct_record(*t);
     if (!record) {
@@ -67,9 +67,8 @@ struct btree_lba_manager_test :
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);
-	lba_manager->complete_transaction(*t);
-      },
-      crimson::ct_error::assert_all{});
+	return lba_manager->complete_transaction(*t);
+      }).handle_error(crimson::ct_error::assert_all{});
   }
 
   seastar::future<> set_up_fut() final {
@@ -137,7 +136,7 @@ struct btree_lba_manager_test :
   }
 
   void submit_test_transaction(test_transaction_t t) {
-    submit_transaction(std::move(t.t)).get0();
+    submit_transaction(std::move(t.t)).get();
     test_lba_mappings.swap(t.mappings);
   }
 
