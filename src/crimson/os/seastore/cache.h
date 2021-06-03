@@ -306,36 +306,6 @@ public:
   }
 
   /**
-   * get_extents
-   *
-   * returns refs to extents in extents from:
-   * - t if modified by t
-   * - extent_set if already in cache
-   * - disk
-   */
-  template<typename T>
-  get_extent_ertr::future<t_pextent_list_t<T>> get_extents(
-    Transaction &t,        ///< [in, out] current transaction
-    paddr_list_t &&extents ///< [in] extent list for lookup
-  ) {
-    auto retref = std::make_unique<t_pextent_list_t<T>>();
-    auto &ret = *retref;
-    auto ext = std::make_unique<paddr_list_t>(std::move(extents));
-    return crimson::do_for_each(
-      ext->begin(),
-      ext->end(),
-      [this, &t, &ret](auto &p) {
-	auto &[offset, len] = p;
-	return get_extent(t, offset, len).safe_then([&ret](auto cext) {
-	  ret.push_back(std::move(cext));
-	});
-      }).safe_then([retref=std::move(retref), ext=std::move(ext)]() mutable {
-	return get_extent_ertr::make_ready_future<t_pextent_list_t<T>>(
-	  std::move(*retref));
-      });
-  }
-
-  /**
    * alloc_new_extent
    *
    * Allocates a fresh extent.  addr will be relative until commit.
