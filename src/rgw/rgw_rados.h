@@ -826,8 +826,8 @@ public:
 
       struct DeleteParams {
         rgw_user bucket_owner;
-        int versioning_status;
-        ACLOwner obj_owner; /* needed for creation of deletion marker */
+        int versioning_status; // versioning flags defined in enum RGWBucketFlags
+        ACLOwner obj_owner;    // needed for creation of deletion marker
         uint64_t olh_epoch;
         string marker_version_id;
         uint32_t bilog_flags;
@@ -1216,7 +1216,7 @@ public:
                  RGWObjectCtx& obj_ctx,
 		 const RGWBucketInfo& bucket_owner,
 		 const rgw_obj& src_obj,
-		 int versioning_status,
+		 int versioning_status,  // versioning flags defined in enum RGWBucketFlags
 		 uint16_t bilog_flags = 0,
 		 const ceph::real_time& expiration_time = ceph::real_time(),
 		 rgw_zone_set *zones_trace = nullptr);
