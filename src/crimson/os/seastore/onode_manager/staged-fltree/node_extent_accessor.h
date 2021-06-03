@@ -113,7 +113,8 @@ class DeltaRecorderT final: public DeltaRecorder {
                    laddr_t node_laddr) override {
     LOG_PREFIX(OTree::Extent::Replay);
     assert(is_empty());
-    node_stage_t stage(reinterpret_cast<const FieldType*>(node.get_read()));
+    node_stage_t stage(reinterpret_cast<const FieldType*>(node.get_read()),
+                       node.get_length());
     node_delta_op_t op;
     try {
       ceph::decode(op, delta);
@@ -136,14 +137,16 @@ class DeltaRecorderT final: public DeltaRecorder {
       }
       case node_delta_op_t::SPLIT: {
         DEBUG("decoding SPLIT ...");
-        auto split_at = StagedIterator::decode(stage.p_start(), delta);
+        auto split_at = StagedIterator::decode(
+            node.get_read(), node.get_length(), delta);
         DEBUG("apply split_at={} ...", split_at);
         layout_t::split(node, stage, split_at);
         break;
       }
       case node_delta_op_t::SPLIT_INSERT: {
         DEBUG("decoding SPLIT_INSERT ...");
-        auto split_at = StagedIterator::decode(stage.p_start(), delta);
+        auto split_at = StagedIterator::decode(
+            node.get_read(), node.get_length(), delta);
         auto key = key_hobj_t::decode(delta);
         auto value = decode_value(delta);
         auto insert_pos = position_t::decode(delta);
@@ -280,7 +283,8 @@ class NodeExtentAccessorT {
 
   NodeExtentAccessorT(NodeExtentRef extent)
       : extent{extent},
-        node_stage{reinterpret_cast<const FieldType*>(extent->get_read())} {
+        node_stage{reinterpret_cast<const FieldType*>(extent->get_read()),
+                   extent->get_length()} {
     if (extent->is_initial_pending()) {
       state = nextent_state_t::FRESH;
       mut.emplace(extent->get_mutable());
@@ -348,8 +352,8 @@ class NodeExtentAccessorT {
       extent = extent->mutate(c, std::move(ref_recorder));
       state = nextent_state_t::MUTATION_PENDING;
       assert(extent->is_mutation_pending());
-      node_stage = node_stage_t(
-          reinterpret_cast<const FieldType*>(extent->get_read()));
+      node_stage = node_stage_t(reinterpret_cast<const FieldType*>(extent->get_read()),
+                                extent->get_length());
       assert(recorder == static_cast<recorder_t*>(extent->get_recorder()));
       mut.emplace(extent->get_mutable());
     }
@@ -525,8 +529,8 @@ class NodeExtentAccessorT {
       NodeExtentRef to_discard = extent;
 
       extent = fresh_extent;
-      node_stage = node_stage_t(
-          reinterpret_cast<const FieldType*>(extent->get_read()));
+      node_stage = node_stage_t(reinterpret_cast<const FieldType*>(extent->get_read()),
+                                extent->get_length());
       state = nextent_state_t::FRESH;
       mut.emplace(fresh_mut);
       recorder = nullptr;

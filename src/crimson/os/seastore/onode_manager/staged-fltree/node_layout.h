@@ -765,7 +765,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       STAGE_T::template get_largest_slot<true, false, false>(
           extent.read(), &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
     } else {
-      node_stage_t right_stage{reinterpret_cast<FieldType*>(right_mut.get_write())};
+      node_stage_t right_stage{reinterpret_cast<FieldType*>(right_mut.get_write()),
+                               right_mut.get_length()};
       STAGE_T::template get_largest_slot<true, false, false>(
           right_stage, &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
     }
