@@ -78,7 +78,9 @@ case "$1" in
        fi
        if ! dpkg-statoverride --list /var/log/ceph >/dev/null
        then
-           chown -R $SERVER_USER:$SERVER_GROUP /var/log/ceph
+	   # take care not to touch cephadm log subdirs
+           chown $SERVER_USER:$SERVER_GROUP /var/log/ceph
+	   chown $SERVER_USER:$SERVER_GROUP /var/log/ceph/*.log* || true
 	   # members of group ceph can log here, but cannot remove
 	   # others' files.  non-members cannot read any logs.
            chmod u=rwx,g=rwxs,o=t /var/log/ceph
