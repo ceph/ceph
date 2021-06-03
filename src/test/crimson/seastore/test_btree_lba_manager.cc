@@ -56,7 +56,7 @@ struct btree_lba_manager_test :
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t committed) final {}
 
-  auto submit_transaction(TransactionRef t)
+  seastar::future<> submit_transaction(TransactionRef t)
   {
     auto record = cache.try_construct_record(*t);
     if (!record) {
