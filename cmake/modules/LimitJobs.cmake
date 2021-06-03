@@ -1,5 +1,5 @@
-set(MAX_COMPILE_MEM 2500 CACHE INTERNAL "maximum memory used by each compiling job (in MiB)")
-set(MAX_LINK_MEM 3300 CACHE INTERNAL "maximum memory used by each linking job (in MiB)")
+set(MAX_COMPILE_MEM 3500 CACHE INTERNAL "maximum memory used by each compiling job (in MiB)")
+set(MAX_LINK_MEM 4500 CACHE INTERNAL "maximum memory used by each linking job (in MiB)")
 
 cmake_host_system_information(RESULT _num_cores QUERY NUMBER_OF_LOGICAL_CORES)
 cmake_host_system_information(RESULT _total_mem QUERY TOTAL_PHYSICAL_MEMORY)
