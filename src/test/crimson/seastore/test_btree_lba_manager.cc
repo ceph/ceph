@@ -67,9 +67,8 @@ struct btree_lba_manager_test :
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);
-	lba_manager->complete_transaction(*t);
-      },
-      crimson::ct_error::assert_all{});
+	return lba_manager->complete_transaction(*t);
+      }).handle_error(crimson::ct_error::assert_all{});
   }
 
   seastar::future<> set_up_fut() final {
@@ -137,7 +136,7 @@ struct btree_lba_manager_test :
   }
 
   void submit_test_transaction(test_transaction_t t) {
-    submit_transaction(std::move(t.t)).get0();
+    submit_transaction(std::move(t.t)).get();
     test_lba_mappings.swap(t.mappings);
   }
 
