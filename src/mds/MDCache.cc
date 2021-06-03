@@ -257,9 +257,9 @@ bool MDCache::shutdown()
 // ====================================================================
 // some inode functions
 
-void MDCache::add_inode(CInode *in) 
+void MDCache::add_inode(CInode *in)
 {
-  // add to lru, inode map
+  // add to inode map
   if (in->last == CEPH_NOSNAP) {
     auto &p = inode_map[in->ino()];
     ceph_assert(!p); // should be no dup inos!
