@@ -65,6 +65,13 @@ class Protocol {
   virtual void notify_write() {};
 
   virtual void on_closed() {}
+ 
+ private:
+  ceph::bufferlist sweep_messages_and_move_to_sent(
+      size_t num_msgs,
+      bool require_keepalive,
+      std::optional<utime_t> keepalive_ack,
+      bool require_ack); 
 
  public:
   const proto_t proto_type;
