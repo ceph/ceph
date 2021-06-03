@@ -110,7 +110,7 @@ ceph::bufferlist Protocol::sweep_messages_and_move_to_sent(
   return bl;
 }
 
-seastar::future<> Protocol::send(MessageRef msg)
+seastar::future<> Protocol::send(MessageURef msg)
 {
   if (write_state != write_state_t::drop) {
     conn.out_q.push_back(std::move(msg));
@@ -153,7 +153,7 @@ void Protocol::requeue_sent()
   conn.out_seq -= conn.sent.size();
   logger().debug("{} requeue {} items, revert out_seq to {}",
                  conn, conn.sent.size(), conn.out_seq);
-  for (MessageRef& msg : conn.sent) {
+  for (MessageURef& msg : conn.sent) {
     msg->clear_payload();
     msg->set_seq(0);
   }
@@ -204,7 +204,7 @@ void Protocol::ack_writes(seq_num_t seq)
   }
   while (!conn.sent.empty() && conn.sent.front()->get_seq() <= seq) {
     logger().trace("{} got ack seq {} >= {}, pop {}",
-                   conn, seq, conn.sent.front()->get_seq(), conn.sent.front());
+                   conn, seq, conn.sent.front()->get_seq(), *conn.sent.front());
     conn.sent.pop_front();
   }
 }

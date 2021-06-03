@@ -571,7 +571,7 @@ private:
   using pg_rep_op_fut_t =
     std::tuple<interruptible_future<>,
                do_osd_ops_iertr::future<Ret>>;
-  do_osd_ops_iertr::future<pg_rep_op_fut_t<Ref<MOSDOpReply>>> do_osd_ops(
+  do_osd_ops_iertr::future<pg_rep_op_fut_t<MURef<MOSDOpReply>>> do_osd_ops(
     Ref<MOSDOp> m,
     ObjectContextRef obc,
     const OpInfo &op_info);
@@ -594,7 +594,7 @@ private:
     const OpInfo &op_info,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
-  interruptible_future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
+  interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   std::tuple<interruptible_future<>, interruptible_future<>>
   submit_transaction(
     const OpInfo& op_info,
