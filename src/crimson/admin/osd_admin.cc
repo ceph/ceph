@@ -197,9 +197,9 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<AssertAlwaysHook>();
 /**
 * A Seastar admin hook: fetching the values of configured metrics
 */
-class SeastarMetricsHook : public AdminSocketHook {
+class DumpMetricsHook : public AdminSocketHook {
 public:
-  SeastarMetricsHook() :
+  DumpMetricsHook() :
     AdminSocketHook("perf dump_seastar",
                     "name=group,type=CephString,req=false",
                     "dump current configured seastar metrics and their values")
@@ -270,7 +270,7 @@ private:
     }
   }
 };
-template std::unique_ptr<AdminSocketHook> make_asok_hook<SeastarMetricsHook>();
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpMetricsHook>();
 
 
 static ghobject_t test_ops_get_object_name(
