@@ -6196,6 +6196,10 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT::BUCKET_CHOWN) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name not specified" << std::endl;
+      return EINVAL;
+    }
 
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
