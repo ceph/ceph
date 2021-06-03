@@ -592,6 +592,11 @@ public:
     return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
   }
 
+  template <typename... Args>
+  auto si_then(Args&&... args) {
+    return safe_then_interruptible(std::forward<Args>(args)...);
+  }
+
 
   template<bool interruptible = true, typename ValueInterruptCondT, typename ErrorVisitorT,
 	   typename U = T, std::enable_if_t<!std::is_void_v<U> && interruptible, int> = 0>
