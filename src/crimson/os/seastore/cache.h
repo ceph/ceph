@@ -139,7 +139,7 @@ public:
   /// Declare paddr retired in t
   using retire_extent_ertr = base_ertr;
   using retire_extent_ret = retire_extent_ertr::future<>;
-  retire_extent_ret retire_extent(
+  retire_extent_ret retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
   /**

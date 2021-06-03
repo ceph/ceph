@@ -173,7 +173,7 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   ).safe_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     if (result.refcount == 0 && !result.addr.is_zero()) {
       DEBUGT("offset {} refcount 0", t, offset);
-      return cache->retire_extent(
+      return cache->retire_extent_addr(
 	t, result.addr, result.length
       ).safe_then([result, this] {
 	stats.extents_retired_total++;

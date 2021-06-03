@@ -27,7 +27,7 @@ Cache::~Cache()
   ceph_assert(extents.empty());
 }
 
-Cache::retire_extent_ret Cache::retire_extent(
+Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
   LOG_PREFIX(Cache::retire_extent);
