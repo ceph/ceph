@@ -127,7 +127,7 @@
 
 %define smp_limit_mem_per_job() %( \
   kb_per_job=%1 \
-  kb_total=$(head -1 /proc/meminfo | sed 's/MemTotal:\\s*\\(.*\\) kB.*/\\1/') \
+  kb_total=$(head -3 /proc/meminfo | sed -n 's/MemAvailable:\\s*\\(.*\\) kB.*/\\1/p') \
   jobs=$(( $kb_total / $kb_per_job )) \
   [ $jobs -lt 1 ] && jobs=1 \
   echo $jobs )
@@ -137,8 +137,8 @@
 # 32-bit builds can use 3G memory max, which is not enough even for -j2
 %global _smp_ncpus_max 1
 %else
-# 2.5 GiB mem per job
-%global _smp_ncpus_max %{smp_limit_mem_per_job 2500000}
+# 3.0 GiB mem per job
+%global _smp_ncpus_max %{smp_limit_mem_per_job 3000000}
 %endif
 %endif
 
