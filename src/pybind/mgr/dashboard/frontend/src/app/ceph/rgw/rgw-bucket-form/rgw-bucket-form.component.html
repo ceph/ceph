@@ -273,31 +273,8 @@
                     *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'pattern')"
                     i18n>The entered value must be a positive integer.</span>
               <span class="invalid-feedback"
-                    *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'eitherDaysOrYears')"
-                    i18n>Retention period requires either Days or Years.</span>
-            </div>
-          </div>
-
-          <!-- Retention period (years) -->
-          <div *ngIf="bucketForm.getValue('lock_enabled')"
-               class="form-group row">
-            <label class="cd-col-form-label"
-                   for="lock_retention_period_years">
-              <ng-container i18n>Years</ng-container>
-              <cd-helper i18n>The number of years that you want to specify for the default retention period that will be applied to new objects placed in this bucket.</cd-helper>
-            </label>
-            <div class="cd-col-form-input">
-              <input class="form-control"
-                     type="number"
-                     id="lock_retention_period_years"
-                     formControlName="lock_retention_period_years"
-                     min="0">
-              <span class="invalid-feedback"
-                    *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'pattern')"
-                    i18n>The entered value must be a positive integer.</span>
-              <span class="invalid-feedback"
-                    *ngIf="bucketForm.showError('lock_retention_period_years', frm, 'eitherDaysOrYears')"
-                    i18n>Retention period requires either Days or Years.</span>
+                    *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'lockDays')"
+                    i18n>Retention Days must be a positive integer.</span>
             </div>
           </div>
         </fieldset>

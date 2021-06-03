@@ -63,15 +63,13 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
 
   createForm() {
     const self = this;
-    const eitherDaysOrYears = CdValidators.custom('eitherDaysOrYears', () => {
+    const lockDaysValidator = CdValidators.custom('lockDays', () => {
       if (!self.bucketForm || !_.get(self.bucketForm.getRawValue(), 'lock_enabled')) {
         return false;
       }
-      const years = self.bucketForm.getValue('lock_retention_period_years');
-      const days = self.bucketForm.getValue('lock_retention_period_days');
-      return (days > 0 && years > 0) || (days === 0 && years === 0);
+      const lockDays = Number(self.bucketForm.getValue('lock_retention_period_days'));
+      return !Number.isInteger(lockDays) || lockDays === 0;
     });
-    const lockPeriodDefinition = [0, [CdValidators.number(false), eitherDaysOrYears]];
     this.bucketForm = this.formBuilder.group({
       id: [null],
       bid: [null, [Validators.required], this.editing ? [] : [this.bucketNameValidator()]],
@@ -83,8 +81,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
       'mfa-token-pin': [''],
       lock_enabled: [{ value: false, disabled: this.editing }],
       lock_mode: ['COMPLIANCE'],
-      lock_retention_period_days: lockPeriodDefinition,
-      lock_retention_period_years: lockPeriodDefinition
+      lock_retention_period_days: [0, [CdValidators.number(false), lockDaysValidator]]
     });
   }
 
@@ -135,6 +132,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           // the Angular react framework will throw an error if there is no
           // field for a given key.
           let value: object = _.pick(bidResp, _.keys(defaults));
+          value['lock_retention_period_days'] = this.getLockDays(bidResp);
           value['placement-target'] = bidResp['placement_rule'];
           value['versioning'] = bidResp['versioning'] === RgwBucketVersioning.ENABLED;
           value['mfa-delete'] = bidResp['mfa_delete'] === RgwBucketMfaDelete.ENABLED;
@@ -184,8 +182,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           values['mfa-token-serial'],
           values['mfa-token-pin'],
           values['lock_mode'],
-          values['lock_retention_period_days'],
-          values['lock_retention_period_years']
+          values['lock_retention_period_days']
         )
         .subscribe(
           () => {
@@ -210,8 +207,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           values['placement-target'],
           values['lock_enabled'],
           values['lock_mode'],
-          values['lock_retention_period_days'],
-          values['lock_retention_period_years']
+          values['lock_retention_period_days']
         )
         .subscribe(
           () => {
@@ -361,5 +357,13 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
 
   getMfaDeleteStatus() {
     return this.isMfaDeleteEnabled ? RgwBucketMfaDelete.ENABLED : RgwBucketMfaDelete.DISABLED;
+  }
+
+  private getLockDays(bucketData: object): number {
+    if (bucketData['lock_retention_period_years'] > 0) {
+      return Math.floor(bucketData['lock_retention_period_years'] * 365.242);
+    }
+
+    return bucketData['lock_retention_period_days'];
   }
 }

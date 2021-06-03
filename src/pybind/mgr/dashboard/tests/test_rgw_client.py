@@ -103,6 +103,49 @@ class RgwClientTest(TestCase, KVStoreMockMixin):
         self.assertEqual(['realm1', 'realm2'], instance.get_realms())
         self.assertEqual([], instance.get_realms())
 
+    def test_set_bucket_locking_error(self):
+        instance = RgwClient.admin_instance()
+        test_params = [
+            ('COMPLIANCE', 'null', None, 'must be a positive integer'),
+            ('COMPLIANCE', None, 'null', 'must be a positive integer'),
+            ('COMPLIANCE', -1, None, 'must be a positive integer'),
+            ('COMPLIANCE', None, -1, 'must be a positive integer'),
+            ('COMPLIANCE', 1, 1, 'You can\'t specify both at the same time'),
+            ('COMPLIANCE', None, None, 'You must specify at least one'),
+            ('COMPLIANCE', 0, 0, 'You must specify at least one'),
+            (None, 1, 0, 'must be either COMPLIANCE or GOVERNANCE'),
+            ('', 1, 0, 'must be either COMPLIANCE or GOVERNANCE'),
+            ('FAKE_MODE', 1, 0, 'must be either COMPLIANCE or GOVERNANCE')
+        ]
+        for params in test_params:
+            mode, days, years, error_msg = params
+            with self.assertRaises(DashboardException) as cm:
+                instance.set_bucket_locking(
+                    bucket_name='test',
+                    mode=mode,
+                    retention_period_days=days,
+                    retention_period_years=years
+                )
+            self.assertIn(error_msg, str(cm.exception))
+
+    @patch('dashboard.rest_client._Request', Mock())
+    def test_set_bucket_locking_success(self):
+        instance = RgwClient.admin_instance()
+        test_params = [
+            ('Compliance', '1', None),
+            ('Governance', 1, None),
+            ('COMPLIANCE', None, '1'),
+            ('GOVERNANCE', None, 1),
+        ]
+        for params in test_params:
+            mode, days, years = params
+            self.assertIsNone(instance.set_bucket_locking(
+                bucket_name='test',
+                mode=mode,
+                retention_period_days=days,
+                retention_period_years=years
+            ))
+
 
 class RgwClientHelperTest(TestCase):
     def test_parse_frontend_config_1(self):
