@@ -156,7 +156,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   store(s),
   
-  elector(this),
+  elector(this, map->strategy),
   required_features(0),
   leader(0),
   quorum_con_features(0),
@@ -374,6 +374,22 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
+  } else if (command == "connection scores dump") {
+    if (!get_quorum_mon_features().contains_all(
+				   ceph::features::mon::FEATURE_PINGING)) {
+      ss << "Not all monitors support changing election strategies; \
+             please upgrade them first!";
+    }
+    elector.dump_connection_scores(f.get());
+    f->flush(ss);
+  } else if (command == "connection scores reset") {
+    if (!get_quorum_mon_features().contains_all(
+				   ceph::features::mon::FEATURE_PINGING)) {
+      ss << "Not all monitors support changing election strategies; \
+              please upgrade them first!";
+    }
+    elector.notify_clear_peer_state();
+    f->flush(ss);
   } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
@@ -856,7 +872,14 @@ int Monitor::preinit()
                                      admin_hook,
                                     "show recent slow ops");
   ceph_assert(r == 0);
-
+  r = admin_socket->register_command("connection scores dump", "connection scores dump",
+				      admin_hook,
+				      "show the scores used in connectivity-based elections");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("connection scores reset", "connection scores reset",
+				      admin_hook,
+				      "show the scores used in connectivity-based elections");
+  ceph_assert(r == 0);
   lock.Lock();
 
   // add ourselves as a conf observer
@@ -1142,6 +1165,7 @@ void Monitor::bootstrap()
       dout(0) << " removed from monmap, suicide." << dendl;
       exit(0);
     }
+    elector.notify_clear_peer_state();
   }
   if (newrank >= 0 &&
       monmap->get_addrs(newrank) != messenger->get_myaddrs()) {
@@ -1168,6 +1192,7 @@ void Monitor::bootstrap()
     dout(0) << " my rank is now " << newrank << " (was " << rank << ")" << dendl;
     messenger->set_myname(entity_name_t::MON(newrank));
     rank = newrank;
+    elector.notify_rank_changed(rank);
 
     // reset all connections, or else our peers will think we are someone else.
     messenger->mark_down_all();
@@ -1184,6 +1209,9 @@ void Monitor::bootstrap()
     store->compact();
     dout(10) << "bootstrap -- finished compaction" << dendl;
   }
+
+  // stretch mode bits
+  set_elector_disallowed_leaders(false);
 
   // singleton monitor?
   if (monmap->size() == 1 && rank == 0) {
@@ -1909,6 +1937,7 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
 		    ceph_release());
   r->name = name;
   r->quorum = quorum;
+  r->leader = leader;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
   r->paxos_first_version = paxos->get_first_committed();
   r->paxos_last_version = paxos->get_version();
@@ -1919,6 +1948,8 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
     dout(1) << " adding peer " << m->get_source_addrs()
 	    << " to list of hints" << dendl;
     extra_probe_peers.insert(m->get_source_addrs());
+  } else {
+    elector.begin_peer_ping(monmap->get_rank(m->get_source_addr()));
   }
 
  out:
@@ -1951,6 +1982,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 	       << ", mine was " << monmap->get_epoch() << dendl;
       delete newmap;
       monmap->decode(m->monmap_bl);
+      notify_new_monmap(false);
 
       bootstrap();
       return;
@@ -2055,16 +2087,25 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
              << " vs my version " << paxos->get_version()
              << " (ok)"
              << dendl;
-
-    if (monmap->contains(name) &&
-        !monmap->get_addrs(name).front().is_blank_ip()) {
+    bool in_map = false;
+    const auto my_info = monmap->mon_info.find(name);
+    const map<string,string> *map_crush_loc{nullptr};
+    if (my_info != monmap->mon_info.end()) {
+      in_map = true;
+      map_crush_loc = &my_info->second.crush_loc;
+    }
+    if (in_map &&
+	!monmap->get_addrs(name).front().is_blank_ip() &&
+	(!need_set_crush_loc || (*map_crush_loc == crush_loc))) {
       // i'm part of the cluster; just initiate a new election
       start_election();
     } else {
-      dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
-      send_mon_message(
-	new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
-	*m->quorum.begin());
+      dout(10) << " ready to join, but i'm not in the monmap/"
+	"my addr is blank/location is wrong, trying to join" << dendl;
+      send_mon_message(new MMonJoin(monmap->fsid, name,
+				    messenger->get_myaddrs(), crush_loc,
+				    need_set_crush_loc),
+		       m->leader);
     }
   } else {
     if (monmap->contains(m->name)) {
@@ -2120,8 +2161,7 @@ void Monitor::win_standalone_election()
 
   // bump election epoch, in case the previous epoch included other
   // monitors; we need to be able to make the distinction.
-  elector.init();
-  elector.advance_epoch();
+  elector.declare_standalone_victory();
 
   rank = monmap->get_rank(name);
   ceph_assert(rank == 0);
@@ -2161,7 +2201,7 @@ void Monitor::_finish_svc_election()
   }
 }
 
-void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
+void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
 			   int min_mon_release,
 			   const map<int,Metadata>& metadata)
@@ -2329,14 +2369,21 @@ void Monitor::finish_election()
     authmon()->_set_mon_num_rank(monmap->size(), rank);
   }
 
-  // am i named properly?
+  // am i named and located properly?
   string cur_name = monmap->get_name(messenger->get_myaddrs());
-  if (cur_name != name) {
-    dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
-    send_mon_message(
-      new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
-      *quorum.begin());
+  const auto my_infop = monmap->mon_info.find(cur_name);
+  const map<string,string>& map_crush_loc = my_infop->second.crush_loc;
+  
+  if (cur_name != name ||
+      (need_set_crush_loc && map_crush_loc != crush_loc)) {
+    dout(10) << " renaming/moving myself from " << cur_name << "/"
+	     << map_crush_loc <<" -> " << name << "/" << crush_loc << dendl;
+    send_mon_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddrs(),
+				  crush_loc, need_set_crush_loc),
+		     leader);
+    return;
   }
+  do_stretch_mode_election_work();
 }
 
 void Monitor::_apply_compatset_features(CompatSet &new_features)
@@ -2515,7 +2562,7 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     f->dump_string("mon", *p);
   f->close_section(); // quorum_names
 
-  f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(*quorum.begin()));
+  f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(leader));
 
   if (!quorum.empty()) {
     f->dump_int(
@@ -2614,6 +2661,7 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   f->close_section();
 
   f->dump_object("feature_map", session_map.feature_map);
+  f->dump_bool("stretch_mode", stretch_mode_engaged);
   f->close_section(); // mon_status
 
   if (free_formatter) {
@@ -4450,6 +4498,9 @@ void Monitor::_ms_dispatch(Message *m)
 	   << " (" << s->global_id_status
 	   << ") caps " << s->caps.get_str() << dendl;
 
+  if (!session_stretch_allowed(s, op)) {
+    return;
+  }
   if ((is_synchronizing() ||
        (!s->authenticated && !exited_quorum.is_zero())) &&
       !src_is_mon &&
@@ -4683,7 +4734,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     // elector messages
     case MSG_MON_ELECTION:
-      op->set_type_election();
+      op->set_type_election_or_ping();
       //check privileges here for simplicity
       if (!op->get_session()->is_capable("mon", MON_CAP_X)) {
         dout(0) << "MMonElection received from entity without enough caps!"
@@ -4693,6 +4744,11 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       if (!is_probing() && !is_synchronizing()) {
         elector.dispatch(op);
       }
+      return;
+
+    case MSG_MON_PING:
+      op->set_type_election_or_ping();
+      elector.dispatch(op);
       return;
 
     case MSG_FORWARD:
@@ -6508,4 +6564,316 @@ int Monitor::ms_handle_authentication(Connection *con)
   }
 
   return ret;
+}
+
+void Monitor::set_mon_crush_location(const string& loc)
+{
+  if (loc.empty()) {
+    return;
+  }
+  vector<string> loc_vec;
+  loc_vec.push_back(loc);
+  CrushWrapper::parse_loc_map(loc_vec, &crush_loc);
+  need_set_crush_loc = true;
+}
+
+void Monitor::notify_new_monmap(bool can_change_external_state)
+{
+  if (need_set_crush_loc) {
+    auto my_info_i = monmap->mon_info.find(name);
+    if (my_info_i != monmap->mon_info.end() &&
+	my_info_i->second.crush_loc == crush_loc) {
+      need_set_crush_loc = false;
+    }
+  }
+  elector.notify_strategy_maybe_changed(monmap->strategy);
+  dout(30) << __func__ << "we have " << monmap->removed_ranks.size() << " removed ranks" << dendl;
+  for (auto i = monmap->removed_ranks.rbegin();
+       i != monmap->removed_ranks.rend(); ++i) {
+    int rank = *i;
+    dout(10) << __func__ << "removing rank " << rank << dendl;
+    elector.notify_rank_removed(rank);
+  }
+
+  if (monmap->stretch_mode_enabled) {
+    try_engage_stretch_mode();
+  }
+
+  if (is_stretch_mode()) {
+    if (!monmap->stretch_marked_down_mons.empty()) {
+      set_degraded_stretch_mode();
+    }
+  }
+  set_elector_disallowed_leaders(can_change_external_state);
+}
+
+void Monitor::set_elector_disallowed_leaders(bool allow_election)
+{
+  set<int> dl;
+  for (auto name : monmap->disallowed_leaders) {
+    dl.insert(monmap->get_rank(name));
+  }
+  if (is_stretch_mode()) {
+    for (auto name : monmap->stretch_marked_down_mons) {
+      dl.insert(monmap->get_rank(name));
+    }
+    dl.insert(monmap->get_rank(monmap->tiebreaker_mon));
+  }
+
+  bool disallowed_changed = elector.set_disallowed_leaders(dl);
+  if (disallowed_changed && allow_election) {
+    elector.call_election();
+  }
+}
+
+struct CMonEnableStretchMode : public Context {
+  Monitor *m;
+  CMonEnableStretchMode(Monitor *mon) : m(mon) {}
+  void finish(int r) {
+    m->try_engage_stretch_mode();
+  }
+};
+void Monitor::try_engage_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  if (stretch_mode_engaged) return;
+  if (!osdmon()->is_readable()) {
+    osdmon()->wait_for_readable_ctx(new CMonEnableStretchMode(this));
+  }
+  if (osdmon()->osdmap.stretch_mode_enabled &&
+      monmap->stretch_mode_enabled) {
+    dout(10) << "Engaging stretch mode!" << dendl;
+    stretch_mode_engaged = true;
+    int32_t stretch_divider_id = osdmon()->osdmap.stretch_mode_bucket;
+    stretch_bucket_divider = osdmon()->osdmap.
+      crush->get_type_name(stretch_divider_id);
+    disconnect_disallowed_stretch_sessions();
+  }
+}
+
+void Monitor::do_stretch_mode_election_work()
+{
+  dout(20) << __func__ << dendl;
+  if (!is_stretch_mode() ||
+      !is_leader()) return;
+  dout(20) << "checking for degraded stretch mode" << dendl;
+  map<string, set<string>> old_dead_buckets;
+  old_dead_buckets.swap(dead_mon_buckets);
+  up_mon_buckets.clear();
+  // identify if we've lost a CRUSH bucket, request OSDMonitor check for death
+  map<string,set<string>> down_mon_buckets;
+  for (unsigned i = 0; i < monmap->size(); ++i) {
+    const auto &mi = monmap->mon_info[monmap->get_name(i)];
+    auto ci = mi.crush_loc.find(stretch_bucket_divider);
+    ceph_assert(ci != mi.crush_loc.end());
+    if (quorum.count(i)) {
+      up_mon_buckets.insert(ci->second);
+    } else {
+      down_mon_buckets[ci->second].insert(mi.name);
+    }
+  }
+  dout(20) << "prior dead_mon_buckets: " << old_dead_buckets
+	   << "; down_mon_buckets: " << down_mon_buckets
+	   << "; up_mon_buckets: " << up_mon_buckets << dendl;
+  for (auto di : down_mon_buckets) {
+    if (!up_mon_buckets.count(di.first)) {
+      dead_mon_buckets[di.first] = di.second;
+    }
+  }
+  dout(20) << "new dead_mon_buckets " << dead_mon_buckets << dendl;
+
+  if (dead_mon_buckets != old_dead_buckets &&
+      dead_mon_buckets.size() >= old_dead_buckets.size()) {
+    maybe_go_degraded_stretch_mode();
+  }
+}
+
+struct CMonGoDegraded : public Context {
+  Monitor *m;
+  CMonGoDegraded(Monitor *mon) : m(mon) {}
+  void finish(int r) {
+    m->maybe_go_degraded_stretch_mode();
+  }
+};
+
+struct CMonGoRecovery : public Context {
+  Monitor *m;
+  CMonGoRecovery(Monitor *mon) : m(mon) {}
+  void finish(int r) {
+    m->go_recovery_stretch_mode();
+  }
+};
+void Monitor::go_recovery_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  if (!is_leader()) return;
+  if (!is_degraded_stretch_mode()) return;
+  if (is_recovering_stretch_mode()) return;
+
+  if (dead_mon_buckets.size()) {
+    ceph_assert( 0 == "how did we try and do stretch recovery while we have dead monitor buckets?");
+    // we can't recover if we are missing monitors in a zone!
+    return;
+  }
+  
+  if (!osdmon()->is_readable()) {
+    osdmon()->wait_for_readable_ctx(new CMonGoRecovery(this));
+    return;
+  }
+
+  if (!osdmon()->is_writeable()) {
+    osdmon()->wait_for_writeable_ctx(new CMonGoRecovery(this));
+  }
+  osdmon()->trigger_recovery_stretch_mode();
+}
+
+void Monitor::set_recovery_stretch_mode()
+{
+  degraded_stretch_mode = true;
+  recovering_stretch_mode = true;
+  osdmon()->set_recovery_stretch_mode();
+}
+
+void Monitor::maybe_go_degraded_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  if (is_degraded_stretch_mode()) return;
+  if (!is_leader()) return;
+  if (dead_mon_buckets.empty()) return;
+  if (!osdmon()->is_readable()) {
+    osdmon()->wait_for_readable_ctx(new CMonGoDegraded(this));
+    return;
+  }
+  ceph_assert(monmap->contains(monmap->tiebreaker_mon));
+  // filter out the tiebreaker zone and check if remaining sites are down by OSDs too
+  const auto &mi = monmap->mon_info[monmap->tiebreaker_mon];
+  auto ci = mi.crush_loc.find(stretch_bucket_divider);
+  map<string, set<string>> filtered_dead_buckets = dead_mon_buckets;
+  filtered_dead_buckets.erase(ci->second);
+
+  set<int> matched_down_buckets;
+  set<string> matched_down_mons;
+  bool dead = osdmon()->check_for_dead_crush_zones(filtered_dead_buckets,
+						   &matched_down_buckets,
+						   &matched_down_mons);
+  if (dead) {
+    if (!osdmon()->is_writeable()) {
+      osdmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+    }
+    if (!monmon()->is_writeable()) {
+      monmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+    }
+    trigger_degraded_stretch_mode(matched_down_mons, matched_down_buckets);
+  }
+}
+
+void Monitor::trigger_degraded_stretch_mode(const set<string>& dead_mons,
+					    const set<int>& dead_buckets)
+{
+  dout(20) << __func__ << dendl;
+  ceph_assert(osdmon()->is_writeable());
+  ceph_assert(monmon()->is_writeable());
+
+  // figure out which OSD zone(s) remains alive by removing
+  // tiebreaker mon from up_mon_buckets
+  set<string> live_zones = up_mon_buckets;
+  ceph_assert(monmap->contains(monmap->tiebreaker_mon));
+  const auto &mi = monmap->mon_info[monmap->tiebreaker_mon];
+  auto ci = mi.crush_loc.find(stretch_bucket_divider);
+  live_zones.erase(ci->second);
+  ceph_assert(live_zones.size() == 1); // only support 2 zones right now
+  
+  osdmon()->trigger_degraded_stretch_mode(dead_buckets, live_zones);
+  monmon()->trigger_degraded_stretch_mode(dead_mons);
+  set_degraded_stretch_mode();
+}
+
+void Monitor::set_degraded_stretch_mode()
+{
+  degraded_stretch_mode = true;
+  recovering_stretch_mode = false;
+  osdmon()->set_degraded_stretch_mode();
+}
+
+struct CMonGoHealthy : public Context {
+  Monitor *m;
+  CMonGoHealthy(Monitor *mon) : m(mon) {}
+  void finish(int r) {
+    m->trigger_healthy_stretch_mode();
+  }
+};
+
+
+void Monitor::trigger_healthy_stretch_mode()
+{
+  dout(20) << __func__ << dendl;
+  if (!is_degraded_stretch_mode()) return;
+  if (!is_leader()) return;
+  if (!osdmon()->is_writeable()) {
+    osdmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+  }
+  if (!monmon()->is_writeable()) {
+    monmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+  }
+
+  ceph_assert(osdmon()->osdmap.recovering_stretch_mode);
+  osdmon()->trigger_healthy_stretch_mode();
+  monmon()->trigger_healthy_stretch_mode();
+}
+
+void Monitor::set_healthy_stretch_mode()
+{
+  degraded_stretch_mode = false;
+  recovering_stretch_mode = false;
+  osdmon()->set_healthy_stretch_mode();
+}
+
+bool Monitor::session_stretch_allowed(MonSession *s, MonOpRequestRef& op)
+{
+  if (!is_stretch_mode()) return true;
+  if (s->proxy_con) return true;
+  if (s->validated_stretch_connection) return true;
+  if (!s->con) return true;
+  if (s->con->peer_is_osd()) {
+    dout(20) << __func__ << "checking OSD session" << s << dendl;
+    // okay, check the crush location
+    int barrier_id;
+    int retval = osdmon()->osdmap.crush->get_validated_type_id(stretch_bucket_divider,
+							       &barrier_id);
+    ceph_assert(retval >= 0);
+    int osd_bucket_id = osdmon()->osdmap.crush->get_parent_of_type(s->con->peer_id,
+								   barrier_id);
+    const auto &mi = monmap->mon_info.find(name);
+    ceph_assert(mi != monmap->mon_info.end());
+    auto ci = mi->second.crush_loc.find(stretch_bucket_divider);
+    ceph_assert(ci != mi->second.crush_loc.end());
+    int mon_bucket_id = osdmon()->osdmap.crush->get_item_id(ci->second);
+    
+    if (osd_bucket_id != mon_bucket_id) {
+      dout(5) << "discarding session " << *s
+	      << " and sending OSD to matched zone" << dendl;
+      s->con->mark_down();
+      std::lock_guard l(session_map_lock);
+      remove_session(s);
+      if (op) {
+	op->mark_zap();
+      }
+      return false;
+    }
+  }
+
+  s->validated_stretch_connection = true;
+  return true;
+}
+
+void Monitor::disconnect_disallowed_stretch_sessions()
+{
+  dout(20) << __func__ << dendl;
+  MonOpRequestRef blank;
+  auto i = session_map.sessions.begin();
+  while (i != session_map.sessions.end()) {
+    auto j = i;
+    ++i;
+    session_stretch_allowed(*j, blank);
+  }
 }

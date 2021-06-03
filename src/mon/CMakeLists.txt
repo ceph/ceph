@@ -18,6 +18,8 @@ set(lib_mon_srcs
   ConfigMap.cc
   ConfigMonitor.cc
   Elector.cc
+  ElectionLogic.cc
+  ConnectionTracker.cc
   HealthMonitor.cc
   ConfigKeyService.cc
   ../mds/MDSAuthCaps.cc

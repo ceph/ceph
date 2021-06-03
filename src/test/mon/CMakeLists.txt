@@ -74,3 +74,10 @@ set_target_properties(ceph_test_mon_rss_usage PROPERTIES
   INSTALL_RPATH "")
 install(TARGETS ceph_test_mon_rss_usage
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+#unittest_mon_election
+add_executable(unittest_mon_election
+  test_election.cc
+  )
+add_ceph_unittest(unittest_mon_election)
+target_link_libraries(unittest_mon_election mon global)

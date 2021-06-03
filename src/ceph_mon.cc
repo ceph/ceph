@@ -196,6 +196,8 @@ static void usage()
        << "        extract the monmap from the local monitor store and exit\n"
        << "  --mon-data <directory>\n"
        << "        where the mon store and keyring are located\n"
+       << "  --set-crush-location <bucket>=<foo>"
+       << "        sets monitor's crush bucket location (only for stretch mode)"
        << std::endl;
   generic_server_usage();
 }
@@ -234,7 +236,7 @@ int main(int argc, const char **argv)
   bool compact = false;
   bool force_sync = false;
   bool yes_really = false;
-  std::string osdmapfn, inject_monmap, extract_monmap;
+  std::string osdmapfn, inject_monmap, extract_monmap, crush_loc;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -317,6 +319,8 @@ int main(int argc, const char **argv)
       inject_monmap = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap", (char*)NULL)) {
       extract_monmap = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--set-crush-location", (char*)NULL)) {
+      crush_loc = val;
     } else {
       ++i;
     }
@@ -877,6 +881,7 @@ int main(int argc, const char **argv)
   msgr->start();
   mgr_msgr->start();
 
+  mon->set_mon_crush_location(crush_loc);
   mon->init();
 
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);

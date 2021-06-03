@@ -256,6 +256,52 @@ private:
 
   set<string> outside_quorum;
 
+  bool stretch_mode_engaged{false};
+  bool degraded_stretch_mode{false};
+  bool recovering_stretch_mode{false};
+  string stretch_bucket_divider;
+  map<string, set<string>> dead_mon_buckets; // bucket->mon ranks, locations with no live mons
+  set<string> up_mon_buckets; // locations with a live mon
+  void do_stretch_mode_election_work();
+
+  bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
+  void disconnect_disallowed_stretch_sessions();
+  void set_elector_disallowed_leaders(bool allow_election);
+
+  map <string,string> crush_loc;
+  bool need_set_crush_loc{false};
+public:
+  bool is_stretch_mode() { return stretch_mode_engaged; }
+  bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
+  bool is_recovering_stretch_mode() { return recovering_stretch_mode; }
+
+  /**
+   * This set of functions maintains the in-memory stretch state
+   * and sets up transitions of the map states by calling in to
+   * MonmapMonitor and OSDMonitor.
+   *
+   * The [maybe_]go_* functions are called on the leader to
+   * decide if transitions should happen; the trigger_* functions
+   * set up the map transitions; and the set_* functions actually
+   * change the memory state -- but these are only called
+   * via OSDMonitor::update_from_paxos, to guarantee consistent
+   * updates across the entire cluster.
+   */
+  void try_engage_stretch_mode();
+  void maybe_go_degraded_stretch_mode();
+  void trigger_degraded_stretch_mode(const set<string>& dead_mons,
+				     const set<int>& dead_buckets);
+  void set_degraded_stretch_mode();
+  void go_recovery_stretch_mode();
+  void set_recovery_stretch_mode();
+  void trigger_healthy_stretch_mode();
+  void set_healthy_stretch_mode();
+  void enable_stretch_mode();
+  void set_mon_crush_location(const string& loc);
+
+  
+private:
+
   /**
    * @defgroup Monitor_h_scrub
    * @{
@@ -564,7 +610,7 @@ public:
   epoch_t get_epoch();
   int get_leader() const { return leader; }
   string get_leader_name() {
-    return quorum.empty() ? string() : monmap->get_name(*quorum.begin());
+    return quorum.empty() ? string() : monmap->get_name(leader);
   }
   const set<int>& get_quorum() const { return quorum; }
   list<string> get_quorum_names() {
@@ -602,7 +648,7 @@ public:
   void start_election();
   void win_standalone_election();
   // end election (called by Elector)
-  void win_election(epoch_t epoch, set<int>& q,
+  void win_election(epoch_t epoch, const set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
 		    int min_mon_release,
@@ -820,6 +866,10 @@ public:
   void waitlist_or_zap_client(MonOpRequestRef op);
 
   void send_mon_message(Message *m, int rank);
+  /** can_change_external_state if we can do things like
+   *  call elections as a result of the new map.
+   */
+  void notify_new_monmap(bool can_change_external_state=false);
 
 public:
   struct C_Command : public C_MonOp {

@@ -1559,9 +1559,20 @@ protected:
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
     ostream &ss);
-  static void calc_replicated_acting(
+
+  static std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
+  select_replicated_primary(
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     uint64_t force_auth_primary_missing_objects,
+    const vector<int> &up,
+    pg_shard_t up_primary,
+    const map<pg_shard_t, pg_info_t> &all_info,
+    const OSDMapRef osdmap,
+    ostream &ss);
+
+  static void calc_replicated_acting(
+    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    eversion_t oldest_auth_log_entry,
     unsigned size,
     const vector<int> &acting,
     const vector<int> &up,
@@ -1572,7 +1583,25 @@ protected:
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
     const OSDMapRef osdmap,
+    const PGPool& pool,
     ostream &ss);
+
+  static void calc_replicated_acting_stretch(
+    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    eversion_t oldest_auth_log_entry,
+    unsigned size,
+    const vector<int> &acting,
+    const vector<int> &up,
+    pg_shard_t up_primary,
+    const map<pg_shard_t, pg_info_t> &all_info,
+    bool restrict_to_up_acting,
+    vector<int> *want,
+    set<pg_shard_t> *backfill,
+    set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
+    const PGPool& pool,
+    std::ostream &ss);
+
   void choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
                                 const pg_info_t &auth_info,
                                 vector<int> *want,
@@ -2912,6 +2941,16 @@ protected:
   uint64_t get_min_upacting_features() const { return upacting_features; }
   bool perform_deletes_during_peering() const {
     return !(get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
+  }
+
+  /**
+   * Returns whether the current acting set is able to go active
+   * and serve writes. It needs to satisfy min_size and any
+   * applicable stretch cluster constraints.
+   */
+  bool acting_set_writeable() {
+    return (acting.size() >= pool.info.min_size) &&
+      (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
   }
 
   bool hard_limit_pglog() const {

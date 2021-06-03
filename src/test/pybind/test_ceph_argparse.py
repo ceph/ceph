@@ -506,9 +506,6 @@ class TestMon(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mon', 'add',
                                                     'name',
                                                     '400.500.600.700']))
-        assert_equal({}, validate_command(sigdict, ['mon', 'add', 'name',
-                                                    '1.2.3.4:1234',
-                                                    'toomany']))
 
     def test_remove(self):
         self.assert_valid_command(['mon', 'remove', 'name'])

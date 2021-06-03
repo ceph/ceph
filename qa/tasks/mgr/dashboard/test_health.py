@@ -260,7 +260,8 @@ class HealthTest(DashboardTestCase):
                 'rank': int,
                 'state': str,
                 # TODO: What type should be expected here?
-                'sync_provider': JList(JAny(none=True))
+                'sync_provider': JList(JAny(none=True)),
+                'stretch_mode': bool
             }),
             'osd_map': JObj({
                 # TODO: define schema for crush map and osd_metadata, among
