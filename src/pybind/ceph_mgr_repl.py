@@ -101,6 +101,7 @@ Please set the environment variables first:
                         default='mgr self-test eval',
                         help='command prefix for eval the source')
     parser.add_argument('--timeout', action='store',
+                        type=int,
                         default=10,
                         help='timeout in seconds')
     parser.add_argument('--show-env', action='store_true',
