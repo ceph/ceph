@@ -306,6 +306,12 @@
      --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token
      --totp-pin                the valid value of a TOTP token at a certain time
   
+  radoslist options:
+     --rgw-obj-fs              the field separator that will separate the rados
+                               object name from the rgw object name;
+                               additionally rados objects for incomplete
+                               multipart uploads will not be output
+  
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name
     --name/-n TYPE.ID set name

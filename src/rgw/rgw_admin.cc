@@ -379,6 +379,11 @@ void usage()
   cout << "   --totp-seconds            the time resolution that is being used for TOTP generation\n";
   cout << "   --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token\n";
   cout << "   --totp-pin                the valid value of a TOTP token at a certain time\n";
+  cout << "\nradoslist options:\n";
+  cout << "   --rgw-obj-fs              the field separator that will separate the rados\n";
+  cout << "                             object name from the rgw object name;\n";
+  cout << "                             additionally rados objects for incomplete\n";
+  cout << "                             multipart uploads will not be output\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -2921,6 +2926,8 @@ int main(int argc, const char **argv)
   string event_id;
   rgw::notify::EventTypeList event_types;
 
+  std::optional<std::string> rgw_obj_fs; // radoslist field separator
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -3265,6 +3272,8 @@ int main(int argc, const char **argv)
       rgw::notify::from_string_list(val, event_types);
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--rgw-obj-fs", (char*)NULL)) {
+      rgw_obj_fs = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -5615,6 +5624,10 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_BUCKET_RADOS_LIST) {
     RGWRadosList lister(store,
 			max_concurrent_ios, orphan_stale_secs, tenant);
+    if (rgw_obj_fs) {
+      lister.set_field_separator(*rgw_obj_fs);
+    }
+
     if (bucket_name.empty()) {
       ret = lister.run();
     } else {
