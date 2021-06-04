@@ -670,7 +670,7 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
     op_not_blocked = false;
 
     if (stack->is_io_blocked()) {
-      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
       if (stack->is_interval_waiting()) {
         interval_wait_count++;
       }
@@ -679,10 +679,10 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
       /* do nothing, we'll re-add the stack when the blocking stack is done,
        * or when we're awaken
        */
-      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is_blocked_by_stack()=" << stack->is_blocked_by_stack()
+      ldpp_dout(dpp, 20) << __func__ << ":" << " stack=" << (void *)stack << " is_blocked_by_stack()=" << stack->is_blocked_by_stack()
 	             << " is_sleeping=" << stack->is_sleeping() << " waiting_for_child()=" << stack->waiting_for_child() << dendl;
     } else if (stack->is_done()) {
-      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is done" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << ":" << " stack=" << (void *)stack << " is done" << dendl;
       RGWCoroutinesStack *s;
       while (stack->unblock_stack(&s)) {
 	if (!s->is_blocked_by_stack() && !s->is_done()) {
@@ -727,7 +727,7 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
       ret = completion_mgr->get_next(&io);
       lock.lock();
       if (ret < 0) {
-       ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
+       ldpp_dout(dpp, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
     }
@@ -738,10 +738,10 @@ next:
       ret = completion_mgr->get_next(&io);
       lock.lock();
       if (ret < 0) {
-        ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
+        ldpp_dout(dpp, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       if (going_down) {
-	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
+	ldpp_dout(dpp, 5) << __func__ << "(): was stopped, exiting" << dendl;
 	ret = -ECANCELED;
         canceled = true;
         break;
@@ -765,14 +765,14 @@ next:
       ::encode_json("entry", *s, &formatter);
     }
     formatter.close_section();
-    lderr(cct) << __func__ << "(): ERROR: deadlock detected, dumping remaining coroutines:\n";
+    ldpp_dout(dpp, -1) << __func__ << "(): ERROR: deadlock detected, dumping remaining coroutines:\n";
     formatter.flush(*_dout);
     *_dout << dendl;
     ceph_assert(context_stacks.empty() || going_down); // assert on deadlock
   }
 
   for (auto stack : context_stacks) {
-    ldout(cct, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
+    ldpp_dout(dpp, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
     stack->cancel();
   }
   run_contexts.erase(run_context);
