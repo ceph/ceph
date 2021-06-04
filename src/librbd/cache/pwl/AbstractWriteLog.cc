@@ -1527,7 +1527,7 @@ bool AbstractWriteLog<I>::check_allocation(
   }
 
   if (alloc_succeeds) {
-    reserve_cache(req, alloc_succeeds, no_space);
+    alloc_cache(req, alloc_succeeds, no_space);
   }
 
   if (alloc_succeeds) {

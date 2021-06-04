@@ -390,7 +390,7 @@ protected:
   virtual void schedule_flush_and_append(
       pwl::GenericLogOperationsVector &ops) {}
   virtual void persist_last_flushed_sync_gen() {}
-  virtual void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
+  virtual void alloc_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
                              bool &no_space) {}
   virtual void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
 					DeferredContexts &post_unlock,
