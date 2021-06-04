@@ -2,7 +2,7 @@
 Telemetry module for ceph-mgr
 
 Collect statistics from Ceph cluster and send this back to the Ceph project
-when user has opted-in
+when user has opted-in.
 """
 import enum
 import errno
