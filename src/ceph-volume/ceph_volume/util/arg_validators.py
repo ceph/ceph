@@ -230,5 +230,5 @@ class ValidFraction(object):
     def __call__(self, fraction):
         fraction_float = float(fraction)
         if math.isnan(fraction_float) or fraction_float <= 0.0 or fraction_float > 1.0:
-            raise argparse.ArgumentTypeError('Fraction not in (0,1.0]')
+            raise argparse.ArgumentError(None, 'Fraction %f not in (0,1.0]' % fraction_float)
         return fraction_float

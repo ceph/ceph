@@ -346,6 +346,10 @@ class TestValidFraction(object):
         result = self.validator('0.8')
         assert result == 0.8
 
+    def test_fraction_not_float(self, fake_call):
+        with pytest.raises(ValueError):
+            self.validator('xyz')
+
     def test_fraction_is_nan(self, fake_call):
         with pytest.raises(argparse.ArgumentError):
             self.validator('NaN')
