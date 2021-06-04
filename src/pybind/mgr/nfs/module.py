@@ -28,8 +28,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       fsname: str,
                                       clusterid: str,
                                       binding: str,
-                                      readonly: bool = False,
-                                      path: str = '/') -> Tuple[int, str, str]:
+                                      path: str = '/',
+                                      readonly: bool = False) -> Tuple[int, str, str]:
         """Create a cephfs export"""
         # TODO Extend export creation for rgw.
         return self.export_mgr.create_export(fsal_type='cephfs', fs_name=fsname,
