@@ -475,10 +475,9 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     std::lock_guard locker(m_lock);
     initial_first_valid_entry = this->m_first_valid_entry;
     first_valid_entry = this->m_first_valid_entry;
-    auto entry = m_log_entries.front();
-    while (!m_log_entries.empty() &&
-           retiring_entries.size() < frees_per_tx &&
-           this->can_retire_entry(entry)) {
+    while (!m_log_entries.empty() && retiring_entries.size() < frees_per_tx &&
+           this->can_retire_entry(m_log_entries.front())) {
+      auto entry = m_log_entries.front();
       if (entry->log_entry_index != first_valid_entry) {
         lderr(cct) << "Retiring entry index (" << entry->log_entry_index
                    << ") and first valid log entry index (" << first_valid_entry
@@ -495,7 +494,6 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           this->m_blocks_to_log_entries.remove_log_entry(gen_write_entry);
         }
       }
-      entry = m_log_entries.front();
     }
   }
 
