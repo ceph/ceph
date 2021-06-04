@@ -87,7 +87,7 @@ function main {
     repo_url="https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/flavors/${FLAVOR}/repo"
     if grep ubuntu <<<"$env" > /dev/null 2>&1; then
         # Docker makes it impossible to access anything outside the CWD : /
-        cp -- /ceph/shaman/cephdev.asc .
+        wget -O cephdev.asc 'https://download.ceph.com/keys/autobuild.asc'
         cat > Dockerfile <<EOF
 FROM ${env}
 
