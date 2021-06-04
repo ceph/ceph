@@ -1,5 +1,13 @@
 >=17.0.0
 
+* `ceph-mgr-modules-core` debian package does not recommend `ceph-mgr-rook`
+  anymore. As the latter depends on `python3-numpy` which cannot be imported in
+  different Python sub-interpreters multi-times if the version of
+  `python3-numpy` is older than 1.19. Since `apt-get` installs the `Recommends`
+  packages by default, `ceph-mgr-rook` was always installed along with
+  `ceph-mgr` debian package as an indirect dependency. If your workflow depends
+  on this behavior, you might want to install `ceph-mgr-rook` separately.
+
 * A new library is available, libcephsqlite. It provides a SQLite Virtual File
   System (VFS) on top of RADOS. The database and journals are striped over
   RADOS across multiple objects for virtually unlimited scaling and throughput
