@@ -418,7 +418,7 @@ int RGWRadosRemoveCR::send_request(const DoutPrefixProvider *dpp)
   auto rados = store->getRados()->get_rados_handle();
   int r = rados->ioctx_create(obj.pool.name.c_str(), ioctx);
   if (r < 0) {
-    lderr(cct) << "ERROR: failed to open pool (" << obj.pool.name << ") ret=" << r << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to open pool (" << obj.pool.name << ") ret=" << r << dendl;
     return r;
   }
   ioctx.locator_set_key(obj.loc);
@@ -546,7 +546,7 @@ int RGWOmapAppend::operate(const DoutPrefixProvider *dpp) {
         }
       }
       if (get_ret_status() < 0) {
-        ldout(cct, 0) << "ERROR: failed to store entries in omap" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to store entries in omap" << dendl;
         return set_state(RGWCoroutine_Error);
       }
     }
@@ -809,7 +809,7 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
       caller->set_sleeping(false); /* will only be relevant when we return, that's why we can do it early */
       if (retcode < 0) {
         set_locked(false);
-        ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj << ":" << lock_name << ": retcode=" << retcode << dendl;
+        ldpp_dout(dpp, 20) << *this << ": couldn't lock " << obj << ":" << lock_name << ": retcode=" << retcode << dendl;
         return set_state(RGWCoroutine_Error, retcode);
       }
       set_locked(true);
