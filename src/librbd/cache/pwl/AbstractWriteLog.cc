@@ -1497,8 +1497,8 @@ bool AbstractWriteLog<I>::check_allocation(
     uint32_t num_unpublished_reserves) {
   bool alloc_succeeds = true;
   bool no_space = false;
+  std::lock_guard locker(m_lock);
   {
-    std::lock_guard locker(m_lock);
     if (m_free_lanes < num_lanes) {
       ldout(m_image_ctx.cct, 20) << "not enough free lanes (need "
                                  <<  num_lanes
@@ -1531,26 +1531,18 @@ bool AbstractWriteLog<I>::check_allocation(
   }
 
   if (alloc_succeeds) {
-    std::lock_guard locker(m_lock);
     /* We need one free log entry per extent (each is a separate entry), and
      * one free "lane" for remote replication. */
-    if ((m_free_lanes >= num_lanes) &&
-        (m_free_log_entries >= num_log_entries) &&
-        (m_bytes_allocated_cap >= m_bytes_allocated + bytes_allocated)) {
-      m_free_lanes -= num_lanes;
-      m_free_log_entries -= num_log_entries;
-      m_unpublished_reserves += num_unpublished_reserves;
-      m_bytes_allocated += bytes_allocated;
-      m_bytes_cached += bytes_cached;
-      m_bytes_dirty += bytes_dirtied;
-    } else {
-      alloc_succeeds = false;
-    }
+    m_free_lanes -= num_lanes;
+    m_free_log_entries -= num_log_entries;
+    m_unpublished_reserves += num_unpublished_reserves;
+    m_bytes_allocated += bytes_allocated;
+    m_bytes_cached += bytes_cached;
+    m_bytes_dirty += bytes_dirtied;
   }
 
   if (!alloc_succeeds && no_space) {
     /* Expedite flushing and/or retiring */
-    std::lock_guard locker(m_lock);
     m_alloc_failed_since_retire = true;
     m_last_alloc_fail = ceph_clock_now();
   }
