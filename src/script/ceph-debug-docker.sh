@@ -110,10 +110,12 @@ EOF
             centos:7)
                 python_bindings="python36-rados python36-cephfs"
                 ceph_debuginfo="ceph-debuginfo"
+                debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
                 ;;
             centos:8)
                 python_bindings="python3-rados python3-cephfs"
                 ceph_debuginfo="ceph-base-debuginfo"
+                debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
                 ;;
         esac
         if [ "${FLAVOR}" = "crimson" ]; then
@@ -123,7 +125,8 @@ EOF
 FROM ${env}
 
 WORKDIR /root
-RUN yum update -y && \
+RUN sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
+    yum update -y && \
     yum install -y tmux epel-release wget psmisc ca-certificates gdb
 RUN wget -O /etc/yum.repos.d/ceph-dev.repo $repo_url && \
     yum clean all && \
