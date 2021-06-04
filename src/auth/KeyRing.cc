@@ -162,7 +162,7 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
   f->flush(bl);
 }
 
-void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
+void KeyRing::decode(bufferlist::const_iterator& bli)
 {
   int ret;
   bufferlist bl;
@@ -198,19 +198,6 @@ void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
 	throw ceph::buffer::malformed_input(oss.str().c_str());
       }
     }
-  }
-}
-
-void KeyRing::decode(bufferlist::const_iterator& bl) {
-  __u8 struct_v;
-  auto start_pos = bl;
-  try {
-    using ceph::decode;
-    decode(struct_v, bl);
-    decode(keys, bl);
-  } catch (ceph::buffer::error& err) {
-    keys.clear();
-    decode_plaintext(start_pos);
   }
 }
 
