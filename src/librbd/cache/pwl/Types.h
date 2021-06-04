@@ -5,11 +5,6 @@
 #define CEPH_LIBRBD_CACHE_PWL_TYPES_H
 
 #include "acconfig.h"
-
-#ifdef WITH_RBD_RWL
-#include "libpmemobj.h"
-#endif
-
 #include <vector>
 #include "librbd/BlockGuard.h"
 #include "librbd/io/Types.h"
@@ -181,13 +176,18 @@ const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
 const unsigned long int MAX_ALLOC_PER_TRANSACTION = 8;
 const unsigned long int MAX_FREE_PER_TRANSACTION = 1;
 const unsigned int MAX_CONCURRENT_WRITES = (1024 * 1024);
+const unsigned int SECOND_ROOT_OFFSET = 1u << 11;
+const unsigned int MAX_ROOT_LEN = 1u << 11;
+const unsigned int FIRST_ENTRY_OFFSET = 1u << 12;
 
-const uint64_t DEFAULT_POOL_SIZE = 1u<<30;
+const uint64_t DEFAULT_POOL_SIZE = 1u << 30;
 const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
 const uint64_t POOL_SIZE_ALIGN = 1 << 20;
+/* The unusable spaces include root and entry.
+ * If modification is necessary, please calculate carefully */
 constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
-const uint8_t RWL_LAYOUT_VERSION = 1;
+const uint8_t RWL_LAYOUT_VERSION = 2;
 const uint8_t SSD_LAYOUT_VERSION = 1;
 const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
 const double AGGRESSIVE_RETIRE_HIGH_WATER = 0.75;
@@ -210,22 +210,14 @@ public:
   void add(Context* ctx);
 };
 
-/* Pmem structures */
-#ifdef WITH_RBD_RWL
-POBJ_LAYOUT_BEGIN(rbd_pwl);
-POBJ_LAYOUT_ROOT(rbd_pwl, struct WriteLogPoolRoot);
-POBJ_LAYOUT_TOID(rbd_pwl, uint8_t);
-POBJ_LAYOUT_TOID(rbd_pwl, struct WriteLogCacheEntry);
-POBJ_LAYOUT_END(rbd_pwl);
-#endif
-
 struct WriteLogCacheEntry {
   uint64_t sync_gen_number = 0;
   uint64_t write_sequence_number = 0;
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
   #ifdef WITH_RBD_RWL
-  TOID(uint8_t) write_data;
+  uint64_t write_data = 0;     /* offset in pmem,
+                                * 1 offset == MIN_WRITE_ALLOC_SIZE Byte */
   #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t write_data_pos = 0; /* SSD data offset */
@@ -329,13 +321,18 @@ struct WriteLogCacheEntry {
 
 struct WriteLogPoolRoot {
   #ifdef WITH_RBD_RWL
+  uint32_t crc = 0;
+  /* To make superblock update atomic. If one of the superblocks fails to
+   * update (CRC check), the another one will be used. And one of the
+   * superblocks is always available. The sequence_num decide which superblocks
+   * to write. If the number is even, write to 0~2k, otherwise, write 2~4k. */
+  uint64_t sequence_num = 0;
   union {
     struct {
       uint8_t layout_version;
     };
     uint64_t _u64;
   } header;
-  TOID(struct WriteLogCacheEntry) log_entries;   /* contiguous array of log entries */
   #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t layout_version = 0;
@@ -372,8 +369,8 @@ struct WriteLogPoolRoot {
 struct WriteBufferAllocation {
   unsigned int allocation_size = 0;
   #ifdef WITH_RBD_RWL
-  pobj_action buffer_alloc_action;
-  TOID(uint8_t) buffer_oid = OID_NULL;
+  char *pmem_head_addr = nullptr;   /* runtime pmem head addr */
+  uint64_t pmem_offset = 0;         /* offset in pmem */
   #endif
   bool allocated = false;
   utime_t allocation_lat;

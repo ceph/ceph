@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_CACHE_REPLICATED_WRITE_LOG
 
 #include <functional>
-#include <libpmemobj.h>
 #include <list>
 #include "common/Timer.h"
 #include "common/RWLock.h"
@@ -20,6 +19,7 @@
 #include "librbd/cache/pwl/LogOperation.h"
 #include "librbd/cache/pwl/Request.h"
 #include "librbd/cache/pwl/rwl/Builder.h"
+#include "librbd/cache/pwl/rwl/PmemManager.h"
 
 class Context;
 
@@ -55,9 +55,11 @@ private:
   using C_FlushRequestT = pwl::C_FlushRequest<This>;
   using C_DiscardRequestT = pwl::C_DiscardRequest<This>;
 
-  PMEMobjpool *m_log_pool = nullptr;
+  std::unique_ptr<PmemDev> m_log_pool = nullptr;
+  uint64_t m_sequence_num = 0;
+  unsigned m_super_block_crc_len = 0;
+  struct WriteLogCacheEntry *m_pmem_log_entries = nullptr;
   Builder<This> *m_builderobj;
-  const char* m_pwl_pool_layout_name;
   const uint64_t MAX_EXTENT_SIZE = 1048576;
 
   Builder<This>* create_builder();
@@ -72,6 +74,8 @@ private:
   void flush_pmem_buffer(V& ops);
   void inc_allocated_cached_bytes(
       std::shared_ptr<pwl::GenericLogEntry> log_entry) override;
+  void persist_pmem_root();
+
 protected:
   using AbstractWriteLog<ImageCtxT>::m_lock;
   using AbstractWriteLog<ImageCtxT>::m_log_entries;
@@ -85,7 +89,7 @@ protected:
   void process_work() override;
   void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) override;
   void append_scheduled_ops(void) override;
-  void reserve_cache(C_BlockIORequestT *req,
+  void alloc_cache(C_BlockIORequestT *req,
                      bool &alloc_succeeds, bool &no_space) override;
   void collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
