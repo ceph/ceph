@@ -561,7 +561,7 @@ namespace rgw {
 
     r = rgw_perf_start(g_ceph_context);
 
-    rgw_rest_init(g_ceph_context, store->get_zone()->get_zonegroup());
+    rgw_rest_init(this, g_ceph_context, store->get_zone()->get_zonegroup());
 
     mutex.lock();
     init_timer.cancel_all_events();
