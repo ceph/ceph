@@ -253,7 +253,7 @@ void ObjectCache::touch_lru(const DoutPrefixProvider *dpp, const string& name, O
       break;
     }
     auto map_iter = cache_map.find(*iter);
-    ldout(cct, 10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
+    ldpp_dout(dpp, 10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
     if (map_iter != cache_map.end()) {
       ObjectCacheEntry& entry = map_iter->second;
       invalidate_lru(entry);
