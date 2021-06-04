@@ -174,7 +174,7 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
     debug echo "ceph-mgr dashboard not built - disabling."
     with_mgr_dashboard=false
 fi
-with_mgr_restful=true
+with_mgr_restful=false
 
 filestore_path=
 kstore_path=
@@ -451,8 +451,8 @@ case $1 in
     --without-dashboard)
         with_mgr_dashboard=false
         ;;
-    --without-restful)
-        with_mgr_restful=false
+    --with-restful)
+        with_mgr_restful=true
         ;;
     --seastore-devs)
         parse_block_devs --seastore-devs "$2"
