@@ -84,7 +84,11 @@ function main {
 
     T=$(mktemp -d)
     pushd "$T"
-    repo_url="https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/flavors/${FLAVOR}/repo"
+    distro="${env/://}"
+    api_url="https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=${FLAVOR}&distros=${distro}/x86_64&ref=${branch}&sha1=${sha}"
+    repo_url="$(wget -O - "$api_url" | jq -r '.[0].chacra_url')repo"
+    # validate url:
+    wget -O /dev/null "$repo_url"
     if grep ubuntu <<<"$env" > /dev/null 2>&1; then
         # Docker makes it impossible to access anything outside the CWD : /
         wget -O cephdev.asc 'https://download.ceph.com/keys/autobuild.asc'
