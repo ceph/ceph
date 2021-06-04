@@ -975,8 +975,7 @@ def main():
     if parsed_args.client_name:
         name = parsed_args.client_name
 
-    # default '' means default conf search
-    conffile = ''
+    conffile = rados.Rados.DEFAULT_CONF_FILES
     if parsed_args.cephconf:
         conffile = parsed_args.cephconf
     # For now, --admin-daemon is handled as usual.  Try it
