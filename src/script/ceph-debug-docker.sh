@@ -140,7 +140,7 @@ EOF
 
     printf "built image %s\n" "$tag"
 
-    run docker run -ti -v /ceph:/ceph:ro "$tag"
+    run docker run -ti -v /ceph:/ceph:ro -v /cephfs:/cephfs:ro -v /teuthology:/teuthology:ro "$tag"
     return 0
 }
 
