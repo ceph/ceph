@@ -14,8 +14,8 @@ First, create an authentication key for your daemon::
 
     ceph auth get-or-create mgr.$name mon 'allow profile mgr' osd 'allow *' mds 'allow *'
 
-Place that key into ``mgr data`` path, which for a cluster "ceph"
-and mgr $name "foo" would be ``/var/lib/ceph/mgr/ceph-foo``.
+Place that key as file named ``keyring`` into ``mgr data`` path, which for a cluster "ceph"
+and mgr $name "foo" would be ``/var/lib/ceph/mgr/ceph-foo`` respective ``/var/lib/ceph/mgr/ceph-foo/keyring``.
 
 Start the ceph-mgr daemon::
 
