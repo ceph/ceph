@@ -131,7 +131,7 @@ RUN sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
 RUN wget -O /etc/yum.repos.d/ceph-dev.repo $repo_url && \
     yum clean all && \
     yum upgrade -y && \
-    yum install -y ceph ${ceph_debuginfo} ceph-fuse ${python_bindings}
+    yum install -y ceph ${ceph_debuginfo} ${python_bindings}
 EOF
         time run docker build $CACHE --tag "$tag" .
     fi
