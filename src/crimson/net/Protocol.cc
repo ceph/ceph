@@ -103,8 +103,8 @@ ceph::bufferlist Protocol::sweep_messages_and_move_to_sent(
                                           require_ack);
   if (!conn.policy.lossy) {
     conn.sent.insert(conn.sent.end(),
-                     conn.out_q.begin(),
-                     conn.out_q.end());
+                     std::make_move_iterator(conn.out_q.begin()),
+                     std::make_move_iterator(conn.out_q.end()));
   }
   conn.out_q.clear();
   return bl;
