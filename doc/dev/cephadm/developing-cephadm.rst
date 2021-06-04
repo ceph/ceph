@@ -10,6 +10,7 @@ vstart --cephadm
 
 - Start a cluster with vstart, with cephadm configured
 - Manage any additional daemons with cephadm
+- Requires compiled ceph binaries
 
 In this case, the mon and manager at a minimum are running in the usual
 vstart way, not managed by cephadm.  But cephadm is enabled and the local
@@ -86,6 +87,26 @@ When you're done, you can tear down the cluster with::
 
   sudo ../src/ckill.sh   # or,
   sudo ../src/cephadm/cephadm rm-cluster --force --fsid `cat fsid`
+
+cephadm bootstrap --shared_ceph_folder
+======================================
+
+Cephadm can also be used directly without compiled ceph binaries.
+
+Run cephadm like so::
+
+  sudo ./cephadm bootstrap --mon-ip 127.0.0.1 \
+    --ssh-private-key /home/<user>/.ssh/id_rsa \
+    --skip-mon-network \
+    --skip-monitoring-stack --single-host-defaults \
+    --skip-dashboard \ 
+    --shared_ceph_folder /home/<user>/path/to/ceph/
+
+- ``~/.ssh/id_rsa`` is used as the cluster key.  It is assumed that
+  this key is authorized to ssh with no passphrase to root@`hostname`.
+
+Source code changes made in the ``pybind/mgr/`` directory then
+require a daemon restart to take effect. 
 
 Note regarding network calls from CLI handlers
 ==============================================
