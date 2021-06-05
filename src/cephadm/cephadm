@@ -2050,10 +2050,11 @@ def check_units(ctx, units, enabler=None):
 
 
 def is_container_running(ctx: CephadmContext, name: str) -> bool:
-    out, err, ret = call_throws(ctx, [
-        ctx.container_engine.path, 'ps',
-        '--format', '{{.Names}}'])
-    return name in out
+    out, err, ret = call(ctx, [
+        ctx.container_engine.path, 'container', 'inspect',
+        '--format', '{{.State.Status}}', name
+    ])
+    return out == 'running'
 
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
