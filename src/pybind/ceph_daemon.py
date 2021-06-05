@@ -117,8 +117,8 @@ class Termsize(object):
                                           self.rows, self.cols, self.changed)
 
     def __repr__(self) -> str:
-        return 'Termsize(%d,%d,%s)' % (self.__class__,
-                                       self.rows, self.cols, self.changed)
+        return '%s(%d,%d,%s)' % (self.__class__,
+                                 self.rows, self.cols, self.changed)
 
 
 class DaemonWatcher(object):
