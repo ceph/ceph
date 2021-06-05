@@ -398,9 +398,18 @@ private:
   void wait_for_aio(FileWriter *h);  // safe to call without a lock
 #endif
 
+  int64_t _maybe_extend_log();
+  void _extend_log();
+  uint64_t _consume_dirty();
+  void _clear_dirty_set_stable(uint64_t seq_stable);
+  void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
+
+  void _flush_and_sync_log_core(int64_t available_runway);
+  int _flush_and_sync_log_jump(uint64_t jump_to,
+			       int64_t available_runway);
   int _flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
-			  uint64_t want_seq = 0,
-			  uint64_t jump_to = 0);
+			  uint64_t want_seq = 0);
+
   uint64_t _estimate_log_size();
   bool _should_compact_log();
 
