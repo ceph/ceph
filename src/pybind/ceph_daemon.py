@@ -31,7 +31,7 @@ READ_CHUNK_SIZE = 4096
 
 
 def admin_socket(asok_path: str,
-                 cmd: str,
+                 cmd: Sequence[str],
                  format: Optional[str] = '') -> bytes:
     """
     Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
