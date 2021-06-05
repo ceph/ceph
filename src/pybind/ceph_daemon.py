@@ -71,9 +71,6 @@ def admin_socket(asok_path: str,
     except Exception as e:
         raise RuntimeError('exception getting command descriptions: ' + str(e))
 
-    if cmd == 'get_command_descriptions':
-        return cmd_json
-
     sigdict = parse_json_funcsigs(cmd_json.decode('utf-8'), 'cli')
     valid_dict = validate_command(sigdict, cmd)
     if not valid_dict:
