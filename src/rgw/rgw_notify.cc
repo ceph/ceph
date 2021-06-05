@@ -646,7 +646,7 @@ void metadata_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyV
   }
 }
 
-void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValueMap& tags) {
+void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyMultiValueMap& tags) {
   const auto src_obj = get_object_with_atttributes(s, obj);
   if (!src_obj) {
     return;
@@ -747,7 +747,7 @@ bool notification_match(reservation_t& res, const rgw_pubsub_topic_filter& filte
       }
     } else {
       // try to fetch tags from the attributes
-      KeyValueMap tags;
+      KeyMultiValueMap tags;
       tags_from_attributes(s, obj, tags);
       if (!match(filter.s3_filter.tag_filter, tags)) {
         return false;
