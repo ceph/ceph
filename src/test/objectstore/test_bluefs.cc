@@ -760,6 +760,72 @@ TEST(BlueFS, test_replay_growth) {
   fs.umount();
 }
 
+TEST(BlueFS, test_tracker_50965) {
+  uint64_t size_wal = 1048576 * 64;
+  TempBdev bdev_wal{size_wal};
+  uint64_t size_db = 1048576 * 128;
+  TempBdev bdev_db{size_db};
+  uint64_t size_slow = 1048576 * 256;
+  TempBdev bdev_slow{size_slow};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.ApplyChanges();
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false, 0));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false, 0));
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, 0));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
+
+  string dir_slow = "dir.slow";
+  ASSERT_EQ(0, fs.mkdir(dir_slow));
+  string dir_db = "dir_db";
+  ASSERT_EQ(0, fs.mkdir(dir_db));
+
+  string file_slow = "file";
+  BlueFS::FileWriter *h_slow;
+  ASSERT_EQ(0, fs.open_for_write(dir_slow, file_slow, &h_slow, false));
+  ASSERT_NE(nullptr, h_slow);
+
+  string file_db = "file";
+  BlueFS::FileWriter *h_db;
+  ASSERT_EQ(0, fs.open_for_write(dir_db, file_db, &h_db, false));
+  ASSERT_NE(nullptr, h_db);
+
+  bufferlist bl1;
+  std::unique_ptr<char[]> buf1 = gen_buffer(70000);
+  bufferptr bp1 = buffer::claim_char(70000, buf1.get());
+  bl1.push_back(bp1);
+  h_slow->append(bl1.c_str(), bl1.length());
+  fs.flush(h_slow);
+
+  uint64_t h_slow_dirty_seq_1 = fs.debug_get_dirty_seq(h_slow);
+
+  bufferlist bl2;
+  std::unique_ptr<char[]> buf2 = gen_buffer(1000);
+  bufferptr bp2 = buffer::claim_char(1000, buf2.get());
+  bl2.push_back(bp2);
+  h_db->append(bl2.c_str(), bl2.length());
+  fs.fsync(h_db);
+
+  uint64_t h_slow_dirty_seq_2 = fs.debug_get_dirty_seq(h_slow);
+  bool h_slow_dev_dirty = fs.debug_get_is_dev_dirty(h_slow, BlueFS::BDEV_SLOW);
+
+  //problem if allocations are stable in log but slow device is not flushed yet
+  ASSERT_FALSE(h_slow_dirty_seq_1 != 0 &&
+	       h_slow_dirty_seq_2 == 0 &&
+	       h_slow_dev_dirty == true);
+
+  fs.close_writer(h_slow);
+  fs.close_writer(h_db);
+
+  fs.umount();
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
