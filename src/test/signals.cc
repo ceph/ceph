@@ -16,7 +16,7 @@
 #define dout_context g_ceph_context
 static volatile sig_atomic_t got_sigusr1 = 0;
 
-static void handle_sigusr1(int signo)
+static void handle_sigusr1(int signo, siginfo_t*, void*)
 {
   got_sigusr1 = 1;
 }
