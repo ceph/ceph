@@ -389,8 +389,10 @@ private:
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log(FileWriter *h);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
+  int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l);
   int _flush(FileWriter *h, bool force, bool *flushed = nullptr);
+  int _flush_special(FileWriter *h);
   int _fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l);
 
 #ifdef HAVE_LIBAIO
