@@ -84,6 +84,7 @@ void sighup_handler(int signum)
 static void reraise_fatal(int signum)
 {
   // Use default handler to dump core
+  signal(signum, SIG_DFL);
   int ret = raise(signum);
 
   // Normally, we won't get here. If we do, something is very weird.
@@ -144,11 +145,26 @@ static int parse_from_os_release(
   return 0;
 }
 
-static void handle_fatal_signal(int signum)
+static void handle_oneshot_fatal_signal(int signum)
 {
-  // This code may itself trigger a SIGSEGV if the heap is corrupt. In that
-  // case, SA_RESETHAND specifies that the default signal handler--
-  // presumably dump core-- will handle it.
+  constexpr static pid_t NULL_TID{0};
+  static std::atomic<pid_t> handler_tid{NULL_TID};
+  if (auto expected{NULL_TID};
+      !handler_tid.compare_exchange_strong(expected, ceph_gettid())) {
+    if (expected == ceph_gettid()) {
+      // The handler code may itself trigger a SIGSEGV if the heap is corrupt.
+      // In that case, SIG_DFL followed by return specifies that the default
+      // signal handler -- presumably dump core -- will handle it.
+      signal(signum, SIG_DFL);
+    } else {
+      // Huh, another thread got into troubles while we are handling the fault.
+      // If this is i.e. SIGSEGV handler, returning means retrying the faulty
+      // instruction one more time, and thus all those extra threads will run
+      // into a busy-wait basically.
+    }
+    return;
+  }
+
   char buf[1024];
   char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
   int r = ceph_pthread_getname(pthread_self(), pthread_name, sizeof(pthread_name));
@@ -335,14 +351,14 @@ static void handle_fatal_signal(int signum)
 
 void install_standard_sighandlers(void)
 {
-  install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGABRT, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGILL, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGFPE, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGSEGV, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGABRT, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGBUS, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGILL, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGFPE, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGXCPU, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGXFSZ, handle_oneshot_fatal_signal, SA_NODEFER);
+  install_sighandler(SIGSYS, handle_oneshot_fatal_signal, SA_NODEFER);
 }
 
 
