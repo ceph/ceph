@@ -37,9 +37,7 @@ void RGWObjTagSet_S3::decode_xml(XMLObj *obj) {
   for (auto& entry : entries) {
     const std::string& key = entry.get_key();
     const std::string& val = entry.get_val();
-    if (!add_tag(key,val)) {
-      throw RGWXMLDecoder::err("failed to add tag");
-    }
+    add_tag(key,val);
   }
 }
 
