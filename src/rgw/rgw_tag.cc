@@ -10,12 +10,12 @@
 #include "rgw_tag.h"
 #include "rgw_common.h"
 
-bool RGWObjTags::add_tag(const string&key, const string& val){
-  return tag_map.emplace(std::make_pair(key,val)).second;
+void RGWObjTags::add_tag(const string& key, const string& val){
+  tag_map.emplace(std::make_pair(key,val));
 }
 
-bool RGWObjTags::emplace_tag(std::string&& key, std::string&& val){
-  return tag_map.emplace(std::move(key), std::move(val)).second;
+void RGWObjTags::emplace_tag(std::string&& key, std::string&& val){
+  tag_map.emplace(std::move(key), std::move(val));
 }
 
 int RGWObjTags::check_and_add_tag(const string&key, const string& val){
@@ -26,10 +26,7 @@ int RGWObjTags::check_and_add_tag(const string&key, const string& val){
     return -ERR_INVALID_TAG;
   }
 
-  // if we get a conflicting key, either the XML is malformed or the user
-  // supplied an invalid string
-  if (!add_tag(key,val))
-    return -EINVAL;
+  add_tag(key,val);
 
   return 0;
 }
