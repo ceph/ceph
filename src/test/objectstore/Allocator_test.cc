@@ -500,6 +500,47 @@ TEST_P(AllocTest, test_alloc_47883)
   EXPECT_EQ(got, 0x630000);
 }
 
+TEST_P(AllocTest, test_alloc_50656_best_fit)
+{
+  uint64_t block = 0x1000;
+  uint64_t size = 0x3b9e400000;
+
+  init_alloc(size, block);
+
+  // too few free extents - causes best fit mode for avls
+  for (size_t i = 0; i < 0x10; i++) {
+    alloc->init_add_free(i * 2 * 0x100000, 0x100000);
+  }
+
+  alloc->init_add_free(0x1e1bd13000, 0x404000);
+
+  PExtentVector extents;
+  auto need = 0x400000;
+  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
+  EXPECT_GT(got, 0);
+  EXPECT_EQ(got, 0x400000);
+}
+
+TEST_P(AllocTest, test_alloc_50656_first_fit)
+{
+  uint64_t block = 0x1000;
+  uint64_t size = 0x3b9e400000;
+
+  init_alloc(size, block);
+
+  for (size_t i = 0; i < 0x10000; i += 2) {
+    alloc->init_add_free(i * 0x100000, 0x100000);
+  }
+
+  alloc->init_add_free(0x1e1bd13000, 0x404000);
+
+  PExtentVector extents;
+  auto need = 0x400000;
+  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
+  EXPECT_GT(got, 0);
+  EXPECT_EQ(got, 0x400000);
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
