@@ -2299,7 +2299,7 @@ void BlueFS::_rewrite_log_and_layout_sync(bool allocate_with_fallback,
 
   log_writer = _create_writer(log_file);
   log_writer->append(bl);
-  r = _flush(log_writer, true);
+  r = _flush_special(log_writer);
   ceph_assert(r == 0);
 #ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
@@ -2436,7 +2436,7 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
   new_log_writer->append(bl);
 
   // 3. flush
-  r = _flush(new_log_writer, true);
+  r = _flush_special(new_log_writer);
   ceph_assert(r == 0);
 
   // 4. wait
@@ -2618,7 +2618,7 @@ void BlueFS::_flush_and_sync_log_core(int64_t runway)
   log_t.clear();
   log_t.seq = 0;  // just so debug output is less confusing
 
-  int r = _flush(log_writer, true);
+  int r = _flush_special(log_writer);
   ceph_assert(r == 0);
 }
 
@@ -2829,11 +2829,8 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 
   ceph_assert(h->file->num_readers.load() == 0);
 
-  bool buffered;
-  if (h->file->fnode.ino == 1)
-    buffered = false;
-  else
-    buffered = cct->_conf->bluefs_buffered_io;
+  bool buffered = cct->_conf->bluefs_buffered_io;
+  ceph_assert(h->file->fnode.ino > 1);
 
   if (offset + length <= h->pos)
     return 0;
@@ -2854,7 +2851,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   if (allocated < offset + length) {
     // we should never run out of log space here; see the min runway check
     // in _flush_and_sync_log.
-    ceph_assert(h->file->fnode.ino != 1);
     int r = _allocate(vselector->select_prefer_bdev(h->file->vselector_hint),
 		      offset + length - allocated,
 		      &h->file->fnode);
@@ -2870,15 +2866,14 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   }
   if (h->file->fnode.size < offset + length) {
     h->file->fnode.size = offset + length;
-    if (h->file->fnode.ino > 1) {
-      // we do not need to dirty the log file (or it's compacting
-      // replacement) when the file size changes because replay is
-      // smart enough to discover it on its own.
-      h->file->is_dirty = true;
-    }
+    h->file->is_dirty = true;
   }
   dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
+  return _flush_data(h, offset, length, buffered);
+}
 
+int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered)
+{
   uint64_t x_off = 0;
   auto p = h->file->fnode.seek(offset, &x_off);
   ceph_assert(p != h->file->fnode.extents.end());
@@ -3023,6 +3018,23 @@ int BlueFS::_flush(FileWriter *h, bool force, bool *flushed)
     *flushed = true;
   }
   return r;
+}
+
+// Flush for bluefs special files.
+// Does not add extents to h.
+// Does not mark h as dirty.
+// we do not need to dirty the log file (or it's compacting
+// replacement) when the file size changes because replay is
+// smart enough to discover it on its own.
+int BlueFS::_flush_special(FileWriter *h)
+{
+  uint64_t length = h->get_buffer_length();
+  uint64_t offset = h->pos;
+  ceph_assert(length + offset <= h->file->fnode.get_allocated());
+  if (h->file->fnode.size < offset + length) {
+    h->file->fnode.size = offset + length;
+  }
+  return _flush_data(h, offset, length, false);
 }
 
 int BlueFS::_truncate(FileWriter *h, uint64_t offset)
