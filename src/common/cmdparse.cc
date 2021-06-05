@@ -569,6 +569,30 @@ bool validate_str_arg(std::string_view value,
   }
 }
 
+bool validate_bool(CephContext *cct,
+		  const cmdmap_t& cmdmap,
+		  const arg_desc_t& desc,
+		  const std::string_view name,
+		  const std::string_view type,
+		  std::ostream& os)
+{
+  bool v;
+  try {
+    if (!cmd_getval(cmdmap, string(name), v)) {
+      if (auto req = desc.find("req");
+	  req != end(desc) && req->second == "false") {
+	return true;
+      } else {
+	os << "missing required parameter: '" << name << "'";
+	return false;
+      }
+    }
+    return true;
+  } catch (const bad_cmd_get& e) {
+    return false;
+  }
+}
+
 template<bool is_vector,
 	 typename T,
 	 typename Value = std::conditional_t<is_vector,
@@ -648,6 +672,9 @@ bool validate_cmd(CephContext* cct,
       } else if (type == "CephFloat") {
 	return !validate_arg<false, double>(cct, cmdmap, arg_desc,
 					    name, type, os);
+      } else if (type == "CephBool") {
+	return !validate_bool(cct, cmdmap, arg_desc,
+			      name, type, os);
       } else {
 	return !validate_arg<false, string>(cct, cmdmap, arg_desc,
 					    name, type, os);
