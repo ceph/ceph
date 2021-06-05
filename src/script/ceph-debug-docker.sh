@@ -85,7 +85,7 @@ function main {
     T=$(mktemp -d)
     pushd "$T"
     distro="${env/://}"
-    api_url="https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=${FLAVOR}&distros=${distro}/x86_64&ref=${branch}&sha1=${sha}"
+    api_url="https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=${FLAVOR}&distros=${distro}/$(arch)&ref=${branch}&sha1=${sha}"
     repo_url="$(wget -O - "$api_url" | jq -r '.[0].chacra_url')repo"
     # validate url:
     wget -O /dev/null "$repo_url"
