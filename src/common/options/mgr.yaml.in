@@ -192,3 +192,11 @@ options:
   services:
   - mgr
   - mon
+- name: mon_osd_err_op_age_ratio
+  type: float
+  level: advanced
+  desc: issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)
+  default: 128
+  services:
+  - mgr
+  with_legacy: true
