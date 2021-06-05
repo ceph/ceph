@@ -199,7 +199,7 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
 {
   LOG_PREFIX(SeaStore::read);
   DEBUG("oid {} offset {} len {}", oid, offset, len);
-  return repeat_with_onode<ceph::bufferlist>(
+  return read_repeat_with_onode<ceph::bufferlist>(
     ch,
     oid,
     [=](auto &t, auto &onode) -> ObjectDataHandler::read_ret {

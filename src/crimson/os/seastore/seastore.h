@@ -195,6 +195,34 @@ private:
       });
   }
 
+  template <typename Ret, typename F>
+  auto read_repeat_with_onode(
+    CollectionRef ch,
+    const ghobject_t &oid,
+    F &&f) const {
+    return seastar::do_with(
+      oid,
+      Ret{},
+      TransactionRef(),
+      OnodeRef(),
+      std::forward<F>(f),
+      [=](auto &oid, auto &ret, auto &t, auto &onode, auto &f) {
+        return repeat_eagain([&, this] {
+          t = transaction_manager->create_transaction();
+          return onode_manager->get_or_create_onode(
+            *t, oid
+          ).safe_then([&](auto onode_ret) {
+            onode = std::move(onode_ret);
+            return f(*t, *onode);
+          }).safe_then([&ret](auto _ret) {
+            ret = _ret;
+          });
+        }).safe_then([&ret] {
+          return seastar::make_ready_future<Ret>(ret);
+        });
+      });
+  }
+
   using _omap_get_value_ertr = OMapManager::base_ertr::extend<
     crimson::ct_error::enodata
     >;
