@@ -19,9 +19,10 @@ from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
 from prettytable import PrettyTable, HEADER
-from signal import signal, SIGWINCH
+from signal import signal, Signals, SIGWINCH
 from termios import TIOCGWINSZ
-from typing import Any, Dict, Optional, Sequence, TextIO, Tuple
+from types import FrameType
+from typing import Any, Callable, Dict, Optional, Sequence, TextIO, Tuple
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
@@ -40,7 +41,7 @@ def admin_socket(asok_path: str,
     (daemon commands don't support 'plain' output).
     """
 
-    def do_sockio(path, cmd_bytes):
+    def do_sockio(path: str, cmd_bytes: bytes) -> bytes:
         """ helper: do all the actual low-level stream I/O """
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(path)
@@ -180,7 +181,7 @@ class DaemonWatcher(object):
         return (self.COLOR_DARK_SEQ if dark else self.COLOR_SEQ) % (30 + color) \
                + msg + self.RESET_SEQ
 
-    def bold(self, msg) -> str:
+    def bold(self, msg: str) -> str:
         """
         Decorate `msg` with escape sequences to make it appear bold
         """
@@ -365,7 +366,9 @@ class DaemonWatcher(object):
         if not len(self._stats):
             raise RuntimeError("no stats selected by filters")
 
-    def _handle_sigwinch(self, signo, frame) -> None:
+    def _handle_sigwinch(self,
+                         signo: Signals,
+                         frame: FrameType) -> None:
         self.termsize.update()
 
     def run(self,
