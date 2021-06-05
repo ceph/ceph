@@ -374,26 +374,113 @@ public:
   void finish_split_stats(const object_stat_sum_t& stats,
 			  ObjectStore::Transaction &t);
 
-  void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  void scrub(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    // a new scrub
+    scrub_queued = false;
+    forward_scrub_event(&ScrubPgIF::initiate_regular_scrub, queued, "StartScrub"sv);
+  }
+
   /**
    *  a special version of PG::scrub(), which:
    *  - is initiated after repair, and
    *  - is not required to allocate local/remote OSD scrub resources
    */
-  void recovery_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
-  void replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
-  void replica_scrub_resched(epoch_t queued, ThreadPool::TPHandle &handle);
+  void recovery_scrub(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    // a new scrub
+    scrub_queued = false;
+    forward_scrub_event(&ScrubPgIF::initiate_scrub_after_repair, queued,
+			"AfterRepairScrub"sv);
+  }
 
-  /// Queues a PGScrubResourcesOK message. Will translate into 'RemotesReserved' FSM event
-  void scrub_send_resources_granted(epoch_t queued, ThreadPool::TPHandle &handle);
-  void scrub_send_resources_denied(epoch_t queued, ThreadPool::TPHandle &handle);
-  void scrub_send_scrub_resched(epoch_t queued, ThreadPool::TPHandle &handle);
-  void scrub_send_pushes_update(epoch_t queued, ThreadPool::TPHandle &handle);
-  void scrub_send_applied_update(epoch_t queued, ThreadPool::TPHandle &handle);
-  void scrub_send_unblocking(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
-  void scrub_send_digest_update(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
-  void scrub_send_replmaps_ready(epoch_t epoch_queued, ThreadPool::TPHandle &handle);
-  void scrub_send_replica_pushes(epoch_t queued, ThreadPool::TPHandle &handle);
+  void replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+
+  void replica_scrub_resched(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    scrub_queued = false;
+    forward_scrub_event(&ScrubPgIF::send_sched_replica, queued, "SchedReplica"sv);
+  }
+
+  void scrub_send_resources_granted(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_remotes_reserved, queued, "RemotesReserved"sv);
+  }
+
+  void scrub_send_resources_denied(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_reservation_failure, queued,
+			"ReservationFailure"sv);
+  }
+
+  void scrub_send_scrub_resched(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    scrub_queued = false;
+    forward_scrub_event(&ScrubPgIF::send_scrub_resched, queued, "InternalSchedScrub"sv);
+  }
+
+  void scrub_send_pushes_update(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::active_pushes_notification, queued,
+			"ActivePushesUpd"sv);
+  }
+
+  void scrub_send_applied_update(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::update_applied_notification, queued,
+			"UpdatesApplied"sv);
+  }
+
+  void scrub_send_unblocking(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_scrub_unblock, queued, "Unblocked"sv);
+  }
+
+  void scrub_send_digest_update(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::digest_update_notification, queued, "DigestUpdate"sv);
+  }
+
+  void scrub_send_local_map_ready(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_local_map_done, queued, "IntLocalMapDone"sv);
+  }
+
+  void scrub_send_replmaps_ready(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_replica_maps_ready, queued, "GotReplicas"sv);
+  }
+
+  void scrub_send_replica_pushes(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_replica_pushes_upd, queued,
+			"ReplicaPushesUpd"sv);
+  }
+
+  void scrub_send_maps_compared(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_maps_compared, queued, "MapsCompared"sv);
+  }
+
+  void scrub_send_get_next_chunk(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_get_next_chunk, queued, "NextChunk"sv);
+  }
+
+  void scrub_send_scrub_is_finished(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_scrub_is_finished, queued, "ScrubFinished"sv);
+  }
+
+  void scrub_send_chunk_free(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_chunk_free, queued, "SelectedChunkFree"sv);
+  }
+
+  void scrub_send_chunk_busy(epoch_t queued, ThreadPool::TPHandle& handle)
+  {
+    forward_scrub_event(&ScrubPgIF::send_chunk_busy, queued, "ChunkIsBusy"sv);
+  }
 
   void reg_next_scrub();
 
@@ -564,7 +651,8 @@ private:
 				  requested_scrub_t& planned) const;
 
   using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
-  void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued);
+
+  void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc);
 
 public:
   virtual void do_request(
@@ -711,7 +799,7 @@ protected:
 public:
   bool dne() { return info.dne(); }
 
-  virtual void send_cluster_message(
+  void send_cluster_message(
     int osd, MessageRef m, epoch_t epoch, bool share_map_update) override;
 
 protected:
@@ -1137,7 +1225,7 @@ protected:
   void do_pending_flush();
 
 public:
-  virtual void prepare_write(
+  void prepare_write(
     pg_info_t &info,
     pg_info_t &last_written_info,
     PastIntervals &past_intervals,
