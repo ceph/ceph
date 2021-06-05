@@ -6,12 +6,12 @@
 
 #include <string>
 #include <include/types.h>
-#include <boost/container/flat_map.hpp>
+#include <map>
 
 class RGWObjTags
 {
 public:
-  using tag_map_t = boost::container::flat_map <std::string, std::string>;
+  using tag_map_t = std::multimap <std::string, std::string>;
 
 protected:
   tag_map_t tag_map;
@@ -37,8 +37,8 @@ protected:
   }
 
   void dump(Formatter *f) const;
-  bool add_tag(const std::string& key, const std::string& val="");
-  bool emplace_tag(std::string&& key, std::string&& val);
+  void add_tag(const std::string& key, const std::string& val="");
+  void emplace_tag(std::string&& key, std::string&& val);
   int check_and_add_tag(const std::string& key, const std::string& val="");
   size_t count() const {return tag_map.size();}
   int set_from_string(const std::string& input);
