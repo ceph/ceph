@@ -49,6 +49,7 @@ export class TelemetryComponent implements OnInit {
   sendToUrl = '';
   sendToDeviceUrl = '';
   step = 1;
+  showContactInfo = false;
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -159,6 +160,10 @@ export class TelemetryComponent implements OnInit {
         this.error = true;
       }
     );
+  }
+
+  toggleIdent() {
+    this.showContactInfo = !this.showContactInfo;
   }
 
   updateConfig() {
