@@ -7850,6 +7850,13 @@ int RGWDeleteBucketPolicy::verify_permission()
 
 void RGWDeleteBucketPolicy::execute()
 {
+  bufferlist data;
+  op_ret = forward_request_to_master(s, nullptr, store, data, nullptr, &s->info);
+  if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+  }
+
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
       auto attrs = s->bucket_attrs;
       attrs.erase(RGW_ATTR_IAM_POLICY);
@@ -8308,6 +8315,13 @@ int RGWDeleteBucketPublicAccessBlock::verify_permission()
 
 void RGWDeleteBucketPublicAccessBlock::execute()
 {
+  bufferlist data;
+  op_ret = forward_request_to_master(s, nullptr, store, data, nullptr, &s->info);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
       auto attrs = s->bucket_attrs;
       attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
