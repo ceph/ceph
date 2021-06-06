@@ -11,6 +11,8 @@
 #define CEPH_MSG_UCXSTACK_H
 
 #include <sys/eventfd.h>
+#include <ucp/api/ucp.h>
+#include <ucs/datastruct/list.h>
 
 #include <list>
 #include <vector>
@@ -22,6 +24,33 @@
 #include "msg/async/Stack.h"
 
 class UCXWorker;
+
+/*
+ * UCX callback for send/receive completion
+ */
+class UcxCallback {
+public:
+    virtual ~UcxCallback();
+    virtual void operator()(ucs_status_t status) = 0;
+};
+
+struct ucx_request {
+    UcxCallback *callback;
+    ucs_status_t status;
+    bool completed;
+    uint32_t conn_id;
+    size_t recv_length;
+    ucs_list_link_t pos;
+};
+
+class UCXProEngine {
+private:
+  ucp_worker_h ucp_worker;
+public:
+  UCXProEngine(ucp_worker_h ucp_worker)
+  {
+  }
+};
 
 class UCXConSktImpl : public ConnectedSocketImpl {
 protected:
@@ -68,11 +97,14 @@ public:
 };
 
 class UCXWorker : public Worker {
+  std::shared_ptr<UCXProEngine> ucp_worker_engine;
   std::list<UCXConSktImpl*> pending_sent_conns;
   ceph::mutex lock = ceph::make_mutex("UCXWorker::lock");
 
 public:
-  explicit UCXWorker(CephContext *cct, unsigned worker_id);
+  explicit
+  UCXWorker(CephContext *cct, unsigned worker_id,
+            std::shared_ptr<UCXProEngine> ucp_worker_engine);
   ~UCXWorker();
 
   int listen(entity_addr_t &listen_addr, unsigned addr_slot,
@@ -91,6 +123,8 @@ public:
 
 class UCXStack : public NetworkStack {
 private:
+  ucp_context_h ucp_ctx;
+  std::shared_ptr<UCXProEngine> ucp_worker_engine;
   std::vector<std::thread> worker_threads;
   Worker* create_worker(CephContext *cct, unsigned worker_id) override;
 
@@ -100,6 +134,11 @@ public:
 
   void spawn_worker(std::function<void ()> &&worker_func) override;
   void join_worker(unsigned idx) override;
+
+  static void request_init(void *request);
+  static void request_reset(ucx_request *r);
+  static void request_release(void *request);
+
 };
 
 #endif //CEPH_MSG_UCXSTACK_H

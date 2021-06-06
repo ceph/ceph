@@ -12,8 +12,6 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#include <ucp/api/ucp.h>
-
 #include "include/str_list.h"
 #include "include/compat.h"
 #include "common/Cycles.h"
@@ -31,9 +29,11 @@ static ostream& _prefix(std::ostream *_dout,
   return *_dout << "UCXStack: " << func_name << ": ";
 }
 
-UCXWorker::UCXWorker(CephContext *cct, unsigned worker_id)
-  : Worker(cct, worker_id)
+UCXWorker::UCXWorker(CephContext *cct, unsigned worker_id,
+                     std::shared_ptr<UCXProEngine> ucp_worker_engine)
+  : Worker(cct, worker_id), ucp_worker_engine(ucp_worker_engine)
 {
+  ldout(cct, 20) << "Creating UCXWorker: " << worker_id << dendl;
 }
 
 UCXWorker::~UCXWorker()
@@ -93,6 +93,33 @@ UCXStack::UCXStack(CephContext *cct)
   : NetworkStack(cct)
 {
   ldout(cct, 20) << "creating UCXStack: " << this << dendl;
+
+  ucs_status_t status = UCS_OK;
+  /* Create context */
+  ucp_params_t ucp_params;
+  memset(&ucp_params, 0, sizeof(ucp_params));
+  ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
+                            UCP_PARAM_FIELD_REQUEST_INIT |
+                            UCP_PARAM_FIELD_REQUEST_SIZE;
+  ucp_params.features     = UCP_FEATURE_AM; // TODO: refine wakeup
+  ucp_params.request_init = request_init;
+  ucp_params.request_size = sizeof(ucx_request);
+  status = ucp_init(&ucp_params, NULL, &ucp_ctx);
+  if (status != UCS_OK) {
+    lderr(cct) << "ucp_init() failed: " << ucs_status_string(status) << dendl;
+  }
+
+  /* Create worker */
+  ucp_worker_h ucp_worker;
+  ucp_worker_params_t worker_params;
+  memset(&worker_params, 0, sizeof(worker_params));
+  worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+  worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+  status = ucp_worker_create(ucp_ctx, &worker_params, &ucp_worker);
+  if (status != UCS_OK) {
+    lderr(cct) << "ucp_worker_create() failed: " << ucs_status_string(status) << dendl;
+  }
+  ucp_worker_engine = std::make_shared<UCXProEngine>(ucp_worker);
 }
 
 UCXStack::~UCXStack()
@@ -101,7 +128,7 @@ UCXStack::~UCXStack()
 
 Worker* UCXStack::create_worker(CephContext *cct, unsigned worker_id)
 {
-  auto ucx_worker = new UCXWorker(cct, worker_id);
+  auto ucx_worker = new UCXWorker(cct, worker_id, ucp_worker_engine);
   return ucx_worker;
 }
 
@@ -112,4 +139,28 @@ void UCXStack::spawn_worker(std::function<void ()> &&worker_func)
 
 void UCXStack::join_worker(unsigned idx)
 {
+}
+
+void UCXStack::request_init(void *request)
+{
+  ucx_request *req = reinterpret_cast<ucx_request*>(request);
+  request_reset(req);
+}
+
+void UCXStack::request_reset(ucx_request *req)
+{
+  req->completed   = false;
+  req->callback    = NULL;
+  req->status      = UCS_OK;
+  req->recv_length = 0;
+  req->pos.next    = NULL;
+  req->pos.prev    = NULL;
+}
+
+void UCXStack::request_release(void *request)
+{
+  ucx_request *req = reinterpret_cast<ucx_request*>(request);
+  request_reset(req);
+
+  ucp_request_free(request);
 }
