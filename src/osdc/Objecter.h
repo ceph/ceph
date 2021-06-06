@@ -1666,8 +1666,8 @@ private:
     int acting_primary = -1;
 
     pg_mapping_t() {}
-    pg_mapping_t(epoch_t epoch, std::vector<int> up, int up_primary,
-                 std::vector<int> acting, int acting_primary)
+    pg_mapping_t(epoch_t epoch, const std::vector<int>& up, int up_primary,
+                 const std::vector<int>& acting, int acting_primary)
                : epoch(epoch), up(up), up_primary(up_primary),
                  acting(acting), acting_primary(acting_primary) {}
   };
@@ -1677,7 +1677,9 @@ private:
   std::map<int64_t, std::vector<pg_mapping_t>> pg_mappings;
 
   // convenient accessors
-  bool lookup_pg_mapping(const pg_t& pg, pg_mapping_t* pg_mapping) {
+  bool lookup_pg_mapping(const pg_t& pg, epoch_t epoch, std::vector<int> *up,
+                         int *up_primary, std::vector<int> *acting,
+                         int *acting_primary) {
     std::shared_lock l{pg_mapping_lock};
     auto it = pg_mappings.find(pg.pool());
     if (it == pg_mappings.end())
@@ -1685,9 +1687,13 @@ private:
     auto& mapping_array = it->second;
     if (pg.ps() >= mapping_array.size())
       return false;
-    if (mapping_array[pg.ps()].epoch != pg_mapping->epoch) // stale
+    if (mapping_array[pg.ps()].epoch != epoch) // stale
       return false;
-    *pg_mapping = mapping_array[pg.ps()];
+    auto& pg_mapping = mapping_array[pg.ps()];
+    *up = pg_mapping.up;
+    *up_primary = pg_mapping.up_primary;
+    *acting = pg_mapping.acting;
+    *acting_primary = pg_mapping.acting_primary;
     return true;
   }
   void update_pg_mapping(const pg_t& pg, pg_mapping_t&& pg_mapping) {

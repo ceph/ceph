@@ -2761,14 +2761,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   vector<int> up, acting;
   ps_t actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
   pg_t actual_pgid(actual_ps, pgid.pool());
-  pg_mapping_t pg_mapping;
-  pg_mapping.epoch = osdmap->get_epoch();
-  if (lookup_pg_mapping(actual_pgid, &pg_mapping)) {
-    up = pg_mapping.up;
-    up_primary = pg_mapping.up_primary;
-    acting = pg_mapping.acting;
-    acting_primary = pg_mapping.acting_primary;
-  } else {
+  if (!lookup_pg_mapping(actual_pgid, osdmap->get_epoch(), &up, &up_primary,
+                         &acting, &acting_primary)) {
     osdmap->pg_to_up_acting_osds(actual_pgid, &up, &up_primary,
                                  &acting, &acting_primary);
     pg_mapping_t pg_mapping(osdmap->get_epoch(),
@@ -2838,10 +2832,10 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 
   if (legacy_change || split_or_merge || force_resend) {
     t->pgid = pgid;
-    t->acting = acting;
+    t->acting = std::move(acting);
     t->acting_primary = acting_primary;
     t->up_primary = up_primary;
-    t->up = up;
+    t->up = std::move(up);
     t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
@@ -2849,8 +2843,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
     if (pi->is_erasure()) {
-      for (uint8_t i = 0; i < acting.size(); ++i) {
-        if (acting[i] == acting_primary) {
+      for (uint8_t i = 0; i < t->acting.size(); ++i) {
+        if (t->acting[i] == acting_primary) {
           spgid.reset_shard(shard_id_t(i));
           break;
         }
@@ -2865,31 +2859,31 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->peering_crush_mandatory_member = pi->peering_crush_mandatory_member;
     ldout(cct, 10) << __func__ << " "
 		   << " raw pgid " << pgid << " -> actual " << t->actual_pgid
-		   << " acting " << acting
+		   << " acting " << t->acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
     if ((t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
                      CEPH_OSD_FLAG_LOCALIZE_READS)) &&
-        !is_write && pi->is_replicated() && acting.size() > 1) {
+        !is_write && pi->is_replicated() && t->acting.size() > 1) {
       int osd;
-      ceph_assert(is_read && acting[0] == acting_primary);
+      ceph_assert(is_read && t->acting[0] == acting_primary);
       if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
-	int p = rand() % acting.size();
+	int p = rand() % t->acting.size();
 	if (p)
 	  t->used_replica = true;
-	osd = acting[p];
-	ldout(cct, 10) << " chose random osd." << osd << " of " << acting
+	osd = t->acting[p];
+	ldout(cct, 10) << " chose random osd." << osd << " of " << t->acting
 		       << dendl;
       } else {
 	// look for a local replica.  prefer the primary if the
 	// distance is the same.
 	int best = -1;
 	int best_locality = 0;
-	for (unsigned i = 0; i < acting.size(); ++i) {
+	for (unsigned i = 0; i < t->acting.size(); ++i) {
 	  int locality = osdmap->crush->get_common_ancestor_distance(
-		 cct, acting[i], crush_location);
+		 cct, t->acting[i], crush_location);
 	  ldout(cct, 20) << __func__ << " localize: rank " << i
-			 << " osd." << acting[i]
+			 << " osd." << t->acting[i]
 			 << " locality " << locality << dendl;
 	  if (i == 0 ||
 	      (locality >= 0 && best_locality >= 0 &&
@@ -2902,7 +2896,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	  }
 	}
 	ceph_assert(best >= 0);
-	osd = acting[best];
+	osd = t->acting[best];
       }
       t->osd = osd;
     } else {
