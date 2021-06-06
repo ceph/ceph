@@ -91,13 +91,14 @@ public:
 
 class UCXStack : public NetworkStack {
 private:
+  std::vector<std::thread> worker_threads;
   Worker* create_worker(CephContext *cct, unsigned worker_id) override;
 
 public:
   explicit UCXStack(CephContext *cct);
   ~UCXStack();
 
-  void spawn_worker(std::function<void ()> &&func) override;
+  void spawn_worker(std::function<void ()> &&worker_func) override;
   void join_worker(unsigned idx) override;
 };
 

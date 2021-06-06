@@ -105,8 +105,9 @@ Worker* UCXStack::create_worker(CephContext *cct, unsigned worker_id)
   return ucx_worker;
 }
 
-void UCXStack::spawn_worker(std::function<void ()> &&func)
+void UCXStack::spawn_worker(std::function<void ()> &&worker_func)
 {
+  worker_threads.emplace_back(std::move(worker_func));
 }
 
 void UCXStack::join_worker(unsigned idx)
