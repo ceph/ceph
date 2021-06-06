@@ -540,7 +540,7 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
     auto expiration = now;
     expiration += ceph::make_timespan(cct->_conf->rgw_data_log_window);
     for (auto& bs : buckets) {
-      update_renewed(bs, expiration);
+      update_renewed(dpp, bs, expiration);
     }
   }
 
@@ -563,14 +563,14 @@ void RGWDataChangesLog::register_renew(const rgw_bucket_shard& bs)
   cur_cycle.insert(bs);
 }
 
-void RGWDataChangesLog::update_renewed(const rgw_bucket_shard& bs,
+void RGWDataChangesLog::update_renewed(const DoutPrefixProvider *dpp, const rgw_bucket_shard& bs,
 				       real_time expiration)
 {
   std::scoped_lock l{lock};
   ChangeStatusPtr status;
   _get_change(bs, status);
 
-  ldout(cct, 20) << "RGWDataChangesLog::update_renewd() bucket_name="
+  ldpp_dout(dpp, 20) << "RGWDataChangesLog::update_renewd() bucket_name="
 		 << bs.bucket.name << " shard_id=" << bs.shard_id
 		 << " expiration=" << expiration << dendl;
   status->cur_expiration = expiration;

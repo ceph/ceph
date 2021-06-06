@@ -206,7 +206,7 @@ class RGWDataChangesLog {
 
   void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
   void register_renew(const rgw_bucket_shard& bs);
-  void update_renewed(const rgw_bucket_shard& bs, ceph::real_time expiration);
+  void update_renewed(const DoutPrefixProvider *dpp, const rgw_bucket_shard& bs, ceph::real_time expiration);
 
   ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
   ceph::condition_variable renew_cond;
