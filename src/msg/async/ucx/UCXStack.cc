@@ -12,6 +12,8 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+#include <ucp/api/ucp.h>
+
 #include "include/str_list.h"
 #include "include/compat.h"
 #include "common/Cycles.h"
@@ -70,6 +72,12 @@ int UCXWorker::connect(const entity_addr_t &peer_addr,
   }
 
   *peer_skt = ConnectedSocket(std::unique_ptr<UCXConSktImpl>(ucx_peerskt));
+
+  ucp_params_t ucp_params;
+  ucp_context_h _context;
+  ucs_status_t status = ucp_init(&ucp_params, NULL, &_context);
+  (void)status;
+
   return rst;
 }
 
