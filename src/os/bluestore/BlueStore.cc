@@ -11250,6 +11250,10 @@ BlueStore::TransContext *BlueStore::_txc_create(
 {
   TransContext *txc = new TransContext(cct, c, osr, on_commits);
   txc->t = db->get_transaction();
+  txc->osd_op = osd_op;
+
+  if (osd_op)
+    osd_op->mark_event("txc create");
 
 #ifdef WITH_BLKIN
   if (osd_op && osd_op->pg_trace) {
@@ -11654,6 +11658,9 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 #if defined(WITH_LTTNG)
     auto start = mono_clock::now();
 #endif
+
+    if (txc->osd_op)
+      txc->osd_op->mark_event("db async submit");
 
 #ifdef WITH_BLKIN
     if (txc->trace) {
@@ -12196,14 +12203,17 @@ void BlueStore::_kv_sync_thread()
       int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
-#ifdef WITH_BLKIN
       for (auto txc : kv_committing) {
+        if (txc->osd_op)
+          txc->osd_op->mark_event("db sync submit");
+
+#ifdef WITH_BLKIN
         if (txc->trace) {
           txc->trace.event("db sync submit");
           txc->trace.keyval("kv_committing size", kv_committing.size());
         }
-      }
 #endif
+      }
 
       int committing_size = kv_committing.size();
       int deferred_size = deferred_stable.size();
@@ -12742,6 +12752,9 @@ int BlueStore::queue_transactions(
 
   _txc_finalize_kv(txc, txc->t);
 
+  if (txc->osd_op)
+    txc->osd_op->mark_event("txc encode finished");
+
 #ifdef WITH_BLKIN
   if (txc->trace) {
     txc->trace.event("txc encode finished");
@@ -12798,6 +12811,9 @@ int BlueStore::queue_transactions(
       finisher.queue(on_applied);
     }
   }
+
+  if (txc->osd_op)
+    txc->osd_op->mark_event("txc applied");
 
 #ifdef WITH_BLKIN
   if (txc->trace) {

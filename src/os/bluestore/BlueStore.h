@@ -1563,6 +1563,10 @@ public:
 
     inline void set_state(state_t s) {
        state = s;
+
+       if (osd_op)
+         osd_op->mark_event(get_state_name());
+
 #ifdef WITH_BLKIN
        if (trace) {
          trace.event(get_state_name());
@@ -1623,6 +1627,8 @@ public:
     bool tracing = false;
 #endif
 
+    TrackedOpRef osd_op;
+
 #ifdef WITH_BLKIN
     ZTracer::Trace trace;
 #endif
@@ -1639,6 +1645,9 @@ public:
       }
     }
     ~TransContext() {
+     if (osd_op)
+       osd_op->mark_event("txc destruct");
+
 #ifdef WITH_BLKIN
       if (trace) {
         trace.event("txc destruct");
