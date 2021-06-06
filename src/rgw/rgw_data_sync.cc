@@ -1322,7 +1322,7 @@ public:
           obligation_counter = state->counter;
           progress = ceph::real_time{};
 
-          ldout(cct, 4) << "starting sync on " << bucket_shard_str{state->key}
+          ldpp_dout(dpp, 4) << "starting sync on " << bucket_shard_str{state->key}
               << ' ' << *state->obligation << dendl;
           yield call(new RGWRunBucketSourcesSyncCR(sc, lease_cr,
                                                    std::nullopt, /* target_bs */
@@ -2335,7 +2335,7 @@ public:
         }
 
         if (need_more_info) {
-          ldout(cct, 20) << "Could not determine exact policy rule for obj=" << key << ", will read source object attributes" << dendl;
+          ldpp_dout(dpp, 20) << "Could not determine exact policy rule for obj=" << key << ", will read source object attributes" << dendl;
           /*
            * we need to fetch info about source object, so that we can determine
            * the correct policy configuration. This can happen if there are multiple
@@ -2362,7 +2362,7 @@ public:
               auto it = iter->second.cbegin();
               obj_tags.decode(it);
             } catch (buffer::error &err) {
-              ldout(cct, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
+              ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
             }
           }
 
@@ -2381,14 +2381,14 @@ public:
 
         if (param_mode == rgw_sync_pipe_params::MODE_USER) {
           if (!param_user) {
-            ldout(cct, 20) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
+            ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
             return set_cr_error(-EPERM);
           }
           user_perms.emplace(sync_env, *param_user);
 
           yield call(user_perms->init_cr());
           if (retcode < 0) {
-            ldout(cct, 20) << "ERROR: " << __func__ << ": failed to init user perms manager for uid=" << *param_user << dendl;
+            ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": failed to init user perms manager for uid=" << *param_user << dendl;
             return set_cr_error(retcode);
           }
 
@@ -2397,12 +2397,12 @@ public:
                                           sync_pipe.dest_bucket_attrs,
                                           &dest_bucket_perms);
           if (r < 0) {
-            ldout(cct, 20) << "ERROR: " << __func__ << ": failed to init bucket perms manager for uid=" << *param_user << " bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << dendl;
+            ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": failed to init bucket perms manager for uid=" << *param_user << " bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << dendl;
             return set_cr_error(retcode);
           }
 
           if (!dest_bucket_perms.verify_bucket_permission(RGW_PERM_WRITE)) {
-            ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bs.bucket.get_key() << ")" << dendl;
+            ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bs.bucket.get_key() << ")" << dendl;
             return -EPERM;
           }
 
@@ -2412,7 +2412,7 @@ public:
                                       sync_pipe.source_bucket_attrs,
                                       source_bucket_perms.get());
           if (r < 0) {
-            ldout(cct, 20) << "ERROR: " << __func__ << ": failed to init bucket perms manager for uid=" << *param_user << " bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << dendl;
+            ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": failed to init bucket perms manager for uid=" << *param_user << " bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << dendl;
             return set_cr_error(retcode);
           }
         }
@@ -2445,7 +2445,7 @@ public:
         return set_cr_done();
       }
 
-      ldout(cct, 0) << "ERROR: " << __func__ << ": Too many retries trying to fetch object, possibly a bug: bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << " key=" << key << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": Too many retries trying to fetch object, possibly a bug: bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << " key=" << key << dendl;
 
       return set_cr_error(-EIO);
     }
@@ -2510,10 +2510,10 @@ int RGWArchiveSyncModule::create_instance(const DoutPrefixProvider *dpp, CephCon
 RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
 {
   auto sync_env = sc->env;
-  ldout(sc->cct, 5) << "SYNC_ARCHIVE: sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+  ldpp_dout(sync_env->dpp, 5) << "SYNC_ARCHIVE: sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
   if (!sync_pipe.dest_bucket_info.versioned() ||
      (sync_pipe.dest_bucket_info.flags & BUCKET_VERSIONS_SUSPENDED)) {
-      ldout(sc->cct, 0) << "SYNC_ARCHIVE: sync_object: enabling object versioning for archive bucket" << dendl;
+      ldpp_dout(sync_env->dpp, 0) << "SYNC_ARCHIVE: sync_object: enabling object versioning for archive bucket" << dendl;
       sync_pipe.dest_bucket_info.flags = (sync_pipe.dest_bucket_info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
       int op_ret = sync_env->store->getRados()->put_bucket_instance_info(sync_pipe.dest_bucket_info, false, real_time(), NULL, sync_env->dpp);
       if (op_ret < 0) {
@@ -2774,7 +2774,7 @@ public:
       /* fetch current position in logs */
       yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.source_bs, &info));
       if (retcode < 0 && retcode != -ENOENT) {
-        ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to fetch bucket index status" << dendl;
         return set_cr_error(retcode);
       }
       yield {
