@@ -312,6 +312,7 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual, bool restart)
       m_manual_stop = false;
       m_delete_requested = false;
       m_restart_requested = false;
+      m_status_removed = false;
 
       if (on_finish != nullptr) {
         ceph_assert(m_on_start_finish == nullptr);
@@ -930,6 +931,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       dout(0) << "remote image no longer exists: scheduling deletion" << dendl;
       unregister_asok_hook = true;
       std::swap(delete_requested, m_delete_requested);
+      m_delete_in_progress = true;
     }
 
     std::swap(resync_requested, m_resync_requested);
@@ -965,23 +967,12 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     return;
   }
 
-  if (m_local_status_updater->exists(m_global_image_id)) {
-    dout(15) << "removing local mirror image status" << dendl;
+  if (!m_status_removed) {
     auto ctx = new LambdaContext([this, r](int) {
-        handle_shut_down(r);
-      });
-    m_local_status_updater->remove_mirror_image_status(m_global_image_id, ctx);
-    return;
-  }
-
-  if (m_remote_image_peer.mirror_status_updater != nullptr &&
-      m_remote_image_peer.mirror_status_updater->exists(m_global_image_id)) {
-    dout(15) << "removing remote mirror image status" << dendl;
-    auto ctx = new LambdaContext([this, r](int) {
-        handle_shut_down(r);
-      });
-    m_remote_image_peer.mirror_status_updater->remove_mirror_image_status(
-      m_global_image_id, ctx);
+      m_status_removed = true;
+      handle_shut_down(r);
+    });
+    remove_image_status(m_delete_in_progress, ctx);
     return;
   }
 
@@ -1135,6 +1126,48 @@ void ImageReplayer<I>::reregister_admin_socket_hook() {
 
   unregister_admin_socket_hook();
   register_admin_socket_hook();
+}
+
+template <typename I>
+void ImageReplayer<I>::remove_image_status(bool force, Context *on_finish)
+{
+  auto ctx = new LambdaContext([this, force, on_finish](int) {
+    remove_image_status_remote(force, on_finish);
+  });
+
+  if (m_local_status_updater->exists(m_global_image_id)) {
+    dout(15) << "removing local mirror image status" << dendl;
+    if (force) {
+      m_local_status_updater->remove_mirror_image_status(
+        m_global_image_id, true, ctx);
+    } else {
+      m_local_status_updater->remove_refresh_mirror_image_status(
+        m_global_image_id, ctx);
+    }
+    return;
+  }
+
+  ctx->complete(0);
+}
+
+template <typename I>
+void ImageReplayer<I>::remove_image_status_remote(bool force, Context *on_finish)
+{
+  if (m_remote_image_peer.mirror_status_updater != nullptr &&
+      m_remote_image_peer.mirror_status_updater->exists(m_global_image_id)) {
+    dout(15) << "removing remote mirror image status" << dendl;
+    if (force) {
+      m_remote_image_peer.mirror_status_updater->remove_mirror_image_status(
+        m_global_image_id, true, on_finish);
+    } else {
+      m_remote_image_peer.mirror_status_updater->remove_refresh_mirror_image_status(
+        m_global_image_id, on_finish);
+    }
+    return;
+  }
+  if (on_finish) {
+    on_finish->complete(0);
+  }
 }
 
 template <typename I>
