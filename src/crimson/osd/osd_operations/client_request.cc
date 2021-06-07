@@ -192,7 +192,7 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
   if (!pg->is_primary()) {
     // primary can handle both normal ops and balanced reads
     if (is_misdirected(*pg)) {
-      logger().trace("process_op: dropping misdirected op");
+      logger().trace("do_process: dropping misdirected op");
       return seastar::now();
     } else if (const hobject_t& hoid = m->get_hobj();
                !pg->get_peering_state().can_serve_replica_read(hoid)) {
