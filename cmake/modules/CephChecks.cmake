@@ -1,6 +1,6 @@
-if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7)
-    message(FATAL_ERROR "GCC 7+ required due to C++17 requirements")
+if(CMAKE_COMPILER_IS_GNUCXX)
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.1)
+    message(FATAL_ERROR "GCC 8.1+ required due to C++17 requirements")
   endif()
 endif()
 
