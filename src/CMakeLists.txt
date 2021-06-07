@@ -891,7 +891,6 @@ configure_file(
   ${CMAKE_BINARY_DIR}/include/acconfig.h
 )
 
-if(NOT WIN32)
 # Everything you need to spin up a cluster with vstart.sh
 add_custom_target(vstart-base DEPENDS
     ceph-osd
@@ -900,8 +899,14 @@ add_custom_target(vstart-base DEPENDS
     ceph-conf
     monmaptool
     crushtool
-    rados
+    rados)
+if(NOT WIN32)
+  # WIN32 port does not build python bindings
+  # TODO: introduce an option for enabling python binding
+  add_dependencies(vstart-base
     cython_rados)
+endif()
+
 if (WITH_MGR)
   add_dependencies(vstart-base ceph-mgr)
 endif()
@@ -928,7 +933,6 @@ endif()
 if(WITH_MGR)
   add_dependencies(vstart ceph-volume-venv-setup)
 endif()
-endif(NOT WIN32)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
