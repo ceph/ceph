@@ -525,8 +525,6 @@ struct interruptible_errorator {
   }
 
   using pass_further = typename Errorator::pass_further;
-  using ready_future_marker = ready_future_marker;
-  using exception_future_marker = exception_future_marker;
 };
 
 template <typename InterruptCond,
@@ -581,6 +579,21 @@ public:
   interruptible_future_detail(
     interruptible_future_detail<InterruptCond, seastar::future<T>>&& fut)
     : core_type(static_cast<seastar::future<T>&&>(fut)) {}
+
+  template <class... A>
+  [[gnu::always_inline]]
+  interruptible_future_detail(ready_future_marker, A&&... a)
+    : core_type(::seastar::make_ready_future<typename core_type::value_type>(
+		  std::forward<A>(a)...)) {
+  }
+  [[gnu::always_inline]]
+  interruptible_future_detail(exception_future_marker, ::seastar::future_state_base&& state) noexcept
+    : core_type(::seastar::futurize<core_type>::make_exception_future(std::move(state))) {
+  }
+  [[gnu::always_inline]]
+  interruptible_future_detail(exception_future_marker, std::exception_ptr&& ep) noexcept
+    : core_type(::seastar::futurize<core_type>::make_exception_future(std::move(ep))) {
+  }
 
   template<bool interruptible = true, typename ValueInterruptCondT, typename ErrorVisitorT,
 	   std::enable_if_t<!interruptible, int> = 0>
