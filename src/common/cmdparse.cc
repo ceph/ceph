@@ -578,7 +578,7 @@ bool validate_bool(CephContext *cct,
 {
   bool v;
   try {
-    if (!cmd_getval(cmdmap, string(name), v)) {
+    if (!cmd_getval(cmdmap, name, v)) {
       if (auto req = desc.find("req");
 	  req != end(desc) && req->second == "false") {
 	return true;
@@ -607,7 +607,7 @@ bool validate_arg(CephContext* cct,
 {
   Value v;
   try {
-    if (!cmd_getval(cmdmap, string(name), v)) {
+    if (!cmd_getval(cmdmap, name, v)) {
       if constexpr (is_vector) {
 	  // an empty list is acceptable.
 	  return true;
