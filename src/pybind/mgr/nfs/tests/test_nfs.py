@@ -565,7 +565,7 @@ EXPORT
     """
 
     def test_remove_export(self) -> None:
-        with self._mock_orchestrator(True):
+        with self._mock_orchestrator(True), mock.patch('nfs.module.ExportMgr._exec'):
             for cluster_id, info in self.clusters.items():
                 self._do_test_remove_export(cluster_id, info['exports'])
                 self._reset_temp_store()
