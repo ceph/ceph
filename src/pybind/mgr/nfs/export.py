@@ -26,7 +26,7 @@ def export_cluster_checker(func: FuncT) -> FuncT:
             **kwargs: Any
     ) -> Tuple[int, str, str]:
         """
-        This method checks if cluster exists and sets rados namespace.
+        This method checks if cluster exists
         """
         if kwargs['cluster_id'] not in available_clusters(fs_export.mgr):
             return -errno.ENOENT, "", "Cluster does not exists"
@@ -244,7 +244,7 @@ class ExportMgr:
         return path
 
     @export_cluster_checker
-    def create_export(self, cluster_id: str, **kwargs: Any) -> Tuple[int, str, str]:
+    def create_export(self, **kwargs: Any) -> Tuple[int, str, str]:
         try:
             fsal_type = kwargs.pop('fsal_type')
             if fsal_type == 'cephfs':
@@ -256,7 +256,10 @@ class ExportMgr:
             return exception_handler(e, f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
 
     @export_cluster_checker
-    def delete_export(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
+    def delete_export(self,
+                      cluster_id: str = '',
+                      pseudo_path: Optional[str] = None) -> Tuple[int, str, str]:
+        assert pseudo_path is not None
         return self._delete_export(cluster_id, pseudo_path)
 
     def delete_all_exports(self, cluster_id: str) -> None:
@@ -273,7 +276,9 @@ class ExportMgr:
         log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
 
     @export_cluster_checker
-    def list_exports(self, cluster_id: str, detailed: bool) -> Tuple[int, str, str]:
+    def list_exports(self,
+                     cluster_id: str = '',
+                     detailed: bool = False) -> Tuple[int, str, str]:
         try:
             if detailed:
                 result_d = [export.to_dict() for export in self.exports[cluster_id]]
@@ -291,8 +296,8 @@ class ExportMgr:
     @export_cluster_checker
     def get_export(
             self,
-            cluster_id: str,
-            pseudo_path: Optional[str]
+            cluster_id: str = '',
+            pseudo_path: Optional[str] = None
     ) -> Tuple[int, str, str]:
         try:
             export = self._fetch_export(cluster_id, pseudo_path)
