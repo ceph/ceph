@@ -44,7 +44,7 @@ class node_extent_t {
   const char* p_start() const { return fields_start(*p_fields); }
 
   const char* off_to_ptr(node_offset_t off) const {
-    assert(off <= FieldType::SIZE);
+    assert(off <= node_size);
     return p_start() + off;
   }
 
@@ -52,26 +52,30 @@ class node_extent_t {
     auto _ptr = static_cast<const char*>(ptr);
     assert(_ptr >= p_start());
     auto off = _ptr - p_start();
-    assert(off <= FieldType::SIZE);
+    assert(off <= node_size);
     return off;
   }
 
   bool is_level_tail() const { return p_fields->is_level_tail(); }
   level_t level() const { return p_fields->header.level; }
   node_offset_t free_size() const {
-    return p_fields->template free_size_before<NODE_TYPE>(keys());
+    return p_fields->template free_size_before<NODE_TYPE>(
+        keys(), node_size);
   }
-  node_offset_t total_size() const { return p_fields->total_size(); }
+  node_offset_t total_size() const {
+    return p_fields->total_size(node_size);
+  }
   const char* p_left_bound() const;
   template <node_type_t T = NODE_TYPE>
   std::enable_if_t<T == node_type_t::INTERNAL, const laddr_packed_t*>
   get_end_p_laddr() const {
     assert(is_level_tail());
     if constexpr (FIELD_TYPE == field_type_t::N3) {
-      return p_fields->get_p_child_addr(keys());
+      return p_fields->get_p_child_addr(keys(), node_size);
     } else {
-      auto offset_start = p_fields->get_item_end_offset(keys());
-      assert(offset_start <= FieldType::SIZE);
+      auto offset_start = p_fields->get_item_end_offset(
+          keys(), node_size);
+      assert(offset_start <= node_size);
       offset_start -= sizeof(laddr_packed_t);
       auto p_addr = p_start() + offset_start;
       return reinterpret_cast<const laddr_packed_t*>(p_addr);
@@ -82,9 +86,12 @@ class node_extent_t {
   using key_get_type = typename FieldType::key_get_type;
   static constexpr auto CONTAINER_TYPE = ContainerType::INDEXABLE;
   index_t keys() const { return p_fields->num_keys; }
-  key_get_type operator[] (index_t index) const { return p_fields->get_key(index); }
+  key_get_type operator[] (index_t index) const {
+    return p_fields->get_key(index, node_size);
+  }
   node_offset_t size_before(index_t index) const {
-    auto free_size = p_fields->template free_size_before<NODE_TYPE>(index);
+    auto free_size = p_fields->template free_size_before<NODE_TYPE>(
+        index, node_size);
     assert(total_size() >= free_size);
     return total_size() - free_size;
   }
@@ -98,7 +105,7 @@ class node_extent_t {
   get_p_value(index_t index) const {
     assert(index < keys());
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      return p_fields->get_p_child_addr(index);
+      return p_fields->get_p_child_addr(index, node_size);
     } else {
       auto range = get_nxt_container(index);
       auto ret = reinterpret_cast<const value_header_t*>(range.p_start);
@@ -204,7 +211,7 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
     assert(p_fields->num_keys == 0);
 #endif
     p_append_left = p_start + FieldType::HEADER_SIZE;
-    p_append_right = p_start + FieldType::SIZE;
+    p_append_right = p_start + p_mut->get_length();
   }
   Appender(NodeExtentMutable*, const node_extent_t&, bool open = false);
   void append(const node_extent_t& src, index_t from, index_t items);
