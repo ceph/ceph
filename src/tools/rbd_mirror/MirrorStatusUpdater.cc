@@ -190,17 +190,32 @@ void MirrorStatusUpdater<I>::set_mirror_image_status(
 }
 
 template <typename I>
+void MirrorStatusUpdater<I>::remove_refresh_mirror_image_status(
+    const std::string& global_image_id,
+    Context* on_finish) {
+  if (try_remove_mirror_image_status(global_image_id, false, false,
+                                     on_finish)) {
+    m_threads->work_queue->queue(on_finish, 0);
+  }
+}
+
+template <typename I>
 void MirrorStatusUpdater<I>::remove_mirror_image_status(
-    const std::string& global_image_id, Context* on_finish) {
-  if (try_remove_mirror_image_status(global_image_id, on_finish)) {
+    const std::string& global_image_id, bool immediate_update,
+    Context* on_finish) {
+  if (try_remove_mirror_image_status(global_image_id, true, immediate_update,
+                                     on_finish)) {
     m_threads->work_queue->queue(on_finish, 0);
   }
 }
 
 template <typename I>
 bool MirrorStatusUpdater<I>::try_remove_mirror_image_status(
-    const std::string& global_image_id, Context* on_finish) {
-  dout(15) << "global_image_id=" << global_image_id << dendl;
+    const std::string& global_image_id, bool queue_update,
+    bool immediate_update, Context* on_finish) {
+  dout(15) << "global_image_id=" << global_image_id << ", "
+           << "queue_update=" << queue_update << ", "
+           << "immediate_update=" << immediate_update << dendl;
 
   std::unique_lock locker(m_lock);
   if ((m_update_in_flight &&
@@ -209,8 +224,10 @@ bool MirrorStatusUpdater<I>::try_remove_mirror_image_status(
        m_update_global_image_ids.count(global_image_id) > 0)) {
     // if update is scheduled/in-progress, wait for it to complete
     on_finish = new LambdaContext(
-      [this, global_image_id, on_finish](int r) {
-        if (try_remove_mirror_image_status(global_image_id, on_finish)) {
+      [this, global_image_id, queue_update, immediate_update,
+             on_finish](int r) {
+        if (try_remove_mirror_image_status(global_image_id, queue_update,
+                                           immediate_update, on_finish)) {
           on_finish->complete(0);
         }
       });
@@ -219,6 +236,13 @@ bool MirrorStatusUpdater<I>::try_remove_mirror_image_status(
   }
 
   m_global_image_status.erase(global_image_id);
+  if (queue_update) {
+    m_update_global_image_ids.insert(global_image_id);
+    if (immediate_update) {
+      queue_update_task(std::move(locker));
+    }
+  }
+
   return true;
 }
 
@@ -314,6 +338,8 @@ void MirrorStatusUpdater<I>::update_task(int r) {
 
       auto status_it = global_image_status.find(global_image_id);
       if (status_it == global_image_status.end()) {
+        librbd::cls_client::mirror_image_status_remove(&op, global_image_id);
+        ++op_count;
         continue;
       }
 
