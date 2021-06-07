@@ -1,5 +1,6 @@
 import argparse
 import os
+import math
 from ceph_volume import terminal
 from ceph_volume import decorators
 from ceph_volume.util import disk
@@ -148,3 +149,14 @@ def exclude_group_options(parser, groups, argv=None):
                     terminal.warning(msg)
             last_group = group_name
         last_flag = flag
+
+class ValidFraction(object):
+    """
+    Validate fraction is in (0, 1.0]
+    """
+
+    def __call__(self, fraction):
+        fraction_float = float(fraction)
+        if math.isnan(fraction_float) or fraction_float <= 0.0 or fraction_float > 1.0:
+            raise argparse.ArgumentError(None, 'Fraction %f not in (0,1.0]' % fraction_float)
+        return fraction_float
