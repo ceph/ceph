@@ -1,16 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <filesystem>
 #include <iostream>
 #include <unistd.h>
 
-#if __has_include(<filesystem>)
-#include <filesystem>
-namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 
 #include "gtest/gtest.h"
 #include "include/Context.h"
@@ -23,6 +17,8 @@ namespace fs = std::experimental::filesystem;
 #include "test/librados/test_cxx.h"
 
 #include "tools/immutable_object_cache/ObjectCacheStore.h"
+
+namespace fs = std::filesystem;
 
 using namespace ceph::immutable_obj_cache;
 
