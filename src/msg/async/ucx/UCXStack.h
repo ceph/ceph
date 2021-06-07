@@ -45,11 +45,22 @@ struct ucx_request {
 
 class UCXProEngine {
 private:
+  CephContext *cct;
+  ceph::mutex lock = ceph::make_mutex("UCXProEngine::lock");
+  std::thread thread_engine;
   ucp_worker_h ucp_worker;
 public:
-  UCXProEngine(ucp_worker_h ucp_worker)
-  {
-  }
+  UCXProEngine(CephContext *cct, ucp_worker_h ucp_worker);
+
+  void fire_polling();
+  void progress();
+
+  static ucs_status_t
+  am_recv_callback(void *arg, const void *header,
+                   size_t header_length,
+                   void *data, size_t length,
+                   const ucp_am_recv_param_t *param);
+
 };
 
 class UCXConSktImpl : public ConnectedSocketImpl {

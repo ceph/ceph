@@ -44,6 +44,7 @@ int UCXWorker::listen(entity_addr_t &listen_addr, unsigned addr_slot,
                       const SocketOptions &ser_opts, ServerSocket *ser_skt)
 {
   int rst = 0;
+  ucp_worker_engine->fire_polling();
 
   auto ucx_serskt = new UCXSerSktImpl(cct, this, listen_addr, addr_slot);
   rst = ucx_serskt->listen(listen_addr, ser_opts);
@@ -87,6 +88,42 @@ void UCXWorker::destroy()
 
 void UCXWorker::initialize()
 {
+  ceph_assert(ucp_worker_engine != nullptr);
+}
+
+UCXProEngine::UCXProEngine(CephContext *cct, ucp_worker_h ucp_worker)
+  : cct(cct), ucp_worker(ucp_worker)
+{
+}
+
+void UCXProEngine::fire_polling()
+{
+  std::lock_guard lk{lock};
+
+  if (thread_engine.joinable()) {
+    return;
+  }
+
+  thread_engine = std::thread(&UCXProEngine::progress, this);
+  ceph_pthread_setname(thread_engine.native_handle(), "ucx-progress");
+}
+
+void UCXProEngine::progress()
+{
+  ldout(cct, 20) << " ucp_worker_progress start " << dendl;
+  while (true) {
+    ucp_worker_progress(ucp_worker);
+  }
+}
+
+ucs_status_t
+UCXProEngine::am_recv_callback(void *arg, const void *header,
+                               size_t header_length,
+                               void *data, size_t length,
+                               const ucp_am_recv_param_t *param)
+{
+  // TODO:
+  return UCS_OK;
 }
 
 UCXStack::UCXStack(CephContext *cct)
@@ -119,7 +156,18 @@ UCXStack::UCXStack(CephContext *cct)
   if (status != UCS_OK) {
     lderr(cct) << "ucp_worker_create() failed: " << ucs_status_string(status) << dendl;
   }
-  ucp_worker_engine = std::make_shared<UCXProEngine>(ucp_worker);
+
+  ucp_worker_engine = std::make_shared<UCXProEngine>(cct, ucp_worker);
+
+  ucp_am_handler_param_t param;
+  param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                     UCP_AM_HANDLER_PARAM_FIELD_CB |
+                     UCP_AM_HANDLER_PARAM_FIELD_ARG;
+  param.id         = 0xcafebeef;
+  param.cb         = UCXProEngine::am_recv_callback;
+  param.arg        = ucp_worker_engine.get();
+  ceph_assert(UCS_OK == ucp_worker_set_am_recv_handler(ucp_worker, &param));
+
 }
 
 UCXStack::~UCXStack()
