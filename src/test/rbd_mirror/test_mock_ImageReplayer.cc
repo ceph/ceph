@@ -63,7 +63,10 @@ struct MirrorStatusUpdater<librbd::MockTestImageCtx> {
   MOCK_METHOD3(set_mirror_image_status,
                void(const std::string&, const cls::rbd::MirrorImageSiteStatus&,
                     bool));
-  MOCK_METHOD2(remove_mirror_image_status, void(const std::string&, Context*));
+  MOCK_METHOD2(remove_refresh_mirror_image_status, void(const std::string&,
+                                                        Context*));
+  MOCK_METHOD3(remove_mirror_image_status, void(const std::string&, bool,
+                                                Context*));
 };
 
 template <>
