@@ -19,9 +19,10 @@ from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
 from prettytable import PrettyTable, HEADER
-from signal import signal, SIGWINCH
+from signal import signal, Signals, SIGWINCH
 from termios import TIOCGWINSZ
-from typing import Any, Dict, Optional, Sequence, TextIO, Tuple
+from types import FrameType
+from typing import Any, Callable, Dict, Optional, Sequence, TextIO, Tuple
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
@@ -31,7 +32,7 @@ READ_CHUNK_SIZE = 4096
 
 
 def admin_socket(asok_path: str,
-                 cmd: str,
+                 cmd: Sequence[str],
                  format: Optional[str] = '') -> bytes:
     """
     Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
@@ -40,7 +41,7 @@ def admin_socket(asok_path: str,
     (daemon commands don't support 'plain' output).
     """
 
-    def do_sockio(path, cmd_bytes):
+    def do_sockio(path: str, cmd_bytes: bytes) -> bytes:
         """ helper: do all the actual low-level stream I/O """
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(path)
@@ -70,9 +71,6 @@ def admin_socket(asok_path: str,
                              b'{"prefix": "get_command_descriptions"}')
     except Exception as e:
         raise RuntimeError('exception getting command descriptions: ' + str(e))
-
-    if cmd == 'get_command_descriptions':
-        return cmd_json
 
     sigdict = parse_json_funcsigs(cmd_json.decode('utf-8'), 'cli')
     valid_dict = validate_command(sigdict, cmd)
@@ -120,8 +118,8 @@ class Termsize(object):
                                           self.rows, self.cols, self.changed)
 
     def __repr__(self) -> str:
-        return 'Termsize(%d,%d,%s)' % (self.__class__,
-                                       self.rows, self.cols, self.changed)
+        return '%s(%d,%d,%s)' % (self.__class__,
+                                 self.rows, self.cols, self.changed)
 
 
 class DaemonWatcher(object):
@@ -183,7 +181,7 @@ class DaemonWatcher(object):
         return (self.COLOR_DARK_SEQ if dark else self.COLOR_SEQ) % (30 + color) \
                + msg + self.RESET_SEQ
 
-    def bold(self, msg) -> str:
+    def bold(self, msg: str) -> str:
         """
         Decorate `msg` with escape sequences to make it appear bold
         """
@@ -368,7 +366,9 @@ class DaemonWatcher(object):
         if not len(self._stats):
             raise RuntimeError("no stats selected by filters")
 
-    def _handle_sigwinch(self, signo, frame) -> None:
+    def _handle_sigwinch(self,
+                         signo: Signals,
+                         frame: FrameType) -> None:
         self.termsize.update()
 
     def run(self,
