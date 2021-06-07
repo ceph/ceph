@@ -118,7 +118,7 @@ public:
    * @returns the number of slot request failures
    */
   int64_t get_failed() const {
-    return failed;
+    return failed.load();
   }
 
    /**

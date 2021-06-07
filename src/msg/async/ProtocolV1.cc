@@ -720,7 +720,7 @@ CtPtr ProtocolV1::throttle_dispatch_queue() {
   if (cur_msg_size) {
     Messenger* msgr = connection->dispatch_queue->get_messenger();
     //update max if it's changed in the conf. Expecting qa tests would change ms_dispatch_throttle_bytes.
-    connection->dispatch_queue->dispatch_throttler.reset_max(msgr->dispatch_throttle_bytes);
+    connection->dispatch_queue->dispatch_throttler.reset_max(msgr->dispatch_throttle_bytes.load());
 
     if (!connection->dispatch_queue->dispatch_throttler.get_or_fail(
             cur_msg_size)) {
@@ -763,10 +763,10 @@ CtPtr ProtocolV1::throttle_dispatch_queue() {
       return nullptr;
     }
     else {
-      //Don't deliver ms_throttle_t::NONE forever. Limit it for THROTTLE_STATUS_INTERVAL seconds
+      //Don't deliver ms_throttle_t::NONE forever. Limit it for THROTTLE_DELIVER_INTERVAL seconds
       //since the last ms_throttle_t::DISPATCH_QUEUE delivery.
       if (std::chrono::duration_cast<std::chrono::seconds>
-          (ceph::coarse_mono_clock::now() - throttle_prev_clog) <= THROTTLE_STATUS_INTERVAL.load()) {
+          (ceph::coarse_mono_clock::now() - throttle_prev_clog) <= THROTTLE_DELIVER_INTERVAL) {
         msgr->ms_deliver_throttle(ms_throttle_t::NONE);
       }
     }
