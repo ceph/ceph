@@ -329,7 +329,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return cast(str, self.get_module_option("orchestrator"))
 
     @_cli_write_command('orch host add')
-    def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None, maintenance: Optional[bool] = False) -> HandleCommandResult:
+    def _add_host(self,
+                  hostname: str,
+                  addr: Optional[str] = None,
+                  labels: Optional[List[str]] = None,
+                  maintenance: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
 
@@ -820,7 +824,7 @@ Usage:
 
     @_cli_write_command('orch osd rm stop')
     def _osd_rm_stop(self, svc_id: List[str]) -> HandleCommandResult:
-        """Remove OSD services"""
+        """Cancel ongoing OSD removal operation"""
         completion = self.stop_remove_osds(svc_id)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -1121,10 +1125,11 @@ Usage:
     @_cli_write_command('orch apply nfs')
     def _apply_nfs(self,
                    svc_id: str,
-                   pool: str,
-                   namespace: Optional[str] = None,
                    placement: Optional[str] = None,
                    format: Format = Format.plain,
+                   pool: Optional[str] = None,
+                   namespace: Optional[str] = None,
+                   port: Optional[int] = None,
                    dry_run: bool = False,
                    unmanaged: bool = False,
                    no_overwrite: bool = False,
@@ -1137,6 +1142,7 @@ Usage:
             service_id=svc_id,
             pool=pool,
             namespace=namespace,
+            port=port,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run

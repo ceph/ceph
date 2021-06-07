@@ -1,3 +1,5 @@
+.. _cephfs-nfs:
+
 =======================
 CephFS Exports over NFS
 =======================
@@ -18,7 +20,7 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <clusterid> [<placement>]
+    $ ceph nfs cluster create <clusterid> [<placement>] [--ingress --virtual-ip <ip>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
 ``clusterid``, and a common NFS Ganesha config RADOS object.
@@ -47,24 +49,20 @@ cluster)::
 
     "2 host1,host2"
 
+To deploy NFS with an HA front-end (virtual IP and load balancer), add the
+``--ingress`` flag and specify a virtual IP address. This will deploy a combination
+of keepalived and haproxy to provide an high-availability NFS frontend for the NFS
+service.
+
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
-
-Update NFS Ganesha Cluster
-==========================
-
-.. code:: bash
-
-    $ ceph nfs cluster update <clusterid> <placement>
-
-This updates the deployed cluster according to the placement value.
 
 Delete NFS Ganesha Cluster
 ==========================
 
 .. code:: bash
 
-    $ ceph nfs cluster delete <clusterid>
+    $ ceph nfs cluster rm <clusterid>
 
 This deletes the deployed cluster.
 
@@ -191,7 +189,7 @@ Delete CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export delete <clusterid> <binding>
+    $ ceph nfs export rm <clusterid> <binding>
 
 This deletes an export in an NFS Ganesha cluster, where:
 

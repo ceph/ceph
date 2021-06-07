@@ -8,7 +8,6 @@ import collections
 import errno
 import logging
 import os
-import socket
 import ssl
 import sys
 import tempfile
@@ -109,6 +108,8 @@ class CherryPyConfig(object):
         else:
             server_port = self.get_localized_module_option('ssl_server_port', 8443)  # type: ignore
 
+        if server_addr == '::':
+            server_addr = self.get_mgr_ip()  # type: ignore
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
@@ -193,7 +194,7 @@ class CherryPyConfig(object):
 
         uri = "{0}://{1}:{2}{3}/".format(
             'https' if use_ssl else 'http',
-            socket.getfqdn(server_addr if server_addr != '::' else ''),
+            server_addr,
             server_port,
             self.url_prefix
         )

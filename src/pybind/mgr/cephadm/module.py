@@ -570,14 +570,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         # cephadm
         self._kick_serve_loop()
 
-    def get_unique_name(self, daemon_type, host, existing, prefix=None,
-                        forcename=None):
-        # type: (str, str, List[orchestrator.DaemonDescription], Optional[str], Optional[str]) -> str
+    def get_unique_name(
+            self,
+            daemon_type: str,
+            host: str,
+            existing: List[orchestrator.DaemonDescription],
+            prefix: Optional[str] = None,
+            forcename: Optional[str] = None,
+            rank: Optional[int] = None,
+            rank_generation: Optional[int] = None,
+    ) -> str:
         """
         Generate a unique random service name
         """
         suffix = daemon_type not in [
-            'mon', 'crash', 'nfs',
+            'mon', 'crash',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'cephadm-exporter',
         ]
@@ -594,6 +601,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 name = prefix + '.'
             else:
                 name = ''
+            if rank is not None and rank_generation is not None:
+                name += f'{rank}.{rank_generation}.'
             name += host
             if suffix:
                 name += '.' + ''.join(random.choice(string.ascii_lowercase)
@@ -718,6 +727,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return True, err, ret
 
+    def _validate_and_set_ssh_val(self, what: str, new: Optional[str], old: Optional[str]) -> None:
+        self.set_store(what, new)
+        self._reconfig_ssh()
+        if self.cache.get_hosts():
+            # Can't check anything without hosts
+            host = self.cache.get_hosts()[0]
+            r = CephadmServe(self)._check_host(host)
+            if r is not None:
+                # connection failed reset user
+                self.set_store(what, old)
+                self._reconfig_ssh()
+                raise OrchestratorError('ssh connection %s@%s failed' % (self.ssh_user, host))
+        self.log.info(f'Set ssh {what}')
+
     @orchestrator._cli_write_command(
         prefix='cephadm set-ssh-config')
     def _set_ssh_config(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
@@ -726,12 +749,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         # Set an ssh_config file provided from stdin
 
-        if inbuf == self.ssh_config:
+        old = self.ssh_config
+        if inbuf == old:
             return 0, "value unchanged", ""
         self.validate_ssh_config_content(inbuf)
-        self.set_store("ssh_config", inbuf)
-        self.log.info('Set ssh_config')
-        self._reconfig_ssh()
+        self._validate_and_set_ssh_val('ssh_config', inbuf, old)
         return 0, "", ""
 
     @orchestrator._cli_write_command('cephadm clear-ssh-config')
@@ -795,11 +817,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Set cluster SSH private key (use -i <private_key>)"""
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty private ssh key provided"
-        if inbuf == self.ssh_key:
+        old = self.ssh_key
+        if inbuf == old:
             return 0, "value unchanged", ""
-        self.set_store("ssh_identity_key", inbuf)
+        self._validate_and_set_ssh_val('ssh_identity_key', inbuf, old)
         self.log.info('Set ssh private key')
-        self._reconfig_ssh()
         return 0, "", ""
 
     @orchestrator._cli_write_command(
@@ -808,11 +830,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Set cluster SSH public key (use -i <public_key>)"""
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty public ssh key provided"
-        if inbuf == self.ssh_pub:
+        old = self.ssh_pub
+        if inbuf == old:
             return 0, "value unchanged", ""
-        self.set_store("ssh_identity_pub", inbuf)
-        self.log.info('Set ssh public key')
-        self._reconfig_ssh()
+        self._validate_and_set_ssh_val('ssh_identity_pub', inbuf, old)
         return 0, "", ""
 
     @orchestrator._cli_write_command(
@@ -855,20 +876,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if user == current_user:
             return 0, "value unchanged", ""
 
-        self.set_store('ssh_user', user)
-        self._reconfig_ssh()
-
-        host = self.cache.get_hosts()[0]
-        r = CephadmServe(self)._check_host(host)
-        if r is not None:
-            # connection failed reset user
-            self.set_store('ssh_user', current_user)
-            self._reconfig_ssh()
-            return -errno.EINVAL, '', 'ssh connection %s@%s failed' % (user, host)
+        self._validate_and_set_ssh_val('ssh_user', user, current_user)
 
         msg = 'ssh user set to %s' % user
         if user != 'root':
-            msg += ' sudo will be used'
+            msg += '. sudo will be used'
         self.log.info(msg)
         return 0, msg, ''
 
@@ -1374,10 +1386,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             )
         ]
 
-    def _check_valid_addr(self, host: str, addr: str) -> None:
+    def _check_valid_addr(self, host: str, addr: str) -> str:
         # make sure hostname is resolvable before trying to make a connection
         try:
-            utils.resolve_ip(addr)
+            ip_addr = utils.resolve_ip(addr)
         except OrchestratorError as e:
             msg = str(e) + f'''
 You may need to supply an address for {addr}
@@ -1408,6 +1420,7 @@ Then run the following:
             errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
             raise OrchestratorError('Host %s (%s) failed check(s): %s' % (
                 host, addr, errors))
+        return ip_addr
 
     def _add_host(self, spec):
         # type: (HostSpec) -> str
@@ -1417,7 +1430,9 @@ Then run the following:
         :param host: host name
         """
         assert_valid_host(spec.hostname)
-        self._check_valid_addr(spec.hostname, spec.addr)
+        ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+        if spec.addr == spec.hostname and ip_addr:
+            spec.addr = ip_addr
 
         # prime crush map?
         if spec.location:
@@ -1434,7 +1449,7 @@ Then run the following:
         self.offline_hosts_remove(spec.hostname)
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
-        return "Added host '{}'".format(spec.hostname)
+        return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
 
     @handle_orch_error
     def add_host(self, spec: HostSpec) -> str:
@@ -1695,7 +1710,7 @@ Then run the following:
                          refresh: bool = False) -> List[orchestrator.ServiceDescription]:
         if refresh:
             self._invalidate_daemons_and_kick_serve()
-            self.log.info('Kicked serve() loop to refresh all services')
+            self.log.debug('Kicked serve() loop to refresh all services')
 
         sm: Dict[str, orchestrator.ServiceDescription] = {}
 
@@ -1779,7 +1794,7 @@ Then run the following:
                      refresh: bool = False) -> List[orchestrator.DaemonDescription]:
         if refresh:
             self._invalidate_daemons_and_kick_serve(host)
-            self.log.info('Kicked serve() loop to refresh all daemons')
+            self.log.debug('Kicked serve() loop to refresh all daemons')
 
         result = []
         for h, dm in self.cache.get_daemons_with_volatile_status():
@@ -1924,10 +1939,26 @@ Then run the following:
             if self.spec_store[service_name].spec.service_type in ('mon', 'mgr'):
                 return f'Unable to remove {service_name} service.\n' \
                        f'Note, you might want to mark the {service_name} service as "unmanaged"'
-        found = self.spec_store.rm(service_name)
+
+        # Report list of affected OSDs
+        osds_msg = {}
+        if service_name.startswith('osd.'):
+            for h, dm in self.cache.get_daemons_with_volatile_status():
+                osds_to_remove = []
+                for name, dd in dm.items():
+                    if dd.daemon_type == 'osd' and (dd.service_name() == service_name or not dd.osdspec_affinity):
+                        osds_to_remove.append(str(dd.daemon_id))
+                if osds_to_remove:
+                    osds_msg[h] = osds_to_remove
+
+        found = self.spec_store.rm(service_name) or osds_msg
         if found:
             self._kick_serve_loop()
-            return 'Removed service %s' % service_name
+            if osds_msg:
+                return f'The service {service_name} will be deleted once the following OSDs: {osds_msg} ' \
+                       f'will be deleted manually.'
+            else:
+                return f'Removed service {service_name}'
         else:
             # must be idempotent: still a success.
             try:
@@ -1950,13 +1981,15 @@ Then run the following:
         if refresh:
             if host_filter and host_filter.hosts:
                 for h in host_filter.hosts:
+                    self.log.debug(f'will refresh {h} devs')
                     self.cache.invalidate_host_devices(h)
             else:
                 for h in self.cache.get_hosts():
+                    self.log.debug(f'will refresh {h} devs')
                     self.cache.invalidate_host_devices(h)
 
             self.event.set()
-            self.log.info('Kicked serve() loop to refresh devices')
+            self.log.debug('Kicked serve() loop to refresh devices')
 
         result = []
         for host, dls in self.cache.devices.items():
@@ -2237,12 +2270,14 @@ Then run the following:
                     'service_type': spec.service_type,
                     'data': self._preview_osdspecs(osdspecs=[cast(DriveGroupSpec, spec)])}
 
+        svc = self.cephadm_services[spec.service_type]
         ha = HostAssignment(
             spec=spec,
             hosts=self._schedulable_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
-            allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
+            allow_colo=svc.allow_colo(),
+            rank_map=self.spec_store[spec.service_name()].rank_map if svc.ranked() else None
         )
         ha.validate()
         hosts, to_add, to_remove = ha.place()
@@ -2251,7 +2286,7 @@ Then run the following:
             'service_name': spec.service_name(),
             'service_type': spec.service_type,
             'add': [hs.hostname for hs in to_add],
-            'remove': [d.hostname for d in to_remove]
+            'remove': [d.name() for d in to_remove]
         }
 
     @handle_orch_error

@@ -84,19 +84,19 @@ class TestCephadm(object):
     def test_host(self, cephadm_module):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         with with_host(cephadm_module, 'test'):
-            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', 'test')]
+            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1.2.3.4')]
 
             # Be careful with backward compatibility when changing things here:
             assert json.loads(cephadm_module.get_store('inventory')) == \
-                {"test": {"hostname": "test", "addr": "test", "labels": [], "status": ""}}
+                {"test": {"hostname": "test", "addr": "1.2.3.4", "labels": [], "status": ""}}
 
-            with with_host(cephadm_module, 'second'):
+            with with_host(cephadm_module, 'second', '1.2.3.5'):
                 assert wait(cephadm_module, cephadm_module.get_hosts()) == [
-                    HostSpec('test', 'test'),
-                    HostSpec('second', 'second')
+                    HostSpec('test', '1.2.3.4'),
+                    HostSpec('second', '1.2.3.5')
                 ]
 
-            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', 'test')]
+            assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '1.2.3.4')]
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -117,6 +117,7 @@ class TestCephadm(object):
 
                 assert [remove_id_events(dd) for dd in wait(cephadm_module, c)] == [
                     {
+                        'service_name': 'mds.name',
                         'daemon_type': 'mds',
                         'hostname': 'test',
                         'status': 1,
@@ -289,7 +290,7 @@ class TestCephadm(object):
                 _run_cephadm.assert_called_with(
                     'test', 'mon.test', 'deploy', [
                         '--name', 'mon.test',
-                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null, "deployed_by": []}',
+                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
                         '--config-json', '-',
                         '--reconfig',
                     ],
@@ -315,7 +316,7 @@ class TestCephadm(object):
                 with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
                     CephadmServe(cephadm_module)._check_daemons()
                     _mon_cmd.assert_any_call(
-                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://test:3000'},
+                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://1.2.3.4:3000'},
                         None)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -753,7 +754,9 @@ class TestCephadm(object):
                 })
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.CephadmOrchestrator.rados", mock.MagicMock())
+    @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
+    @mock.patch("cephadm.services.nfs.NFSService.purge", mock.MagicMock())
+    @mock.patch("cephadm.services.nfs.NFSService.create_rados_config_obj", mock.MagicMock())
     def test_nfs(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
@@ -914,6 +917,10 @@ class TestCephadm(object):
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("subprocess.run", None)
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
+    @mock.patch("cephadm.services.nfs.NFSService.create_rados_config_obj", mock.MagicMock())
+    @mock.patch("cephadm.services.nfs.NFSService.purge", mock.MagicMock())
+    @mock.patch("subprocess.run", mock.MagicMock())
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec, meth, 'test'):
@@ -980,12 +987,12 @@ class TestCephadm(object):
             assert "Host 'test' not found" in err
 
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-            assert out == HostSpec('test', 'test', status='Offline').to_json()
+            assert out == HostSpec('test', '1.2.3.4', status='Offline').to_json()
 
             _get_connection.side_effect = None
             assert CephadmServe(cephadm_module)._check_host('test') is None
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-            assert out == HostSpec('test', 'test').to_json()
+            assert out == HostSpec('test', '1.2.3.4').to_json()
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_dont_touch_offline_or_maintenance_host_daemons(self, cephadm_module):

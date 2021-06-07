@@ -5486,7 +5486,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("mgr_module_path"),
 
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("restful iostat")
+    .set_default("restful iostat nfs")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .add_service("mon")

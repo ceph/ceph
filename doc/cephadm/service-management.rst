@@ -5,39 +5,60 @@ Service Management
 Service Status
 ==============
 
-A service is a group of daemons that are configured together.
+A service is a group of daemons configured together. To see the status of one
+of the services running in the Ceph cluster, do the following:
 
-Print a list of services known to the orchestrator. The list can be limited to
-services on a particular host with the optional --host parameter and/or
-services of a particular type via optional --type parameter
-(mon, osd, mgr, mds, rgw):
+#. Use the command line to print a list of services. 
+#. Locate the service whose status you want to check. 
+#. Print the status of the service.
 
-::
+The following command prints a list of services known to the orchestrator. To
+limit the output to services only on a specified host, use the optional
+``--host`` parameter. To limit the output to services of only a particular
+type, use the optional ``--type`` parameter (mon, osd, mgr, mds, rgw):
 
-    ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
+   .. prompt:: bash #
 
-Discover the status of a particular service or daemons::
+     ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
 
-    ceph orch ls --service_type type --service_name <name> [--refresh]
+Discover the status of a particular service or daemon:
 
-Export the service specs known to the orchestrator as yaml in format
-that is compatible to ``ceph orch apply -i``::
+   .. prompt:: bash #
 
-    ceph orch ls --export
+     ceph orch ls --service_type type --service_name <name> [--refresh]
 
-For examples about retrieving specs of single services see :ref:`orchestrator-cli-service-spec-retrieve`.
+To export the service specifications knows to the orchestrator, run the following command.
+
+   .. prompt:: bash #
+
+     ceph orch ls --export
+
+The service specifications exported with this command will be exported as yaml
+and that yaml can be used with the ``ceph orch apply -i`` command.
+
+For information about retrieving the specifications of single services (including examples of commands), see :ref:`orchestrator-cli-service-spec-retrieve`.
 
 Daemon Status
 =============
 
-A daemon is a running systemd unit and is part of a service.
+A daemon is a systemd unit that is running and part of a service.
 
-Print a list of all daemons known to the orchestrator::
+To see the status of a daemon, do the following:
+
+#. Print a list of all daemons known to the orchestrator.
+#. Query the status of the target daemon.
+
+First, print a list of all daemons known to the orchestrator:
+
+   .. prompt:: bash #
 
     ceph orch ps [--hostname host] [--daemon_type type] [--service_name name] [--daemon_id id] [--format f] [--refresh]
 
-Query the status of a particular service instance (mon, osd, mds, rgw).  For OSDs
-the id is the numeric OSD ID, for MDS services it is the file system name::
+Then query the status of a particular service instance (mon, osd, mds, rgw).
+For OSDs the id is the numeric OSD ID. For MDS services the id is the file
+system name:
+
+   .. prompt:: bash #
 
     ceph orch ps --daemon_type osd --daemon_id 0
     
@@ -46,8 +67,8 @@ the id is the numeric OSD ID, for MDS services it is the file system name::
 Service Specification
 =====================
 
-A *Service Specification* is a data structure
-to specify the deployment of services.  For example in YAML:
+A *Service Specification* is a data structure that is used to specify the
+deployment of services.  Here is an example of a service specification in YAML:
 
 .. code-block:: yaml
 
@@ -61,7 +82,7 @@ to specify the deployment of services.  For example in YAML:
     unmanaged: false
     ...
 
-where the properties of a service specification are:
+In this example, the properties of this service specification are:
 
 * ``service_type``
     The type of the service. Needs to be either a Ceph
@@ -73,21 +94,20 @@ where the properties of a service specification are:
     The name of the service.
 * ``placement``
     See :ref:`orchestrator-cli-placement-spec`.
-* ``unmanaged``
-    If set to ``true``, the orchestrator will not deploy nor
-    remove any daemon associated with this service. Placement and all other
-    properties will be ignored. This is useful, if this service should not
-    be managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
+* ``unmanaged`` If set to ``true``, the orchestrator will not deploy nor remove
+    any daemon associated with this service. Placement and all other properties
+    will be ignored. This is useful, if you do not want this service to be
+    managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
 
-Each service type can have additional service specific properties.
+Each service type can have additional service-specific properties.
 
 Service specifications of type ``mon``, ``mgr``, and the monitoring
 types do not require a ``service_id``.
 
 A service of type ``osd`` is described in :ref:`drivegroups`
 
-Many service specifications can be applied at once using
-``ceph orch apply -i`` by submitting a multi-document YAML file::
+Many service specifications can be applied at once using ``ceph orch apply -i``
+by submitting a multi-document YAML file::
 
     cat <<EOF | ceph orch apply -i -
     service_type: mon
@@ -114,7 +134,9 @@ Retrieving the running Service Specification
 If the services have been started via ``ceph orch apply...``, then directly changing
 the Services Specification is complicated. Instead of attempting to directly change
 the Services Specification, we suggest exporting the running Service Specification by
-following these instructions::
+following these instructions:
+
+   .. prompt:: bash #
     
     ceph orch ls --service-name rgw.<realm>.<zone> --export > rgw.<realm>.<zone>.yaml
     ceph orch ls --service-type mgr --export > mgr.yaml
@@ -139,7 +161,9 @@ or in a YAML files.
 Explicit placements
 -------------------
 
-Daemons can be explicitly placed on hosts by simply specifying them::
+Daemons can be explicitly placed on hosts by simply specifying them:
+
+   .. prompt:: bash #
 
     orch apply prometheus --placement="host1 host2 host3"
 
@@ -154,9 +178,11 @@ Or in YAML:
         - host2
         - host3
 
-MONs and other services may require some enhanced network specifications::
+MONs and other services may require some enhanced network specifications:
 
-  orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
+   .. prompt:: bash #
+
+    orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
 
 where ``[v2:1.2.3.4:3300,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
@@ -166,7 +192,9 @@ and ``=name`` specifies the name of the new monitor.
 Placement by labels
 -------------------
 
-Daemons can be explicitly placed on hosts that match a specific label::
+Daemons can be explicitly placed on hosts that match a specific label:
+
+   .. prompt:: bash #
 
     orch apply prometheus --placement="label:mylabel"
 
@@ -183,7 +211,9 @@ Or in YAML:
 Placement by pattern matching
 -----------------------------
 
-Daemons can be placed on hosts as well::
+Daemons can be placed on hosts as well:
+
+   .. prompt:: bash #
 
     orch apply prometheus --placement='myhost[1-3]'
 
@@ -195,7 +225,9 @@ Or in YAML:
     placement:
       host_pattern: "myhost[1-3]"
 
-To place a service on *all* hosts, use ``"*"``::
+To place a service on *all* hosts, use ``"*"``:
+
+   .. prompt:: bash #
 
     orch apply node-exporter --placement='*'
 
@@ -211,15 +243,21 @@ Or in YAML:
 Setting a limit
 ---------------
 
-By specifying ``count``, only that number of daemons will be created::
+By specifying ``count``, only that number of daemons will be created:
+
+   .. prompt:: bash #
 
     orch apply prometheus --placement=3
 
-To deploy *daemons* on a subset of hosts, also specify the count::
+To deploy *daemons* on a subset of hosts, also specify the count:
+
+   .. prompt:: bash #
 
     orch apply prometheus --placement="2 host1 host2 host3"
 
-If the count is bigger than the amount of hosts, cephadm deploys one per host::
+If the count is bigger than the amount of hosts, cephadm deploys one per host:
+
+   .. prompt:: bash #
 
     orch apply prometheus --placement="3 host1 host2"
 
@@ -253,15 +291,21 @@ service in a ``ServiceSpec``. For certain operations, like updating
 the RGW HTTP port, we need to update the existing
 specification.
 
-1. List the current ``ServiceSpec``::
+1. List the current ``ServiceSpec``:
+
+   .. prompt:: bash #
 
     ceph orch ls --service_name=<service-name> --export > myservice.yaml
 
-2. Update the yaml file::
+2. Update the yaml file:
+
+   .. prompt:: bash #
 
     vi myservice.yaml
 
-3. Apply the new ``ServiceSpec``::
+3. Apply the new ``ServiceSpec``:
+   
+   .. prompt:: bash #
 
     ceph orch apply -i myservice.yaml [--dry-run]
     
@@ -346,27 +390,27 @@ the :ref:`orchestrator-cli-service-spec` with ``unmanaged=True``.
 
 To manually deploy a daemon on a host, please execute:
 
-.. code-block:: bash
+   .. prompt:: bash #
 
-  ceph orch daemon add <daemon-type>  --placement=<placement spec>
+     ceph orch daemon add <daemon-type>  --placement=<placement spec>
 
-For example 
+For example :
 
-.. code-block:: bash
+   .. prompt:: bash #
 
-  ceph orch daemon add mgr --placement=my_host
+     ceph orch daemon add mgr --placement=my_host
 
 To manually remove a daemon, please run:
 
-.. code-block:: bash
+   .. prompt:: bash #
 
-  ceph orch daemon rm <daemon name>... [--force]
+     ceph orch daemon rm <daemon name>... [--force]
 
-For example 
+For example:
 
-.. code-block:: bash
+   .. prompt:: bash #
 
-  ceph orch daemon rm mgr.my_host.xyzxyz
+     ceph orch daemon rm mgr.my_host.xyzxyz
 
 .. note:: 
 

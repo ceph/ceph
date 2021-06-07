@@ -127,7 +127,7 @@ class TestNFS(MgrTestCase):
         '''
         Test deletion of a single nfs cluster.
         '''
-        self._nfs_cmd('cluster', 'delete', self.cluster_id)
+        self._nfs_cmd('cluster', 'rm', self.cluster_id)
         self._check_nfs_cluster_status('No daemons reported',
                                        'NFS Ganesha cluster could not be deleted')
 
@@ -179,7 +179,7 @@ class TestNFS(MgrTestCase):
         '''
         Delete an export.
         '''
-        self._nfs_cmd('export', 'delete', self.cluster_id, self.pseudo_path)
+        self._nfs_cmd('export', 'rm', self.cluster_id, self.pseudo_path)
         self._check_auth_ls()
 
     def _test_list_export(self):
@@ -243,9 +243,9 @@ class TestNFS(MgrTestCase):
         '''
         Return port and ip for a cluster
         '''
-        #{'test': [{'hostname': 'smithi068', 'ip': ['172.21.15.68'], 'port': 2049}]}
-        info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))['test'][0]
-        return info_output["port"], info_output["ip"][0]
+        #{'test': {'backend': [{'hostname': 'smithi068', 'ip': '172.21.15.68', 'port': 2049}]}}
+        info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))['test']['backend'][0]
+        return info_output["port"], info_output["ip"]
 
     def _test_mnt(self, pseudo_path, port, ip, check=True):
         '''
@@ -297,7 +297,7 @@ class TestNFS(MgrTestCase):
         Test idempotency of cluster create and delete commands.
         '''
         self._test_idempotency(self._test_create_cluster, ['nfs', 'cluster', 'create', self.cluster_id])
-        self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'delete', self.cluster_id])
+        self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'rm', self.cluster_id])
 
     def test_create_cluster_with_invalid_cluster_id(self):
         '''
@@ -333,7 +333,7 @@ class TestNFS(MgrTestCase):
         self._test_idempotency(self._create_default_export, ['nfs', 'export', 'create', 'cephfs',
                                                              self.fs_name, self.cluster_id,
                                                              self.pseudo_path])
-        self._test_idempotency(self._delete_export, ['nfs', 'export', 'delete', self.cluster_id,
+        self._test_idempotency(self._delete_export, ['nfs', 'export', 'rm', self.cluster_id,
                                                      self.pseudo_path])
         self._test_delete_cluster()
 
@@ -443,14 +443,23 @@ class TestNFS(MgrTestCase):
         '''
         self._test_create_cluster()
         info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))
-        info_ip = info_output[self.cluster_id][0].pop("ip")
-        host_details = {self.cluster_id: [{
-            "hostname": self._sys_cmd(['hostname']).decode("utf-8").strip(),
-            "port": 2049
-            }]}
+        print(f'info {info_output}')
+        info_ip = info_output[self.cluster_id].get('backend', [])[0].pop("ip")
+        host_details = {
+            self.cluster_id: {
+                'backend': [
+                    {
+                        "hostname": self._sys_cmd(['hostname']).decode("utf-8").strip(),
+                        "port": 2049
+                    }
+                ],
+                "virtual_ip": None,
+            }
+        }
         host_ip = self._sys_cmd(['hostname', '-I']).decode("utf-8").split()
+        print(f'host_ip is {host_ip}, info_ip is {info_ip}')
         self.assertDictEqual(info_output, host_details)
-        self.assertTrue(any([ip in info_ip for ip in host_ip]))
+        self.assertTrue(info_ip in host_ip)
         self._test_delete_cluster()
 
     def test_cluster_set_reset_user_config(self):
