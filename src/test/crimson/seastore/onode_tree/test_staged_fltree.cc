@@ -846,6 +846,8 @@ class DummyChildPool {
     field_type_t field_type() const override { return field_type_t::N0; }
     const char* read() const override {
       ceph_abort("impossible path"); }
+    extent_len_t get_node_size() const override {
+      ceph_abort("impossible path"); }
     nextent_state_t get_extent_state() const override {
       ceph_abort("impossible path"); }
     level_t level() const override { return 0u; }

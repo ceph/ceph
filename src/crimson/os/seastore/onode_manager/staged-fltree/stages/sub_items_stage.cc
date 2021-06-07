@@ -34,13 +34,13 @@ IA_TEMPLATE(KeyT::VIEW);
 IA_TEMPLATE(KeyT::HOBJ);
 
 node_offset_t internal_sub_items_t::trim_until(
-    NodeExtentMutable&, internal_sub_items_t& items, index_t index)
+    NodeExtentMutable& mut, internal_sub_items_t& items, index_t index)
 {
   assert(index != 0);
   auto keys = items.keys();
   assert(index <= keys);
   size_t ret = sizeof(internal_sub_item_t) * (keys - index);
-  assert(ret < NODE_BLOCK_SIZE);
+  assert(ret < mut.get_length());
   return ret;
 }
 
@@ -152,7 +152,7 @@ node_offset_t leaf_sub_items_t::trim_until(
                      size_trim_offsets);
   mut.copy_in_absolute((void*)items.p_num_keys, num_keys_t(index));
   size_t ret = size_trim_offsets + (p_shift_start - p_items_start);
-  assert(ret < NODE_BLOCK_SIZE);
+  assert(ret < mut.get_length());
   return ret;
 }
 

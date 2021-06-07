@@ -64,7 +64,6 @@ inline bool is_valid_index(index_t index) { return index < INDEX_UPPER_BOUND; }
 // we support up to 64 KiB tree nodes
 using node_offset_t = uint16_t;
 constexpr node_offset_t DISK_BLOCK_SIZE = 1u << 12;
-constexpr node_offset_t NODE_BLOCK_SIZE = DISK_BLOCK_SIZE * 1u;
 constexpr auto MAX_NODE_SIZE =
     (extent_len_t)std::numeric_limits<node_offset_t>::max() + 1;
 
@@ -176,9 +175,10 @@ inline std::ostream& operator<<(std::ostream& os, const tree_stats_t& stats) {
 }
 
 template <typename PtrType>
-void reset_ptr(PtrType& ptr, const char* origin_base, const char* new_base) {
+void reset_ptr(PtrType& ptr, const char* origin_base,
+               const char* new_base, extent_len_t node_size) {
   assert((const char*)ptr > origin_base);
-  assert((const char*)ptr - origin_base < NODE_BLOCK_SIZE);
+  assert((const char*)ptr - origin_base < (int)node_size);
   ptr = reinterpret_cast<PtrType>(
       (const char*)ptr - origin_base + new_base);
 }

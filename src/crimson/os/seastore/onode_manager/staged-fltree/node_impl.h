@@ -64,6 +64,7 @@ class NodeImpl {
   virtual field_type_t field_type() const = 0;
   virtual laddr_t laddr() const = 0;
   virtual const char* read() const = 0;
+  virtual extent_len_t get_node_size() const = 0;
   virtual nextent_state_t get_extent_state() const = 0;
   virtual void prepare_mutate(context_t) = 0;
   virtual bool is_level_tail() const = 0;
