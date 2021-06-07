@@ -60,7 +60,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             realm: Optional[str] = None,
     ) -> Tuple[int, str, str]:
         """Create an RGW export"""
-        clients = None
+        clients = []
         squash = 'none'
         if addr:
             clients = [{
