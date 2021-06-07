@@ -12,14 +12,9 @@
  *
  */
 
-#include <boost/type_traits.hpp>
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
+#include <boost/type_traits.hpp>
+
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -42,6 +37,8 @@ namespace fs = std::experimental::filesystem;
 
 // set set_mon_vals()
 #define dout_subsys ceph_subsys_monc
+
+namespace fs = std::filesystem;
 
 using std::cerr;
 using std::cout;

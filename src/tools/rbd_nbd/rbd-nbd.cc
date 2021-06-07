@@ -44,13 +44,7 @@
 #include <libnl3/netlink/genl/ctrl.h>
 #include <libnl3/netlink/genl/mngt.h>
 
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -85,6 +79,8 @@ namespace fs = std::experimental::filesystem;
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-nbd: "
+
+namespace fs = std::filesystem;
 
 using boost::endian::big_to_native;
 using boost::endian::native_to_big;

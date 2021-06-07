@@ -6,17 +6,11 @@
  */
 
 #include "include/compat.h"
+#include <filesystem>
 #include <set>
 #include <map>
 #include <string>
 #include <memory>
-#if __has_include(<filesystem>)
-#include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -43,6 +37,8 @@ namespace fs = std::experimental::filesystem;
 #define dtrace dout(30)
 #define dwarn dout(0)
 #define dinfo dout(0)
+
+namespace fs = std::filesystem;
 
 using std::cerr;
 using std::ostream;
