@@ -522,9 +522,9 @@ private:
       return 0;
 
 
-    auto log = pbucket_info->layout.logs.cbegin();
-    if (log->gen < totrim.gen) {
+    if (pbucket_info->layout.logs.front().gen < totrim.gen) {
       clean_info = {*pbucket_info, {}};
+      auto log = clean_info->first.layout.logs.cbegin();
       if (log->layout.type == rgw::BucketLogType::InIndex) {
 	clean_info->second = log->layout.in_index;
       } else {
