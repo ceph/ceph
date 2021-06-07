@@ -1,6 +1,7 @@
 import errno
 import json
 import logging
+import subprocess
 from typing import List, Any, Dict, Tuple, Optional, TYPE_CHECKING, TypeVar, Callable, cast
 from os.path import normpath
 
@@ -123,6 +124,26 @@ class ExportMgr:
         except TimedOut:
             log.exception("Ganesha timed out")
 
+    def _exec(self, args: List[str]) -> Tuple[int, str, str]:
+        try:
+            util = args.pop(0)
+            cmd = [
+                util,
+                '-k', str(self.mgr.get_ceph_option('keyring')),
+                '-n', f'mgr.{self.mgr.get_mgr_id()}',
+            ] + args
+            log.debug('exec: ' + ' '.join(cmd))
+            p = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=10,
+            )
+        except subprocess.CalledProcessError as ex:
+            log.error(f'Error executing <<{ex.cmd}>>: {ex.output}')
+        except subprocess.TimeoutExpired:
+            log.error(f'timeout (10s) executing <<{cmd}>>')
+        return p.returncode, p.stdout.decode(), p.stderr.decode()
+
     @property
     def exports(self) -> Dict[str, List[Export]]:
         if self._exports is None:
@@ -208,6 +229,10 @@ class ExportMgr:
                 if isinstance(export.fsal, CephFSFSAL) or isinstance(export.fsal, RGWFSAL):
                     assert export.fsal.user_id
                     self._delete_user(export.fsal.user_id)
+                if isinstance(export.fsal, RGWFSAL):
+                    assert export.fsal.user_id
+                    uid = f'nfs.{cluster_id}.{export.path}'
+                    self._exec(['radosgw-admin', 'user', 'rm', '--uid', uid])
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                 return 0, "Successfully deleted export", ""
@@ -435,11 +460,13 @@ class FSExport(ExportMgr):
     def create_rgw_export(self,
                           bucket: str,
                           cluster_id: str,
-                          path: str,
                           pseudo_path: str,
                           read_only: bool,
                           squash: str,
+                          realm: Optional[str] = None,
                           clients: list = []) -> Tuple[int, str, str]:
+        if '/' in bucket:
+            raise NFSInvalidOperation('"/" is not allowed in bucket name')
         pseudo_path = self.format_path(pseudo_path)
 
         if cluster_id not in self.exports:
@@ -447,6 +474,17 @@ class FSExport(ExportMgr):
 
         if not self._fetch_export(cluster_id, pseudo_path):
             # generate access+secret keys
+            uid = f'nfs.{cluster_id}.{bucket}'
+            ret, out, err = self._exec(['radosgw-admin', 'user', 'info', '--uid', uid])
+            if ret:
+                ret, out, err = self._exec(['radosgw-admin', 'user', 'create', '--uid', uid,
+                                            '--display-name', uid])
+                if ret:
+                    raise NFSException(f'Failed to create user {uid}')
+            j = json.loads(out)
+            # FIXME: make this more tolerate of unexpected output?
+            access_key = j['keys'][0]['access_key']
+            secret_key = j['keys'][0]['secret_key']
 
             ex_id = self._gen_export_id(cluster_id)
             if clients:
@@ -456,16 +494,16 @@ class FSExport(ExportMgr):
             else:
                 access_type = "RW"
             ex_dict = {
-                'path': self.format_path(path),
+                'path': self.format_path(bucket),
                 'pseudo': pseudo_path,
                 'cluster_id': cluster_id,
                 'access_type': access_type,
                 'squash': squash,
                 'fsal': {
                     "name": "RGW",
-                    # "user_id": user_id,
-                    # "access_key_id": access_key_id,
-                    # "secret_access_key": secret_access_key,
+                    "user_id": uid,
+                    "access_key_id": access_key,
+                    "secret_access_key": secret_key,
                 },
                 'clients': clients
             }
@@ -473,7 +511,7 @@ class FSExport(ExportMgr):
             self._save_export(cluster_id, export)
             result = {
                 "bind": pseudo_path,
-                "path": path,
+                "path": bucket,
                 "cluster": cluster_id,
                 "mode": access_type,
             }
