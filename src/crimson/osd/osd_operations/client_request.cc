@@ -99,13 +99,13 @@ seastar::future<> ClientRequest::start()
               }
               return with_blocking_future_interruptible<IOInterruptCondition>(
                 handle.enter(pp(pg).await_map)
-              ).then_interruptible([this, &pg]() mutable {
+              ).then_interruptible([this, &pg] {
                 return with_blocking_future_interruptible<IOInterruptCondition>(
                     pg.osdmap_gate.wait_for_map(m->get_min_epoch()));
-              }).then_interruptible([this, &pg](auto map) mutable {
+              }).then_interruptible([this, &pg](auto map) {
                 return with_blocking_future_interruptible<IOInterruptCondition>(
                     handle.enter(pp(pg).wait_for_active));
-              }).then_interruptible([this, &pg]() mutable {
+              }).then_interruptible([this, &pg]() {
                 return with_blocking_future_interruptible<IOInterruptCondition>(
                     pg.wait_for_active_blocker.wait());
               }).then_interruptible([this, pgref=std::move(pgref)]() mutable {
@@ -119,7 +119,7 @@ seastar::future<> ClientRequest::start()
                 }
               });
             })
-          ).then_interruptible([this, pgref]() mutable {
+          ).then_interruptible([this, pgref]() {
             sequencer.finish_op(get_id());
             return seastar::stop_iteration::yes;
           });
