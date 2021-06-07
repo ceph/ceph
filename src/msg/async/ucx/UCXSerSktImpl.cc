@@ -26,17 +26,44 @@ static ostream& _prefix(std::ostream *_dout,
 }
 
 UCXSerSktImpl::UCXSerSktImpl(CephContext *cct, UCXWorker *ucx_worker,
-                             entity_addr_t& ser_addr, unsigned addr_slot)
-  : ServerSocketImpl(ser_addr.get_type(), addr_slot),
-    cct(cct), ucx_worker(ucx_worker)
+                             std::shared_ptr<UCXProEngine> ucp_worker_engine,
+                             entity_addr_t& listen_addr, unsigned addr_slot)
+  : ServerSocketImpl(listen_addr.get_type(), addr_slot),
+    cct(cct), net(cct), ucx_worker(ucx_worker), ucp_worker_engine(ucp_worker_engine),
+    listen_addr(listen_addr)
 {
 }
 
-int UCXSerSktImpl::listen(entity_addr_t &listen_addr, const SocketOptions &skt_opts)
+int UCXSerSktImpl::listen(const SocketOptions &skt_opts)
 {
-  int rst = 0;
+  struct sockaddr_in listen_addr;
+  memset(&listen_addr, 0, sizeof(listen_addr));
+  listen_addr = this->listen_addr.in4_addr();
 
-  return rst;
+  ucp_listener_params_t listener_params;
+  listener_params.field_mask = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                               UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+  listener_params.sockaddr.addr = (const sockaddr*)&listen_addr;
+  listener_params.sockaddr.addrlen = sizeof(listen_addr);
+  listener_params.conn_handler.cb  = recv_req_con_cb;
+  listener_params.conn_handler.arg = reinterpret_cast<void*>(this);
+
+  listen_skt_notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
+
+  ucs_status_t status = ucp_listener_create(ucp_worker_engine->get_ucp_worker(),
+                                            &listener_params,
+                                            &ucp_ser_listener);
+  if (status != UCS_OK) {
+      lderr(cct) << "ucp_listener_create() failed: " << ucs_status_string(status)
+                 << dendl;
+      return false;
+  }
+
+  ldout(cct, 20) << "started listener " << ucp_ser_listener << " on "
+                 << sockaddr_str((const sockaddr*)&listen_addr, sizeof(listen_addr)) << ", "
+                 << "server listen fd: " << listen_skt_notify_fd
+                 << dendl;
+  return true;
 }
 
 int UCXSerSktImpl::accept(ConnectedSocket *peer_socket, const SocketOptions &opt,
@@ -51,12 +78,81 @@ int UCXSerSktImpl::accept(ConnectedSocket *peer_socket, const SocketOptions &opt
 
 void UCXSerSktImpl::abort_accept()
 {
-  if (listen_socket >= 0) {
-    ::close(listen_socket);
+  if (listen_skt_notify_fd >= 0) {
+    ::close(listen_skt_notify_fd);
   }
 }
 
 int UCXSerSktImpl::fd() const
 {
-  return listen_socket;
+  ceph_assert(listen_skt_notify_fd != -1);
+  return listen_skt_notify_fd;
+}
+
+const std::string
+UCXSerSktImpl::sockaddr_str(const struct sockaddr* saddr, size_t addrlen)
+{
+  char buf[128];
+  int port;
+
+  if (saddr->sa_family != AF_INET) {
+      return "<unknown address family>";
+  }
+
+  struct sockaddr_storage addr = {0};
+  memcpy(&addr, saddr, addrlen);
+  switch (addr.ss_family) {
+  case AF_INET:
+      inet_ntop(AF_INET, &((struct sockaddr_in*)&addr)->sin_addr,
+                buf, sizeof(buf));
+      port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
+      break;
+  case AF_INET6:
+      inet_ntop(AF_INET6, &((struct sockaddr_in6*)&addr)->sin6_addr,
+                buf, sizeof(buf));
+      port = ntohs(((struct sockaddr_in6*)&addr)->sin6_port);
+      break;
+  default:
+      return "<invalid address>";
+  }
+
+  snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), ":%d", port);
+  return buf;
+}
+
+void UCXSerSktImpl::listen_notify()
+{
+  eventfd_t listen_sync_val = 0x1;
+  int rst = eventfd_write(listen_skt_notify_fd, listen_sync_val);
+  ceph_assert(rst == 0);
+}
+
+void UCXSerSktImpl::recv_req_con_cb(ucp_conn_request_h conn_req, void *arg)
+{
+  UCXSerSktImpl *this_self = reinterpret_cast<UCXSerSktImpl*>(arg);
+
+  ucp_conn_request_attr_t conn_req_attr;
+  conn_req_attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+  ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
+
+  if (status == UCS_OK) {
+    ldout(this_self->cct, 20) << "got new connection request "
+                              << conn_req << " from client "
+                              << this_self->sockaddr_str(
+                                   (const struct sockaddr*)
+                                      &conn_req_attr.client_address,
+                                    sizeof(conn_req_attr.client_address))
+                              << dendl;
+  } else {
+    lderr(this_self->cct) << "got new connection request " << conn_req << ", "
+                          << "ucp_conn_request_query() failed "
+                          << "(" << ucs_status_string(status) << ")"
+                          << dendl;
+  }
+
+  conn_req_t conn_request;
+  conn_request.conn_request = conn_req;
+  gettimeofday(&conn_request.arrival_time, NULL);
+
+  this_self->conn_requests.push_back(conn_request);
 }

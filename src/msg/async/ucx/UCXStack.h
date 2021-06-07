@@ -21,6 +21,7 @@
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "msg/msg_types.h"
 #include "msg/async/Stack.h"
 
 class UCXWorker;
@@ -54,6 +55,7 @@ public:
 
   void fire_polling();
   void progress();
+  ucp_worker_h get_ucp_worker();
 
   static ucs_status_t
   am_recv_callback(void *arg, const void *header,
@@ -89,22 +91,37 @@ public:
 };
 
 class UCXSerSktImpl : public ServerSocketImpl {
-protected:
+  typedef struct {
+      ucp_conn_request_h conn_request;
+      struct timeval     arrival_time;
+  } conn_req_t;
+public:
   CephContext *cct;
-  int listen_socket = -1;
+private:
+  ceph::NetHandler net;
+  ucp_listener_h ucp_ser_listener = nullptr;
+  int listen_skt_notify_fd = -1;
   UCXWorker *ucx_worker;
+  std::shared_ptr<UCXProEngine> ucp_worker_engine;
   entity_addr_t listen_addr;
+  std::deque<conn_req_t> conn_requests;
+
+  const std::string sockaddr_str(const struct sockaddr* saddr, size_t addrlen);
 
 public:
   UCXSerSktImpl(CephContext *cct, UCXWorker *ucx_worker,
+                std::shared_ptr<UCXProEngine> ucp_worker_engine,
                 entity_addr_t& listen_addr, unsigned addr_slot);
 
-  int listen(entity_addr_t &listen_addr, const SocketOptions &skt_opts);
+  int listen(const SocketOptions &skt_opts);
 
   int accept(ConnectedSocket *peer_socket, const SocketOptions &opts,
              entity_addr_t *peer_addr, Worker *ucx_worker) override;
   void abort_accept() override;
   int fd() const override;
+
+  void listen_notify();
+  static void recv_req_con_cb(ucp_conn_request_h conn_req, void *arg);
 };
 
 class UCXWorker : public Worker {

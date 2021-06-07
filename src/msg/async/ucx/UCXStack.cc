@@ -46,8 +46,8 @@ int UCXWorker::listen(entity_addr_t &listen_addr, unsigned addr_slot,
   int rst = 0;
   ucp_worker_engine->fire_polling();
 
-  auto ucx_serskt = new UCXSerSktImpl(cct, this, listen_addr, addr_slot);
-  rst = ucx_serskt->listen(listen_addr, ser_opts);
+  auto ucx_serskt = new UCXSerSktImpl(cct, this, ucp_worker_engine, listen_addr, addr_slot);
+  rst = ucx_serskt->listen(ser_opts);
   if (rst < 0) {
     lderr(cct) << "listen" << listen_addr << " failed." << dendl;
     delete ucx_serskt;
@@ -55,7 +55,7 @@ int UCXWorker::listen(entity_addr_t &listen_addr, unsigned addr_slot,
   }
 
   *ser_skt = ServerSocket(std::unique_ptr<ServerSocketImpl>(ucx_serskt));
-  return rst;
+  return 0;
 }
 
 int UCXWorker::connect(const entity_addr_t &peer_addr,
@@ -116,6 +116,11 @@ void UCXProEngine::progress()
   }
 }
 
+ucp_worker_h UCXProEngine::get_ucp_worker()
+{
+  return ucp_worker;
+}
+
 ucs_status_t
 UCXProEngine::am_recv_callback(void *arg, const void *header,
                                size_t header_length,
@@ -167,7 +172,6 @@ UCXStack::UCXStack(CephContext *cct)
   param.cb         = UCXProEngine::am_recv_callback;
   param.arg        = ucp_worker_engine.get();
   ceph_assert(UCS_OK == ucp_worker_set_am_recv_handler(ucp_worker, &param));
-
 }
 
 UCXStack::~UCXStack()
