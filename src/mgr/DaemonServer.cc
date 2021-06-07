@@ -1442,7 +1442,7 @@ bool DaemonServer::_handle_command(
       return true;
     }
     bool no_increasing = false;
-    cmd_getval(cmdctx->cmdmap, "no_increasing", no_increasing);
+    cmd_getval_compat_cephbool(cmdctx->cmdmap, "no_increasing", no_increasing);
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap &osdmap, const PGMap& pgmap) {

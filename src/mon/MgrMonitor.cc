@@ -1184,10 +1184,10 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       ss << "module '" << module << "' is already enabled (always-on)";
       goto out;
     }
-    string force;
-    cmd_getval(cmdmap, "force", force);
+    bool force = false;
+    cmd_getval_compat_cephbool(cmdmap, "force", force);
     if (!pending_map.all_support_module(module) &&
-	force != "--force") {
+	!force) {
       ss << "all mgr daemons do not support module '" << module << "', pass "
 	 << "--force to force enablement";
       r = -ENOENT;
@@ -1195,7 +1195,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     }
 
     std::string can_run_error;
-    if (force != "--force" && !pending_map.can_run_module(module, &can_run_error)) {
+    if (!force && !pending_map.can_run_module(module, &can_run_error)) {
       ss << "module '" << module << "' reports that it cannot run on the active "
             "manager daemon: " << can_run_error << " (pass --force to force "
             "enablement)";

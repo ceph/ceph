@@ -77,7 +77,9 @@
  *
  * COMMAND("auth add "
  *   	   "name=entity,type=CephString "
- *   	   "name=caps,type=CephString,n=N,req=false",
+ *   	   "name=caps,type=CephString,n=N,req=false "
+ *         "-- "
+ *         "name=some_option,type=CephString,req=false",
  *   	   "add auth info for <name> from input file, or random key "
  *   	   "if no input given, and/or any caps specified in the command")
  *
@@ -88,6 +90,12 @@
  * enters auth add client.admin 'mon rwx' 'osd *'.  The result will be a
  * JSON object like {"prefix":"auth add", "entity":"client.admin",
  * "caps":["mon rwx", "osd *"]}.
+ *
+ * The -- separates positional from non-positional (and, by implication,
+ * optional) arguments.  Note that CephBool is assumed to be non-positional
+ * and will also implicitly mark that any following arguments are
+ * non-positional.
+ *
  * Note that
  * 	- string literals are accumulated into 'prefix'
  * 	- n=1 descriptors are given normal string or int object values
@@ -474,7 +482,7 @@ COMMAND_WITH_FLAG("mon remove "
 	"remove monitor named <name>", "mon", "rw",
     FLAG(DEPRECATED))
 COMMAND("mon feature ls "
-        "name=with_value,type=CephChoices,strings=--with-value,req=false",
+        "name=with_value,type=CephBool,req=false",
         "list available mon map features to be set/unset",
         "mon", "r")
 COMMAND("mon feature set "
@@ -750,7 +758,7 @@ COMMAND("osd crush rule rename "
         "rename crush rule <srcname> to <dstname>",
         "osd", "rw")
 COMMAND("osd crush tree "
-        "name=shadow,type=CephChoices,strings=--show-shadow,req=false",
+        "name=show_shadow,type=CephBool,req=false",
 	"dump crush buckets and items in a tree view",
 	"osd", "r")
 COMMAND("osd crush ls name=node,type=CephString,goodchars=[A-Za-z0-9-_.]",
@@ -1166,7 +1174,7 @@ COMMAND("osd force_recovery_stretch_mode " \
 COMMAND("osd tier add "
 	"name=pool,type=CephPoolname "
 	"name=tierpool,type=CephPoolname "
-	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
+	"name=force_nonempty,type=CephBool,req=false",
 	"add the tier <tierpool> (the second one) to base pool <pool> (the first one)",
 	"osd", "rw")
 COMMAND("osd tier rm "
@@ -1256,7 +1264,7 @@ COMMAND("mgr services",
         "mgr", "r")
 COMMAND("mgr module enable "
 	"name=module,type=CephString "
-	"name=force,type=CephChoices,strings=--force,req=false",
+	"name=force,type=CephBool,req=false",
 	"enable mgr module", "mgr", "rw")
 COMMAND("mgr module disable "
 	"name=module,type=CephString",
@@ -1286,7 +1294,7 @@ COMMAND("config rm"
 	"config", "rw")
 COMMAND("config get "
 	"name=who,type=CephString "
-	"name=key,type=CephString,req=False",
+	"name=key,type=CephString,req=false",
 	"Show configuration option(s) for an entity",
 	"config", "r")
 COMMAND("config dump",
@@ -1302,7 +1310,7 @@ COMMAND("config ls",
 COMMAND("config assimilate-conf",
 	"Assimilate options from a conf, and return a new, minimal conf file",
 	"config", "rw")
-COMMAND("config log name=num,type=CephInt,req=False",
+COMMAND("config log name=num,type=CephInt,req=false",
 	"Show recent history of config changes",
 	"config", "r")
 COMMAND("config reset "
@@ -1352,7 +1360,7 @@ COMMAND_WITH_FLAG("connection scores reset",
 		  "mon", "rwx",
 		  FLAG(TELL))
 COMMAND_WITH_FLAG("sync_force "
-            "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
+            "name=yes_i_really_mean_it,type=CephBool,req=false",
             "force sync of and clear monitor store",
             "mon", "rw",
             FLAG(TELL))

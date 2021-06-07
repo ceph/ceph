@@ -138,13 +138,20 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
 
   stringstream ss(cmd);
   std::string word;
+  bool positional = true;
 
   while (std::getline(ss, word, ' ')) {
+    if (word == "--") {
+      positional = false;
+      continue;
+    }
+
     // if no , or =, must be a plain word to put out
     if (word.find_first_of(",=") == string::npos) {
       f->dump_string("arg", word);
       continue;
     }
+
     // accumulate descriptor keywords in desckv
     auto desckv = cmddesc_get_args(word);
     // name the individual desc object based on the name key
@@ -168,8 +175,20 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
     }
 
     // dump all the keys including name into the array
+    if (!positional) {
+      desckv["positional"] = "false";
+    }
     for (auto [key, value] : desckv) {
-      f->dump_string(key, value);
+      if (key == "positional") {
+	if (!HAVE_FEATURE(features, SERVER_QUINCY)) {
+	  continue;
+	}
+	f->dump_bool(key, value == "true" || value == "True");
+      } else if (key == "req" && HAVE_FEATURE(features, SERVER_QUINCY)) {
+	f->dump_bool(key, value == "true" || value == "True");
+      } else {
+	f->dump_string(key, value);
+      }
     }
     f->close_section(); // attribute object for individual desc
   }
@@ -550,6 +569,30 @@ bool validate_str_arg(std::string_view value,
   }
 }
 
+bool validate_bool(CephContext *cct,
+		  const cmdmap_t& cmdmap,
+		  const arg_desc_t& desc,
+		  const std::string_view name,
+		  const std::string_view type,
+		  std::ostream& os)
+{
+  bool v;
+  try {
+    if (!cmd_getval(cmdmap, string(name), v)) {
+      if (auto req = desc.find("req");
+	  req != end(desc) && req->second == "false") {
+	return true;
+      } else {
+	os << "missing required parameter: '" << name << "'";
+	return false;
+      }
+    }
+    return true;
+  } catch (const bad_cmd_get& e) {
+    return false;
+  }
+}
+
 template<bool is_vector,
 	 typename T,
 	 typename Value = std::conditional_t<is_vector,
@@ -629,6 +672,9 @@ bool validate_cmd(CephContext* cct,
       } else if (type == "CephFloat") {
 	return !validate_arg<false, double>(cct, cmdmap, arg_desc,
 					    name, type, os);
+      } else if (type == "CephBool") {
+	return !validate_bool(cct, cmdmap, arg_desc,
+			      name, type, os);
       } else {
 	return !validate_arg<false, string>(cct, cmdmap, arg_desc,
 					    name, type, os);
@@ -668,6 +714,25 @@ bool cmd_getval(const cmdmap_t& cmdmap,
     } catch (boost::bad_get&) {
       throw bad_cmd_get(k, cmdmap);
     }
+  }
+}
+
+bool cmd_getval_compat_cephbool(
+  const cmdmap_t& cmdmap,
+  const std::string& k, bool& val)
+{
+  try {
+    return cmd_getval(cmdmap, k, val);
+  } catch (bad_cmd_get& e) {
+    // try as legacy/compat CephChoices
+    std::string t;
+    if (!cmd_getval(cmdmap, k, t)) {
+      return false;
+    }
+    std::string expected = "--"s + k;
+    std::replace(expected.begin(), expected.end(), '_', '-');
+    val = (t == expected);
+    return true;
   }
 }
 
