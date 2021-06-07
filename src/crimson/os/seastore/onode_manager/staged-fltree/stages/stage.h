@@ -859,7 +859,7 @@ struct staged {
    *   size() -> node_offset_t
    *   size_overhead() -> node_offset_t
    *   (IS_BOTTOM) get_p_value() -> const value_t*
-   *   (!IS_BOTTOM) get_nxt_container() -> nxt_stage::container_t
+   *   (!IS_BOTTOM) get_nxt_container() -> container_range_t
    *   (!IS_BOTTOM) size_to_nxt() -> node_offset_t
    * seek:
    *   operator++() -> iterator_t&

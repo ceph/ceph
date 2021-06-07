@@ -395,6 +395,11 @@ struct memory_range_t {
   const char* p_end;
 };
 
+struct container_range_t {
+  memory_range_t range;
+  extent_len_t node_size;
+};
+
 enum class ContainerType { ITERATIVE, INDEXABLE };
 
 // the input type to construct the value during insert.

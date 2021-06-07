@@ -38,8 +38,10 @@ class item_iterator_t {
   using value_input_t = value_input_type_t<NODE_TYPE>;
   using value_t = value_type_t<NODE_TYPE>;
  public:
-  item_iterator_t(const memory_range_t& range)
-      : p_items_start(range.p_start), p_items_end(range.p_end) {
+  item_iterator_t(const container_range_t& range)
+      : node_size{range.node_size},
+        p_items_start(range.range.p_start),
+        p_items_end(range.range.p_end) {
     assert(p_items_start < p_items_end);
     next_item_range(p_items_end);
   }
@@ -73,8 +75,8 @@ class item_iterator_t {
   node_offset_t size_overhead() const {
     return sizeof(node_offset_t) + get_key().size_overhead();
   }
-  memory_range_t get_nxt_container() const {
-    return {item_range.p_start, get_key().p_start()};
+  container_range_t get_nxt_container() const {
+    return {{item_range.p_start, get_key().p_start()}, node_size};
   }
   bool has_next() const {
     assert(p_items_start <= item_range.p_start);
@@ -109,8 +111,9 @@ class item_iterator_t {
     index_t index;
     ceph::decode(index, delta);
 
-    item_iterator_t ret({p_node_start + start_offset,
-                         p_node_start + end_offset});
+    item_iterator_t ret({{p_node_start + start_offset,
+                          p_node_start + end_offset},
+                         node_size});
     while (index > 0) {
       ++ret;
       --index;
@@ -156,6 +159,7 @@ class item_iterator_t {
     item_range = {p_item_start, p_item_end};
   }
 
+  extent_len_t node_size;
   const char* p_items_start;
   const char* p_items_end;
   mutable memory_range_t item_range;

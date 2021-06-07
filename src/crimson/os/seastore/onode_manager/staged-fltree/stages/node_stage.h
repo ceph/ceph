@@ -98,7 +98,7 @@ class node_extent_t {
   node_offset_t size_to_nxt_at(index_t index) const;
   node_offset_t size_overhead_at(index_t index) const {
     return FieldType::ITEM_OVERHEAD; }
-  memory_range_t get_nxt_container(index_t index) const;
+  container_range_t get_nxt_container(index_t index) const;
 
   template <typename T = FieldType>
   std::enable_if_t<T::FIELD_TYPE == field_type_t::N3, const value_t*>
@@ -107,7 +107,7 @@ class node_extent_t {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       return p_fields->get_p_child_addr(index, node_size);
     } else {
-      auto range = get_nxt_container(index);
+      auto range = get_nxt_container(index).range;
       auto ret = reinterpret_cast<const value_header_t*>(range.p_start);
       assert(range.p_start + ret->allocation_size() == range.p_end);
       return ret;
