@@ -6366,7 +6366,6 @@ int mirror_image_status_set(cls_method_context_t hctx, bufferlist *in,
  * Output:
  * @returns 0 on success, negative error code on failure
  *
- * NOTE: deprecated - remove this method after Octopus is unsupported
  */
 int mirror_image_status_remove(cls_method_context_t hctx, bufferlist *in,
 			       bufferlist *out) {
