@@ -5187,11 +5187,11 @@ struct FillInVerifyExtent : public Context {
     r(r), rval(rv), outdatap(blp), maybe_crc(mc),
     size(size), osd(osd), soid(soid), flags(flags) {}
   void finish(int len) override {
-    *r = len;
     if (len < 0) {
       *rval = len;
       return;
     }
+    *r = len;
     *rval = 0;
 
     // whole object?  can we verify the checksum?
