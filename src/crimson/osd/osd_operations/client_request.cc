@@ -123,10 +123,11 @@ seastar::future<> ClientRequest::start()
             sequencer.finish_op(get_id());
             return seastar::stop_iteration::yes;
           });
-	}, [pgref](std::exception_ptr eptr) {
+	}, [this, pgref](std::exception_ptr eptr) {
           if (should_abort_request(std::move(eptr))) {
             return seastar::stop_iteration::yes;
           } else {
+            sequencer.maybe_reset(get_id());
             return seastar::stop_iteration::no;
           }
 	}, pgref);
