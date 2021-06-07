@@ -395,11 +395,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "mon feature ls") {
    
     bool list_with_value = false;
-    string with_value;
-    if (cmd_getval(cmdmap, "with_value", with_value) &&
-        with_value == "--with-value") {
-      list_with_value = true;
-    }
+    cmd_getval_compat_cephbool(cmdmap, "with_value", list_with_value);
 
     MonMap *p = mon.monmap;
 

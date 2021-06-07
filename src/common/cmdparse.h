@@ -62,6 +62,10 @@ struct bad_cmd_get : public std::exception {
 bool cmd_getval(const cmdmap_t& cmdmap,
 		std::string_view k, bool& val);
 
+bool cmd_getval_compat_cephbool(
+  const cmdmap_t& cmdmap,
+  const std::string& k, bool& val);
+
 template <typename T>
 bool cmd_getval(const cmdmap_t& cmdmap,
 		std::string_view k, T& val)

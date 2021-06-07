@@ -111,7 +111,7 @@ COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,req=false " \
 	"name=max_change,type=CephFloat,req=false "			\
 	"name=max_osds,type=CephInt,req=false "			\
-	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
+	"name=no_increasing,type=CephBool,req=false",\
 	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw")
 COMMAND("osd test-reweight-by-utilization " \
@@ -181,7 +181,7 @@ COMMAND("service status",
         "dump service state", "service", "r")
 
 COMMAND("config show " \
-	"name=who,type=CephString name=key,type=CephString,req=False",
+	"name=who,type=CephString name=key,type=CephString,req=false",
 	"Show running configuration",
 	"mgr", "r")
 COMMAND("config show-with-defaults " \
@@ -203,7 +203,7 @@ COMMAND("device ls-by-host name=host,type=CephString",
 	"mgr", "r")
 COMMAND("device set-life-expectancy name=devid,type=CephString "\
 	"name=from,type=CephString "\
-	"name=to,type=CephString,req=False",
+	"name=to,type=CephString,req=false",
 	"Set predicted device life expectancy",
 	"mgr", "rw")
 COMMAND("device rm-life-expectancy name=devid,type=CephString",
