@@ -269,7 +269,18 @@ class ExportMgr:
         return path
 
     @export_cluster_checker
-    def create_export(self, **kwargs: Any) -> Tuple[int, str, str]:
+    def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Tuple[int, str, str]:
+        # if addr(s) are provided, construct client list and adjust outer block
+        clients = []
+        if addr:
+            clients = [{
+                'addresses': addr,
+                'access_type': 'ro' if kwargs['read_only'] else 'rw',
+                'squash': kwargs['squash'],
+            }]
+            kwargs['squash'] = 'none'
+        kwargs['clients'] = clients
+
         try:
             fsal_type = kwargs.pop('fsal_type')
             if fsal_type == 'cephfs':
