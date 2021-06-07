@@ -64,12 +64,12 @@ class item_iterator_t {
   }
   node_offset_t size() const {
     size_t ret = item_range.p_end - item_range.p_start + sizeof(node_offset_t);
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < node_size);
     return ret;
   };
   node_offset_t size_to_nxt() const {
     size_t ret = get_key().size() + sizeof(node_offset_t);
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < node_size);
     return ret;
   }
   node_offset_t size_overhead() const {
@@ -92,8 +92,8 @@ class item_iterator_t {
   void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
     int start_offset = p_items_start - p_node_start;
     int end_offset = p_items_end - p_node_start;
-    assert(start_offset > 0 && start_offset < NODE_BLOCK_SIZE);
-    assert(end_offset > 0 && end_offset <= NODE_BLOCK_SIZE);
+    assert(start_offset > 0 && start_offset < (int)node_size);
+    assert(end_offset > 0 && end_offset <= (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
     ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
     ceph::encode(_index, encoded);
@@ -107,7 +107,7 @@ class item_iterator_t {
     node_offset_t end_offset;
     ceph::decode(end_offset, delta);
     assert(start_offset < end_offset);
-    assert(end_offset <= NODE_BLOCK_SIZE);
+    assert(end_offset <= node_size);
     index_t index;
     ceph::decode(index, delta);
 

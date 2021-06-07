@@ -188,7 +188,7 @@ struct string_key_view_t {
   }
   node_offset_t size() const {
     size_t ret = length + sizeof(string_size_t);
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < MAX_NODE_SIZE);
     return ret;
   }
   node_offset_t size_logical() const {
@@ -217,9 +217,11 @@ struct string_key_view_t {
   }
   bool operator!=(const string_key_view_t& x) const { return !(*this == x); }
 
-  void reset_to(const char* origin_base, const char* new_base) {
-    reset_ptr(p_key, origin_base, new_base);
-    reset_ptr(p_length, origin_base, new_base);
+  void reset_to(const char* origin_base,
+                const char* new_base,
+                extent_len_t node_size) {
+    reset_ptr(p_key, origin_base, new_base, node_size);
+    reset_ptr(p_length, origin_base, new_base, node_size);
 #ifndef NDEBUG
     string_size_t current_length;
     std::memcpy(&current_length, p_length, sizeof(string_size_t));
@@ -397,7 +399,7 @@ struct ns_oid_view_t {
   node_offset_t size() const {
     if (type() == Type::STR) {
       size_t ret = nspace.size() + oid.size();
-      assert(ret < NODE_BLOCK_SIZE);
+      assert(ret < MAX_NODE_SIZE);
       return ret;
     } else {
       return sizeof(string_size_t);
@@ -417,9 +419,11 @@ struct ns_oid_view_t {
   }
   bool operator!=(const ns_oid_view_t& x) const { return !(*this == x); }
 
-  void reset_to(const char* origin_base, const char* new_base) {
-    nspace.reset_to(origin_base, new_base);
-    oid.reset_to(origin_base, new_base);
+  void reset_to(const char* origin_base,
+                const char* new_base,
+                extent_len_t node_size) {
+    nspace.reset_to(origin_base, new_base, node_size);
+    oid.reset_to(origin_base, new_base, node_size);
   }
 
   template <KeyT KT>
@@ -700,18 +704,20 @@ class key_view_t {
     replace(key);
   }
 
-  void reset_to(const char* origin_base, const char* new_base) {
+  void reset_to(const char* origin_base,
+                const char* new_base,
+                extent_len_t node_size) {
     if (p_shard_pool != nullptr) {
-      reset_ptr(p_shard_pool, origin_base, new_base);
+      reset_ptr(p_shard_pool, origin_base, new_base, node_size);
     }
     if (p_crush != nullptr) {
-      reset_ptr(p_crush, origin_base, new_base);
+      reset_ptr(p_crush, origin_base, new_base, node_size);
     }
     if (p_ns_oid.has_value()) {
-      p_ns_oid->reset_to(origin_base, new_base);
+      p_ns_oid->reset_to(origin_base, new_base, node_size);
     }
     if (p_snap_gen != nullptr) {
-      reset_ptr(p_snap_gen, origin_base, new_base);
+      reset_ptr(p_snap_gen, origin_base, new_base, node_size);
     }
   }
 

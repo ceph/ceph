@@ -191,7 +191,8 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
   key_view = _key_view;
   p_value_header = _p_value_header;
   assert((const char*)p_value_header > p_node_base);
-  assert((const char*)p_value_header - p_node_base < NODE_BLOCK_SIZE);
+  assert((const char*)p_value_header - p_node_base <
+         (int)ref_leaf_node->get_node_size());
 
   value_payload_mut.reset();
   p_value_recorder = nullptr;
@@ -211,10 +212,12 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
 
     auto current_p_node_base = ref_leaf_node->read();
     assert(current_p_node_base != p_node_base);
+    auto node_size = ref_leaf_node->get_node_size();
 
     version.state = current_version.state;
-    reset_ptr(p_value_header, p_node_base, current_p_node_base);
-    key_view->reset_to(p_node_base, current_p_node_base);
+    reset_ptr(p_value_header, p_node_base,
+              current_p_node_base, node_size);
+    key_view->reset_to(p_node_base, current_p_node_base, node_size);
     value_payload_mut.reset();
     p_value_recorder = nullptr;
 
@@ -1713,6 +1716,11 @@ node_version_t LeafNode::get_version() const
 const char* LeafNode::read() const
 {
   return impl->read();
+}
+
+extent_len_t LeafNode::get_node_size() const
+{
+  return impl->get_node_size();
 }
 
 std::tuple<key_view_t, const value_header_t*>

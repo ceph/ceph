@@ -102,6 +102,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   field_type_t field_type() const override { return FIELD_TYPE; }
   laddr_t laddr() const override { return extent.get_laddr(); }
   const char* read() const override { return extent.read().p_start(); }
+  extent_len_t get_node_size() const override { return extent.get_length(); }
   nextent_state_t get_extent_state() const override { return extent.get_state(); }
   void prepare_mutate(context_t c) override { return extent.prepare_mutate(c); }
   bool is_level_tail() const override { return extent.read().is_level_tail(); }
@@ -394,6 +395,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       ceph_abort("impossible path");
     }
+#ifndef NDEBUG
+    if (pp_value) {
+      assert((const char*)(*pp_value) - extent.read().p_start() <
+             extent.get_length());
+    }
+#endif
   }
 
   void get_prev_slot(search_position_t& pos,

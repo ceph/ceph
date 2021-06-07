@@ -63,7 +63,7 @@ class internal_sub_items_t {
   }
   node_offset_t size_before(index_t index) const {
     size_t ret = index * sizeof(internal_sub_item_t);
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < node_size);
     return ret;
   }
   const laddr_packed_t* get_p_value(index_t index) const {
@@ -79,7 +79,7 @@ class internal_sub_items_t {
     int end_offset = p_end - p_node_start;
     assert(start_offset > 0 &&
            start_offset < end_offset &&
-           end_offset < NODE_BLOCK_SIZE);
+           end_offset < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
     ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
   }
@@ -93,7 +93,7 @@ class internal_sub_items_t {
     node_offset_t end_offset;
     ceph::decode(end_offset, delta);
     assert(start_offset < end_offset);
-    assert(end_offset <= NODE_BLOCK_SIZE);
+    assert(end_offset <= node_size);
     return internal_sub_items_t({{p_node_start + start_offset,
                                   p_node_start + end_offset},
                                  node_size});
@@ -233,7 +233,7 @@ class leaf_sub_items_t {
             (index + 1) * sizeof(node_offset_t) +
             get_offset(index).value;
     }
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < node_size);
     return ret;
   }
   node_offset_t size_overhead_at(index_t index) const { return sizeof(node_offset_t); }
@@ -252,7 +252,7 @@ class leaf_sub_items_t {
     int end_offset = p_end - p_node_start;
     assert(start_offset > 0 &&
            start_offset < end_offset &&
-           end_offset < NODE_BLOCK_SIZE);
+           end_offset < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
     ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
   }
@@ -266,7 +266,7 @@ class leaf_sub_items_t {
     node_offset_t end_offset;
     ceph::decode(end_offset, delta);
     assert(start_offset < end_offset);
-    assert(end_offset <= NODE_BLOCK_SIZE);
+    assert(end_offset < node_size);
     return leaf_sub_items_t({{p_node_start + start_offset,
                               p_node_start + end_offset},
                              node_size});

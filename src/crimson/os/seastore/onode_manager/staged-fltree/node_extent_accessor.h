@@ -77,11 +77,13 @@ class DeltaRecorderT final: public DeltaRecorder {
   void encode_update_child_addr(
       const laddr_t new_addr,
       const laddr_packed_t* p_addr,
-      const char* p_node_start) {
+      const char* p_node_start,
+      extent_len_t node_size) {
     ceph::encode(node_delta_op_t::UPDATE_CHILD_ADDR, encoded);
     ceph::encode(new_addr, encoded);
     int node_offset = reinterpret_cast<const char*>(p_addr) - p_node_start;
-    assert(node_offset > 0 && node_offset <= NODE_BLOCK_SIZE);
+    assert(node_offset > 0 && node_offset < (int)node_size);
+    assert(node_offset < (int)MAX_NODE_SIZE);
     ceph::encode(static_cast<node_offset_t>(node_offset), encoded);
   }
 
@@ -438,11 +440,13 @@ class NodeExtentAccessorT {
     assert(extent->is_pending());
     assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
-      recorder->encode_update_child_addr(new_addr, p_addr, read().p_start());
+      recorder->encode_update_child_addr(
+          new_addr, p_addr, read().p_start(), get_length());
     }
 #ifndef NDEBUG
     test_extent->prepare_replay(extent);
-    test_recorder->encode_update_child_addr(new_addr, p_addr, read().p_start());
+    test_recorder->encode_update_child_addr(
+        new_addr, p_addr, read().p_start(), get_length());
 #endif
     layout_t::update_child_addr(*mut, new_addr, p_addr);
 #ifndef NDEBUG
