@@ -76,6 +76,7 @@ public:
     }
 
     // Work nicely with for loops without requiring a nested type.
+    using reference = iter_t&;
     iter_t &operator*() { return *this; }
     iter_t *operator->() { return this; }
 
