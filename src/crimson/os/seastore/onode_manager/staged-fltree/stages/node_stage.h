@@ -68,7 +68,7 @@ class node_extent_t {
   get_end_p_laddr() const {
     assert(is_level_tail());
     if constexpr (FIELD_TYPE == field_type_t::N3) {
-      return &p_fields->child_addrs[keys()];
+      return p_fields->get_p_child_addr(keys());
     } else {
       auto offset_start = p_fields->get_item_end_offset(keys());
       assert(offset_start <= FieldType::SIZE);
@@ -98,7 +98,7 @@ class node_extent_t {
   get_p_value(index_t index) const {
     assert(index < keys());
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      return &p_fields->child_addrs[index];
+      return p_fields->get_p_child_addr(index);
     } else {
       auto range = get_nxt_container(index);
       auto ret = reinterpret_cast<const value_header_t*>(range.p_start);
