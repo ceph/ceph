@@ -44,7 +44,9 @@ public:
       const cls::rbd::MirrorImageSiteStatus& mirror_image_site_status,
       bool immediate_update);
   void remove_mirror_image_status(const std::string& global_image_id,
-                                  Context* on_finish);
+                                  bool immediate_update, Context* on_finish);
+  void remove_refresh_mirror_image_status(const std::string& global_image_id,
+                                          Context* on_finish);
 
 private:
   /**
@@ -90,6 +92,7 @@ private:
   GlobalImageIds m_updating_global_image_ids;
 
   bool try_remove_mirror_image_status(const std::string& global_image_id,
+                                      bool queue_update, bool immediate_update,
                                       Context* on_finish);
 
   void init_mirror_status_watcher(Context* on_finish);
