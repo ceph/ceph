@@ -15,7 +15,7 @@ Synopsis
 | **ceph-volume** **inventory**
 
 | **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
-| *zap* | *list* | *batch*]
+| *zap* | *list* | *batch* | *new-wal* | *new-db* | *migrate* ]
 
 | **ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
 
@@ -242,6 +242,71 @@ Positional arguments:
 * <DEVICE>  Either in the form of ``vg/lv`` for logical volumes,
   ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
 
+
+**new-wal**
+Attaches the given logical volume to OSD as a WAL. Logical volume
+name format is vg/lv. Fails if OSD has already got attached WAL.
+
+Usage::
+
+    ceph-volume lvm new-wal --osd-id OSD_ID --osd-fsid OSD_FSID --target TARGET_LV
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+
+Required arguments:
+
+* --osd-id OSD_ID       OSD id to attach new WAL to
+* --osd-fsid OSD_FSID   OSD fsid to attach new WAL to
+* --target TARGET_LV    logical volume name to attach as WAL
+
+
+**new-db**
+Attaches the given logical volume to OSD as a DB. Logical volume
+name format is vg/lv. Fails if OSD has already got attached DB.
+
+Usage::
+
+    ceph-volume lvm new-db --osd-id OSD_ID --osd-fsid OSD_FSID --target <target lv>
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+
+Required arguments:
+
+* --osd-id OSD_ID       OSD id to attach new DB to
+* --osd-fsid OSD_FSID   OSD fsid to attach new DB to
+* --target TARGET_LV    logical volume name to attach as DB
+
+**migrate**
+
+Moves BlueFS data from source volume(s) to the target one, source volumes
+(except the main, i.e. data or block one) are removed on success. LVM volumes
+are permitted for Target only, both already attached or new one. In the latter
+case it is attached to the OSD replacing one of the source devices. Following
+replacement rules apply (in the order of precedence, stop on the first match):
+
+    - if source list has DB volume - target device replaces it.
+    - if source list has WAL volume - target device replace it.
+    - if source list has slow volume only - operation is not permitted,
+      requires explicit allocation via new-db/new-wal command.
+
+Usage::
+
+    ceph-volume lvm migrate --osd-id OSD_ID --osd-fsid OSD_FSID --target TARGET_LV --from {data|db|wal} [{data|db|wal} ...]
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+
+Required arguments:
+
+* --osd-id OSD_ID       OSD id to perform migration at
+* --osd-fsid OSD_FSID   OSD fsid to perform migration at
+* --target TARGET_LV    logical volume to move data to
+* --from TYPE_LIST      list of source device type names, e.g. --from db wal
 
 simple
 ------
