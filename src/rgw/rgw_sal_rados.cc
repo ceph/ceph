@@ -1263,9 +1263,9 @@ void RadosStore::meta_list_keys_complete(void* handle)
   ctl()->meta.mgr->list_keys_complete(handle);
 }
 
-std::string RadosStore::meta_get_marker(void* handle)
+std::string RadosStore::meta_get_marker(const DoutPrefixProvider *dpp, void* handle)
 {
-  return ctl()->meta.mgr->get_marker(handle);
+  return ctl()->meta.mgr->get_marker(dpp, handle);
 }
 
 int RadosStore::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y)

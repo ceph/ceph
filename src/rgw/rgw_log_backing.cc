@@ -310,7 +310,7 @@ bs::error_code logback_generations::setup(const DoutPrefixProvider *dpp,
 		 << ": failed to re-establish watch, unsafe to continue: oid="
 		 << oid << ", ec=" << ec.message() << dendl;
     }
-    return handle_init(std::move(e));
+    return handle_init(dpp, std::move(e));
   } catch (const std::bad_alloc&) {
     return bs::error_code(ENOMEM, bs::system_category());
   }
@@ -378,12 +378,12 @@ bs::error_code logback_generations::update(const DoutPrefixProvider *dpp, option
     l.unlock();
 
     if (highest_empty) {
-      auto ec = handle_empty_to(*highest_empty);
+      auto ec = handle_empty_to(dpp, *highest_empty);
       if (ec) return ec;
     }
 
     if (!new_entries.empty()) {
-      auto ec = handle_new_gens(std::move(new_entries));
+      auto ec = handle_new_gens(dpp, std::move(new_entries));
       if (ec) return ec;
     }
   } catch (const std::bad_alloc&) {
@@ -535,7 +535,7 @@ bs::error_code logback_generations::new_backing(const DoutPrefixProvider *dpp,
 		 << ": notify failed with r=" << r << dendl;
       return { -r, bs::system_category() };
     }
-    ec = handle_new_gens(new_entries);
+    ec = handle_new_gens(dpp, new_entries);
   } catch (const std::bad_alloc&) {
     return bs::error_code(ENOMEM, bs::system_category());
   }
@@ -595,7 +595,7 @@ bs::error_code logback_generations::empty_to(const DoutPrefixProvider *dpp,
 		 << ": notify failed with r=" << r << dendl;
       return { -r, bs::system_category() };
     }
-    ec = handle_empty_to(newtail);
+    ec = handle_empty_to(dpp, newtail);
   } catch (const std::bad_alloc&) {
     return bs::error_code(ENOMEM, bs::system_category());
   }

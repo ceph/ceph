@@ -234,8 +234,6 @@ int RGWObjectSimplePutCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   RGWDataAccess::ObjectRef obj;
 
-  CephContext *cct = store->ctx();
-
   int ret = params.bucket->get_object(params.key, &obj);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to get object: " << cpp_strerror(-ret) << dendl;
@@ -257,8 +255,6 @@ int RGWObjectSimplePutCR::Request::_send_request(const DoutPrefixProvider *dpp)
 template<>
 int RGWBucketLifecycleConfigCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
-  CephContext *cct = store->ctx();
-
   RGWLC *lc = store->getRados()->get_lc();
   if (!lc) {
     ldpp_dout(dpp, -1) << "ERROR: lifecycle object is not initialized!" << dendl;

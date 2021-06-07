@@ -158,7 +158,7 @@ int RGWStreamReadHTTPResourceCRF::read(const DoutPrefixProvider *dpp, bufferlist
         req->get_out_headers(&attrs);
         int ret = decode_rest_obj(dpp, attrs, extra_data);
         if (ret < 0) {
-          ldout(cct, 0) << "ERROR: " << __func__ << " decode_rest_obj() returned ret=" << ret << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " decode_rest_obj() returned ret=" << ret << dendl;
           return ret;
         }
         got_extra_data = true;

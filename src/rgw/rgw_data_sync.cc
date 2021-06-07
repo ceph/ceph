@@ -1244,10 +1244,10 @@ public:
 
   int operate(const DoutPrefixProvider *dpp) override;
 
-  void handle_complete_stack(uint64_t stack_id) {
+  void handle_complete_stack(const DoutPrefixProvider *dpp, uint64_t stack_id) {
     auto iter = shard_progress.find(stack_id);
     if (iter == shard_progress.end()) {
-      lderr(cct) << "ERROR: RGWRunBucketSourcesSyncCR::handle_complete_stack(): stack_id=" << stack_id << " not found! Likely a bug" << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: RGWRunBucketSourcesSyncCR::handle_complete_stack(): stack_id=" << stack_id << " not found! Likely a bug" << dendl;
       return;
     }
     if (progress) {
@@ -2039,7 +2039,7 @@ class RGWUserPermHandler {
 
       ret = user_ctl->get_attrs_by_uid(sync_env->dpp, uid, &uattrs, null_yield);
       if (ret == 0) {
-        ret = RGWUserPermHandler::policy_from_attrs(sync_env->cct, uattrs, &info->user_acl);
+        ret = RGWUserPermHandler::policy_from_attrs(sync_env->dpp, sync_env->cct, uattrs, &info->user_acl);
       }
       if (ret == -ENOENT) {
         info->user_acl.create_default(uid, info->user_info.display_name);
@@ -2080,7 +2080,8 @@ public:
                                   int perm);
   };
 
-  static int policy_from_attrs(CephContext *cct,
+  static int policy_from_attrs(const DoutPrefixProvider *dpp,
+                               CephContext *cct,
                                const map<string, bufferlist>& attrs,
                                RGWAccessControlPolicy *acl) {
     acl->set_ctx(cct);
@@ -2093,7 +2094,7 @@ public:
     try {
       acl->decode(iter);
     } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): could not decode policy, caught buffer::error" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): could not decode policy, caught buffer::error" << dendl;
       return -EIO;
     }
 
@@ -2114,7 +2115,7 @@ int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
   sync_env = handler->sync_env;
   info = handler->info;
 
-  int r = RGWUserPermHandler::policy_from_attrs(sync_env->cct, bucket_attrs, &bucket_acl);
+  int r = RGWUserPermHandler::policy_from_attrs(sync_env->dpp, sync_env->cct, bucket_attrs, &bucket_acl);
   if (r < 0) {
     return r;
   }
@@ -2145,7 +2146,7 @@ bool RGWUserPermHandler::Bucket::verify_object_permission(const map<string, buff
 {
   RGWAccessControlPolicy obj_acl;
 
-  int r = policy_from_attrs(sync_env->cct, obj_attrs, &obj_acl);
+  int r = policy_from_attrs(sync_env->dpp, sync_env->cct, obj_attrs, &obj_acl);
   if (r < 0) {
     return r;
   }
@@ -2182,7 +2183,8 @@ public:
     *need_retry = false;
   }
 
-  int filter(CephContext *cct,
+  int filter(const DoutPrefixProvider *dpp,
+             CephContext *cct,
              const rgw_obj_key& source_key,
              const RGWBucketInfo& dest_bucket_info,
              std::optional<rgw_placement_rule> dest_placement_rule,
@@ -2191,7 +2193,8 @@ public:
              const rgw_placement_rule **prule) override;
 };
 
-int RGWFetchObjFilter_Sync::filter(CephContext *cct,
+int RGWFetchObjFilter_Sync::filter(const DoutPrefixProvider *dpp,
+                                   CephContext *cct,
                                    const rgw_obj_key& source_key,
                                    const RGWBucketInfo& dest_bucket_info,
                                    std::optional<rgw_placement_rule> dest_placement_rule,
@@ -2211,7 +2214,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
       auto it = iter->second.cbegin();
       obj_tags.decode(it);
     } catch (buffer::error &err) {
-      ldout(cct, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
     }
   }
 
@@ -2224,7 +2227,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
   if (verify_dest_params &&
       !(*verify_dest_params == params.dest)) {
     /* raced! original dest params were different, will need to retry */
-    ldout(cct, 0) << "WARNING: " << __func__ << ": pipe dest params are different than original params, must have raced with object rewrite, retrying" << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: " << __func__ << ": pipe dest params are different than original params, must have raced with object rewrite, retrying" << dendl;
     *need_retry = true;
     return -ECANCELED;
   }
@@ -2236,7 +2239,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
     if (!acl_translation_owner.empty()) {
       if (params.mode == rgw_sync_pipe_params::MODE_USER &&
           acl_translation_owner != dest_bucket_info.owner) {
-        ldout(cct, 0) << "ERROR: " << __func__ << ": acl translation was requested, but user (" << acl_translation_owner
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": acl translation was requested, but user (" << acl_translation_owner
           << ") is not dest bucket owner (" << dest_bucket_info.owner << ")" << dendl;
         return -EPERM;
       }
@@ -2245,7 +2248,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
   }
   if (params.mode == rgw_sync_pipe_params::MODE_USER) {
     if (!bucket_perms->verify_object_permission(obj_attrs, RGW_PERM_READ)) {
-      ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to fetch object" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to fetch object" << dendl;
       return -EPERM;
     }
   }
@@ -2258,7 +2261,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
     *prule = &dest_rule;
   }
 
-  return RGWFetchObjFilter_Default::filter(cct,
+  return RGWFetchObjFilter_Default::filter(dpp, cct,
                                            source_key,
                                            dest_bucket_info,
                                            dest_placement_rule,
@@ -2538,16 +2541,17 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dp
 RGWCoroutine *RGWArchiveDataSyncModule::remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
                                                      real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
-  ldout(sc->cct, 0) << "SYNC_ARCHIVE: remove_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
+  auto sync_env = sc->env;
+  ldpp_dout(sync_env->dpp, 0) << "SYNC_ARCHIVE: remove_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
   return NULL;
 }
 
 RGWCoroutine *RGWArchiveDataSyncModule::create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                                             rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
-  ldout(sc->cct, 0) << "SYNC_ARCHIVE: create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
-	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
   auto sync_env = sc->env;
+  ldpp_dout(sync_env->dpp, 0) << "SYNC_ARCHIVE: create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
+	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
   return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->store, sc->source_zone,
                             sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
@@ -2870,7 +2874,7 @@ RGWCoroutine *RGWRemoteBucketManager::init_sync_status_cr(int num, RGWObjVersion
 #define BUCKET_SYNC_ATTR_PREFIX RGW_ATTR_PREFIX "bucket-sync."
 
 template <class T>
-static bool decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const string& attr_name, T *val)
+static bool decode_attr(const DoutPrefixProvider *dpp, CephContext *cct, map<string, bufferlist>& attrs, const string& attr_name, T *val)
 {
   map<string, bufferlist>::iterator iter = attrs.find(attr_name);
   if (iter == attrs.end()) {
@@ -2882,22 +2886,22 @@ static bool decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const 
   try {
     decode(*val, biter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode attribute: " << attr_name << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode attribute: " << attr_name << dendl;
     return false;
   }
   return true;
 }
 
-void rgw_bucket_shard_sync_info::decode_from_attrs(CephContext *cct, map<string, bufferlist>& attrs)
+void rgw_bucket_shard_sync_info::decode_from_attrs(const DoutPrefixProvider *dpp, CephContext *cct, map<string, bufferlist>& attrs)
 {
-  if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "state", &state)) {
-    decode_attr(cct, attrs, "state", &state);
+  if (!decode_attr(dpp, cct, attrs, BUCKET_SYNC_ATTR_PREFIX "state", &state)) {
+    decode_attr(dpp, cct, attrs, "state", &state);
   }
-  if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "full_marker", &full_marker)) {
-    decode_attr(cct, attrs, "full_marker", &full_marker);
+  if (!decode_attr(dpp, cct, attrs, BUCKET_SYNC_ATTR_PREFIX "full_marker", &full_marker)) {
+    decode_attr(dpp, cct, attrs, "full_marker", &full_marker);
   }
-  if (!decode_attr(cct, attrs, BUCKET_SYNC_ATTR_PREFIX "inc_marker", &inc_marker)) {
-    decode_attr(cct, attrs, "inc_marker", &inc_marker);
+  if (!decode_attr(dpp, cct, attrs, BUCKET_SYNC_ATTR_PREFIX "inc_marker", &inc_marker)) {
+    decode_attr(dpp, cct, attrs, "inc_marker", &inc_marker);
   }
 }
 
@@ -2959,7 +2963,7 @@ int RGWReadBucketPipeSyncStatusCoroutine::operate(const DoutPrefixProvider *dpp)
       ldpp_dout(dpp, 0) << "ERROR: failed to call fetch bucket shard info oid=" << oid << " ret=" << retcode << dendl;
       return set_cr_error(retcode);
     }
-    status->decode_from_attrs(sync_env->cct, attrs);
+    status->decode_from_attrs(dpp, sync_env->cct, attrs);
     return set_cr_done();
   }
   return 0;
@@ -4375,7 +4379,7 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
                                                          cur_progress),
                            BUCKET_SYNC_SPAWN_WINDOW,
                            [&](uint64_t stack_id, int ret) {
-                             handle_complete_stack(stack_id);
+                             handle_complete_stack(dpp, stack_id);
                              if (ret < 0) {
                                tn->log(10, "a sync operation returned error");
                              }
@@ -4384,7 +4388,7 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
       }
     }
     drain_all_cb([&](uint64_t stack_id, int ret) {
-                   handle_complete_stack(stack_id);
+                   handle_complete_stack(dpp, stack_id);
                    if (ret < 0) {
                      tn->log(10, "a sync operation returned error");
                    }
@@ -4949,7 +4953,7 @@ int rgw_read_remote_bilog_info(const DoutPrefixProvider *dpp,
   }
   r = markers.from_string(result.max_marker, -1);
   if (r < 0) {
-    lderr(conn->get_ctx()) << "failed to decode remote log markers" << dendl;
+    ldpp_dout(dpp, -1) << "failed to decode remote log markers" << dendl;
     return r;
   }
   return 0;

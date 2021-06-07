@@ -681,7 +681,7 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
             << cpp_strerror(r) << dendl;
         return r;
       }
-      marker = mgr->get_marker(handle);
+      marker = mgr->get_marker(dpp, handle);
 
       if (!keys.empty()) {
         ceph_assert(keys.size() == 1);
@@ -719,7 +719,7 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
           << cpp_strerror(r) << dendl;
       return r;
     }
-    marker = mgr->get_marker(handle);
+    marker = mgr->get_marker(dpp, handle);
 
     if (!keys.empty()) {
       ceph_assert(keys.size() == 1);

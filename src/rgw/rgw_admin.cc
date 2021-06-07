@@ -7837,7 +7837,7 @@ next:
       encode_json("truncated", truncated, formatter.get());
       encode_json("count", count, formatter.get());
       if (truncated) {
-        encode_json("marker", store->meta_get_marker(handle), formatter.get());
+        encode_json("marker", store->meta_get_marker(dpp(), handle), formatter.get());
       }
       formatter->close_section();
     }
@@ -7896,7 +7896,7 @@ next:
 
         for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
           cls_log_entry& entry = *iter;
-          static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->dump_log_entry(entry, formatter.get());
+          static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->dump_log_entry(dpp(), entry, formatter.get());
         }
         formatter->flush(cout);
       } while (truncated);

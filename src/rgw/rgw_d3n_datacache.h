@@ -150,9 +150,9 @@ class D3nRGWDataCache : public T {
 public:
   D3nRGWDataCache() {}
 
-  int init_rados() override {
+  int init_rados(const DoutPrefixProvider *dpp) override {
     int ret;
-    ret = T::init_rados();
+    ret = T::init_rados(dpp);
     if (ret < 0)
       return ret;
 

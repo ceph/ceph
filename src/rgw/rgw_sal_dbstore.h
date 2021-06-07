@@ -745,7 +745,7 @@ public:
       virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
       virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<std::string>& keys, bool* truncated) override;
       virtual void meta_list_keys_complete(void* handle) override;
-      virtual std::string meta_get_marker(void *handle) override;
+      virtual std::string meta_get_marker(const DoutPrefixProvider *dpp, void *handle) override;
       virtual int meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y) override;
 
       virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }

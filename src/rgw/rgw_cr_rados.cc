@@ -30,7 +30,7 @@ bool RGWAsyncRadosProcessor::RGWWQ::_enqueue(RGWAsyncRadosRequest *req) {
   }
   req->get();
   processor->m_req_queue.push_back(req);
-  dout(20) << "enqueued request req=" << hex << req << dec << dendl;
+  ldpp_dout(this, 20) << "enqueued request req=" << hex << req << dec << dendl;
   _dump_queue();
   return true;
 }
@@ -44,7 +44,7 @@ RGWAsyncRadosRequest *RGWAsyncRadosProcessor::RGWWQ::_dequeue() {
     return NULL;
   RGWAsyncRadosRequest *req = processor->m_req_queue.front();
   processor->m_req_queue.pop_front();
-  dout(20) << "dequeued request req=" << hex << req << dec << dendl;
+  ldpp_dout(this, 20) << "dequeued request req=" << hex << req << dec << dendl;
   _dump_queue();
   return req;
 }
@@ -60,12 +60,12 @@ void RGWAsyncRadosProcessor::RGWWQ::_dump_queue() {
   }
   deque<RGWAsyncRadosRequest *>::iterator iter;
   if (processor->m_req_queue.empty()) {
-    dout(20) << "RGWWQ: empty" << dendl;
+    ldpp_dout(this, 20) << "RGWWQ: empty" << dendl;
     return;
   }
-  dout(20) << "RGWWQ:" << dendl;
+  ldpp_dout(this, 20) << "RGWWQ:" << dendl;
   for (iter = processor->m_req_queue.begin(); iter != processor->m_req_queue.end(); ++iter) {
-    dout(20) << "req: " << hex << *iter << dec << dendl;
+    ldpp_dout(this, 20) << "req: " << hex << *iter << dec << dendl;
   }
 }
 

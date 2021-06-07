@@ -532,7 +532,7 @@ struct rgw_bucket_shard_sync_info {
   rgw_bucket_shard_full_sync_marker full_marker;
   rgw_bucket_shard_inc_sync_marker inc_marker;
 
-  void decode_from_attrs(CephContext *cct, std::map<std::string, bufferlist>& attrs);
+  void decode_from_attrs(const DoutPrefixProvider *dpp, CephContext *cct, std::map<std::string, bufferlist>& attrs);
   void encode_all_attrs(std::map<std::string, bufferlist>& attrs);
   void encode_state_attr(std::map<std::string, bufferlist>& attrs);
 

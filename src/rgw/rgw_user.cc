@@ -2224,7 +2224,7 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   formatter->dump_bool("truncated", truncated);
   formatter->dump_int("count", count);
   if (truncated) {
-    formatter->dump_string("marker", store->meta_get_marker(handle));
+    formatter->dump_string("marker", store->meta_get_marker(dpp, handle));
   }
 
   // close result object section

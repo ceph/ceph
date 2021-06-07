@@ -1112,7 +1112,7 @@ void RGWRados::finalize()
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWRados::init_rados()
+int RGWRados::init_rados(const DoutPrefixProvider *dpp)
 {
   int ret = 0;
 
@@ -1127,7 +1127,7 @@ int RGWRados::init_rados()
 
   auto crs = std::unique_ptr<RGWCoroutinesManagerRegistry>{
     new RGWCoroutinesManagerRegistry(cct)};
-  ret = crs->hook_to_admin_command("cr dump");
+  ret = crs->hook_to_admin_command(dpp, "cr dump");
   if (ret < 0) {
     return ret;
   }
@@ -1403,7 +1403,7 @@ int RGWRados::initialize(const DoutPrefixProvider *dpp)
 
   host_id = svc.zone_utils->gen_host_id();
 
-  ret = init_rados();
+  ret = init_rados(dpp);
   if (ret < 0)
     return ret;
 
@@ -3881,7 +3881,8 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWFetchObjFilter_Default::filter(CephContext *cct,
+int RGWFetchObjFilter_Default::filter(const DoutPrefixProvider *dpp,
+                                      CephContext *cct,
                                       const rgw_obj_key& source_key,
                                       const RGWBucketInfo& dest_bucket_info,
                                       std::optional<rgw_placement_rule> dest_placement_rule,
@@ -3988,7 +3989,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                     [&](map<string, bufferlist>& obj_attrs) {
                       const rgw_placement_rule *ptail_rule;
 
-                      int ret = filter->filter(cct,
+                      int ret = filter->filter(dpp, cct,
                                                src_obj->get_key(),
                                                dest_bucket->get_info(),
                                                dest_placement_rule,

@@ -360,7 +360,7 @@ public:
     delete data;
   }
 
-  virtual string get_marker(void *handle) override {
+  virtual string get_marker(const DoutPrefixProvider *dpp, void *handle) override {
     iter_data *data = static_cast<iter_data *>(handle);
 
     if (data->iter != data->sections.end()) {
@@ -565,13 +565,13 @@ void RGWMetadataHandler_GenericMetaBE::list_keys_complete(void *handle)
   delete op;
 }
 
-string RGWMetadataHandler_GenericMetaBE::get_marker(void *handle)
+string RGWMetadataHandler_GenericMetaBE::get_marker(const DoutPrefixProvider *dpp, void *handle)
 {
   auto op = static_cast<RGWSI_MetaBackend_Handler::Op_ManagedCtx *>(handle);
   string marker;
   int r = op->list_get_marker(&marker);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): list_get_marker() returned: r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): list_get_marker() returned: r=" << r << dendl;
     /* not much else to do */
   }
 
@@ -823,14 +823,14 @@ void RGWMetadataManager::list_keys_complete(void *handle)
   delete h;
 }
 
-string RGWMetadataManager::get_marker(void *handle)
+string RGWMetadataManager::get_marker(const DoutPrefixProvider *dpp, void *handle)
 {
   list_keys_handle *h = static_cast<list_keys_handle *>(handle);
 
-  return h->handler->get_marker(h->handle);
+  return h->handler->get_marker(dpp, h->handle);
 }
 
-void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
+void RGWMetadataManager::dump_log_entry(const DoutPrefixProvider *dpp, cls_log_entry& entry, Formatter *f)
 {
   f->open_object_section("entry");
   f->dump_string("id", entry.id);
@@ -845,7 +845,7 @@ void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
 
     encode_json("data", log_data, f);
   } catch (buffer::error& err) {
-    lderr(cct) << "failed to decode log entry: " << entry.section << ":" << entry.name<< " ts=" << entry.timestamp << dendl;
+    ldpp_dout(dpp, -1) << "failed to decode log entry: " << entry.section << ":" << entry.name<< " ts=" << entry.timestamp << dendl;
   }
   f->close_section();
 }

@@ -220,17 +220,17 @@ public:
   /// Handle initialization on startup
   ///
   /// @param e All non-empty generations
-  virtual bs::error_code handle_init(entries_t e) noexcept = 0;
+  virtual bs::error_code handle_init(const DoutPrefixProvider *dpp, entries_t e) noexcept = 0;
 
   /// Handle new generations.
   ///
   /// @param e Map of generations added since last update
-  virtual bs::error_code handle_new_gens(entries_t e) noexcept = 0;
+  virtual bs::error_code handle_new_gens(const DoutPrefixProvider *dpp, entries_t e) noexcept = 0;
 
   /// Handle generations being marked empty
   ///
   /// @param new_tail Lowest non-empty generation
-  virtual bs::error_code handle_empty_to(uint64_t new_tail) noexcept = 0;
+  virtual bs::error_code handle_empty_to(const DoutPrefixProvider *dpp, uint64_t new_tail) noexcept = 0;
 };
 
 inline std::string gencursor(uint64_t gen_id, std::string_view cursor) {

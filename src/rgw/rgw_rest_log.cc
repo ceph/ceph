@@ -110,7 +110,7 @@ void RGWOp_MDLog_List::send_response() {
     for (list<cls_log_entry>::iterator iter = entries.begin();
 	 iter != entries.end(); ++iter) {
       cls_log_entry& entry = *iter;
-      static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
+      static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr->dump_log_entry(s, entry, s->formatter);
       flusher.flush();
     }
     s->formatter->close_section();

@@ -91,7 +91,7 @@ public:
   virtual int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 
-  virtual std::string get_marker(void *handle) = 0;
+  virtual std::string get_marker(const DoutPrefixProvider *dpp, void *handle) = 0;
 
   virtual int get_shard_id(const std::string& entry, int *shard_id) {
     *shard_id = 0;
@@ -186,7 +186,7 @@ public:
   int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated) override;
   void list_keys_complete(void *handle) override;
 
-  std::string get_marker(void *handle) override;
+  std::string get_marker(const DoutPrefixProvider *dpp, void *handle) override;
 
   /**
    * Compare an incoming versus on-disk tag/version+mtime combo against
@@ -259,9 +259,9 @@ public:
   int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 
-  std::string get_marker(void *handle);
+  std::string get_marker(const DoutPrefixProvider *dpp, void *handle);
 
-  void dump_log_entry(cls_log_entry& entry, Formatter *f);
+  void dump_log_entry(const DoutPrefixProvider *dpp, cls_log_entry& entry, Formatter *f);
 
   void get_sections(std::list<std::string>& sections);
 

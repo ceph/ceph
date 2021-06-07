@@ -337,7 +337,7 @@ class Store {
     /** Complete a metadata listing */
     virtual void meta_list_keys_complete(void* handle) = 0;
     /** Get the marker associated with the current metadata listing */
-    virtual std::string meta_get_marker(void* handle) = 0;
+    virtual std::string meta_get_marker(const DoutPrefixProvider *dpp, void* handle) = 0;
     /** Remove a specific metadata key */
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) = 0;
     /** Get an instance of the Sync module for bucket sync */

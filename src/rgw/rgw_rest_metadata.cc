@@ -166,7 +166,7 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
     encode_json("count", count, s->formatter);
     if (truncated) {
       string esc_marker =
-	rgw::to_base64(store->meta_get_marker(handle));
+	rgw::to_base64(store->meta_get_marker(this, handle));
       encode_json("marker", esc_marker, s->formatter);
     }
     s->formatter->close_section();

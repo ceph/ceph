@@ -120,7 +120,7 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
       return store;
     }
 
-    if (rados->init_rados() < 0) {
+    if (rados->init_rados(dpp) < 0) {
       delete store; store = nullptr;
     }
   }

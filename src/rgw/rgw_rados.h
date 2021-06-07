@@ -160,7 +160,8 @@ class RGWFetchObjFilter {
 public:
   virtual ~RGWFetchObjFilter() {}
 
-  virtual int filter(CephContext *cct,
+  virtual int filter(const DoutPrefixProvider *dpp,
+                     CephContext *cct,
                      const rgw_obj_key& source_key,
                      const RGWBucketInfo& dest_bucket_info,
                      std::optional<rgw_placement_rule> dest_placement_rule,
@@ -175,7 +176,8 @@ protected:
 public:
   RGWFetchObjFilter_Default() {}
 
-  int filter(CephContext *cct,
+  int filter(const DoutPrefixProvider *dpp,
+             CephContext *cct,
              const rgw_obj_key& source_key,
              const RGWBucketInfo& dest_bucket_info,
              std::optional<rgw_placement_rule> dest_placement_rule,
@@ -588,7 +590,7 @@ public:
   /** Initialize the RADOS instance and prepare to do other ops */
   int init_svc(bool raw, const DoutPrefixProvider *dpp);
   int init_ctl(const DoutPrefixProvider *dpp);
-  virtual int init_rados();
+  virtual int init_rados(const DoutPrefixProvider *dpp);
   int init_complete(const DoutPrefixProvider *dpp);
   int initialize(const DoutPrefixProvider *dpp);
   void finalize();

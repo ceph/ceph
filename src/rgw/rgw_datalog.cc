@@ -387,17 +387,17 @@ RGWDataChangesLog::RGWDataChangesLog(CephContext* cct)
     prefix(get_prefix()),
     changes(cct->_conf->rgw_data_log_changes_size) {}
 
-bs::error_code DataLogBackends::handle_init(entries_t e) noexcept {
+bs::error_code DataLogBackends::handle_init(const DoutPrefixProvider *dpp, entries_t e) noexcept {
   std::unique_lock l(m);
 
   for (const auto& [gen_id, gen] : e) {
     if (gen.pruned) {
-      lderr(datalog.cct)
+      ldpp_dout(dpp, -1)
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__
 	<< ": ERROR: given empty generation: gen_id=" << gen_id << dendl;
     }
     if (count(gen_id) != 0) {
-      lderr(datalog.cct)
+      ldpp_dout(dpp, -1)
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__
 	<< ": ERROR: generation already exists: gen_id=" << gen_id << dendl;
     }
@@ -410,14 +410,14 @@ bs::error_code DataLogBackends::handle_init(entries_t e) noexcept {
 	emplace(gen_id, new RGWDataChangesFIFO(ioctx, datalog, gen_id, shards));
 	break;
       default:
-	lderr(datalog.cct)
+	ldpp_dout(dpp, -1)
 	  << __PRETTY_FUNCTION__ << ":" << __LINE__
 	  << ": IMPOSSIBLE: invalid log type: gen_id=" << gen_id
 	  << ", type" << gen.type << dendl;
 	return bs::error_code(EFAULT, bs::system_category());
       }
     } catch (const bs::system_error& err) {
-      lderr(datalog.cct)
+      ldpp_dout(dpp, -1)
 	  << __PRETTY_FUNCTION__ << ":" << __LINE__
 	  << ": error setting up backend: gen_id=" << gen_id
 	  << ", err=" << err.what() << dendl;
@@ -426,17 +426,17 @@ bs::error_code DataLogBackends::handle_init(entries_t e) noexcept {
   }
   return {};
 }
-bs::error_code DataLogBackends::handle_new_gens(entries_t e) noexcept {
-  return handle_init(std::move(e));
+bs::error_code DataLogBackends::handle_new_gens(const DoutPrefixProvider *dpp, entries_t e) noexcept {
+  return handle_init(dpp, std::move(e));
 }
-bs::error_code DataLogBackends::handle_empty_to(uint64_t new_tail) noexcept {
+bs::error_code DataLogBackends::handle_empty_to(const DoutPrefixProvider *dpp, uint64_t new_tail) noexcept {
   std::unique_lock l(m);
   auto i = cbegin();
   if (i->first < new_tail) {
     return {};
   }
   if (new_tail >= (cend() - 1)->first) {
-    lderr(datalog.cct)
+    ldpp_dout(dpp, -1)
       << __PRETTY_FUNCTION__ << ":" << __LINE__
       << ": ERROR: attempt to trim head: new_tail=" << new_tail << dendl;
     return bs::error_code(EFAULT, bs::system_category());
@@ -473,7 +473,7 @@ int RGWDataChangesLog::start(const DoutPrefixProvider *dpp, const RGWZone* _zone
 
 
   if (!besr) {
-    lderr(cct) << __PRETTY_FUNCTION__
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 	       << ": Error initializing backends: "
 	       << besr.error().message() << dendl;
     return ceph::from_error_code(besr.error());
