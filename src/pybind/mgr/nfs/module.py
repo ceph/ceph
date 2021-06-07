@@ -32,14 +32,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             binding: str,
             path: Optional[str] = '/',
             readonly: Optional[bool] = False,
-            addr: Optional[str] = None,
+            addr: Optional[List[str]] = None,
             squash: str = 'none',
     ) -> Tuple[int, str, str]:
         """Create a cephfs export"""
         clients = []
         if addr:
             clients = [{
-                'addresses': [addr],
+                'addresses': addr,
                 'access_type': 'ro' if readonly else 'rw',
                 'squash': squash,
             }]
@@ -56,7 +56,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             cluster_id: str,
             binding: str,
             readonly: Optional[bool] = False,
-            addr: Optional[str] = None,
+            addr: Optional[List[str]] = None,
             realm: Optional[str] = None,
     ) -> Tuple[int, str, str]:
         """Create an RGW export"""
@@ -64,7 +64,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         squash = 'none'
         if addr:
             clients = [{
-                'addresses': [addr],
+                'addresses': addr,
                 'access_type': 'ro' if readonly else 'rw',
                 'squash': squash,
             }]
