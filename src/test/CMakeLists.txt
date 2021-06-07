@@ -606,6 +606,10 @@ add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
+if(DEFINED PROMTOOL_EXECUTABLE)
+  set(promtool_executable_checked TRUE)
+endif()
+
 find_program(PROMTOOL_EXECUTABLE promtool)
 if(PROMTOOL_EXECUTABLE)
   execute_process(
@@ -615,11 +619,11 @@ if(PROMTOOL_EXECUTABLE)
   if(NOT rc)
     add_ceph_test(run-promtool-unittests
       ${PROMTOOL_EXECUTABLE} test rules ${CMAKE_SOURCE_DIR}/monitoring/prometheus/alerts/test_alerts.yml)
-  else()
+  elseif(NOT promtool_executable_checked)
     message(WARNING "'${PROMTOOL_EXECUTABLE} test rules' does not work, "
       "please use a newer prometheus")
   endif()
-else()
+elseif(NOT promtool_executable_checked)
   message(WARNING "run-promtool-unittests is skipped due to missing promtool")
 endif()
 
