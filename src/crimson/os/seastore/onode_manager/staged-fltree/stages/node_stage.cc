@@ -46,7 +46,7 @@ node_offset_t NODE_T::size_to_nxt_at(index_t index) const
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
-memory_range_t NODE_T::get_nxt_container(index_t index) const
+container_range_t NODE_T::get_nxt_container(index_t index) const
 {
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
     ceph_abort("N3 internal node doesn't have the right part");
@@ -65,7 +65,7 @@ memory_range_t NODE_T::get_nxt_container(index_t index) const
     } else {
       // range for item_iterator_t<NODE_TYPE>
     }
-    return {item_p_start, item_p_end};
+    return {{item_p_start, item_p_end}, node_size};
   }
 }
 

@@ -42,7 +42,9 @@ class internal_sub_items_t {
  public:
   using num_keys_t = index_t;
 
-  internal_sub_items_t(const memory_range_t& range) {
+  internal_sub_items_t(const container_range_t& _range)
+      : node_size{_range.node_size} {
+    auto& range = _range.range;
     assert(range.p_start < range.p_end);
     assert((range.p_end - range.p_start) % sizeof(internal_sub_item_t) == 0);
     num_items = (range.p_end - range.p_start) / sizeof(internal_sub_item_t);
@@ -92,8 +94,9 @@ class internal_sub_items_t {
     ceph::decode(end_offset, delta);
     assert(start_offset < end_offset);
     assert(end_offset <= NODE_BLOCK_SIZE);
-    return internal_sub_items_t({p_node_start + start_offset,
-                                 p_node_start + end_offset});
+    return internal_sub_items_t({{p_node_start + start_offset,
+                                  p_node_start + end_offset},
+                                 node_size});
   }
 
   static node_offset_t header_size() { return 0u; }
@@ -119,6 +122,7 @@ class internal_sub_items_t {
   class Appender;
 
  private:
+  extent_len_t node_size;
   index_t num_items;
   const internal_sub_item_t* p_first_item;
 };
@@ -164,7 +168,9 @@ class leaf_sub_items_t {
   // should be enough to index all keys under 64 KiB node
   using num_keys_t = uint16_t;
 
-  leaf_sub_items_t(const memory_range_t& range) {
+  leaf_sub_items_t(const container_range_t& _range)
+      : node_size{_range.node_size} {
+    auto& range = _range.range;
     assert(range.p_start < range.p_end);
     auto _p_num_keys = range.p_end - sizeof(num_keys_t);
     assert(range.p_start < _p_num_keys);
@@ -261,8 +267,9 @@ class leaf_sub_items_t {
     ceph::decode(end_offset, delta);
     assert(start_offset < end_offset);
     assert(end_offset <= NODE_BLOCK_SIZE);
-    return leaf_sub_items_t({p_node_start + start_offset,
-                             p_node_start + end_offset});
+    return leaf_sub_items_t({{p_node_start + start_offset,
+                              p_node_start + end_offset},
+                             node_size});
   }
 
   static node_offset_t header_size() { return sizeof(num_keys_t); }
@@ -288,6 +295,7 @@ class leaf_sub_items_t {
   class Appender;
 
  private:
+  extent_len_t node_size;
   // TODO: support unaligned access
   const num_keys_t* p_num_keys;
   const node_offset_packed_t* p_offsets;
