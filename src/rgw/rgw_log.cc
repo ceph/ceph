@@ -279,9 +279,28 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     formatter->close_section();
   }
   formatter->dump_string("trans_id", entry.trans_id);
+  switch(entry.identity_type) {
+    case TYPE_RGW:
+      formatter->dump_string("authentication_type","Local");
+      break;
+    case TYPE_LDAP:
+      formatter->dump_string("authentication_type","LDAP");
+      break;
+    case TYPE_KEYSTONE:
+      formatter->dump_string("authentication_type","Keystone");
+      break;
+    case TYPE_WEB:
+      formatter->dump_string("authentication_type","OIDC Provider");
+      break;
+    case TYPE_ROLE:
+      formatter->dump_string("authentication_type","STS");
+      break;
+    default:
+      break;
+  }
   if (entry.token_claims.size() > 0) {
     if (entry.token_claims[0] == "sts") {
-      formatter->open_object_section("sts_token_claims");
+      formatter->open_object_section("sts_info");
       for (const auto& iter: entry.token_claims) {
         auto pos = iter.find(":");
         if (pos != string::npos) {
@@ -411,6 +430,8 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
   entry.uri = std::move(uri);
 
   entry.op = op_name;
+
+  entry.identity_type = s->auth.identity->get_identity_type();
 
   if (! s->token_claims.empty()) {
     entry.token_claims = std::move(s->token_claims);
