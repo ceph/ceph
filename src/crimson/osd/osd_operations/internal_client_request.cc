@@ -102,7 +102,7 @@ seastar::future<> InternalClientRequest::start()
             });
           });
         });
-      }, [this](std::exception_ptr eptr) {
+      }, [](std::exception_ptr eptr) {
         if (should_abort_request(std::move(eptr))) {
           return seastar::stop_iteration::yes;
         } else {
