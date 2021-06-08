@@ -339,8 +339,7 @@ class NodeExtentAccessorT {
 
   bool is_retired() const {
     if (extent) {
-      // XXX SeaStore extent cannot distinguish between invalid and retired.
-      // assert(extent->is_valid());
+      assert(!extent->is_retired());
       return false;
     } else {
       return true;
