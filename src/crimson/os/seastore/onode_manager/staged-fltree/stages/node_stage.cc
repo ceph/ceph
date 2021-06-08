@@ -51,9 +51,9 @@ container_range_t NODE_T::get_nxt_container(index_t index) const
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
     ceph_abort("N3 internal node doesn't have the right part");
   } else {
-    node_offset_t item_start_offset = p_fields->get_item_start_offset(
+    auto item_start_offset = p_fields->get_item_start_offset(
         index, node_size);
-    node_offset_t item_end_offset = p_fields->get_item_end_offset(
+    auto item_end_offset = p_fields->get_item_end_offset(
         index, node_size);
     assert(item_start_offset < item_end_offset);
     auto item_p_start = p_start() + item_start_offset;
@@ -299,7 +299,7 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
           src.p_start() + offset_left_start, left_size);
     } else {
       node_offset_t step_size = FieldType::estimate_insert_one();
-      node_offset_t offset_base = src.fields().get_item_end_offset(
+      extent_len_t offset_base = src.fields().get_item_end_offset(
           from, node_size);
       int offset_change = p_append_right - p_start - offset_base;
       auto p_offset_dst = p_append_left;
@@ -311,10 +311,11 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
         p_offset_dst += sizeof(typename FieldType::key_t);
       }
       for (auto i = from; i < from + items; ++i) {
-        p_mut->copy_in_absolute(
-            p_offset_dst,
-            node_offset_t(src.fields().get_item_start_offset(i, node_size) +
-                          offset_change));
+        int new_offset = src.fields().get_item_start_offset(i, node_size) +
+                         offset_change;
+        assert(new_offset > 0);
+        assert(new_offset < (int)node_size);
+        p_mut->copy_in_absolute(p_offset_dst, node_offset_t(new_offset));
         p_offset_dst += step_size;
       }
       assert(p_append_left + left_size + sizeof(typename FieldType::key_t) ==
@@ -323,14 +324,16 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
     p_append_left += left_size;
 
     // append right part backwards
-    node_offset_t offset_right_start = src.fields().get_item_end_offset(
+    auto offset_right_start = src.fields().get_item_end_offset(
         from + items, node_size);
-    node_offset_t offset_right_end = src.fields().get_item_end_offset(
+    auto offset_right_end = src.fields().get_item_end_offset(
         from, node_size);
-    node_offset_t right_size = offset_right_end - offset_right_start;
+    int right_size = offset_right_end - offset_right_start;
+    assert(right_size > 0);
+    assert(right_size < (int)node_size);
     p_append_right -= right_size;
     p_mut->copy_in_absolute(p_append_right,
-        src.p_start() + offset_right_start, right_size);
+        src.p_start() + offset_right_start, node_offset_t(right_size));
   }
 }
 

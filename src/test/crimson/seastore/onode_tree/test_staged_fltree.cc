@@ -861,7 +861,7 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     node_offset_t free_size() const override {
       ceph_abort("impossible path"); }
-    node_offset_t total_size() const override {
+    extent_len_t total_size() const override {
       ceph_abort("impossible path"); }
     bool is_size_underflow() const override {
       ceph_abort("impossible path"); }
@@ -869,7 +869,7 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     std::tuple<match_stage_t, std::size_t> evaluate_merge(NodeImpl&) override {
       ceph_abort("impossible path"); }
-    search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, node_offset_t) override {
+    search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, extent_len_t) override {
       ceph_abort("impossible path"); }
     eagain_future<NodeExtentMutable> rebuild_extent(context_t) override {
       ceph_abort("impossible path"); }

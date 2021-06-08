@@ -130,7 +130,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
   level_t level() const override { return extent.read().level(); }
   node_offset_t free_size() const override { return extent.read().free_size(); }
-  node_offset_t total_size() const override { return extent.read().total_size(); }
+  extent_len_t total_size() const override { return extent.read().total_size(); }
   bool is_extent_retired() const override { return extent.is_retired(); }
 
   std::optional<key_view_t> get_pivot_index() const override {
@@ -224,8 +224,11 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return {merge_stage, merge_size};
   }
 
-  search_position_t merge(NodeExtentMutable& mut, NodeImpl& _right_node,
-                          match_stage_t merge_stage, node_offset_t merge_size) override {
+  search_position_t merge(
+      NodeExtentMutable& mut,
+      NodeImpl& _right_node,
+      match_stage_t merge_stage,
+      extent_len_t merge_size) override {
     LOG_PREFIX(OTree::Layout::merge);
     assert(NODE_TYPE == _right_node.node_type());
     assert(FIELD_TYPE == _right_node.field_type());
@@ -872,7 +875,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     build_name();
   }
 
-  node_offset_t filled_size() const {
+  extent_len_t filled_size() const {
     auto& node_stage = extent.read();
     auto ret = node_stage.size_before(node_stage.keys());
     assert(ret == node_stage.total_size() - node_stage.free_size());

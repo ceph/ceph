@@ -71,8 +71,8 @@ using slot_1_t = _slot_t<crush_t, field_type_t::N1>;
 using slot_3_t = _slot_t<snap_gen_t, field_type_t::N3>;
 
 struct node_range_t {
-  node_offset_t start;
-  node_offset_t end;
+  extent_len_t start;
+  extent_len_t end;
 };
 
 template <typename FieldType>
@@ -84,15 +84,15 @@ template <node_type_t NODE_TYPE, typename FieldType>
 node_range_t fields_free_range_before(
     const FieldType& node, index_t index, extent_len_t node_size) {
   assert(index <= node.num_keys);
-  node_offset_t offset_start = node.get_key_start_offset(index, node_size);
-  node_offset_t offset_end = node.get_item_end_offset(index, node_size);
+  extent_len_t offset_start = node.get_key_start_offset(index, node_size);
+  extent_len_t offset_end = node.get_item_end_offset(index, node_size);
   if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
     if (node.is_level_tail() && index == node.num_keys) {
       offset_end -= sizeof(laddr_t);
     }
   }
   assert(offset_start <= offset_end);
-  assert(offset_end - offset_start < (int)node_size);
+  assert(offset_end - offset_start < node_size);
   return {offset_start, offset_end};
 }
 
@@ -132,7 +132,7 @@ struct _node_fields_013_t {
   static constexpr node_offset_t ITEM_OVERHEAD = SlotType::OVERHEAD;
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  node_offset_t total_size(extent_len_t node_size) const {
+  extent_len_t total_size(extent_len_t node_size) const {
     return node_size;
   }
   key_get_type get_key(
@@ -158,7 +158,7 @@ struct _node_fields_013_t {
     assert(index < num_keys);
     return &slots[index].right_offset;
   }
-  node_offset_t get_item_end_offset(
+  extent_len_t get_item_end_offset(
       index_t index, extent_len_t node_size) const {
     return index == 0 ? node_size
                       : get_item_start_offset(index - 1, node_size);
@@ -226,13 +226,13 @@ struct node_fields_2_t {
   static constexpr node_offset_t ITEM_OVERHEAD = sizeof(node_offset_t);
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  node_offset_t total_size(extent_len_t node_size) const {
+  extent_len_t total_size(extent_len_t node_size) const {
     return node_size;
   }
   key_get_type get_key(
       index_t index, extent_len_t node_size) const {
     assert(index < num_keys);
-    node_offset_t item_end_offset = get_item_end_offset(index, node_size);
+    auto item_end_offset = get_item_end_offset(index, node_size);
     const char* p_start = fields_start(*this);
     return key_t(p_start + item_end_offset);
   }
@@ -240,7 +240,7 @@ struct node_fields_2_t {
       index_t index, extent_len_t node_size) const {
     assert(index <= num_keys);
     auto offset = HEADER_SIZE + sizeof(node_offset_t) * num_keys;
-    assert(offset <= node_size);
+    assert(offset < node_size);
     return offset;
   }
   node_offset_t get_item_start_offset(
@@ -254,7 +254,7 @@ struct node_fields_2_t {
     assert(index < num_keys);
     return &offsets[index];
   }
-  node_offset_t get_item_end_offset(
+  extent_len_t get_item_end_offset(
       index_t index, extent_len_t node_size) const {
     return index == 0 ? node_size
                       : get_item_start_offset(index - 1, node_size);
@@ -320,7 +320,7 @@ struct internal_fields_3_t {
   static constexpr node_offset_t ITEM_OVERHEAD = 0u;
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  node_offset_t total_size(extent_len_t node_size) const {
+  extent_len_t total_size(extent_len_t node_size) const {
     if (is_level_tail()) {
       return node_size - sizeof(snap_gen_t);
     } else {
@@ -337,8 +337,8 @@ struct internal_fields_3_t {
   free_size_before(index_t index, extent_len_t node_size) const {
     assert(index <= num_keys);
     assert(num_keys <= get_max_num_keys(node_size));
-    auto free = total_size(node_size) - HEADER_SIZE -
-                index * ITEM_SIZE;
+    extent_len_t free = total_size(node_size) - HEADER_SIZE -
+                        index * ITEM_SIZE;
     if (is_level_tail() && index == num_keys) {
       free -= sizeof(laddr_t);
     }

@@ -208,7 +208,7 @@ struct staged {
     *   CONTAINER_TYPE = ContainerType::INDEXABLE
     *   keys() const -> index_t
     *   operator[](index_t) const -> key_get_type
-    *   size_before(index_t) const -> node_offset_t
+    *   size_before(index_t) const -> extent_len_t
     *   size_overhead_at(index_t) const -> node_offset_t
     *   (IS_BOTTOM) get_p_value(index_t) const -> const value_t*
     *   (!IS_BOTTOM) size_to_nxt_at(index_t) const -> node_offset_t
