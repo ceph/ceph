@@ -44,6 +44,7 @@ class internal_sub_items_t {
 
   internal_sub_items_t(const container_range_t& _range)
       : node_size{_range.node_size} {
+    assert(is_valid_node_size(node_size));
     auto& range = _range.range;
     assert(range.p_start < range.p_end);
     assert((range.p_end - range.p_start) % sizeof(internal_sub_item_t) == 0);
@@ -170,6 +171,7 @@ class leaf_sub_items_t {
 
   leaf_sub_items_t(const container_range_t& _range)
       : node_size{_range.node_size} {
+    assert(is_valid_node_size(node_size));
     auto& range = _range.range;
     assert(range.p_start < range.p_end);
     auto _p_num_keys = range.p_end - sizeof(num_keys_t);

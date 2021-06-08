@@ -66,6 +66,11 @@ using node_offset_t = uint16_t;
 constexpr node_offset_t DISK_BLOCK_SIZE = 1u << 12;
 constexpr auto MAX_NODE_SIZE =
     (extent_len_t)std::numeric_limits<node_offset_t>::max() + 1;
+inline bool is_valid_node_size(extent_len_t node_size) {
+  return (node_size > 0 &&
+          node_size <= MAX_NODE_SIZE &&
+          node_size % DISK_BLOCK_SIZE == 0);
+}
 
 using string_size_t = uint16_t;
 

@@ -111,10 +111,8 @@ void validate_tree_config(const tree_conf_t& conf)
               string_key_view_t::VALID_UPPER_BOUND);
   ceph_assert(conf.max_oid_size <
               string_key_view_t::VALID_UPPER_BOUND);
-  ceph_assert(conf.internal_node_size <= MAX_NODE_SIZE);
-  ceph_assert(conf.internal_node_size % DISK_BLOCK_SIZE == 0);
-  ceph_assert(conf.leaf_node_size <= MAX_NODE_SIZE);
-  ceph_assert(conf.leaf_node_size % DISK_BLOCK_SIZE == 0);
+  ceph_assert(is_valid_node_size(conf.internal_node_size));
+  ceph_assert(is_valid_node_size(conf.leaf_node_size));
 
   if (conf.do_split_check) {
     // In hope to comply with 3 * (oid + ns) + 2 * value < node

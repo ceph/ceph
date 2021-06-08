@@ -36,8 +36,7 @@ class node_extent_t {
 
   node_extent_t(const FieldType* p_fields, extent_len_t node_size)
       : p_fields{p_fields}, node_size{node_size} {
-    assert(node_size <= MAX_NODE_SIZE);
-    assert(node_size % DISK_BLOCK_SIZE == 0);
+    assert(is_valid_node_size(node_size));
     validate(*p_fields);
   }
 
