@@ -92,7 +92,7 @@ std::string cmddesc_get_prenautilus_compat(const std::string &cmddesc)
       // Instruct legacy clients or mons to send --foo-bar string in place
       // of a 'true'/'false' value
       std::ostringstream oss;
-      oss << std::string("--") << desckv["name"];
+      oss << "--" << desckv["name"];
       std::string val = oss.str();
       std::replace(val.begin(), val.end(), '_', '-');
       desckv["type"] = "CephChoices";
@@ -165,7 +165,7 @@ dump_cmd_to_json(Formatter *f, uint64_t features, const string& cmd)
         // Instruct legacy clients to send --foo-bar string in place
         // of a 'true'/'false' value
         std::ostringstream oss;
-        oss << std::string("--") << desckv["name"];
+        oss << "--" << desckv["name"];
         val = oss.str();
         std::replace(val.begin(), val.end(), '_', '-');
 
@@ -578,7 +578,7 @@ bool validate_bool(CephContext *cct,
 {
   bool v;
   try {
-    if (!cmd_getval(cmdmap, string(name), v)) {
+    if (!cmd_getval(cmdmap, name, v)) {
       if (auto req = desc.find("req");
 	  req != end(desc) && req->second == "false") {
 	return true;
@@ -607,7 +607,7 @@ bool validate_arg(CephContext* cct,
 {
   Value v;
   try {
-    if (!cmd_getval(cmdmap, string(name), v)) {
+    if (!cmd_getval(cmdmap, name, v)) {
       if constexpr (is_vector) {
 	  // an empty list is acceptable.
 	  return true;
