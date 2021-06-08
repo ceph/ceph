@@ -58,7 +58,7 @@ struct ResponseMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Message") == 0) {
       pushstring(L, err->message);
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -77,7 +77,7 @@ struct ResponseMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Message") == 0) {
       err->message.assign(luaL_checkstring(L, 3));
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return NO_RETURNVAL;
   }
@@ -101,7 +101,7 @@ struct QuotaMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Rounded") == 0) {
       lua_pushboolean(L, !info->check_on_raw);
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -121,7 +121,7 @@ struct PlacementRuleMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "StorageClass") == 0) {
       pushstring(L, rule->storage_class);
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -141,7 +141,7 @@ struct UserMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Id") == 0) {
       pushstring(L, user->id);
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -161,7 +161,7 @@ struct OwnerMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "User") == 0) {
       create_metatable<UserMetaTable>(L, false, &(owner->get_id()));
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -203,7 +203,7 @@ struct BucketMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "User") == 0) {
       create_metatable<UserMetaTable>(L, false, &(bucket->get_info().owner));
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -231,7 +231,7 @@ struct ObjectMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "MTime") == 0) {
       pushtime(L, obj->get_mtime());
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -346,7 +346,7 @@ struct GrantMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Referer") == 0) {
       pushstring(L, grant->get_referer());
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -446,7 +446,7 @@ struct ACLMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Grants") == 0) {
       create_metatable<GrantsMetaTable>(L, false, &(acl->get_acl().get_grant_map()));
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -543,7 +543,7 @@ struct PolicyMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Statements") == 0) {
       create_metatable<StatementsMetaTable>(L, &(policy->statements));
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -641,7 +641,7 @@ struct HTTPMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Domain") == 0) {
       pushstring(L, info->domain);
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -663,7 +663,7 @@ struct CopyFromMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Object") == 0) {
       create_metatable<ObjectMetaTable>(L, false, s->src_object);
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -683,7 +683,7 @@ struct ZoneGroupMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Endpoint") == 0) {
       pushstring(L, s->zonegroup_endpoint);
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
@@ -762,7 +762,7 @@ struct RequestMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Tags") == 0) {
       create_metatable<StringMapMetaTable<RGWObjTags::tag_map_t>>(L, false, &(s->tagset.get_tags()));
     } else {
-      throw_unknown_field(index, TableName());
+      return error_unknown_field(L, index, TableName());
     }
     return ONE_RETURNVAL;
   }
