@@ -42,6 +42,7 @@ class item_iterator_t {
       : node_size{range.node_size},
         p_items_start(range.range.p_start),
         p_items_end(range.range.p_end) {
+    assert(is_valid_node_size(node_size));
     assert(p_items_start < p_items_end);
     next_item_range(p_items_end);
   }

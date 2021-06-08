@@ -83,7 +83,6 @@ class DeltaRecorderT final: public DeltaRecorder {
     ceph::encode(new_addr, encoded);
     int node_offset = reinterpret_cast<const char*>(p_addr) - p_node_start;
     assert(node_offset > 0 && node_offset < (int)node_size);
-    assert(node_offset < (int)MAX_NODE_SIZE);
     ceph::encode(static_cast<node_offset_t>(node_offset), encoded);
   }
 
@@ -287,6 +286,7 @@ class NodeExtentAccessorT {
       : extent{extent},
         node_stage{reinterpret_cast<const FieldType*>(extent->get_read()),
                    extent->get_length()} {
+    assert(is_valid_node_size(extent->get_length()));
     if (extent->is_initial_pending()) {
       state = nextent_state_t::FRESH;
       mut.emplace(extent->get_mutable());
@@ -314,7 +314,7 @@ class NodeExtentAccessorT {
     auto ref_recorder = recorder_t::create_for_replay();
     test_recorder = static_cast<recorder_t*>(ref_recorder.get());
     test_extent = TestReplayExtent::create(
-        extent->get_length(), std::move(ref_recorder));
+        get_length(), std::move(ref_recorder));
 #endif
   }
   ~NodeExtentAccessorT() = default;
@@ -325,7 +325,11 @@ class NodeExtentAccessorT {
 
   const node_stage_t& read() const { return node_stage; }
   laddr_t get_laddr() const { return extent->get_laddr(); }
-  extent_len_t get_length() const { return extent->get_length(); }
+  extent_len_t get_length() const {
+    auto len = extent->get_length();
+    assert(is_valid_node_size(len));
+    return len;
+  }
   nextent_state_t get_state() const {
     assert(!is_retired());
     // we cannot rely on the underlying extent state because
@@ -355,7 +359,7 @@ class NodeExtentAccessorT {
       state = nextent_state_t::MUTATION_PENDING;
       assert(extent->is_mutation_pending());
       node_stage = node_stage_t(reinterpret_cast<const FieldType*>(extent->get_read()),
-                                extent->get_length());
+                                get_length());
       assert(recorder == static_cast<recorder_t*>(extent->get_recorder()));
       mut.emplace(extent->get_mutable());
     }
@@ -500,7 +504,7 @@ class NodeExtentAccessorT {
 
   void test_copy_to(NodeExtentMutable& to) const {
     assert(extent->get_length() == to.get_length());
-    std::memcpy(to.get_write(), extent->get_read(), extent->get_length());
+    std::memcpy(to.get_write(), extent->get_read(), get_length());
   }
 
   eagain_future<NodeExtentMutable> rebuild(context_t c) {
@@ -512,7 +516,7 @@ class NodeExtentAccessorT {
       return eagain_ertr::make_ready_future<NodeExtentMutable>(*mut);
     }
     assert(!extent->is_initial_pending());
-    auto alloc_size = extent->get_length();
+    auto alloc_size = get_length();
     return c.nm.alloc_extent(c.t, alloc_size
     ).handle_error(
       eagain_ertr::pass_further{},
@@ -527,14 +531,14 @@ class NodeExtentAccessorT {
              c.t, extent->get_laddr(), fresh_extent->get_laddr());
       assert(fresh_extent->is_initial_pending());
       assert(fresh_extent->get_recorder() == nullptr);
-      assert(extent->get_length() == fresh_extent->get_length());
+      assert(get_length() == fresh_extent->get_length());
       auto fresh_mut = fresh_extent->get_mutable();
-      std::memcpy(fresh_mut.get_write(), extent->get_read(), extent->get_length());
+      std::memcpy(fresh_mut.get_write(), extent->get_read(), get_length());
       NodeExtentRef to_discard = extent;
 
       extent = fresh_extent;
       node_stage = node_stage_t(reinterpret_cast<const FieldType*>(extent->get_read()),
-                                extent->get_length());
+                                get_length());
       state = nextent_state_t::FRESH;
       mut.emplace(fresh_mut);
       recorder = nullptr;

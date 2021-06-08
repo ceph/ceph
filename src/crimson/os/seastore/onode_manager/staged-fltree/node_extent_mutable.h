@@ -68,7 +68,14 @@ class NodeExtentMutable {
 
   const char* get_read() const { return p_start; }
   char* get_write() { return p_start; }
-  extent_len_t get_length() const { return length; }
+  extent_len_t get_length() const {
+#ifndef NDEBUG
+    if (node_offset == 0) {
+      assert(is_valid_node_size(length));
+    }
+#endif
+    return length;
+  }
   node_offset_t get_node_offset() const { return node_offset; }
 
   NodeExtentMutable get_mutable_absolute(const void* dst, node_offset_t len) const {
@@ -77,6 +84,7 @@ class NodeExtentMutable {
     assert((const char*)dst != get_read());
     auto ret = *this;
     node_offset_t offset = (const char*)dst - get_read();
+    assert(offset != 0);
     ret.p_start += offset;
     ret.length = len;
     ret.node_offset = offset;
