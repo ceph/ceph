@@ -129,6 +129,7 @@ struct connection_t {
   CallbackList callbacks;
   ceph::coarse_real_clock::time_point next_reconnect;
   bool mandatory;
+  bool use_ssl;
   bool verify_ssl;
   boost::optional<const std::string&> ca_location;
 
@@ -145,6 +146,7 @@ struct connection_t {
     cct(nullptr),
     next_reconnect(ceph::coarse_real_clock::now()),
     mandatory(false),
+    use_ssl(false),
     verify_ssl(false),
     ca_location(boost::none)
   {}
@@ -546,6 +548,7 @@ connection_ptr_t create_new_connection(const amqp_connection_info& info,
   conn->password.assign(info.password);
   conn->mandatory = mandatory_delivery;
   conn->cct = cct;
+  conn->use_ssl = info.ssl;
   conn->verify_ssl = verify_ssl;
   conn->ca_location =  ca_location;
   return create_connection(conn, info);
@@ -695,6 +698,7 @@ private:
       for (;conn_it != end_it;) {
         
         auto& conn = conn_it->second;
+        const auto& conn_key = conn_it->first;
         // delete the connection if marked for deletion
         if (conn->marked_for_deletion) {
           ldout(conn->cct, 10) << "AMQP run: connection is deleted" << dendl;
@@ -712,20 +716,21 @@ private:
             // pointers are used temporarily inside the amqp_connection_info object
             // as read-only values, hence the assignment, and const_cast are safe here
             amqp_connection_info info;
-            info.host = const_cast<char*>(conn_it->first.host.c_str());
-            info.port = conn_it->first.port;
-            info.vhost = const_cast<char*>(conn_it->first.vhost.c_str());
+            info.host = const_cast<char*>(conn_key.host.c_str());
+            info.port = conn_key.port;
+            info.vhost = const_cast<char*>(conn_key.vhost.c_str());
             info.user = const_cast<char*>(conn->user.c_str());
             info.password = const_cast<char*>(conn->password.c_str());
+            info.ssl = conn->use_ssl;
             ldout(conn->cct, 20) << "AMQP run: retry connection" << dendl;
             if (create_connection(conn, info)->is_ok() == false) {
-              ldout(conn->cct, 10) << "AMQP run: connection (" << to_string(conn_it->first) << ") retry failed. error: " <<
+              ldout(conn->cct, 10) << "AMQP run: connection (" << to_string(conn_key) << ") retry failed. error: " <<
                 status_to_string(conn->status) << " (" << conn->reply_code << ")"  << dendl;
               // TODO: add error counter for failed retries
               // TODO: add exponential backoff for retries
               conn->next_reconnect = now + reconnect_time;
             } else {
-              ldout(conn->cct, 10) << "AMQP run: connection (" << to_string(conn_it->first) << ") retry successfull" << dendl;
+              ldout(conn->cct, 10) << "AMQP run: connection (" << to_string(conn_key) << ") retry successfull" << dendl;
             }
           }
           INCREMENT_AND_CONTINUE(conn_it);
@@ -907,8 +912,9 @@ public:
     struct amqp_connection_info info;
     // cache the URL so that parsing could happen in-place
     std::vector<char> url_cache(url.c_str(), url.c_str()+url.size()+1);
-    if (AMQP_STATUS_OK != amqp_parse_url(url_cache.data(), &info)) {
-      ldout(cct, 1) << "AMQP connect: URL parsing failed" << dendl;
+    const auto retcode = amqp_parse_url(url_cache.data(), &info);
+    if (AMQP_STATUS_OK != retcode) {
+      ldout(cct, 1) << "AMQP connect: URL parsing failed. error: " << retcode << dendl;
       return nullptr;
     }
 
