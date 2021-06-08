@@ -247,18 +247,20 @@ TransactionManager::submit_transaction_direct(
       DEBUGT("journal commit to {} seq {}", tref, addr, journal_seq);
       segment_cleaner->set_journal_head(journal_seq);
       cache->complete_commit(tref, addr, journal_seq, segment_cleaner.get());
-      lba_manager->complete_transaction(tref);
-      segment_cleaner->update_journal_tail_target(
-	cache->get_oldest_dirty_from().value_or(journal_seq));
-      auto to_release = tref.get_segment_to_release();
-      if (to_release != NULL_SEG_ID) {
-	return segment_manager.release(to_release
-	).safe_then([this, to_release] {
-	  segment_cleaner->mark_segment_released(to_release);
-	});
-      } else {
-	return SegmentManager::release_ertr::now();
-      }
+      return lba_manager->complete_transaction(tref).safe_then(
+	[&tref, journal_seq=journal_seq, this] {
+	segment_cleaner->update_journal_tail_target(
+	  cache->get_oldest_dirty_from().value_or(journal_seq));
+	auto to_release = tref.get_segment_to_release();
+	if (to_release != NULL_SEG_ID) {
+	  return segment_manager.release(to_release
+	  ).safe_then([this, to_release] {
+	    segment_cleaner->mark_segment_released(to_release);
+	  });
+	} else {
+	  return SegmentManager::release_ertr::now();
+	}
+      });
     }).safe_then([&tref] {
       return tref.handle.complete();
     }).handle_error(
@@ -323,17 +325,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
     if (is_logical_type(type)) {
       return lba_manager->get_mapping(
 	t,
-	laddr,
-	len).safe_then([=, &t](lba_pin_list_t pins) {
-	  ceph_assert(pins.size() <= 1);
-	  if (pins.empty()) {
-	    return get_extent_if_live_ret(
-	      get_extent_if_live_ertr::ready_future_marker{},
-	      CachedExtentRef());
-	  }
-
-	  auto pin = std::move(pins.front());
-	  pins.pop_front();
+	laddr).safe_then([=, &t] (LBAPinRef pin) {
 	  ceph_assert(pin->get_laddr() == laddr);
 	  ceph_assert(pin->get_length() == (extent_len_t)len);
 	  if (pin->get_paddr() == addr) {
@@ -364,7 +356,11 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 	      get_extent_if_live_ertr::ready_future_marker{},
 	      CachedExtentRef());
 	  }
-	});
+	}).handle_error(crimson::ct_error::enoent::handle([] {
+	  return get_extent_if_live_ret(
+	    get_extent_if_live_ertr::ready_future_marker{},
+	    CachedExtentRef());
+	}), crimson::ct_error::pass_further_all{});
     } else {
       DEBUGT("non-logical extent {}", t, addr);
       return lba_manager->get_physical_extent_if_live(

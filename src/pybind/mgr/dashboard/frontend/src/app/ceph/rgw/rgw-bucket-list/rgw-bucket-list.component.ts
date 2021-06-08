@@ -125,20 +125,18 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
 
   transformBucketData() {
     _.forEach(this.buckets, (bucketKey) => {
-      const usageList = bucketKey['usage'];
       const maxBucketSize = bucketKey['bucket_quota']['max_size'];
       const maxBucketObjects = bucketKey['bucket_quota']['max_objects'];
-      let totalBucketSize = 0;
-      let numOfObjects = 0;
-      _.forEach(usageList, (usageKey) => {
-        totalBucketSize = totalBucketSize + usageKey.size_actual;
-        numOfObjects = numOfObjects + usageKey.num_objects;
-      });
-      bucketKey['bucket_size'] = totalBucketSize;
-      bucketKey['num_objects'] = numOfObjects;
-      bucketKey['size_usage'] = maxBucketSize > 0 ? totalBucketSize / maxBucketSize : undefined;
+      bucketKey['bucket_size'] = 0;
+      bucketKey['num_objects'] = 0;
+      if (!_.isEmpty(bucketKey['usage'])) {
+        bucketKey['bucket_size'] = bucketKey['usage']['rgw.main']['size_actual'];
+        bucketKey['num_objects'] = bucketKey['usage']['rgw.main']['num_objects'];
+      }
+      bucketKey['size_usage'] =
+        maxBucketSize > 0 ? bucketKey['bucket_size'] / maxBucketSize : undefined;
       bucketKey['object_usage'] =
-        maxBucketObjects > 0 ? numOfObjects / maxBucketObjects : undefined;
+        maxBucketObjects > 0 ? bucketKey['num_objects'] / maxBucketObjects : undefined;
     });
   }
 

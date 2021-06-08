@@ -204,7 +204,7 @@ Debugging with GDB
 
 The `tips`_ for debugging Scylla also apply to Crimson.
 
-.. _tips: https://github.com/scylladb/scylla/blob/master/docs/debugging.md#tips-and-tricks
+.. _tips: https://github.com/scylladb/scylla/blob/master/docs/guides/debugging.md#tips-and-tricks
 
 Human-readable backtraces with addr2line
 ----------------------------------------

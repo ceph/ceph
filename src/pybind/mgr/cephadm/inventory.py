@@ -1,7 +1,9 @@
 import datetime
 from copy import copy
+import ipaddress
 import json
 import logging
+import socket
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
     NamedTuple, Type
 
@@ -10,6 +12,8 @@ from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
+
+from .utils import resolve_ip
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -28,6 +32,15 @@ class Inventory:
 
     def __init__(self, mgr: 'CephadmOrchestrator'):
         self.mgr = mgr
+        adjusted_addrs = False
+
+        def is_valid_ip(ip: str) -> bool:
+            try:
+                ipaddress.ip_address(ip)
+                return True
+            except ValueError:
+                return False
+
         # load inventory
         i = self.mgr.get_store('inventory')
         if i:
@@ -36,6 +49,34 @@ class Inventory:
             for k, v in self._inventory.items():
                 if 'hostname' not in v:
                     v['hostname'] = k
+
+                # convert legacy non-IP addr?
+                if is_valid_ip(str(v.get('addr'))):
+                    continue
+                if len(self._inventory) > 1:
+                    if k == socket.gethostname():
+                        # Never try to resolve our own host!  This is
+                        # fraught and can lead to either a loopback
+                        # address (due to podman's futzing with
+                        # /etc/hosts) or a private IP based on the CNI
+                        # configuration.  Instead, wait until the mgr
+                        # fails over to another host and let them resolve
+                        # this host.
+                        continue
+                    ip = resolve_ip(cast(str, v.get('addr')))
+                else:
+                    # we only have 1 node in the cluster, so we can't
+                    # rely on another host doing the lookup.  use the
+                    # IP the mgr binds to.
+                    ip = self.mgr.get_mgr_ip()
+                if is_valid_ip(ip) and not ip.startswith('127.0.'):
+                    self.mgr.log.info(
+                        f"inventory: adjusted host {v['hostname']} addr '{v['addr']}' -> '{ip}'"
+                    )
+                    v['addr'] = ip
+                    adjusted_addrs = True
+            if adjusted_addrs:
+                self.save()
         else:
             self._inventory = dict()
         logger.debug('Loaded inventory %s' % self._inventory)

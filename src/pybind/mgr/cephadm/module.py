@@ -727,6 +727,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return True, err, ret
 
+    def _validate_and_set_ssh_val(self, what: str, new: Optional[str], old: Optional[str]) -> None:
+        self.set_store(what, new)
+        self._reconfig_ssh()
+        if self.cache.get_hosts():
+            # Can't check anything without hosts
+            host = self.cache.get_hosts()[0]
+            r = CephadmServe(self)._check_host(host)
+            if r is not None:
+                # connection failed reset user
+                self.set_store(what, old)
+                self._reconfig_ssh()
+                raise OrchestratorError('ssh connection %s@%s failed' % (self.ssh_user, host))
+        self.log.info(f'Set ssh {what}')
+
     @orchestrator._cli_write_command(
         prefix='cephadm set-ssh-config')
     def _set_ssh_config(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
@@ -735,12 +749,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         # Set an ssh_config file provided from stdin
 
-        if inbuf == self.ssh_config:
+        old = self.ssh_config
+        if inbuf == old:
             return 0, "value unchanged", ""
         self.validate_ssh_config_content(inbuf)
-        self.set_store("ssh_config", inbuf)
-        self.log.info('Set ssh_config')
-        self._reconfig_ssh()
+        self._validate_and_set_ssh_val('ssh_config', inbuf, old)
         return 0, "", ""
 
     @orchestrator._cli_write_command('cephadm clear-ssh-config')
@@ -804,11 +817,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Set cluster SSH private key (use -i <private_key>)"""
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty private ssh key provided"
-        if inbuf == self.ssh_key:
+        old = self.ssh_key
+        if inbuf == old:
             return 0, "value unchanged", ""
-        self.set_store("ssh_identity_key", inbuf)
+        self._validate_and_set_ssh_val('ssh_identity_key', inbuf, old)
         self.log.info('Set ssh private key')
-        self._reconfig_ssh()
         return 0, "", ""
 
     @orchestrator._cli_write_command(
@@ -817,11 +830,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Set cluster SSH public key (use -i <public_key>)"""
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty public ssh key provided"
-        if inbuf == self.ssh_pub:
+        old = self.ssh_pub
+        if inbuf == old:
             return 0, "value unchanged", ""
-        self.set_store("ssh_identity_pub", inbuf)
-        self.log.info('Set ssh public key')
-        self._reconfig_ssh()
+        self._validate_and_set_ssh_val('ssh_identity_pub', inbuf, old)
         return 0, "", ""
 
     @orchestrator._cli_write_command(
@@ -864,20 +876,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if user == current_user:
             return 0, "value unchanged", ""
 
-        self.set_store('ssh_user', user)
-        self._reconfig_ssh()
-
-        host = self.cache.get_hosts()[0]
-        r = CephadmServe(self)._check_host(host)
-        if r is not None:
-            # connection failed reset user
-            self.set_store('ssh_user', current_user)
-            self._reconfig_ssh()
-            return -errno.EINVAL, '', 'ssh connection %s@%s failed' % (user, host)
+        self._validate_and_set_ssh_val('ssh_user', user, current_user)
 
         msg = 'ssh user set to %s' % user
         if user != 'root':
-            msg += ' sudo will be used'
+            msg += '. sudo will be used'
         self.log.info(msg)
         return 0, msg, ''
 
@@ -1383,10 +1386,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             )
         ]
 
-    def _check_valid_addr(self, host: str, addr: str) -> None:
+    def _check_valid_addr(self, host: str, addr: str) -> str:
         # make sure hostname is resolvable before trying to make a connection
         try:
-            utils.resolve_ip(addr)
+            ip_addr = utils.resolve_ip(addr)
         except OrchestratorError as e:
             msg = str(e) + f'''
 You may need to supply an address for {addr}
@@ -1417,6 +1420,7 @@ Then run the following:
             errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
             raise OrchestratorError('Host %s (%s) failed check(s): %s' % (
                 host, addr, errors))
+        return ip_addr
 
     def _add_host(self, spec):
         # type: (HostSpec) -> str
@@ -1426,7 +1430,9 @@ Then run the following:
         :param host: host name
         """
         assert_valid_host(spec.hostname)
-        self._check_valid_addr(spec.hostname, spec.addr)
+        ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+        if spec.addr == spec.hostname and ip_addr:
+            spec.addr = ip_addr
 
         # prime crush map?
         if spec.location:
@@ -1443,7 +1449,7 @@ Then run the following:
         self.offline_hosts_remove(spec.hostname)
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
-        return "Added host '{}'".format(spec.hostname)
+        return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
 
     @handle_orch_error
     def add_host(self, spec: HostSpec) -> str:

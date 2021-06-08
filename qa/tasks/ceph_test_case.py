@@ -192,16 +192,22 @@ class CephTestCase(unittest.TestCase):
         log.debug("wait_until_equal: success")
 
     @classmethod
-    def wait_until_true(cls, condition, timeout, period=5):
+    def wait_until_true(cls, condition, timeout, check_fn=None, period=5):
         elapsed = 0
+        retry_count = 0
         while True:
             if condition():
-                log.debug("wait_until_true: success in {0}s".format(elapsed))
+                log.debug("wait_until_true: success in {0}s and {1} retries".format(elapsed, retry_count))
                 return
             else:
                 if elapsed >= timeout:
-                    raise TestTimeoutError("Timed out after {0}s".format(elapsed))
+                    if check_fn and check_fn() and retry_count < 5:
+                        elapsed = 0
+                        retry_count += 1
+                        log.debug("wait_until_true: making progress, waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
+                    else:
+                        raise TestTimeoutError("Timed out after {0}s and {1} retries".format(elapsed, retry_count))
                 else:
-                    log.debug("wait_until_true: waiting (timeout={0})...".format(timeout))
+                    log.debug("wait_until_true: waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
                 time.sleep(period)
                 elapsed += period

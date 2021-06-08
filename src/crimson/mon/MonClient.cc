@@ -597,7 +597,7 @@ int Client::handle_auth_request(crimson::net::ConnectionRef con,
     auth_meta->get_connection_secret_length(),
     reply,
     &name,
-    &active_con->get_conn()->peer_global_id,
+    &con->peer_global_id,
     &caps_info,
     &auth_meta->session_key,
     &auth_meta->connection_secret,
@@ -1045,15 +1045,13 @@ seastar::future<> Client::send_message(MessageURef m)
 seastar::future<> Client::on_session_opened()
 {
   return active_con->renew_rotating_keyring().then([this] {
-    return sub.reload() ? renew_subs() : seastar::now();
-  }).then([this] {
     for (auto& m : pending_messages) {
       (void) active_con->get_conn()->send(std::move(m.msg));
       m.pr.set_value();
     }
     pending_messages.clear();
     ready_to_send = true;
-    return seastar::now();
+    return sub.reload() ? renew_subs() : seastar::now();
   }).then([this] {
     return seastar::parallel_for_each(mon_commands,
       [this](auto &command) {

@@ -183,7 +183,7 @@ class Docs(BaseController):
         return schema.as_dict()
 
     @classmethod
-    def _gen_responses(cls, method, resp_object=None):
+    def _gen_responses(cls, method, resp_object=None, version=None):
         resp: Dict[str, Dict[str, Union[str, Any]]] = {
             '400': {
                 "description": "Operation exception. Please check the "
@@ -201,26 +201,30 @@ class Docs(BaseController):
                                "response body for the stack trace."
             }
         }
+
+        if not version:
+            version = DEFAULT_VERSION
+
         if method.lower() == 'get':
             resp['200'] = {'description': "OK",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
                                        {'type': 'object'}}}
         if method.lower() == 'post':
             resp['201'] = {'description': "Resource created.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
                                        {'type': 'object'}}}
         if method.lower() == 'put':
             resp['200'] = {'description': "Resource updated.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
                                        {'type': 'object'}}}
         if method.lower() == 'delete':
             resp['204'] = {'description': "Resource deleted.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
                                        {'type': 'object'}}}
         if method.lower() in ['post', 'put', 'delete']:
             resp['202'] = {'description': "Operation is still executing."
                                           " Please check the task queue.",
-                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(version):
                                        {'type': 'object'}}}
 
         if resp_object:
@@ -228,7 +232,7 @@ class Docs(BaseController):
                 if status_code in resp:
                     resp[status_code].update({
                         'content': {
-                            'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION): {
+                            'application/vnd.ceph.api.v{}+json'.format(version): {
                                 'schema': cls._gen_schema_for_content(response_body)}}})
 
         return resp
@@ -261,7 +265,7 @@ class Docs(BaseController):
         return parameters
 
     @classmethod
-    def _gen_paths(cls, all_endpoints):
+    def gen_paths(cls, all_endpoints):
         # pylint: disable=R0912
         method_order = ['get', 'post', 'put', 'delete']
         paths = {}
@@ -281,8 +285,19 @@ class Docs(BaseController):
                 func = endpoint.func
 
                 summary = ''
+                version = ''
                 resp = {}
                 p_info = []
+
+                if hasattr(func, '__method_map_method__'):
+                    version = func.__method_map_method__['version']
+
+                elif hasattr(func, '__resource_method__'):
+                    version = func.__resource_method__['version']
+
+                elif hasattr(func, '__collection_method__'):
+                    version = func.__collection_method__['version']
+
                 if hasattr(func, 'doc_info'):
                     if func.doc_info['summary']:
                         summary = func.doc_info['summary']
@@ -302,7 +317,7 @@ class Docs(BaseController):
                     'tags': [cls._get_tag(endpoint)],
                     'description': func.__doc__,
                     'parameters': params,
-                    'responses': cls._gen_responses(method, resp)
+                    'responses': cls._gen_responses(method, resp, version)
                 }
                 if summary:
                     methods[method.lower()]['summary'] = summary
@@ -338,7 +353,7 @@ class Docs(BaseController):
         host = cherrypy.request.base.split('://', 1)[1] if not offline else 'example.com'
         logger.debug("Host: %s", host)
 
-        paths = cls._gen_paths(all_endpoints)
+        paths = cls.gen_paths(all_endpoints)
 
         if not base_url:
             base_url = "/"

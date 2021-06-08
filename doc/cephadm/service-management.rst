@@ -5,46 +5,58 @@ Service Management
 Service Status
 ==============
 
-A service is a group of daemons that are configured together.
+A service is a group of daemons configured together. To see the status of one
+of the services running in the Ceph cluster, do the following:
 
-Print a list of services known to the orchestrator. The list can be limited to
-services on a particular host with the optional --host parameter and/or
-services of a particular type via optional --type parameter
-(mon, osd, mgr, mds, rgw):
+#. Use the command line to print a list of services. 
+#. Locate the service whose status you want to check. 
+#. Print the status of the service.
 
-   .. prompt:: bash #
-
-    ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
-
-Discover the status of a particular service or daemons:
-
-   .. prompt:: bash #
-
-    ceph orch ls --service_type type --service_name <name> [--refresh]
-
-Export the service specs known to the orchestrator as yaml in format
-that is compatible to ``ceph orch apply -i``:
+The following command prints a list of services known to the orchestrator. To
+limit the output to services only on a specified host, use the optional
+``--host`` parameter. To limit the output to services of only a particular
+type, use the optional ``--type`` parameter (mon, osd, mgr, mds, rgw):
 
    .. prompt:: bash #
 
-    ceph orch ls --export
+     ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
 
-For examples about retrieving specs of single services see :ref:`orchestrator-cli-service-spec-retrieve`.
+Discover the status of a particular service or daemon:
+
+   .. prompt:: bash #
+
+     ceph orch ls --service_type type --service_name <name> [--refresh]
+
+To export the service specifications knows to the orchestrator, run the following command.
+
+   .. prompt:: bash #
+
+     ceph orch ls --export
+
+The service specifications exported with this command will be exported as yaml
+and that yaml can be used with the ``ceph orch apply -i`` command.
+
+For information about retrieving the specifications of single services (including examples of commands), see :ref:`orchestrator-cli-service-spec-retrieve`.
 
 Daemon Status
 =============
 
-A daemon is a running systemd unit and is part of a service.
+A daemon is a systemd unit that is running and part of a service.
 
-Print a list of all daemons known to the orchestrator:
+To see the status of a daemon, do the following:
+
+#. Print a list of all daemons known to the orchestrator.
+#. Query the status of the target daemon.
+
+First, print a list of all daemons known to the orchestrator:
 
    .. prompt:: bash #
 
     ceph orch ps [--hostname host] [--daemon_type type] [--service_name name] [--daemon_id id] [--format f] [--refresh]
 
-Query the status of a particular service instance (mon, osd, mds, rgw).  For
-OSDs the id is the numeric OSD ID, for MDS services it is the file system
-name:
+Then query the status of a particular service instance (mon, osd, mds, rgw).
+For OSDs the id is the numeric OSD ID. For MDS services the id is the file
+system name:
 
    .. prompt:: bash #
 
@@ -55,8 +67,8 @@ name:
 Service Specification
 =====================
 
-A *Service Specification* is a data structure
-to specify the deployment of services.  For example in YAML:
+A *Service Specification* is a data structure that is used to specify the
+deployment of services.  Here is an example of a service specification in YAML:
 
 .. code-block:: yaml
 
@@ -70,7 +82,7 @@ to specify the deployment of services.  For example in YAML:
     unmanaged: false
     ...
 
-where the properties of a service specification are:
+In this example, the properties of this service specification are:
 
 * ``service_type``
     The type of the service. Needs to be either a Ceph
@@ -82,21 +94,20 @@ where the properties of a service specification are:
     The name of the service.
 * ``placement``
     See :ref:`orchestrator-cli-placement-spec`.
-* ``unmanaged``
-    If set to ``true``, the orchestrator will not deploy nor
-    remove any daemon associated with this service. Placement and all other
-    properties will be ignored. This is useful, if this service should not
-    be managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
+* ``unmanaged`` If set to ``true``, the orchestrator will not deploy nor remove
+    any daemon associated with this service. Placement and all other properties
+    will be ignored. This is useful, if you do not want this service to be
+    managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
 
-Each service type can have additional service specific properties.
+Each service type can have additional service-specific properties.
 
 Service specifications of type ``mon``, ``mgr``, and the monitoring
 types do not require a ``service_id``.
 
 A service of type ``osd`` is described in :ref:`drivegroups`
 
-Many service specifications can be applied at once using
-``ceph orch apply -i`` by submitting a multi-document YAML file::
+Many service specifications can be applied at once using ``ceph orch apply -i``
+by submitting a multi-document YAML file::
 
     cat <<EOF | ceph orch apply -i -
     service_type: mon

@@ -546,7 +546,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   } else if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
-     * since bucket instace meta object is unique for this specific bucket instace, we don't
+     * since bucket instance meta object is unique for this specific bucket instance, we don't
      * need to return an error.
      * A scenario where we'd get -EEXIST here, is in a multi-zone config, we're not on the
      * master, creating a bucket, sending bucket creation to the master, we create the bucket

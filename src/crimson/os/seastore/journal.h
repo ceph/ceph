@@ -172,7 +172,6 @@ public:
     ).finally([this] {
       current_journal_segment.reset();
       reset_soft_state();
-      return close_ertr::now();
     });
   }
 
@@ -196,7 +195,7 @@ public:
     auto rsize = get_encoded_record_length(record);
     auto total = rsize.mdlength + rsize.dlength;
     if (total > max_record_length()) {
-      auto &logger = crimson::get_logger(ceph_subsys_filestore);
+      auto &logger = crimson::get_logger(ceph_subsys_seastore);
       logger.error(
 	"Journal::submit_record: record size {} exceeds max {}",
 	total,

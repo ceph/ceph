@@ -323,11 +323,11 @@ int main(int argc, const char **argv)
 
   std::string journal_path = g_conf().get_val<std::string>("osd_journal");
   uint32_t flags = g_conf().get_val<uint64_t>("osd_os_flags");
-  ObjectStore *store = ObjectStore::create(g_ceph_context,
-					   store_type,
-					   data_path,
-					   journal_path,
-                                           flags);
+  std::unique_ptr<ObjectStore> store = ObjectStore::create(g_ceph_context,
+							   store_type,
+							   data_path,
+							   journal_path,
+							   flags);
   if (!store) {
     derr << "unable to create object store" << dendl;
     forker.exit(-ENODEV);
@@ -369,7 +369,7 @@ int main(int argc, const char **argv)
       forker.exit(-EINVAL);
     }
 
-    int err = OSD::mkfs(g_ceph_context, store, g_conf().get_val<uuid_d>("fsid"),
+    int err = OSD::mkfs(g_ceph_context, std::move(store), g_conf().get_val<uuid_d>("fsid"),
                         whoami, osdspec_affinity);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
@@ -438,7 +438,7 @@ int main(int argc, const char **argv)
 	 << " for object store " << data_path
 	 << dendl;
 flushjournal_out:
-    delete store;
+    store.reset();
     forker.exit(err < 0 ? 1 : 0);
   }
   if (dump_journal) {
@@ -477,7 +477,7 @@ flushjournal_out:
   uuid_d cluster_fsid, osd_fsid;
   ceph_release_t require_osd_release = ceph_release_t::unknown;
   int w;
-  int r = OSD::peek_meta(store, &magic, &cluster_fsid, &osd_fsid, &w,
+  int r = OSD::peek_meta(store.get(), &magic, &cluster_fsid, &osd_fsid, &w,
 			 &require_osd_release);
   if (r < 0) {
     derr << TEXT_RED << " ** ERROR: unable to open OSD superblock on "
@@ -678,7 +678,7 @@ flushjournal_out:
   }
 
   osdptr = new OSD(g_ceph_context,
-		   store,
+		   std::move(store),
 		   whoami,
 		   ms_cluster,
 		   ms_public,

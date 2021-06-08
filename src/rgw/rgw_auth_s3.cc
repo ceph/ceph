@@ -580,16 +580,8 @@ static void add_v4_canonical_params_from_map(const map<string, string>& m,
     if (key.empty()) {
       continue;
     }
-    const string *pval = &(entry.second);
-    string _val;
 
-    if (pval->find_first_of('+') != std::string::npos) {
-      _val = *pval;
-      boost::replace_all(_val, "+", " ");
-      pval = &_val;
-    }
-
-    (*result)[aws4_uri_recode(key, true)] = aws4_uri_recode(*pval, true);
+    (*result)[aws4_uri_recode(key, true)] = aws4_uri_recode(entry.second, true);
   }
 }
 

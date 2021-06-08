@@ -14,7 +14,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -85,6 +85,22 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
       return lookup_range_ertr::make_ready_future<lba_pin_list_t>(
 	std::move(*result));
     });
+}
+
+LBAInternalNode::lookup_pin_ret LBAInternalNode::lookup_pin(
+  op_context_t c,
+  laddr_t addr)
+{
+  auto iter = get_containing_child(addr);
+  return get_lba_btree_extent(
+    c,
+    this,
+    get_meta().depth - 1,
+    iter->get_val(),
+    get_paddr()
+  ).safe_then([c, addr] (LBANodeRef extent) {
+    return extent->lookup_pin(c, addr);
+  }).finally([ref=LBANodeRef(this)] {});
 }
 
 LBAInternalNode::insert_ret LBAInternalNode::insert(
@@ -484,6 +500,25 @@ LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
   }
   return lookup_range_ertr::make_ready_future<lba_pin_list_t>(
     std::move(ret));
+}
+
+LBALeafNode::lookup_pin_ret LBALeafNode::lookup_pin(
+  op_context_t c,
+  laddr_t addr)
+{
+  logger().debug("LBALeafNode::lookup_pin {}", addr);
+  auto iter = find(addr);
+  if (iter == end()) {
+    return crimson::ct_error::enoent::make();
+  }
+  auto val = iter->get_val();
+  auto begin = iter->get_key();
+  return lookup_pin_ret(
+    lookup_pin_ertr::ready_future_marker{},
+    std::make_unique<BtreeLBAPin>(
+      this,
+      val.paddr.maybe_relative_to(get_paddr()),
+      lba_node_meta_t{ begin, begin + val.len, 0}));
 }
 
 LBALeafNode::insert_ret LBALeafNode::insert(

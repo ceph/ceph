@@ -19,6 +19,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   panelStyle: any;
   grafanaExist = false;
   mode = '&kiosk';
+  datasource = 'Dashboard1';
   loading = true;
   styles: Record<string, string> = {};
   dashboardExist = true;
@@ -171,6 +172,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
       '/' +
       this.grafanaPath +
       '&refresh=2s' +
+      `&var-datasource=${this.datasource}` +
       this.mode +
       '&' +
       this.time;

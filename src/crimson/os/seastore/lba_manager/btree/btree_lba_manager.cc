@@ -13,7 +13,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -59,24 +59,24 @@ BtreeLBAManager::get_root(Transaction &t)
   });
 }
 
-BtreeLBAManager::get_mapping_ret
-BtreeLBAManager::get_mapping(
+BtreeLBAManager::get_mappings_ret
+BtreeLBAManager::get_mappings(
   Transaction &t,
   laddr_t offset, extent_len_t length)
 {
-  logger().debug("BtreeLBAManager::get_mapping: {}, {}", offset, length);
+  logger().debug("BtreeLBAManager::get_mappings: {}, {}", offset, length);
   return get_root(
     t).safe_then([this, &t, offset, length](auto extent) {
       return extent->lookup_range(
 	get_context(t),
 	offset, length
-      ).safe_then([extent](auto ret) { return ret; });
-    }).safe_then([](auto &&e) {
-      logger().debug("BtreeLBAManager::get_mapping: got mapping {}", e);
-      return get_mapping_ret(
-	get_mapping_ertr::ready_future_marker{},
-	std::move(e));
-    });
+      ).safe_then([](auto &&e) {
+        logger().debug("BtreeLBAManager::get_mappings: got mappings {}", e);
+        return get_mappings_ret(
+          get_mappings_ertr::ready_future_marker{},
+          std::move(e));
+      });
+  });
 }
 
 
@@ -93,13 +93,30 @@ BtreeLBAManager::get_mappings(
     l->begin(),
     l->end(),
     [this, &t, &ret](const auto &p) {
-      return get_mapping(t, p.first, p.second).safe_then(
+      return get_mappings(t, p.first, p.second).safe_then(
 	[&ret](auto res) {
 	  ret.splice(ret.end(), res, res.begin(), res.end());
 	});
     }).safe_then([l=std::move(l), retptr=std::move(retptr)]() mutable {
       return std::move(*retptr);
     });
+}
+
+BtreeLBAManager::get_mapping_ret
+BtreeLBAManager::get_mapping(
+  Transaction &t,
+  laddr_t offset)
+{
+  logger().debug("BtreeLBAManager::get_mapping: {}", offset);
+  return get_root(t
+  ).safe_then([this, &t, offset] (auto extent) {
+    return extent->lookup_pin(get_context(t), offset);
+  }).safe_then([] (auto &&e) {
+    logger().debug("BtreeLBAManager::get_mapping: got mapping {}", *e);
+    return get_mapping_ret(
+      get_mapping_ertr::ready_future_marker{},
+      std::move(e));
+  });
 }
 
 BtreeLBAManager::find_hole_ret

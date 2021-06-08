@@ -99,6 +99,10 @@ struct LBAInternalNode
     laddr_t addr,
     extent_len_t len) final;
 
+  lookup_pin_ret lookup_pin(
+    op_context_t c,
+    laddr_t addr) final;
+
   insert_ret insert(
     op_context_t c,
     laddr_t laddr,
@@ -373,6 +377,10 @@ struct LBALeafNode
     op_context_t c,
     laddr_t addr,
     extent_len_t len) final;
+
+  lookup_pin_ret lookup_pin(
+    op_context_t c,
+    laddr_t addr) final;
 
   insert_ret insert(
     op_context_t c,

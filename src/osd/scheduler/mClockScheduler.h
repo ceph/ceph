@@ -193,6 +193,9 @@ public:
     ostream << "mClockScheduler";
   }
 
+  // Update data associated with the modified mclock config key(s)
+  void update_configuration() final;
+
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set<std::string> &changed) final;

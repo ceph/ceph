@@ -50,13 +50,17 @@ public:
   mkfs_ret mkfs(
     Transaction &t) final;
 
-  get_mapping_ret get_mapping(
+  get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) final;
 
   get_mappings_ret get_mappings(
     Transaction &t,
     laddr_list_t &&list) final;
+
+  get_mapping_ret get_mapping(
+    Transaction &t,
+    laddr_t offset) final;
 
   find_hole_ret find_hole(
     Transaction &t,

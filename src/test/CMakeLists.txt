@@ -620,10 +620,7 @@ if(PROMTOOL_EXECUTABLE)
       "please use a newer prometheus")
   endif()
 else()
-  if(LINUX)
-    add_ceph_test(run-promtool-unittests
-      {CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
-  endif()
+  message(WARNING "run-promtool-unittests is skipped due to missing promtool")
 endif()
 
 set_property(

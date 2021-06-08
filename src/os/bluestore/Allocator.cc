@@ -25,8 +25,7 @@ class Allocator::SocketHook : public AdminSocketHook {
   friend class Allocator;
   std::string name;
 public:
-  explicit SocketHook(Allocator *alloc,
-                      const std::string& _name) :
+  SocketHook(Allocator *alloc, std::string_view _name) :
     alloc(alloc), name(_name)
   {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
@@ -106,7 +105,7 @@ public:
   }
 
 };
-Allocator::Allocator(const std::string& name,
+Allocator::Allocator(std::string_view name,
                      int64_t _capacity,
                      int64_t _block_size)
   : device_size(_capacity), block_size(_block_size)
@@ -124,8 +123,8 @@ const string& Allocator::get_name() const {
   return asok_hook->name;
 }
 
-Allocator *Allocator::create(CephContext* cct, string type,
-                             int64_t size, int64_t block_size, const std::string& name)
+Allocator *Allocator::create(CephContext* cct, std::string_view type,
+                             int64_t size, int64_t block_size, std::string_view name)
 {
   Allocator* alloc = nullptr;
   if (type == "stupid") {

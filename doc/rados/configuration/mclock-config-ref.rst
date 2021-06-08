@@ -7,11 +7,12 @@
 Mclock profiles mask the low level details from users, making it
 easier for them to configure mclock.
 
-To use mclock, you must provide the following input parameters:
+The following input parameters are required for a mclock profile to configure
+the QoS related parameters:
 
-* total capacity of each OSD
+* total capacity (IOPS) of each OSD (determined automatically)
 
-* an mclock profile to enable
+* an mclock profile type to enable
 
 Using the settings in the specified profile, the OSD determines and applies the
 lower-level mclock and Ceph parameters. The parameters applied by the mclock
@@ -31,11 +32,11 @@ Ceph cluster enables the throttling of the operations(IOPS) belonging to
 different client classes (background recovery, scrub, snaptrim, client op,
 osd subop)”*.
 
-The mclock profile uses the capacity limits and the mclock profile selected by
-the user to determine the low-level mclock resource control parameters.
+The mclock profile uses the capacity limits and the mclock profile type selected
+by the user to determine the low-level mclock resource control parameters.
 
-Depending on the profile, lower-level mclock resource-control parameters and
-some Ceph-configuration parameters are transparently applied.
+Depending on the profile type, lower-level mclock resource-control parameters
+and some Ceph-configuration parameters are transparently applied.
 
 The low-level mclock resource control parameters are the *reservation*,
 *limit*, and *weight* that provide control of the resource shares, as
@@ -56,7 +57,7 @@ mclock profiles can be broadly classified into two types,
     as compared to background recoveries and other internal clients within
     Ceph. This profile is enabled by default.
   - **high_recovery_ops**:
-    This profile allocates more reservation to background recoveries as 
+    This profile allocates more reservation to background recoveries as
     compared to external clients and other internal clients within Ceph. For
     example, an admin may enable this profile temporarily to speed-up background
     recoveries during non-peak hours.
@@ -109,7 +110,8 @@ chunk of the bandwidth allocation goes to client ops. Background recovery ops
 are given lower allocation (and therefore take a longer time to complete). But
 there might be instances that necessitate giving higher allocations to either
 client ops or recovery ops. In order to deal with such a situation, you can
-enable one of the alternate built-in profiles mentioned above.
+enable one of the alternate built-in profiles by following the steps mentioned
+in the next section.
 
 If any mClock profile (including "custom") is active, the following Ceph config
 sleep options will be disabled,
@@ -139,20 +141,64 @@ all its clients.
 Steps to Enable mClock Profile
 ==============================
 
-The following sections outline the steps required to enable a mclock profile.
+As already mentioned, the default mclock profile is set to *high_client_ops*.
+The other values for the built-in profiles include *balanced* and
+*high_recovery_ops*.
 
-Determining OSD Capacity Using Benchmark Tests
-----------------------------------------------
+If there is a requirement to change the default profile, then the option
+:confval:`osd_mclock_profile` may be set during runtime by using the following
+command:
 
-To allow mclock to fulfill its QoS goals across its clients, it is most
-important to have a good understanding of each OSD's capacity in terms of its
-baseline throughputs (IOPS) across the Ceph nodes. To determine this capacity,
-you must perform appropriate benchmarking tests. The steps for performing these
-benchmarking tests are broadly outlined below.
+  .. prompt:: bash #
 
-Any existing benchmarking tool can be used for this purpose. The following
-steps use the *Ceph Benchmarking Tool* (cbt_). Regardless of the tool
-used, the steps described below remain the same.
+    ceph config set [global,osd] osd_mclock_profile <value>
+
+For example, to change the profile to allow faster recoveries, the following
+command can be used to switch to the *high_recovery_ops* profile:
+
+  .. prompt:: bash #
+
+    ceph config set osd osd_mclock_profile high_recovery_ops
+
+.. note:: The *custom* profile is not recommended unless you are an advanced
+          user.
+
+And that's it! You are ready to run workloads on the cluster and check if the
+QoS requirements are being met.
+
+
+OSD Capacity Determination (Automated)
+======================================
+
+The OSD capacity in terms of total IOPS is determined automatically during OSD
+initialization. This is achieved by running the OSD bench tool and overriding
+the default value of ``osd_mclock_max_capacity_iops_[hdd, ssd]`` option
+depending on the device type. No other action/input is expected from the user
+to set the OSD capacity. You may verify the capacity of an OSD after the
+cluster is brought up by using the following command:
+
+  .. prompt:: bash #
+
+    ceph config show osd.x osd_mclock_max_capacity_iops_[hdd, ssd]
+
+For example, the following command shows the max capacity for osd.0 on a Ceph
+node whose underlying device type is SSD:
+
+  .. prompt:: bash #
+
+    ceph config show osd.0 osd_mclock_max_capacity_iops_ssd
+
+
+Steps to Manually Benchmark an OSD (Optional)
+=============================================
+
+.. note:: These steps are only necessary if you want to override the OSD
+          capacity already determined automatically during OSD initialization.
+          Otherwise, you may skip this section entirely.
+
+Any existing benchmarking tool can be used for this purpose. In this case, the
+steps use the *Ceph OSD Bench* command described in the next section. Regardless
+of the tool/command used, the steps outlined further below remain the same.
 
 As already described in the :ref:`dmclock-qos` section, the number of
 shards and the bluestore's throttle parameters have an impact on the mclock op
@@ -167,68 +213,85 @@ maximize the impact of the mclock scheduler.
 
 :Bluestore Throttle Parameters:
   We recommend using the default values as defined by
-  :confval:`bluestore_throttle_bytes` and :confval:`bluestore_throttle_deferred_bytes`. But
-  these parameters may also be determined during the benchmarking phase as
-  described below.
+  :confval:`bluestore_throttle_bytes` and
+  :confval:`bluestore_throttle_deferred_bytes`. But these parameters may also be
+  determined during the benchmarking phase as described below.
 
-Benchmarking Test Steps Using CBT
-`````````````````````````````````
+OSD Bench Command Syntax
+````````````````````````
 
-The steps below use the default shards and detail the steps used to determine the
-correct bluestore throttle values.
+The :ref:`osd-subsystem` section describes the OSD bench command. The syntax
+used for benchmarking is shown below :
 
-.. note:: These steps, although manual in April 2021, will be automated in the future.
+.. prompt:: bash #
 
-1. On the Ceph node hosting the OSDs, download cbt_ from git.
-2. Install cbt and all the dependencies mentioned on the cbt github page.
-3. Construct the Ceph configuration file and the cbt yaml file.
-4. Ensure that the bluestore throttle options ( i.e.
-   :confval:`bluestore_throttle_bytes` and :confval:`bluestore_throttle_deferred_bytes`) are
-   set to the default values.
-5. Ensure that the test is performed on similar device types to get reliable
-   OSD capacity data.
-6. The OSDs can be grouped together with the desired replication factor for the
-   test to ensure reliability of OSD capacity data.
-7. After ensuring that the OSDs nodes are in the desired configuration, run a
-   simple 4KiB random write workload on the OSD(s) for 300 secs.
-8. Note the overall throughput(IOPS) obtained from the cbt output file. This
-   value is the baseline throughput(IOPS) when the default bluestore
-   throttle options are in effect.
-9. If the intent is to determine the bluestore throttle values for your
-   environment, then set the two options, :confval:`bluestore_throttle_bytes` and
-   :confval:`bluestore_throttle_deferred_bytes` to 32 KiB(32768 Bytes) each to begin
-   with. Otherwise, you may skip to the next section.
-10. Run the 4KiB random write workload as before on the OSD(s) for 300 secs.
-11. Note the overall throughput from the cbt log files and compare the value
-    against the baseline throughput in step 8.
-12. If the throughput doesn't match with the baseline, increment the bluestore
-    throttle options by 2x and repeat steps 9 through 11 until the obtained
-    throughput is very close to the baseline value.
+  ceph tell osd.N bench [TOTAL_BYTES] [BYTES_PER_WRITE] [OBJ_SIZE] [NUM_OBJS]
 
-For example, during benchmarking on a machine with NVMe SSDs, a value of 256 KiB for
-both bluestore throttle and deferred bytes was determined to maximize the impact
-of mclock. For HDDs, the corresponding value was 40 MiB, where the overall
-throughput was roughly equal to the baseline throughput. Note that in general
-for HDDs, the bluestore throttle values are expected to be higher when compared
-to SSDs.
+where,
 
-.. _cbt: https://github.com/ceph/cbt
+* ``TOTAL_BYTES``: Total number of bytes to write
+* ``BYTES_PER_WRITE``: Block size per write
+* ``OBJ_SIZE``: Bytes per object
+* ``NUM_OBJS``: Number of objects to write
+
+Benchmarking Test Steps Using OSD Bench
+```````````````````````````````````````
+
+The steps below use the default shards and detail the steps used to determine
+the correct bluestore throttle values (optional).
+
+#. Bring up your Ceph cluster and login to the Ceph node hosting the OSDs that
+   you wish to benchmark.
+#. Run a simple 4KiB random write workload on an OSD using the following
+   commands:
+
+   .. note:: Note that before running the test, caches must be cleared to get an
+             accurate measurement.
+
+   For example, if you are running the benchmark test on osd.0, run the following
+   commands:
+
+   .. prompt:: bash #
+
+     ceph tell osd.0 cache drop
+
+   .. prompt:: bash #
+
+     ceph tell osd.0 bench 12288000 4096 4194304 100
+
+#. Note the overall throughput(IOPS) obtained from the output of the osd bench
+   command. This value is the baseline throughput(IOPS) when the default
+   bluestore throttle options are in effect.
+#. If the intent is to determine the bluestore throttle values for your
+   environment, then set the two options, :confval:`bluestore_throttle_bytes`
+   and :confval:`bluestore_throttle_deferred_bytes` to 32 KiB(32768 Bytes) each
+   to begin with. Otherwise, you may skip to the next section.
+#. Run the 4KiB random write test as before using OSD bench.
+#. Note the overall throughput from the output and compare the value
+   against the baseline throughput recorded in step 3.
+#. If the throughput doesn't match with the baseline, increment the bluestore
+   throttle options by 2x and repeat steps 5 through 7 until the obtained
+   throughput is very close to the baseline value.
+
+For example, during benchmarking on a machine with NVMe SSDs, a value of 256 KiB
+for both bluestore throttle and deferred bytes was determined to maximize the
+impact of mclock. For HDDs, the corresponding value was 40 MiB, where the
+overall throughput was roughly equal to the baseline throughput. Note that in
+general for HDDs, the bluestore throttle values are expected to be higher when
+compared to SSDs.
 
 
 Specifying  Max OSD Capacity
-----------------------------
+````````````````````````````
 
-The steps in this section may be performed only if the max osd capacity is
-different from the default values (SSDs: 21500 IOPS and HDDs: 315 IOPS). The
-option ``osd_mclock_max_capacity_iops_[hdd, ssd]`` can be set by specifying it
-in either the **[global]** section or in a specific OSD section (**[osd.x]** of
-your Ceph configuration file).
-
-Alternatively, commands of the following form may be used:
+The steps in this section may be performed only if you want to override the
+max osd capacity automatically determined during OSD initialization. The option
+``osd_mclock_max_capacity_iops_[hdd, ssd]`` can be set by running the
+following command:
 
   .. prompt:: bash #
 
-     ceph config set [global, osd] osd_mclock_max_capacity_iops_[hdd,ssd] <value>
+     ceph config set [global,osd] osd_mclock_max_capacity_iops_[hdd,ssd] <value>
 
 For example, the following command sets the max capacity for all the OSDs in a
 Ceph node whose underlying device type is SSDs:
@@ -245,43 +308,12 @@ device type is HDD, use a command like this:
     ceph config set osd.0 osd_mclock_max_capacity_iops_hdd 350
 
 
-Specifying Which mClock Profile to Enable
------------------------------------------
-
-As already mentioned, the default mclock profile is set to *high_client_ops*.
-The other values for the built-in profiles include *balanced* and
-*high_recovery_ops*.
-
-If there is a requirement to change the default profile, then the option
-:confval:`osd_mclock_profile` may be set in the **[global]** or **[osd]** section of
-your Ceph configuration file before bringing up your cluster.
-
-Alternatively, to change the profile during runtime, use the following command:
-
-  .. prompt:: bash #
-
-    ceph config set [global,osd] osd_mclock_profile <value>
-
-For example, to change the profile to allow faster recoveries, the following
-command can be used to switch to the *high_recovery_ops* profile:
-
-  .. prompt:: bash #
-
-    ceph config set osd osd_mclock_profile high_recovery_ops
-
-.. note:: The *custom* profile is not recommended unless you are an advanced user.
-
-And that's it! You are ready to run workloads on the cluster and check if the
-QoS requirements are being met.
-
-
 .. index:: mclock; config settings
 
 mClock Config Options
 =====================
 
 .. confval:: osd_mclock_profile
-.. confval:: osd_mclock_max_capacity_iops
 .. confval:: osd_mclock_max_capacity_iops_hdd
 .. confval:: osd_mclock_max_capacity_iops_ssd
 .. confval:: osd_mclock_cost_per_io_usec

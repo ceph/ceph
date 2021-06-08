@@ -174,6 +174,7 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
     debug echo "ceph-mgr dashboard not built - disabling."
     with_mgr_dashboard=false
 fi
+with_mgr_restful=true
 
 filestore_path=
 kstore_path=
@@ -187,7 +188,6 @@ RESTFUL_URLS=""
 
 conf_fn="$CEPH_CONF_PATH/ceph.conf"
 keyring_fn="$CEPH_CONF_PATH/keyring"
-osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 inc_osd_num=0
 
@@ -451,6 +451,9 @@ case $1 in
     --without-dashboard)
         with_mgr_dashboard=false
         ;;
+    --without-restful)
+        with_mgr_restful=false
+        ;;
     --seastore-devs)
         parse_block_devs --seastore-devs "$2"
         shift
@@ -592,9 +595,12 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="restful iostat"
+    local mgr_modules="iostat"
     if $with_mgr_dashboard; then
-        mgr_modules="dashboard $mgr_modules"
+        mgr_modules+=" dashboard"
+    fi
+    if $with_mgr_restful; then
+        mgr_modules+=" restful"
     fi
 
     local msgr_conf=''
@@ -971,6 +977,22 @@ EOF
     fi
 }
 
+create_mgr_restful_secret() {
+    while ! ceph_adm -h | grep -c -q ^restful ; do
+        debug echo 'waiting for mgr restful module to start'
+        sleep 1
+    done
+    local secret_file
+    if ceph_adm restful create-self-signed-cert > /dev/null; then
+        secret_file=`mktemp`
+        ceph_adm restful create-key admin -o $secret_file
+        RESTFUL_SECRET=`cat $secret_file`
+        rm $secret_file
+    else
+        debug echo MGR Restful is not working, perhaps the package is not installed?
+    fi
+}
+
 start_mgr() {
     local mgr=0
     local ssl=${DASHBOARD_SSL:-1}
@@ -1041,18 +1063,8 @@ EOF
                 fi
             fi
         fi
-
-        while ! ceph_adm -h | grep -c -q ^restful ; do
-            debug echo 'waiting for mgr restful module to start'
-            sleep 1
-        done
-        if ceph_adm restful create-self-signed-cert; then
-            SF=`mktemp`
-            ceph_adm restful create-key admin -o $SF
-            RESTFUL_SECRET=`cat $SF`
-            rm $SF
-        else
-            debug echo MGR Restful is not working, perhaps the package is not installed?
+        if $with_mgr_restful; then
+            create_mgr_restful_secret
         fi
     fi
 
@@ -1596,7 +1608,7 @@ fi
  docker_service(){
      local service=''
      #prefer podman
-     if pgrep -f podman > /dev/null; then
+     if command -v podman > /dev/null; then
 	 service="podman"
      elif pgrep -f docker > /dev/null; then
 	 service="docker"
@@ -1635,13 +1647,19 @@ debug echo "vstart cluster complete. Use stop.sh to stop. See out/* (e.g. 'tail 
 echo ""
 if [ "$new" -eq 1 ]; then
     if $with_mgr_dashboard; then
-        echo "dashboard urls: $DASH_URLS"
-        echo "  w/ user/pass: admin / admin"
+        cat <<EOF
+dashboard urls: $DASH_URLS
+  w/ user/pass: admin / admin
+EOF
     fi
-    echo "restful urls: $RESTFUL_URLS"
-    echo "  w/ user/pass: admin / $RESTFUL_SECRET"
-    echo ""
+    if $with_mgr_restful; then
+        cat <<EOF
+restful urls: $RESTFUL_URLS
+  w/ user/pass: admin / $RESTFUL_SECRET
+EOF
+    fi
 fi
+
 echo ""
 # add header to the environment file
 {
