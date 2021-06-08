@@ -155,7 +155,8 @@ class KVPool {
   }
 
   static KVPool create_raw_range(
-      const std::vector<size_t>& str_sizes,
+      const std::vector<size_t>& ns_sizes,
+      const std::vector<size_t>& oid_sizes,
       const std::vector<size_t>& value_sizes,
       const std::pair<index_t, index_t>& range2,
       const std::pair<index_t, index_t>& range1,
@@ -179,8 +180,8 @@ class KVPool {
           ns_size = 0;
           oid_size = 0;
         } else {
-          ns_size = str_sizes[rd() % str_sizes.size()];
-          oid_size = str_sizes[rd() % str_sizes.size()];
+          ns_size = ns_sizes[rd() % ns_sizes.size()];
+          oid_size = oid_sizes[rd() % oid_sizes.size()];
           assert(ns_size && oid_size);
         }
         for (index_t k = range0.first; k < range0.second; ++k) {
