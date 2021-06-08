@@ -112,6 +112,8 @@ class OSDService(CephService):
         created = []
         for osd_id, osds in osds_elems.items():
             for osd in osds:
+                if osd['type'] == 'db':
+                    continue
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
                     logger.debug('mismatched fsid, skipping %s' % osd)
                     continue
