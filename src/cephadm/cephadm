@@ -280,7 +280,6 @@ class Monitoring(object):
             'args': [
                 '--config.file=/etc/prometheus/prometheus.yml',
                 '--storage.tsdb.path=/prometheus',
-                '--web.listen-address=:{}'.format(port_map['prometheus'][0]),
             ],
             'config-json-files': [
                 'prometheus.yml',
@@ -311,7 +310,6 @@ class Monitoring(object):
             'cpus': '2',
             'memory': '2GB',
             'args': [
-                '--web.listen-address=:{}'.format(port_map['alertmanager'][0]),
                 '--cluster.listen-address=:{}'.format(port_map['alertmanager'][1]),
             ],
             'config-json-files': [
@@ -2144,6 +2142,17 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     elif daemon_type in Monitoring.components:
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
+        # set ip and port to bind to for nodeexporter,alertmanager,prometheus
+        if daemon_type != 'grafana':
+            ip = ''
+            port = Monitoring.port_map[daemon_type][0]
+            if 'meta_json' in ctx and ctx.meta_json:
+                meta = json.loads(ctx.meta_json) or {}
+                if 'ip' in meta and meta['ip']:
+                    ip = meta['ip']
+                if 'ports' in meta and meta['ports']:
+                    port = meta['ports'][0]
+            r += [f'--web.listen-address={ip}:{port}']
         if daemon_type == 'alertmanager':
             config = get_parm(ctx.config_json)
             peers = config.get('peers', list())  # type: ignore
@@ -2943,15 +2952,7 @@ class Firewalld(object):
 def update_firewalld(ctx, daemon_type):
     # type: (CephadmContext, str) -> None
     firewall = Firewalld(ctx)
-
     firewall.enable_service_for(daemon_type)
-
-    fw_ports = []
-
-    if daemon_type in Monitoring.port_map.keys():
-        fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
-
-    firewall.open_ports(fw_ports)
     firewall.apply_rules()
 
 
@@ -4344,9 +4345,6 @@ def command_deploy(ctx):
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
         # Default Checks
-        if not ctx.reconfig and not redeploy:
-            daemon_ports.extend(Monitoring.port_map[daemon_type])
-
         # make sure provided config-json is sufficient
         config = get_parm(ctx.config_json)  # type: ignore
         required_files = Monitoring.components[daemon_type].get('config-json-files', list())
