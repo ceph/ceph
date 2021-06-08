@@ -95,8 +95,6 @@ or delete them if they were just created. ::
 	ceph pg {pgid} mark_unfound_lost revert|delete
 
 
-.. _osd-subsystem:
-
 OSD Subsystem
 =============
 
