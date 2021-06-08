@@ -85,9 +85,8 @@ void ShardServices::handle_conf_change(const ConfigProxy& conf,
   }
 }
 
-template<class MsgT>
-seastar::future<> ShardServices::do_send_to_osd(
-  int peer, MsgT m, epoch_t from_epoch)
+seastar::future<> ShardServices::send_to_osd(
+  int peer, MessageURef m, epoch_t from_epoch)
 {
   if (osdmap->is_down(peer)) {
     logger().info("{}: osd.{} is_down", __func__, peer);
@@ -101,18 +100,6 @@ seastar::future<> ShardServices::do_send_to_osd(
         osdmap->get_cluster_addrs(peer).front(), CEPH_ENTITY_TYPE_OSD);
     return conn->send(std::move(m));
   }
-}
-
-seastar::future<> ShardServices::send_to_osd(
-  int peer, MessageRef m, epoch_t from_epoch) 
-{
-  return do_send_to_osd(peer, std::move(m), from_epoch);
-}
-
-seastar::future<> ShardServices::send_to_osd(
-  int peer, MessageURef m, epoch_t from_epoch) 
-{
-  return do_send_to_osd(peer, std::move(m), from_epoch);
 }
 
 seastar::future<> ShardServices::dispatch_context_transaction(
