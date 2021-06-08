@@ -1440,51 +1440,6 @@ options:
   - no_mon_update
   - cluster_create
   with_legacy: true
-- name: mon_delta_reset_interval
-  type: float
-  level: advanced
-  desc: window duration for rate calculations in 'ceph status'
-  fmt_desc: Seconds of inactivity before we reset the PG delta to 0. We keep
-    track of the delta of the used space of each pool, so, for
-    example, it would be easier for us to understand the progress of
-    recovery or the performance of cache tier. But if there's no
-    activity reported for a certain pool, we just reset the history of
-    deltas of that pool.
-  default: 10
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_stat_smooth_intervals
-  type: uint
-  level: advanced
-  desc: number of PGMaps stats over which we calc the average read/write throughput
-    of the whole cluster
-  fmt_desc: Ceph will smooth statistics over the last ``N`` PG maps.
-  default: 6
-  services:
-  - mgr
-  min: 1
-- name: mon_pg_stuck_threshold
-  type: int
-  level: advanced
-  desc: number of seconds after which pgs can be considered stuck inactive, unclean,
-    etc
-  long_desc: see doc/control.rst under dump_stuck for more info
-  fmt_desc: Number of seconds after which PGs can be considered as
-    being stuck.
-  default: 1_min
-  services:
-  - mgr
-- name: mon_pg_warn_min_per_osd
-  type: uint
-  level: advanced
-  desc: minimal number PGs per (in) osd before we warn the admin
-  fmt_desc: Raise ``HEALTH_WARN`` if the average number
-    of PGs per ``in`` OSD is under this number. A non-positive number
-    disables this.
-  default: 0
-  services:
-  - mgr
 - name: mon_max_pg_per_osd
   type: uint
   level: advanced
@@ -1496,69 +1451,8 @@ options:
   default: 250
   services:
   - mgr
+  - mon
   min: 1
-- name: mon_target_pg_per_osd
-  type: uint
-  level: advanced
-  desc: Automated PG management creates this many PGs per OSD
-  long_desc: When creating pools, the automated PG management logic will attempt to
-    reach this target.  In some circumstances, it may exceed this target, up to the
-    ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
-    created if the cluster is not yet fully utilised
-  default: 100
-  min: 1
-- name: mon_pg_warn_max_object_skew
-  type: float
-  level: advanced
-  desc: max skew few average in objects per pg
-  fmt_desc: Raise ``HEALTH_WARN`` if the average RADOS object count per PG
-    of any pool is greater than ``mon_pg_warn_max_object_skew`` times
-    the average RADOS object count per PG of all pools. Zero or a non-positive
-    number disables this. Note that this option applies to ``ceph-mgr`` daemons.
-  default: 10
-  services:
-  - mgr
-- name: mon_pg_warn_min_objects
-  type: int
-  level: advanced
-  desc: 'do not warn below this object #'
-  fmt_desc: Do not warn if the total number of RADOS objects in cluster is below
-    this number
-  default: 10000
-  services:
-  - mgr
-- name: mon_pg_warn_min_pool_objects
-  type: int
-  level: advanced
-  desc: 'do not warn on pools below this object #'
-  fmt_desc: Do not warn on pools whose RADOS object count is below this number
-  default: 1000
-  services:
-  - mgr
-- name: mon_pg_check_down_all_threshold
-  type: float
-  level: advanced
-  desc: threshold of down osds after which we check all pgs
-  fmt_desc: Percentage threshold of ``down`` OSDs above which we check all PGs
-    for stale ones.
-  default: 0.5
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_cache_target_full_warn_ratio
-  type: float
-  level: advanced
-  desc: issue CACHE_POOL_NEAR_FULL health warning when cache pool utilization exceeds
-    this ratio of usable space
-  fmt_desc: Position between pool's ``cache_target_full`` and ``target_max_object``
-    where we start warning
-  default: 0.66
-  services:
-  - mgr
-  flags:
-  - no_mon_update
-  - cluster_create
-  with_legacy: true
 - name: mon_osd_full_ratio
   type: float
   level: advanced
@@ -1666,117 +1560,6 @@ options:
   - mon
   see_also:
   - ms_bind_msgr2
-- name: mon_warn_on_legacy_crush_tunables
-  type: bool
-  level: advanced
-  desc: issue OLD_CRUSH_TUNABLES health warning if CRUSH tunables are older than mon_crush_min_required_version
-  fmt_desc: Raise ``HEALTH_WARN`` when CRUSH tunables are too old (older than ``mon_min_crush_required_version``)
-  default: true
-  services:
-  - mgr
-  see_also:
-  - mon_crush_min_required_version
-  with_legacy: true
-- name: mon_crush_min_required_version
-  type: str
-  level: advanced
-  desc: minimum ceph release to use for mon_warn_on_legacy_crush_tunables
-  fmt_desc: The minimum tunable profile required by the cluster. See
-    :ref:`CRUSH map tunables <crush-map-tunables>` for details.
-  default: hammer
-  services:
-  - mgr
-  see_also:
-  - mon_warn_on_legacy_crush_tunables
-  with_legacy: true
-- name: mon_warn_on_crush_straw_calc_version_zero
-  type: bool
-  level: advanced
-  desc: issue OLD_CRUSH_STRAW_CALC_VERSION health warning if the CRUSH map's straw_calc_version
-    is zero
-  fmt_desc: Raise ``HEALTH_WARN`` when the CRUSH ``straw_calc_version`` is zero. See
-    :ref:`CRUSH map tunables <crush-map-tunables>` for details.
-  default: true
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_warn_on_osd_down_out_interval_zero
-  type: bool
-  level: advanced
-  desc: issue OSD_NO_DOWN_OUT_INTERVAL health warning if mon_osd_down_out_interval
-    is zero
-  long_desc: Having mon_osd_down_out_interval set to 0 means that down OSDs are not
-    marked out automatically and the cluster does not heal itself without administrator
-    intervention.
-  fmt_desc: Raise ``HEALTH_WARN`` when ``mon_osd_down_out_interval`` is zero. Having this
-    option set to zero on the leader acts much like the ``noout`` flag. It's hard to figure
-    out what's going wrong with clusters without the ``noout`` flag set but acting like that
-    just the same, so we report a warning in this case.
-  default: true
-  services:
-  - mgr
-  see_also:
-  - mon_osd_down_out_interval
-  with_legacy: true
-- name: mon_warn_on_cache_pools_without_hit_sets
-  type: bool
-  level: advanced
-  desc: issue CACHE_POOL_NO_HIT_SET health warning for cache pools that do not have
-    hit sets configured
-  fmt_desc: Raise ``HEALTH_WARN`` when a cache pool does not have the ``hit_set_type``
-    value configured. See :ref:`hit_set_type <hit_set_type>` for more details.
-  default: true
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_warn_on_pool_no_app
-  type: bool
-  level: dev
-  desc: issue POOL_APP_NOT_ENABLED health warning if pool has not application enabled
-  default: true
-  services:
-  - mgr
-- name: mon_warn_on_pool_pg_num_not_power_of_two
-  type: bool
-  level: dev
-  desc: issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two
-    pg_num value
-  default: true
-  services:
-  - mon
-- name: mon_warn_on_pool_no_redundancy
-  type: bool
-  level: advanced
-  desc: Issue a health warning if any pool is configured with no replicas
-  fmt_desc: Raise ``HEALTH_WARN`` if any pool is configured with no replicas.
-  default: true
-  services:
-  - mon
-  see_also:
-  - osd_pool_default_size
-  - osd_pool_default_min_size
-- name: mon_allow_pool_size_one
-  type: bool
-  level: advanced
-  desc: allow configuring pool with no replicas
-  default: false
-  services:
-  - mon
-- name: mon_warn_on_misplaced
-  type: bool
-  level: advanced
-  desc: Issue a health warning if there are misplaced objects
-  default: false
-  services:
-  - mgr
-  with_legacy: true
-- name: mon_warn_on_too_few_osds
-  type: bool
-  level: advanced
-  desc: Issue a health warning if there are fewer OSDs than osd_pool_default_size
-  default: true
-  services:
-  - mgr
 - name: mon_warn_on_slow_ping_time
   type: float
   level: advanced
@@ -1787,6 +1570,7 @@ options:
   default: 0
   services:
   - mgr
+  - osd
   see_also:
   - mon_warn_on_slow_ping_ratio
 - name: mon_warn_on_slow_ping_ratio
@@ -1798,6 +1582,7 @@ options:
   default: 0.05
   services:
   - mgr
+  - osd
   see_also:
   - osd_heartbeat_grace
   - mon_warn_on_slow_ping_time
@@ -2418,25 +2203,6 @@ options:
   desc: Number of times to try sending a command directed at a specific monitor
   default: 2
   with_legacy: true
-- name: mon_max_pool_pg_num
-  type: uint
-  level: advanced
-  default: 64_K
-  fmt_desc: The maximum number of placement groups per pool.
-- name: mon_pool_quota_warn_threshold
-  type: int
-  level: advanced
-  desc: percent of quota at which to issue warnings
-  default: 0
-  services:
-  - mgr
-- name: mon_pool_quota_crit_threshold
-  type: int
-  level: advanced
-  desc: percent of quota at which to issue errors
-  default: 0
-  services:
-  - mgr
 # whitespace-separated list of key=value pairs describing crush location
 - name: crush_location
   type: str
