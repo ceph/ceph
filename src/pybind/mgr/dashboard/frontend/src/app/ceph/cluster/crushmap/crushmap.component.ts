@@ -58,6 +58,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
 
   private abstractTreeData(data: any): any[] {
     const nodes = data.nodes || [];
+    const rootNodes = data.roots || [];
     const treeNodeMap: { [key: number]: any } = {};
 
     if (0 === nodes.length) {
@@ -70,7 +71,7 @@ export class CrushmapComponent implements OnDestroy, OnInit {
 
     const roots: any[] = [];
     nodes.reverse().forEach((node: any) => {
-      if (node.type === 'root') {
+      if (rootNodes.includes(node.id)) {
         roots.push(node.id);
       }
       treeNodeMap[node.id] = this.generateTreeLeaf(node, treeNodeMap);
