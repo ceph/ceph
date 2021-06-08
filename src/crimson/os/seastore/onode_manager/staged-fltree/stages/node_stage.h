@@ -48,7 +48,7 @@ class node_extent_t {
     return p_fields->template free_size_before<NODE_TYPE>(
         keys(), node_size);
   }
-  node_offset_t total_size() const {
+  extent_len_t total_size() const {
     return p_fields->total_size(node_size);
   }
   const char* p_left_bound() const;
@@ -75,7 +75,7 @@ class node_extent_t {
   key_get_type operator[] (index_t index) const {
     return p_fields->get_key(index, node_size);
   }
-  node_offset_t size_before(index_t index) const {
+  extent_len_t size_before(index_t index) const {
     auto free_size = p_fields->template free_size_before<NODE_TYPE>(
         index, node_size);
     assert(total_size() >= free_size);
@@ -210,7 +210,10 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
       assert(p_append < p_append_right);
       assert(p_append_left < p_append);
       p_append_right = p_append;
-      FieldType::append_offset(*p_mut, p_append - p_start, p_append_left);
+      auto new_offset = p_append - p_start;
+      assert(new_offset > 0);
+      assert(new_offset < p_mut->get_length());
+      FieldType::append_offset(*p_mut, new_offset, p_append_left);
       ++num_keys;
     } else {
       ceph_abort("not implemented");

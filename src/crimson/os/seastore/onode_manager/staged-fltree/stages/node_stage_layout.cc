@@ -48,9 +48,12 @@ void F013_T::update_size_at(
        p_slot < &node.slots[node.num_keys];
        ++p_slot) {
     node_offset_t offset = p_slot->right_offset;
+    int new_offset = offset - change;
+    assert(new_offset > 0);
+    assert(new_offset < (int)node_size);
     mut.copy_in_absolute(
         (void*)&(p_slot->right_offset),
-        node_offset_t(offset - change));
+        node_offset_t(new_offset));
   }
 #ifndef NDEBUG
   // check overflow
@@ -94,9 +97,10 @@ void F013_T::insert_at(
   mut.shift_absolute(p_insert, p_shift_end - p_insert, estimate_insert_one());
   mut.copy_in_absolute((void*)&node.num_keys, num_keys_t(node.num_keys + 1));
   append_key(mut, key_t::template from_key<KT>(key), p_insert);
-  append_offset(mut,
-                node.get_item_end_offset(index, node_size) - size_right,
-                p_insert);
+  int new_offset = node.get_item_end_offset(index, node_size) - size_right;
+  assert(new_offset > 0);
+  assert(new_offset < (int)node_size);
+  append_offset(mut, new_offset, p_insert);
 }
 #define IA_TEMPLATE(ST, KT) template void F013_INST(ST)::      \
     insert_at<KT>(NodeExtentMutable&, const full_key_t<KT>&, \

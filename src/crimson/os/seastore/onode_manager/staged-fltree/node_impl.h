@@ -82,14 +82,14 @@ class NodeImpl {
 
   virtual level_t level() const = 0;
   virtual node_offset_t free_size() const = 0;
-  virtual node_offset_t total_size() const = 0;
+  virtual extent_len_t total_size() const = 0;
   virtual bool is_extent_retired() const = 0;
   virtual std::optional<key_view_t> get_pivot_index() const = 0;
   virtual bool is_size_underflow() const = 0;
 
   virtual std::tuple<match_stage_t, search_position_t> erase(const search_position_t&) = 0;
   virtual std::tuple<match_stage_t, std::size_t> evaluate_merge(NodeImpl&) = 0;
-  virtual search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, node_offset_t) = 0;
+  virtual search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, extent_len_t) = 0;
   virtual eagain_future<NodeExtentMutable> rebuild_extent(context_t) = 0;
   virtual eagain_future<> retire_extent(context_t) = 0;
   virtual search_position_t make_tail() = 0;
