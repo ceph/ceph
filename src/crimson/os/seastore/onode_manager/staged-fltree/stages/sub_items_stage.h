@@ -77,12 +77,12 @@ class internal_sub_items_t {
                  sizeof(internal_sub_item_t);
     auto p_start = p_end - num_items * sizeof(internal_sub_item_t);
     int start_offset = p_start - p_node_start;
-    int end_offset = p_end - p_node_start;
-    assert(start_offset > 0 &&
-           start_offset < end_offset &&
-           end_offset < (int)node_size);
+    int stage_size = p_end - p_start;
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert(start_offset + stage_size < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
-    ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
+    ceph::encode(static_cast<node_offset_t>(stage_size), encoded);
   }
 
   static internal_sub_items_t decode(
@@ -91,12 +91,13 @@ class internal_sub_items_t {
       ceph::bufferlist::const_iterator& delta) {
     node_offset_t start_offset;
     ceph::decode(start_offset, delta);
-    node_offset_t end_offset;
-    ceph::decode(end_offset, delta);
-    assert(start_offset < end_offset);
-    assert(end_offset <= node_size);
+    node_offset_t stage_size;
+    ceph::decode(stage_size, delta);
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert((unsigned)start_offset + stage_size < node_size);
     return internal_sub_items_t({{p_node_start + start_offset,
-                                  p_node_start + end_offset},
+                                  p_node_start + start_offset + stage_size},
                                  node_size});
   }
 
@@ -251,12 +252,12 @@ class leaf_sub_items_t {
     auto p_end = reinterpret_cast<const char*>(p_num_keys) +
                   sizeof(num_keys_t);
     int start_offset = p_start() - p_node_start;
-    int end_offset = p_end - p_node_start;
-    assert(start_offset > 0 &&
-           start_offset < end_offset &&
-           end_offset < (int)node_size);
+    int stage_size = p_end - p_start();
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert(start_offset + stage_size < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
-    ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
+    ceph::encode(static_cast<node_offset_t>(stage_size), encoded);
   }
 
   static leaf_sub_items_t decode(
@@ -265,12 +266,13 @@ class leaf_sub_items_t {
       ceph::bufferlist::const_iterator& delta) {
     node_offset_t start_offset;
     ceph::decode(start_offset, delta);
-    node_offset_t end_offset;
-    ceph::decode(end_offset, delta);
-    assert(start_offset < end_offset);
-    assert(end_offset < node_size);
+    node_offset_t stage_size;
+    ceph::decode(stage_size, delta);
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert((unsigned)start_offset + stage_size < node_size);
     return leaf_sub_items_t({{p_node_start + start_offset,
-                              p_node_start + end_offset},
+                              p_node_start + start_offset + stage_size},
                              node_size});
   }
 
