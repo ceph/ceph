@@ -7356,9 +7356,6 @@ void RGWSetAttrs::execute(optional_yield y)
     rgw::sal::Attrs a(attrs);
     op_ret = s->object->set_obj_attrs(this, s->obj_ctx, &a, nullptr, y);
   } else {
-    for (auto& iter : attrs) {
-      s->bucket_attrs[iter.first] = std::move(iter.second);
-    }
     op_ret = s->bucket->set_instance_attrs(this, attrs, y);
   }
 
