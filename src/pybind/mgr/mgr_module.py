@@ -1043,7 +1043,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
                 osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats,
                 health, mon_status, devices, device <devid>, pg_stats,
-                pool_stats, pg_ready, osd_ping_times.
+                pool_stats, pg_ready, osd_ping_times, mgr_map, mgr_ips,
+                modified_config_options, service_map, mds_metadata,
+                have_local_config_map, osd_pool_stats, pg_status.
 
         Note:
             All these structures have their own JSON representations: experiment
