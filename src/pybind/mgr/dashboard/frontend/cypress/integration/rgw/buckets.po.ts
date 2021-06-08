@@ -42,7 +42,6 @@ export class BucketsPageHelper extends PageHelper {
       this.selectLockMode('Compliance');
       cy.get('#lock_mode').should('have.class', 'ng-valid');
       cy.get('#lock_retention_period_days').type('3');
-      cy.get('#lock_retention_period_years').type('0');
     }
 
     // Click the create button and wait for bucket to be made

@@ -41,8 +41,7 @@ export class RgwBucketService {
     placementTarget: string,
     lockEnabled: boolean,
     lock_mode: 'GOVERNANCE' | 'COMPLIANCE',
-    lock_retention_period_days: string,
-    lock_retention_period_years: string
+    lock_retention_period_days: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.post(this.url, null, {
@@ -55,7 +54,6 @@ export class RgwBucketService {
             lock_enabled: String(lockEnabled),
             lock_mode,
             lock_retention_period_days,
-            lock_retention_period_years,
             daemon_name: params.get('daemon_name')
           }
         })
@@ -72,8 +70,7 @@ export class RgwBucketService {
     mfaTokenSerial: string,
     mfaTokenPin: string,
     lockMode: 'GOVERNANCE' | 'COMPLIANCE',
-    lockRetentionPeriodDays: string,
-    lockRetentionPeriodYears: string
+    lockRetentionPeriodDays: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.append('bucket_id', bucketId);
@@ -84,7 +81,6 @@ export class RgwBucketService {
       params = params.append('mfa_token_pin', mfaTokenPin);
       params = params.append('lock_mode', lockMode);
       params = params.append('lock_retention_period_days', lockRetentionPeriodDays);
-      params = params.append('lock_retention_period_years', lockRetentionPeriodYears);
       return this.http.put(`${this.url}/${bucket}`, null, { params: params });
     });
   }

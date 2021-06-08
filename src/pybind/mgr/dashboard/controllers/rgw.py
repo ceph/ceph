@@ -200,8 +200,8 @@ class RgwBucket(RgwRESTController):
                      retention_period_days, retention_period_years):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_bucket_locking(bucket_name, mode,
-                                             int(retention_period_days),
-                                             int(retention_period_years))
+                                             retention_period_days,
+                                             retention_period_years)
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
