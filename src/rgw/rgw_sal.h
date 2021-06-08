@@ -643,7 +643,10 @@ class Object {
 
     virtual ~Object() = default;
 
-    virtual int delete_object(const DoutPrefixProvider* dpp, RGWObjectCtx* obj_ctx, optional_yield y) = 0;
+    virtual int delete_object(const DoutPrefixProvider* dpp,
+			      RGWObjectCtx* obj_ctx,
+			      optional_yield y,
+			      bool prevent_versioning = false) = 0;
     virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
 			       bool keep_index_consistent, optional_yield y) = 0;
     virtual int copy_object(RGWObjectCtx& obj_ctx, User* user,
