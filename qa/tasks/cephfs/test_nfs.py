@@ -44,7 +44,7 @@ class TestNFS(MgrTestCase):
          "cluster_id": self.cluster_id,
          "pseudo": self.pseudo_path,
          "access_type": "RW",
-         "squash": "no_root_squash",
+         "squash": "none",
          "security_label": True,
          "protocols": [
            4
@@ -56,7 +56,6 @@ class TestNFS(MgrTestCase):
            "name": "CEPH",
            "user_id": "nfs.test.1",
            "fs_name": self.fs_name,
-           "sec_label_xattr": ''
          },
          "clients": []
         }
@@ -557,8 +556,9 @@ class TestNFS(MgrTestCase):
         new_pseudo_path = '/testing'
         export_block['pseudo'] = new_pseudo_path
         export_block['access_type'] = 'RO'
-        self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'update', '-i', '-'],
-                stdin=json.dumps(export_block))
+        self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'update',
+                                   self.cluster_id, '-i', '-'],
+                             stdin=json.dumps(export_block))
         self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
         self._write_to_read_only_export(new_pseudo_path, port, ip)
         self._test_delete_cluster()
@@ -578,7 +578,8 @@ class TestNFS(MgrTestCase):
             else:
                 export_block_new[key] = value
             try:
-                self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'update', '-i', '-'],
+                self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'update',
+                                           self.cluster_id, '-i', '-'],
                         stdin=json.dumps(export_block_new))
             except CommandFailedError:
                 pass
@@ -621,3 +622,4 @@ class TestNFS(MgrTestCase):
         exec_cmd_invalid('export', 'delete', 'clusterid')
         exec_cmd_invalid('export', 'get')
         exec_cmd_invalid('export', 'get', 'clusterid')
+        exec_cmd_invalid('export', 'update')
