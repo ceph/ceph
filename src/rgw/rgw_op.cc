@@ -351,24 +351,6 @@ static int get_obj_head(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-struct multipart_upload_info
-{
-  rgw_placement_rule dest_placement;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(dest_placement, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(dest_placement, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(multipart_upload_info)
-
 static int get_multipart_info(const DoutPrefixProvider *dpp, struct req_state *s,
 			      rgw::sal::Object* obj,
                               multipart_upload_info *upload_info)
@@ -6264,7 +6246,7 @@ void RGWListMultipart::execute(optional_yield y)
   mp.init(s->object->get_name(), upload_id);
   meta_oid = mp.get_meta();
 
-  op_ret = get_multipart_info(this, s, meta_oid, nullptr);
+  op_ret = get_multipart_info(this, s, meta_oid, &upload_info);
   if (op_ret < 0)
     return;
 

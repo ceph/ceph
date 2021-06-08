@@ -3758,7 +3758,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
     s->formatter->dump_string("UploadId", upload_id);
-    s->formatter->dump_string("StorageClass", "STANDARD");
+    s->formatter->dump_string("StorageClass", get_storage_class());
     s->formatter->dump_int("PartNumberMarker", marker);
     s->formatter->dump_int("NextPartNumberMarker", cur_max);
     s->formatter->dump_int("MaxParts", max_parts);
