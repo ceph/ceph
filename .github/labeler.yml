@@ -1,3 +1,6 @@
+api-change:
+  - src/pybind/mgr/dashboard/openapi.yaml
+
 build/ops:
   - "**/CMakeLists.txt"
   - admin/**
