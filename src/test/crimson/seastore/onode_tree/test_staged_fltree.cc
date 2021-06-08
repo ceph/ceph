@@ -1522,7 +1522,8 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     constexpr bool TEST_SEASTORE = true;
     constexpr bool TRACK_CURSORS = true;
     auto kvs = KVPool<test_item_t>::create_raw_range(
-        {8, 11, 64, 256, 301, 320},
+        {8, 11,  64, 256, 301, 320},
+        {8, 11,  64, 256, 301, 320},
         {8, 16, 128, 512, 576, 640},
         {0, 16}, {0, 10}, {0, 4});
     auto moved_nm = (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
@@ -1619,13 +1620,14 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
     constexpr double EAGAIN_PROBABILITY = 0.1;
     constexpr bool TRACK_CURSORS = false;
     auto kvs = KVPool<test_item_t>::create_raw_range(
-        {8, 11, 64, 256, 301, 320},
-        {8, 16, 128, 512, 576, 640},
+        {8, 11,  64, 128,  255,  256},
+        {8, 13,  64, 512, 2035, 2048},
+        {8, 16, 128, 576,  992, 1200},
         {0, 8}, {0, 10}, {0, 4});
     auto moved_nm = NodeExtentManager::create_seastore(
         *tm, L_ADDR_MIN, EAGAIN_PROBABILITY);
     auto p_nm = static_cast<SeastoreNodeExtentManager<true>*>(moved_nm.get());
-    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, BoundedValue>>(
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, ExtendedValue>>(
         kvs, std::move(moved_nm));
     unsigned num_ops = 0;
     unsigned num_ops_eagain = 0;

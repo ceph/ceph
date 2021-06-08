@@ -203,8 +203,11 @@ class TestValue final : public Value {
 };
 
 using UnboundedValue = TestValue<
-  value_magic_t::TEST_UNBOUND, 4096, 4096, 4096, 4096, 4096, false>;
+  value_magic_t::TEST_UNBOUND, 4096, 4096, 4096, 4096,  4096, false>;
 using BoundedValue   = TestValue<
-  value_magic_t::TEST_BOUNDED,  320,  320,  640, 4096, 4096, true>;
+  value_magic_t::TEST_BOUNDED,  320,  320,  640, 4096,  4096, true>;
+// should be the same configuration with FLTreeOnode
+using ExtendedValue  = TestValue<
+  value_magic_t::TEST_EXTENDED, 256, 2048, 1200, 8192, 16384, true>;
 
 }

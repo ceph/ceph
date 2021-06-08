@@ -19,6 +19,7 @@ enum class value_magic_t : uint8_t {
   ONODE = 0x52,
   TEST_UNBOUND,
   TEST_BOUNDED,
+  TEST_EXTENDED,
 };
 inline std::ostream& operator<<(std::ostream& os, const value_magic_t& magic) {
   switch (magic) {
@@ -28,6 +29,8 @@ inline std::ostream& operator<<(std::ostream& os, const value_magic_t& magic) {
     return os << "TEST_UNBOUND";
   case value_magic_t::TEST_BOUNDED:
     return os << "TEST_BOUNDED";
+  case value_magic_t::TEST_EXTENDED:
+    return os << "TEST_EXTENDED";
   default:
     return os << "UNKNOWN(" << magic << ")";
   }

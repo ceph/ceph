@@ -97,6 +97,9 @@ build_value_recorder_by_type(ceph::bufferlist& encoded,
   case value_magic_t::TEST_BOUNDED:
     ret = std::make_unique<BoundedValue::Recorder>(encoded);
     break;
+  case value_magic_t::TEST_EXTENDED:
+    ret = std::make_unique<ExtendedValue::Recorder>(encoded);
+    break;
   default:
     ret = nullptr;
     break;

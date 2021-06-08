@@ -12,11 +12,16 @@ namespace crimson::os::seastore::onode {
 struct FLTreeOnode final : Onode, Value {
   static constexpr tree_conf_t TREE_CONF = {
     value_magic_t::ONODE,
-    128,        // max_ns_size
-    320,        // max_oid_size
+    256,        // max_ns_size
+                //   same to option osd_max_object_namespace_len
+    2048,       // max_oid_size
+                //   same to option osd_max_object_name_len
     1200,       // max_value_payload_size
-    4096,       // internal_node_size
-    4096        // leaf_node_size
+                //   see crimson::os::seastore::onode_layout_t
+    8192,       // internal_node_size
+                //   see the formula in validate_tree_config
+    16384       // leaf_node_size
+                //   see the formula in validate_tree_config
   };
 
   enum class status_t {
