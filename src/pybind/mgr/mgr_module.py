@@ -321,22 +321,35 @@ class CLICommand(object):
 
     @staticmethod
     def load_func_metadata(f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
-        desc = inspect.getdoc(f) or ''
+        desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
         arg_spec = full_argspec.annotations
         first_default = len(arg_spec)
         if full_argspec.defaults:
             first_default -= len(full_argspec.defaults)
         args = []
+        positional = True
         for index, arg in enumerate(full_argspec.args):
             if arg in CLICommand.KNOWN_ARGS:
                 continue
+            if arg == '_end_positional_':
+                positional = False
+                continue
+            if (
+                arg == 'format'
+                or arg_spec[arg] is Optional[bool]
+                or arg_spec[arg] is bool
+            ):
+                # implicit switch to non-positional on any
+                # Optional[bool] or the --format option
+                positional = False
             assert arg in arg_spec, \
                 f"'{arg}' is not annotated for {f}: {full_argspec}"
             has_default = index >= first_default
             args.append(CephArgtype.to_argdesc(arg_spec[arg],
                                                dict(name=arg),
-                                               has_default))
+                                               has_default,
+                                               positional))
         return desc, arg_spec, first_default, ' '.join(args)
 
     def store_func_metadata(self, f: HandlerFuncType) -> None:
@@ -1026,11 +1039,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
 
-        :param str data_name: Valid things to fetch are osd_crush_map_text,
+        :param str data_name: Valid things to fetch are osdmap_crush_map_text,
                 osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
                 osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats,
                 health, mon_status, devices, device <devid>, pg_stats,
-                pool_stats, pg_ready, osd_ping_times.
+                pool_stats, pg_ready, osd_ping_times, mgr_map, mgr_ips,
+                modified_config_options, service_map, mds_metadata,
+                have_local_config_map, osd_pool_stats, pg_status.
 
         Note:
             All these structures have their own JSON representations: experiment

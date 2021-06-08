@@ -280,7 +280,6 @@ class Monitoring(object):
             'args': [
                 '--config.file=/etc/prometheus/prometheus.yml',
                 '--storage.tsdb.path=/prometheus',
-                '--web.listen-address=:{}'.format(port_map['prometheus'][0]),
             ],
             'config-json-files': [
                 'prometheus.yml',
@@ -311,7 +310,6 @@ class Monitoring(object):
             'cpus': '2',
             'memory': '2GB',
             'args': [
-                '--web.listen-address=:{}'.format(port_map['alertmanager'][0]),
                 '--cluster.listen-address=:{}'.format(port_map['alertmanager'][1]),
             ],
             'config-json-files': [
@@ -1474,6 +1472,16 @@ def call_timeout(ctx, command, timeout):
 ##################################
 
 
+def json_loads_retry(cli_func):
+    for sleep_secs in [1, 4, 4]:
+        try:
+            return json.loads(cli_func())
+        except json.JSONDecodeError:
+            logger.debug('Invalid JSON. Retrying in %s seconds...' % sleep_secs)
+            time.sleep(sleep_secs)
+    return json.loads(cli_func())
+
+
 def is_available(ctx, what, func):
     # type: (CephadmContext, str, Callable[[], bool]) -> None
     """
@@ -2051,10 +2059,11 @@ def check_units(ctx, units, enabler=None):
 
 
 def is_container_running(ctx: CephadmContext, name: str) -> bool:
-    out, err, ret = call_throws(ctx, [
-        ctx.container_engine.path, 'ps',
-        '--format', '{{.Names}}'])
-    return name in out
+    out, err, ret = call(ctx, [
+        ctx.container_engine.path, 'container', 'inspect',
+        '--format', '{{.State.Status}}', name
+    ])
+    return out == 'running'
 
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
@@ -2133,6 +2142,17 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     elif daemon_type in Monitoring.components:
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
+        # set ip and port to bind to for nodeexporter,alertmanager,prometheus
+        if daemon_type != 'grafana':
+            ip = ''
+            port = Monitoring.port_map[daemon_type][0]
+            if 'meta_json' in ctx and ctx.meta_json:
+                meta = json.loads(ctx.meta_json) or {}
+                if 'ip' in meta and meta['ip']:
+                    ip = meta['ip']
+                if 'ports' in meta and meta['ports']:
+                    port = meta['ports'][0]
+            r += [f'--web.listen-address={ip}:{port}']
         if daemon_type == 'alertmanager':
             config = get_parm(ctx.config_json)
             peers = config.get('peers', list())  # type: ignore
@@ -2932,15 +2952,7 @@ class Firewalld(object):
 def update_firewalld(ctx, daemon_type):
     # type: (CephadmContext, str) -> None
     firewall = Firewalld(ctx)
-
     firewall.enable_service_for(daemon_type)
-
-    fw_ports = []
-
-    if daemon_type in Monitoring.port_map.keys():
-        fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
-
-    firewall.open_ports(fw_ports)
     firewall.apply_rules()
 
 
@@ -4034,14 +4046,15 @@ def command_bootstrap(ctx):
 
     image_ver = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run().strip()
     logger.info(f'Ceph version: {image_ver}')
-    image_release = image_ver.split()[4]
-    if (
-        not ctx.allow_mismatched_release
-        and image_release not in [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]
-    ):
-        raise Error(
-            f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE}; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
-        )
+
+    if not ctx.allow_mismatched_release:
+        image_release = image_ver.split()[4]
+        if image_release not in \
+                [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]:
+            raise Error(
+                f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE};'
+                ' please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+            )
 
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid(ctx)
@@ -4113,15 +4126,6 @@ def command_bootstrap(ctx):
             cli(['config', 'assimilate-conf',
                  '-i', '/var/lib/ceph/user.conf'],
                 {tmp.name: '/var/lib/ceph/user.conf:z'})
-
-    def json_loads_retry(cli_func):
-        for sleep_secs in [1, 4, 4]:
-            try:
-                return json.loads(cli_func())
-            except json.JSONDecodeError:
-                logger.debug('Invalid JSON. Retrying in %s seconds...' % sleep_secs)
-                time.sleep(sleep_secs)
-        return json.loads(cli_func())
 
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart():
@@ -4341,9 +4345,6 @@ def command_deploy(ctx):
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
         # Default Checks
-        if not ctx.reconfig and not redeploy:
-            daemon_ports.extend(Monitoring.port_map[daemon_type])
-
         # make sure provided config-json is sufficient
         config = get_parm(ctx.config_json)  # type: ignore
         required_files = Monitoring.components[daemon_type].get('config-json-files', list())
@@ -8156,18 +8157,15 @@ def _parse_args(av):
     return args
 
 
-def cephadm_init_ctx(args: List[str]) -> Optional[CephadmContext]:
-
+def cephadm_init_ctx(args: List[str]) -> CephadmContext:
     ctx = CephadmContext()
     ctx.set_args(_parse_args(args))
     return ctx
 
 
-def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
-
+def cephadm_init(args: List[str]) -> CephadmContext:
     global logger
     ctx = cephadm_init_ctx(args)
-    assert ctx is not None
 
     # Logger configuration
     if not os.path.exists(LOG_DIR):
@@ -8192,10 +8190,6 @@ def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
             if handler.name == 'console':
                 handler.setLevel(logging.DEBUG)
 
-    if not ctx.has_function():
-        sys.stderr.write('No command specified; pass -h or --help for usage\n')
-        return None
-
     return ctx
 
 
@@ -8210,7 +8204,8 @@ def main():
     av = sys.argv[1:]
 
     ctx = cephadm_init(av)
-    if not ctx:  # error, exit
+    if not ctx.has_function():
+        sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
 
     try:

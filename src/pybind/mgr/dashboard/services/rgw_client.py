@@ -14,7 +14,7 @@ from ..settings import Settings
 from ..tools import build_url, dict_contains_path, dict_get, json_str_to_object
 
 try:
-    from typing import Any, Dict, List, Optional, Tuple
+    from typing import Any, Dict, List, Optional, Tuple, Union
 except ImportError:
     pass  # For typing only
 
@@ -607,12 +607,11 @@ class RgwClient(RestClient):
 
     @RestClient.api_put('/{bucket_name}?object-lock')
     def set_bucket_locking(self,
-                           bucket_name,
-                           mode,
-                           retention_period_days,
-                           retention_period_years,
-                           request=None):
-        # type: (str, str, int, int, Optional[object]) -> None
+                           bucket_name: str,
+                           mode: str,
+                           retention_period_days: Optional[Union[int, str]] = None,
+                           retention_period_years: Optional[Union[int, str]] = None,
+                           request: Optional[object] = None) -> None:
         """
         Places the locking configuration on the specified bucket. The
         locking configuration will be applied by default to every new
@@ -630,6 +629,14 @@ class RgwClient(RestClient):
         # pylint: disable=unused-argument
 
         # Do some validations.
+        try:
+            retention_period_days = int(retention_period_days) if retention_period_days else 0
+            retention_period_years = int(retention_period_years) if retention_period_years else 0
+            if retention_period_days < 0 or retention_period_years < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            msg = "Retention period must be a positive integer."
+            raise DashboardException(msg=msg, component='rgw')
         if retention_period_days and retention_period_years:
             # https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTBucketPUTObjectLockConfiguration.html
             msg = "Retention period requires either Days or Years. "\
@@ -638,6 +645,9 @@ class RgwClient(RestClient):
         if not retention_period_days and not retention_period_years:
             msg = "Retention period requires either Days or Years. "\
                 "You must specify at least one."
+            raise DashboardException(msg=msg, component='rgw')
+        if not isinstance(mode, str) or mode.upper() not in ['COMPLIANCE', 'GOVERNANCE']:
+            msg = "Retention mode must be either COMPLIANCE or GOVERNANCE."
             raise DashboardException(msg=msg, component='rgw')
 
         # Generate the XML data like this:

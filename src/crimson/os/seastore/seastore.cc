@@ -155,7 +155,14 @@ seastar::future<CollectionRef> SeaStore::open_collection(const coll_t& cid)
 {
   LOG_PREFIX(SeaStore::open_collection);
   DEBUG("{}", cid);
-  return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
+  return list_collections().then([cid, this] (auto colls) {
+    if (auto found = std::find(colls.begin(), colls.end(), cid);
+	found != colls.end()) {
+      return seastar::make_ready_future<CollectionRef>(_get_collection(cid));
+    } else {
+      return seastar::make_ready_future<CollectionRef>();
+    }
+  });
 }
 
 seastar::future<std::vector<coll_t>> SeaStore::list_collections()

@@ -142,6 +142,149 @@ options:
   default: /usr/sbin/cephadm
   services:
   - mgr
+- name: mon_delta_reset_interval
+  type: float
+  level: advanced
+  desc: window duration for rate calculations in 'ceph status'
+  fmt_desc: Seconds of inactivity before we reset the PG delta to 0. We keep
+    track of the delta of the used space of each pool, so, for
+    example, it would be easier for us to understand the progress of
+    recovery or the performance of cache tier. But if there's no
+    activity reported for a certain pool, we just reset the history of
+    deltas of that pool.
+  default: 10
+  services:
+  - mgr
+  with_legacy: true
+- name: mon_stat_smooth_intervals
+  type: uint
+  level: advanced
+  desc: number of PGMaps stats over which we calc the average read/write throughput
+    of the whole cluster
+  fmt_desc: Ceph will smooth statistics over the last ``N`` PG maps.
+  default: 6
+  services:
+  - mgr
+  min: 1
+- name: mon_pool_quota_warn_threshold
+  type: int
+  level: advanced
+  desc: percent of quota at which to issue warnings
+  default: 0
+  services:
+  - mgr
+- name: mon_pool_quota_crit_threshold
+  type: int
+  level: advanced
+  desc: percent of quota at which to issue errors
+  default: 0
+  services:
+  - mgr
+- name: mon_cache_target_full_warn_ratio
+  type: float
+  level: advanced
+  desc: issue CACHE_POOL_NEAR_FULL health warning when cache pool utilization exceeds
+    this ratio of usable space
+  fmt_desc: Position between pool's ``cache_target_full`` and ``target_max_object``
+    where we start warning
+  default: 0.66
+  services:
+  - mgr
+  flags:
+  - no_mon_update
+  - cluster_create
+  with_legacy: true
+- name: mon_pg_check_down_all_threshold
+  type: float
+  level: advanced
+  desc: threshold of down osds after which we check all pgs
+  fmt_desc: Percentage threshold of ``down`` OSDs above which we check all PGs
+    for stale ones.
+  default: 0.5
+  services:
+  - mgr
+  with_legacy: true
+- name: mon_pg_stuck_threshold
+  type: int
+  level: advanced
+  desc: number of seconds after which pgs can be considered stuck inactive, unclean,
+    etc
+  long_desc: see doc/control.rst under dump_stuck for more info
+  fmt_desc: Number of seconds after which PGs can be considered as
+    being stuck.
+  default: 1_min
+  services:
+  - mgr
+- name: mon_pg_warn_min_per_osd
+  type: uint
+  level: advanced
+  desc: minimal number PGs per (in) osd before we warn the admin
+  fmt_desc: Raise ``HEALTH_WARN`` if the average number
+    of PGs per ``in`` OSD is under this number. A non-positive number
+    disables this.
+  default: 0
+  services:
+  - mgr
+- name: mon_pg_warn_max_object_skew
+  type: float
+  level: advanced
+  desc: max skew few average in objects per pg
+  fmt_desc: Raise ``HEALTH_WARN`` if the average RADOS object count per PG
+    of any pool is greater than ``mon_pg_warn_max_object_skew`` times
+    the average RADOS object count per PG of all pools. Zero or a non-positive
+    number disables this. Note that this option applies to ``ceph-mgr`` daemons.
+  default: 10
+  services:
+  - mgr
+- name: mon_pg_warn_min_objects
+  type: int
+  level: advanced
+  desc: 'do not warn below this object #'
+  fmt_desc: Do not warn if the total number of RADOS objects in cluster is below
+    this number
+  default: 10000
+  services:
+  - mgr
+- name: mon_pg_warn_min_pool_objects
+  type: int
+  level: advanced
+  desc: 'do not warn on pools below this object #'
+  fmt_desc: Do not warn on pools whose RADOS object count is below this number
+  default: 1000
+  services:
+  - mgr
+- name: mon_warn_on_misplaced
+  type: bool
+  level: advanced
+  desc: Issue a health warning if there are misplaced objects
+  default: false
+  services:
+  - mgr
+  with_legacy: true
+- name: mon_warn_on_pool_no_app
+  type: bool
+  level: dev
+  desc: issue POOL_APP_NOT_ENABLED health warning if pool has not application enabled
+  default: true
+  services:
+  - mgr
+- name: mon_warn_on_too_few_osds
+  type: bool
+  level: advanced
+  desc: Issue a health warning if there are fewer OSDs than osd_pool_default_size
+  default: true
+  services:
+  - mgr
+- name: mon_target_pg_per_osd
+  type: uint
+  level: advanced
+  desc: Automated PG management creates this many PGs per OSD
+  long_desc: When creating pools, the automated PG management logic will attempt to
+    reach this target.  In some circumstances, it may exceed this target, up to the
+    ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
+    created if the cluster is not yet fully utilised
+  default: 100
+  min: 1
 # min pgs per osd for reweight-by-pg command
 - name: mon_reweight_min_pgs_per_osd
   type: uint
@@ -192,3 +335,11 @@ options:
   services:
   - mgr
   - mon
+- name: mon_osd_err_op_age_ratio
+  type: float
+  level: advanced
+  desc: issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)
+  default: 128
+  services:
+  - mgr
+  with_legacy: true

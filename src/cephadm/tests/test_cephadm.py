@@ -1,47 +1,43 @@
 # type: ignore
-from typing import List, Optional
-import mock
-from mock import patch, call
-import os
-import sys
-import unittest
-import threading
-import time
+
 import errno
+import mock
+import os
+import pytest
 import socket
+import sys
+import time
+import threading
+import unittest
+
 from http.server import HTTPServer
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-import pytest
+from typing import List, Optional
 
-from .fixtures import exporter
+from .fixtures import (
+    cephadm_fs,
+    exporter,
+    mock_docker,
+    mock_podman,
+    with_cephadm_ctx,
+)
 
-with patch('builtins.open', create=True):
+
+with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
+
 class TestCephAdm(object):
-
-    @staticmethod
-    def mock_docker():
-        docker = mock.Mock(cd.Docker)
-        docker.path = '/usr/bin/docker'
-        return docker
-
-    @staticmethod
-    def mock_podman():
-        podman = mock.Mock(cd.Podman)
-        podman.path = '/usr/bin/podman'
-        podman.version = (2, 1, 0)
-        return podman
 
     def test_docker_unit_file(self):
         ctx = mock.Mock()
-        ctx.container_engine = self.mock_docker()
+        ctx.container_engine = mock_docker()
         r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
         assert 'Requires=docker.service' in r
-        ctx.container_engine = self.mock_podman()
+        ctx.container_engine = mock_podman()
         r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
         assert 'Requires=docker.service' not in r
 
@@ -107,7 +103,7 @@ class TestCephAdm(object):
             except:
                 assert False
             else:
-                assert _socket.call_args == call(address_family, socket.SOCK_STREAM)
+                assert _socket.call_args == mock.call(address_family, socket.SOCK_STREAM)
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -410,19 +406,17 @@ default proto ra metric 100
 
         # test normal valid login with url, username and password specified
         call_throws.return_value = '', '', 0
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'sample-url',
             '--registry-username', 'sample-user', '--registry-password',
             'sample-pass'])
-        ctx.container_engine = self.mock_docker()
-        assert ctx
+        ctx.container_engine = mock_docker()
         retval = cd.command_registry_login(ctx)
         assert retval == 0
 
         # test bad login attempt with invalid arguments given
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'bad-args-url'])
-        assert ctx
         with pytest.raises(Exception) as e:
             assert cd.command_registry_login(ctx)
         assert str(e.value) == ('Invalid custom registry arguments received. To login to a custom registry include '
@@ -430,18 +424,16 @@ default proto ra metric 100
 
         # test normal valid login with json file
         get_parm.return_value = {"url": "sample-url", "username": "sample-username", "password": "sample-password"}
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-json', 'sample-json'])
-        ctx.container_engine = self.mock_docker()
-        assert ctx
+        ctx.container_engine = mock_docker()
         retval = cd.command_registry_login(ctx)
         assert retval == 0
 
         # test bad login attempt with bad json file
         get_parm.return_value = {"bad-json": "bad-json"}
-        ctx: Optional[cd.CephadmContext] =  cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext =  cd.cephadm_init_ctx(
             ['registry-login', '--registry-json', 'sample-json'])
-        assert ctx
         with pytest.raises(Exception) as e:
             assert cd.command_registry_login(ctx)
         assert str(e.value) == ("json provided for custom registry login did not include all necessary fields. "
@@ -454,11 +446,10 @@ default proto ra metric 100
 
         # test login attempt with valid arguments where login command fails
         call_throws.side_effect = Exception
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'sample-url',
             '--registry-username', 'sample-user', '--registry-password',
             'sample-pass'])
-        assert ctx
         with pytest.raises(Exception) as e:
             cd.command_registry_login(ctx)
         assert str(e.value) == "Failed to login to custom registry @ sample-url as sample-user with given password"
@@ -532,7 +523,7 @@ docker.io/ceph/daemon-base:octopus
 
         ctx.log_to_journald = None
         # enable if podman support --cgroup=split
-        ctx.container_engine = self.mock_podman()
+        ctx.container_engine = mock_podman()
         ctx.container_engine.version = (2, 1, 0)
         assert cd.should_log_to_journald(ctx)
 
@@ -541,7 +532,7 @@ docker.io/ceph/daemon-base:octopus
         assert not cd.should_log_to_journald(ctx)
 
         # disable on docker
-        ctx.container_engine = self.mock_docker()
+        ctx.container_engine = mock_docker()
         assert not cd.should_log_to_journald(ctx)
 
 
@@ -1024,10 +1015,145 @@ class TestMonitoring(object):
             daemon_id=daemon_id
         )
         assert _open.call_args_list == [
-            call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
+            mock.call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
                  encoding='utf-8'),
-            call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
+            mock.call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
                  encoding='utf-8'),
         ]
-        assert call().__enter__().write('foo') in _open.mock_calls
-        assert call().__enter__().write('bar') in _open.mock_calls
+        assert mock.call().__enter__().write('foo') in _open.mock_calls
+        assert mock.call().__enter__().write('bar') in _open.mock_calls
+
+
+class TestBootstrap(TestCephAdm):
+
+    @staticmethod
+    def _get_cmd(*args):
+        return [
+            'bootstrap',
+            '--allow-mismatched-release',
+            '--skip-prepare-host',
+            '--skip-dashboard',
+            *args,
+        ]
+
+    def test_config(self, cephadm_fs):
+        conf_file = 'foo'
+        cmd = self._get_cmd(
+            '--mon-ip', '192.168.1.1',
+            '--skip-mon-network',
+            '--config', conf_file,
+        )
+
+        with with_cephadm_ctx(cmd) as ctx:
+            msg = r'No such file or directory'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cephadm_fs.create_file(conf_file)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0
+
+    def test_no_mon_addr(self, cephadm_fs):
+        cmd = self._get_cmd()
+        with with_cephadm_ctx(cmd) as ctx:
+            msg = r'must specify --mon-ip or --mon-addrv'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+    def test_skip_mon_network(self, cephadm_fs):
+        cmd = self._get_cmd('--mon-ip', '192.168.1.1')
+
+        with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+            msg = r'Failed to infer CIDR network'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cmd += ['--skip-mon-network']
+        with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0
+
+    @pytest.mark.parametrize('mon_ip, list_networks, result',
+        [
+            # IPv4
+            (
+                'eth0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '0.0.0.0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '192.168.1.0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '192.168.1.1',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            (
+                '192.168.1.1:1234',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            # IPv6
+            (
+                '::',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '::ffff:192.168.1.0',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                False,
+            ),
+            (
+                '::ffff:192.168.1.1',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+            (
+                '::ffff:c0a8:101',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+            (
+                '0000:0000:0000:0000:0000:FFFF:C0A8:0101',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+        ])
+    def test_mon_ip(self, mon_ip, list_networks, result, cephadm_fs):
+        cmd = self._get_cmd('--mon-ip', mon_ip)
+        if not result:
+            with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+                msg = r'Failed to infer CIDR network'
+                with pytest.raises(cd.Error, match=msg):
+                    cd.command_bootstrap(ctx)
+        else:
+            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+                retval = cd.command_bootstrap(ctx)
+                assert retval == 0
+
+    def test_allow_fqdn_hostname(self, cephadm_fs):
+        hostname = 'foo.bar'
+        cmd = self._get_cmd(
+            '--mon-ip', '192.168.1.1',
+            '--skip-mon-network',
+        )
+
+        with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
+            msg = r'--allow-fqdn-hostname'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cmd += ['--allow-fqdn-hostname']
+        with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0

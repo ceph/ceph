@@ -103,7 +103,7 @@
     "ngx-toastr": "13.1.0",
     "rxjs": "6.6.3",
     "simplebar-angular": "2.3.0",
-    "swagger-ui-dist": "3.35.1",
+    "swagger-ui": "3.49.0",
     "tslib": "2.0.2",
     "zone.js": "0.10.3"
   },
@@ -117,6 +117,7 @@
     "@types/lodash": "4.14.161",
     "@types/node": "12.12.62",
     "@types/simplebar": "5.1.1",
+    "@types/swagger-ui": "3.47.0",
     "codelyzer": "6.0.1",
     "cypress": "5.3.0",
     "cypress-multi-reporters": "1.4.0",

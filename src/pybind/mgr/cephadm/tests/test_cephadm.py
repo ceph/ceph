@@ -3,6 +3,8 @@ from contextlib import contextmanager
 
 import pytest
 
+import yaml
+
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
@@ -297,6 +299,38 @@ class TestCephadm(object):
                     stdin='{"config": "\\n\\n[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
                     + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
                     image='')
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_monitoring_ports(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+
+        with with_host(cephadm_module, 'test'):
+
+            yaml_str = """service_type: alertmanager
+service_name: alertmanager
+placement:
+    count: 1
+spec:
+    port: 4200
+"""
+            yaml_file = yaml.safe_load(yaml_str)
+            spec = ServiceSpec.from_json(yaml_file)
+
+            with mock.patch("cephadm.services.monitoring.AlertmanagerService.generate_config", return_value=({}, [])):
+                with with_service(cephadm_module, spec):
+
+                    CephadmServe(cephadm_module)._check_daemons()
+
+                    _run_cephadm.assert_called_with(
+                        'test', 'alertmanager.test', 'deploy', [
+                            '--name', 'alertmanager.test',
+                            '--meta-json', '{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null}',
+                            '--config-json', '-',
+                            '--tcp-ports', '4200 9094',
+                            '--reconfig'
+                        ],
+                        stdin='{}',
+                        image='')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
