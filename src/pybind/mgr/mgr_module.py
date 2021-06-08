@@ -1039,7 +1039,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
 
-        :param str data_name: Valid things to fetch are osd_crush_map_text,
+        :param str data_name: Valid things to fetch are osdmap_crush_map_text,
                 osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
                 osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats,
                 health, mon_status, devices, device <devid>, pg_stats,
