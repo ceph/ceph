@@ -5214,7 +5214,7 @@ int RGWRados::delete_obj(const DoutPrefixProvider *dpp,
                          RGWObjectCtx& obj_ctx,
                          const RGWBucketInfo& bucket_info,
                          const rgw_obj& obj,
-                         int versioning_status,
+                         int versioning_status, // versioning flags defined in enum RGWBucketFlags
                          uint16_t bilog_flags,
                          const real_time& expiration_time,
                          rgw_zone_set *zones_trace)

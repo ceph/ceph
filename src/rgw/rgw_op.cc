@@ -6112,8 +6112,9 @@ void RGWCompleteMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  // remove the upload obj
-  int r = meta_obj->delete_object(this, s->obj_ctx, y);
+  // remove the upload meta object ; the meta object is not versioned
+  // when the bucket is, as that would add an unneeded delete marker
+  int r = meta_obj->delete_object(this, s->obj_ctx, y, true /* prevent versioning */);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer->clear_locked();
@@ -6127,7 +6128,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
-}
+} // RGWCompleteMultipart::execute
 
 bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUpload* parts)
 {
