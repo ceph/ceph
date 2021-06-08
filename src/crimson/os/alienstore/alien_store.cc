@@ -210,6 +210,9 @@ seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
   return tp->submit([this, cid] {
     return store->open_collection(cid);
   }).then([this] (ObjectStore::CollectionHandle c) {
+    if (!c) {
+      return seastar::make_ready_future<CollectionRef>();
+    }
     CollectionRef ch;
     auto cp = coll_map.find(c->cid);
     if (cp == coll_map.end()){
