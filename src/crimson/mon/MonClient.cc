@@ -1045,6 +1045,11 @@ seastar::future<> Client::send_message(MessageURef m)
 seastar::future<> Client::on_session_opened()
 {
   return active_con->renew_rotating_keyring().then([this] {
+    if (!active_con) {
+      // the connection can be closed even in the middle of the opening sequence
+      logger().info("on_session_opened {}: connection closed", __LINE__);
+      return seastar::now();
+    }
     for (auto& m : pending_messages) {
       (void) active_con->get_conn()->send(std::move(m.msg));
       m.pr.set_value();
@@ -1053,6 +1058,10 @@ seastar::future<> Client::on_session_opened()
     ready_to_send = true;
     return sub.reload() ? renew_subs() : seastar::now();
   }).then([this] {
+    if (!active_con) {
+      logger().info("on_session_opened {}: connection closed", __LINE__);
+      return seastar::now();
+    }
     return seastar::parallel_for_each(mon_commands,
       [this](auto &command) {
       return send_message(crimson::make_message<MMonCommand>(*command.req));
