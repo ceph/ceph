@@ -1103,11 +1103,11 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
       [req, lcod=peering_state.get_info().last_complete, this] {
       peering_state.update_last_complete_ondisk(lcod);
       const auto map_epoch = get_osdmap_epoch();
-      auto reply = ceph::make_message<MOSDRepOpReply>(
+      auto reply = crimson::make_message<MOSDRepOpReply>(
         req.get(), pg_whoami, 0,
 	map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
       reply->set_last_complete_ondisk(lcod);
-      return shard_services.send_to_osd(req->from.osd, reply, map_epoch);
+      return shard_services.send_to_osd(req->from.osd, std::move(reply), map_epoch);
     });
 }
 
