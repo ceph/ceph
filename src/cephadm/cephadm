@@ -1474,6 +1474,16 @@ def call_timeout(ctx, command, timeout):
 ##################################
 
 
+def json_loads_retry(cli_func):
+    for sleep_secs in [1, 4, 4]:
+        try:
+            return json.loads(cli_func())
+        except json.JSONDecodeError:
+            logger.debug('Invalid JSON. Retrying in %s seconds...' % sleep_secs)
+            time.sleep(sleep_secs)
+    return json.loads(cli_func())
+
+
 def is_available(ctx, what, func):
     # type: (CephadmContext, str, Callable[[], bool]) -> None
     """
@@ -4035,14 +4045,15 @@ def command_bootstrap(ctx):
 
     image_ver = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run().strip()
     logger.info(f'Ceph version: {image_ver}')
-    image_release = image_ver.split()[4]
-    if (
-        not ctx.allow_mismatched_release
-        and image_release not in [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]
-    ):
-        raise Error(
-            f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE}; please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
-        )
+
+    if not ctx.allow_mismatched_release:
+        image_release = image_ver.split()[4]
+        if image_release not in \
+                [DEFAULT_IMAGE_RELEASE, LATEST_STABLE_RELEASE]:
+            raise Error(
+                f'Container release {image_release} != cephadm release {DEFAULT_IMAGE_RELEASE};'
+                ' please use matching version of cephadm (pass --allow-mismatched-release to continue anyway)'
+            )
 
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid(ctx)
@@ -4114,15 +4125,6 @@ def command_bootstrap(ctx):
             cli(['config', 'assimilate-conf',
                  '-i', '/var/lib/ceph/user.conf'],
                 {tmp.name: '/var/lib/ceph/user.conf:z'})
-
-    def json_loads_retry(cli_func):
-        for sleep_secs in [1, 4, 4]:
-            try:
-                return json.loads(cli_func())
-            except json.JSONDecodeError:
-                logger.debug('Invalid JSON. Retrying in %s seconds...' % sleep_secs)
-                time.sleep(sleep_secs)
-        return json.loads(cli_func())
 
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart():
@@ -8157,18 +8159,15 @@ def _parse_args(av):
     return args
 
 
-def cephadm_init_ctx(args: List[str]) -> Optional[CephadmContext]:
-
+def cephadm_init_ctx(args: List[str]) -> CephadmContext:
     ctx = CephadmContext()
     ctx.set_args(_parse_args(args))
     return ctx
 
 
-def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
-
+def cephadm_init(args: List[str]) -> CephadmContext:
     global logger
     ctx = cephadm_init_ctx(args)
-    assert ctx is not None
 
     # Logger configuration
     if not os.path.exists(LOG_DIR):
@@ -8193,10 +8192,6 @@ def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
             if handler.name == 'console':
                 handler.setLevel(logging.DEBUG)
 
-    if not ctx.has_function():
-        sys.stderr.write('No command specified; pass -h or --help for usage\n')
-        return None
-
     return ctx
 
 
@@ -8211,7 +8206,8 @@ def main():
     av = sys.argv[1:]
 
     ctx = cephadm_init(av)
-    if not ctx:  # error, exit
+    if not ctx.has_function():
+        sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
 
     try:
