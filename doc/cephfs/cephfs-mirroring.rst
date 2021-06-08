@@ -1,6 +1,8 @@
-================
-CephFS Mirroring
-================
+.. _cephfs-mirroring:
+
+=========================
+CephFS Snapshot Mirroring
+=========================
 
 CephFS supports asynchronous replication of snapshots to a remote CephFS file system via
 `cephfs-mirror` tool. Snapshots are synchronized by mirroring snapshot data followed by
@@ -12,26 +14,12 @@ Requirements
 
 The primary (local) and secondary (remote) Ceph clusters version should be Pacific or later.
 
-Key Idea
---------
-
-For a given snapshot pair in a directory, `cephfs-mirror` daemon will rely on readdir diff
-to identify changes in a directory tree. The diffs are applied to directory in the remote
-file system thereby only synchronizing files that have changed between two snapshots.
-
-This feature is tracked here: https://tracker.ceph.com/issues/47034.
-
-Currently, snapshot data is synchronized by bulk copying to the remote filesystem.
-
-.. note:: Synchronizing hardlinks is not supported -- hardlinked files get synchronized
-          as separate files.
-
 Creating Users
 --------------
 
 Start by creating a user (on the primary/local cluster) for the mirror daemon. This user
 requires write capability on the metadata pool to create RADOS objects (index objects)
-for watch/notify operation and read capability on the data pool(s).
+for watch/notify operation and read capability on the data pool(s)::
 
   $ ceph auth get-or-create client.mirror mon 'profile cephfs-mirror' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
 
@@ -54,51 +42,19 @@ Mirror daemon should be spawned using `systemctl(1)` unit files::
 
   $ cephfs-mirror --id mirror --cluster site-a -f
 
-.. note:: User used here is `mirror` as created in the `Creating Users` section.
+.. note:: User used here is `mirror` created in the `Creating Users` section.
 
-Mirroring Design
-----------------
-
-CephFS supports asynchronous replication of snapshots to a remote CephFS file system
-via `cephfs-mirror` tool. For a given directory, snapshots are synchronized by transferring
-snapshot data to the remote file system and creating a snapshot with the same name as the
-snapshot being synchronized.
-
-Snapshot Synchronization Order
-------------------------------
-
-Although the order in which snapshots get chosen for synchronization does not matter,
-snapshots are picked based on creation order (using snap-id).
-
-Snapshot Incarnation
---------------------
-
-A snapshot may be deleted and recreated (with the same name) with different contents.
-An "old" snapshot could have been synchronized (earlier) and the recreation of the
-snapshot could have been done when mirroring was disabled. Using snapshot names to
-infer the point-of-continuation would result in the "new" snapshot (incarnation)
-never getting picked up for synchronization.
-
-Snapshots on the secondary file system stores the snap-id of the snapshot it was
-synchronized from. This metadata is stored in `SnapInfo` structure on the MDS.
-
-Interfaces
-----------
+Interface
+---------
 
 `Mirroring` module (manager plugin) provides interfaces for managing directory snapshot
 mirroring. Manager interfaces are (mostly) wrappers around monitor commands for managing
 file system mirroring and is the recommended control interface.
 
-Mirroring Module and Interface
-------------------------------
+Mirroring Module
+----------------
 
-Mirroring module provides interface for managing directory snapshot mirroring. The module
-is implemented as a Ceph Manager plugin. Mirroring module does not manage spawning (and
-terminating) the mirror daemons. Right now the preferred way would be to start/stop
-mirror daemons via `systemctl(1)`. Going forward, deploying mirror daemons would be
-managed by `cephadm` (Tracker: http://tracker.ceph.com/issues/47261).
-
-The manager module is responsible for assigning directories to mirror daemons for
+The mirroring module is responsible for assigning directories to mirror daemons for
 synchronization. Multiple mirror daemons can be spawned to achieve concurrency in
 directory snapshot synchronization. When mirror daemons are spawned (or terminated)
 , the mirroring module discovers the modified set of mirror daemons and rebalances
@@ -133,7 +89,7 @@ To add a peer use::
 
   $ ceph fs snapshot mirror peer_add <fs_name> <remote_cluster_spec> [<remote_fs_name>] [<remote_mon_host>] [<cephx_key>]
 
-`<remote_fs_name>` is optional, and default to `<fs_name>` (on the remote cluster).
+`<remote_fs_name>` is optional, and defaults to `<fs_name>` (on the remote cluster).
 
 This requires the remote cluster ceph configuration and user keyring to be available in
 the primary cluster. See `Bootstrap Peers` section to avoid this. `peer_add` additionally
@@ -145,8 +101,6 @@ a peer is the recommended way to add a peer.
 To remove a peer use::
 
   $ ceph fs snapshot mirror peer_remove <fs_name> <peer_uuid>
-
-.. note:: See `Mirror Daemon Status` section on how to figure out Peer UUID.
 
 To list file system mirror peers use::
 
@@ -178,7 +132,7 @@ disallowed to be added for mirorring::
   Error EINVAL: /d0/d1/d2/d3 is a subtree of tracked path /d0/d1/d2
 
 Commands to check directory mapping (to mirror daemons) and directory distribution are
-detailed in `Mirror Daemon Status` section.
+detailed in `Mirroring Status` section.
 
 Bootstrap Peers
 ---------------
@@ -206,20 +160,12 @@ e.g.::
 
   $ ceph fs snapshot mirror peer_bootstrap import cephfs eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ==
 
-Mirror Daemon Status
---------------------
+Mirroring Status
+----------------
 
-Mirror daemons get asynchronously notified about changes in file system mirroring status
-and/or peer updates.
-
-CephFS mirroring module provides `mirror daemon status` interface to check mirror daemon
-status::
+CephFS mirroring module provides `mirror daemon status` interface to check mirror daemon status::
 
   $ ceph fs snapshot mirror daemon status <fs_name>
-
-E.g::
-
-  $ ceph fs snapshot mirror daemon status a | jq
   [
     {
       "daemon_id": 284167,
@@ -361,30 +307,71 @@ synchronization.
 When mirroring is disabled, the respective `fs mirror status` command for the file system
 will not show up in command help.
 
-Mirroring module provides a couple of commands to display directory mapping and distribution
-information. To check which mirror daemon a directory has been mapped to use::
+Configuration Options
+---------------------
 
-  $ ceph fs snapshot mirror dirmap cephfs /d0/d1/d2
-  {
-    "instance_id": "404148",
-    "last_shuffled": 1601284516.10986,
-    "state": "mapped"
-  }
+``cephfs_mirror_max_concurrent_directory_syncs``
 
-.. note:: `instance_id` is the RAODS instance-id associated with a mirror daemon.
+:Description: Maximum number of directory snapshots that can be synchronized concurrently by
+              cephfs-mirror daemon. Controls the number of synchronization threads.
+:Type:  64-bit Integer Unsigned
+:Default: ``3``
 
-Other information such as `state` and `last_shuffled` are interesting when running
-multiple mirror daemons.
+``cephfs_mirror_action_update_interval``
 
-When no mirror daemons are running the above command shows::
+:Description: Interval in seconds to process pending mirror update actions.
+:Type:  Float
+:Default: ``2``
 
-  $ ceph fs snapshot mirror dirmap cephfs /d0/d1/d2
-  {
-    "reason": "no mirror daemons running",
-    "state": "stalled"
-  }
+``cephfs_mirror_restart_mirror_on_blocklist_interval``
 
-Signifying that no mirror daemons are running and mirroring is stalled.
+:Description: Interval in seconds to restart blocklisted mirror instances. Setting to zero (0)
+              disables restarting blocklisted instances.
+:Type:  Float
+:Default: ``30``
+
+``cephfs_mirror_max_snapshot_sync_per_cycle``
+
+:Description: Maximum number of snapshots to mirror when a directory is picked up for mirroring
+              by worker threads.
+:Type:  64-bit Integer Unsigned
+:Default: ``3``
+
+``cephfs_mirror_directory_scan_interval``
+
+:Description: Interval in seconds to scan configured directories for snapshot mirroring.
+:Type:  64-bit Integer Unsigned
+:Default: ``10``
+
+``cephfs_mirror_max_consecutive_failures_per_directory``
+
+:Description: Number of consecutive snapshot synchronization failues to mark a directory as
+              "failed". Failed directories are retried for synchronization less frequently.
+:Type:  64-bit Integer Unsigned
+:Default: ``10``
+
+``cephfs_mirror_retry_failed_directories_interval``
+
+:Description: Interval in seconds to retry synchronization for failed directories.
+:Type:  64-bit Integer Unsigned
+:Default: ``60``
+
+``cephfs_mirror_restart_mirror_on_failure_interval``
+
+:Description: Interval in seconds to restart failed mirror instances. Setting to zero (0)
+              disables restarting failed mirror instances.
+:Type:  Float
+:Default: ``20``
+
+``cephfs_mirror_mount_timeout``
+
+:Description: Timeout in seconds for mounting primary or secondary (remote) ceph file system
+              by the cephfs-mirror daemon. Setting this to a higher value could result in the
+              mirror daemon getting stalled when mounting a file system if the cluster is not
+              reachable. This option is used to override the usual client_mount_timeout.
+:Type:  Float
+:Default: ``10``
+
 
 Re-adding Peers
 ---------------
@@ -396,8 +383,3 @@ in the command output). Also, it is recommended to purge synchronized directorie
 from the peer  before re-adding it to another file system (especially those directories
 which might exist in the new primary file system). This is not required if re-adding
 a peer to the same primary file system it was earlier synchronized from.
-
-Feature Status
---------------
-
-`cephfs-mirror` daemon is built by default (follows `WITH_CEPHFS` CMake rule).
