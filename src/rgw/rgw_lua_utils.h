@@ -164,8 +164,9 @@ struct EmptyMetaTable {
     return luaL_error(L, "trying to get length of non-iterable field");
   }
 
-  static void throw_unknown_field(const std::string& index, const std::string& table) {
-    throw std::runtime_error("unknown field name: " + index + " provided to: " + table);
+  static int error_unknown_field(lua_State* L, const std::string& index, const std::string& table) {
+    return luaL_error(L, "unknown field name: %s provided to: %s",
+                      index.c_str(), table.c_str());
   }
 };
 
