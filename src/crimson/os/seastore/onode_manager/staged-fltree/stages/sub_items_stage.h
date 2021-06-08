@@ -170,6 +170,11 @@ class leaf_sub_items_t {
   // should be enough to index all keys under 64 KiB node
   using num_keys_t = uint16_t;
 
+  // TODO: remove if num_keys_t is aligned
+  struct num_keys_packed_t {
+    num_keys_t value;
+  } __attribute__((packed));
+
   leaf_sub_items_t(const container_range_t& _range)
       : node_size{_range.node_size} {
     assert(is_valid_node_size(node_size));
@@ -177,7 +182,7 @@ class leaf_sub_items_t {
     assert(range.p_start < range.p_end);
     auto _p_num_keys = range.p_end - sizeof(num_keys_t);
     assert(range.p_start < _p_num_keys);
-    p_num_keys = reinterpret_cast<const num_keys_t*>(_p_num_keys);
+    p_num_keys = reinterpret_cast<const num_keys_packed_t*>(_p_num_keys);
     assert(keys());
     auto _p_offsets = _p_num_keys - sizeof(node_offset_t);
     assert(range.p_start < _p_offsets);
@@ -216,7 +221,7 @@ class leaf_sub_items_t {
   // container type system
   using key_get_type = const snap_gen_t&;
   static constexpr auto CONTAINER_TYPE = ContainerType::INDEXABLE;
-  num_keys_t keys() const { return *p_num_keys; }
+  num_keys_t keys() const { return p_num_keys->value; }
   key_get_type operator[](index_t index) const {
     assert(index < keys());
     auto pointer = get_item_end(index);
@@ -300,8 +305,7 @@ class leaf_sub_items_t {
 
  private:
   extent_len_t node_size;
-  // TODO: support unaligned access
-  const num_keys_t* p_num_keys;
+  const num_keys_packed_t* p_num_keys;
   const node_offset_packed_t* p_offsets;
   const char* p_items_end;
 };
