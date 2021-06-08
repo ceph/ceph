@@ -56,10 +56,11 @@ describe('CrushmapComponent', () => {
           { status: 'up', type: 'osd', name: 'osd.0', id: 0 },
           { status: 'down', type: 'osd', name: 'osd.1', id: 1 },
           { status: 'up', type: 'osd', name: 'osd.2', id: 2 },
-          { children: [-4], type: 'root', name: 'default-2', id: -3 },
+          { children: [-4], type: 'datacenter', name: 'site1', id: -3 },
           { children: [4], type: 'host', name: 'my-host-2', id: -4 },
           { status: 'up', type: 'osd', name: 'osd.0-2', id: 4 }
-        ]
+        ],
+        roots: [-1, -3, -6]
       })
     );
     fixture.detectChanges();
@@ -88,8 +89,8 @@ describe('CrushmapComponent', () => {
         ],
         id: component.nodes[0].id,
         status: undefined,
-        type: 'root',
-        name: 'default-2 (root)'
+        type: 'datacenter',
+        name: 'site1 (datacenter)'
       },
       {
         children: [

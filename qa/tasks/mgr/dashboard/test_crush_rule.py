@@ -82,5 +82,6 @@ class CrushRuleTest(DashboardTestCase):
         self.assertStatus(200)
         self.assertSchemaBody(JObj({
             'names': JList(str),
-            'nodes': JList(JObj({}, allow_unknown=True))
+            'nodes': JList(JObj({}, allow_unknown=True)),
+            'roots': JList(int)
         }))
