@@ -907,12 +907,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
     if (!entity_name.empty()) {
       EntityAuth eauth;
       if (keyring.get_auth(entity, eauth)) {
-	KeyRing kr;
-	kr.add(entity, eauth);
-	if (f)
-	  kr.encode_formatted("auth", f.get(), rdata);
-	else
-	  kr.encode_plaintext(rdata);
+	_encode_auth(entity, eauth, rdata, f.get());
 	r = 0;
       } else {
 	ss << "no key for " << eauth;
@@ -926,17 +921,12 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       r = 0;
     }
   } else if (prefix == "auth get" && !entity_name.empty()) {
-    KeyRing keyring;
     EntityAuth entity_auth;
     if (!mon.key_server.get_auth(entity, entity_auth)) {
       ss << "failed to find " << entity_name << " in keyring";
       r = -ENOENT;
     } else {
-      keyring.add(entity, entity_auth);
-      if (f)
-	keyring.encode_formatted("auth", f.get(), rdata);
-      else
-	keyring.encode_plaintext(rdata);
+      _encode_auth(entity, entity_auth, rdata, f.get());
       r = 0;
     }
   } else if (prefix == "auth print-key" ||
@@ -1390,7 +1380,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonCommand>();
   stringstream ss, ds;
-  bufferlist rdata;
+  bufferlist rdata; // holds data that'll be printed on client's stdout
   string rs;
   int err = -EINVAL;
 
@@ -1682,14 +1672,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
           ds << entity_auth.key;
         }
       } else {
-	KeyRing kr;
-	kr.add(entity, entity_auth.key, entity_auth.pending_key);
-        if (f) {
-          kr.set_caps(entity, entity_auth.caps);
-          kr.encode_formatted("auth", f.get(), rdata);
-        } else {
-          kr.encode_plaintext(rdata);
-        }
+	_encode_key(entity, entity_auth, rdata, f.get(), true,
+		    &entity_auth.caps);
       }
       err = 0;
       goto done;
@@ -1728,14 +1712,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
         ds << auth_inc.auth.key;
       }
     } else {
-      KeyRing kr;
-      kr.add(entity, auth_inc.auth.key);
-      if (f) {
-        kr.set_caps(entity, wanted_caps);
-        kr.encode_formatted("auth", f.get(), rdata);
-      } else {
-        kr.encode_plaintext(rdata);
-      }
+      _encode_key(entity, auth_inc.auth, rdata, f.get(), false,
+		  &wanted_caps);
     }
 
     rdata.append(ds);
@@ -1850,14 +1828,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	}
       }
 
-      KeyRing kr;
-      kr.add(entity, entity_auth.key);
-      if (f) {
-	kr.set_caps(entity, entity_auth.caps);
-	kr.encode_formatted("auth", f.get(), rdata);
-      } else {
-	kr.encode_plaintext(rdata);
-      }
+      _encode_key(entity, entity_auth, rdata, f.get(), false, &wanted_caps);
       err = 0;
       goto done;
     }
@@ -1869,15 +1840,9 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
-    KeyRing kr;
-    kr.add(entity, auth_inc.auth.key);
-    if (f) {
-      kr.set_caps(entity, wanted_caps);
-      kr.encode_formatted("auth", f.get(), rdata);
-    } else {
-      kr.encode_plaintext(rdata);
-    }
 
+    _encode_key(entity, auth_inc.auth, rdata, f.get(), false,
+		&wanted_caps);
     rdata.append(ds);
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
@@ -1931,6 +1896,49 @@ done:
   getline(ss, rs, '\0');
   mon.reply_command(op, err, rs, rdata, get_last_committed());
   return false;
+}
+
+void AuthMonitor::_encode_keyring(KeyRing& kr, const EntityName& entity,
+  bufferlist& rdata, Formatter* fmtr, map<string, bufferlist>* caps)
+{
+  if (not fmtr) {
+    kr.encode_plaintext(rdata);
+  } else {
+    if (caps != nullptr) {
+      kr.set_caps(entity, *caps);
+    }
+    kr.encode_formatted("auth", fmtr, rdata);
+  }
+}
+
+void AuthMonitor::_encode_auth(const EntityName& entity,
+  const EntityAuth& eauth, bufferlist& rdata, Formatter* fmtr,
+  bool pending_key, map<string, bufferlist>* caps)
+{
+  KeyRing kr;
+
+  if (not pending_key) {
+    kr.add(entity, eauth);
+  } else {
+    kr.add(entity, eauth.key, eauth.pending_key);
+  }
+
+  _encode_keyring(kr, entity, rdata, fmtr, caps);
+}
+
+void AuthMonitor::_encode_key(const EntityName& entity,
+  const EntityAuth& eauth, bufferlist& rdata, Formatter* fmtr,
+  bool pending_key, map<string, bufferlist>* caps)
+{
+  KeyRing kr;
+
+  if (not pending_key) {
+    kr.add(entity, eauth.key);
+  } else {
+    kr.add(entity, eauth.key, eauth.pending_key);
+  }
+
+  _encode_keyring(kr, entity, rdata, fmtr, caps);
 }
 
 bool AuthMonitor::prepare_global_id(MonOpRequestRef op)

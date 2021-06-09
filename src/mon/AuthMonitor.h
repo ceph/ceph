@@ -166,6 +166,16 @@ private:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
+  void _encode_keyring(KeyRing& kr, const EntityName& entity,
+    bufferlist& rdata, Formatter* fmtr,
+    std::map<std::string, bufferlist>* wanted_caps=nullptr);
+  void _encode_auth(const EntityName& entity, const EntityAuth& eauth,
+    bufferlist& rdata, Formatter* fmtr, bool pending_key=false,
+    std::map<std::string, bufferlist>* caps=nullptr);
+  void _encode_key(const EntityName& entity, const EntityAuth& eauth,
+    bufferlist& rdata, Formatter* fmtr, bool pending_key=false,
+    std::map<std::string, bufferlist>* caps=nullptr);
+
   bool check_rotate();
   void process_used_pending_keys(const std::map<EntityName,CryptoKey>& keys);
 
