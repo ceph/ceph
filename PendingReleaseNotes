@@ -173,6 +173,11 @@
   than the number mentioned against the config tunable `mds_max_snaps_per_dir`
   so that a new snapshot can be created and retained during the next schedule
   run.
+* cephfs: Running the command "ceph fs authorize" for an existing entity now
+  upgrades the entity's capabilities instead of printing an error. It can now
+  also change read/write permissions in a capability that the entity already
+  holds. If the capability passed by user is same as one of the capabilities
+  that the entity already holds, idempotency is maintained.
 
 >=17.2.1
 

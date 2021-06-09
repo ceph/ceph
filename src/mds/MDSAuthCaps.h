@@ -93,6 +93,17 @@ struct MDSCapSpec {
   bool allow_full() const {
     return (caps & FULL);
   }
+
+  unsigned get_caps() {
+    return caps;
+  }
+
+  void set_caps(unsigned int _caps) {
+    caps = _caps;
+  }
+
+  std::string to_string();
+
 private:
   unsigned caps = 0;
 };
@@ -135,6 +146,7 @@ struct MDSCapMatch {
    * @param target_path filesystem path without leading '/'
    */
   bool match_path(std::string_view target_path) const;
+  std::string to_string();
 
   // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
   int64_t uid = MDS_AUTH_UID_ANY;
@@ -156,6 +168,7 @@ struct MDSCapGrant {
   MDSCapGrant() {}
 
   void parse_network();
+  std::string to_string();
 
   MDSCapSpec spec;
   MDSCapMatch match;
@@ -181,6 +194,7 @@ public:
 
   void set_allow_all();
   bool parse(std::string_view str, std::ostream *err);
+  bool merge(MDSAuthCaps newcap);
 
   bool allow_all() const;
   bool is_capable(std::string_view inode_path,
@@ -211,7 +225,9 @@ public:
     return false;
   }
 
+
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
+  std::string to_string();
 private:
   std::vector<MDSCapGrant> grants;
 };
