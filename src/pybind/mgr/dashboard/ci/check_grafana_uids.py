@@ -72,28 +72,34 @@ def get_grafana_dashboards(base_dir):
     json_files = get_files(base_dir, 'json')
     dashboards = {}
     for json_file in json_files:
-        with open(json_file) as f:
-            dashboard_config = json.load(f)
-            uid = dashboard_config.get('uid')
+        try:
+            with open(json_file) as f:
+                dashboard_config = json.load(f)
+                uid = dashboard_config.get('uid')
+                assert dashboard_config['id'] is None, \
+                    "'id' not null: '{}'".format(dashboard_config['id'])
 
-            # Grafana dashboard checks
-            title = dashboard_config['title']
-            assert len(title) > 0, \
-                "Title not found in '{}'".format(json_file)
-            assert len(dashboard_config.get('links', [])) == 0, \
-                "Links found in '{}'".format(json_file)
-            if not uid:
-                continue
-            if uid in dashboards:
-                # duplicated uids
-                error_msg = 'Duplicated UID {} found, already defined in {}'.\
-                    format(uid, dashboards[uid]['file'])
-                exit(error_msg)
+                # Grafana dashboard checks
+                title = dashboard_config['title']
+                assert len(title) > 0, \
+                    "Title not found in '{}'".format(json_file)
+                assert len(dashboard_config.get('links', [])) == 0, \
+                    "Links found in '{}'".format(json_file)
+                if not uid:
+                    continue
+                if uid in dashboards:
+                    # duplicated uids
+                    error_msg = 'Duplicated UID {} found, already defined in {}'.\
+                        format(uid, dashboards[uid]['file'])
+                    exit(error_msg)
 
-            dashboards[uid] = {
-                'file': json_file,
-                'title': title
-            }
+                dashboards[uid] = {
+                    'file': json_file,
+                    'title': title
+                }
+        except Exception as e:
+            print(f"Error in file {json_file}")
+            raise e
     return dashboards
 
 
