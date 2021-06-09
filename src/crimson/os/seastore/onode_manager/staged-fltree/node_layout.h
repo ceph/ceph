@@ -204,19 +204,32 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
   std::tuple<match_stage_t, std::size_t> evaluate_merge(
       NodeImpl& _right_node) override {
-    assert(NODE_TYPE == _right_node.node_type());
-    assert(FIELD_TYPE == _right_node.field_type());
     auto& left_node_stage = extent.read();
     auto& right_node = dynamic_cast<NodeLayoutT&>(_right_node);
     auto& right_node_stage = right_node.extent.read();
+
+    assert(NODE_TYPE == _right_node.node_type());
+    assert(FIELD_TYPE == _right_node.field_type());
     assert(!is_level_tail());
     assert(!is_keys_empty());
-    assert(!right_node.is_keys_empty());
-    key_view_t left_pivot_index;
-    STAGE_T::template get_largest_slot<false, true, false>(
-        left_node_stage, nullptr, &left_pivot_index, nullptr);
-    auto [merge_stage, size_comp] = STAGE_T::evaluate_merge(
-        left_pivot_index, right_node_stage);
+
+    match_stage_t merge_stage;
+    node_offset_t size_comp;
+    if (right_node.is_keys_empty()) {
+      if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+        assert(right_node.is_level_tail());
+        merge_stage = STAGE;
+        size_comp = right_node_stage.header_size();
+      } else {
+        ceph_abort("impossible path");
+      }
+    } else {
+      key_view_t left_pivot_index;
+      STAGE_T::template get_largest_slot<false, true, false>(
+          left_node_stage, nullptr, &left_pivot_index, nullptr);
+      std::tie(merge_stage, size_comp) = STAGE_T::evaluate_merge(
+          left_pivot_index, right_node_stage);
+    }
     auto size_left = filled_size();
     auto size_right = right_node.filled_size();
     assert(size_right > size_comp);
@@ -230,9 +243,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       match_stage_t merge_stage,
       extent_len_t merge_size) override {
     LOG_PREFIX(OTree::Layout::merge);
-    assert(NODE_TYPE == _right_node.node_type());
-    assert(FIELD_TYPE == _right_node.field_type());
+
+    auto& left_node_stage = extent.read();
     auto& right_node = dynamic_cast<NodeLayoutT&>(_right_node);
+    auto& right_node_stage = right_node.extent.read();
     if (unlikely(LOGGER.is_enabled(seastar::log_level::debug))) {
       {
         std::ostringstream sos;
@@ -246,30 +260,40 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       }
     }
 
+    assert(NODE_TYPE == _right_node.node_type());
+    assert(FIELD_TYPE == _right_node.field_type());
     assert(!is_level_tail());
     assert(!is_keys_empty());
-    auto& left_node_stage = extent.read();
-    position_t left_last_pos;
-    STAGE_T::template get_largest_slot<true, false, false>(
-        left_node_stage, &left_last_pos, nullptr, nullptr);
-
-    typename STAGE_T::template StagedAppender<KeyT::VIEW> left_appender;
-    left_appender.init_tail(&mut, left_node_stage, merge_stage);
-
-    assert(!right_node.is_keys_empty());
-    auto& right_node_stage = right_node.extent.read();
-    typename STAGE_T::StagedIterator right_append_at;
-    right_append_at.set(right_node_stage);
-
-    auto pos_end = position_t::end();
-    STAGE_T::template append_until<KeyT::VIEW>(
-        right_append_at, left_appender, pos_end, STAGE);
-    assert(right_append_at.is_end());
-    left_appender.wrap();
 
     if (right_node.is_level_tail()) {
       node_stage_t::update_is_level_tail(mut, left_node_stage, true);
       build_name();
+    }
+    position_t left_last_pos;
+    STAGE_T::template get_largest_slot<true, false, false>(
+        left_node_stage, &left_last_pos, nullptr, nullptr);
+
+    if (right_node.is_keys_empty()) {
+      if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+        assert(right_node.is_level_tail());
+        laddr_t tail_value = right_node_stage.get_end_p_laddr()->value;
+        auto p_write = left_node_stage.get_end_p_laddr();
+        mut.copy_in_absolute((void*)p_write, tail_value);
+      } else {
+        ceph_abort("impossible path");
+      }
+    } else {
+      typename STAGE_T::template StagedAppender<KeyT::VIEW> left_appender;
+      left_appender.init_tail(&mut, left_node_stage, merge_stage);
+
+      typename STAGE_T::StagedIterator right_append_at;
+      right_append_at.set(right_node_stage);
+
+      auto pos_end = position_t::end();
+      STAGE_T::template append_until<KeyT::VIEW>(
+          right_append_at, left_appender, pos_end, STAGE);
+      assert(right_append_at.is_end());
+      left_appender.wrap();
     }
 
     if (unlikely(LOGGER.is_enabled(seastar::log_level::debug))) {
