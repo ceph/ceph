@@ -60,7 +60,6 @@ private:
   unsigned m_super_block_crc_len = 0;
   struct WriteLogCacheEntry *m_pmem_log_entries = nullptr;
   Builder<This> *m_builderobj;
-  const uint64_t MAX_EXTENT_SIZE = 1048576;
 
   Builder<This>* create_builder();
   void remove_pool_file();
@@ -113,9 +112,6 @@ protected:
   void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry,
       pwl::WriteLogCacheEntry *pmem_entry) override;
-  uint64_t get_max_extent() override {
-    return MAX_EXTENT_SIZE;
-  }
 };
 
 } // namespace rwl

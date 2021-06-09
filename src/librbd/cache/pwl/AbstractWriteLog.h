@@ -393,11 +393,7 @@ protected:
   virtual void alloc_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
                              bool &no_space) {}
   virtual void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
-					DeferredContexts &post_unlock,
-					bool has_write_entry) = 0;
-  virtual uint64_t get_max_extent() {
-    return 0;
-  }
+      DeferredContexts &post_unlock, bool has_write_entry) = 0;
   void update_image_cache_state(void);
 };
 
