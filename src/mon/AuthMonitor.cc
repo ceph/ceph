@@ -1789,19 +1789,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     EntityAuth entity_auth;
     if (mon.key_server.get_auth(entity, entity_auth)) {
-      for (const auto& [cap_entity, cap] : encoded_caps) {
-	if (entity_auth.caps.count(cap_entity) == 0 ||
-	    !entity_auth.caps[cap_entity].contents_equal(cap)) {
-	  ss << entity << " already has fs capabilities that differ from "
-	     << "those supplied. To generate a new auth key for " << entity
-	     << ", first remove " << entity << " from configuration files, "
-	     << "execute 'ceph auth rm " << entity << "', then execute this "
-	     << "command again.";
-	  err = -EINVAL;
-	  goto done;
-	}
-      }
-
       int rv = _gen_wanted_caps(entity_auth, newcaps, ss);
       ceph_assert(rv == CAPS_UPDATE_REQD or rv == CAPS_UPDATE_NOT_REQD or
 	          rv == CAPS_PARSING_ERR);
