@@ -15,8 +15,9 @@
 #  version 2.1 of the License, or (at your option) any later version.
 #
 
-from nose.tools import eq_ as eq
-from nose.tools import *
+from nose.tools import assert_equal, assert_raises, \
+    assert_not_in, assert_in, \
+    assert_regexp_matches
 from unittest import TestCase
 
 from ceph_argparse import validate_command, parse_json_funcsigs, validate, \
@@ -28,17 +29,18 @@ import random
 import re
 import string
 import sys
-import json
 try:
     from StringIO import StringIO
 except ImportError:
     from io import StringIO
+
 
 def get_command_descriptions(what):
     CEPH_BIN = os.environ['CEPH_BIN']
     if CEPH_BIN == "":
         CEPH_BIN = "."
     return os.popen(CEPH_BIN + "/get_command_descriptions " + "--" + what).read()
+
 
 def test_parse_json_funcsigs():
     commands = get_command_descriptions("all")
@@ -47,6 +49,7 @@ def test_parse_json_funcsigs():
     # syntax error https://github.com/ceph/ceph/pull/585
     commands = get_command_descriptions("pull585")
     assert_raises(TypeError, parse_json_funcsigs, commands, 'cli')
+
 
 sigdict = parse_json_funcsigs(get_command_descriptions("all"), 'cli')
 
@@ -1281,8 +1284,8 @@ class TestValidate(TestCase):
             a_type = arg_type
             if a_type == self.MIXED:
                 a_type = random.choice((self.ARGS,
-                                          self.KWARGS,
-                                          self.KWARGS_EQ))
+                                        self.KWARGS,
+                                        self.KWARGS_EQ))
             if a_type == self.ARGS:
                 final_args.append(v)
             elif a_type == self.KWARGS:
