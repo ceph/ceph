@@ -2391,7 +2391,7 @@ public:
           }
 
           if (!dest_bucket_perms.verify_bucket_permission(RGW_PERM_WRITE)) {
-            ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bs.bucket.get_key() << ")" << dendl;
+            ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bucket.get_key() << ")" << dendl;
             return -EPERM;
           }
 
@@ -2771,7 +2771,7 @@ public:
         const bool stopped = status.state == rgw_bucket_shard_sync_info::StateStopped;
         bool write_status = false;
 
-        auto max_marker = marker_mgr.get(sync_pair.dest_bs.shard_id, "");
+        auto max_marker = marker_mgr.get(sync_pair.source_bs.shard_id, "");
 
         if (info.syncstopped) {
           if (stopped && !sync_env->sync_module->should_full_sync()) {
@@ -2832,15 +2832,9 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
     auto& sync_pair = sync_pairs[i];
 
     sync_pair.source_bs.bucket = source_bucket_info.bucket;
-    sync_pair.dest_bs.bucket = dest_bucket;
+    sync_pair.dest_bucket = dest_bucket;
 
     sync_pair.source_bs.shard_id = (source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? cur_shard : -1);
-
-    if (dest_bucket == source_bucket_info.bucket) {
-      sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id;
-    } else {
-      sync_pair.dest_bs.shard_id = -1;
-    }
   }
 
   sc.init(sync_env, conn, source_zone);
@@ -2987,7 +2981,7 @@ class CheckAllBucketShardStatusIsIncremental : public RGWShardCollectCR {
     if (shard >= num_shards || status < 0 || !*result) {
       return false;
     }
-    sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id = shard++;
+    sync_pair.source_bs.shard_id = shard++;
     spawn(new CheckBucketShardStatusIsIncremental(sc, sync_pair, result), false);
     return true;
   }
@@ -3090,7 +3084,7 @@ class InitBucketShardStatusCollectCR : public RGWShardCollectCR {
     if (shard >= num_shards || status < 0) { // stop spawning on any errors
       return false;
     }
-    sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id = shard++;
+    sync_pair.source_bs.shard_id = shard++;
     spawn(new InitBucketShardStatusCR(sc, sync_pair, info, marker_mgr), false);
     return true;
   }
@@ -3126,7 +3120,7 @@ public:
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.dest_bs.bucket, &info));
+      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.dest_bucket, &info));
       if (retcode < 0) {
         lderr(cct) << "failed to read remote bilog info: "
             << cpp_strerror(retcode) << dendl;
@@ -3836,7 +3830,7 @@ public:
     data_sync_module = sync_env->sync_module->get_data_handler();
     
     zones_trace = _zones_trace;
-    zones_trace.insert(sync_env->svc->zone->get_zone().id, _sync_pipe.info.dest_bs.get_key());
+    zones_trace.insert(sync_env->svc->zone->get_zone().id, _sync_pipe.info.dest_bucket.get_key());
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -4008,7 +4002,7 @@ public:
                                          SSTR(bucket_shard_str{bs}))),
       marker_tracker(sc, status_obj, sync_status, tn, objv_tracker)
   {
-    zones_trace.insert(sc->source_zone.id, sync_pipe.info.dest_bs.bucket.get_key());
+    zones_trace.insert(sc->source_zone.id, sync_pipe.info.dest_bucket.get_key());
     prefix_handler.set_rules(sync_pipe.get_rules());
   }
 
@@ -4259,7 +4253,7 @@ public:
         << bucket_shard_str{bs};
     set_status("init");
     rules = sync_pipe.get_rules();
-    target_location_key = sync_pipe.info.dest_bs.bucket.get_key();
+    target_location_key = sync_pipe.info.dest_bucket.get_key();
   }
 
   bool check_key_handled(const rgw_obj_key& key) {
@@ -4715,7 +4709,7 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
         } else {
           sync_pair.source_bs.bucket = siter->source.get_bucket();
         }
-        sync_pair.dest_bs.bucket = siter->target.get_bucket();
+        sync_pair.dest_bucket = siter->target.get_bucket();
 
         sync_pair.handler = siter->handler;
 
@@ -4736,11 +4730,6 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
          * this affects the crafted status oid
          */
         sync_pair.source_bs.shard_id = (source_num_shards > 0 ? cur_shard : -1);
-        if (source_num_shards == target_num_shards) {
-          sync_pair.dest_bs.shard_id = sync_pair.source_bs.shard_id;
-        } else {
-          sync_pair.dest_bs.shard_id = -1;
-        }
 
         ldpp_dout(dpp, 20) << __func__ << "(): sync_pair=" << sync_pair << dendl;
 
@@ -5083,7 +5072,7 @@ public:
       bucket_status_obj(sc->env->svc->zone->get_zone_params().log_pool,
                  RGWBucketPipeSyncStatusManager::full_status_oid(sc->source_zone,
                                                                  sync_pair.source_bs.bucket,
-                                                                 sync_pair.dest_bs.bucket)),
+                                                                 sync_pair.dest_bucket)),
       tn(tn) {
   }
 
@@ -5153,9 +5142,9 @@ public:
       status_obj(env->svc->zone->get_zone_params().log_pool,
                  RGWBucketPipeSyncStatusManager::full_status_oid(sc->source_zone,
                                                                  sync_pair.source_bs.bucket,
-                                                                 sync_pair.dest_bs.bucket)),
+                                                                 sync_pair.dest_bucket)),
       tn(env->sync_tracer->add_node(_tn_parent, "bucket",
-                                    SSTR(bucket_shard_str{_sync_pair.dest_bs} << "<-" << bucket_shard_str{_sync_pair.source_bs} ))) {
+                                    SSTR(bucket_str{_sync_pair.dest_bucket} << "<-" << bucket_shard_str{_sync_pair.source_bs} ))) {
   }
 
   int operate(const DoutPrefixProvider *dpp) override;
@@ -5183,7 +5172,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(retcode);
     }
 
-    yield call(new RGWSyncGetBucketInfoCR(env, sync_pair.dest_bs.bucket, &sync_pipe.dest_bucket_info,
+    yield call(new RGWSyncGetBucketInfoCR(env, sync_pair.dest_bucket, &sync_pipe.dest_bucket_info,
                                           &sync_pipe.dest_bucket_attrs, tn));
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
@@ -5482,10 +5471,10 @@ string RGWBucketPipeSyncStatusManager::full_status_oid(const rgw_zone_id& source
 string RGWBucketPipeSyncStatusManager::inc_status_oid(const rgw_zone_id& source_zone,
                                                       const rgw_bucket_sync_pair_info& sync_pair)
 {
-  if (sync_pair.source_bs == sync_pair.dest_bs) {
-    return bucket_status_oid_prefix + "." + source_zone.id + ":" + sync_pair.dest_bs.get_key();
+  if (sync_pair.source_bs.bucket == sync_pair.dest_bucket) {
+    return bucket_status_oid_prefix + "." + source_zone.id + ":" + sync_pair.source_bs.get_key();
   } else {
-    return bucket_status_oid_prefix + "." + source_zone.id + ":" + sync_pair.dest_bs.get_key() + ":" + sync_pair.source_bs.get_key();
+    return bucket_status_oid_prefix + "." + source_zone.id + ":" + sync_pair.dest_bucket.get_key() + ":" + sync_pair.source_bs.get_key();
   }
 }
 
@@ -5534,15 +5523,7 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   rgw::sal::RadosStore* const store;
   RGWDataSyncCtx *const sc;
   RGWDataSyncEnv *const env;
-  RGWBucketInfo source_bucket_info;
-  RGWBucketInfo dest_bucket_info;
-  rgw_bucket_shard source_bs;
-  rgw_bucket_shard dest_bs;
-
   rgw_bucket_sync_pair_info sync_pair;
-
-  bool shard_to_shard_sync;
-
   using Vector = std::vector<rgw_bucket_shard_sync_info>;
   Vector::iterator i, end;
 
@@ -5563,34 +5544,19 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
                                Vector *status)
     : RGWShardCollectCR(sc->cct, max_concurrent_shards),
       store(store), sc(sc), env(sc->env),
-      source_bucket_info(source_bucket_info),
-      dest_bucket_info(dest_bucket_info),
       i(status->begin()), end(status->end())
   {
-    shard_to_shard_sync = (source_bucket_info.layout.current_index.layout.normal.num_shards == dest_bucket_info.layout.current_index.layout.normal.num_shards);
-
-    source_bs = rgw_bucket_shard(source_bucket_info.bucket, source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1);
-    dest_bs = rgw_bucket_shard(dest_bucket_info.bucket, dest_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1);
-
-    status->clear();
-    status->resize(std::max<size_t>(1, source_bucket_info.layout.current_index.layout.normal.num_shards));
-
-    i = status->begin();
-    end = status->end();
+    sync_pair.source_bs = rgw_bucket_shard(source_bucket_info.bucket, source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1);
+    sync_pair.dest_bucket = dest_bucket_info.bucket;
   }
 
   bool spawn_next() override {
     if (i == end) {
       return false;
     }
-    sync_pair.source_bs = source_bs;
-    sync_pair.dest_bs = dest_bs;
     spawn(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pair, &*i, nullptr), false);
     ++i;
-    ++source_bs.shard_id;
-    if (shard_to_shard_sync) {
-      dest_bs.shard_id = source_bs.shard_id;
-    }
+    ++sync_pair.source_bs.shard_id;
     return true;
   }
 };
