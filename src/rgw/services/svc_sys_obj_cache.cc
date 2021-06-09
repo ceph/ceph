@@ -481,9 +481,9 @@ void RGWSI_SysObj_Cache::set_enabled(bool status)
 
 bool RGWSI_SysObj_Cache::chain_cache_entry(const DoutPrefixProvider *dpp,
                                            std::initializer_list<rgw_cache_entry_info *> cache_info_entries,
-                                           RGWChainedCache::Entry *chained_entry)
+                                           RGWChainedCache::Entry *chained_entry, const string& key)
 {
-  return cache.chain_cache_entry(dpp, cache_info_entries, chained_entry);
+  return cache.chain_cache_entry(dpp, cache_info_entries, chained_entry, key);
 }
 
 void RGWSI_SysObj_Cache::register_chained_cache(RGWChainedCache *cc)

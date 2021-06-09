@@ -208,13 +208,100 @@ public:
   }
   bool chain_cache_entry(const DoutPrefixProvider *dpp,
                          std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
-			 RGWChainedCache::Entry *chained_entry);
+			 RGWChainedCache::Entry *chained_entry, const string& key);
 
   void set_enabled(bool status);
 
   void chain_cache(RGWChainedCache *cache);
   void unchain_cache(RGWChainedCache *cache);
   void invalidate_all();
+};
+
+class ShardedObjectCache {
+
+  uint64_t shard_count;
+  ceph::mutex lock = ceph::make_mutex("ShardedObjectCache");
+  CephContext *cct;
+  vector<ObjectCache *> shards;
+  vector<RGWChainedCache *> chained_cache;
+
+  uint64_t hash(std::string const& name) {
+    std::hash<std::string> h;
+    return uint64_t(h(name) % shard_count);
+  }
+
+public:
+  ShardedObjectCache() : shard_count(0), cct(NULL) { }
+  ~ShardedObjectCache() {
+    for (uint64_t i = 0; i < shard_count; i++) {
+      delete shards[i];
+    }
+    for (auto cache : chained_cache) {
+      cache->unregistered();
+    }
+  }
+  int get(const DoutPrefixProvider *dpp, const std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info) {
+    return shards[hash(name)]->get(dpp, name, bl, mask, cache_info);
+  }
+  std::optional<ObjectCacheInfo> get(const DoutPrefixProvider *dpp, const std::string& name) {
+    return shards[hash(name)]->get(dpp, name);
+  }
+  template<typename F>
+  void for_each(const F& f) {
+    for (auto& shard : shards) {
+      shard->for_each(f);
+    }
+  }
+  void put(const DoutPrefixProvider *dpp, const std::string& name, ObjectCacheInfo& bl, rgw_cache_entry_info *cache_info) {
+    shards[hash(name)]->put(dpp, name, bl, cache_info);
+  }
+  bool remove(const DoutPrefixProvider *dpp, const std::string& name) {
+    return shards[hash(name)]->remove(dpp, name);
+  }
+  void set_ctx(CephContext *_cct) {
+    cct = _cct;
+    shard_count = size_t(cct->_conf.get_val<uint64_t>("rgw_cache_shard_count"));
+    ceph_assert(shard_count > 0);
+    for (uint64_t i = 0; i < shard_count; i++) {
+      ObjectCache* oc = new ObjectCache();
+      oc->set_ctx(_cct);
+      shards.push_back(oc);
+    }
+  }
+  bool chain_cache_entry(const DoutPrefixProvider *dpp,
+                         std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
+                         RGWChainedCache::Entry *chained_entry, const string& key) {
+   return shards[hash(key)]->chain_cache_entry(dpp, cache_info_entries, chained_entry, key);
+  }
+  void set_enabled(bool status) {
+    for (auto& shard : shards) {
+      shard->set_enabled(status);
+    }
+  }
+  void chain_cache(RGWChainedCache *cache) {
+    std::lock_guard l(lock);
+    chained_cache.push_back(cache);
+  }
+  void unchain_cache(RGWChainedCache *cache) {
+    std::lock_guard l(lock);
+    auto iter = chained_cache.begin();
+    for (; iter != chained_cache.end(); ++iter) {
+      if (cache == *iter) {
+        chained_cache.erase(iter);
+        cache->unregistered();
+        return;
+      }
+    }
+  }
+  void invalidate_all() {
+    for (auto& shard : shards) {
+      shard->invalidate_all();
+    }
+    std::lock_guard l(lock);
+    for (auto& cache : chained_cache) {
+      cache->invalidate_all();
+    }
+  }
 };
 
 #endif

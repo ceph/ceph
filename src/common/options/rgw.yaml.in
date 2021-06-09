@@ -277,6 +277,21 @@ options:
   see_also:
   - rgw_cache_enabled
   with_legacy: true
+- name: rgw_cache_shard_count
+  type: uint 
+  level: advanced
+  desc: The number of RGW cache shards.
+  long_desc: The number of independent cache shards to use for the rados object gateway.
+    Each cache shard will store up to rgw_cache_lru_size items.
+  fmt_desc: The number of Coph Object Gateway cache shards.
+  default: 4
+  min: 1
+  max: 1024
+  services:
+  - rgw
+  see_also:
+  - rgw_cache_lru_size
+  with_legacy: true
 - name: rgw_dns_name
   type: str
   level: advanced

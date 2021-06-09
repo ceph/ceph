@@ -90,7 +90,7 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
 
 bool ObjectCache::chain_cache_entry(const DoutPrefixProvider *dpp,
                                     std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
-				    RGWChainedCache::Entry *chained_entry)
+				    RGWChainedCache::Entry *chained_entry, const string& key)
 {
   std::lock_guard l(lock);
   if (!enabled) {
