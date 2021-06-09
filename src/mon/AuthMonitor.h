@@ -168,6 +168,8 @@ private:
                   Formatter* fmtr);
   void _print_auth(EntityName& entity, EntityAuth& eauth, bufferlist& rdata,
                    Formatter* fmtr, bool just_key=false);
+  int _update_caps(EntityName& entity, vector<string>& caps_vec,
+		   MonOpRequestRef op);
 
   bool check_rotate();
 
