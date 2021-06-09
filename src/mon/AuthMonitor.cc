@@ -838,12 +838,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
     if (!entity_name.empty()) {
       EntityAuth eauth;
       if (keyring.get_auth(entity, eauth)) {
-	KeyRing kr;
-	kr.add(entity, eauth);
-	if (f)
-	  kr.encode_formatted("auth", f.get(), rdata);
-	else
-	  kr.encode_plaintext(rdata);
+	_print_auth(entity, eauth, rdata, f.get());
 	ss << "export " << eauth;
 	r = 0;
       } else {
@@ -866,11 +861,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       ss << "failed to find " << entity_name << " in keyring";
       r = -ENOENT;
     } else {
-      keyring.add(entity, entity_auth);
-      if (f)
-	keyring.encode_formatted("auth", f.get(), rdata);
-      else
-	keyring.encode_plaintext(rdata);
+      _print_auth(entity, entity_auth, rdata, f.get());
       ss << "exported keyring for " << entity_name;
       r = 0;
     }
@@ -1535,14 +1526,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
           ds << entity_auth.key;
         }
       } else {
-	KeyRing kr;
-	kr.add(entity, entity_auth.key);
-        if (f) {
-          kr.set_caps(entity, entity_auth.caps);
-          kr.encode_formatted("auth", f.get(), rdata);
-        } else {
-          kr.encode_plaintext(rdata);
-        }
+	_print_key(entity, entity_auth, rdata, f.get());
       }
       err = 0;
       goto done;
@@ -1581,14 +1565,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
         ds << auth_inc.auth.key;
       }
     } else {
-      KeyRing kr;
-      kr.add(entity, auth_inc.auth.key);
-      if (f) {
-        kr.set_caps(entity, wanted_caps);
-        kr.encode_formatted("auth", f.get(), rdata);
-      } else {
-        kr.encode_plaintext(rdata);
-      }
+      _print_key(entity, auth_inc.auth, rdata, f.get());
     }
 
     rdata.append(ds);
@@ -1703,14 +1680,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	}
       }
 
-      KeyRing kr;
-      kr.add(entity, entity_auth.key);
-      if (f) {
-	kr.set_caps(entity, entity_auth.caps);
-	kr.encode_formatted("auth", f.get(), rdata);
-      } else {
-	kr.encode_plaintext(rdata);
-      }
+      _print_key(entity, entity_auth, rdata, f.get());
       err = 0;
       goto done;
     }
@@ -1722,15 +1692,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
-    KeyRing kr;
-    kr.add(entity, auth_inc.auth.key);
-    if (f) {
-      kr.set_caps(entity, wanted_caps);
-      kr.encode_formatted("auth", f.get(), rdata);
-    } else {
-      kr.encode_plaintext(rdata);
-    }
 
+    _print_key(entity, auth_inc.auth, rdata, f.get());
     rdata.append(ds);
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
@@ -1787,6 +1750,29 @@ done:
   getline(ss, rs, '\0');
   mon.reply_command(op, err, rs, rdata, get_last_committed());
   return false;
+}
+
+void AuthMonitor::_print_key(EntityName& entity, EntityAuth& eauth,
+                             bufferlist& rdata, Formatter* fmtr)
+{
+  _print_auth(entity, eauth, rdata, fmtr, true);
+}
+
+void AuthMonitor::_print_auth(EntityName& entity, EntityAuth& eauth,
+                              bufferlist& rdata, Formatter* fmtr,bool just_key)
+{
+  KeyRing kr;
+  if (just_key) {
+    kr.add(entity, eauth.key);
+  } else {
+    kr.add(entity, eauth);
+  }
+
+  if (fmtr) {
+    kr.encode_formatted("auth", fmtr, rdata);
+  } else {
+    kr.encode_plaintext(rdata);
+  }
 }
 
 bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
