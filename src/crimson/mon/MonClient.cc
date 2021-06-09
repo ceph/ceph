@@ -587,6 +587,11 @@ int Client::handle_auth_request(crimson::net::ConnectionRef con,
     logger().info("skipping challenge on {}", con);
     authorizer_challenge = nullptr;
   }
+  if (!active_con) {
+    logger().info("auth request during inactivity period");
+    // let's instruct the client to come back later
+    return -EBUSY;
+  }
   bool was_challenge = (bool)auth_meta->authorizer_challenge;
   EntityName name;
   AuthCapsInfo caps_info;
