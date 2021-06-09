@@ -88,9 +88,9 @@ seastar::future<> ClientRequest::start()
           epoch_t same_interval_since = pgref->get_interval_start_epoch();
           logger().debug("{} same_interval_since: {}", *this, same_interval_since);
           may_set_prev_op();
-          assert(prev_op_id.has_value());
           return sequencer.start_op(
-            handle, *prev_op_id, get_id(),
+            *this,
+            handle,
             interruptor::wrap_function(
               [this, pgref]() mutable -> interruptible_future<> {
               PG &pg = *pgref;
@@ -120,14 +120,14 @@ seastar::future<> ClientRequest::start()
               });
             })
           ).then_interruptible([this, pgref]() {
-            sequencer.finish_op(get_id());
+            sequencer.finish_op(*this);
             return seastar::stop_iteration::yes;
           });
 	}, [this, pgref](std::exception_ptr eptr) {
           if (should_abort_request(*this, std::move(eptr))) {
             return seastar::stop_iteration::yes;
           } else {
-            sequencer.maybe_reset(get_id());
+            sequencer.maybe_reset(*this);
             return seastar::stop_iteration::no;
           }
 	}, pgref);
