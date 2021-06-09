@@ -457,6 +457,7 @@ class FSExport(ExportMgr):
                 'clients': clients
             }
             export = Export.from_dict(ex_id, ex_dict)
+            export.validate(self.mgr)
             self._save_export(cluster_id, export)
             result = {
                 "bind": pseudo_path,
@@ -519,6 +520,7 @@ class FSExport(ExportMgr):
                 'clients': clients
             }
             export = Export.from_dict(ex_id, ex_dict)
+            export.validate(self.mgr)
             self._save_export(cluster_id, export)
             result = {
                 "bind": pseudo_path,
