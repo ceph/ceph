@@ -50,6 +50,23 @@ TEST_P(AllocTest, test_alloc_init)
   ASSERT_EQ(alloc->get_free(), (uint64_t) 0);
 }
 
+TEST_P(AllocTest, test_init_add_free)
+{
+  int64_t block_size = 1024;
+  int64_t capacity = 4 * 1024 * block_size;
+
+  {
+    init_alloc(capacity, block_size);
+
+    auto free = alloc->get_free();
+    alloc->init_add_free(block_size, 0);
+    ASSERT_EQ(free, alloc->get_free());
+
+    alloc->init_rm_free(block_size, 0);
+    ASSERT_EQ(free, alloc->get_free());
+  }
+}
+
 TEST_P(AllocTest, test_alloc_min_alloc)
 {
   int64_t block_size = 1024;
