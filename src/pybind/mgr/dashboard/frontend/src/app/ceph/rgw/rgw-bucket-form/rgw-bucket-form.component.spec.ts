@@ -318,29 +318,17 @@ describe('RgwBucketFormComponent', () => {
   });
 
   describe('object locking', () => {
-    const setDaysAndYears = (fn: (name: string) => void) => {
-      ['lock_retention_period_days', 'lock_retention_period_years'].forEach(fn);
-    };
-
     const expectPatternLockError = (value: string) => {
       formHelper.setValue('lock_enabled', true, true);
-      setDaysAndYears((name: string) => {
-        formHelper.setValue(name, value);
-        formHelper.expectError(name, 'pattern');
-      });
+      formHelper.setValue('lock_retention_period_days', value);
+      formHelper.expectError('lock_retention_period_days', 'pattern');
     };
 
-    const expectValidLockInputs = (enabled: boolean, mode: string, days: string, years: string) => {
+    const expectValidLockInputs = (enabled: boolean, mode: string, days: string) => {
       formHelper.setValue('lock_enabled', enabled);
       formHelper.setValue('lock_mode', mode);
       formHelper.setValue('lock_retention_period_days', days);
-      formHelper.setValue('lock_retention_period_years', years);
-      [
-        'lock_enabled',
-        'lock_mode',
-        'lock_retention_period_days',
-        'lock_retention_period_years'
-      ].forEach((name) => {
+      ['lock_enabled', 'lock_mode', 'lock_retention_period_days'].forEach((name) => {
         const control = component.bucketForm.get(name);
         expect(control.valid).toBeTruthy();
         expect(control.errors).toBeNull();
@@ -360,15 +348,13 @@ describe('RgwBucketFormComponent', () => {
       expect(control.disabled).toBeTruthy();
     });
 
-    it('should have the "eitherDaysOrYears" error', () => {
+    it('should have the "lockDays" error', () => {
       formHelper.setValue('lock_enabled', true);
-      setDaysAndYears((name: string) => {
-        const control = component.bucketForm.get(name);
-        control.updateValueAndValidity();
-        expect(control.value).toBe(0);
-        expect(control.invalid).toBeTruthy();
-        formHelper.expectError(control, 'eitherDaysOrYears');
-      });
+      const control = component.bucketForm.get('lock_retention_period_days');
+      control.updateValueAndValidity();
+      expect(control.value).toBe(0);
+      expect(control.invalid).toBeTruthy();
+      formHelper.expectError(control, 'lockDays');
     });
 
     it('should have the "pattern" error [1]', () => {
@@ -380,11 +366,16 @@ describe('RgwBucketFormComponent', () => {
     });
 
     it('should have valid values [1]', () => {
-      expectValidLockInputs(true, 'Governance', '0', '1');
+      expectValidLockInputs(true, 'Governance', '1');
     });
 
     it('should have valid values [2]', () => {
-      expectValidLockInputs(false, 'Compliance', '100', '0');
+      expectValidLockInputs(false, 'Compliance', '2');
+    });
+
+    it('should convert retention years to days', () => {
+      expect(component['getLockDays']({ lock_retention_period_years: 1000 })).toBe(365242);
+      expect(component['getLockDays']({ lock_retention_period_days: 5 })).toBe(5);
     });
   });
 });
