@@ -36,7 +36,7 @@ ClientRequest::~ClientRequest()
 
 void ClientRequest::print(std::ostream &lhs) const
 {
-  lhs << *m;
+  lhs << "m=[" << *m << "], prev_op_id=" << prev_op_id;
 }
 
 void ClientRequest::dump_detail(Formatter *f) const
