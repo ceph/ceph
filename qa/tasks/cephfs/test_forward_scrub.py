@@ -232,7 +232,7 @@ class TestForwardScrub(CephFSTestCase):
         self.mount_a.umount_wait()
 
         with self.assert_cluster_log("inode table repaired", invert_match=True):
-            out_json = self.fs.run_scrub(["start", "/", "repair", "recursive"])
+            out_json = self.fs.run_scrub(["start", "/", "repair,recursive"])
             self.assertNotEqual(out_json, None)
             self.assertEqual(out_json["return_code"], 0)
             self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
@@ -256,7 +256,7 @@ class TestForwardScrub(CephFSTestCase):
         self.fs.wait_for_daemons()
 
         with self.assert_cluster_log("inode table repaired"):
-            out_json = self.fs.run_scrub(["start", "/", "repair", "recursive"])
+            out_json = self.fs.run_scrub(["start", "/", "repair,recursive"])
             self.assertNotEqual(out_json, None)
             self.assertEqual(out_json["return_code"], 0)
             self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
@@ -289,7 +289,7 @@ class TestForwardScrub(CephFSTestCase):
                                   "oh i'm sorry did i overwrite your xattr?")
 
         with self.assert_cluster_log("bad backtrace on inode"):
-            out_json = self.fs.run_scrub(["start", "/", "repair", "recursive"])
+            out_json = self.fs.run_scrub(["start", "/", "repair,recursive"])
             self.assertNotEqual(out_json, None)
             self.assertEqual(out_json["return_code"], 0)
             self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
