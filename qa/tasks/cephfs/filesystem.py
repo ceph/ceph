@@ -11,6 +11,8 @@ import random
 
 from io import BytesIO, StringIO
 from errno import EBUSY
+from random import choice
+from string import ascii_lowercase, digits
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -365,6 +367,19 @@ class MDSCluster(CephCluster):
         self.mds_daemons[mds_id].signal(sig, silent);
 
     def newfs(self, name='cephfs', create=True):
+        fs_ls_output = self.mon_manager.run_cluster_cmd(
+            args='fs ls', stdout=StringIO()).stdout.getvalue()
+
+        fsname = name
+        while fsname in fs_ls_output:
+            fsname = 'cephfs_' + choice(ascii_lowercase) + choice(digits)
+
+        if fsname != name:
+            log.info(f'changing fs name from "{name}" to "{fsname}" because '
+                     f'a Ceph FS named "{name}" is already present in the '
+                      'cluster.')
+            name = fsname
+
         return Filesystem(self._ctx, name=name, create=create)
 
     def status(self):

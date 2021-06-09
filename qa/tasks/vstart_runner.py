@@ -50,6 +50,8 @@ import logging
 import shlex
 
 from unittest import suite, loader
+from random import choice
+from string import ascii_lowercase, digits
 
 from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
@@ -940,6 +942,19 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
         pass
 
     def newfs(self, name='cephfs', create=True):
+        fs_ls_output = self.mon_manager.run_cluster_cmd(
+            args='fs ls', stdout=StringIO()).stdout.getvalue()
+
+        fsname = name
+        while fsname in fs_ls_output:
+            fsname = 'cephfs_' + choice(ascii_lowercase) + choice(digits)
+
+        if fsname != name:
+            log.info(f'changing fs name from "{name}" to "{fsname}" because '
+                     f'a Ceph FS named "{name}" is already present in the '
+                      'cluster.')
+            name = fsname
+
         return LocalFilesystem(self._ctx, name=name, create=create)
 
     def delete_all_filesystems(self):
