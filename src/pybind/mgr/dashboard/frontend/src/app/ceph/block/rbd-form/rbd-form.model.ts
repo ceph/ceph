@@ -13,4 +13,7 @@ export class RbdFormModel {
 
   /* Configuration */
   configuration: RbdConfigurationEntry[];
+
+  /* Deletion process */
+  source?: string;
 }

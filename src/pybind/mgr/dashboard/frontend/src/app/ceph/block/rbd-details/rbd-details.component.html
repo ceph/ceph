@@ -3,7 +3,7 @@
 </ng-template>
 
 
-<tabset *ngIf="selection?.hasSingleSelection">
+<tabset *ngIf="selection?.hasSingleSelection && selectedItem.source !== 'REMOVING'">
   <tab i18n-heading
        heading="Details">
     <table class="table table-striped table-bordered">
@@ -132,6 +132,9 @@
   </tab>
 </tabset>
 
+<cd-warning-panel *ngIf="selection?.hasSingleSelection && selectedItem.source === 'REMOVING'"
+                  i18n>Information can not be displayed for RBD in status 'Removing'.</cd-warning-panel>
+
 <ng-template
   #poolConfigurationSourceTpl
   let-row="row"
@@ -141,4 +144,3 @@
   </ng-container>
   <ng-template #global><span i18n i18n-tooltip tooltip="This is the global value. No value for this option has been set for this image.">Global</span></ng-template>
 </ng-template>
-

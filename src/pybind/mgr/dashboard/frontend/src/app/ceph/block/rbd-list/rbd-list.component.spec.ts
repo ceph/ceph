@@ -21,6 +21,7 @@ import { RbdService } from '../../../shared/api/rbd.service';
 import { ActionLabels } from '../../../shared/constants/app.constants';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
+import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
@@ -363,5 +364,30 @@ describe('RbdListComponent', () => {
         expect(tableActions.tableActions).toEqual([]);
       });
     });
+  });
+
+  it('should disable edit, copy, flatten and move action if RBD is in status `Removing`', () => {
+    const checkAction = (name: string) => {
+      const message = `Action not possible for an RBD in status 'Removing'`;
+      const action = component.tableActions.find((o) => o.name === name);
+      expect(action.disable(component.selection)).toBeTruthy();
+      expect(action.disableDesc(undefined)).toBe(message);
+    };
+
+    component.selection = new CdTableSelection();
+    component.selection.selected = [
+      {
+        name: 'foobar',
+        pool_name: 'rbd',
+        snapshots: [],
+        source: 'REMOVING'
+      }
+    ];
+    component.selection.update();
+
+    checkAction('Edit');
+    checkAction('Copy');
+    checkAction('Flatten');
+    checkAction('Move to Trash');
   });
 });
