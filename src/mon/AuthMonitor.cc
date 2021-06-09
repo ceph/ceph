@@ -1652,6 +1652,41 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       + " tag " + pg_pool_t::APPLICATION_NAME_CEPHFS
       + " data=" + filesystem;
 
+    vector<string> newcaps = {"mon", mon_cap_string, "osd", osd_cap_string,
+			      "mds", mds_cap_string};
+
+    EntityAuth e_auth;
+    if (mon.key_server.get_auth(entity, e_auth)) {
+      for (auto it = newcaps.begin(); it != newcaps.end(); it += 2) {
+	string& cap_entity = *it;
+        if (entity_auth.caps.count(cap_entity) == 0) {
+          ss << entity << " already has fs capabilities that differ from "
+             << "those supplied. To generate a new auth key for " << entity
+             << ", first remove " << entity << " from configuration files, "
+             << "execute 'ceph auth rm " << entity << "', then execute this "
+             << "command again.";
+          err = -EINVAL;
+          goto done;
+        }
+      }
+
+      bool all_caps_same = _gen_wanted_caps(e_auth, newcaps, filesystem);
+
+      if (all_caps_same) {
+	ss << entity << " already has caps that are same as those supplied.";
+	_print_key(entity, e_auth, rdata, f.get());
+	err = 0;
+	goto done;
+      }
+
+      err = _update_caps(entity, newcaps, op);
+      if (err == 0) {
+	return true;
+      } else {
+	goto done;
+      }
+    }
+
     std::map<string, bufferlist> wanted_caps = {
       { "mon", _encode_cap(mon_cap_string) },
       { "osd", _encode_cap(osd_cap_string) },
@@ -1662,26 +1697,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
         !valid_caps("osd", osd_cap_string, &ss) ||
 	!valid_caps("mds", mds_cap_string, &ss)) {
       err = -EINVAL;
-      goto done;
-    }
-
-    EntityAuth entity_auth;
-    if (mon.key_server.get_auth(entity, entity_auth)) {
-      for (const auto &sys_cap : wanted_caps) {
-	if (entity_auth.caps.count(sys_cap.first) == 0 ||
-	    !entity_auth.caps[sys_cap.first].contents_equal(sys_cap.second)) {
-	  ss << entity << " already has fs capabilities that differ from "
-	     << "those supplied. To generate a new auth key for " << entity
-	     << ", first remove " << entity << " from configuration files, "
-	     << "execute 'ceph auth rm " << entity << "', then execute this "
-	     << "command again.";
-	  err = -EINVAL;
-	  goto done;
-	}
-      }
-
-      _print_key(entity, entity_auth, rdata, f.get());
-      err = 0;
       goto done;
     }
 
@@ -1728,6 +1743,111 @@ done:
   getline(ss, rs, '\0');
   mon.reply_command(op, err, rs, rdata, get_last_committed());
   return false;
+}
+
+/* Generate the caps that should now be present in the entity's auth keyring
+ * (that is wanted caps) by merging the caps already held in the auth keyring
+ * and the new caps provided by "fs authorize" subcommand.
+ */
+bool AuthMonitor::_gen_wanted_caps(EntityAuth& e_auth, vector<string>& newcaps,
+                                    string& fs)
+{
+  bool all_caps_same = true; // whether all caps passed are same as the
+			     // one present.
+
+  if (e_auth.caps.empty()) {
+    all_caps_same = false;
+    return all_caps_same;
+  }
+
+  for (auto it = newcaps.begin(); it != newcaps.end(); it += 2) {
+    string& cap_entity = *it;
+    string& ncap = *(it + 1);
+
+    string ecap; // ecap = entity cap
+    auto i = e_auth.caps[cap_entity].cbegin();
+    decode(ecap, i);
+    if (ecap == ncap) {
+      continue;
+    }
+
+    all_caps_same = false;
+
+    if (cap_entity == "mon") {
+      if (ecap.find("fsname=" + fs) == string::npos) {
+	ncap = ecap + (ecap.empty() ? "" : ", ") + ncap;
+      } else {
+	ncap = ecap;
+      }
+    } else if (cap_entity == "osd") {
+      if (ecap.find("data=" + fs) == string::npos) {
+	ncap = ecap + (ecap.empty() ? "" : ", ") + ncap;
+	continue;
+      }
+
+      string c_fscap;
+      smatch sm;
+      if (ecap.find(",") != string::npos) {
+	string expr = "allow.*data=" + fs;
+	if (regex_search(ecap, sm, regex(expr + ","))) {
+	  for (auto i : sm)
+	    c_fscap = i;
+	  c_fscap.replace(c_fscap.find(","), 1, "");
+	} else {
+	  regex_search(ecap, sm, regex(", " + expr));
+	  for (auto i : sm)
+	    c_fscap = i;
+	  c_fscap.replace(c_fscap.find(", "), 2, "");
+	}
+
+	if (c_fscap == ncap)
+	  continue;
+      } else
+	c_fscap = ecap;
+
+      string c_perm, n_perm;
+      regex_search(c_fscap, sm, regex("allow [rw]* "));
+      for (auto i : sm)
+	      c_perm = i;
+      regex_search(ncap, sm, regex("allow [rw]* "));
+      for (auto i : sm)
+	      n_perm = i;
+
+      ncap = ecap.replace(ecap.find(c_perm), c_perm.size(), n_perm);
+    } else if (cap_entity == "mds") {
+      if (ecap.find("fsname=" + fs) == string::npos) {
+	ncap = ecap + (ecap.empty() ? "" : ", ") + ncap;
+	continue;
+      }
+
+      if (ecap.find(",") == string::npos) {
+	continue;
+      }
+
+      string c_fscap; // current cap for given fs name
+      string expr = "allow.*fsname=" + fs;
+      smatch sm;
+      if (regex_search(ecap, sm, regex(expr + ","))) {
+	for (auto i : sm)
+	  c_fscap = i;
+	c_fscap.replace(c_fscap.find(","), 1, "");
+      } else {
+	regex_search(ecap, sm, regex(", " + expr));
+	for (auto i : sm)
+	  c_fscap = i;
+	c_fscap.replace(c_fscap.find(", "), 2, "");
+      }
+
+      if (c_fscap == ncap) {
+	ncap = ecap;
+	continue;
+      }
+
+      ncap = ecap.replace(ecap.find(c_fscap), c_fscap.size(), ncap);
+    }
+  }
+
+  return all_caps_same;
 }
 
 void AuthMonitor::_print_key(EntityName& entity, EntityAuth& eauth,
