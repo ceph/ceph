@@ -165,6 +165,10 @@ private:
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
+  void _print_key(EntityName& entity, EntityAuth& eauth, bufferlist& rdata,
+                  Formatter* fmtr);
+  void _print_auth(EntityName& entity, EntityAuth& eauth, bufferlist& rdata,
+                   Formatter* fmtr, bool just_key=false);
 
   bool check_rotate();
   void process_used_pending_keys(const std::map<EntityName,CryptoKey>& keys);
