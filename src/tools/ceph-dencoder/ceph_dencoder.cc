@@ -16,13 +16,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 #include <iomanip>
 
 #include "ceph_ver.h"
@@ -33,6 +27,8 @@ namespace fs = std::experimental::filesystem;
 #include "denc_registry.h"
 
 #define MB(m) ((m) * 1024 * 1024)
+
+namespace fs = std::filesystem;
 
 void usage(ostream &out)
 {

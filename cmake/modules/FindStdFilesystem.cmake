@@ -28,7 +28,6 @@ set(_std_filesystem_already_included FALSE)
 foreach(library
     ""
     "stdc++fs"
-    "c++experimental"
     "c++fs")
   try_std_filesystem_library("${library}" StdFilesystem_LIBRARY _std_filesystem_already_included)
   if(_std_filesystem_already_included)

@@ -13,15 +13,7 @@
 
 #include "PyModuleRegistry.h"
 
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#else
-#error std::filesystem not available!
-#endif
 
 #include "include/stringify.h"
 #include "common/errno.h"
@@ -41,6 +33,8 @@ namespace fs = std::experimental::filesystem;
 
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
+
+namespace fs = std::filesystem;
 
 std::set<std::string> obsolete_modules = {
   "orchestrator_cli",

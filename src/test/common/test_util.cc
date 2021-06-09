@@ -12,17 +12,13 @@
  *
  */
 
+#include <filesystem>
+
+#include "gtest/gtest.h"
 #include "common/ceph_context.h"
 #include "include/util.h"
-#include "gtest/gtest.h"
 
-#if __has_include(<filesystem>)
-#include <filesystem>
 namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 
 #if defined(__linux__)
 TEST(util, collect_sys_info)

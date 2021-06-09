@@ -1,17 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <set>
-#include <map>
-#include <string>
-#include <memory>
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -42,6 +36,8 @@ namespace fs = std::experimental::filesystem;
 #define dout_subsys ceph_subsys_rocksdb
 #undef dout_prefix
 #define dout_prefix *_dout << "rocksdb: "
+
+namespace fs = std::filesystem;
 
 using std::function;
 using std::list;

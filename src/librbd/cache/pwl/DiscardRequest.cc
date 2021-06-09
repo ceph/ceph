@@ -1,19 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <filesystem>
+
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/hostname.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/DiscardRequest.h"
-
-#if __has_include(<filesystem>)
-#include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 
 #include "librbd/cache/pwl/ImageCacheState.h"
 
@@ -27,6 +21,8 @@ namespace fs = std::experimental::filesystem;
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::pwl:DiscardRequest: " \
                            << this << " " << __func__ << ": "
+
+namespace fs = std::filesystem;
 
 namespace librbd {
 namespace cache {
