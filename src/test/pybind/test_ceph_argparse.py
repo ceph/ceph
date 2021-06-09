@@ -283,9 +283,6 @@ class TestMonitor(TestArgparse):
     def test_compact(self):
         self.assert_valid_command(['compact'])
 
-    def test_scrub(self):
-        self.assert_valid_command(['scrub'])
-
     def test_fsid(self):
         self.assert_valid_command(['fsid'])
 
