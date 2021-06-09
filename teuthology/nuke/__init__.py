@@ -225,7 +225,7 @@ def main(args):
     if ctx.pid:
         if ctx.archive:
             log.info('Killing teuthology process at pid %d', ctx.pid)
-            os.system('grep -q %s /proc/%d/cmdline && sudo kill %d' % (
+            os.system('grep -q %s /proc/%d/cmdline && sudo kill -9 %d' % (
                 ctx.archive,
                 ctx.pid,
                 ctx.pid))
