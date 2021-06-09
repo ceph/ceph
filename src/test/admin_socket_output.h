@@ -15,17 +15,13 @@
 #ifndef CEPH_ADMIN_SOCKET_OUTPUT_H
 #define CEPH_ADMIN_SOCKET_OUTPUT_H
 
+#include <filesystem>
 #include <string>
 #include <map>
 #include <set>
 #include <vector>
-#if __has_include(<filesystem>)	 // For extension
-#include <filesystem>
+
 namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 
 using socket_results = std::map<std::string, std::string>;
 using test_functions =
