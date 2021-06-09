@@ -507,15 +507,6 @@ struct interruptible_errorator {
 	Errorator::template make_ready_future<ValueT>(
 	  std::forward<A>(value)...));
   }
-  template <typename ValueT = void>
-  static interruptible_future_detail<
-    InterruptCond,
-    typename Errorator::template future<ValueT>>
-  make_ready_future() {
-    return interruptible_future_detail<
-      InterruptCond, typename Errorator::template future<ValueT>>(
-	Errorator::template make_ready_future<ValueT>());
-  }
   static interruptible_future_detail<
     InterruptCond,
     typename Errorator::template future<>> now() {
