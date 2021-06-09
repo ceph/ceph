@@ -17,7 +17,8 @@
 
 from nose.tools import assert_equal, assert_raises, \
     assert_not_in, assert_in, \
-    assert_regexp_matches
+    assert_regexp_matches, \
+    nottest
 from unittest import TestCase
 
 from ceph_argparse import validate_command, parse_json_funcsigs, validate, \
@@ -1265,6 +1266,7 @@ class TestValidate(TestCase):
 
         self.sig = parse_funcsig(self.prefix + self.args_dict)
 
+    @nottest
     def arg_kwarg_test(self, prefix, args, sig, arg_type=0):
         """
         Runs validate in different arg/kargs ways.
