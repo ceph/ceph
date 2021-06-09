@@ -1182,7 +1182,7 @@ class DummyChildPool {
 
       // fix back
       logger().info("\n\nFIX pos({}) from {} back to {}:",
-                    pos, node_to_fix->get_name(), old_key);
+                    pos, node_to_fix->get_name(), key_hobj_t(old_key));
       node_to_fix->fix_key(pool_clone.get_context(), old_key).unsafe_get0();
       EXPECT_EQ(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0(), 2);
       EXPECT_EQ(pool_clone.p_dummy->size(), 1);
