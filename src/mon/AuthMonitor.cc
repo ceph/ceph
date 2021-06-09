@@ -1843,33 +1843,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 						  get_last_committed() + 1));
     return true;
   } else if (prefix == "auth caps" && !entity_name.empty()) {
-    KeyServerData::Incremental auth_inc;
-    auth_inc.name = entity;
-    if (!mon.key_server.get_auth(auth_inc.name, auth_inc.auth)) {
-      ss << "couldn't find entry " << auth_inc.name;
-      err = -ENOENT;
+    err = _update_caps(entity, caps_vec, op);
+    if (err == 0)
+      return true;
+    else
       goto done;
-    }
-
-    if (!valid_caps(caps_vec, &ss)) {
-      err = -EINVAL;
-      goto done;
-    }
-
-    map<string,bufferlist> newcaps;
-    for (vector<string>::iterator it = caps_vec.begin();
-	 it != caps_vec.end(); it += 2)
-      encode(*(it+1), newcaps[*it]);
-
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    auth_inc.auth.caps = newcaps;
-    push_cephx_inc(auth_inc);
-
-    ss << "updated caps for " << auth_inc.name;
-    getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-					      get_last_committed() + 1));
-    return true;
   } else if ((prefix == "auth del" || prefix == "auth rm") &&
              !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -1913,6 +1891,39 @@ void AuthMonitor::_print_auth(EntityName& entity, EntityAuth& eauth,
   } else {
     kr.encode_plaintext(rdata);
   }
+}
+
+int AuthMonitor::_update_caps(EntityName& entity, vector<string>& caps_vec,
+			      MonOpRequestRef op)
+{
+  stringstream ss;
+
+  KeyServerData::Incremental auth_inc;
+  auth_inc.name = entity;
+  if (!mon.key_server.get_auth(auth_inc.name, auth_inc.auth)) {
+    ss << "couldn't find entry " << auth_inc.name;
+    return -ENOENT;
+  }
+
+  if (!valid_caps(caps_vec, &ss)) {
+    return -EINVAL;
+  }
+
+  map<string,bufferlist> newcaps;
+  for (vector<string>::iterator it = caps_vec.begin();
+       it != caps_vec.end(); it += 2)
+    encode(*(it+1), newcaps[*it]);
+
+  auth_inc.op = KeyServerData::AUTH_INC_ADD;
+  auth_inc.auth.caps = newcaps;
+  push_cephx_inc(auth_inc);
+
+  ss << "updated caps for " << auth_inc.name;
+  string rs;
+  getline(ss, rs);
+  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					    get_last_committed() + 1));
+  return 0;
 }
 
 bool AuthMonitor::prepare_global_id(MonOpRequestRef op)

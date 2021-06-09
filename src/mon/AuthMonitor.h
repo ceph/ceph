@@ -169,6 +169,8 @@ private:
                   Formatter* fmtr);
   void _print_auth(EntityName& entity, EntityAuth& eauth, bufferlist& rdata,
                    Formatter* fmtr, bool just_key=false);
+  int _update_caps(EntityName& entity, std::vector<std::string>& caps_vec,
+		   MonOpRequestRef op);
 
   bool check_rotate();
   void process_used_pending_keys(const std::map<EntityName,CryptoKey>& keys);
