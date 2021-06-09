@@ -5,7 +5,6 @@
 #define CEPH_RGW_HTTP_CLIENT_H
 
 #include "common/async/yield_context.h"
-#include "common/RWLock.h"
 #include "common/Cond.h"
 #include "rgw_common.h"
 #include "rgw_string.h"
@@ -22,7 +21,8 @@ void rgw_http_client_cleanup();
 struct rgw_http_req_data;
 class RGWHTTPManager;
 
-class RGWHTTPClient : public RGWIOProvider
+class RGWHTTPClient : public RGWIOProvider,
+                      public NoDoutPrefix
 {
   friend class RGWHTTPManager;
 
@@ -40,6 +40,12 @@ class RGWHTTPClient : public RGWIOProvider
 
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
+  string ca_path;
+
+  string client_cert;
+
+  string client_key;
+
   std::atomic<unsigned> stopped { 0 };
 
 
@@ -49,11 +55,17 @@ protected:
   string method;
   string url;
 
+  string protocol;
+  string host;
+  string resource_prefix;
+
   size_t send_len{0};
 
   param_vec_t headers;
 
   long  req_timeout{0L};
+
+  void init();
 
   RGWHTTPManager *get_manager();
 
@@ -103,15 +115,10 @@ public:
   virtual ~RGWHTTPClient();
   explicit RGWHTTPClient(CephContext *cct,
                          const string& _method,
-                         const string& _url)
-    : has_send_len(false),
-      http_status(HTTP_STATUS_NOSTATUS),
-      req_data(nullptr),
-      verify_ssl(cct->_conf->rgw_verify_ssl),
-      cct(cct),
-      method(_method),
-      url(_url) {
-  }
+                         const string& _url);
+
+  std::ostream& gen_prefix(std::ostream& out) const override;
+
 
   void append_header(const string& name, const string& val) {
     headers.push_back(pair<string, string>(name, val));
@@ -170,6 +177,18 @@ public:
 
   void *get_io_user_info() override {
     return user_info;
+  }
+
+  void set_ca_path(const string& _ca_path) {
+    ca_path = _ca_path;
+  }
+
+  void set_client_cert(const string& _client_cert) {
+    client_cert = _client_cert;
+  }
+
+  void set_client_key(const string& _client_key) {
+    client_key = _client_key;
   }
 };
 

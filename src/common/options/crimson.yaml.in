@@ -1,0 +1,42 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: crimson_osd_obc_lru_size
+  type: uint
+  level: advanced
+  desc: Number of obcs to cache
+  default: 10
+- name: crimson_osd_scheduler_concurrency
+  type: uint
+  level: advanced
+  desc: The maximum number concurrent IO operations, 0 for unlimited
+  default: 0
+- name: crimson_alien_op_num_threads
+  type: uint
+  level: advanced
+  desc: The number of threads for serving alienized ObjectStore
+  default: 6
+  flags:
+  - startup
+- name: crimson_alien_thread_cpu_cores
+  type: str
+  level: advanced
+  desc: CPU cores on which alienstore threads will run
+- name: seastore_segment_size
+  type: size
+  desc: Segment size to use for SegmentManager
+  level: advanced
+  default: 64_M
+- name: seastore_device_size
+  type: size
+  desc: Total size to use for SegmentManager block file if created
+  level: dev
+  default: 100_G
+- name: seastore_block_create
+  type: bool
+  level: dev
+  desc: Create SegmentManager file if it doesn't exist
+  default: true
+  see_also:
+  - seastore_device_size

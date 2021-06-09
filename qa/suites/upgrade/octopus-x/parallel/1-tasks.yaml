@@ -12,6 +12,9 @@ tasks:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
+    # deploy additional mons the "old" (octopus) way
+    add_mons_via_daemon_add: true
+    avoid_pacific_features: true
 - print: "**** done end installing octopus cephadm ..."
 
 - cephadm.shell:
@@ -24,6 +27,9 @@ tasks:
 - cephadm.shell:
     mon.a:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim false --force
+      - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
+
 - print: "**** done cephadm.shell ceph config set mgr..."
 
 - print: "**** done start parallel"

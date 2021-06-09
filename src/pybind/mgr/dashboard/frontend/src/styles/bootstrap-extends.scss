@@ -122,7 +122,7 @@ legend {
   @extend .fa-fw;
 }
 
-pre {
+pre:not(cd-api-docs *) {
   @extend .card;
   @extend .bg-light;
   @extend .p-2;

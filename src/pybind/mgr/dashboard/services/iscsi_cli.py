@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import errno
 import json
@@ -23,7 +22,7 @@ def list_iscsi_gateways(_):
 
 
 @CLIWriteCommand('dashboard iscsi-gateway-add')
-@CLICheckNonemptyFileInput
+@CLICheckNonemptyFileInput(desc='iSCSI gateway configuration')
 def add_iscsi_gateway(_, inbuf, name: Optional[str] = None):
     '''
     Add iSCSI gateway configuration. Gateway URL read from -i <file>

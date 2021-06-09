@@ -138,6 +138,9 @@ class item_iterator_t {
   static node_offset_t trim_at(
       NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&, node_offset_t trimmed);
 
+  static node_offset_t erase(
+      NodeExtentMutable&, const item_iterator_t<NODE_TYPE>&, const char*);
+
   template <KeyT KT>
   class Appender;
 
@@ -166,6 +169,7 @@ class item_iterator_t<NODE_TYPE>::Appender {
  public:
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_append{p_append} {}
+  Appender(NodeExtentMutable*, const item_iterator_t&, bool open);
   bool append(const item_iterator_t<NODE_TYPE>& src, index_t& items);
   char* wrap() { return p_append; }
   std::tuple<NodeExtentMutable*, char*> open_nxt(const key_get_type&);

@@ -307,7 +307,8 @@ static int delete_bucket(void){
 
 RGWCORSRule *xml_to_cors_rule(string s){
   RGWCORSConfiguration_S3 *cors_config;
-  RGWCORSXMLParser_S3 parser(g_ceph_context);
+  const DoutPrefix dp(g_ceph_context, 1, "test cors: ");
+  RGWCORSXMLParser_S3 parser(&dp, g_ceph_context);
   const string *data = g_test->get_response_data();
   if (!parser.init()) {
     return NULL;

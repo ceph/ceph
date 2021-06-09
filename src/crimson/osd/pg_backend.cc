@@ -63,21 +63,21 @@ PGBackend::PGBackend(shard_id_t shard,
     store{store}
 {}
 
-PGBackend::load_metadata_ertr::future<PGBackend::loaded_object_md_t::ref>
+PGBackend::load_metadata_iertr::future
+  <PGBackend::loaded_object_md_t::ref>
 PGBackend::load_metadata(const hobject_t& oid)
 {
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
 
-  return store->get_attrs(
+  return interruptor::make_interruptible(store->get_attrs(
     coll,
-    ghobject_t{oid, ghobject_t::NO_GEN, shard}).safe_then(
+    ghobject_t{oid, ghobject_t::NO_GEN, shard})).safe_then_interruptible(
       [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
 	loaded_object_md_t::ref ret(new loaded_object_md_t());
 	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
-	  bufferlist bl;
-	  bl.push_back(std::move(oiiter->second));
+	  bufferlist bl = std::move(oiiter->second);
 	  ret->os = ObjectState(
 	    object_info_t(bl),
 	    true);
@@ -90,8 +90,7 @@ PGBackend::load_metadata(const hobject_t& oid)
 	
 	if (oid.is_head()) {
 	  if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
-	    bufferlist bl;
-	    bl.push_back(std::move(ssiter->second));
+	    bufferlist bl = std::move(ssiter->second);
 	    ret->ss = SnapSet(bl);
 	  } else {
 	    /* TODO: add support for writing out snapsets
@@ -120,7 +119,7 @@ PGBackend::load_metadata(const hobject_t& oid)
       }));
 }
 
-seastar::future<crimson::osd::acked_peers_t>
+PGBackend::rep_op_fut_t
 PGBackend::mutate_object(
   std::set<pg_shard_t> pg_shards,
   crimson::osd::ObjectContextRef &&obc,
@@ -137,13 +136,12 @@ PGBackend::mutate_object(
     obc->obs.oi.prior_version = ctx->obs->oi.version;
 #endif
 
-    auto& m = osd_op_p.req;
     obc->obs.oi.prior_version = obc->obs.oi.version;
     obc->obs.oi.version = osd_op_p.at_version;
     if (osd_op_p.user_at_version > obc->obs.oi.user_version)
       obc->obs.oi.user_version = osd_op_p.user_at_version;
-    obc->obs.oi.last_reqid = m->get_reqid();
-    obc->obs.oi.mtime = m->get_mtime();
+    obc->obs.oi.last_reqid = osd_op_p.req_id;
+    obc->obs.oi.mtime = osd_op_p.mtime;
     obc->obs.oi.local_mtime = ceph_clock_now();
 
     // object_info_t
@@ -178,7 +176,7 @@ static inline bool _read_verify_data(
   return true;
 }
 
-PGBackend::read_errorator::future<>
+PGBackend::read_ierrorator::future<>
 PGBackend::read(const ObjectState& os, OSDOp& osd_op)
 {
   const auto& oi = os.oi;
@@ -206,7 +204,7 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op)
     // read the whole object if length is 0
     length = size;
   }
-  return _read(oi.soid, offset, length, op.flags).safe_then(
+  return _read(oi.soid, offset, length, op.flags).safe_then_interruptible_tuple(
     [&oi, &osd_op](auto&& bl) -> read_errorator::future<> {
     if (!_read_verify_data(oi, bl)) {
       // crc mismatches
@@ -222,19 +220,20 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op)
   read_errorator::pass_further{});
 }
 
-PGBackend::read_errorator::future<>
+PGBackend::read_ierrorator::future<>
 PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op)
 {
   const auto& op = osd_op.op;
   logger().trace("sparse_read: {} {}~{}",
                  os.oi.soid, op.extent.offset, op.extent.length);
-  return store->fiemap(coll, ghobject_t{os.oi.soid},
+  return interruptor::make_interruptible(store->fiemap(coll, ghobject_t{os.oi.soid},
 		       op.extent.offset,
-		       op.extent.length).then([&os, &osd_op, this](auto&& m) {
+		       op.extent.length)).then_interruptible(
+    [&os, &osd_op, this](auto&& m) {
     return seastar::do_with(interval_set<uint64_t>{std::move(m)},
 			    [&os, &osd_op, this](auto&& extents) {
-      return store->readv(coll, ghobject_t{os.oi.soid},
-                          extents, osd_op.op.flags).safe_then(
+      return interruptor::make_interruptible(store->readv(coll, ghobject_t{os.oi.soid},
+                          extents, osd_op.op.flags)).safe_then_interruptible_tuple(
         [&os, &osd_op, &extents](auto&& bl) -> read_errorator::future<> {
         if (_read_verify_data(os.oi, bl)) {
           osd_op.op.extent.length = bl.length();
@@ -286,7 +285,7 @@ namespace {
   }
 }
 
-PGBackend::checksum_errorator::future<>
+PGBackend::checksum_ierrorator::future<>
 PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
 {
   // sanity tests and normalize the argments
@@ -318,7 +317,8 @@ PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
   }
 
   // read the chunk to be checksum'ed
-  return _read(os.oi.soid, checksum.offset, checksum.length, osd_op.op.flags).safe_then(
+  return _read(os.oi.soid, checksum.offset, checksum.length, osd_op.op.flags)
+  .safe_then_interruptible(
     [&osd_op](auto&& read_bl) mutable -> checksum_errorator::future<> {
     auto& checksum = osd_op.op.checksum;
     if (read_bl.length() != checksum.length) {
@@ -351,7 +351,7 @@ PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
   });
 }
 
-PGBackend::cmp_ext_errorator::future<>
+PGBackend::cmp_ext_ierrorator::future<>
 PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
 {
   const ceph_osd_op& op = osd_op.op;
@@ -373,7 +373,7 @@ PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
   } else {
     ext_len = op.extent.length;
   }
-  auto read_ext = ll_read_errorator::make_ready_future<ceph::bufferlist>();
+  auto read_ext = ll_read_ierrorator::make_ready_future<ceph::bufferlist>();
   if (ext_len == 0) {
     logger().debug("{}: zero length extent", __func__);
   } else if (!os.exists || os.oi.is_whiteout()) {
@@ -381,7 +381,7 @@ PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
   } else {
     read_ext = _read(os.oi.soid, op.extent.offset, ext_len, 0);
   }
-  return read_ext.safe_then([&osd_op](auto&& read_bl) {
+  return read_ext.safe_then_interruptible([&osd_op](auto&& read_bl) {
     int32_t retcode = 0;
     for (unsigned index = 0; index < osd_op.indata.length(); index++) {
       char byte_in_op = osd_op.indata[index];
@@ -397,7 +397,8 @@ PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
   });
 }
 
-PGBackend::stat_errorator::future<> PGBackend::stat(
+PGBackend::stat_ierrorator::future<>
+PGBackend::stat(
   const ObjectState& os,
   OSDOp& osd_op)
 {
@@ -447,7 +448,7 @@ static bool is_offset_and_length_valid(
   }
 }
 
-seastar::future<> PGBackend::write(
+PGBackend::interruptible_future<> PGBackend::write(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& txn,
@@ -510,7 +511,7 @@ seastar::future<> PGBackend::write(
   return seastar::now();
 }
 
-seastar::future<> PGBackend::write_same(
+PGBackend::interruptible_future<> PGBackend::write_same(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -539,7 +540,7 @@ seastar::future<> PGBackend::write_same(
   return seastar::now();
 }
 
-seastar::future<> PGBackend::writefull(
+PGBackend::interruptible_future<> PGBackend::writefull(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -566,7 +567,7 @@ seastar::future<> PGBackend::writefull(
   return seastar::now();
 }
 
-PGBackend::append_errorator::future<> PGBackend::append(
+PGBackend::append_ierrorator::future<> PGBackend::append(
   ObjectState& os,
   OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -588,7 +589,7 @@ PGBackend::append_errorator::future<> PGBackend::append(
   return seastar::now();
 }
 
-PGBackend::write_ertr::future<> PGBackend::truncate(
+PGBackend::write_iertr::future<> PGBackend::truncate(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -640,7 +641,7 @@ PGBackend::write_ertr::future<> PGBackend::truncate(
   return write_ertr::now();
 }
 
-PGBackend::write_ertr::future<> PGBackend::zero(
+PGBackend::write_iertr::future<> PGBackend::zero(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -667,7 +668,7 @@ PGBackend::write_ertr::future<> PGBackend::zero(
   return write_ertr::now();
 }
 
-seastar::future<> PGBackend::create(
+PGBackend::interruptible_future<> PGBackend::create(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
@@ -693,8 +694,8 @@ seastar::future<> PGBackend::create(
   return seastar::now();
 }
 
-seastar::future<> PGBackend::remove(ObjectState& os,
-                                    ceph::os::Transaction& txn)
+PGBackend::interruptible_future<>
+PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn)
 {
   // todo: snapset
   txn.remove(coll->get_cid(),
@@ -709,7 +710,7 @@ seastar::future<> PGBackend::remove(ObjectState& os,
   return seastar::now();
 }
 
-seastar::future<std::tuple<std::vector<hobject_t>, hobject_t>>
+PGBackend::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>>
 PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 {
   if (__builtin_expect(stopping, false)) {
@@ -717,11 +718,11 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
   }
 
   auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
-  return store->list_objects(coll,
-                             gstart,
-                             ghobject_t::get_max(),
-                             limit)
-    .then([](auto ret) {
+  return interruptor::make_interruptible(store->list_objects(coll,
+					 gstart,
+					 ghobject_t::get_max(),
+					 limit))
+    .then_interruptible([](auto ret) {
       auto& [gobjects, next] = ret;
       std::vector<hobject_t> objects;
       boost::copy(gobjects |
@@ -743,7 +744,7 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
     });
 }
 
-seastar::future<> PGBackend::setxattr(
+PGBackend::interruptible_future<> PGBackend::setxattr(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
@@ -775,7 +776,7 @@ seastar::future<> PGBackend::setxattr(
   //ctx->delta_stats.num_wr++;
 }
 
-PGBackend::get_attr_errorator::future<> PGBackend::getxattr(
+PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
@@ -788,17 +789,16 @@ PGBackend::get_attr_errorator::future<> PGBackend::getxattr(
     name = "_" + aname;
   }
   logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-  return getxattr(os.oi.soid, name).safe_then([&osd_op] (ceph::bufferptr val) {
-    osd_op.outdata.clear();
-    osd_op.outdata.push_back(std::move(val));
+  return getxattr(os.oi.soid, name).safe_then_interruptible(
+    [&osd_op] (ceph::bufferlist&& val) {
+    osd_op.outdata = std::move(val);
     osd_op.op.xattr.value_len = osd_op.outdata.length();
     return get_attr_errorator::now();
-    //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   });
-  //ctx->delta_stats.num_rd++;
 }
 
-PGBackend::get_attr_errorator::future<ceph::bufferptr> PGBackend::getxattr(
+PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
+PGBackend::getxattr(
   const hobject_t& soid,
   std::string_view key) const
 {
@@ -809,7 +809,7 @@ PGBackend::get_attr_errorator::future<ceph::bufferptr> PGBackend::getxattr(
   return store->get_attr(coll, ghobject_t{soid}, key);
 }
 
-PGBackend::get_attr_errorator::future<> PGBackend::get_xattrs(
+PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
@@ -831,7 +831,8 @@ PGBackend::get_attr_errorator::future<> PGBackend::get_xattrs(
   });
 }
 
-PGBackend::rm_xattr_ertr::future<> PGBackend::rm_xattr(
+PGBackend::rm_xattr_iertr::future<>
+PGBackend::rm_xattr(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
@@ -847,14 +848,18 @@ PGBackend::rm_xattr_ertr::future<> PGBackend::rm_xattr(
   string attr_name{"_"};
   bp.copy(osd_op.op.xattr.name_len, attr_name);
   txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
-  return rm_xattr_ertr::now();
+  return rm_xattr_iertr::now();
 }
 
 using get_omap_ertr =
   crimson::os::FuturizedStore::read_errorator::extend<
     crimson::ct_error::enodata>;
+using get_omap_iertr =
+  ::crimson::interruptible::interruptible_errorator<
+    ::crimson::osd::IOInterruptCondition,
+    get_omap_ertr>;
 static
-get_omap_ertr::future<
+get_omap_iertr::future<
   crimson::os::FuturizedStore::omap_values_t>
 maybe_get_omap_vals_by_keys(
   crimson::os::FuturizedStore* store,
@@ -870,7 +875,7 @@ maybe_get_omap_vals_by_keys(
 }
 
 static
-get_omap_ertr::future<
+get_omap_iertr::future<
   std::tuple<bool, crimson::os::FuturizedStore::omap_values_t>>
 maybe_get_omap_vals(
   crimson::os::FuturizedStore* store,
@@ -885,7 +890,7 @@ maybe_get_omap_vals(
   }
 }
 
-PGBackend::ll_read_errorator::future<ceph::bufferlist>
+PGBackend::ll_read_ierrorator::future<ceph::bufferlist>
 PGBackend::omap_get_header(
   const crimson::os::CollectionRef& c,
   const ghobject_t& oid) const
@@ -893,19 +898,19 @@ PGBackend::omap_get_header(
   return store->omap_get_header(c, oid);
 }
 
-PGBackend::ll_read_errorator::future<>
+PGBackend::ll_read_ierrorator::future<>
 PGBackend::omap_get_header(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
-  return omap_get_header(coll, ghobject_t{os.oi.soid}).safe_then(
+  return omap_get_header(coll, ghobject_t{os.oi.soid}).safe_then_interruptible(
     [&osd_op] (ceph::bufferlist&& header) {
       osd_op.outdata = std::move(header);
       return seastar::now();
     });
 }
 
-PGBackend::ll_read_errorator::future<>
+PGBackend::ll_read_ierrorator::future<>
 PGBackend::omap_get_keys(
   const ObjectState& os,
   OSDOp& osd_op) const
@@ -930,7 +935,7 @@ PGBackend::omap_get_keys(
     std::min(max_return, local_conf()->osd_max_omap_entries_per_request);
 
   // TODO: truly chunk the reading
-  return maybe_get_omap_vals(store, coll, os.oi, start_after).safe_then(
+  return maybe_get_omap_vals(store, coll, os.oi, start_after).safe_then_interruptible(
     [=, &osd_op](auto ret) {
       ceph::bufferlist result;
       bool truncated = false;
@@ -948,7 +953,7 @@ PGBackend::omap_get_keys(
       osd_op.outdata.claim_append(result);
       encode(truncated, osd_op.outdata);
       return seastar::now();
-    }).handle_error(
+    }).handle_error_interruptible(
       crimson::ct_error::enodata::handle([&osd_op] {
         uint32_t num = 0;
 	bool truncated = false;
@@ -963,7 +968,7 @@ PGBackend::omap_get_keys(
   //ctx->delta_stats.num_rd++;
 }
 
-PGBackend::ll_read_errorator::future<>
+PGBackend::ll_read_ierrorator::future<>
 PGBackend::omap_get_vals(
   const ObjectState& os,
   OSDOp& osd_op) const
@@ -988,7 +993,8 @@ PGBackend::omap_get_vals(
     std::min(max_return, local_conf()->osd_max_omap_entries_per_request);
 
   // TODO: truly chunk the reading
-  return maybe_get_omap_vals(store, coll, os.oi, start_after).safe_then(
+  return maybe_get_omap_vals(store, coll, os.oi, start_after)
+  .safe_then_interruptible(
     [=, &osd_op] (auto&& ret) {
       auto [done, vals] = std::move(ret);
       assert(done);
@@ -1014,7 +1020,7 @@ PGBackend::omap_get_vals(
       osd_op.outdata.claim_append(result);
       encode(truncated, osd_op.outdata);
       return ll_read_errorator::now();
-    }).handle_error(
+    }).handle_error_interruptible(
       crimson::ct_error::enodata::handle([&osd_op] {
         encode(uint32_t{0} /* num */, osd_op.outdata);
         encode(bool{false} /* truncated */, osd_op.outdata);
@@ -1028,7 +1034,7 @@ PGBackend::omap_get_vals(
   //ctx->delta_stats.num_rd++;
 }
 
-PGBackend::ll_read_errorator::future<>
+PGBackend::ll_read_ierrorator::future<>
 PGBackend::omap_get_vals_by_keys(
   const ObjectState& os,
   OSDOp& osd_op) const
@@ -1048,11 +1054,12 @@ PGBackend::omap_get_vals_by_keys(
   } catch (buffer::error&) {
     throw crimson::osd::invalid_argument();
   }
-  return maybe_get_omap_vals_by_keys(store, coll, os.oi, keys_to_get).safe_then(
+  return maybe_get_omap_vals_by_keys(store, coll, os.oi, keys_to_get)
+  .safe_then_interruptible(
     [&osd_op] (crimson::os::FuturizedStore::omap_values_t&& vals) {
       encode(vals, osd_op.outdata);
       return ll_read_errorator::now();
-    }).handle_error(
+    }).handle_error_interruptible(
       crimson::ct_error::enodata::handle([&osd_op] {
         uint32_t num = 0;
         encode(num, osd_op.outdata);
@@ -1066,7 +1073,8 @@ PGBackend::omap_get_vals_by_keys(
   //ctx->delta_stats.num_rd++;
 }
 
-seastar::future<> PGBackend::omap_set_vals(
+PGBackend::interruptible_future<>
+PGBackend::omap_set_vals(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -1096,7 +1104,8 @@ seastar::future<> PGBackend::omap_set_vals(
   return seastar::now();
 }
 
-seastar::future<> PGBackend::omap_set_header(
+PGBackend::interruptible_future<>
+PGBackend::omap_set_header(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
@@ -1111,7 +1120,7 @@ seastar::future<> PGBackend::omap_set_header(
   return seastar::now();
 }
 
-seastar::future<> PGBackend::omap_remove_range(
+PGBackend::interruptible_future<> PGBackend::omap_remove_range(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
@@ -1131,7 +1140,7 @@ seastar::future<> PGBackend::omap_remove_range(
   return seastar::now();
 }
 
-PGBackend::omap_clear_ertr::future<>
+PGBackend::omap_clear_iertr::future<>
 PGBackend::omap_clear(
   ObjectState& os,
   OSDOp& osd_op,
@@ -1155,14 +1164,15 @@ PGBackend::omap_clear(
   return omap_clear_ertr::now();
 }
 
-seastar::future<struct stat> PGBackend::stat(
+PGBackend::interruptible_future<struct stat>
+PGBackend::stat(
   CollectionRef c,
   const ghobject_t& oid) const
 {
   return store->stat(c, oid);
 }
 
-seastar::future<std::map<uint64_t, uint64_t>>
+PGBackend::interruptible_future<std::map<uint64_t, uint64_t>>
 PGBackend::fiemap(
   CollectionRef c,
   const ghobject_t& oid,

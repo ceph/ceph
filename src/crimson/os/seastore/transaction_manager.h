@@ -20,6 +20,7 @@
 
 #include "crimson/osd/exceptions.h"
 
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
@@ -32,19 +33,44 @@ class Journal;
 
 template <typename F>
 auto repeat_eagain(F &&f) {
+  LOG_PREFIX("repeat_eagain");
   return seastar::do_with(
     std::forward<F>(f),
-    [](auto &f) {
+    [FNAME](auto &f) {
       return crimson::do_until(
-	[&f] {
+	[FNAME, &f] {
 	  return std::invoke(f
 	  ).safe_then([] {
 	    return true;
 	  }).handle_error(
-	    [](const crimson::ct_error::eagain &e) {
+	    [FNAME](const crimson::ct_error::eagain &e) {
+	      DEBUG("hit eagain, restarting");
 	      return seastar::make_ready_future<bool>(false);
 	    },
 	    crimson::ct_error::pass_further_all{}
+	  );
+	});
+    });
+}
+
+// non-errorated version
+template <typename F>
+auto repeat_eagain2(F &&f) {
+  LOG_PREFIX("repeat_eagain");
+  return seastar::do_with(
+    std::forward<F>(f),
+    [FNAME](auto &f) {
+      return seastar::repeat(
+	[FNAME, &f] {
+	  return std::invoke(f
+	  ).safe_then([] {
+	    return seastar::stop_iteration::yes;
+	  }).handle_error(
+	    [FNAME](const crimson::ct_error::eagain &e) {
+	      DEBUG("hit eagain, restarting");
+	      return seastar::make_ready_future<seastar::stop_iteration>(
+	          seastar::stop_iteration::no);
+	    }
 	  );
 	});
     });
@@ -86,94 +112,127 @@ public:
   close_ertr::future<> close();
 
   /// Creates empty transaction
-  TransactionRef create_transaction() {
-    return make_transaction();
+  TransactionRef create_transaction() final {
+    return cache->create_transaction();
   }
 
-  /// Creates weak transaction
+  /// Creates empty weak transaction
   TransactionRef create_weak_transaction() {
-    return make_weak_transaction();
+    return cache->create_weak_transaction();
   }
 
   /**
-   * Read extents corresponding to specified lba range
+   * get_pin
+   *
+   * Get the logical pin at offset
    */
-  using read_extent_ertr = LBAManager::get_mapping_ertr::extend_ertr<
-    SegmentManager::read_ertr>;
-  template <typename T>
-  using read_extent_ret = read_extent_ertr::future<lextent_list_t<T>>;
-  template <typename T>
-  read_extent_ret<T> read_extents(
+  using get_pin_ertr = LBAManager::get_mapping_ertr;
+  using get_pin_ret = LBAManager::get_mapping_ret;
+  get_pin_ret get_pin(
+    Transaction &t,
+    laddr_t offset) {
+    return lba_manager->get_mapping(t, offset);
+  }
+
+  /**
+   * get_pins
+   *
+   * Get logical pins overlapping offset~length
+   */
+  using get_pins_ertr = LBAManager::get_mappings_ertr;
+  using get_pins_ret = get_pins_ertr::future<lba_pin_list_t>;
+  get_pins_ret get_pins(
     Transaction &t,
     laddr_t offset,
-    extent_len_t length)
-  {
-    std::unique_ptr<lextent_list_t<T>> ret =
-      std::make_unique<lextent_list_t<T>>();
-    auto &ret_ref = *ret;
-    std::unique_ptr<lba_pin_list_t> pin_list =
-      std::make_unique<lba_pin_list_t>();
-    auto &pin_list_ref = *pin_list;
-    return lba_manager->get_mapping(
-      t, offset, length
-    ).safe_then([this, &t, &pin_list_ref, &ret_ref](auto pins) {
-      crimson::get_logger(ceph_subsys_filestore).debug(
-	"read_extents: mappings {}",
-	pins);
-      pins.swap(pin_list_ref);
-      return crimson::do_for_each(
-	pin_list_ref.begin(),
-	pin_list_ref.end(),
-	[this, &t, &ret_ref](auto &pin) {
-	  crimson::get_logger(ceph_subsys_filestore).debug(
-	    "read_extents: get_extent {}~{}",
-	    pin->get_paddr(),
-	    pin->get_length());
-	  return cache->get_extent<T>(
-	    t,
-	    pin->get_paddr(),
-	    pin->get_length()
-	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable
-		      -> read_extent_ertr::future<> {
-	    if (!ref->has_pin()) {
-	      if (pin->has_been_invalidated() || ref->has_been_invalidated()) {
-		return crimson::ct_error::eagain::make();
-	      } else {
-		ref->set_pin(std::move(pin));
-		lba_manager->add_pin(ref->get_pin());
-	      }
-	    }
-	    ret_ref.push_back(std::make_pair(ref->get_laddr(), ref));
-	    crimson::get_logger(ceph_subsys_filestore).debug(
-	      "read_extents: got extent {}",
-	      *ref);
-	    return read_extent_ertr::now();
-	  });
-	});
-    }).safe_then([ret=std::move(ret), pin_list=std::move(pin_list)]() mutable {
-      return read_extent_ret<T>(
-	read_extent_ertr::ready_future_marker{},
-	std::move(*ret));
+    extent_len_t length) {
+    return lba_manager->get_mappings(
+      t, offset, length);
+  }
+
+  /**
+   * pin_to_extent
+   *
+   * Get extent mapped at pin.
+   */
+  using pin_to_extent_ertr = get_pin_ertr::extend_ertr<
+    SegmentManager::read_ertr>;
+  template <typename T>
+  using pin_to_extent_ret = pin_to_extent_ertr::future<
+    TCachedExtentRef<T>>;
+  template <typename T>
+  pin_to_extent_ret<T> pin_to_extent(
+    Transaction &t,
+    LBAPinRef pin) {
+    LOG_PREFIX(TransactionManager::pin_to_extent);
+    using ret = pin_to_extent_ret<T>;
+    DEBUGT("getting extent {}", t, *pin);
+    return cache->get_extent<T>(
+      t,
+      pin->get_paddr(),
+      pin->get_length()
+    ).safe_then([this, FNAME, &t, pin=std::move(pin)](auto ref) mutable -> ret {
+      if (!ref->has_pin()) {
+	if (pin->has_been_invalidated() || ref->has_been_invalidated()) {
+	  return crimson::ct_error::eagain::make();
+	} else {
+	  ref->set_pin(std::move(pin));
+	  lba_manager->add_pin(ref->get_pin());
+	}
+      }
+      DEBUGT("got extent {}", t, *ref);
+      return pin_to_extent_ret<T>(
+	pin_to_extent_ertr::ready_future_marker{},
+	std::move(ref));
+    });
+  }
+
+  /**
+   * read_extent
+   *
+   * Read extent of type T at offset~length
+   */
+  using read_extent_ertr = get_pin_ertr::extend_ertr<
+    SegmentManager::read_ertr>;
+  template <typename T>
+  using read_extent_ret = read_extent_ertr::future<
+    TCachedExtentRef<T>>;
+  template <typename T>
+  read_extent_ret<T> read_extent(
+    Transaction &t,
+    laddr_t offset,
+    extent_len_t length) {
+    LOG_PREFIX(TransactionManager::read_extent);
+    return get_pin(
+      t, offset
+    ).safe_then([this, FNAME, &t, offset, length] (auto pin) {
+      if (length != pin->get_length() || !pin->get_paddr().is_real()) {
+        ERRORT("offset {} len {} got wrong pin {}",
+               t, offset, length, *pin);
+        ceph_assert(0 == "Should be impossible");
+      }
+      return this->pin_to_extent<T>(t, std::move(pin));
     });
   }
 
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
-    auto &logger = crimson::get_logger(ceph_subsys_filestore);
+    LOG_PREFIX(TransactionManager::get_mutable_extent);
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
+    stats.extents_mutated_total++;
+    stats.extents_mutated_bytes += ret->get_length();
     if (!ret->has_pin()) {
-      logger.debug(
-	"{}: duplicating {} for write: {}",
-	__func__,
+      DEBUGT(
+	"duplicating {} for write: {}",
+	t,
 	*ref,
 	*ret);
       ret->set_pin(ref->get_pin().duplicate());
     } else {
-      logger.debug(
-	"{}: {} already pending",
-	__func__,
+      DEBUGT(
+	"{} already pending",
+	t,
 	*ref);
       assert(ref->is_pending());
       assert(&*ref == &*ret);
@@ -233,11 +292,38 @@ public:
       hint,
       len,
       ext->get_paddr()
-    ).safe_then([ext=std::move(ext)](auto &&ref) mutable {
+    ).safe_then([ext=std::move(ext), len, this](auto &&ref) mutable {
       ext->set_pin(std::move(ref));
+      stats.extents_allocated_total++;
+      stats.extents_allocated_bytes += len;
       return alloc_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
+  }
+
+  using reserve_extent_ertr = alloc_extent_ertr;
+  using reserve_extent_ret = reserve_extent_ertr::future<LBAPinRef>;
+  reserve_extent_ret reserve_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len) {
+    return lba_manager->alloc_extent(
+      t,
+      hint,
+      len,
+      zero_paddr());
+  }
+
+  using find_hole_ertr = LBAManager::find_hole_ertr;
+  using find_hole_ret = LBAManager::find_hole_ret;
+  find_hole_ret find_hole(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len) {
+    return lba_manager->find_hole(
+      t,
+      hint,
+      len);
   }
 
   /* alloc_extents
@@ -281,10 +367,14 @@ public:
   submit_transaction_ertr::future<> submit_transaction(TransactionRef);
 
   /// SegmentCleaner::ExtentCallbackInterface
+  using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
+  submit_transaction_direct_ret submit_transaction_direct(
+    TransactionRef t) final;
 
   using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
-    journal_seq_t seq) final;
+    journal_seq_t seq,
+    size_t max_bytes) final;
 
   using SegmentCleaner::ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
@@ -316,6 +406,55 @@ public:
   release_segment_ret release_segment(
     segment_id_t id) final {
     return segment_manager.release(id);
+  }
+
+  /**
+   * read_root_meta
+   *
+   * Read root block meta entry for key.
+   */
+  using read_root_meta_ertr = base_ertr;
+  using read_root_meta_bare = std::optional<std::string>;
+  using read_root_meta_ret = read_root_meta_ertr::future<
+    read_root_meta_bare>;
+  read_root_meta_ret read_root_meta(
+    Transaction &t,
+    const std::string &key) {
+    return cache->get_root(
+      t
+    ).safe_then([&key](auto root) {
+      auto meta = root->root.get_meta();
+      auto iter = meta.find(key);
+      if (iter == meta.end()) {
+	return seastar::make_ready_future<read_root_meta_bare>(std::nullopt);
+      } else {
+	return seastar::make_ready_future<read_root_meta_bare>(iter->second);
+      }
+    });
+  }
+
+  /**
+   * update_root_meta
+   *
+   * Update root block meta entry for key to value.
+   */
+  using update_root_meta_ertr = base_ertr;
+  using update_root_meta_ret = update_root_meta_ertr::future<>;
+  update_root_meta_ret update_root_meta(
+    Transaction& t,
+    const std::string& key,
+    const std::string& value) {
+    return cache->get_root(
+      t
+    ).safe_then([this, &t, &key, &value](RootBlockRef root) {
+      root = cache->duplicate_for_write(t, root)->cast<RootBlock>();
+
+      auto meta = root->root.get_meta();
+      meta[key] = value;
+
+      root->root.set_meta(meta);
+      return seastar::now();
+    });
   }
 
   /**
@@ -368,6 +507,14 @@ public:
     croot->get_root().collection_root.update(cmroot);
   }
 
+  extent_len_t get_block_size() const {
+    return segment_manager.get_block_size();
+  }
+
+  store_statfs_t store_stat() const {
+    return segment_cleaner->stat();
+  }
+
   ~TransactionManager();
 
 private:
@@ -380,6 +527,17 @@ private:
   JournalRef journal;
 
   WritePipeline write_pipeline;
+
+  struct {
+    uint64_t extents_retired_total = 0;
+    uint64_t extents_retired_bytes = 0;
+    uint64_t extents_mutated_total = 0;
+    uint64_t extents_mutated_bytes = 0;
+    uint64_t extents_allocated_total = 0;
+    uint64_t extents_allocated_bytes = 0;
+  } stats;
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 
 public:
   // Testing interfaces

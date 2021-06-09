@@ -48,6 +48,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_WATCH 0
 #define LIBRBD_SUPPORTS_WRITESAME 1
 #define LIBRBD_SUPPORTS_WRITE_ZEROES 1
+#define LIBRBD_SUPPORTS_ENCRYPTION 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API          __attribute__ ((visibility ("default")))

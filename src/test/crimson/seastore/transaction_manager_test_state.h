@@ -9,7 +9,10 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
+#include "crimson/os/seastore/seastore.h"
 #include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -66,11 +69,9 @@ protected:
 };
 
 auto get_transaction_manager(
-  SegmentManager &segment_manager
-) {
+  SegmentManager &segment_manager) {
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
-    SegmentCleaner::config_t::default_from_segment_manager(
-      segment_manager),
+    SegmentCleaner::config_t::get_default(),
     true);
   auto journal = std::make_unique<Journal>(segment_manager);
   auto cache = std::make_unique<Cache>(segment_manager);
@@ -78,14 +79,24 @@ auto get_transaction_manager(
 
   journal->set_segment_provider(&*segment_cleaner);
 
-  auto ret = std::make_unique<TransactionManager>(
+  return std::make_unique<TransactionManager>(
     segment_manager,
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
     std::move(lba_manager));
-  return ret;
 }
+
+auto get_seastore(SegmentManagerRef sm) {
+  auto tm = get_transaction_manager(*sm);
+  auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
+  return std::make_unique<SeaStore>(
+    std::move(sm),
+    std::move(tm),
+    std::move(cm),
+    std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(*tm));
+}
+
 
 class TMTestState : public EphemeralTestState {
 protected:
@@ -108,8 +119,10 @@ protected:
   }
 
   virtual seastar::future<> _teardown() {
-    return tm->close(
-    ).handle_error(
+    return tm->close().safe_then([this] {
+      _destroy();
+      return seastar::now();
+    }).handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}
     );
   }
@@ -118,7 +131,11 @@ protected:
     return tm->mount(
     ).handle_error(
       crimson::ct_error::assert_all{"Error in mount"}
-    );
+    ).then([this] {
+      return segment_cleaner->stop();
+    }).then([this] {
+      return segment_cleaner->run_until_halt();
+    });
   }
 
   virtual seastar::future<> _mkfs() {
@@ -126,5 +143,73 @@ protected:
     ).handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}
     );
+  }
+};
+
+class TestSegmentManagerWrapper final : public SegmentManager {
+  SegmentManager &sm;
+public:
+  TestSegmentManagerWrapper(SegmentManager &sm) : sm(sm) {}
+
+  mount_ret mount() final {
+    return mount_ertr::now(); // we handle this above
+  }
+
+  mkfs_ret mkfs(seastore_meta_t c) final {
+    return mkfs_ertr::now(); // we handle this above
+  }
+
+
+  open_ertr::future<SegmentRef> open(segment_id_t id) final {
+    return sm.open(id);
+  }
+
+  release_ertr::future<> release(segment_id_t id) final {
+    return sm.release(id);
+  }
+
+  read_ertr::future<> read(
+    paddr_t addr, size_t len, ceph::bufferptr &out) final {
+    return sm.read(addr, len, out);
+  }
+
+  size_t get_size() const final { return sm.get_size(); }
+  segment_off_t get_block_size() const final { return sm.get_block_size(); }
+  segment_off_t get_segment_size() const final {
+    return sm.get_segment_size();
+  }
+  const seastore_meta_t &get_meta() const final {
+    return sm.get_meta();
+  }
+  ~TestSegmentManagerWrapper() final {}
+};
+
+class SeaStoreTestState : public EphemeralTestState {
+protected:
+  std::unique_ptr<SeaStore> seastore;
+
+  SeaStoreTestState() : EphemeralTestState() {}
+
+  virtual void _init() {
+    seastore = get_seastore(
+      std::make_unique<TestSegmentManagerWrapper>(*segment_manager));
+  }
+
+  virtual void _destroy() {
+    seastore.reset();
+  }
+
+  virtual seastar::future<> _teardown() {
+    return seastore->umount().then([this] {
+      seastore.reset();
+    });
+  }
+
+  virtual seastar::future<> _mount() {
+    return seastore->mount();
+  }
+
+  virtual seastar::future<> _mkfs() {
+    return seastore->mkfs(uuid_d{});
   }
 };

@@ -43,6 +43,11 @@ list(APPEND man_srcs
   cephadm.rst
   cephfs-mirror.rst)
 
+if(WITH_CEPHFS_SHELL)
+  list(APPEND man_srcs
+    cephfs-shell.rst)
+endif()
+
 if(HAVE_LIBFUSE)
   list(APPEND man_srcs
     ceph-fuse.rst

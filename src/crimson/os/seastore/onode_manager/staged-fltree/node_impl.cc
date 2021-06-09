@@ -11,7 +11,7 @@ last_split_info_t last_split = {};
 #endif
 
 // XXX: branchless allocation
-InternalNodeImpl::alloc_ertr::future<InternalNodeImpl::fresh_impl_t>
+eagain_future<InternalNodeImpl::fresh_impl_t>
 InternalNodeImpl::allocate(
     context_t c, field_type_t type, bool is_level_tail, level_t level)
 {
@@ -28,7 +28,7 @@ InternalNodeImpl::allocate(
   }
 }
 
-LeafNodeImpl::alloc_ertr::future<LeafNodeImpl::fresh_impl_t>
+eagain_future<LeafNodeImpl::fresh_impl_t>
 LeafNodeImpl::allocate(
     context_t c, field_type_t type, bool is_level_tail)
 {

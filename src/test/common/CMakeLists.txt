@@ -20,15 +20,17 @@ if(HAVE_BLKID AND LINUX)
   # unittest_blkdev
   add_executable(unittest_blkdev
     test_blkdev.cc)
-  add_ceph_unittest(unittest_blkdev ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_blkdev)
+  add_ceph_unittest(unittest_blkdev)
   target_link_libraries(unittest_blkdev global ${BLKID_LIBRARIES})
 endif()
 
 # unittest_lockdep
-add_executable(unittest_lockdep
-  test_lockdep.cc)
-add_ceph_unittest(unittest_lockdep)
-target_link_libraries(unittest_lockdep ceph-common)
+if(WITH_CEPH_DEBUG_MUTEX)
+  add_executable(unittest_lockdep
+    test_lockdep.cc)
+  add_ceph_unittest(unittest_lockdep)
+  target_link_libraries(unittest_lockdep ceph-common)
+endif()
 
 # unittest_counter
 add_executable(unittest_counter
@@ -152,7 +154,7 @@ add_executable(unittest_throttle
   Throttle.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_throttle parallel)
+add_ceph_unittest(unittest_throttle PARALLEL)
 target_link_libraries(unittest_throttle global) 
 
 # unittest_lru
@@ -260,12 +262,12 @@ add_executable(unittest_weighted_priority_queue
 target_link_libraries(unittest_weighted_priority_queue ceph-common)
 add_ceph_unittest(unittest_weighted_priority_queue)
 
-# unittest_mutex_debug
-add_executable(unittest_mutex_debug
-  test_mutex_debug.cc
-  )
-add_ceph_unittest(unittest_mutex_debug)
-target_link_libraries(unittest_mutex_debug ceph-common)
+if(WITH_CEPH_DEBUG_MUTEX)
+  add_executable(unittest_mutex_debug
+    test_mutex_debug.cc)
+  add_ceph_unittest(unittest_mutex_debug)
+  target_link_libraries(unittest_mutex_debug ceph-common)
+endif()
 
 # unittest_shunique_lock
 add_executable(unittest_shunique_lock
@@ -358,3 +360,9 @@ target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
 
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)
+
+if(WITH_SYSTEMD)
+  add_executable(unittest_journald_logger test_journald_logger.cc)
+  target_link_libraries(unittest_journald_logger ceph-common)
+  add_ceph_unittest(unittest_journald_logger)
+endif()

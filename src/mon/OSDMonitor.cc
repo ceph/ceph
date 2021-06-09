@@ -615,7 +615,7 @@ CrushWrapper &OSDMonitor::_get_stable_crush()
   return *osdmap.crush;
 }
 
-void OSDMonitor::_get_pending_crush(CrushWrapper& newcrush)
+CrushWrapper OSDMonitor::_get_pending_crush()
 {
   bufferlist bl;
   if (pending_inc.crush.length())
@@ -624,7 +624,9 @@ void OSDMonitor::_get_pending_crush(CrushWrapper& newcrush)
     osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   auto p = bl.cbegin();
-  newcrush.decode(p);
+  CrushWrapper crush;
+  crush.decode(p);
+  return crush;
 }
 
 void OSDMonitor::create_initial()
@@ -942,7 +944,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
   if (osdmap.stretch_mode_enabled) {
     dout(20) << "Stretch mode enabled in this map" << dendl;
-    mon.maybe_engage_stretch_mode();
+    mon.try_engage_stretch_mode();
     if (osdmap.degraded_stretch_mode) {
       dout(20) << "Degraded stretch mode set in this map" << dendl;
       if (!osdmap.recovering_stretch_mode) {
@@ -956,15 +958,16 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	  dout(10) << "Enabling recovery stretch mode in this map" << dendl;
 	  mon.go_recovery_stretch_mode();
 	}
+      } else {
+	mon.set_recovery_stretch_mode();
       }
+    } else {
+      mon.set_healthy_stretch_mode();
     }
     if (marked_osd_down &&
 	(!osdmap.degraded_stretch_mode || osdmap.recovering_stretch_mode)) {
       dout(20) << "Checking degraded stretch mode due to osd changes" << dendl;
       mon.maybe_go_degraded_stretch_mode();
-    }
-    if (osdmap.recovering_stretch_mode && stretch_recovery_triggered.is_zero()) {
-      stretch_recovery_triggered = ceph_clock_now();
     }
   }
 }
@@ -1177,8 +1180,7 @@ void OSDMonitor::create_pending()
   // Rewrite CRUSH rule IDs if they are using legacy "ruleset"
   // structure.
   if (osdmap.crush->has_legacy_rule_ids()) {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     // First, for all pools, work out which rule they really used
     // by resolving ruleset to rule.
@@ -1564,7 +1566,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // finalize up pending_inc
   pending_inc.modified = ceph_clock_now();
 
-  int r = pending_inc.propagate_snaps_to_tiers(cct, osdmap);
+  int r = pending_inc.propagate_base_properties_to_tiers(cct, osdmap);
   ceph_assert(r == 0);
 
   if (mapping_job) {
@@ -3176,14 +3178,70 @@ bool OSDMonitor::can_mark_in(int i)
 bool OSDMonitor::check_failures(utime_t now)
 {
   bool found_failure = false;
-  for (map<int,failure_info_t>::iterator p = failure_info.begin();
-       p != failure_info.end();
-       ++p) {
-    if (can_mark_down(p->first)) {
-      found_failure |= check_failure(now, p->first, p->second);
+  auto p = failure_info.begin();
+  while (p != failure_info.end()) {
+    auto& [target_osd, fi] = *p;
+    if (can_mark_down(target_osd) &&
+	check_failure(now, target_osd, fi)) {
+      found_failure = true;
+      ++p;
+    } else if (is_failure_stale(now, fi)) {
+      dout(10) << " dropping stale failure_info for osd." << target_osd
+	       << " from " << fi.reporters.size() << " reporters"
+	       << dendl;
+      p = failure_info.erase(p);
+    } else {
+      ++p;
     }
   }
   return found_failure;
+}
+
+utime_t OSDMonitor::get_grace_time(utime_t now,
+				   int target_osd,
+				   failure_info_t& fi) const
+{
+  utime_t orig_grace(g_conf()->osd_heartbeat_grace, 0);
+  if (!g_conf()->mon_osd_adjust_heartbeat_grace) {
+    return orig_grace;
+  }
+  utime_t grace = orig_grace;
+  double halflife = (double)g_conf()->mon_osd_laggy_halflife;
+  double decay_k = ::log(.5) / halflife;
+
+  // scale grace period based on historical probability of 'lagginess'
+  // (false positive failures due to slowness).
+  const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
+  const utime_t failed_for = now - fi.get_failed_since();
+  double decay = exp((double)failed_for * decay_k);
+  dout(20) << " halflife " << halflife << " decay_k " << decay_k
+	   << " failed_for " << failed_for << " decay " << decay << dendl;
+  double my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
+  grace += my_grace;
+
+  // consider the peers reporting a failure a proxy for a potential
+  // 'subcluster' over the overall cluster that is similarly
+  // laggy.  this is clearly not true in all cases, but will sometimes
+  // help us localize the grace correction to a subset of the system
+  // (say, a rack with a bad switch) that is unhappy.
+  double peer_grace = 0;
+  for (auto& [reporter, report] : fi.reporters) {
+    if (osdmap.exists(reporter)) {
+      const osd_xinfo_t& xi = osdmap.get_xinfo(reporter);
+      utime_t elapsed = now - xi.down_stamp;
+      double decay = exp((double)elapsed * decay_k);
+      peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
+    }
+  }
+  peer_grace /= (double)fi.reporters.size();
+  grace += peer_grace;
+  dout(10) << " osd." << target_osd << " has "
+	   << fi.reporters.size() << " reporters, "
+	   << grace << " grace (" << orig_grace << " + " << my_grace
+	   << " + " << peer_grace << "), max_failed_since " << fi.get_failed_since()
+	   << dendl;
+
+  return grace;
 }
 
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
@@ -3197,32 +3255,6 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 
   set<string> reporters_by_subtree;
   auto reporter_subtree_level = g_conf().get_val<string>("mon_osd_reporter_subtree_level");
-  utime_t orig_grace(g_conf()->osd_heartbeat_grace, 0);
-  utime_t max_failed_since = fi.get_failed_since();
-  utime_t failed_for = now - max_failed_since;
-
-  utime_t grace = orig_grace;
-  double my_grace = 0, peer_grace = 0;
-  double decay_k = 0;
-  if (g_conf()->mon_osd_adjust_heartbeat_grace) {
-    double halflife = (double)g_conf()->mon_osd_laggy_halflife;
-    decay_k = ::log(.5) / halflife;
-
-    // scale grace period based on historical probability of 'lagginess'
-    // (false positive failures due to slowness).
-    const osd_xinfo_t& xi = osdmap.get_xinfo(target_osd);
-    double decay = exp((double)failed_for * decay_k);
-    dout(20) << " halflife " << halflife << " decay_k " << decay_k
-	     << " failed_for " << failed_for << " decay " << decay << dendl;
-    my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
-    grace += my_grace;
-  }
-
-  // consider the peers reporting a failure a proxy for a potential
-  // 'subcluster' over the overall cluster that is similarly
-  // laggy.  this is clearly not true in all cases, but will sometimes
-  // help us localize the grace correction to a subset of the system
-  // (say, a rack with a bad switch) that is unhappy.
   ceph_assert(fi.reporters.size());
   for (auto p = fi.reporters.begin(); p != fi.reporters.end();) {
     // get the parent bucket whose type matches with "reporter_subtree_level".
@@ -3235,32 +3267,18 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
       } else {
         reporters_by_subtree.insert(iter->second);
       }
-      if (g_conf()->mon_osd_adjust_heartbeat_grace) {
-        const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
-        utime_t elapsed = now - xi.down_stamp;
-        double decay = exp((double)elapsed * decay_k);
-        peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
-      }
       ++p;
     } else {
       fi.cancel_report(p->first);;
       p = fi.reporters.erase(p);
     }
   }
-  
-  if (g_conf()->mon_osd_adjust_heartbeat_grace) {
-    peer_grace /= (double)fi.reporters.size();
-    grace += peer_grace;
+  if (reporters_by_subtree.size() < g_conf().get_val<uint64_t>("mon_osd_min_down_reporters")) {
+    return false;
   }
-
-  dout(10) << " osd." << target_osd << " has "
-	   << fi.reporters.size() << " reporters, "
-	   << grace << " grace (" << orig_grace << " + " << my_grace
-	   << " + " << peer_grace << "), max_failed_since " << max_failed_since
-	   << dendl;
-
-  if (failed_for >= grace &&
-      reporters_by_subtree.size() >= g_conf().get_val<uint64_t>("mon_osd_min_down_reporters")) {
+  const utime_t failed_for = now - fi.get_failed_since();
+  const utime_t grace = get_grace_time(now, target_osd, fi);
+  if (failed_for >= grace) {
     dout(1) << " we have enough reporters to mark osd." << target_osd
 	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
@@ -3276,6 +3294,17 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     return true;
   }
   return false;
+}
+
+bool OSDMonitor::is_failure_stale(utime_t now, failure_info_t& fi) const
+{
+  // if it takes too long to either cancel the report to mark the osd down,
+  // some reporters must have failed to cancel their reports. let's just
+  // forget these reports.
+  const utime_t failed_for = now - fi.get_failed_since();
+  auto heartbeat_grace = cct->_conf.get_val<int64_t>("osd_heartbeat_grace");
+  auto heartbeat_stale = cct->_conf.get_val<int64_t>("osd_heartbeat_stale");
+  return failed_for >= (heartbeat_grace + heartbeat_stale);
 }
 
 void OSDMonitor::force_failure(int target_osd, int by)
@@ -3334,11 +3363,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 		      << m->get_orig_source();
 
     failure_info_t& fi = failure_info[target_osd];
-    MonOpRequestRef old_op = fi.add_report(reporter, failed_since, op);
-    if (old_op) {
-      mon.no_reply(old_op);
-    }
-
+    fi.add_report(reporter, failed_since, op);
     return check_failure(now, target_osd, fi);
   } else {
     // remove the report
@@ -3347,10 +3372,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 		       << m->get_orig_source();
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
-      MonOpRequestRef report_op = fi.cancel_report(reporter);
-      if (report_op) {
-        mon.no_reply(report_op);
-      }
+      fi.cancel_report(reporter);
       if (fi.reporters.empty()) {
 	dout(10) << " removing last failure_info for osd." << target_osd
 		 << dendl;
@@ -5402,8 +5424,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
@@ -5426,11 +5447,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	   prefix == "osd ls-tree" ||
 	   prefix == "osd info") {
 
-    epoch_t epoch = 0;
-    int64_t epochnum;
-    cmd_getval(cmdmap, "epoch", epochnum, (int64_t)osdmap.get_epoch());
-    epoch = epochnum;
-    
+    epoch_t epoch = cmd_getval_or<int64_t>(cmdmap, "epoch", osdmap.get_epoch());
     bufferlist osdmap_bl;
     int err = get_version_full(epoch, osdmap_bl);
     if (err == -ENOENT) {
@@ -6635,9 +6652,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rs << "\n";
     rdata.append(rs.str());
   } else if (prefix == "osd crush tree") {
-    string shadow;
-    cmd_getval(cmdmap, "shadow", shadow);
-    bool show_shadow = shadow == "--show-shadow";
+    bool show_shadow = false;
+    if (!cmd_getval_compat_cephbool(cmdmap, "show_shadow", show_shadow)) {
+      std::string shadow;
+      if (cmd_getval(cmdmap, "shadow", shadow) &&
+	  shadow == "--show-shadow") {
+	show_shadow = true;
+      }
+    }
     boost::scoped_ptr<Formatter> f(Formatter::create(format));
     if (f) {
       f->open_object_section("crush_tree");
@@ -7283,8 +7305,7 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
       return ret;
   }
 
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
+  CrushWrapper newcrush = _get_pending_crush();
 
   ret = newcrush.rename_bucket(srcname,
 			       dstname,
@@ -7379,8 +7400,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
     return -EEXIST;
   }
 
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
+  CrushWrapper newcrush = _get_pending_crush();
 
   ruleid = newcrush.get_rule_id(name);
   if (ruleid != -ENOENT) {
@@ -7731,8 +7751,7 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
     // found it, use it
     *crush_rule = ret;
   } else {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     ret = newcrush.get_rule_id(rule_name);
     if (ret != -ENOENT) {
@@ -7811,8 +7830,17 @@ int OSDMonitor::prepare_new_pool(string& name,
 {
   if (name.length() == 0)
     return -EINVAL;
-  if (pg_num == 0)
-    pg_num = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
+  if (pg_num == 0) {
+    auto pg_num_from_mode =
+      [pg_num=g_conf().get_val<uint64_t>("osd_pool_default_pg_num")]
+      (const string& mode) {
+      return mode == "on" ? 1 : pg_num;
+    };
+    pg_num = pg_num_from_mode(
+      pg_autoscale_mode.empty() ?
+      g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode") :
+      pg_autoscale_mode);
+  }
   if (pgp_num == 0)
     pgp_num = g_conf().get_val<uint64_t>("osd_pool_default_pgp_num");
   if (!pgp_num)
@@ -7840,8 +7868,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     return r;
   }
   if (g_conf()->mon_osd_crush_smoke_test) {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     ostringstream err;
     CrushTester tester(newcrush, err);
     tester.set_min_x(0);
@@ -9062,8 +9089,7 @@ void OSDMonitor::do_osd_create(
 
 out:
   if (device_class.size()) {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     if (newcrush.get_max_devices() < *new_id + 1) {
       newcrush.set_max_devices(*new_id + 1);
     }
@@ -9613,8 +9639,7 @@ int OSDMonitor::prepare_command_osd_purge(
    *     the crush update we delayed from before.
    */
 
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
+  CrushWrapper newcrush = _get_pending_crush();
 
   bool may_be_idempotent = false;
 
@@ -9667,8 +9692,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   bufferlist rdata;
   int err = 0;
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
@@ -9806,8 +9830,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
 
   } else if (prefix == "osd crush set-all-straw-buckets-to-straw2") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     for (int b = 0; b < newcrush.get_max_buckets(); ++b) {
       int bid = -1 - b;
       if (newcrush.bucket_exists(bid) &&
@@ -9835,8 +9858,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool stop = false;
     vector<string> idvec;
     cmd_getval(cmdmap, "ids", idvec);
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     set<int> updated;
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
       set<int> osds;
@@ -9909,8 +9931,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool stop = false;
     vector<string> idvec;
     cmd_getval(cmdmap, "ids", idvec);
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     set<int> updated;
 
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
@@ -9982,8 +10003,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "class '" << device_class << "' already exists";
       goto reply;
     }
-     CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+     CrushWrapper newcrush = _get_pending_crush();
      if (newcrush.class_exists(device_class)) {
       ss << "class '" << device_class << "' already exists";
       goto update;
@@ -10012,8 +10032,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
        goto reply;
      }
 
-     CrushWrapper newcrush;
-     _get_pending_crush(newcrush);
+     CrushWrapper newcrush = _get_pending_crush();
      if (!newcrush.class_exists(device_class)) {
        err = 0; // make command idempotent
        goto wait;
@@ -10087,8 +10106,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     if (!newcrush.class_exists(srcname) && newcrush.class_exists(dstname)) {
       // suppose this is a replay and return success
       // so command is idempotent
@@ -10128,8 +10146,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (newcrush.name_exists(name)) {
       ss << "bucket '" << name << "' already exists";
@@ -10198,8 +10215,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto update;
   } else if (prefix == "osd crush weight-set create" ||
 	     prefix == "osd crush weight-set create-compat") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     int64_t pool;
     int positions;
     if (newcrush.has_non_straw2_buckets()) {
@@ -10252,8 +10268,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd crush weight-set rm" ||
 	     prefix == "osd crush weight-set rm-compat") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     int64_t pool;
     if (prefix == "osd crush weight-set rm") {
       string poolname;
@@ -10279,8 +10294,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "pool", poolname);
     cmd_getval(cmdmap, "item", item);
     cmd_getval(cmdmap, "weight", weight);
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     int64_t pool;
     if (prefix == "osd crush weight-set reweight") {
       pool = osdmap.lookup_pg_pool_name(poolname.c_str());
@@ -10366,8 +10380,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     dout(5) << "adding/updating crush item id " << osdid << " name '"
       << osd_name << "' weight " << weight << " at location "
       << loc << dendl;
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     string action;
     if (prefix == "osd crush set" ||
@@ -10427,8 +10440,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	      << "' initial_weight " << weight << " at location " << loc
 	      << dendl;
 
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+      CrushWrapper newcrush = _get_pending_crush();
 
       err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc,
 					 g_conf()->osd_crush_update_weight_set);
@@ -10462,8 +10474,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       CrushWrapper::parse_loc_map(argvec, &loc);
 
       dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+      CrushWrapper newcrush = _get_pending_crush();
 
       if (!newcrush.name_exists(name)) {
 	err = -ENOENT;
@@ -10502,8 +10513,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool force = false;
     cmd_getval(cmdmap, "yes_i_really_mean_it", force);
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     if (!newcrush.name_exists(source)) {
       ss << "source item " << source << " does not exist";
       err = -ENOENT;
@@ -10570,8 +10580,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     dout(5) << "linking crush item name '" << name << "' at location " << loc << dendl;
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (!newcrush.name_exists(name)) {
       err = -ENOENT;
@@ -10605,8 +10614,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     prefix == "osd crush unlink") {
     do {
       // osd crush rm <id> [ancestor]
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+      CrushWrapper newcrush = _get_pending_crush();
 
       string name;
       cmd_getval(cmdmap, "name", name);
@@ -10661,8 +10669,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } while (false);
 
   } else if (prefix == "osd crush reweight-all") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     newcrush.reweight(cct);
     pending_inc.crush.clear();
@@ -10674,8 +10681,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd crush reweight") {
     // osd crush reweight <name> <weight>
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     string name;
     cmd_getval(cmdmap, "name", name);
@@ -10713,8 +10719,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd crush reweight-subtree") {
     // osd crush reweight <name> <weight>
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     string name;
     cmd_getval(cmdmap, "name", name);
@@ -10751,8 +10756,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush tunables") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     err = 0;
     string profile;
@@ -10790,8 +10794,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush set-tunable") {
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     err = 0;
     string tunable;
@@ -10848,8 +10851,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (newcrush.rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
@@ -10887,8 +10889,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (newcrush.rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
@@ -11087,8 +11088,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
 
     if (!newcrush.rule_exists(name)) {
       ss << "rule " << name << " does not exist";
@@ -11136,8 +11136,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+    CrushWrapper newcrush = _get_pending_crush();
     if (!newcrush.rule_exists(srcname) && newcrush.rule_exists(dstname)) {
       // srcname does not exist and dstname already exists
       // suppose this is a replay and return success
@@ -11392,7 +11391,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
-    ceph_assert(osdmap.require_osd_release >= ceph_release_t::luminous);
+    ceph_assert(osdmap.require_osd_release >= ceph_release_t::octopus);
     if (!osdmap.get_num_up_osds() && !sure) {
       ss << "Not advisable to continue since no OSDs are up. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
@@ -12501,7 +12500,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string addrstr;
     cmd_getval(cmdmap, "addr", addrstr);
     entity_addr_t addr;
-    if (!addr.parse(addrstr.c_str(), 0)) {
+    if (!addr.parse(addrstr)) {
       ss << "unable to parse address " << addrstr;
       err = -EINVAL;
       goto reply;
@@ -12520,9 +12519,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       if (blocklistop == "add") {
 	utime_t expires = ceph_clock_now();
-	double d;
 	// default one hour
-	cmd_getval(cmdmap, "expire", d,
+	double d = cmd_getval_or<double>(cmdmap, "expire",
           g_conf()->mon_osd_blocklist_default_expire);
 	expires += d;
 
@@ -12644,12 +12642,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t pg_num, pg_num_min;
-    int64_t pgp_num;
-    cmd_getval(cmdmap, "pg_num", pg_num, int64_t(0));
-    cmd_getval(cmdmap, "pgp_num", pgp_num, pg_num);
-    cmd_getval(cmdmap, "pg_num_min", pg_num_min, int64_t(0));
-
+    int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
+    int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
+    int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
     string pool_type_str;
     cmd_getval(cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
@@ -12720,8 +12715,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  rule_name = poolstr;
 	}
       }
-      cmd_getval(cmdmap, "expected_num_objects",
-                 expected_num_objects, int64_t(0));
+      expected_num_objects =
+	cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
     } else {
       //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
       //     and put expected_num_objects to rule field
@@ -12737,8 +12732,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
         rule_name = erasure_code_profile;
       } else { // cmd is well-formed
-        cmd_getval(cmdmap, "expected_num_objects",
-                   expected_num_objects, int64_t(0));
+        expected_num_objects =
+	  cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
       }
     }
 
@@ -12794,8 +12789,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    int64_t fast_read_param;
-    cmd_getval(cmdmap, "fast_read", fast_read_param, int64_t(-1));
+    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", -1);
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;
@@ -12962,11 +12956,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     // make sure new tier is empty
-    string force_nonempty;
-    cmd_getval(cmdmap, "force_nonempty", force_nonempty);
+    bool force_nonempty = false;
+    cmd_getval_compat_cephbool(cmdmap, "force_nonempty", force_nonempty);
     const pool_stat_t *pstats = mon.mgrstatmon()->get_pool_stat(tierpool_id);
     if (pstats && pstats->stats.sum.num_objects != 0 &&
-	force_nonempty != "--force-nonempty") {
+	!force_nonempty) {
       ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
       err = -ENOTEMPTY;
       goto reply;
@@ -12978,8 +12972,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     if ((!tp->removed_snaps.empty() || !tp->snaps.empty()) &&
-	((force_nonempty != "--force-nonempty") ||
-	 (!g_conf()->mon_debug_unsafe_allow_tier_with_nonempty_snaps))) {
+	(!force_nonempty ||
+	 !g_conf()->mon_debug_unsafe_allow_tier_with_nonempty_snaps)) {
       ss << "tier pool '" << tierpoolstr << "' has snapshot state; it cannot be added as a tier without breaking the pool";
       err = -ENOTEMPTY;
       goto reply;
@@ -14151,8 +14145,7 @@ int OSDMonitor::_prepare_remove_pool(
   }
 
   // remove any choose_args for this pool
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
+  CrushWrapper newcrush = _get_pending_crush();
   if (newcrush.have_choose_args(pool)) {
     dout(10) << __func__ << " removing choose_args for pool " << pool << dendl;
     newcrush.rm_choose_args(pool);
@@ -14311,8 +14304,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 {
   dout(20) << __func__ << dendl;
   *okay = false;
-  CrushWrapper crush;
-  _get_pending_crush(crush);
+  CrushWrapper crush = _get_pending_crush();
   int dividing_id;
   int retval = crush.get_validated_type_id(dividing_bucket, &dividing_id);
   if (retval == -1) {
@@ -14457,6 +14449,23 @@ void OSDMonitor::trigger_recovery_stretch_mode()
     }
   }
   propose_pending();
+}
+
+void OSDMonitor::set_degraded_stretch_mode()
+{
+  stretch_recovery_triggered.set_from_double(0);
+}
+
+void OSDMonitor::set_recovery_stretch_mode()
+{
+  if (stretch_recovery_triggered.is_zero()) {
+    stretch_recovery_triggered = ceph_clock_now();
+  }
+}
+
+void OSDMonitor::set_healthy_stretch_mode()
+{
+  stretch_recovery_triggered.set_from_double(0);
 }
 
 void OSDMonitor::notify_new_pg_digest()

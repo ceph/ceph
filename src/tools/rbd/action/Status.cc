@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "common/ceph_json.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "tools/rbd/ArgumentTypes.h"
@@ -22,39 +21,6 @@ namespace po = boost::program_options;
 namespace {
 
 const std::string IMAGE_CACHE_STATE = ".librbd/image_cache_state";
-
-struct ImageCacheState {
-  bool present = false;
-  bool clean = false;
-  int size = 0;
-  std::string host;
-  std::string path;
-};
-
-bool image_cache_parse(const std::string& s, ImageCacheState &cache_state) {
-  JSONParser p;
-  JSONFormattable f;
-  bool success = p.parse(s.c_str(), s.size());
-  if (success) {
-    decode_json_obj(f, &p);
-    if ((success = f.exists("present"))) {
-      cache_state.present = (bool)f["present"];
-    }
-    if (success && (success = f.exists("clean"))) {
-      cache_state.present = (bool)f["clean"];
-    }
-    if (success && (success = f.exists("pwl_size"))) {
-      cache_state.size = (int)f["pwl_size"];
-    }
-    if (success && (success = f.exists("pwl_host"))) {
-      cache_state.host = (std::string)f["pwl_host"];
-    }
-    if (success && (success = f.exists("pwl_path"))) {
-      cache_state.path = (std::string)f["pwl_path"];
-    }
-  }
-  return success;
-}
 
 } // anonymous namespace
 
@@ -137,19 +103,13 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
     }
   }
 
-  ImageCacheState cache_state;
+  std::string image_cache_str;
   if (features & RBD_FEATURE_DIRTY_CACHE) {
-    std::string image_cache_str;
     r = image.metadata_get(IMAGE_CACHE_STATE, &image_cache_str);
     if (r < 0) {
-      std::cerr << "rbd: getting image cache status failed: " << cpp_strerror(r)
+      std::cerr << "rbd: getting image cache state failed: " << cpp_strerror(r)
                 << std::endl;
-    } else {
-      r = image_cache_parse(image_cache_str, cache_state);
-      if (r < 0) {
-        std::cerr << "rbd: image cache metadata is corrupted: " << cpp_strerror(r)
-                  << std::endl;
-      }
+      // not fatal
     }
   }
 
@@ -186,13 +146,8 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       f->dump_string("state_description", migration_status.state_description);
       f->close_section(); // migration
     }
-    if (cache_state.present) {
-      f->open_object_section("image_cache_state");
-      f->dump_bool("clean", cache_state.clean);
-      f->dump_int("size", cache_state.size);
-      f->dump_string("host", cache_state.host);
-      f->dump_string("path", cache_state.path);
-      f->close_section(); // image_cache_state
+    if (!image_cache_str.empty()) {
+      f->dump_string("image_cache_state", image_cache_str);
     }
   } else {
     if (watchers.size()) {
@@ -234,13 +189,8 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       std::cout << std::endl;
     }
 
-    if (cache_state.present) {
-        std::cout << "Image cache state:" << std::endl;
-        std::cout << "\tclean: " << (cache_state.clean ? "true" : "false")
-                  << std::endl
-                  << "\tsize: " << byte_u_t(cache_state.size) << std::endl
-                  << "\thost: " << cache_state.host << std::endl
-                  << "\tpath: " << cache_state.path << std::endl;
+    if (!image_cache_str.empty()) {
+        std::cout << "Image cache state: " << image_cache_str << std::endl;
     }
   }
 

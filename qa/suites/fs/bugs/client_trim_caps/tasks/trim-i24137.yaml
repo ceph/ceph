@@ -1,0 +1,14 @@
+# Note this test is unlikely to exercise the code as expected in the future:
+# "It's too tricky to arrange inodes in session->caps. we don't know if it
+# still works in the future." -Zheng
+
+tasks:
+- exec:
+    mon.a:
+    - ceph config set mds mds_min_caps_per_client 1
+- background_exec:
+    mon.a:
+    - "sleep 30 && ceph config set mds mds_max_caps_per_client 1"
+- exec:
+    client.0:
+    - ceph_test_trim_caps

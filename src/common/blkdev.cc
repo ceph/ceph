@@ -429,6 +429,14 @@ std::string _decode_model_enc(const std::string& in)
     v.erase(found + 1);
   }
   std::replace(v.begin(), v.end(), ' ', '_');
+
+  // remove "__", which seems to come up on by ubuntu box for some reason.
+  while (true) {
+    auto p = v.find("__");
+    if (p == std::string::npos) break;
+    v.replace(p, 2, "_");
+  }
+
   return v;
 }
 
@@ -498,6 +506,12 @@ std::string get_device_id(const std::string& devname,
   udev_device_unref(dev);
   udev_unref(udev);
 
+  cout << " vendor '" << id_vendor << "'" << std::endl;
+  cout << " model '" << id_model << "'" << std::endl;
+  cout << " serial_short '" << id_serial_short << "'" << std::endl;
+  cout << " scsi_serial '" << id_scsi_serial << "'" << std::endl;
+  cout << " serial '" << id_serial << "'" << std::endl;
+
   // ID_SERIAL is usually $vendor_$model_$serial, but not always
   // ID_SERIAL_SHORT is mostly always just the serial
   // ID_MODEL is sometimes $vendor_$model, but
@@ -533,7 +547,7 @@ std::string get_device_id(const std::string& devname,
   }
   if (err) {
     if (model.empty() && serial.empty()) {
-      *err = std::string("fallback method has no model nor serial'");
+      *err = std::string("fallback method has no model nor serial");
       return {};
     } else if (model.empty()) {
       *err = std::string("fallback method has serial '") + serial

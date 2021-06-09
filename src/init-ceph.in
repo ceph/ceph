@@ -36,6 +36,8 @@ else
 	ETCDIR=.
 	ASSUME_DEV=1
 	CEPH_LIB=$CEPH_ROOT/${BUILD_DIR}/lib
+	# mgr shells out to radosgw-admin; give it a proper path
+	export PATH=$BINDIR:$PATH
 	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_ROOT/src/pybind:$CEPH_LIB/cython_modules/lib.3:$CEPH_ROOT/src/python-common:$PYTHONPATH
 	echo "$LD_LIBRARY_PATH" | grep -q $CEPH_LIB || export LD_LIBRARY_PATH=$CEPH_LIB:$CEPH_ROOT/${BUILD_DIR}/external/lib:$LD_LIBRARY_PATH
 	echo "$DYLD_LIBRARY_PATH" | grep -q $CEPH_LIB || export DYLD_LIBRARY_PATH=$CEPH_LIB:$CEPH_ROOT/${BUILD_DIR}/external/lib:$DYLD_LIBRARY_PATH

@@ -25,7 +25,8 @@ static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
   // created for us by `seastar::async` in `::do_op_call()`.
   int ret = 0;
   using osd_op_errorator = crimson::osd::OpsExecuter::osd_op_errorator;
-  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_op(op).handle_error(
+  reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->execute_op(op)
+  .handle_error_interruptible(
     osd_op_errorator::all_same_way([&ret] (const std::error_code& err) {
       assert(err.value() > 0);
       ret = -err.value();
@@ -481,4 +482,15 @@ int cls_get_manifest_ref_count(cls_method_context_t hctx, string fp_oid)
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
   // FIXME
   return 4096;
+}
+
+int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
+		   const char *cls, const char *method, bufferlist& inbl)
+{
+  return 0;
+}
+
+int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
+{
+  return 0;
 }

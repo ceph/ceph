@@ -43,7 +43,7 @@ import { SharedModule } from './shared/shared.module';
     },
     {
       provide: APP_BASE_HREF,
-      useValue: window['base-href']
+      useValue: '/' + (window.location.pathname.split('/', 1)[1] || '')
     }
   ],
   bootstrap: [AppComponent]

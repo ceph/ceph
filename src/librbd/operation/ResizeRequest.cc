@@ -400,7 +400,7 @@ void ResizeRequest<I>::send_update_header() {
   librados::ObjectWriteOperation op;
   if (image_ctx.old_format) {
     // rewrite only the size field of the header
-    ceph_le64 new_size = init_le64(m_new_size);
+    ceph_le64 new_size(m_new_size);
     bufferlist bl;
     bl.append(reinterpret_cast<const char*>(&new_size), sizeof(new_size));
     op.write(offsetof(rbd_obj_header_ondisk, image_size), bl);

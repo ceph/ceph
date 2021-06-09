@@ -132,35 +132,16 @@ public:
  */
 class BlockSegmentManager final : public SegmentManager {
 public:
-  using access_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::permission_denied,
-    crimson::ct_error::enoent>;
+  mount_ret mount() final;
 
-
-  struct mount_config_t {
-    std::string path;
-  };
-  using mount_ertr = access_ertr;
-  using mount_ret = access_ertr::future<>;
-  mount_ret mount(mount_config_t);
-
-  struct mkfs_config_t {
-    std::string path;
-    size_t segment_size = 0;
-    size_t total_size = 0;
-    seastore_meta_t meta;
-  };
-  using mkfs_ertr = access_ertr;
-  using mkfs_ret = mkfs_ertr::future<>;
-  static mkfs_ret mkfs(mkfs_config_t);
+  mkfs_ret mkfs(seastore_meta_t) final;
   
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error
     >;
   close_ertr::future<> close();
 
-  BlockSegmentManager() = default;
+  BlockSegmentManager(const std::string &path) : device_path(path) {}
   ~BlockSegmentManager();
 
   open_ertr::future<SegmentRef> open(segment_id_t id) final;
@@ -193,6 +174,7 @@ private:
   using segment_state_t = Segment::segment_state_t;
 
   
+  std::string device_path;
   std::unique_ptr<SegmentStateTracker> tracker;
   block_sm_superblock_t superblock;
   seastar::file device;

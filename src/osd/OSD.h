@@ -85,7 +85,6 @@ struct C_OpenPGs;
 class LogChannel;
 
 class MOSDPGCreate2;
-class MOSDPGQuery;
 class MOSDPGNotify;
 class MOSDPGInfo;
 class MOSDPGRemove;
@@ -101,7 +100,7 @@ public:
   CephContext *cct;
   ObjectStore::CollectionHandle meta_ch;
   const int whoami;
-  ObjectStore *&store;
+  ObjectStore * const store;
   LogClient &log_client;
   LogChannelRef clog;
   PGRecoveryStats &pg_recovery_stats;
@@ -319,10 +318,7 @@ public:
     std::lock_guard l(sched_scrub_lock);
     if (sched_scrub_pg.empty())
       return false;
-    std::set<ScrubJob>::const_iterator iter = sched_scrub_pg.lower_bound(next);
-    if (iter == sched_scrub_pg.cend())
-      return false;
-    ++iter;
+    std::set<ScrubJob>::const_iterator iter = sched_scrub_pg.upper_bound(next);
     if (iter == sched_scrub_pg.cend())
       return false;
     *out = *iter;
@@ -590,9 +586,10 @@ public:
   void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority);
+
   void queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_priority);
 
-  /// queue the message (-> event) that all replicas reserved scrub resources for us
+  /// queue the message (-> event) that all replicas have reserved scrub resources for us
   void queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority);
 
   /// queue the message (-> event) that some replicas denied our scrub resources request
@@ -608,14 +605,36 @@ public:
   /// Signals that all pending updates were applied
   void queue_scrub_applied_update(PG* pg, Scrub::scrub_prio_t with_priority);
 
+  /// Signals that the selected chunk (objects range) is available for scrubbing
+  void queue_scrub_chunk_free(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// The chunk selected is blocked by user operations, and cannot be scrubbed now
+  void queue_scrub_chunk_busy(PG* pg, Scrub::scrub_prio_t with_priority);
+
   /// The block-range that was locked and prevented the scrubbing - is freed
   void queue_scrub_unblocking(PG* pg, Scrub::scrub_prio_t with_priority);
 
   /// Signals that all write OPs are done
   void queue_scrub_digest_update(PG* pg, Scrub::scrub_prio_t with_priority);
 
+  /// Signals that the the local (Primary's) scrub map is ready
+  void queue_scrub_got_local_map(PG* pg, Scrub::scrub_prio_t with_priority);
+
   /// Signals that we (the Primary) got all waited-for scrub-maps from our replicas
   void queue_scrub_got_repl_maps(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// Signals that all chunks were handled
+  /// Note: always with high priority, as must be acted upon before the
+  /// next scrub request arrives from the Primary (and the primary is free
+  /// to send the request once the replica's map is received).
+  void queue_scrub_is_finished(PG* pg);
+
+  /// Signals that there are more chunks to handle
+  void queue_scrub_next_chunk(PG* pg, Scrub::scrub_prio_t with_priority);
+
+  /// Signals that we have finished comparing the maps for this chunk
+  /// Note: required, as in Crimson this operation is 'futurized'.
+  void queue_scrub_maps_compared(PG* pg, Scrub::scrub_prio_t with_priority);
 
   void queue_for_rep_scrub(PG* pg,
 			   Scrub::scrub_prio_t with_high_priority,
@@ -624,6 +643,8 @@ public:
   /// Signals a change in the number of in-flight recovery writes
   void queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority);
 
+  /// (not in Crimson) Queue a SchedReplica event to be sent to the replica, to trigger
+  /// a re-check of the availability of the scrub map prepared by the backend.
   void queue_for_rep_scrub_resched(PG* pg,
 				   Scrub::scrub_prio_t with_high_priority,
 				   unsigned int qu_priority);
@@ -1082,6 +1103,7 @@ struct OSDShard {
 		    std::set<std::pair<spg_t,epoch_t>> *merge_pgs);
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
+  void update_scheduler_config();
 
   OSDShard(
     int id,
@@ -1123,7 +1145,7 @@ protected:
   MgrClient   mgrc;
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
-  ObjectStore *store;
+  std::unique_ptr<ObjectStore> store;
 #ifdef HAVE_LIBFUSE
   FuseStore *fuse_store = nullptr;
 #endif
@@ -1422,7 +1444,7 @@ private:
     std::vector<uint32_t> hb_front_min;
     std::vector<uint32_t> hb_front_max;
 
-    bool is_stale(utime_t stale) {
+    bool is_stale(utime_t stale) const {
       if (ping_history.empty()) {
         return false;
       }
@@ -1430,7 +1452,7 @@ private:
       return oldest_deadline <= stale;
     }
 
-    bool is_unhealthy(utime_t now) {
+    bool is_unhealthy(utime_t now) const {
       if (ping_history.empty()) {
         /// we haven't sent a ping yet or we have got all replies,
         /// in either way we are safe and healthy for now
@@ -1441,7 +1463,7 @@ private:
       return now > oldest_deadline;
     }
 
-    bool is_healthy(utime_t now) {
+    bool is_healthy(utime_t now) const {
       if (last_rx_front == utime_t() || last_rx_back == utime_t()) {
         // only declare to be healthy until we have received the first
         // replies from both front/back connections
@@ -1895,7 +1917,6 @@ protected:
   double scrub_sleep_time(bool must_scrub);
 
   // -- generic pg peering --
-  PeeringCtx create_context();
   void dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
                         ThreadPool::TPHandle *handle = NULL);
 
@@ -1919,7 +1940,6 @@ protected:
 				 bool is_fast_dispatch);
 
   void handle_fast_pg_create(MOSDPGCreate2 *m);
-  void handle_fast_pg_query(MOSDPGQuery *m);
   void handle_pg_query_nopg(const MQuery& q);
   void handle_fast_pg_notify(MOSDPGNotify *m);
   void handle_pg_notify_nopg(const MNotifyRec& q);
@@ -2016,7 +2036,7 @@ private:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
   OSD(CephContext *cct_,
-      ObjectStore *store_,
+      std::unique_ptr<ObjectStore> store_,
       int id,
       Messenger *internal,
       Messenger *external,
@@ -2030,7 +2050,11 @@ private:
   ~OSD() override;
 
   // static bits
-  static int mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami, std::string osdspec_affinity);
+  static int mkfs(CephContext *cct,
+		  std::unique_ptr<ObjectStore> store,
+		  uuid_d fsid,
+		  int whoami,
+		  std::string osdspec_affinity);
 
   /* remove any non-user xattrs from a std::map of them */
   void filter_xattrs(std::map<std::string, ceph::buffer::ptr>& attrs) {
@@ -2065,6 +2089,14 @@ private:
   float get_osd_snap_trim_sleep();
 
   int get_recovery_max_active();
+  void maybe_override_max_osd_capacity_for_qos();
+  bool maybe_override_options_for_qos();
+  int run_osd_bench_test(int64_t count,
+                         int64_t bsize,
+                         int64_t osize,
+                         int64_t onum,
+                         double *elapsed,
+                         std::ostream& ss);
 
   void scrub_purged_snaps();
   void probe_smart(const std::string& devid, std::ostream& ss);

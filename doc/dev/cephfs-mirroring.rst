@@ -30,9 +30,10 @@ Creating Users
 --------------
 
 Start by creating a user (on the primary/local cluster) for the mirror daemon. This user
-has restrictive capabilities on the MDS and the OSD::
+requires write capability on the metadata pool to create RADOS objects (index objects)
+for watch/notify operation and read capability on the data pool(s).
 
-  $ ceph auth get-or-create client.mirror mon 'allow r' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
+  $ ceph auth get-or-create client.mirror mon 'profile cephfs-mirror' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
 
 Create a user for each file system peer (on the secondary/remote cluster). This user needs
 to have full capabilities on the MDS (to take snapshots) and the OSDs::
@@ -114,7 +115,7 @@ Mirroring module provides a family of commands to control mirroring of directory
 snapshots. To add or remove directories, mirroring needs to be enabled for a given
 file system. To enable mirroring use::
 
-  $ ceph fs snapshot mirror enable <fs>
+  $ ceph fs snapshot mirror enable <fs_name>
 
 .. note:: Mirroring module commands use `fs snapshot mirror` prefix as compared to
           the monitor commands which `fs mirror` prefix. Make sure to use module
@@ -122,7 +123,7 @@ file system. To enable mirroring use::
 
 To disable mirroring, use::
 
-  $ ceph fs snapshot mirror disable <fs>
+  $ ceph fs snapshot mirror disable <fs_name>
 
 Once mirroring is enabled, add a peer to which directory snapshots are to be mirrored.
 Peers follow `<client>@<cluster>` specification and get assigned a unique-id (UUID)
@@ -130,25 +131,34 @@ when added. See `Creating Users` section on how to create Ceph users for mirrori
 
 To add a peer use::
 
-  $ ceph fs snapshot mirror peer_add <fs> <remote_cluster_spec> [<remote_fs_name>]
+  $ ceph fs snapshot mirror peer_add <fs_name> <remote_cluster_spec> [<remote_fs_name>] [<remote_mon_host>] [<cephx_key>]
 
-`<remote_fs_name>` is optional, and default to `<fs>` (on the remote cluster).
+`<remote_fs_name>` is optional, and default to `<fs_name>` (on the remote cluster).
+
+This requires the remote cluster ceph configuration and user keyring to be available in
+the primary cluster. See `Bootstrap Peers` section to avoid this. `peer_add` additionally
+supports passing the remote cluster monitor address and the user key. However, bootstrapping
+a peer is the recommended way to add a peer.
 
 .. note:: Only a single peer is supported right now.
 
 To remove a peer use::
 
-  $ ceph fs snapshot mirror peer_remove <fs> <peer_uuid>
+  $ ceph fs snapshot mirror peer_remove <fs_name> <peer_uuid>
 
 .. note:: See `Mirror Daemon Status` section on how to figure out Peer UUID.
 
+To list file system mirror peers use::
+
+  $ ceph fs snapshot mirror peer_list <fs_name>
+
 To configure a directory for mirroring, use::
 
-  $ ceph fs snapshot mirror add <fs> <path>
+  $ ceph fs snapshot mirror add <fs_name> <path>
 
 To stop a mirroring directory snapshots use::
 
-  $ ceph fs snapshot mirror remove <fs> <path>
+  $ ceph fs snapshot mirror remove <fs_name> <path>
 
 Only absolute directory paths are allowed. Also, paths are normalized by the mirroring
 module, therfore, `/a/b/../b` is equivalent to `/a/b`.
@@ -170,12 +180,79 @@ disallowed to be added for mirorring::
 Commands to check directory mapping (to mirror daemons) and directory distribution are
 detailed in `Mirror Daemon Status` section.
 
+Bootstrap Peers
+---------------
+
+Adding a peer (via `peer_add`) requires the peer cluster configuration and user keyring
+to be available in the primary cluster (manager host and hosts running the mirror daemon).
+This can be avoided by bootstrapping and importing a peer token. Peer bootstrap involves
+creating a bootstrap token on the peer cluster via::
+
+  $ ceph fs snapshot mirror peer_bootstrap create <fs_name> <client_entity> <site-name>
+
+e.g.::
+
+  $ ceph fs snapshot mirror peer_bootstrap create backup_fs client.mirror_remote site-remote
+  {"token": "eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ=="}
+
+`site-name` refers to a user-defined string to identify the remote filesystem. In context
+of `peer_add` interface, `site-name` is the passed in `cluster` name from `remote_cluster_spec`.
+
+Import the bootstrap token in the primary cluster via::
+
+  $ ceph fs snapshot mirror peer_bootstrap import <fs_name> <token>
+
+e.g.::
+
+  $ ceph fs snapshot mirror peer_bootstrap import cephfs eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ==
+
 Mirror Daemon Status
 --------------------
 
 Mirror daemons get asynchronously notified about changes in file system mirroring status
-and/or peer updates. CephFS mirror daemons provide admin socket commands for querying
-mirror status. To check available commands for mirror status use::
+and/or peer updates.
+
+CephFS mirroring module provides `mirror daemon status` interface to check mirror daemon
+status::
+
+  $ ceph fs snapshot mirror daemon status <fs_name>
+
+E.g::
+
+  $ ceph fs snapshot mirror daemon status a | jq
+  [
+    {
+      "daemon_id": 284167,
+      "filesystems": [
+        {
+          "filesystem_id": 1,
+          "name": "a",
+          "directory_count": 1,
+          "peers": [
+            {
+              "uuid": "02117353-8cd1-44db-976b-eb20609aa160",
+              "remote": {
+                "client_name": "client.mirror_remote",
+                "cluster_name": "ceph",
+                "fs_name": "backup_fs"
+              },
+              "stats": {
+                "failure_count": 1,
+                "recovery_count": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+
+An entry per mirror daemon instance is displayed along with information such as configured
+peers and basic stats. For more detailed stats, use the admin socket interface as detailed
+below.
+
+CephFS mirror daemons provide admin socket commands for querying mirror status. To check
+available commands for mirror status use::
 
   $ ceph --admin-daemon /path/to/mirror/daemon/admin/socket help
   {

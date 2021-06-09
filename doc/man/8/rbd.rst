@@ -237,6 +237,8 @@ Commands
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.
+  Note: snapshots are not copied, use `deep cp` command to include
+  snapshots.
 
 :command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--thick-provision] [--no-progress] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The
@@ -264,6 +266,22 @@ Commands
 :command:`device unmap` [-t | --device-type *device-type*] [-o | --options *device-options*] *image-spec* | *snap-spec* | *device-path*
   Unmap the block device that was mapped via the rbd kernel module
   (default) or other supported device.
+
+  The --options argument is a comma separated list of device type
+  specific options (opt1,opt2=val,...).
+
+:command:`device attach` [-t | --device-type *device-type*] --device *device-path* [--read-only] [--exclusive] [--force] [-o | --options *device-options*] *image-spec* | *snap-spec*
+  Attach the specified image to the specified block device (currently only
+  `nbd` on Linux). This operation is unsafe and should not be normally used.
+  In particular, specifying the wrong image or the wrong block device may
+  lead to data corruption as no validation is performed by `nbd` kernel driver.
+
+  The --options argument is a comma separated list of device type
+  specific options (opt1,opt2=val,...).
+
+:command:`device detach` [-t | --device-type *device-type*] [-o | --options *device-options*] *image-spec* | *snap-spec* | *device-path*
+  Detach the block device that was mapped or attached (currently only `nbd`
+  on Linux). This operation is unsafe and should not be normally used.
 
   The --options argument is a comma separated list of device type
   specific options (opt1,opt2=val,...).
@@ -1000,7 +1018,7 @@ Availability
 ============
 
 **rbd** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the Ceph documentation at http://ceph.com/docs for more information.
+the Ceph documentation at https://docs.ceph.com for more information.
 
 
 See also

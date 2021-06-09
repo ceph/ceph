@@ -1,33 +1,20 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-public-methods
-import unittest
+from unittest import TestCase
+from unittest.mock import Mock, patch
 
-try:
-    from unittest.mock import MagicMock, patch
-except ImportError:
-    from mock import MagicMock, patch  # type: ignore
-
-from ..services.rgw_client import NoCredentialsException, RgwClient, \
-    RgwDaemon, _parse_frontend_config
+from ..exceptions import DashboardException
+from ..services.rgw_client import NoCredentialsException, \
+    NoRgwDaemonsException, RgwClient, _parse_frontend_config
 from ..settings import Settings
-from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
+from . import KVStoreMockMixin, RgwStub  # pylint: disable=no-name-in-module
 
 
-def _get_daemons_stub():
-    daemon = RgwDaemon()
-    daemon.host = 'rgw.1.myorg.com'
-    daemon.port = 8000
-    daemon.ssl = True
-    daemon.name = 'rgw.1.myorg.com'
-    daemon.zonegroup_name = 'zonegroup2-realm1'
-    return {daemon.name: daemon}
-
-
-@patch('dashboard.services.rgw_client._get_daemons', _get_daemons_stub)
-@patch('dashboard.services.rgw_client.RgwClient._get_user_id', MagicMock(
+@patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
     return_value='dummy_admin'))
-class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
+class RgwClientTest(TestCase, KVStoreMockMixin):
     def setUp(self):
+        RgwStub.get_daemons()
         self.mock_kv_store()
         self.CONFIG_KEY_DICT.update({
             'RGW_API_ACCESS_KEY': 'klausmustermann',
@@ -44,6 +31,12 @@ class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
         instance = RgwClient.admin_instance()
         self.assertFalse(instance.session.verify)
 
+    def test_no_daemons(self):
+        RgwStub.get_mgr_no_services()
+        with self.assertRaises(NoRgwDaemonsException) as cm:
+            RgwClient.admin_instance()
+        self.assertIn('No RGW service is running.', str(cm.exception))
+
     def test_no_credentials(self):
         self.CONFIG_KEY_DICT.update({
             'RGW_API_ACCESS_KEY': '',
@@ -55,12 +48,12 @@ class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
 
     def test_default_daemon_wrong_settings(self):
         self.CONFIG_KEY_DICT.update({
-            'RGW_API_HOST': 'localhost',
+            'RGW_API_HOST': '172.20.0.2',
             'RGW_API_PORT': '7990',
         })
-        with self.assertRaises(LookupError) as cm:
+        with self.assertRaises(DashboardException) as cm:
             RgwClient.admin_instance()
-        self.assertIn('No RGW daemon found with host:', str(cm.exception))
+        self.assertIn('No RGW daemon found with user-defined host:', str(cm.exception))
 
     @patch.object(RgwClient, '_get_daemon_zone_info')
     def test_get_placement_targets_from_zone(self, zone_info):
@@ -83,7 +76,7 @@ class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
 
         instance = RgwClient.admin_instance()
         expected_result = {
-            'zonegroup': 'zonegroup2-realm1',
+            'zonegroup': 'zonegroup1',
             'placement_targets': [
                 {
                     'name': 'default-placement',
@@ -110,8 +103,51 @@ class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
         self.assertEqual(['realm1', 'realm2'], instance.get_realms())
         self.assertEqual([], instance.get_realms())
 
+    def test_set_bucket_locking_error(self):
+        instance = RgwClient.admin_instance()
+        test_params = [
+            ('COMPLIANCE', 'null', None, 'must be a positive integer'),
+            ('COMPLIANCE', None, 'null', 'must be a positive integer'),
+            ('COMPLIANCE', -1, None, 'must be a positive integer'),
+            ('COMPLIANCE', None, -1, 'must be a positive integer'),
+            ('COMPLIANCE', 1, 1, 'You can\'t specify both at the same time'),
+            ('COMPLIANCE', None, None, 'You must specify at least one'),
+            ('COMPLIANCE', 0, 0, 'You must specify at least one'),
+            (None, 1, 0, 'must be either COMPLIANCE or GOVERNANCE'),
+            ('', 1, 0, 'must be either COMPLIANCE or GOVERNANCE'),
+            ('FAKE_MODE', 1, 0, 'must be either COMPLIANCE or GOVERNANCE')
+        ]
+        for params in test_params:
+            mode, days, years, error_msg = params
+            with self.assertRaises(DashboardException) as cm:
+                instance.set_bucket_locking(
+                    bucket_name='test',
+                    mode=mode,
+                    retention_period_days=days,
+                    retention_period_years=years
+                )
+            self.assertIn(error_msg, str(cm.exception))
 
-class RgwClientHelperTest(unittest.TestCase):
+    @patch('dashboard.rest_client._Request', Mock())
+    def test_set_bucket_locking_success(self):
+        instance = RgwClient.admin_instance()
+        test_params = [
+            ('Compliance', '1', None),
+            ('Governance', 1, None),
+            ('COMPLIANCE', None, '1'),
+            ('GOVERNANCE', None, 1),
+        ]
+        for params in test_params:
+            mode, days, years = params
+            self.assertIsNone(instance.set_bucket_locking(
+                bucket_name='test',
+                mode=mode,
+                retention_period_days=days,
+                retention_period_years=years
+            ))
+
+
+class RgwClientHelperTest(TestCase):
     def test_parse_frontend_config_1(self):
         self.assertEqual(_parse_frontend_config('beast port=8000'), (8000, False))
 

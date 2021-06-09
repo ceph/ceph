@@ -73,6 +73,13 @@ struct value_header_t {
   value_magic_t magic;
   value_size_t payload_size;
 
+  bool operator==(const value_header_t& rhs) const {
+    return (magic == rhs.magic && payload_size == rhs.payload_size);
+  }
+  bool operator!=(const value_header_t& rhs) const {
+    return !(*this == rhs);
+  }
+
   value_size_t allocation_size() const {
     return payload_size + sizeof(value_header_t);
   }
@@ -155,23 +162,21 @@ class tree_cursor_t;
  */
 class Value {
  public:
-  using ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange,
-    crimson::ct_error::eagain>;
-  template <class ValueT=void>
-  using future = ertr::future<ValueT>;
-
   virtual ~Value();
   Value(const Value&) = default;
   Value(Value&&) = default;
   Value& operator=(const Value&) = delete;
   Value& operator=(Value&&) = delete;
 
+  /// Returns whether the Value is still tracked in tree.
+  bool is_tracked() const;
+
+  /// Invalidate the Value before submitting transaction.
+  void invalidate();
+
   /// Returns the value payload size.
   value_size_t get_payload_size() const {
+    assert(is_tracked());
     return read_value_header()->payload_size;
   }
 
@@ -182,15 +187,16 @@ class Value {
   Value(NodeExtentManager&, const ValueBuilder&, Ref<tree_cursor_t>&);
 
   /// Extends the payload size.
-  future<> extend(Transaction&, value_size_t extend_size);
+  eagain_future<> extend(Transaction&, value_size_t extend_size);
 
   /// Trim and shrink the payload.
-  future<> trim(Transaction&, value_size_t trim_size);
+  eagain_future<> trim(Transaction&, value_size_t trim_size);
 
   /// Get the permission to mutate the payload with the optional value recorder.
   template <typename PayloadT, typename ValueDeltaRecorderT>
   std::pair<NodeExtentMutable&, ValueDeltaRecorderT*>
   prepare_mutate_payload(Transaction& t) {
+    assert(is_tracked());
     assert(sizeof(PayloadT) <= get_payload_size());
 
     auto value_mutable = do_prepare_mutate_payload(t);
@@ -204,6 +210,7 @@ class Value {
   /// Get the latest payload pointer for read.
   template <typename PayloadT>
   const PayloadT* read_payload() const {
+    assert(is_tracked());
     // see Value documentation
     static_assert(alignof(PayloadT) == 1);
     assert(sizeof(PayloadT) <= get_payload_size());
@@ -220,6 +227,9 @@ class Value {
   NodeExtentManager& nm;
   const ValueBuilder& vb;
   Ref<tree_cursor_t> p_cursor;
+
+  template <typename ValueImpl>
+  friend class Btree;
 };
 
 /**

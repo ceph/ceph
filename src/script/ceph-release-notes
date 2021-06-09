@@ -31,6 +31,7 @@ import os
 import re
 import sys
 import requests
+import time
 
 from git import Repo
 
@@ -50,6 +51,8 @@ prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
+release_re = re.compile(r"^(nautilus|octopus|pacific|quincy):\s*")
+
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
 
@@ -154,7 +157,22 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
             print ("Ignoring low-numbered PR, probably picked up from"
                    " ceph/ceph-qa-suite.git")
             continue
-        pr = gh.repos("ceph")("ceph").pulls(number).get()
+
+        attempts = 0
+        retries = 30
+        while attempts < retries:
+            try:
+                pr = gh.repos("ceph")("ceph").pulls(number).get()
+                break
+            except Exception:
+                if attempts < retries:
+                    attempts += 1
+                    sleep_time = 2 * attempts
+                    print(f"Failed to fetch PR {number}, sleeping for {sleep_time} seconds")
+                    time.sleep(sleep_time)
+                else:
+                    print(f"Could not fetch PR {number} in {retries} tries.")
+                    raise
         (title, message) = _title_message(commit, pr, strict)
         issues = []
         if pr['body']:
@@ -184,14 +202,14 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
 
         if strict:
             title_re = (
-                '^(?:hammer|infernalis|jewel|kraken|luminous|mimic|nautilus|octopus|pacific):\s+(' +
+                '^(?:nautilus|octopus|pacific|quincy):\s+(' +
                 '|'.join(prefixes) +
                 ')(:.*)'
             )
             match = re.match(title_re, title)
             if not match:
                 print ("ERROR: https://github.com/ceph/ceph/pull/" +
-                       str(number) + " title " + title.encode("utf-8") +
+                       str(number) + " title " + title +
                        " does not match " + title_re)
             else:
                 title = match.group(1) + match.group(2)
@@ -204,6 +222,8 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
         title = title.replace('*', '\*')
         # and escape the underscores for noting a link
         title = rst_link_re.sub(r'\1\_\2', title)
+        # remove release prefix for backports
+        title = release_re.sub('', title)
         pr2info[number] = (author, title, message)
 
         for issue in set(issues):
@@ -242,9 +262,9 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
             issues = ''
         if plaintext:
             print ("* {title} ({issues}{author})".format(
-                    title=title.encode("utf-8"),
+                    title=title,
                     issues=issues,
-                    author=author.encode("utf-8")
+                    author=author
                 )
             )
         elif html:
@@ -254,9 +274,9 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
                     "https://github.com/ceph/ceph/pull/{pr}\""
                     ">pr#{pr}</a>, {author})</p></li>"
                 ).format(
-                    title=title.encode("utf-8"),
+                    title=title,
                     issues=issues,
-                    author=author.encode("utf-8"), pr=pr
+                    author=author, pr=pr
                 )
             )
         else:
@@ -266,9 +286,9 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
                     "https://github.com/ceph/ceph/pull/{pr}"
                     ">`_, {author})"
                 ).format(
-                    title=title.encode("utf-8"),
+                    title=title,
                     issues=issues,
-                    author=author.encode("utf-8"), pr=pr
+                    author=author, pr=pr
                 )
             )
         if message:

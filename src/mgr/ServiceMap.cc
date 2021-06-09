@@ -3,7 +3,9 @@
 
 #include "mgr/ServiceMap.h"
 
+#include <experimental/iterator>
 #include <fmt/format.h>
+#include <regex>
 
 #include "common/Formatter.h"
 
@@ -75,17 +77,47 @@ std::string ServiceMap::Service::get_summary() const
   if (daemons.empty()) {
     return "no daemons active";
   }
-  std::ostringstream ss;
-  ss << daemons.size() << (daemons.size() > 1 ? " daemons" : " daemon")
-     << " active";
 
-  if (!daemons.empty()) {
+  // If "daemon_type" is present, this will be used in place of "daemon" when
+  // reporting the count (e.g., "${N} daemons").
+  //
+  // We will additional break down the count by various groupings, based
+  // on the following keys:
+  //
+  //   "hostname" -> host(s)
+  //   "zone_id" -> zone(s)
+  //
+  // The `ceph -s` will be something likes:
+  //    iscsi: 3 portals active (3 hosts)
+  //      rgw: 3 gateways active (3 hosts, 1 zone)
+
+  std::map<std::string, std::set<std::string>> groupings;
+  std::string type("daemon");
+  int num = 0;
+  for (auto& d : daemons) {
+    ++num;
+    if (auto p = d.second.metadata.find("daemon_type");
+	p != d.second.metadata.end()) {
+      type = p->second;
+    }
+    for (auto k : {make_pair("zone", "zone_id"),
+	  make_pair("host", "hostname")}) {
+      auto p = d.second.metadata.find(k.second);
+      if (p != d.second.metadata.end()) {
+	groupings[k.first].insert(p->second);
+      }
+    }
+  }
+
+  std::ostringstream ss;
+  ss << num << " " << type << (num > 1 ? "s" : "") << " active";
+  if (groupings.size()) {
     ss << " (";
-    for (auto p = daemons.begin(); p != daemons.end(); ++p) {
-      if (p != daemons.begin()) {
+    for (auto i = groupings.begin(); i != groupings.end(); ++i) {
+      if (i != groupings.begin()) {
 	ss << ", ";
       }
-      ss << p->first;
+      ss << i->second.size() << " " << i->first << (i->second.size() ? "s" : "");
     }
     ss << ")";
   }

@@ -1,5 +1,4 @@
 # type: ignore
-from __future__ import absolute_import
 
 import json
 import logging
@@ -73,7 +72,10 @@ if 'UNITTEST' in os.environ:
             except FileNotFoundError:
                 val = None
             mo = [o for o in self.MODULE_OPTIONS if o['name'] == key]
-            if len(mo) == 1:
+            if len(mo) >= 1:  # >= 1, cause self.MODULE_OPTIONS. otherwise it
+                #               fails when importing multiple modules.
+                if 'default' in mo and val is None:
+                    val = mo[0]['default']
                 if val is not None:
                     cls = {
                         'str': str,
@@ -181,6 +183,7 @@ if 'UNITTEST' in os.environ:
 
             super(M, self).__init__()
             self._ceph_get_version = mock.Mock()
+            self._ceph_get_ceph_conf_path = mock.MagicMock()
             self._ceph_get_option = mock.MagicMock()
             self._ceph_get_context = mock.MagicMock()
             self._ceph_register_client = mock.MagicMock()

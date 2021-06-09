@@ -5,8 +5,9 @@ import yaml
 import pytest
 
 from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    ServiceSpec, ServiceSpecValidationError, RGWSpec, NFSServiceSpec, IscsiServiceSpec
+    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec
 from ceph.deployment.drive_group import DriveGroupSpec
+from ceph.deployment.hostspec import SpecValidationError
 
 
 @pytest.mark.parametrize("test_input,expected, require_network",
@@ -62,6 +63,7 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
         ('3 data[1-3]', "PlacementSpec(count=3, host_pattern='data[1-3]')"),
         ('3 data?', "PlacementSpec(count=3, host_pattern='data?')"),
         ('3 data*', "PlacementSpec(count=3, host_pattern='data*')"),
+        ("count-per-host:4 label:foo", "PlacementSpec(count_per_host=4, label='foo')"),
     ])
 def test_parse_placement_specs(test_input, expected):
     ret = PlacementSpec.from_string(test_input)
@@ -74,10 +76,16 @@ def test_parse_placement_specs(test_input, expected):
         ("host=a host*"),
         ("host=a label:wrong"),
         ("host? host*"),
+        ('host=a count-per-host:0'),
+        ('host=a count-per-host:-10'),
+        ('count:2 count-per-host:1'),
+        ('host1=a host2=b count-per-host:2'),
+        ('host1:10/8 count-per-host:2'),
+        ('count-per-host:2'),
     ]
 )
 def test_parse_placement_specs_raises(test_input):
-    with pytest.raises(ServiceSpecValidationError):
+    with pytest.raises(SpecValidationError):
         PlacementSpec.from_string(test_input)
 
 @pytest.mark.parametrize("test_input",
@@ -89,6 +97,41 @@ def test_parse_placement_specs_raises(test_input):
 def test_parse_host_placement_specs_raises_wrong_format(test_input):
     with pytest.raises(ValueError):
         HostPlacementSpec.parse(test_input)
+
+
+@pytest.mark.parametrize(
+    "p,hosts,size",
+    [
+        (
+            PlacementSpec(count=3),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            3
+        ),
+        (
+            PlacementSpec(host_pattern='*'),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            5
+        ),
+        (
+            PlacementSpec(count_per_host=2, host_pattern='*'),
+            ['host1', 'host2', 'host3', 'host4', 'host5'],
+            10
+        ),
+        (
+            PlacementSpec(host_pattern='foo*'),
+            ['foo1', 'foo2', 'bar1', 'bar2'],
+            2
+        ),
+        (
+            PlacementSpec(count_per_host=2, host_pattern='foo*'),
+            ['foo1', 'foo2', 'bar1', 'bar2'],
+            4
+        ),
+    ])
+def test_placement_target_size(p, hosts, size):
+    assert p.get_target_count(
+        [HostPlacementSpec(n, '', '') for n in hosts]
+    ) == size
 
 
 def _get_dict_spec(s_type, s_id):
@@ -139,6 +182,16 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
     assert spec.validate() is None
     ServiceSpec.from_json(spec.to_json())
 
+def test_osd_unmanaged():
+    osd_spec = {"placement": {"host_pattern": "*"},
+                "service_id": "all-available-devices",
+                "service_name": "osd.all-available-devices",
+                "service_type": "osd",
+                "spec": {"data_devices": {"all": True}, "filter_logic": "AND", "objectstore": "bluestore"},
+                "unmanaged": True}
+
+    dg_spec = ServiceSpec.from_json(osd_spec)
+    assert dg_spec.unmanaged == True
 
 def test_yaml():
     y = """service_type: crash
@@ -158,10 +211,13 @@ service_name: rgw.default-rgw-realm.eu-central-1.1
 placement:
   hosts:
   - ceph-001
+networks:
+- 10.0.0.0/8
+- 192.168.0.0/16
 spec:
+  rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
-  subcluster: '1'
 ---
 service_type: osd
 service_id: osd_spec_default
@@ -236,9 +292,10 @@ spec:
                              ),
                              (
                                      ServiceSpec(
-                                         service_type='rgw'
+                                         service_type='rgw',
+                                         service_id='foo',
                                      ),
-                                     RGWSpec(),
+                                     RGWSpec(service_id='foo'),
                                      True
                              ),
                          ])
@@ -263,3 +320,18 @@ def test_service_name(s_type, s_id, s_name):
     spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
     spec.validate()
     assert spec.service_name() == s_name
+
+@pytest.mark.parametrize(
+    's_type,s_id',
+    [
+        ('mds', 's:id'),
+        ('rgw', '*s_id'),
+        ('nfs', 's/id'),
+        ('iscsi', 's@id'),
+        ('osd', 's;id'),
+    ])
+
+def test_service_id_raises_invalid_char(s_type, s_id):
+    with pytest.raises(SpecValidationError):
+        spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
+        spec.validate()

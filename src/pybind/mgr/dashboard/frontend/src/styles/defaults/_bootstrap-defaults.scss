@@ -22,6 +22,7 @@ $yellow: #ffc200 !default;
 $green: #0b0 !default;
 $teal: #20c997 !default;
 $cyan: #17a2b8 !default;
+$barley-white: #fcecba !default;
 
 $primary: #2b99a8 !default;
 $secondary: #374249 !default;
@@ -45,11 +46,28 @@ $theme-colors: (
 ) !default;
 
 // Body
-
 $body-color-bright: $light !default;
 $body-bg: $white !default;
 $body-color: $gray-900 !default;
 $body-bg-alt: $gray-200 !default;
+
+// Health colors.
+$health-color-error: #f00 !default;
+$health-color-healthy: $green !default;
+$health-color-warning: #ffa500 !default;
+
+// Chart colors.
+$chart-color-red: #c9190b !default;
+$chart-color-blue: #06c !default;
+$chart-color-orange: #ef9234 !default;
+$chart-color-yellow: #f6d173 !default;
+$chart-color-green: #7cc674 !default;
+$chart-color-gray: #ededed !default;
+$chart-color-cyan: #73c5c5 !default;
+$chart-color-purple: #3c3d99 !default;
+$chart-color-center-text: #151515 !default;
+$chart-color-center-text-description: #72767b !default;
+$chart-color-tooltip-background: $black !default;
 
 // Typography
 

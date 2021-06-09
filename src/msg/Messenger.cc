@@ -21,7 +21,7 @@ Messenger *Messenger::create_client_messenger(CephContext *cct, std::string lnam
 uint64_t Messenger::get_pid_nonce()
 {
   uint64_t nonce = getpid();
-  if (nonce == 1) {
+  if (nonce == 1 || getenv("CEPH_USE_RANDOM_NONCE")) {
     // we're running in a container; use a random number instead!
     nonce = ceph::util::generate_random_number<uint64_t>();
   }
@@ -37,12 +37,7 @@ Messenger *Messenger::create(CephContext *cct, const std::string &type,
 			     entity_name_t name, std::string lname,
 			     uint64_t nonce)
 {
-  int r = -1;
-  if (type == "random") {
-    r = 0;
-    //r = ceph::util::generate_random_number(0, 1);
-  }
-  if (r == 0 || type.find("async") != std::string::npos)
+  if (type == "random" || type.find("async") != std::string::npos)
     return new AsyncMessenger(cct, name, type, std::move(lname), nonce);
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
   return nullptr;

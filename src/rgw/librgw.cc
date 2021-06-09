@@ -53,6 +53,12 @@
 #include "rgw_http_client.h"
 #include "rgw_http_client_curl.h"
 #include "rgw_perf_counters.h"
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+#include "rgw_amqp.h"
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+#include "rgw_kafka.h"
+#endif
 
 #include "services/svc_zone.h"
 
@@ -60,7 +66,6 @@
 #include <thread>
 #include <string>
 #include <mutex>
-
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -135,7 +140,7 @@ namespace rgw {
     }
   }
 
-  void RGWLibProcess::handle_request(RGWRequest* r)
+  void RGWLibProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r)
   {
     /*
      * invariant: valid requests are derived from RGWLibRequst
@@ -236,9 +241,6 @@ namespace rgw {
 
     RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
 
-    auto sysobj_ctx = store->svc()->sysobj->init_obj_ctx();
-    s->sysobj_ctx = &sysobj_ctx;
-
     /* XXX and -then- stash req_state pointers everywhere they are needed */
     ret = req->init(rgw_env, &rados_ctx, io, s);
     if (ret < 0) {
@@ -336,7 +338,7 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(store->getRados(), nullptr /* !rest */, s,
+      rgw_log_op(store, nullptr /* !rest */, s,
 		 (op ? op->name() : "unknown"), olog);
     }
 
@@ -538,8 +540,8 @@ namespace rgw {
       g_conf()->rgw_run_sync_thread &&
       g_conf()->rgw_nfs_run_sync_thread;
 
-    const DoutPrefix dp(cct.get(), dout_subsys, "librgw: ");
-    store = RGWStoreManager::get_storage(&dp, g_ceph_context,
+    store = StoreManager::get_storage(this, g_ceph_context,
+					 "rados",
 					 run_gc,
 					 run_lc,
 					 run_quota,
@@ -558,7 +560,7 @@ namespace rgw {
 
     r = rgw_perf_start(g_ceph_context);
 
-    rgw_rest_init(g_ceph_context, store->svc()->zone->get_zonegroup());
+    rgw_rest_init(g_ceph_context, store->get_zone()->get_zonegroup());
 
     mutex.lock();
     init_timer.cancel_all_events();
@@ -581,7 +583,7 @@ namespace rgw {
     ldh->init();
     ldh->bind();
 
-    rgw_log_usage_init(g_ceph_context, store->getRados());
+    rgw_log_usage_init(g_ceph_context, store);
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 
@@ -613,11 +615,22 @@ namespace rgw {
 
     fe->run();
 
-    r = store->getRados()->register_to_service_map("rgw-nfs", service_map_meta);
+    r = store->register_to_service_map("rgw-nfs", service_map_meta);
     if (r < 0) {
       derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
       /* ignore error */
     }
+
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+    if (!rgw::amqp::init(cct.get())) {
+      derr << "ERROR: failed to initialize AMQP manager" << dendl;
+    }
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+    if (!rgw::kafka::init(cct.get())) {
+      derr << "ERROR: failed to initialize Kafka manager" << dendl;
+    }
+#endif
 
     return 0;
   } /* RGWLib::init() */
@@ -641,12 +654,18 @@ namespace rgw {
 
     delete olog;
 
-    RGWStoreManager::close_storage(store);
+    StoreManager::close_storage(store);
 
     rgw_tools_cleanup();
     rgw_shutdown_resolver();
     rgw_http_client_cleanup();
     rgw::curl::cleanup_curl();
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+    rgw::amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+    rgw::kafka::shutdown();
+#endif
 
     rgw_perf_stop(g_ceph_context);
 
@@ -656,24 +675,26 @@ namespace rgw {
     return 0;
   } /* RGWLib::stop() */
 
-  int RGWLibIO::set_uid(rgw::sal::RGWRadosStore *store, const rgw_user& uid)
+  int RGWLibIO::set_uid(rgw::sal::Store* store, const rgw_user& uid)
   {
     const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
-    int ret = store->ctl()->user->get_info_by_uid(&dp, uid, &user_info, null_yield);
+    std::unique_ptr<rgw::sal::User> user = store->get_user(uid);
+    /* object exists, but policy is broken */
+    int ret = user->load_user(&dp, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
     }
+    user_info = user->get_info();
     return ret;
   }
 
   int RGWLibRequest::read_permissions(RGWOp* op, optional_yield y) {
     /* bucket and object ops */
-    const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
     int ret =
-      rgw_build_bucket_policies(&dp, rgwlib.get_store(), get_state(), y);
+      rgw_build_bucket_policies(op, rgwlib.get_store(), get_state(), y);
     if (ret < 0) {
-      ldpp_dout(&dp, 10) << "read_permissions (bucket policy) on "
+      ldpp_dout(op, 10) << "read_permissions (bucket policy) on "
 				  << get_state()->bucket << ":"
 				  << get_state()->object
 				  << " only_bucket=" << only_bucket()
@@ -682,10 +703,10 @@ namespace rgw {
 	ret = -EACCES;
     } else if (! only_bucket()) {
       /* object ops */
-      ret = rgw_build_object_policies(&dp, rgwlib.get_store(), get_state(),
+      ret = rgw_build_object_policies(op, rgwlib.get_store(), get_state(),
 				      op->prefetch_data(), y);
       if (ret < 0) {
-	ldpp_dout(&dp, 10) << "read_permissions (object policy) on"
+	ldpp_dout(op, 10) << "read_permissions (object policy) on"
 				    << get_state()->bucket << ":"
 				    << get_state()->object
 				    << " ret=" << ret << dendl;

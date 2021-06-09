@@ -7,23 +7,29 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import CephadmUpgrade
 from cephadm.serve import CephadmServe
+from orchestrator import OrchestratorError
 from .fixtures import _run_cephadm, wait, with_host, with_service
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_start(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'test'):
-        assert wait(cephadm_module, cephadm_module.upgrade_start(
-            'image_id', None)) == 'Initiating upgrade to image_id'
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2))):
+                assert wait(cephadm_module, cephadm_module.upgrade_start(
+                    'image_id', None)) == 'Initiating upgrade to docker.io/image_id'
 
-        assert wait(cephadm_module, cephadm_module.upgrade_status()).target_image == 'image_id'
+                assert wait(cephadm_module, cephadm_module.upgrade_status()
+                            ).target_image == 'docker.io/image_id'
 
-        assert wait(cephadm_module, cephadm_module.upgrade_pause()) == 'Paused upgrade to image_id'
+                assert wait(cephadm_module, cephadm_module.upgrade_pause()
+                            ) == 'Paused upgrade to docker.io/image_id'
 
-        assert wait(cephadm_module, cephadm_module.upgrade_resume()
-                    ) == 'Resumed upgrade to image_id'
+                assert wait(cephadm_module, cephadm_module.upgrade_resume()
+                            ) == 'Resumed upgrade to docker.io/image_id'
 
-        assert wait(cephadm_module, cephadm_module.upgrade_stop()) == 'Stopped upgrade to image_id'
+                assert wait(cephadm_module, cephadm_module.upgrade_stop()
+                            ) == 'Stopped upgrade to docker.io/image_id'
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -50,10 +56,10 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                            }):
                 version_mock.return_value = 'ceph version 18.2.1 (somehash)'
                 assert wait(cephadm_module, cephadm_module.upgrade_start(
-                    'to_image', None)) == 'Initiating upgrade to to_image'
+                    'to_image', None)) == 'Initiating upgrade to docker.io/to_image'
 
                 assert wait(cephadm_module, cephadm_module.upgrade_status()
-                            ).target_image == 'to_image'
+                            ).target_image == 'docker.io/to_image'
 
                 def _versions_mock(cmd):
                     return json.dumps({
@@ -83,6 +89,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                             container_id='container_id',
                             container_image_id='image_id',
                             container_image_digests=['to_image@repo_digest'],
+                            deployed_by=['to_image@repo_digest'],
                             version='version',
                             state='running',
                         )
@@ -105,7 +112,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                 if use_repo_digest:
                     assert image == 'to_image@repo_digest'
                 else:
-                    assert image == 'to_image'
+                    assert image == 'docker.io/to_image'
 
 
 def test_upgrade_state_null(cephadm_module: CephadmOrchestrator):
@@ -113,3 +120,25 @@ def test_upgrade_state_null(cephadm_module: CephadmOrchestrator):
     cephadm_module.set_store('upgrade_state', 'null')
     CephadmUpgrade(cephadm_module)
     assert CephadmUpgrade(cephadm_module).upgrade_state is None
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_not_enough_mgrs(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=1)), CephadmOrchestrator.apply_mgr, ''):
+            with pytest.raises(OrchestratorError):
+                wait(cephadm_module, cephadm_module.upgrade_start('image_id', None))
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+def test_enough_mons_for_ok_to_stop(check_mon_command, cephadm_module: CephadmOrchestrator):
+    # only 2 monitors, not enough for ok-to-stop to ever pass
+    check_mon_command.return_value = (
+        0, '{"monmap": {"mons": [{"name": "mon.1"}, {"name": "mon.2"}]}}', '')
+    assert not cephadm_module.upgrade._enough_mons_for_ok_to_stop()
+
+    # 3 monitors, ok-to-stop should work fine
+    check_mon_command.return_value = (
+        0, '{"monmap": {"mons": [{"name": "mon.1"}, {"name": "mon.2"}, {"name": "mon.3"}]}}', '')
+    assert cephadm_module.upgrade._enough_mons_for_ok_to_stop()

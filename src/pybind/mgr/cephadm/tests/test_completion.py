@@ -1,24 +1,9 @@
 import pytest
 
-from .fixtures import wait
-from ..module import trivial_completion, forall_hosts
+from ..module import forall_hosts
 
 
 class TestCompletion(object):
-
-    def test_trivial(self, cephadm_module):
-        @trivial_completion
-        def run(x):
-            return x + 1
-        assert wait(cephadm_module, run(1)) == 2
-
-    def test_exception(self, cephadm_module):
-        @trivial_completion
-        def run(x):
-            raise ValueError
-        c = run(1)
-        with pytest.raises(ValueError):
-            wait(cephadm_module, c)
 
     @pytest.mark.parametrize("input,expected", [
         ([], []),

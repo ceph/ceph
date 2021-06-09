@@ -86,9 +86,9 @@ string render_log_object_name(const string& format,
 }
 
 /* usage logger */
-class UsageLogger {
+class UsageLogger : public DoutPrefixProvider {
   CephContext *cct;
-  RGWRados *store;
+  rgw::sal::Store* store;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
   ceph::mutex lock = ceph::make_mutex("UsageLogger");
   int32_t num_entries;
@@ -111,7 +111,7 @@ class UsageLogger {
   }
 public:
 
-  UsageLogger(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
+  UsageLogger(CephContext *_cct, rgw::sal::Store* _store) : cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
     timer.init();
     std::lock_guard l{timer_lock};
     set_timer();
@@ -165,13 +165,17 @@ public:
     num_entries = 0;
     lock.unlock();
 
-    store->log_usage(old_map);
+    store->log_usage(this, old_map);
   }
+
+  CephContext *get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return dout_subsys; }
+  std::ostream& gen_prefix(std::ostream& out) const override { return out << "rgw UsageLogger: "; }
 };
 
 static UsageLogger *usage_logger = NULL;
 
-void rgw_log_usage_init(CephContext *cct, RGWRados *store)
+void rgw_log_usage_init(CephContext *cct, rgw::sal::Store* store)
 {
   usage_logger = new UsageLogger(cct, store);
 }
@@ -199,7 +203,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!bucket_name.empty()) {
   bucket_name = s->bucket_name;
     user = s->bucket_owner.get_id();
-    if (!rgw::sal::RGWBucket::empty(s->bucket.get()) &&
+    if (!rgw::sal::Bucket::empty(s->bucket.get()) &&
 	s->bucket->get_info().requester_pays) {
       payer = s->user->get_id();
     }
@@ -225,7 +229,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!s->is_err())
     data.successful_ops = 1;
 
-  ldout(s->cct, 30) << "log_usage: bucket_name=" << bucket_name
+  ldpp_dout(s, 30) << "log_usage: bucket_name=" << bucket_name
 	<< " tenant=" << s->bucket_tenant
 	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
 	<< bytes_received << ", success=" << data.successful_ops << dendl;
@@ -328,7 +332,7 @@ void OpsLogSocket::log(struct rgw_log_entry& entry)
   append_output(bl);
 }
 
-int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
+int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
 	       const string& op_name, OpsLogSocket *olog)
 {
   struct rgw_log_entry entry;
@@ -341,12 +345,12 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     return 0;
 
   if (s->bucket_name.empty()) {
-    ldout(s->cct, 5) << "nothing to log for operation" << dendl;
+    ldpp_dout(s, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
-  if (s->err.ret == -ERR_NO_SUCH_BUCKET || rgw::sal::RGWBucket::empty(s->bucket.get())) {
+  if (s->err.ret == -ERR_NO_SUCH_BUCKET || rgw::sal::Bucket::empty(s->bucket.get())) {
     if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
-      ldout(s->cct, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
+      ldpp_dout(s, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
       return 0;
     }
     bucket_id = "";
@@ -356,11 +360,11 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   entry.bucket = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
 
   if (check_utf8(entry.bucket.c_str(), entry.bucket.size()) != 0) {
-    ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
+    ldpp_dout(s, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
 
-  if (!rgw::sal::RGWObject::empty(s->object.get())) {
+  if (!rgw::sal::Object::empty(s->object.get())) {
     entry.obj = s->object->get_key();
   } else {
     entry.obj = rgw_obj_key("-");
@@ -462,25 +466,14 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   if (s->cct->_conf->rgw_ops_log_rados) {
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        entry.bucket_id, entry.bucket);
-
-    rgw_raw_obj obj(store->svc.zone->get_zone_params().log_pool, oid);
-
-    ret = store->append_async(obj, bl.length(), bl);
-    if (ret == -ENOENT) {
-      ret = store->create_pool(store->svc.zone->get_zone_params().log_pool);
-      if (ret < 0)
-        goto done;
-      // retry
-      ret = store->append_async(obj, bl.length(), bl);
-    }
+    ret = store->log_op(s, oid, bl);
   }
 
   if (olog) {
     olog->log(entry);
   }
-done:
   if (ret < 0)
-    ldout(s->cct, 0) << "ERROR: failed to log entry" << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to log entry" << dendl;
 
   return ret;
 }

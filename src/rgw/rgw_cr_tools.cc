@@ -16,14 +16,14 @@
 #define dout_subsys ceph_subsys_rgw
 
 template<>
-int RGWUserCreateCR::Request::_send_request()
+int RGWUserCreateCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   CephContext *cct = store->ctx();
 
   const int32_t default_max_buckets =
     cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
 
-  RGWUserAdminOpState op_state;
+  RGWUserAdminOpState op_state(store);
 
   auto& user = params.user;
 
@@ -91,20 +91,19 @@ int RGWUserCreateCR::Request::_send_request()
 }
 
 template<>
-int RGWGetUserInfoCR::Request::_send_request()
+int RGWGetUserInfoCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   return store->ctl()->user->get_info_by_uid(dpp, params.user, result.get(), null_yield);
 }
 
 template<>
-int RGWGetBucketInfoCR::Request::_send_request()
+int RGWGetBucketInfoCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
-  return store->getRados()->get_bucket_info(store->svc(), params.tenant, params.bucket_name,
-                                result->bucket_info, &result->mtime, null_yield, dpp, &result->attrs);
+  return store->get_bucket(dpp, nullptr, params.tenant, params.bucket_name, &result->bucket, null_yield);
 }
 
 template<>
-int RGWBucketCreateLocalCR::Request::_send_request()
+int RGWBucketCreateLocalCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   CephContext *cct = store->ctx();
   auto& zone_svc = store->svc()->zone;
@@ -116,7 +115,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
 
   if (!placement_rule.empty() &&
       !zone_svc->get_zone_params().valid_placement(placement_rule)) {
-    ldout(cct, 0) << "placement target (" << placement_rule << ")"
+    ldpp_dout(dpp, 0) << "placement target (" << placement_rule << ")"
       << " doesn't exist in the placement targets of zonegroup"
       << " (" << zone_svc->get_zonegroup().api_name << ")" << dendl;
     return -ERR_INVALID_LOCATION_CONSTRAINT;
@@ -159,11 +158,11 @@ int RGWBucketCreateLocalCR::Request::_send_request()
     rgw_bucket bucket;
     bucket.tenant = user.tenant;
     bucket.name = bucket_name;
-    ret = zone_svc->select_bucket_placement(*user_info, zonegroup_id,
+    ret = zone_svc->select_bucket_placement(dpp, *user_info, zonegroup_id,
 					    placement_rule,
 					    &selected_placement_rule, nullptr, null_yield);
     if (selected_placement_rule != bucket_info.placement_rule) {
-      ldout(cct, 0) << "bucket already exists on a different placement rule: "
+      ldpp_dout(dpp, 0) << "bucket already exists on a different placement rule: "
         << " selected_rule= " << selected_placement_rule
         << " existing_rule= " << bucket_info.placement_rule << dendl;
       return -EEXIST;
@@ -229,7 +228,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
 }
 
 template<>
-int RGWObjectSimplePutCR::Request::_send_request()
+int RGWObjectSimplePutCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   RGWDataAccess::ObjectRef obj;
 
@@ -254,7 +253,7 @@ int RGWObjectSimplePutCR::Request::_send_request()
 }
 
 template<>
-int RGWBucketLifecycleConfigCR::Request::_send_request()
+int RGWBucketLifecycleConfigCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   CephContext *cct = store->ctx();
 
@@ -264,7 +263,7 @@ int RGWBucketLifecycleConfigCR::Request::_send_request()
     return -EIO;
   }
 
-  int ret = lc->set_bucket_config(params.bucket_info,
+  int ret = lc->set_bucket_config(params.bucket,
                                   params.bucket_attrs,
                                   &params.config);
   if (ret < 0) {
@@ -276,7 +275,7 @@ int RGWBucketLifecycleConfigCR::Request::_send_request()
 }
 
 template<>
-int RGWBucketGetSyncPolicyHandlerCR::Request::_send_request()
+int RGWBucketGetSyncPolicyHandlerCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   int r = store->ctl()->bucket->get_sync_policy_handler(params.zone,
                                                         params.bucket,

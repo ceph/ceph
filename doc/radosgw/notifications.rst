@@ -29,6 +29,7 @@ mechanism. This API is similar to the one defined as the S3-compatible API of th
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
+.. note:: To enable bucket notifications API, the `rgw_enable_apis` configuration parameter should contain: "notifications".
 
 Notification Reliability
 ------------------------
@@ -384,7 +385,7 @@ pushed or pulled using the pubsub sync module. For example:
            "eventSource":"ceph:s3",
            "awsRegion":"us-east-1",
            "eventTime":"2019-11-22T13:47:35.124724Z",
-           "eventName":"s3:ObjectCreated:Put",
+           "eventName":"ObjectCreated:Put",
            "userIdentity":{
                "principalId":"tester"
            },
@@ -423,7 +424,7 @@ pushed or pulled using the pubsub sync module. For example:
 
 - awsRegion: zonegroup
 - eventTime: timestamp indicating when the event was triggered
-- eventName: for list of supported events see: `S3 Notification Compatibility`_
+- eventName: for list of supported events see: `S3 Notification Compatibility`_. Note that the eventName values do not start with the `s3:` prefix.
 - userIdentity.principalId: user that triggered the change
 - requestParameters.sourceIPAddress: not supported
 - responseElements.x-amz-request-id: request ID of the original change

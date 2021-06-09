@@ -352,9 +352,9 @@ private:
   std::set<std::string> _experimental_features;
 
   ceph::PluginRegistry* _plugin_registry;
-
+#ifdef CEPH_DEBUG_MUTEX
   md_config_obs_t *_lockdep_obs;
-
+#endif
 public:
   TOPNSPC::crush::CrushLocation crush_location;
 private:

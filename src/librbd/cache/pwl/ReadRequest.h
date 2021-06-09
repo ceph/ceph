@@ -11,7 +11,7 @@ namespace librbd {
 namespace cache {
 namespace pwl {
 
-typedef std::vector<pwl::ImageExtentBuf> ImageExtentBufs;
+typedef std::vector<std::shared_ptr<pwl::ImageExtentBuf>> ImageExtentBufs;
 
 class C_ReadRequest : public Context {
 public:
@@ -19,7 +19,9 @@ public:
   ImageExtentBufs read_extents;
   bufferlist miss_bl;
 
-  C_ReadRequest(CephContext *cct, utime_t arrived, PerfCounters *perfcounter, bufferlist *out_bl, Context *on_finish)
+  C_ReadRequest(
+      CephContext *cct, utime_t arrived, PerfCounters *perfcounter,
+      bufferlist *out_bl, Context *on_finish)
     : m_cct(cct), m_on_finish(on_finish), m_out_bl(out_bl),
       m_arrived_time(arrived), m_perfcounter(perfcounter) {}
   ~C_ReadRequest() {}

@@ -115,7 +115,7 @@ public:
                           off_t bl_len) override;
   virtual int flush() override;
 
-  int read_manifest(bufferlist& manifest_bl);
+  int read_manifest(const DoutPrefixProvider *dpp, bufferlist& manifest_bl);
 }; /* RGWGetObj_BlockDecrypt */
 
 
@@ -149,5 +149,24 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
                                     std::string>& crypt_http_responses);
+
+static inline void set_attr(map<string, bufferlist>& attrs,
+                            const char* key,
+                            std::string_view value)
+{
+  bufferlist bl;
+  bl.append(value.data(), value.size());
+  attrs[key] = std::move(bl);
+}
+
+static inline std::string get_str_attribute(map<string, bufferlist>& attrs,
+                                            const char *name)
+{
+  auto iter = attrs.find(name);
+  if (iter == attrs.end()) {
+    return {};
+  }
+  return iter->second.to_str();
+}
 
 #endif

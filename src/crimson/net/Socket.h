@@ -179,7 +179,6 @@ class FixedCPUServerSocket
   seastar::future<> reset() {
     return container().invoke_on_all([] (auto& ss) {
       assert(ss.shutdown_gate.is_closed());
-      ss.shutdown_gate = seastar::gate();
       ss.addr = entity_addr_t();
       ss.listener.reset();
     });

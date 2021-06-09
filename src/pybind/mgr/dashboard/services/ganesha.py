@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-lines
-from __future__ import absolute_import
 
 import logging
 import os
@@ -16,7 +15,7 @@ from ..settings import Settings
 from .cephfs import CephFS
 from .cephx import CephX
 from .orchestrator import OrchClient
-from .rgw_client import NoCredentialsException, RequestException, RgwClient
+from .rgw_client import NoCredentialsException, NoRgwDaemonsException, RequestException, RgwClient
 
 logger = logging.getLogger('ganesha')
 
@@ -43,9 +42,6 @@ class Ganesha(object):
         location_list = [loc.strip() for loc in location_list_str.split(
             ",")] if location_list_str else []
         for location in location_list:
-            cluster = None
-            pool = None
-            namespace = None
             if not location:
                 raise NFSException("Invalid Ganesha cluster RADOS "
                                    "[cluster_id:]pool/namespace setting: {}"
@@ -68,6 +64,18 @@ class Ganesha(object):
                     pool, namespace = pool_nm, None
                 else:
                     pool, namespace = pool_nm.split('/', 1)
+
+            # Check pool/namespace collision.
+            for clusters in [orch_result, result]:
+                for cluster_name, cluster_data in clusters.items():
+                    if cluster_data['pool'] == pool and cluster_data['namespace'] == namespace:
+                        raise NFSException(
+                            f'Pool `{pool}` and namespace `{namespace}` are already in use by '
+                            f"""NFS-Ganesha cluster called `{cluster_name}`{" that is deployed by "
+                            "the Orchestrator" if cluster_data['type'] == ClusterType.ORCHESTRATOR
+                            else ''}. """
+                            'Please update GANESHA_RADOS_POOL_NAMESPACE setting.'
+                        )
 
             if cluster in orch_result:
                 # cephadm might have set same cluster settings, ask the user to remove it.
@@ -154,7 +162,8 @@ class Ganesha(object):
             if RgwClient.admin_instance().is_service_online() and \
                     RgwClient.admin_instance().is_system_user():
                 result.append("RGW")
-        except (NoCredentialsException, RequestException, LookupError):
+        except (DashboardException, NoCredentialsException, RequestException,
+                NoRgwDaemonsException):
             pass
         return result
 
@@ -212,9 +221,9 @@ class GaneshaConfParser(object):
         return block_name
 
     def parse_block_or_section(self):
-        if self.stream().startswith("%url "):
+        if self.stream().startswith("%url"):
             # section line
-            self.pos += 5
+            self.pos += self.stream().find('rados://')
             idx = self.stream().find('\n')
             if idx == -1:
                 value = self.stream()

@@ -226,7 +226,7 @@ public:
 
 	localmask &= ~CEPH_SETATTR_BTIME;
 
-	head.args.setattr.btime = { init_le32(0), init_le32(0) };
+	head.args.setattr.btime = { ceph_le32(0), ceph_le32(0) };
 	head.args.setattr.mask = localmask;
       }
     }
@@ -322,6 +322,8 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 WRITE_CLASS_ENCODER(MClientRequest::Release)

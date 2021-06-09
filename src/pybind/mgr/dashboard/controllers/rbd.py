@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=unused-argument
 # pylint: disable=too-many-statements,too-many-branches
-from __future__ import absolute_import
 
 import logging
 import math

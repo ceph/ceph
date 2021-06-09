@@ -175,6 +175,9 @@ class node_extent_t {
   static node_offset_t trim_at(NodeExtentMutable&, const node_extent_t&,
                         index_t index, node_offset_t trimmed);
 
+  static node_offset_t erase_at(NodeExtentMutable&, const node_extent_t&,
+                                index_t index, const char* p_left_bound);
+
   template <KeyT KT>
   class Appender;
 
@@ -198,6 +201,7 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
     p_append_left = p_start + FieldType::HEADER_SIZE;
     p_append_right = p_start + FieldType::SIZE;
   }
+  Appender(NodeExtentMutable*, const node_extent_t&, bool open = false);
   void append(const node_extent_t& src, index_t from, index_t items);
   void append(const full_key_t<KT>&, const value_input_t&, const value_t*&);
   char* wrap();

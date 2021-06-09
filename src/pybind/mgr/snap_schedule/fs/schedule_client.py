@@ -122,43 +122,35 @@ class SnapSchedClient(CephfsClient):
     def allow_minute_snaps(self) -> None:
         return self.mgr.get_module_option('allow_m_granularity')
 
+    @property
+    def dump_on_update(self) -> None:
+        return self.mgr.get_module_option('dump_on_update')
+
     def get_schedule_db(self, fs: str) -> sqlite3.Connection:
         if fs not in self.sqlite_connections:
-            self.sqlite_connections[fs] = sqlite3.connect(
-                ':memory:',
-                check_same_thread=False)
-            with self.sqlite_connections[fs] as con:
-                con.row_factory = sqlite3.Row
-                con.execute("PRAGMA FOREIGN_KEYS = 1")
-                pool = self.get_metadata_pool(fs)
-                assert pool, f'fs "{fs}" not found'
-                with open_ioctx(self, pool) as ioctx:
-                    try:
-                        size, _mtime = ioctx.stat(SNAP_DB_OBJECT_NAME)
-                        db = ioctx.read(SNAP_DB_OBJECT_NAME,
-                                        size).decode('utf-8')
-                        con.executescript(db)
-                    except rados.ObjectNotFound:
-                        log.debug((f'No schedule DB found in {fs}, '
-                                   'creating one.'))
-                        con.executescript(Schedule.CREATE_TABLES)
+            poolid = self.get_metadata_pool(fs)
+            assert poolid, f'fs "{fs}" not found'
+            uri = f"file:///*{poolid}:/{SNAP_DB_OBJECT_NAME}.db?vfs=ceph";
+            log.debug(f"using uri {uri}")
+            db = sqlite3.connect(uri, check_same_thread=False, uri=True)
+            db.execute('PRAGMA FOREIGN_KEYS = 1')
+            db.execute('PRAGMA JOURNAL_MODE = PERSIST')
+            db.execute('PRAGMA PAGE_SIZE = 65536')
+            db.execute('PRAGMA CACHE_SIZE = 256')
+            db.row_factory = sqlite3.Row
+            # check for legacy dump store
+            with open_ioctx(self, poolid) as ioctx:
+                try:
+                    size, _mtime = ioctx.stat(SNAP_DB_OBJECT_NAME)
+                    dump = ioctx.read(SNAP_DB_OBJECT_NAME, size).decode('utf-8')
+                    db.executescript(dump)
+                    ioctx.remove(SNAP_DB_OBJECT_NAME)
+                except rados.ObjectNotFound:
+                    log.debug(f'No legacy schedule DB found in {fs}')
+            db.executescript(Schedule.CREATE_TABLES)
+            self.sqlite_connections[fs] = db
+            return db
         return self.sqlite_connections[fs]
-
-    def store_schedule_db(self, fs: str) -> None:
-        # only store db is it exists, otherwise nothing to do
-        metadata_pool = self.get_metadata_pool(fs)
-        if not metadata_pool:
-            raise CephfsConnectionException(
-                -errno.ENOENT, "Filesystem {} does not exist".format(fs))
-        if fs in self.sqlite_connections:
-            db_content = []
-            db = self.sqlite_connections[fs]
-            with db:
-                for row in db.iterdump():
-                    db_content.append(row)
-        with open_ioctx(self, metadata_pool) as ioctx:
-            ioctx.write_full(SNAP_DB_OBJECT_NAME,
-                             '\n'.join(db_content).encode('utf-8'))
 
     def _is_allowed_repeat(self, exec_row: Dict[str, str], path: str) -> bool:
         if Schedule.parse_schedule(exec_row['schedule'])[1] == 'M':
@@ -180,6 +172,10 @@ class SnapSchedClient(CephfsClient):
             db = self.get_schedule_db(fs)
             rows = []
             with db:
+                if self.dump_on_update:
+                    dump = [line for line in db.iterdump()]
+                    dump = "\n".join(dump)
+                    log.debug(f"db dump:\n{dump}")
                 cur = db.execute(Schedule.EXEC_QUERY, (path,))
                 all_rows = cur.fetchall()
                 rows = [r for r in all_rows
@@ -293,7 +289,6 @@ class SnapSchedClient(CephfsClient):
         log.debug(f'attempting to add schedule {sched}')
         db = self.get_schedule_db(fs)
         sched.store_schedule(db)
-        self.store_schedule_db(sched.fs)
 
     @updates_schedule_db
     def rm_snap_schedule(self,

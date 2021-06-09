@@ -1,4 +1,5 @@
 #include <string>
+#include <unistd.h>
 #include <include/fs_types.h>
 #include <mds/mdstypes.h>
 #include <include/cephfs/libcephfs.h>
@@ -56,7 +57,8 @@ int main(int argc, char *argv[])
 
 	struct ceph_client_callback_args args = { 0 };
 	args.ino_release_cb = cb;
-	ceph_ll_register_callbacks(cmount, &args);
+	ret = ceph_ll_register_callbacks2(cmount, &args);
+	assert(ret == 0);
 
 	ret = ceph_mount(cmount, NULL);
 	assert(ret >= 0);
@@ -71,7 +73,10 @@ int main(int argc, char *argv[])
 		ret = ceph_ll_lookup_inode(cmount, inos[i], &inodes[i]);
 		assert(ret >= 0);
 	}
+    sleep(45);
 
 	assert(cb_done);
+	ceph_unmount(cmount);
+	ceph_release(cmount);
 	return 0;
 }

@@ -137,7 +137,7 @@ void MDSDaemon::asok_command(
   dout(1) << "asok_command: " << command << " " << cmdmap
 	  << " (starting...)" << dendl;
 
-  int r = -ENOSYS;
+  int r = -CEPHFS_ENOSYS;
   bufferlist outbl;
   CachedStackStringStream css;
   auto& ss = *css;
@@ -169,7 +169,7 @@ void MDSDaemon::asok_command(
   } else if (command == "heap") {
     if (!ceph_using_tcmalloc()) {
       ss << "not using tcmalloc";
-      r = -EOPNOTSUPP;
+      r = -CEPHFS_EOPNOTSUPP;
     } else {
       string heapcmd;
       cmd_getval(cmdmap, "heapcmd", heapcmd);
@@ -180,6 +180,7 @@ void MDSDaemon::asok_command(
 	heapcmd_vec.push_back(value);
       }
       ceph_heap_profiler_handle_command(heapcmd_vec, ss);
+      r = 0;
     }
   } else if (command == "cpu_profiler") {
     string arg;
@@ -187,6 +188,7 @@ void MDSDaemon::asok_command(
     vector<string> argvec;
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ss);
+    r = 0;
   } else {
     if (mds_rank == NULL) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
@@ -197,7 +199,7 @@ void MDSDaemon::asok_command(
 	return;
       } catch (const TOPNSPC::common::bad_cmd_get& e) {
 	ss << e.what();
-	r = -EINVAL;
+	r = -CEPHFS_EINVAL;
       }
     }
   }
@@ -469,7 +471,7 @@ int MDSDaemon::init()
   // to run on Windows.
   derr << "The Ceph MDS does not support running on Windows at the moment."
        << dendl;
-  return -ENOSYS;
+  return -CEPHFS_ENOSYS;
 #endif // _WIN32
 
   dout(10) << "Dumping misc struct sizes:" << dendl;
@@ -539,7 +541,7 @@ int MDSDaemon::init()
          << "maximum retry time reached." << dendl;
     std::lock_guard locker{mds_lock};
     suicide();
-    return -ETIMEDOUT;
+    return -CEPHFS_ETIMEDOUT;
   }
 
   mds_lock.lock();
@@ -633,12 +635,12 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
       << *m->get_connection()->peer_addrs << dendl;
 
     ss << "permission denied";
-    r = -EACCES;
+    r = -CEPHFS_EACCES;
   } else if (m->cmd.empty()) {
-    r = -EINVAL;
+    r = -CEPHFS_EINVAL;
     ss << "no command given";
   } else if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-    r = -EINVAL;
+    r = -CEPHFS_EINVAL;
   } else {
     cct->get_admin_socket()->queue_tell_command(m);
     return;
@@ -844,6 +846,11 @@ void MDSDaemon::respawn()
   /* Dump recent in case the MDS was stuck doing something which caused it to
    * be removed from the MDSMap leading to respawn. */
   g_ceph_context->_log->dump_recent();
+
+  /* valgrind can't handle execve; just exit and let QA infra restart */
+  if (g_conf().get_val<bool>("mds_valgrind_exit")) {
+    _exit(0);
+  }
 
   char *new_argv[orig_argc+1];
   dout(1) << " e: '" << orig_argv[0] << "'" << dendl;

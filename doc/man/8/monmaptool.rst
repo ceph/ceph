@@ -129,7 +129,7 @@ Availability
 ============
 
 **monmaptool** is part of Ceph, a massively scalable, open-source, distributed 
-storage system. Please refer to the Ceph documentation at http://ceph.com/docs 
+storage system. Please refer to the Ceph documentation at https://docs.ceph.com
 for more information.
 
 

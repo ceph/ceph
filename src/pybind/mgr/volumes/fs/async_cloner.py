@@ -6,6 +6,7 @@ import logging
 from contextlib import contextmanager
 
 import cephfs
+from mgr_util import lock_timeout_log
 
 from .async_job import AsyncJobs
 from .exception import IndexException, MetadataMgrException, OpSmException, VolumeException
@@ -117,6 +118,7 @@ def sync_attrs(fs_handle, target_path, source_statx):
         fs_handle.lchown(target_path, source_statx["uid"], source_statx["gid"])
         fs_handle.lutimes(target_path, (time.mktime(source_statx["atime"].timetuple()),
                                         time.mktime(source_statx["mtime"].timetuple())))
+        fs_handle.lchmod(target_path, source_statx["mode"])
     except cephfs.Error as e:
         log.warning("error synchronizing attrs for {0} ({1})".format(target_path, e))
         raise e
@@ -275,7 +277,7 @@ class Cloner(AsyncJobs):
         super(Cloner, self).__init__(volume_client, "cloner", tp_size)
 
     def reconfigure_max_concurrent_clones(self, tp_size):
-        super(Cloner, self).reconfigure_max_concurrent_clones("cloner", tp_size)
+        return super(Cloner, self).reconfigure_max_async_threads(tp_size)
 
     def is_clone_cancelable(self, clone_state):
         return not (SubvolumeOpSm.is_complete_state(clone_state) or SubvolumeOpSm.is_failed_state(clone_state))
@@ -328,7 +330,7 @@ class Cloner(AsyncJobs):
             # to persist the new state, async cloner accesses the volume in exclusive mode.
             # accessing the volume in exclusive mode here would lead to deadlock.
             assert track_idx is not None
-            with self.lock:
+            with lock_timeout_log(self.lock):
                 with open_volume_lockless(self.vc, volname) as fs_handle:
                     with open_group(fs_handle, self.vc.volspec, groupname) as group:
                         with open_subvol(self.vc.mgr, fs_handle, self.vc.volspec, group, clonename, SubvolumeOpType.CLONE_CANCEL) as clone_subvolume:

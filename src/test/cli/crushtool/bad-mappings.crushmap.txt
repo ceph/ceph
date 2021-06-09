@@ -11,11 +11,11 @@ domain root {
 	id -1
 	alg straw
 	hash 0
-	item device0 weight 1.000
-	item device1 weight 1.000
-	item device2 weight 1.000
-	item device3 weight 1.000
-	item device4 weight 1.000
+	item device0 weight 1.00000
+	item device1 weight 1.00000
+	item device2 weight 1.00000
+	item device3 weight 1.00000
+	item device4 weight 1.00000
 }
 
 rule rule-firstn {

@@ -78,32 +78,29 @@ struct CapSnap {
   //snapid_t follows;  // map key
   InodeRef in;
   SnapContext context;
-  int issued, dirty;
+  int issued = 0, dirty = 0;
 
-  uint64_t size;
+  uint64_t size = 0;
   utime_t ctime, btime, mtime, atime;
-  version_t time_warp_seq;
-  uint64_t change_attr;
-  uint32_t   mode;
-  uid_t      uid;
-  gid_t      gid;
+  version_t time_warp_seq = 0;
+  uint64_t change_attr = 0;
+  uint32_t   mode = 0;
+  uid_t      uid = 0;
+  gid_t      gid = 0;
   map<string,bufferptr> xattrs;
-  version_t xattr_version;
+  version_t xattr_version = 0;
 
   bufferlist inline_data;
-  version_t inline_version;
+  version_t inline_version = 0;
 
-  bool writing, dirty_data;
-  uint64_t flush_tid;
+  bool writing = false, dirty_data = false;
+  uint64_t flush_tid = 0;
 
-  int64_t cap_dirtier_uid;
-  int64_t cap_dirtier_gid;
+  int64_t cap_dirtier_uid = -1;
+  int64_t cap_dirtier_gid = -1;
 
   explicit CapSnap(Inode *i)
-    : in(i), issued(0), dirty(0), size(0), time_warp_seq(0), change_attr(0),
-      mode(0), uid(0), gid(0), xattr_version(0), inline_version(0),
-      writing(false), dirty_data(false), flush_tid(0), cap_dirtier_uid(-1),
-      cap_dirtier_gid(-1)
+    : in(i)
   {}
 
   void dump(Formatter *f) const;
@@ -117,58 +114,58 @@ struct CapSnap {
 #define I_CAP_DROPPED		(1 << 4)
 #define I_ERROR_FILELOCK	(1 << 5)
 
-struct Inode {
+struct Inode : RefCountedObject {
   Client *client;
 
   // -- the actual inode --
   inodeno_t ino; // ORDER DEPENDENCY: oset
   snapid_t  snapid;
-  ino_t faked_ino;
+  ino_t faked_ino = 0;
 
-  uint32_t   rdev;    // if special file
+  uint32_t   rdev = 0;    // if special file
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
   utime_t    btime;   // birth time
 
   // perm (namespace permissions)
-  uint32_t   mode;
-  uid_t      uid;
-  gid_t      gid;
+  uint32_t   mode = 0;
+  uid_t      uid = 0;
+  gid_t      gid = 0;
 
   // nlink
-  int32_t    nlink;
+  int32_t    nlink = 0;
 
   // file (data access)
-  ceph_dir_layout dir_layout;
+  ceph_dir_layout dir_layout{};
   file_layout_t layout;
-  uint64_t   size;        // on directory, # dentries
-  uint32_t   truncate_seq;
-  uint64_t   truncate_size;
+  uint64_t   size = 0;        // on directory, # dentries
+  uint32_t   truncate_seq = 1;
+  uint64_t   truncate_size = -1;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
-  uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
-  uint64_t   change_attr;
+  uint32_t   time_warp_seq = 0;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+  uint64_t   change_attr = 0;
 
-  uint64_t max_size;  // max size we can write to
+  uint64_t max_size = 0;  // max size we can write to
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;
   nest_info_t rstat;
 
   // special stuff
-  version_t version;           // auth only
-  version_t xattr_version;
+  version_t version = 0;           // auth only
+  version_t xattr_version = 0;
   utime_t   snap_btime;        // snapshot creation (birth) time
   std::map<std::string, std::string> snap_metadata;
 
   // inline data
-  version_t  inline_version;
+  version_t  inline_version = 0;
   bufferlist inline_data;
 
   bool fscrypt = false; // fscrypt enabled ?
 
-  bool is_root()    const { return ino == MDS_INO_ROOT; }
+  bool is_root()    const { return ino == CEPH_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
@@ -185,7 +182,7 @@ struct Inode {
     return ceph_str_hash(which, dn.data(), dn.length());
   }
 
-  unsigned flags;
+  unsigned flags = 0;
 
   quota_info_t quota;
 
@@ -195,24 +192,29 @@ struct Inode {
   }
 
   // about the dir (if this is one!)
-  Dir       *dir;     // if i'm a dir.
+  Dir       *dir = 0;     // if i'm a dir.
   fragtree_t dirfragtree;
-  uint64_t dir_release_count, dir_ordered_count;
-  bool dir_hashed, dir_replicated;
+  uint64_t dir_release_count = 1;
+  uint64_t dir_ordered_count = 1;
+  bool dir_hashed = false;
+  bool dir_replicated = false;
 
   // per-mds caps
   std::map<mds_rank_t, Cap> caps;            // mds -> Cap
-  Cap *auth_cap;
-  int64_t cap_dirtier_uid;
-  int64_t cap_dirtier_gid;
-  unsigned dirty_caps, flushing_caps;
+  Cap *auth_cap = 0;
+  int64_t cap_dirtier_uid = -1;
+  int64_t cap_dirtier_gid = -1;
+  unsigned dirty_caps = 0;
+  unsigned flushing_caps = 0;
   std::map<ceph_tid_t, int> flushing_cap_tids;
-  int shared_gen, cache_gen;
-  int snap_caps, snap_cap_refs;
+  int shared_gen = 0;
+  int cache_gen = 0;
+  int snap_caps = 0;
+  int snap_cap_refs = 0;
   utime_t hold_caps_until;
   xlist<Inode*>::item delay_cap_item, dirty_cap_item, flushing_cap_item;
 
-  SnapRealm *snaprealm;
+  SnapRealm *snaprealm = 0;
   xlist<Inode*>::item snaprealm_item;
   InodeRef snapdir_parent;  // only if we are a snapdir inode
   map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
@@ -223,10 +225,11 @@ struct Inode {
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
-  uint64_t     reported_size, wanted_max_size, requested_max_size;
+  uint64_t reported_size = 0;
+  uint64_t wanted_max_size = 0;
+  uint64_t requested_max_size = 0;
 
-  int       _ref;      // ref count. 1 for each dentry, fh that links to me.
-  uint64_t  ll_ref;   // separate ref count for ll client
+  uint64_t  ll_ref = 0;   // separate ref count for ll client
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
   string    symlink;  // symlink content, if it's a symlink
   map<string,bufferptr> xattrs;
@@ -246,12 +249,10 @@ struct Inode {
   void make_short_path(filepath& p);
   void make_nosnap_relative_path(filepath& p);
 
-  void get();
-  int _put(int n=1);
-
-  int get_num_ref() {
-    return _ref;
-  }
+  // The ref count. 1 for each dentry, fh, inode_map,
+  // cwd that links to me.
+  void iget() { get(); }
+  void iput(int n=1) { ceph_assert(n >= 0); while (n--) put(); }
 
   void ll_get() {
     ll_ref++;
@@ -277,27 +278,13 @@ struct Inode {
 
   std::set<Fh*> fhs;
 
-  mds_rank_t dir_pin;
+  mds_rank_t dir_pin = MDS_RANK_NONE;
 
+  Inode() = delete;
   Inode(Client *c, vinodeno_t vino, file_layout_t *newlayout)
-    : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
-      rdev(0), mode(0), uid(0), gid(0), nlink(0),
-      size(0), truncate_seq(1), truncate_size(-1),
-      time_warp_seq(0), change_attr(0), max_size(0), version(0),
-      xattr_version(0), inline_version(0), flags(0),
-      dir(0), dir_release_count(1), dir_ordered_count(1),
-      dir_hashed(false), dir_replicated(false), auth_cap(NULL),
-      cap_dirtier_uid(-1), cap_dirtier_gid(-1),
-      dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
-      snap_caps(0), snap_cap_refs(0),
-      delay_cap_item(this), dirty_cap_item(this), flushing_cap_item(this),
-      snaprealm(0), snaprealm_item(this),
-      oset((void *)this, newlayout->pool_id, this->ino),
-      reported_size(0), wanted_max_size(0), requested_max_size(0),
-      _ref(0), ll_ref(0), dir_pin(MDS_RANK_NONE)
-  {
-    memset(&dir_layout, 0, sizeof(dir_layout));
-  }
+    : client(c), ino(vino.ino), snapid(vino.snapid), delay_cap_item(this),
+      dirty_cap_item(this), flushing_cap_item(this), snaprealm_item(this),
+      oset((void *)this, newlayout->pool_id, this->ino) {}
   ~Inode();
 
   vinodeno_t vino() const { return vinodeno_t(ino, snapid); }

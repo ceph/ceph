@@ -259,19 +259,37 @@ private:
   bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
   void disconnect_disallowed_stretch_sessions();
   void set_elector_disallowed_leaders(bool allow_election);
+
+  map <string,string> crush_loc;
+  bool need_set_crush_loc{false};
 public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
   bool is_recovering_stretch_mode() { return recovering_stretch_mode; }
-  void maybe_engage_stretch_mode();
+
+  /**
+   * This set of functions maintains the in-memory stretch state
+   * and sets up transitions of the map states by calling in to
+   * MonmapMonitor and OSDMonitor.
+   *
+   * The [maybe_]go_* functions are called on the leader to
+   * decide if transitions should happen; the trigger_* functions
+   * set up the map transitions; and the set_* functions actually
+   * change the memory state -- but these are only called
+   * via OSDMonitor::update_from_paxos, to guarantee consistent
+   * updates across the entire cluster.
+   */
+  void try_engage_stretch_mode();
   void maybe_go_degraded_stretch_mode();
   void trigger_degraded_stretch_mode(const set<string>& dead_mons,
 				     const set<int>& dead_buckets);
   void set_degraded_stretch_mode();
   void go_recovery_stretch_mode();
+  void set_recovery_stretch_mode();
   void trigger_healthy_stretch_mode();
   void set_healthy_stretch_mode();
   void enable_stretch_mode();
+  void set_mon_crush_location(const string& loc);
 
   
 private:
@@ -840,7 +858,10 @@ public:
   void waitlist_or_zap_client(MonOpRequestRef op);
 
   void send_mon_message(Message *m, int rank);
-  void notify_new_monmap();
+  /** can_change_external_state if we can do things like
+   *  call elections as a result of the new map.
+   */
+  void notify_new_monmap(bool can_change_external_state=false);
 
 public:
   struct C_Command : public C_MonOp {

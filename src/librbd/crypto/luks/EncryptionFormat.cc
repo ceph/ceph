@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "EncryptionFormat.h"
+#include "include/compat.h"
 #include "librbd/crypto/luks/FormatRequest.h"
 #include "librbd/crypto/luks/LoadRequest.h"
 
@@ -17,19 +18,23 @@ EncryptionFormat<I>::EncryptionFormat(
 }
 
 template <typename I>
+EncryptionFormat<I>::~EncryptionFormat() {
+  ceph_memzero_s(
+          &m_passphrase[0], m_passphrase.capacity(), m_passphrase.size());
+}
+
+template <typename I>
 void EncryptionFormat<I>::format(I* image_ctx, Context* on_finish) {
   auto req = luks::FormatRequest<I>::create(
-          image_ctx, get_format(), m_alg, std::move(m_passphrase), on_finish,
-          false);
+          image_ctx, get_format(), m_alg, std::move(m_passphrase), &m_crypto,
+          on_finish, false);
   req->send();
 }
 
 template <typename I>
-void EncryptionFormat<I>::load(
-        I* image_ctx, ceph::ref_t<CryptoInterface>* result_crypto,
-        Context* on_finish) {
+void EncryptionFormat<I>::load(I* image_ctx, Context* on_finish) {
   auto req = luks::LoadRequest<I>::create(
-          image_ctx, get_format(), std::move(m_passphrase), result_crypto,
+          image_ctx, get_format(), std::move(m_passphrase), &m_crypto,
           on_finish);
   req->send();
 }

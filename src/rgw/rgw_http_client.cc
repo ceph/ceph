@@ -294,6 +294,51 @@ void RGWIOProvider::assign_io(RGWIOIDProvider& io_id_provider, int io_type)
   }
 }
 
+RGWHTTPClient::RGWHTTPClient(CephContext *cct,
+                             const string& _method,
+                             const string& _url)
+    : NoDoutPrefix(cct, dout_subsys),
+      has_send_len(false),
+      http_status(HTTP_STATUS_NOSTATUS),
+      req_data(nullptr),
+      verify_ssl(cct->_conf->rgw_verify_ssl),
+      cct(cct),
+      method(_method),
+      url(_url) {
+  init();
+}
+
+std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
+{
+  out << "http_client[" << method << "/" << url << "]";
+  return out;
+}
+
+void RGWHTTPClient::init()
+{
+  auto pos = url.find("://");
+  if (pos == string::npos) {
+    host = url;
+    return;
+  }
+
+  protocol = url.substr(0, pos);
+
+  pos += 3;
+
+  auto host_end_pos = url.find("/", pos);
+  if (host_end_pos == string::npos) {
+    host = url.substr(pos);
+    return;
+  }
+
+  host = url.substr(pos, host_end_pos - pos);
+  resource_prefix = url.substr(host_end_pos + 1);
+  if (resource_prefix.size() > 0 && resource_prefix[resource_prefix.size() - 1] != '/') {
+    resource_prefix.append("/");
+  }
+}
+
 /*
  * the following set of callbacks will be called either on RGWHTTPManager::process(),
  * or via the RGWHTTPManager async processing.
@@ -569,6 +614,21 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYHOST, 0L);
     dout(20) << "ssl verification is set to off" << dendl;
+  } else {
+    if (!ca_path.empty()) {
+      curl_easy_setopt(easy_handle, CURLOPT_CAINFO, ca_path.c_str());
+      dout(20) << "using custom ca cert "<< ca_path.c_str() << " for ssl" << dendl;
+    }
+    if (!client_cert.empty()) {
+      if (!client_key.empty()) {
+	curl_easy_setopt(easy_handle, CURLOPT_SSLCERT, client_cert.c_str());
+	curl_easy_setopt(easy_handle, CURLOPT_SSLKEY, client_key.c_str());
+	dout(20) << "using custom client cert " << client_cert.c_str()
+	  << " and private key " << client_key.c_str() << dendl;
+      } else {
+	dout(5) << "private key is missing for client certificate" << dendl;
+      }
+    }
   }
   curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_TIMEOUT, req_timeout);
@@ -661,7 +721,7 @@ static int clear_signal(int fd)
   // since we're in non-blocking mode, we can try to read a lot more than
   // one signal from signal_thread() to avoid later wakeups. non-blocking reads
   // are also required to support the curl_multi_wait bug workaround
-  std::array<char, 256> buf;
+  std::array<char, 256> buf{};
   int ret = ::read(fd, (void *)buf.data(), buf.size());
   if (ret < 0) {
     ret = -errno;
@@ -1217,7 +1277,7 @@ void *RGWHTTPManager::reqs_thread_entry()
               << cct->_conf->rgw_curl_low_speed_limit << " Bytes per second during " << cct->_conf->rgw_curl_low_speed_time << " seconds." << dendl;
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
-            dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << dendl;
+            dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << " req_data->error_buf=" << req_data->error_buf << dendl;
 	    break;
         }
       }

@@ -9,7 +9,7 @@ import os
 import time
 import traceback
 
-from io import BytesIO
+from io import BytesIO, StringIO
 from collections import namedtuple, defaultdict
 from textwrap import dedent
 
@@ -62,9 +62,8 @@ class Workload(object):
         default just wipe everything in the metadata pool
         """
         # Delete every object in the metadata pool
-        objects = self._filesystem.rados(["ls"]).split("\n")
-        for o in objects:
-            self._filesystem.rados(["rm", o])
+        pool = self._filesystem.get_metadata_pool_name()
+        self._filesystem.rados(["purge", pool, '--yes-i-really-really-mean-it'])
 
     def flush(self):
         """
@@ -328,8 +327,7 @@ class TestDataScan(CephFSTestCase):
         workload.flush()
 
         # Stop the MDS
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # After recovery, we need the MDS to not be strict about stats (in production these options
         # are off by default, but in QA we need to explicitly disable them)
@@ -341,10 +339,9 @@ class TestDataScan(CephFSTestCase):
 
         # Reset the MDS map in case multiple ranks were in play: recovery procedure
         # only understands how to rebuild metadata under rank 0
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
-                '--yes-i-really-mean-it')
+        self.fs.reset()
 
-        self.fs.mds_restart()
+        self.fs.set_joinable() # redundant with reset
 
         def get_state(mds_id):
             info = self.mds_cluster.get_mds_info(mds_id)
@@ -416,9 +413,9 @@ class TestDataScan(CephFSTestCase):
         self._rebuild_metadata(StripedStashedLayout(self.fs, self.mount_a))
 
     def _dirfrag_keys(self, object_id):
-        keys_str = self.fs.rados(["listomapkeys", object_id])
+        keys_str = self.fs.radosmo(["listomapkeys", object_id], stdout=StringIO())
         if keys_str:
-            return keys_str.split("\n")
+            return keys_str.strip().split("\n")
         else:
             return []
 
@@ -459,8 +456,7 @@ class TestDataScan(CephFSTestCase):
         # Flush journal and stop MDS
         self.mount_a.umount_wait()
         self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # Pick a dentry and wipe out its key
         # Because I did a 1 bit split, I know one frag will be named <inode>.01000000
@@ -469,10 +465,10 @@ class TestDataScan(CephFSTestCase):
         victim_key = keys[7]  # arbitrary choice
         log.info("victim_key={0}".format(victim_key))
         victim_dentry = victim_key.split("_head")[0]
-        self.fs.rados(["rmomapkey", frag_obj_id, victim_key])
+        self.fs.radosm(["rmomapkey", frag_obj_id, victim_key])
 
         # Start filesystem back up, observe that the file appears to be gone in an `ls`
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
         self.mount_a.mount_wait()
         files = self.mount_a.run_shell(["ls", "subdir/"]).stdout.getvalue().strip().split("\n")
@@ -480,8 +476,7 @@ class TestDataScan(CephFSTestCase):
 
         # Stop the filesystem
         self.mount_a.umount_wait()
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # Run data-scan, observe that it inserts our dentry back into the correct fragment
         # by checking the omap now has the dentry's key again
@@ -492,7 +487,7 @@ class TestDataScan(CephFSTestCase):
 
         # Start the filesystem and check that the dentry we deleted is now once again visible
         # and points to the correct file data.
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
         self.mount_a.mount_wait()
         out = self.mount_a.run_shell(["cat", "subdir/{0}".format(victim_dentry)]).stdout.getvalue().strip()
@@ -509,8 +504,10 @@ class TestDataScan(CephFSTestCase):
 
         # run scrub to update and make sure rstat.rbytes info in subdir inode and dirfrag
         # are matched
-        out_json = self.fs.rank_tell(["scrub", "start", "/subdir", "repair", "recursive"])
+        out_json = self.fs.run_scrub(["start", "/subdir", "repair", "recursive"])
         self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
         # Remove the whole 'sudbdir' directory
         self.mount_a.run_shell(["rm", "-rf", "subdir/"])
@@ -577,23 +574,21 @@ class TestDataScan(CephFSTestCase):
         # introduce duplicated primary link
         file1_key = "file1_head"
         self.assertIn(file1_key, dirfrag1_keys)
-        file1_omap_data = self.fs.rados(["getomapval", dirfrag1_oid, file1_key, '-'],
-                                        stdout_data=BytesIO())
-        self.fs.rados(["setomapval", dirfrag2_oid, file1_key], stdin_data=file1_omap_data)
+        file1_omap_data = self.fs.radosmo(["getomapval", dirfrag1_oid, file1_key, '-'])
+        self.fs.radosm(["setomapval", dirfrag2_oid, file1_key], stdin=BytesIO(file1_omap_data))
         self.assertIn(file1_key, self._dirfrag_keys(dirfrag2_oid))
 
         # remove a remote link, make inode link count incorrect
         link1_key = 'link1_head'
         self.assertIn(link1_key, dirfrag1_keys)
-        self.fs.rados(["rmomapkey", dirfrag1_oid, link1_key])
+        self.fs.radosm(["rmomapkey", dirfrag1_oid, link1_key])
 
         # increase good primary link's version
         self.mount_a.run_shell(["touch", "testdir1/file1"])
         self.mount_a.umount_wait()
 
         self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         # repair linkage errors
         self.fs.data_scan(["scan_links"])
@@ -601,7 +596,7 @@ class TestDataScan(CephFSTestCase):
         # primary link in testdir2 was deleted?
         self.assertNotIn(file1_key, self._dirfrag_keys(dirfrag2_oid))
 
-        self.fs.mds_restart()
+        self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
         self.mount_a.mount_wait()
@@ -640,10 +635,10 @@ class TestDataScan(CephFSTestCase):
 
         self.fs.mds_asok(["flush", "journal"], mds0_id)
         self.fs.mds_asok(["flush", "journal"], mds1_id)
-        self.mds_cluster.mds_stop()
+        self.fs.fail()
 
-        self.fs.rados(["rm", "mds0_inotable"])
-        self.fs.rados(["rm", "mds1_inotable"])
+        self.fs.radosm(["rm", "mds0_inotable"])
+        self.fs.radosm(["rm", "mds1_inotable"])
 
         self.fs.data_scan(["scan_links", "--filesystem", self.fs.name])
 
@@ -679,7 +674,7 @@ class TestDataScan(CephFSTestCase):
         for item in old_snaptable['snapserver']['snaps']:
             del item['stamp']
 
-        self.fs.rados(["rm", "mds_snaptable"])
+        self.fs.radosm(["rm", "mds_snaptable"])
         self.fs.data_scan(["scan_links", "--filesystem", self.fs.name])
 
         new_snaptable = json.loads(self.fs.table_tool([self.fs.name + ":0", "show", "snap"]))

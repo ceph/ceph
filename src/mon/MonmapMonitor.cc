@@ -121,7 +121,7 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
 			   stringify(ceph_release()));
   }
 
-  mon.notify_new_monmap();
+  mon.notify_new_monmap(true);
 }
 
 void MonmapMonitor::create_pending()
@@ -308,8 +308,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "mon stat") {
@@ -344,8 +343,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
              prefix == "mon dump") {
 
     epoch_t epoch;
-    int64_t epochnum;
-    cmd_getval(cmdmap, "epoch", epochnum, (int64_t)0);
+    int64_t epochnum = cmd_getval_or<int64_t>(cmdmap, "epoch", 0);
     epoch = epochnum;
 
     MonMap *p = mon.monmap;
@@ -397,11 +395,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "mon feature ls") {
    
     bool list_with_value = false;
-    string with_value;
-    if (cmd_getval(cmdmap, "with_value", with_value) &&
-        with_value == "--with-value") {
-      list_with_value = true;
-    }
+    cmd_getval_compat_cephbool(cmdmap, "with_value", list_with_value);
 
     MonMap *p = mon.monmap;
 
@@ -584,7 +578,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     entity_addr_t addr;
     bufferlist rdata;
 
-    if (!addr.parse(addrstr.c_str())) {
+    if (!addr.parse(addrstr)) {
       err = -EINVAL;
       ss << "addr " << addrstr << "does not parse";
       goto reply;
@@ -1244,18 +1238,37 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
     return true;
   }
 
-  if (pending_map.contains(join->name) &&
-      !pending_map.get_addrs(join->name).front().is_blank_ip()) {
+  const auto name_info_i = pending_map.mon_info.find(join->name);
+  if (name_info_i != pending_map.mon_info.end() &&
+      !name_info_i->second.public_addrs.front().is_blank_ip() &&
+      (!join->force_loc || join->crush_loc == name_info_i->second.crush_loc)) {
     dout(10) << " already have " << join->name << dendl;
     return true;
   }
-  if (pending_map.contains(join->addrs) &&
-      pending_map.get_name(join->addrs) == join->name) {
+  string addr_name;
+  if (pending_map.contains(join->addrs)) {
+    addr_name = pending_map.get_name(join->addrs);
+  }
+  if (!addr_name.empty() &&
+      addr_name == join->name &&
+      (!join->force_loc || join->crush_loc.empty() ||
+       pending_map.mon_info[addr_name].crush_loc == join->crush_loc)) {
     dout(10) << " already have " << join->addrs << dendl;
+    return true;
+  }
+  if (pending_map.stretch_mode_enabled &&
+      join->crush_loc.empty() &&
+      (addr_name.empty() ||
+       pending_map.mon_info[addr_name].crush_loc.empty())) {
+    dout(10) << "stretch mode engaged but no source of crush_loc" << dendl;
+    mon.clog->info() << join->name << " attempted to join from " << join->name
+		      << ' ' << join->addrs
+		      << "; but lacks a crush_location for stretch mode";
     return true;
   }
   return false;
 }
+
 bool MonmapMonitor::prepare_join(MonOpRequestRef op)
 {
   auto join = op->get_req<MMonJoin>();
@@ -1270,7 +1283,9 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
   pending_map.add(join->name, join->addrs);
-  pending_map.mon_info[join->name].crush_loc = existing_loc;
+  pending_map.mon_info[join->name].crush_loc =
+    ((join->force_loc || existing_loc.empty()) ?
+     join->crush_loc : existing_loc);
   pending_map.last_changed = ceph_clock_now();
   return true;
 }

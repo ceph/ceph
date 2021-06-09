@@ -12,45 +12,60 @@ via the MDSMap to all MDS and cause older MDS to suicide.
 
 The proper sequence for upgrading the MDS cluster is:
 
-1. Reduce the number of ranks to 1:
+1. Disable and stop standby-replay daemons.
+
+::
+
+    ceph fs set <fs_name> allow_standby_replay false
+
+In Pacific, the standby-replay daemons are stopped for you after running this
+command. Older versions of Ceph require you to stop these daemons manually.
+
+::
+
+    ceph fs dump # find standby-replay daemons
+    ceph mds fail mds.<X>
+
+
+2. Reduce the number of ranks to 1:
 
 ::
 
     ceph fs set <fs_name> max_mds 1
 
-2. Wait for cluster to stop non-zero ranks where only rank 0 is active and the rest are standbys.
+3. Wait for cluster to stop non-zero ranks where only rank 0 is active and the rest are standbys.
 
 ::
 
     ceph status # wait for MDS to finish stopping
 
-3. Take all standbys offline, e.g. using systemctl:
+4. Take all standbys offline, e.g. using systemctl:
 
 ::
 
     systemctl stop ceph-mds.target
 
-4. Confirm only one MDS is online and is rank 0 for your FS:
+5. Confirm only one MDS is online and is rank 0 for your FS:
 
 ::
 
     ceph status
 
-5. Upgrade the single active MDS, e.g. using systemctl:
+6. Upgrade the single active MDS, e.g. using systemctl:
 
 ::
 
     # use package manager to update cluster
     systemctl restart ceph-mds.target
 
-6. Upgrade/start the standby daemons.
+7. Upgrade/start the standby daemons.
 
 ::
 
     # use package manager to update cluster
     systemctl restart ceph-mds.target
 
-7. Restore the previous max_mds for your cluster:
+8. Restore the previous max_mds for your cluster:
 
 ::
 

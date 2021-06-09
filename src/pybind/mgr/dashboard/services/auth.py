@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import json
 import logging
@@ -123,7 +122,7 @@ class JwtManager(object):
 
     @classmethod
     def blocklist_token(cls, token):
-        token = jwt.decode(token, verify=False)
+        token = cls.decode_token(token)
         blocklist_json = mgr.get_store(cls.JWT_TOKEN_BLOCKLIST_KEY)
         if not blocklist_json:
             blocklist_json = "{}"

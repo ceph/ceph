@@ -14,7 +14,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -39,7 +39,10 @@ LBAInternalNode::lookup_ret LBAInternalNode::lookup(
   }
   assert(meta.begin <= addr);
   assert(meta.end > addr);
-  auto iter = lower_bound(addr);
+
+  [[maybe_unused]] auto [iter, biter] = bound(addr, addr + 1);
+  assert(iter != biter);
+  assert(iter + 1 == biter);
   return get_lba_btree_extent(
     c,
     this,
@@ -82,6 +85,22 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
       return lookup_range_ertr::make_ready_future<lba_pin_list_t>(
 	std::move(*result));
     });
+}
+
+LBAInternalNode::lookup_pin_ret LBAInternalNode::lookup_pin(
+  op_context_t c,
+  laddr_t addr)
+{
+  auto iter = get_containing_child(addr);
+  return get_lba_btree_extent(
+    c,
+    this,
+    get_meta().depth - 1,
+    iter->get_val(),
+    get_paddr()
+  ).safe_then([c, addr] (LBANodeRef extent) {
+    return extent->lookup_pin(c, addr);
+  }).finally([ref=LBANodeRef(this)] {});
 }
 
 LBAInternalNode::insert_ret LBAInternalNode::insert(
@@ -166,6 +185,11 @@ LBAInternalNode::mutate_internal_address_ret LBAInternalNode::mutate_internal_ad
     }
     auto iter = get_containing_child(laddr);
     if (iter->get_key() != laddr) {
+      logger().debug(
+	"LBAInternalNode::mutate_internal_address laddr {} "
+	"not found in extent {}",
+	laddr,
+	*this);
       return crimson::ct_error::enoent::make();
     }
 
@@ -391,13 +415,14 @@ LBAInternalNode::merge_entry(
 	    auto mut_croot = c.cache.duplicate_for_write(c.trans, croot);
 	    croot = mut_croot->cast<RootBlock>();
 	  }
+	  auto new_root_addr = begin()->get_val().maybe_relative_to(get_paddr());
 	  croot->get_root().lba_root = lba_root_t{
-	    begin()->get_val(),
+	    new_root_addr,
 	    get_meta().depth - 1};
 	  logger().debug(
 	    "LBAInternalNode::merge_entry: collapsing root {} to addr {}",
 	    *this,
-	    begin()->get_val());
+	    new_root_addr);
 	  c.cache.retire_extent(c.trans, this);
 	  return merge_ertr::make_ready_future<LBANodeRef>(replacement);
 	});
@@ -475,6 +500,25 @@ LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
   }
   return lookup_range_ertr::make_ready_future<lba_pin_list_t>(
     std::move(ret));
+}
+
+LBALeafNode::lookup_pin_ret LBALeafNode::lookup_pin(
+  op_context_t c,
+  laddr_t addr)
+{
+  logger().debug("LBALeafNode::lookup_pin {}", addr);
+  auto iter = find(addr);
+  if (iter == end()) {
+    return crimson::ct_error::enoent::make();
+  }
+  auto val = iter->get_val();
+  auto begin = iter->get_key();
+  return lookup_pin_ret(
+    lookup_pin_ertr::ready_future_marker{},
+    std::make_unique<BtreeLBAPin>(
+      this,
+      val.paddr.maybe_relative_to(get_paddr()),
+      lba_node_meta_t{ begin, begin + val.len, 0}));
 }
 
 LBALeafNode::insert_ret LBALeafNode::insert(

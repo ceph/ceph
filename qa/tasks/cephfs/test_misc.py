@@ -1,3 +1,4 @@
+from io import StringIO
 
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -70,8 +71,7 @@ class TestMisc(CephFSTestCase):
 
         data_pool_name = self.fs.get_data_pool_name()
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
+        self.fs.fail()
 
         self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
                                             '--yes-i-really-mean-it')
@@ -84,9 +84,8 @@ class TestMisc(CephFSTestCase):
                                             self.fs.metadata_pool_name,
                                             self.fs.pgs_per_fs_pool.__str__())
 
-        dummyfile = '/etc/fstab'
-
-        self.fs.put_metadata_object_raw("key", dummyfile)
+        # insert a garbage object
+        self.fs.radosm(["put", "foo", "-"], stdin=StringIO("bar"))
 
         def get_pool_df(fs, name):
             try:
@@ -109,9 +108,10 @@ class TestMisc(CephFSTestCase):
                                             self.fs.metadata_pool_name,
                                             data_pool_name, "--force")
 
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'fail', self.fs.name)
+
         self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
                                             '--yes-i-really-mean-it')
-
 
         self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
                                             self.fs.metadata_pool_name,
@@ -165,7 +165,8 @@ class TestMisc(CephFSTestCase):
                                 cap_waited, session_timeout
                             ))
 
-            self.assertTrue(self.mount_a.is_blocklisted())
+            self.assertTrue(self.mds_cluster.is_addr_blocklisted(
+                self.mount_a.get_global_addr()))
             self.mount_a._kill_background(cap_holder)
         finally:
             self.mount_a.resume_netns()
@@ -198,20 +199,33 @@ class TestMisc(CephFSTestCase):
         info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
         assert info['path'] == "/foo"
 
+    def test_fs_lsflags(self):
+        """
+        Check that the lsflags displays the default state and the new state of flags
+        """
+        # Set some flags
+        self.fs.set_joinable(False)
+        self.fs.set_allow_new_snaps(False)
+        self.fs.set_allow_standby_replay(True)
+
+        lsflags = json.loads(self.fs.mon_manager.raw_cluster_cmd('fs', 'lsflags',
+                                                                 self.fs.name,
+                                                                 "--format=json-pretty"))
+        self.assertEqual(lsflags["joinable"], False)
+        self.assertEqual(lsflags["allow_snaps"], False)
+        self.assertEqual(lsflags["allow_multimds_snaps"], True)
+        self.assertEqual(lsflags["allow_standby_replay"], True)
 
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
     def _run_drop_cache_cmd(self, timeout=None):
         result = None
-        mds_id = self.fs.get_lone_mds_id()
+        args = ["cache", "drop"]
         if timeout is not None:
-            result = self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id),
-                                                    "cache", "drop", str(timeout))
-        else:
-            result = self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id),
-                                                    "cache", "drop")
-        return json.loads(result)
+            args.append(str(timeout))
+        result = self.fs.rank_tell(args)
+        return result
 
     def _setup(self, max_caps=20, threshold=400):
         # create some files

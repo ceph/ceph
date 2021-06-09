@@ -7,7 +7,6 @@
 
 #include "include/rados/librados.hpp"
 #include "common/async/yield_context.h"
-#include "common/RWLock.h"
 
 class RGWAsyncRadosProcessor;
 
@@ -51,7 +50,7 @@ public:
   };
 
 private:
-  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
+  int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
                     const OpenParams& params = {});
   int pool_iterate(librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
@@ -101,7 +100,7 @@ public:
     int create();
     int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup();
-    int open(const OpenParams& params = {});
+    int open(const DoutPrefixProvider *dpp, const OpenParams& params = {});
 
     const rgw_pool& get_pool() {
       return pool;
@@ -124,7 +123,7 @@ public:
       List() {}
       List(Pool *_pool) : pool(_pool) {}
 
-      int init(const string& marker, RGWAccessListFilter *filter = nullptr);
+      int init(const DoutPrefixProvider *dpp, const string& marker, RGWAccessListFilter *filter = nullptr);
       int get_next(int max,
                    std::vector<string> *oids,
                    bool *is_truncated);
@@ -164,11 +163,11 @@ public:
   public:
     Obj() {}
 
-    int open();
+    int open(const DoutPrefixProvider *dpp);
 
-    int operate(librados::ObjectWriteOperation *op, optional_yield y,
+    int operate(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation *op, optional_yield y,
 		int flags = 0);
-    int operate(librados::ObjectReadOperation *op, bufferlist *pbl,
+    int operate(const DoutPrefixProvider *dpp, librados::ObjectReadOperation *op, bufferlist *pbl,
                 optional_yield y, int flags = 0);
     int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
     int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
@@ -177,7 +176,7 @@ public:
     int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
     int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);
     int unwatch(uint64_t handle);
-    int notify(bufferlist& bl, uint64_t timeout_ms,
+    int notify(const DoutPrefixProvider *dpp, bufferlist& bl, uint64_t timeout_ms,
                bufferlist *pbl, optional_yield y);
     void notify_ack(uint64_t notify_id,
                     uint64_t cookie,

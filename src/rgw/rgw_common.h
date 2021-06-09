@@ -45,10 +45,10 @@ namespace ceph {
 }
 
 namespace rgw::sal {
-  class RGWUser;
-  class RGWBucket;
-  class RGWObject;
-  using RGWAttrs = std::map<std::string, ceph::buffer::list>;
+  class User;
+  class Bucket;
+  class Object;
+  using Attrs = std::map<std::string, ceph::buffer::list>;
 }
 
 using ceph::crypto::MD5;
@@ -140,6 +140,8 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
 #define RGW_ATTR_CRYPT_KEYID    RGW_ATTR_CRYPT_PREFIX "keyid"
 #define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"
+#define RGW_ATTR_CRYPT_CONTEXT  RGW_ATTR_CRYPT_PREFIX "context"
+#define RGW_ATTR_CRYPT_DATAKEY  RGW_ATTR_CRYPT_PREFIX "datakey"
 
 
 #define RGW_FORMAT_PLAIN        0
@@ -353,8 +355,26 @@ class RGWHTTPArgs {
   bool sub_resource_exists(const char *name) const {
     return (sub_resources.find(name) != std::end(sub_resources));
   }
+  bool exist_obj_excl_sub_resource() const {
+    const char* const obj_sub_resource[] = {"append", "torrent", "uploadId",
+                                            "partNumber", "versionId"};
+    for (unsigned i = 0; i != std::size(obj_sub_resource); i++) {
+      if (sub_resource_exists(obj_sub_resource[i])) return true;
+    }
+    return false;
+  }
+
   std::map<std::string, std::string>& get_params() {
     return val_map;
+  }
+  const std::map<std::string, std::string>& get_params() const {
+    return val_map;
+  }
+  std::map<std::string, std::string>& get_sys_params() {
+    return sys_val_map;
+  }
+  const std::map<std::string, std::string>& get_sys_params() const {
+    return sys_val_map;
   }
   const std::map<std::string, std::string>& get_sub_resources() const {
     return sub_resources;
@@ -707,7 +727,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(21, 9, bl);
+     ENCODE_START(22, 9, bl);
      encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
@@ -750,10 +770,11 @@ struct RGWUserInfo
      encode(type, bl);
      encode(mfa_ids, bl);
      encode(assumed_role_arn, bl);
+     encode(user_id.ns, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(21, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(22, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
@@ -833,6 +854,11 @@ struct RGWUserInfo
     }
     if (struct_v >= 21) {
       decode(assumed_role_arn, bl);
+    }
+    if (struct_v >= 22) {
+      decode(user_id.ns, bl);
+    } else {
+      user_id.ns.clear();
     }
     DECODE_FINISH(bl);
   }
@@ -1503,11 +1529,11 @@ struct req_state : DoutPrefixProvider {
   string bucket_tenant;
   string bucket_name;
 
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
-  std::unique_ptr<rgw::sal::RGWObject> object;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  std::unique_ptr<rgw::sal::Object> object;
   string src_tenant_name;
   string src_bucket_name;
-  std::unique_ptr<rgw::sal::RGWObject> src_object;
+  std::unique_ptr<rgw::sal::Object> src_object;
   ACLOwner bucket_owner;
   ACLOwner owner;
 
@@ -1526,7 +1552,7 @@ struct req_state : DoutPrefixProvider {
 
   bool has_bad_meta{false};
 
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
 
   struct {
     /* TODO(rzarzynski): switch out to the static_ptr for both members. */
@@ -1596,7 +1622,6 @@ struct req_state : DoutPrefixProvider {
   Clock::duration time_elapsed() const { return Clock::now() - time; }
 
   RGWObjectCtx *obj_ctx{nullptr};
-  RGWSysObjectCtx *sysobj_ctx{nullptr};
   string dialect;
   string req_id;
   string trans_id;
@@ -1616,7 +1641,7 @@ struct req_state : DoutPrefixProvider {
   ~req_state();
 
 
-  void set_user(std::unique_ptr<rgw::sal::RGWUser>& u) { user.swap(u); }
+  void set_user(std::unique_ptr<rgw::sal::User>& u) { user.swap(u); }
   bool is_err() const { return err.is_err(); }
 
   // implements DoutPrefixProvider
@@ -2142,7 +2167,7 @@ extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, st
 					       int perm);
 extern int verify_object_lock(
   const DoutPrefixProvider* dpp,
-  const rgw::sal::RGWAttrs& attrs,
+  const rgw::sal::Attrs& attrs,
   const bool bypass_perm,
   const bool bypass_governance_mode);
 

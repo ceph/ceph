@@ -1,4 +1,3 @@
-import time
 import fnmatch
 from contextlib import contextmanager
 
@@ -12,7 +11,7 @@ except ImportError:
     pass
 
 from cephadm import CephadmOrchestrator
-from orchestrator import raise_if_exception, Completion, HostSpec
+from orchestrator import raise_if_exception, OrchResult, HostSpec
 from tests import mock
 
 
@@ -21,7 +20,9 @@ def get_ceph_option(_, key):
 
 
 def _run_cephadm(ret):
-    def foo(*args, **kwargs):
+    def foo(s, host, entity, cmd, e, **kwargs):
+        if cmd == 'gather-facts':
+            return '{}', '', 0
         return [ret], '', 0
     return foo
 
@@ -64,41 +65,19 @@ def with_cephadm_module(module_options=None, store=None):
 
 
 def wait(m, c):
-    # type: (CephadmOrchestrator, Completion) -> Any
-    m.process([c])
-
-    try:
-        # if in debugger
-        import pydevd  # noqa: F401
-        in_debug = True
-    except ImportError:
-        in_debug = False
-
-    if in_debug:
-        while True:    # don't timeout
-            if c.is_finished:
-                raise_if_exception(c)
-                return c.result
-            time.sleep(0.1)
-    else:
-        for i in range(30):
-            if i % 10 == 0:
-                m.process([c])
-            if c.is_finished:
-                raise_if_exception(c)
-                return c.result
-            time.sleep(0.1)
-    assert False, "timeout" + str(c._state)
+    # type: (CephadmOrchestrator, OrchResult) -> Any
+    return raise_if_exception(c)
 
 
 @contextmanager
-def with_host(m: CephadmOrchestrator, name, refresh_hosts=True):
+def with_host(m: CephadmOrchestrator, name, addr='1.2.3.4', refresh_hosts=True):
     # type: (CephadmOrchestrator, str) -> None
-    wait(m, m.add_host(HostSpec(hostname=name)))
-    if refresh_hosts:
-        CephadmServe(m)._refresh_hosts_and_daemons()
-    yield
-    wait(m, m.remove_host(name))
+    with mock.patch("cephadm.utils.resolve_ip", return_value=addr):
+        wait(m, m.add_host(HostSpec(hostname=name)))
+        if refresh_hosts:
+            CephadmServe(m)._refresh_hosts_and_daemons()
+        yield
+        wait(m, m.remove_host(name))
 
 
 def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):

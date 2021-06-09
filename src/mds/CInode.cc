@@ -1149,7 +1149,7 @@ void CInode::store(MDSContext *fin)
   m.write_full(bl);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->mds->get_metadata_pool());
 
   Context *newfin =
     new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
@@ -1208,7 +1208,7 @@ struct C_IO_Inode_Fetched : public CInodeIOContext {
   Context *fin;
   C_IO_Inode_Fetched(CInode *i, Context *f) : CInodeIOContext(i), fin(f) {}
   void finish(int r) override {
-    // Ignore 'r', because we fetch from two places, so r is usually ENOENT
+    // Ignore 'r', because we fetch from two places, so r is usually CEPHFS_ENOENT
     in->_fetched(bl, bl2, fin);
   }
   void print(ostream& out) const override {
@@ -1224,7 +1224,7 @@ void CInode::fetch(MDSContext *fin)
   C_GatherBuilder gather(g_ceph_context, new C_OnFinisher(c, mdcache->mds->finisher));
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->mds->get_metadata_pool());
 
   // Old on-disk format: inode stored in xattr of a dirfrag
   ObjectOperation rd;
@@ -1248,7 +1248,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     p = bl.cbegin();
   } else {
     derr << "No data while reading inode " << ino() << dendl;
-    fin->complete(-ENOENT);
+    fin->complete(-CEPHFS_ENOENT);
     return;
   }
 
@@ -1262,7 +1262,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     if (magic != CEPH_FS_ONDISK_MAGIC) {
       dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
               << "'" << dendl;
-      fin->complete(-EINVAL);
+      fin->complete(-CEPHFS_EINVAL);
     } else {
       decode_store(p);
       dout(10) << "_fetched " << *this << dendl;
@@ -1270,7 +1270,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     }
   } catch (buffer::error &err) {
     derr << "Corrupt inode " << ino() << ": " << err.what() << dendl;
-    fin->complete(-EINVAL);
+    fin->complete(-CEPHFS_EINVAL);
     return;
   }
 }
@@ -1289,10 +1289,11 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
     in = diri;
     pdn = in->get_parent_dn();
   }
+  bt.old_pools.reserve(get_inode()->old_pools.size());
   for (auto &p : get_inode()->old_pools) {
     // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
     if (p != pool)
-      bt.old_pools.insert(p);
+      bt.old_pools.push_back(p);
   }
 }
 
@@ -1395,18 +1396,18 @@ void CInode::store_backtrace(CInodeCommitOperations &op, int op_prio)
 
 void CInode::_stored_backtrace(int r, version_t v, Context *fin)
 {
-  if (r == -ENOENT) {
+  if (r == -CEPHFS_ENOENT) {
     const int64_t pool = get_backtrace_pool();
     bool exists = mdcache->mds->objecter->with_osdmap(
         [pool](const OSDMap &osd_map) {
           return osd_map.have_pg_pool(pool);
         });
 
-    // This ENOENT is because the pool doesn't exist (the user deleted it
+    // This CEPHFS_ENOENT is because the pool doesn't exist (the user deleted it
     // out from under us), so the backtrace can never be written, so pretend
     // to succeed so that the user can proceed to e.g. delete the file.
     if (!exists) {
-      dout(4) << __func__ << " got ENOENT: a data pool was deleted "
+      dout(4) << __func__ << " got CEPHFS_ENOENT: a data pool was deleted "
                  "beneath us!" << dendl;
       r = 0;
     }
@@ -1478,7 +1479,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
     if (backtrace.ancestors.empty() ||
 	backtrace.ancestors[0].dname != pdn->get_name() ||
 	backtrace.ancestors[0].dirino != pdn->get_dir()->ino())
-      err = -EINVAL;
+      err = -CEPHFS_EINVAL;
   }
 
   if (err) {
@@ -3860,7 +3861,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       sizeof(struct ceph_timespec) + 8; // btime + change_attr
 
     if (bytes > max_bytes)
-      return -ENOSPC;
+      return -CEPHFS_ENOSPC;
   }
 
 
@@ -4684,8 +4685,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         results->backtrace.error_str << "failed to read off disk; see retval";
         // we probably have a new unwritten file!
         // so skip the backtrace scrub for this entry and say that all's well
-        if (in->is_dirty_parent())
+        if (in->is_dirty_parent()) {
+          dout(20) << "forcing backtrace as passed since inode is dirty parent" << dendl;
           results->backtrace.passed = true;
+        }
         goto next;
       }
 
@@ -4706,8 +4709,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
                                      << bl.length() << " bytes)!";
         // we probably have a new unwritten file!
         // so skip the backtrace scrub for this entry and say that all's well
-        if (in->is_dirty_parent())
+        if (in->is_dirty_parent()) {
+          dout(20) << "decode failed; forcing backtrace as passed since "
+                      "inode is dirty parent" << dendl;
           results->backtrace.passed = true;
+        }
 
 	goto next;
       }
@@ -4718,10 +4724,16 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       if (divergent || memory_newer < 0) {
         // we're divergent, or on-disk version is newer
         results->backtrace.error_str << "On-disk backtrace is divergent or newer";
-        // we probably have a new unwritten file!
-        // so skip the backtrace scrub for this entry and say that all's well
-        if (divergent && in->is_dirty_parent())
+        /* if the backtraces are divergent and the link count is 0, then
+         * most likely its a stray entry that's being purged and things are
+         * well and there's no reason for alarm
+         */
+        if (divergent && (in->is_dirty_parent() || in->get_inode()->nlink == 0)) {
           results->backtrace.passed = true;
+          dout(20) << "divergent backtraces are acceptable when dn "
+                      "is being purged or has been renamed or moved to a "
+                      "different directory " << *in << dendl;
+        }
       } else {
         results->backtrace.passed = true;
       }
@@ -4878,10 +4890,24 @@ next:
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones";
 	}
+        if (in->is_dirty()) {
+          MDCache *mdcache = in->mdcache; // for dout()
+          auto ino = [this]() { return in->ino(); }; // for dout()
+          dout(20) << "raw stats most likely wont match since inode is dirty; "
+                      "please rerun scrub when system is stable; "
+                      "assuming passed for now;" << dendl;
+          results->raw_stats.passed = true;
+        }
 	goto next;
       }
 
       results->raw_stats.passed = true;
+      {
+        MDCache *mdcache = in->mdcache; // for dout()
+        auto ino = [this]() { return in->ino(); }; // for dout()
+        dout(20) << "raw stats check passed on " << *in << dendl;
+      }
+
 next:
       return true;
     }
@@ -4936,7 +4962,7 @@ void CInode::validated_data::dump(Formatter *f) const
       f->dump_int("read_ret_val", raw_stats.ondisk_read_retval);
       f->dump_stream("ondisk_value.dirstat") << raw_stats.ondisk_value.dirstat;
       f->dump_stream("ondisk_value.rstat") << raw_stats.ondisk_value.rstat;
-      f->dump_stream("memory_value.dirrstat") << raw_stats.memory_value.dirstat;
+      f->dump_stream("memory_value.dirstat") << raw_stats.memory_value.dirstat;
       f->dump_stream("memory_value.rstat") << raw_stats.memory_value.rstat;
       f->dump_string("error_str", raw_stats.error_str.str());
     }
@@ -5162,7 +5188,7 @@ void CInode::scrub_finished() {
 int64_t CInode::get_backtrace_pool() const
 {
   if (is_dir()) {
-    return mdcache->mds->mdsmap->get_metadata_pool();
+    return mdcache->mds->get_metadata_pool();
   } else {
     // Files are required to have an explicit layout that specifies
     // a pool

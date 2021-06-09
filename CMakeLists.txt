@@ -52,6 +52,7 @@ if(MINGW)
   set(CMAKE_CXX_LINK_EXECUTABLE
     "<CMAKE_CXX_COMPILER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> ${CMAKE_GNULD_IMAGE_VERSION} <LINK_LIBRARIES>")
 
+  link_directories(${MINGW_LINK_DIRECTORIES})
 endif()
 
 option(WITH_CCACHE "Build with ccache.")
@@ -105,6 +106,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 include(GNUInstallDirs)
 include(CephChecks)
+if(CMAKE_GENERATOR MATCHES Ninja)
+  include(LimitJobs)
+endif()
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
@@ -180,6 +184,8 @@ if(WITH_FUSE)
   find_package(FUSE)
   set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif()
+
+option(WITH_DOKAN "Dokan is here" OFF)
 
 option(WITH_XFS "XFS is here" ON)
 if(WITH_XFS)
@@ -279,6 +285,11 @@ endif(WITH_QATZIP)
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
+option(WITH_LIBCEPHSQLITE "libcephsqlite client library" ON)
+if(WITH_LIBCEPHSQLITE)
+  find_package(SQLite3 REQUIRED)
+endif()
+
 # key-value store
 option(WITH_KVS "Key value store is here" ON)
 
@@ -318,7 +329,8 @@ if(WITH_LZ4)
   set(HAVE_LZ4 ${LZ4_FOUND})
 endif(WITH_LZ4)
 
-option(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" OFF)
+CMAKE_DEPENDENT_OPTION(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" ON
+  "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
 
 #if allocator is set on command line make sure it matches below strings
 set(ALLOCATOR "" CACHE STRING
@@ -327,7 +339,7 @@ jemalloc, and libc is supported. if not specified, will try to find tcmalloc, \
 and then jemalloc. If neither of then is found. use the one in libc.")
 if(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
-    find_package(gperftools REQUIRED)
+    find_package(gperftools 2.6.2 REQUIRED)
     set(HAVE_LIBTCMALLOC ON)
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
     find_package(JeMalloc REQUIRED)
@@ -336,7 +348,7 @@ if(ALLOCATOR)
     message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
   endif()
 else(ALLOCATOR)
-  find_package(gperftools)
+  find_package(gperftools 2.6.2)
   set(HAVE_LIBTCMALLOC ${gperftools_FOUND})
   if(NOT gperftools_FOUND)
     find_package(JeMalloc)
@@ -359,10 +371,6 @@ if(WIN32 OR (HAVE_LIBTCMALLOC AND WITH_STATIC_LIBSTDCXX))
   set(EXE_LINKER_USE_PIE FALSE)
 else()
   set(EXE_LINKER_USE_PIE ${ENABLE_SHARED})
-endif()
-
-if (HAVE_LIBTCMALLOC AND TCMALLOC_VERSION_STRING VERSION_LESS 2.6.2)
-  set(LIBTCMALLOC_MISSING_ALIGNED_ALLOC ON)
 endif()
 
 find_package(CURL REQUIRED)
@@ -397,8 +405,6 @@ endif()
 
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
-option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF)
-option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
 option(WITH_RADOSGW_BEAST_OPENSSL "Rados Gateway's Beast frontend uses OpenSSL" ON)
 option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push endpoint" ON)
 option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka push endpoint" ON)
@@ -406,9 +412,6 @@ option(WITH_RADOSGW_LUA_PACKAGES "Rados Gateway's support for dynamically adding
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
-  if(WITH_RADOSGW_FCGI_FRONTEND)
-    find_package(fcgi REQUIRED)
-  endif()
   find_package(OATH REQUIRED)
 
 # https://curl.haxx.se/docs/install.html mentions the
@@ -479,11 +482,6 @@ if(WITH_MGR)
   set(MGR_PYTHON_LIBRARIES ${Python3_LIBRARIES})
   set(MGR_PYTHON_VERSION_MAJOR ${Python3_VERSION_MAJOR})
   set(MGR_PYTHON_VERSION_MINOR ${Python3_VERSION_MINOR})
-  # https://tracker.ceph.com/issues/45147
-  if(Python3_VERSION VERSION_GREATER_EQUAL 3.8)
-    set(MGR_DISABLED_MODULES "diskprediction_local")
-    message(STATUS "mgr module disabled for ${Python3_VERSION}: ${MGR_DISABLED_MODULES}")
-  endif()
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 endif(NOT WIN32)
@@ -619,7 +617,7 @@ if(WITH_SYSTEM_BOOST)
   if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
-  find_package(Boost 1.72 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.73 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
   if(NOT ENABLE_SHARED)
     set_property(TARGET Boost::iostreams APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
@@ -629,7 +627,7 @@ else()
     "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.72
+  build_boost(1.75
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
@@ -646,9 +644,8 @@ endif()
 set(DASHBOARD_FRONTEND_LANGS "" CACHE STRING
   "List of comma separated ceph-dashboard frontend languages to build. \
   Use value `ALL` to build all languages")
-
-# TODO: make this an option and set it to the same value as WITH_MGR_DASHBOARD_FRONTEND
-set(WITH_MGR_ROOK_CLIENT WITH_MGR_DASHBOARD_FRONTEND)
+CMAKE_DEPENDENT_OPTION(WITH_MGR_ROOK_CLIENT "Enable the mgr's Rook support" ON
+  "WITH_MGR" OFF)
 
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
@@ -674,6 +671,8 @@ add_custom_target(check
   COMMAND ${CMAKE_CTEST_COMMAND}
   DEPENDS tests)
 
+option(WITH_SYSTEMD "build with systemd support" ON)
+
 add_subdirectory(src)
 
 add_subdirectory(qa)
@@ -683,7 +682,6 @@ if(WITH_MANPAGE)
   add_subdirectory(man)
 endif(WITH_MANPAGE)
 
-option(WITH_SYSTEMD "install systemd target and service files" ON)
 if(WITH_SYSTEMD)
   add_subdirectory(systemd)
 endif()

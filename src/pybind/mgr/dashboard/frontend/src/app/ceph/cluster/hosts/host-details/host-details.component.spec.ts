@@ -58,7 +58,7 @@ describe('HostDetailsComponent', () => {
     it('should show tabs', () => {
       expect(TabHelper.getTextContents(fixture)).toEqual([
         'Devices',
-        'Inventory',
+        'Physical Disks',
         'Daemons',
         'Performance Details',
         'Device health'

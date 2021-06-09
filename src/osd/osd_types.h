@@ -1521,6 +1521,7 @@ public:
 			    std::ostream *out) const;
   bool stretch_set_can_peer(const vector<int>& want, const OSDMap& osdmap,
 			    std::ostream *out) const {
+    if (!is_stretch_pool()) return true;
     set<int> swant;
     for (auto i : want) swant.insert(i);
     return stretch_set_can_peer(swant, osdmap, out);
@@ -1630,12 +1631,12 @@ public:
   }
 
   int64_t get_dedup_tier() const {
-    int64_t tier_id;
+    int64_t tier_id = 0;
     opts.get(pool_opts_t::DEDUP_TIER, &tier_id);
     return tier_id;
   }
   int64_t get_dedup_cdc_chunk_size() const {
-    int64_t chunk_size;
+    int64_t chunk_size = 0;
     opts.get(pool_opts_t::DEDUP_CDC_CHUNK_SIZE, &chunk_size);
     return chunk_size;
   }

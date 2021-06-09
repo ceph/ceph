@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #pragma once
 
@@ -13,7 +13,7 @@
 
 // forward declarations
 namespace rgw::sal {
-    class RGWRadosStore;
+    class RadosStore;
     class RGWObject;
 }
 
@@ -25,7 +25,7 @@ namespace rgw::notify {
 // initialize the notification manager
 // notification manager is dequeing the 2-phase-commit queues
 // and send the notifications to the endpoints
-bool init(CephContext* cct, rgw::sal::RGWRadosStore* store, const DoutPrefixProvider *dpp);
+bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvider *dpp);
 
 // shutdown the notification manager
 void shutdown();
@@ -52,14 +52,15 @@ struct reservation_t {
     cls_2pc_reservation::id_t res_id;
   };
 
+  const DoutPrefixProvider *dpp;
   std::vector<topic_t> topics;
-  rgw::sal::RGWRadosStore* const store;
+  rgw::sal::RadosStore* const store;
   const req_state* const s;
   size_t size;
-  rgw::sal::RGWObject* const object;
+  rgw::sal::Object* const object;
 
-  reservation_t(rgw::sal::RGWRadosStore* _store, const req_state* _s, rgw::sal::RGWObject* _object) : 
-      store(_store), s(_s), object(_object) {}
+  reservation_t(const DoutPrefixProvider *_dpp, rgw::sal::RadosStore* _store, const req_state* _s, rgw::sal::Object* _object) :
+      dpp(_dpp), store(_store), s(_s), object(_object) {}
 
   // dtor doing resource leak guarding
   // aborting the reservation if not already committed or aborted
@@ -67,12 +68,13 @@ struct reservation_t {
 };
 
 // create a reservation on the 2-phase-commit queue
-int publish_reserve(EventType event_type,
+int publish_reserve(const DoutPrefixProvider *dpp, 
+        EventType event_type,
         reservation_t& reservation,
         const RGWObjTags* req_tags);
 
 // commit the reservation to the queue
-int publish_commit(rgw::sal::RGWObject* obj,
+int publish_commit(rgw::sal::Object* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
@@ -81,7 +83,7 @@ int publish_commit(rgw::sal::RGWObject* obj,
         const DoutPrefixProvider *dpp);
 
 // cancel the reservation
-int publish_abort(reservation_t& reservation);
+int publish_abort(const DoutPrefixProvider *dpp, reservation_t& reservation);
 
 }
 

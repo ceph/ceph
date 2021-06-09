@@ -203,22 +203,7 @@ void LogEntry::log_to_syslog(string level, string facility)
 
 void LogEntry::encode(bufferlist& bl, uint64_t features) const
 {
-  if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-    ENCODE_START(4, 2, bl);
-    __u16 t = prio;
-    entity_inst_t who;
-    who.name = rank;
-    who.addr = addrs.as_legacy_addr();
-    encode(who, bl, features);
-    encode(stamp, bl);
-    encode(seq, bl);
-    encode(t, bl);
-    encode(msg, bl);
-    encode(channel, bl);
-    encode(name, bl);
-    ENCODE_FINISH(bl);
-    return;
-  }
+  assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(5, 5, bl);
   __u16 t = prio;
   encode(name, bl);

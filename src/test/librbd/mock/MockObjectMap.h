@@ -4,7 +4,6 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_OBJECT_MAP_H
 #define CEPH_TEST_LIBRBD_MOCK_OBJECT_MAP_H
 
-#include "common/RWLock.h"
 #include "librbd/Utils.h"
 #include "gmock/gmock.h"
 
@@ -15,8 +14,6 @@ struct MockObjectMap {
   uint8_t operator[](uint64_t object_no) {
     return at(object_no);
   }
-
-  MOCK_CONST_METHOD1(enabled, bool(const RWLock &object_map_lock));
 
   MOCK_CONST_METHOD0(size, uint64_t());
 

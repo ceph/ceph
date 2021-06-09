@@ -10,14 +10,14 @@ import errno
 import random
 import traceback
 
-from io import BytesIO
-from io import StringIO
+from io import BytesIO, StringIO
 from errno import EBUSY
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
 from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
+from teuthology import contextutil
 from tasks.ceph_manager import write_conf
 from tasks import ceph_manager
 
@@ -214,7 +214,7 @@ class CephCluster(object):
         (result,) = self._ctx.cluster.only(first_mon).remotes.keys()
         return result
 
-    def __init__(self, ctx):
+    def __init__(self, ctx) -> None:
         self._ctx = ctx
         self.mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
 
@@ -254,6 +254,20 @@ class CephCluster(object):
             log.debug("_json_asok output empty")
             return None
 
+    def is_addr_blocklisted(self, addr=None):
+        if addr is None:
+            log.warn("Couldn't get the client address, so the blocklisted "
+                     "status undetermined")
+            return False
+
+        blocklist = json.loads(self.mon_manager.run_cluster_cmd(
+            args=["osd", "blocklist", "ls", "--format=json"],
+            stdout=StringIO()).stdout.getvalue())
+        for b in blocklist:
+            if addr == b["addr"]:
+                return True
+        return False
+
 
 class MDSCluster(CephCluster):
     """
@@ -264,17 +278,18 @@ class MDSCluster(CephCluster):
     a parent of Filesystem.  The correct way to use MDSCluster going forward is
     as a separate instance outside of your (multiple) Filesystem instances.
     """
+
     def __init__(self, ctx):
         super(MDSCluster, self).__init__(ctx)
 
-        self.mds_ids = list(misc.all_roles_of_type(ctx.cluster, 'mds'))
+    @property
+    def mds_ids(self):
+        # do this dynamically because the list of ids may change periodically with cephadm
+        return list(misc.all_roles_of_type(self._ctx.cluster, 'mds'))
 
-        if len(self.mds_ids) == 0:
-            raise RuntimeError("This task requires at least one MDS")
-
-        if hasattr(self._ctx, "daemons"):
-            # Presence of 'daemons' attribute implies ceph task rather than ceph_deploy task
-            self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
+    @property
+    def mds_daemons(self):
+        return dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
 
     def _one_or_all(self, mds_id, cb, in_parallel=True):
         """
@@ -289,6 +304,7 @@ class MDSCluster(CephCluster):
         :param cb: Callback taking single argument of MDS daemon name
         :param in_parallel: whether to invoke callbacks concurrently (else one after the other)
         """
+
         if mds_id is None:
             if in_parallel:
                 with parallel() as p:
@@ -560,6 +576,9 @@ class Filesystem(MDSCluster):
         assert(mds_map['max_mds'] == max_mds)
         assert(mds_map['in'] == list(range(0, max_mds)))
 
+    def reset(self):
+        self.mon_manager.raw_cluster_cmd("fs", "reset", str(self.name), '--yes-i-really-mean-it')
+
     def fail(self):
         self.mon_manager.raw_cluster_cmd("fs", "fail", str(self.name))
 
@@ -663,6 +682,9 @@ class Filesystem(MDSCluster):
             max_mds = self.fs_config.get('max_mds', 1)
             if max_mds > 1:
                 self.set_max_mds(max_mds)
+
+            standby_replay = self.fs_config.get('standby_replay', False)
+            self.set_allow_standby_replay(standby_replay)
 
             # If absent will use the default value (60 seconds)
             session_timeout = self.fs_config.get('session_timeout', 60)
@@ -875,15 +897,7 @@ class Filesystem(MDSCluster):
             mds.check_status()
 
         active_count = 0
-        try:
-            mds_map = self.get_mds_map(status=status)
-        except CommandFailedError as cfe:
-            # Old version, fall back to non-multi-fs commands
-            if cfe.exitstatus == errno.EINVAL:
-                mds_map = json.loads(
-                        self.mon_manager.raw_cluster_cmd('mds', 'dump', '--format=json'))
-            else:
-                raise
+        mds_map = self.get_mds_map(status=status)
 
         log.debug("are_daemons_healthy: mds map: {0}".format(mds_map))
 
@@ -907,7 +921,7 @@ class Filesystem(MDSCluster):
                 for mds_id, mds_status in mds_map['info'].items():
                     if mds_status['state'] == 'up:active':
                         try:
-                            daemon_status = self.mds_asok(["status"], mds_id=mds_status['name'])
+                            daemon_status = self.mds_tell(["status"], mds_id=mds_status['name'])
                         except CommandFailedError as cfe:
                             if cfe.exitstatus == errno.EINVAL:
                                 # Old version, can't do this check
@@ -1040,63 +1054,45 @@ class Filesystem(MDSCluster):
 
             status = self.status()
 
-    def get_lone_mds_id(self):
-        """
-        Get a single MDS ID: the only one if there is only one
-        configured, else the only one currently holding a rank,
-        else raise an error.
-        """
-        if len(self.mds_ids) != 1:
-            alive = self.get_rank_names()
-            if len(alive) == 1:
-                return alive[0]
-            else:
-                raise ValueError("Explicit MDS argument required when multiple MDSs in use")
-        else:
-            return self.mds_ids[0]
+    def dencoder(self, obj_type, obj_blob):
+        args = [os.path.join(self._prefix, "ceph-dencoder"), 'type', obj_type, 'import', '-', 'decode', 'dump_json']
+        p = self.mon_manager.controller.run(args=args, stdin=BytesIO(obj_blob), stdout=BytesIO())
+        return p.stdout.getvalue()
 
-    def put_metadata_object_raw(self, object_id, infile):
+    def rados(self, *args, **kwargs):
         """
-        Save an object to the metadata pool
+        Callout to rados CLI.
         """
-        temp_bin_path = infile
-        self.client_remote.run(args=[
-            'sudo', os.path.join(self._prefix, 'rados'), '-p', self.metadata_pool_name, 'put', object_id, temp_bin_path
-        ])
 
-    def get_metadata_object_raw(self, object_id):
-        """
-        Retrieve an object from the metadata pool and store it in a file.
-        """
-        temp_bin_path = '/tmp/' + object_id + '.bin'
+        return self.mon_manager.do_rados(*args, **kwargs)
 
-        self.client_remote.run(args=[
-            'sudo', os.path.join(self._prefix, 'rados'), '-p', self.metadata_pool_name, 'get', object_id, temp_bin_path
-        ])
+    def radosm(self, *args, **kwargs):
+        """
+        Interact with the metadata pool via rados CLI.
+        """
 
-        return temp_bin_path
+        return self.rados(*args, **kwargs, pool=self.get_metadata_pool_name())
+
+    def radosmo(self, *args, stdout=BytesIO(), **kwargs):
+        """
+        Interact with the metadata pool via rados CLI. Get the stdout.
+        """
+
+        return self.radosm(*args, **kwargs, stdout=stdout).stdout.getvalue()
 
     def get_metadata_object(self, object_type, object_id):
         """
         Retrieve an object from the metadata pool, pass it through
         ceph-dencoder to dump it to JSON, and return the decoded object.
         """
-        temp_bin_path = '/tmp/out.bin'
 
-        self.client_remote.run(args=[
-            'sudo', os.path.join(self._prefix, 'rados'), '-p', self.metadata_pool_name, 'get', object_id, temp_bin_path
-        ])
-
-        dump_json = self.client_remote.sh([
-            'sudo', os.path.join(self._prefix, 'ceph-dencoder'), 'type', object_type, 'import', temp_bin_path, 'decode', 'dump_json'
-        ]).strip()
+        o = self.radosmo(['get', object_id, '-'])
+        j = self.dencoder(object_type, o)
         try:
-            dump = json.loads(dump_json)
+            return json.loads(j)
         except (TypeError, ValueError):
-            log.error("Failed to decode JSON: '{0}'".format(dump_json))
+            log.error("Failed to decode JSON: '{0}'".format(j))
             raise
-
-        return dump
 
     def get_journal_version(self):
         """
@@ -1117,9 +1113,15 @@ class Filesystem(MDSCluster):
 
     def mds_asok(self, command, mds_id=None, timeout=None):
         if mds_id is None:
-            mds_id = self.get_lone_mds_id()
+            return self.rank_asok(command, timeout=timeout)
 
         return self.json_asok(command, 'mds', mds_id, timeout=timeout)
+
+    def mds_tell(self, command, mds_id=None):
+        if mds_id is None:
+            return self.rank_tell(command)
+
+        return json.loads(self.mon_manager.raw_cluster_cmd("tell", f"mds.{mds_id}", *command))
 
     def rank_asok(self, command, rank=0, status=None, timeout=None):
         info = self.get_rank(rank=rank, status=status)
@@ -1214,34 +1216,21 @@ class Filesystem(MDSCluster):
             else:
                 time.sleep(1)
 
-    def _read_data_xattr(self, ino_no, xattr_name, type, pool):
-        mds_id = self.mds_ids[0]
-        remote = self.mds_daemons[mds_id].remote
+    def _read_data_xattr(self, ino_no, xattr_name, obj_type, pool):
         if pool is None:
             pool = self.get_data_pool_name()
 
         obj_name = "{0:x}.00000000".format(ino_no)
 
-        args = [
-            os.path.join(self._prefix, "rados"), "-p", pool, "getxattr", obj_name, xattr_name
-        ]
+        args = ["getxattr", obj_name, xattr_name]
         try:
-            proc = remote.run(args=args, stdout=BytesIO())
+            proc = self.rados(args, pool=pool, stdout=BytesIO())
         except CommandFailedError as e:
             log.error(e.__str__())
             raise ObjectNotFound(obj_name)
 
-        data = proc.stdout.getvalue()
-        dump = remote.sh(
-            [os.path.join(self._prefix, "ceph-dencoder"),
-                                            "type", type,
-                                            "import", "-",
-                                            "decode", "dump_json"],
-            stdin=data,
-            stdout=StringIO()
-        )
-
-        return json.loads(dump.strip())
+        obj_blob = proc.stdout.getvalue()
+        return json.loads(self.dencoder(obj_type, obj_blob).strip())
 
     def _write_data_xattr(self, ino_no, xattr_name, data, pool=None):
         """
@@ -1254,16 +1243,12 @@ class Filesystem(MDSCluster):
         :param pool: name of data pool or None to use primary data pool
         :return: None
         """
-        remote = self.mds_daemons[self.mds_ids[0]].remote
         if pool is None:
             pool = self.get_data_pool_name()
 
         obj_name = "{0:x}.00000000".format(ino_no)
-        args = [
-            os.path.join(self._prefix, "rados"), "-p", pool, "setxattr",
-            obj_name, xattr_name, data
-        ]
-        remote.sh(args)
+        args = ["setxattr", obj_name, xattr_name, data]
+        self.rados(args, pool=pool)
 
     def read_backtrace(self, ino_no, pool=None):
         """
@@ -1321,7 +1306,7 @@ class Filesystem(MDSCluster):
             for n in range(0, ((size - 1) // stripe_size) + 1)
         ]
 
-        exist_objects = self.rados(["ls"], pool=self.get_data_pool_name()).split("\n")
+        exist_objects = self.rados(["ls"], pool=self.get_data_pool_name(), stdout=StringIO()).stdout.getvalue().split("\n")
 
         return want_objects, exist_objects
 
@@ -1357,42 +1342,11 @@ class Filesystem(MDSCluster):
 
     def dirfrag_exists(self, ino, frag):
         try:
-            self.rados(["stat", "{0:x}.{1:08x}".format(ino, frag)])
+            self.radosm(["stat", "{0:x}.{1:08x}".format(ino, frag)])
         except CommandFailedError:
             return False
         else:
             return True
-
-    def rados(self, args, pool=None, namespace=None, stdin_data=None,
-              stdin_file=None,
-              stdout_data=None):
-        """
-        Call into the `rados` CLI from an MDS
-        """
-
-        if pool is None:
-            pool = self.get_metadata_pool_name()
-
-        # Doesn't matter which MDS we use to run rados commands, they all
-        # have access to the pools
-        mds_id = self.mds_ids[0]
-        remote = self.mds_daemons[mds_id].remote
-
-        # NB we could alternatively use librados pybindings for this, but it's a one-liner
-        # using the `rados` CLI
-        args = ([os.path.join(self._prefix, "rados"), "-p", pool] +
-                (["--namespace", namespace] if namespace else []) +
-                args)
-
-        if stdin_file is not None:
-            args = ["bash", "-c", "cat " + stdin_file + " | " + " ".join(args)]
-        if stdout_data is None:
-            stdout_data = StringIO()
-
-        p = remote.run(args=args,
-                       stdin=stdin_data,
-                       stdout=stdout_data)
-        return p.stdout.getvalue().strip()
 
     def list_dirfrag(self, dir_ino):
         """
@@ -1404,21 +1358,22 @@ class Filesystem(MDSCluster):
         dirfrag_obj_name = "{0:x}.00000000".format(dir_ino)
 
         try:
-            key_list_str = self.rados(["listomapkeys", dirfrag_obj_name])
+            key_list_str = self.radosmo(["listomapkeys", dirfrag_obj_name], stdout=StringIO())
         except CommandFailedError as e:
             log.error(e.__str__())
             raise ObjectNotFound(dirfrag_obj_name)
 
-        return key_list_str.split("\n") if key_list_str else []
+        return key_list_str.strip().split("\n") if key_list_str else []
 
     def get_meta_of_fs_file(self, dir_ino, obj_name, out):
         """
         get metadata from parent to verify the correctness of the data format encoded by the tool, cephfs-meta-injection.
         warning : The splitting of directory is not considered here.
         """
+
         dirfrag_obj_name = "{0:x}.00000000".format(dir_ino)
         try:
-            self.rados(["getomapval", dirfrag_obj_name, obj_name+"_head", out])
+            self.radosm(["getomapval", dirfrag_obj_name, obj_name+"_head", out])
         except CommandFailedError as e:
             log.error(e.__str__())
             raise ObjectNotFound(dir_ino)
@@ -1431,10 +1386,10 @@ class Filesystem(MDSCluster):
         This O(N) with the number of objects in the pool, so only suitable
         for use on toy test filesystems.
         """
-        all_objects = self.rados(["ls"]).split("\n")
+        all_objects = self.radosmo(["ls"], stdout=StringIO()).strip().split("\n")
         matching_objects = [o for o in all_objects if o.startswith(prefix)]
         for o in matching_objects:
-            self.rados(["rm", o])
+            self.radosm(["rm", o])
 
     def erase_mds_objects(self, rank):
         """
@@ -1495,8 +1450,7 @@ class Filesystem(MDSCluster):
         it'll definitely have keys with perms to access cephfs metadata pool.  This is public
         so that tests can use this remote to go get locally written output files from the tools.
         """
-        mds_id = self.mds_ids[0]
-        return self.mds_daemons[mds_id].remote
+        return self.mon_manager.controller
 
     def journal_tool(self, args, rank, quiet=False):
         """
@@ -1575,3 +1529,38 @@ class Filesystem(MDSCluster):
         assert(new_max_mds < oldmax)
         self.set_max_mds(new_max_mds)
         return self.wait_for_daemons()
+
+    def run_scrub(self, cmd, rank=0):
+        return self.rank_tell(["scrub"] + cmd, rank)
+
+    def get_scrub_status(self, rank=0):
+        return self.run_scrub(["status"], rank)
+
+    def wait_until_scrub_complete(self, result=None, tag=None, rank=0, sleep=30,
+                                  timeout=300, reverse=False):
+        # time out after "timeout" seconds and assume as done
+        if result is None:
+            result = "no active scrubs running"
+        with contextutil.safe_while(sleep=sleep, tries=timeout//sleep) as proceed:
+            while proceed():
+                out_json = self.rank_tell(["scrub", "status"], rank=rank)
+                assert out_json is not None
+                if not reverse:
+                    if result in out_json['status']:
+                        log.info("all active scrubs completed")
+                        return True
+                else:
+                    if result not in out_json['status']:
+                        log.info("all active scrubs completed")
+                        return True
+
+                if tag is not None:
+                    status = out_json['scrubs'][tag]
+                    if status is not None:
+                        log.info(f"scrub status for tag:{tag} - {status}")
+                    else:
+                        log.info(f"scrub has completed for tag:{tag}")
+                        return True
+
+        # timed out waiting for scrub to complete
+        return False

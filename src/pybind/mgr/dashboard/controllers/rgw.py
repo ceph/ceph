@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import json
 import logging
@@ -11,7 +10,7 @@ from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
-from ..services.rgw_client import RgwClient
+from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
 from . import ApiController, BaseController, ControllerDoc, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, allow_empty_body
@@ -48,11 +47,9 @@ class Rgw(BaseController):
     @ReadPermission
     @EndpointDoc("Display RGW Status",
                  responses={200: RGW_SCHEMA})
-    def status(self):
+    def status(self) -> dict:
         status = {'available': False, 'message': None}
         try:
-            if not CephService.get_service_list('rgw'):
-                raise LookupError('No RGW service is running.')
             instance = RgwClient.admin_instance()
             # Check if the service is online.
             try:
@@ -76,7 +73,7 @@ class Rgw(BaseController):
                     instance.userid)
                 raise RequestException(msg)
             status['available'] = True
-        except (RequestException, LookupError) as ex:
+        except (DashboardException, RequestException, NoRgwDaemonsException) as ex:
             status['message'] = str(ex)  # type: ignore
         return status
 
@@ -86,22 +83,25 @@ class Rgw(BaseController):
 class RgwDaemon(RESTController):
     @EndpointDoc("Display RGW Daemons",
                  responses={200: [RGW_DAEMON_SCHEMA]})
-    def list(self):
-        # type: () -> List[dict]
-        daemons = []
-        instance = RgwClient.admin_instance()
+    def list(self) -> List[dict]:
+        daemons: List[dict] = []
+        try:
+            instance = RgwClient.admin_instance()
+        except NoRgwDaemonsException:
+            return daemons
+
         for hostname, server in CephService.get_service_map('rgw').items():
             for service in server['services']:
                 metadata = service['metadata']
 
                 # extract per-daemon service data and health
                 daemon = {
-                    'id': service['id'],
+                    'id': metadata['id'],
                     'version': metadata['ceph_version'],
                     'server_hostname': hostname,
                     'zonegroup_name': metadata['zonegroup_name'],
                     'zone_name': metadata['zone_name'],
-                    'default': instance.daemon.name == service['id']
+                    'default': instance.daemon.name == metadata['id']
                 }
 
                 daemons.append(daemon)
@@ -144,7 +144,8 @@ class RgwRESTController(RESTController):
                 result = json_str_to_object(result)
             return result
         except (DashboardException, RequestException) as e:
-            raise DashboardException(e, http_status_code=500, component='rgw')
+            http_status_code = e.status if isinstance(e, DashboardException) else 500
+            raise DashboardException(e, http_status_code=http_status_code, component='rgw')
 
 
 @ApiController('/rgw/site', Scope.RGW)
@@ -199,8 +200,8 @@ class RgwBucket(RgwRESTController):
                      retention_period_days, retention_period_years):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_bucket_locking(bucket_name, mode,
-                                             int(retention_period_days),
-                                             int(retention_period_years))
+                                             retention_period_days,
+                                             retention_period_years)
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
@@ -298,12 +299,16 @@ class RgwBucket(RgwRESTController):
         uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
         bucket_name = RgwBucket.get_s3_bucket_name(bucket, uid_tenant)
 
+        locking = self._get_locking(uid, daemon_name, bucket_name)
         if versioning_state:
+            if versioning_state == 'Suspended' and locking['lock_enabled']:
+                raise DashboardException(msg='Bucket versioning cannot be disabled/suspended '
+                                             'on buckets with object lock enabled ',
+                                             http_status_code=409, component='rgw')
             self._set_versioning(uid, daemon_name, bucket_name, versioning_state,
                                  mfa_delete, mfa_token_serial, mfa_token_pin)
 
         # Update locking if it is enabled.
-        locking = self._get_locking(uid, daemon_name, bucket_name)
         if locking['lock_enabled']:
             self._set_locking(uid, daemon_name, bucket_name, lock_mode,
                               lock_retention_period_days,
@@ -364,9 +369,10 @@ class RgwUser(RgwRESTController):
             marker = result['marker']
         return users
 
-    def get(self, uid, daemon_name=None):
-        # type: (str, Optional[str]) -> dict
-        result = self.proxy(daemon_name, 'GET', 'user', {'uid': uid})
+    def get(self, uid, daemon_name=None, stats=True) -> dict:
+        query_params = '?stats' if stats else ''
+        result = self.proxy(daemon_name, 'GET', 'user{}'.format(query_params),
+                            {'uid': uid, 'stats': stats})
         if not self._keys_allowed():
             del result['keys']
             del result['swift_keys']

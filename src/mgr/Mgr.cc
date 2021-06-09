@@ -21,6 +21,11 @@
 #include "global/global_context.h"
 #include "global/signal_handler.h"
 
+#ifdef WITH_LIBCEPHSQLITE
+#  include <sqlite3.h>
+#  include "include/libcephsqlite.h"
+#endif
+
 #include "mgr/MgrContext.h"
 
 #include "DaemonServer.h"
@@ -237,6 +242,15 @@ void Mgr::init()
 	mon_allows_kv_sub = true;
       }
     });
+  if (!mon_allows_kv_sub) {
+    // mons are still pre-pacific.  wait long enough to ensure our
+    // next beacon is processed so that our module options are
+    // propagated.  See https://tracker.ceph.com/issues/49778
+    lock.unlock();
+    dout(10) << "waiting a bit for the pre-pacific mon to process our beacon" << dendl;
+    sleep(g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count() * 3);
+    lock.lock();
+  }
 
   // subscribe to all the maps
   monc->sub_want("log-info", 0, 0);
@@ -343,6 +357,32 @@ void Mgr::init()
     "mgr_status", this,
     "Dump mgr status");
   ceph_assert(r == 0);
+
+#ifdef WITH_LIBCEPHSQLITE
+  dout(4) << "Using sqlite3 version: " << sqlite3_libversion() << dendl;
+  /* See libcephsqlite.h for rationale of this code. */
+  sqlite3_auto_extension((void (*)())sqlite3_cephsqlite_init);
+  {
+    sqlite3* db = nullptr;
+    if (int rc = sqlite3_open_v2(":memory:", &db, SQLITE_OPEN_READWRITE, nullptr); rc == SQLITE_OK) {
+      sqlite3_close(db);
+    } else {
+      derr << "could not open sqlite3: " << rc << dendl;
+      ceph_abort();
+    }
+  }
+  {
+    char *ident = nullptr;
+    if (int rc = cephsqlite_setcct(g_ceph_context, &ident); rc < 0) {
+      derr << "could not set libcephsqlite cct: " << rc << dendl;
+      ceph_abort();
+    }
+    entity_addrvec_t addrv;
+    addrv.parse(ident);
+    ident = (char*)realloc(ident, 0);
+    py_module_registry->register_client("libcephsqlite", addrv);
+  }
+#endif
 
   dout(4) << "Complete." << dendl;
   initializing = false;
@@ -529,6 +569,7 @@ void Mgr::handle_log(ref_t<MLog> m)
 void Mgr::handle_service_map(ref_t<MServiceMap> m)
 {
   dout(10) << "e" << m->service_map.epoch << dendl;
+  monc->sub_got("servicemap", m->service_map.epoch);
   cluster_state.set_service_map(m->service_map);
   server.got_service_map();
 }
@@ -544,12 +585,12 @@ void Mgr::handle_mon_map()
     }
   });
   for (const auto& name : names_exist) {
-    const auto k = DaemonKey{"osd", name};
+    const auto k = DaemonKey{"mon", name};
     if (daemon_state.is_updating(k)) {
       continue;
     }
     auto c = new MetadataUpdate(daemon_state, k);
-    const char* cmd = R"(P{{"prefix": "mon metadata", "id": "{}"}})";
+    const char* cmd = R"({{"prefix": "mon metadata", "id": "{}"}})";
     monc->start_mon_command({fmt::format(cmd, name)}, {},
 			    &c->outbl, &c->outs, c);
   }
@@ -639,8 +680,9 @@ void Mgr::handle_fs_map(ref_t<MFSMap> m)
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   std::set<std::string> names_exist;
-  
   const FSMap &new_fsmap = m->get_fsmap();
+
+  monc->sub_got("fsmap", m->epoch);
 
   fs_map_cond.notify_all();
 

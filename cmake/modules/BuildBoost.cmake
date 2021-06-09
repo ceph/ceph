@@ -44,7 +44,7 @@ macro(list_replace list old new)
   unset(where)
 endmacro()
 
-function(do_build_boost version)
+function(do_build_boost root_dir version)
   cmake_parse_arguments(Boost_BUILD "" "" COMPONENTS ${ARGN})
   set(boost_features "variant=release")
   if(Boost_USE_MULTITHREADED)
@@ -140,22 +140,21 @@ function(do_build_boost version)
     ${boost_features})
   set(install_command
     ${b2} install)
-  set(boost_root_dir "${CMAKE_BINARY_DIR}/boost")
   if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  elseif(version VERSION_GREATER 1.73)
+  elseif(version VERSION_GREATER 1.75)
     message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
   else()
     message(STATUS "boost will be downloaded...")
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
-    set(boost_version 1.73.0)
-    set(boost_sha256 4eb3b8d442b426dc35346235c8733b5ae35ba431690e38c6a8263dce9fcbb402)
+    set(boost_version 1.75.0)
+    set(boost_sha256 953db31e016db7bb207f11432bef7df100516eeb746843fa0486a222e3fd49cb)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     set(boost_url 
-      https://dl.bintray.com/boostorg/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
+      https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
     if(CMAKE_VERSION VERSION_GREATER 3.7)
       set(boost_url
         "${boost_url} http://downloads.sourceforge.net/project/boost/boost/${boost_version}/boost_${boost_version_underscore}.tar.bz2")
@@ -174,8 +173,9 @@ function(do_build_boost version)
     CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
     BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
     BUILD_IN_SOURCE 1
+    BUILD_BYPRODUCTS ${Boost_LIBRARIES}
     INSTALL_COMMAND ${install_command}
-    PREFIX "${boost_root_dir}")
+    PREFIX "${root_dir}")
 endfunction()
 
 set(Boost_context_DEPENDENCIES thread chrono system date_time)
@@ -184,9 +184,12 @@ set(Boost_filesystem_DEPENDENCIES system)
 set(Boost_iostreams_DEPENDENCIES regex)
 set(Boost_thread_DEPENDENCIES chrono system date_time atomic)
 
+# define a macro, so the Boost_* variables are visible by its caller
 macro(build_boost version)
-  do_build_boost(${version} ${ARGN})
-  ExternalProject_Get_Property(Boost install_dir)
+  # add the Boost::${component} libraries, do this before adding the "Boost"
+  # target, so we can collect "Boost_LIBRARIES" which is then used by
+  # ExternalProject_Add(Boost ...)
+  set(install_dir "${CMAKE_BINARY_DIR}/boost")
   set(Boost_INCLUDE_DIRS ${install_dir}/include)
   set(Boost_INCLUDE_DIR ${install_dir}/include)
   set(Boost_VERSION ${version})
@@ -211,7 +214,6 @@ macro(build_boost version)
     else()
       add_library(Boost::${c} SHARED IMPORTED)
     endif()
-    add_dependencies(Boost::${c} Boost)
     if(c MATCHES "^python")
       set(c "python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
     endif()
@@ -229,7 +231,7 @@ macro(build_boost version)
       IMPORTED_LOCATION "${Boost_${upper_c}_LIBRARY}")
     if((c MATCHES "coroutine|context") AND (WITH_BOOST_VALGRIND))
       set_target_properties(Boost::${c} PROPERTIES
-	INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_VALGRIND")
+        INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_VALGRIND")
     endif()
     list(APPEND Boost_LIBRARIES ${Boost_${upper_c}_LIBRARY})
   endforeach()
@@ -243,6 +245,14 @@ macro(build_boost version)
       unset(dependencies)
     endif()
     set(Boost_${c}_FOUND "TRUE")
+  endforeach()
+
+  # download, bootstrap and build Boost
+  do_build_boost(${install_dir} ${version} ${ARGN})
+
+  # add dependencies from Boost::${component} to Boost
+  foreach(c ${Boost_BUILD_COMPONENTS})
+    add_dependencies(Boost::${c} Boost)
   endforeach()
 
   # for header-only libraries

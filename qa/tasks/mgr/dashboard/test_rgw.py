@@ -62,8 +62,8 @@ class RgwTestCase(DashboardTestCase):
             cls._radosgw_admin_cmd(['user', 'rm', '--uid=teuth-test-user', '--purge-data'])
         super(RgwTestCase, cls).tearDownClass()
 
-    def get_rgw_user(self, uid):
-        return self._get('/api/rgw/user/{}'.format(uid))
+    def get_rgw_user(self, uid, stats=True):
+        return self._get('/api/rgw/user/{}?stats={}'.format(uid, stats))
 
 
 class RgwApiCredentialsTest(RgwTestCase):
@@ -433,6 +433,16 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['lock_retention_period_days'], 15)
         self.assertEqual(data['lock_retention_period_years'], 0)
         self.assertStatus(200)
+
+        # Update: Disabling bucket versioning should fail if object locking enabled
+        self._put('/api/rgw/bucket/teuth-test-bucket',
+                  params={
+                      'bucket_id': data['id'],
+                      'uid': 'teuth-test-user',
+                      'versioning_state': 'Suspended'
+                  })
+        self.assertStatus(409)
+
         # Delete
         self._delete('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(204)
@@ -507,6 +517,13 @@ class RgwUserTest(RgwTestCase):
 
     def test_get(self):
         data = self.get_rgw_user('admin')
+        self.assertStatus(200)
+        self._assert_user_data(data)
+        self.assertEqual(data['user_id'], 'admin')
+        self.assertTrue(data['stats'])
+        self.assertIsInstance(data['stats'], dict)
+        # Test without stats.
+        data = self.get_rgw_user('admin', False)
         self.assertStatus(200)
         self._assert_user_data(data)
         self.assertEqual(data['user_id'], 'admin')

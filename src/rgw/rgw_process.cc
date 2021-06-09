@@ -82,7 +82,7 @@ RGWRequest* RGWProcess::RGWWQ::_dequeue() {
 
 void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
   perfcounter->inc(l_rgw_qactive);
-  process->handle_request(req);
+  process->handle_request(this, req);
   process->req_throttle.put(1);
   perfcounter->inc(l_rgw_qactive, -1);
 }
@@ -172,7 +172,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   return 0;
 }
 
-int process_request(rgw::sal::RGWRadosStore* const store,
+int process_request(rgw::sal::Store* const store,
                     RGWREST* const rest,
                     RGWRequest* const req,
                     const std::string& frontend_prefix,
@@ -182,6 +182,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
                     optional_yield yield,
 		    rgw::dmclock::Scheduler *scheduler,
                     string* user,
+                    ceph::coarse_real_clock::duration* latency,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
@@ -195,14 +196,11 @@ int process_request(rgw::sal::RGWRadosStore* const store,
   struct req_state rstate(g_ceph_context, &rgw_env, req->id);
   struct req_state *s = &rstate;
 
-  std::unique_ptr<rgw::sal::RGWUser> u = store->get_user(rgw_user());
+  std::unique_ptr<rgw::sal::User> u = store->get_user(rgw_user());
   s->set_user(u);
 
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
-
-  auto sysobj_ctx = store->svc()->sysobj->init_obj_ctx();
-  s->sysobj_ctx = &sysobj_ctx;
 
   if (ret < 0) {
     s->cio = client_io;
@@ -210,9 +208,9 @@ int process_request(rgw::sal::RGWRadosStore* const store,
     return ret;
   }
 
-  s->req_id = store->svc()->zone_utils->unique_id(req->id);
-  s->trans_id = store->svc()->zone_utils->unique_trans_id(req->id);
-  s->host_id = store->getRados()->host_id;
+  s->req_id = store->zone_unique_id(req->id);
+  s->trans_id = store->zone_unique_trans_id(req->id);
+  s->host_id = store->get_host_id();
   s->yield = yield;
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
@@ -243,7 +241,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
   }
   {
     std::string script;
-    auto rc = rgw::lua::read_script(store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
@@ -311,7 +309,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
 done:
   if (op) {
     std::string script;
-    auto rc = rgw::lua::read_script(store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
@@ -332,7 +330,7 @@ done:
   }
 
   if (should_log) {
-    rgw_log_op(store->getRados(), rest, s, (op ? op->name() : "unknown"), olog);
+    rgw_log_op(store, rest, s, (op ? op->name() : "unknown"), olog);
   }
 
   if (http_ret != nullptr) {
@@ -340,7 +338,7 @@ done:
   }
   int op_ret = 0;
 
-  if (user && !rgw::sal::RGWUser::empty(s->user.get())) {
+  if (user && !rgw::sal::User::empty(s->user.get())) {
     *user = s->user->get_id().to_str();
   }
 
@@ -355,10 +353,15 @@ done:
     handler->put_op(op);
   rest->put_handler(handler);
 
+  const auto lat = s->time_elapsed();
+  if (latency) {
+    *latency = lat;
+  }
+
   dout(1) << "====== req done req=" << hex << req << dec
 	  << " op status=" << op_ret
 	  << " http_status=" << s->err.http_ret
-	  << " latency=" << s->time_elapsed()
+	  << " latency=" << lat
 	  << " ======"
 	  << dendl;
 

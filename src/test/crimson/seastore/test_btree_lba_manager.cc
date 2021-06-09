@@ -56,7 +56,7 @@ struct btree_lba_manager_test :
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t committed) final {}
 
-  auto submit_transaction(TransactionRef t)
+  seastar::future<> submit_transaction(TransactionRef t)
   {
     auto record = cache.try_construct_record(*t);
     if (!record) {
@@ -67,9 +67,8 @@ struct btree_lba_manager_test :
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);
-	lba_manager->complete_transaction(*t);
-      },
-      crimson::ct_error::assert_all{});
+	return lba_manager->complete_transaction(*t);
+      }).handle_error(crimson::ct_error::assert_all{});
   }
 
   seastar::future<> set_up_fut() final {
@@ -78,7 +77,7 @@ struct btree_lba_manager_test :
       return journal.open_for_write();
     }).safe_then([this](auto addr) {
       return seastar::do_with(
-	make_transaction(),
+	cache.create_transaction(),
 	[this](auto &transaction) {
 	  cache.init();
 	  return cache.mkfs(*transaction
@@ -121,7 +120,7 @@ struct btree_lba_manager_test :
 
   auto create_transaction() {
     auto t = test_transaction_t{
-      make_transaction(),
+      cache.create_transaction(),
       test_lba_mappings
     };
     cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
@@ -130,14 +129,14 @@ struct btree_lba_manager_test :
 
   auto create_weak_transaction() {
     auto t = test_transaction_t{
-      make_weak_transaction(),
+      cache.create_weak_transaction(),
       test_lba_mappings
     };
     return t;
   }
 
   void submit_test_transaction(test_transaction_t t) {
-    submit_transaction(std::move(t.t)).get0();
+    submit_transaction(std::move(t.t)).get();
     test_lba_mappings.swap(t.mappings);
   }
 
@@ -272,14 +271,23 @@ struct btree_lba_manager_test :
 
   void check_mappings(test_transaction_t &t) {
     for (auto &&i: t.mappings) {
-      auto ret_list = lba_manager->get_mapping(
-	*t.t, i.first, i.second.len
+      auto laddr = i.first;
+      auto len = i.second.len;
+
+      auto ret_list = lba_manager->get_mappings(
+	*t.t, laddr, len
       ).unsafe_get0();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
       EXPECT_EQ(i.second.addr, ret->get_paddr());
-      EXPECT_EQ(i.first, ret->get_laddr());
-      EXPECT_EQ(i.second.len, ret->get_length());
+      EXPECT_EQ(laddr, ret->get_laddr());
+      EXPECT_EQ(len, ret->get_length());
+
+      auto ret_pin = lba_manager->get_mapping(
+        *t.t, laddr).unsafe_get0();
+      EXPECT_EQ(i.second.addr, ret_pin->get_paddr());
+      EXPECT_EQ(laddr, ret_pin->get_laddr());
+      EXPECT_EQ(len, ret_pin->get_length());
     }
     lba_manager->scan_mappings(
       *t.t,

@@ -8,12 +8,9 @@
 
 // value implementations
 #include "test/crimson/seastore/onode_tree/test_value.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
 
 namespace crimson::os::seastore::onode {
-
-using ertr = Value::ertr;
-template <class ValueT=void>
-using future = Value::future<ValueT>;
 
 ceph::bufferlist&
 ValueDeltaRecorder::get_encoded(NodeExtentMutable& payload_mut)
@@ -33,8 +30,20 @@ Value::Value(NodeExtentManager& nm,
 
 Value::~Value() {}
 
-future<> Value::extend(Transaction& t, value_size_t extend_size)
+bool Value::is_tracked() const
 {
+  assert(!p_cursor->is_end());
+  return p_cursor->is_tracked();
+}
+
+void Value::invalidate()
+{
+  p_cursor.reset();
+}
+
+eagain_future<> Value::extend(Transaction& t, value_size_t extend_size)
+{
+  assert(is_tracked());
   [[maybe_unused]] auto target_size = get_payload_size() + extend_size;
   return p_cursor->extend_value(get_context(t), extend_size)
 #ifndef NDEBUG
@@ -45,8 +54,9 @@ future<> Value::extend(Transaction& t, value_size_t extend_size)
   ;
 }
 
-future<> Value::trim(Transaction& t, value_size_t trim_size)
+eagain_future<> Value::trim(Transaction& t, value_size_t trim_size)
 {
+  assert(is_tracked());
   assert(get_payload_size() > trim_size);
   [[maybe_unused]] auto target_size = get_payload_size() - trim_size;
   return p_cursor->trim_value(get_context(t), trim_size)
@@ -79,9 +89,7 @@ build_value_recorder_by_type(ceph::bufferlist& encoded,
     ret = std::make_unique<TestValue::Recorder>(encoded);
     break;
   case value_magic_t::ONODE:
-    // TODO: onode implementation
-    ceph_abort("not implemented");
-    ret = nullptr;
+    ret = std::make_unique<FLTreeOnode::Recorder>(encoded);
     break;
   default:
     ret = nullptr;

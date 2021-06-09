@@ -114,9 +114,10 @@ ssize_t Header::read(ceph::bufferlist* bl) {
   return r;
 }
 
-int Header::format(const char* type, const char* alg, size_t key_size,
-                   const char* cipher_mode, uint32_t sector_size,
-                   uint32_t data_alignment, bool insecure_fast_mode) {
+int Header::format(const char* type, const char* alg, const char* key,
+                   size_t key_size, const char* cipher_mode,
+                   uint32_t sector_size, uint32_t data_alignment,
+                   bool insecure_fast_mode) {
   ceph_assert(m_cd != nullptr);
 
   ldout(m_cct, 20) << "sector size: " << sector_size << ", data alignment: "
@@ -168,7 +169,7 @@ int Header::format(const char* type, const char* alg, size_t key_size,
   }
 
   auto r = crypt_format(
-          m_cd, type, alg, cipher_mode, NULL, NULL, key_size, params);
+          m_cd, type, alg, cipher_mode, NULL, key, key_size, params);
   if (r != 0) {
     lderr(m_cct) << "crypt_format failed: " << cpp_strerror(r) << dendl;
     return r;
@@ -182,7 +183,7 @@ int Header::add_keyslot(const char* passphrase, size_t passphrase_size) {
 
   auto r = crypt_keyslot_add_by_volume_key(
           m_cd, CRYPT_ANY_SLOT, NULL, 0, passphrase, passphrase_size);
-  if (r != 0) {
+  if (r < 0) {
     lderr(m_cct) << "crypt_keyslot_add_by_volume_key failed: "
                  << cpp_strerror(r) << dendl;
     return r;
@@ -221,7 +222,7 @@ int Header::read_volume_key(const char* passphrase, size_t passphrase_size,
   auto r = crypt_volume_key_get(
           m_cd, CRYPT_ANY_SLOT, volume_key, volume_key_size, passphrase,
           passphrase_size);
-  if (r != 0) {
+  if (r < 0) {
     lderr(m_cct) << "crypt_volume_key_get failed: " << cpp_strerror(r)
                  << dendl;
     return r;

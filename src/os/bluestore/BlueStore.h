@@ -1153,6 +1153,7 @@ public:
     void get_omap_tail(std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
 
+#ifdef HAVE_LIBZBD
     // Return the offset of an object on disk.  This function is intended *only*
     // for use with zoned storage devices because in these devices, the objects
     // are laid out contiguously on disk, which is not the case in general.
@@ -1162,6 +1163,8 @@ public:
       return extent_map.extent_map.begin()->blob->
 	  get_blob().calc_offset(0, nullptr);
     }
+#endif
+    
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -1579,6 +1582,7 @@ public:
     std::set<OnodeRef> onodes;     ///< these need to be updated/written
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
+#ifdef HAVE_LIBZBD
     // A map from onode to a vector of object offset.  For new objects created
     // in the transaction we append the new offset to the vector, for
     // overwritten objects we append the negative of the previous ondisk offset
@@ -1589,7 +1593,8 @@ public:
     // different zones.  See update_cleaning_metadata function for how this map
     // is used.
     std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
-
+#endif
+    
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
     std::set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
@@ -1662,6 +1667,7 @@ public:
       onodes.erase(o);
     }
 
+#ifdef HAVE_LIBZBD
     void zoned_note_new_object(OnodeRef &o) {
       auto [_, ok] = zoned_onode_to_offset_map.emplace(
 	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->zoned_get_ondisk_starting_offset()}));
@@ -1685,6 +1691,7 @@ public:
 	it->second.push_back(-offset);
       }
     }
+#endif
 
     void aio_finish(BlueStore *store) override {
       store->txc_aio_finish(this);
@@ -1988,6 +1995,8 @@ public:
       return NULL;
     }
   };
+
+#ifdef HAVE_LIBZBD
   struct ZonedCleanerThread : public Thread {
     BlueStore *store;
     explicit ZonedCleanerThread(BlueStore *s) : store(s) {}
@@ -1996,7 +2005,8 @@ public:
       return nullptr;
     }
   };
-
+#endif
+  
   struct BigDeferredWriteContext {
     uint64_t off = 0;     // original logical offset
     uint32_t b_off = 0;   // blob relative offset
@@ -2087,12 +2097,14 @@ private:
   std::deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
   bool kv_finalize_in_progress = false;
 
+#ifdef HAVE_LIBZBD
   ZonedCleanerThread zoned_cleaner_thread;
   ceph::mutex zoned_cleaner_lock = ceph::make_mutex("BlueStore::zoned_cleaner_lock");
   ceph::condition_variable zoned_cleaner_cond;
   bool zoned_cleaner_started = false;
   bool zoned_cleaner_stop = false;
   std::deque<uint64_t> zoned_cleaner_queue;
+#endif
 
   PerfCounters *logger = nullptr;
 
@@ -2383,11 +2395,13 @@ private:
   int _setup_block_symlink_or_file(std::string name, std::string path, uint64_t size,
 				   bool create);
 
+#ifdef HAVE_LIBZBD
   // Functions related to zoned storage.
   uint64_t _zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size);
   int _zoned_check_config_settings();
   void _zoned_update_cleaning_metadata(TransContext *txc);
   std::string _zoned_get_prefix(uint64_t offset);
+#endif
 
 public:
   utime_t get_deferred_last_submitted() {
@@ -2458,10 +2472,12 @@ private:
   void _kv_sync_thread();
   void _kv_finalize_thread();
 
+#ifdef HAVE_LIBZBD
   void _zoned_cleaner_start();
   void _zoned_cleaner_stop();
   void _zoned_cleaner_thread();
   void _zoned_clean_zone(uint64_t zone_num);
+#endif
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
   void _deferred_queue(TransContext *txc);
@@ -2980,6 +2996,7 @@ public:
   void inject_legacy_omap();
   // resets per_pool_omap | pgmeta_omap for onode
   void inject_legacy_omap(coll_t cid, ghobject_t oid);
+  void inject_stray_omap(uint64_t head, const std::string& name);
 
   void compact() override {
     ceph_assert(db);
@@ -3029,6 +3046,7 @@ private:
   std::set<std::string> failed_compressors;
   std::string spillover_alert;
   std::string legacy_statfs_alert;
+  std::string no_per_pool_omap_alert;
   std::string no_per_pg_omap_alert;
   std::string disk_size_mismatch_alert;
   std::string spurious_read_errors_alert;
@@ -3059,7 +3077,7 @@ private:
   }
 
   void _check_legacy_statfs_alert();
-  void _check_no_per_pg_omap_alert();
+  void _check_no_per_pg_or_pool_omap_alert();
   void _set_disk_size_mismatch_alert(const std::string& s) {
     std::lock_guard l(qlock);
     disk_size_mismatch_alert = s;
@@ -3468,6 +3486,8 @@ static inline void intrusive_ptr_release(BlueStore::OpSequencer *o) {
 
 class BlueStoreRepairer
 {
+  ceph::mutex lock = ceph::make_mutex("BlueStore::BlueStoreRepairer::lock");
+
 public:
   // to simplify future potential migration to mempools
   using fsck_interval = interval_set<uint64_t>;
@@ -3609,15 +3629,16 @@ public:
   bool fix_false_free(KeyValueDB *db,
 		      FreelistManager* fm,
 		      uint64_t offset, uint64_t len);
-  KeyValueDB::Transaction fix_spanning_blobs(KeyValueDB* db);
-
-  void init(uint64_t total_space, uint64_t lres_tracking_unit_size);
+  bool fix_spanning_blobs(
+    KeyValueDB* db,
+    std::function<void(KeyValueDB::Transaction)> f);
 
   bool preprocess_misreference(KeyValueDB *db);
 
   unsigned apply(KeyValueDB* db);
 
   void note_misreference(uint64_t offs, uint64_t len, bool inc_error) {
+    std::lock_guard l(lock);
     misreferenced_extents.union_insert(offs, len);
     if (inc_error) {
       ++to_repair_cnt;
@@ -3628,13 +3649,32 @@ public:
     ++to_repair_cnt;
   }
 
-  StoreSpaceTracker& get_space_usage_tracker() {
-    return space_usage_tracker;
+  void init_space_usage_tracker(
+    uint64_t total_space, uint64_t lres_tracking_unit_size)
+  {
+    //NB: not for use in multithreading mode!!!
+    space_usage_tracker.init(total_space, lres_tracking_unit_size);
   }
+  void set_space_used(uint64_t offset, uint64_t len,
+    const coll_t& cid, const ghobject_t& oid) {
+    std::lock_guard l(lock);
+    space_usage_tracker.set_used(offset, len, cid, oid);
+  }
+  inline bool is_used(const coll_t& cid) const {
+    //NB: not for use in multithreading mode!!!
+    return space_usage_tracker.is_used(cid);
+  }
+  inline bool is_used(const ghobject_t& oid) const {
+    //NB: not for use in multithreading mode!!!
+    return space_usage_tracker.is_used(oid);
+  }
+
   const fsck_interval& get_misreferences() const {
+    //NB: not for use in multithreading mode!!!
     return misreferenced_extents;
   }
   KeyValueDB::Transaction get_fix_misreferences_txn() {
+    //NB: not for use in multithreading mode!!!
     return fix_misreferences_txn;
   }
 
@@ -3762,7 +3802,7 @@ public:
   void* get_hint_for_log() const override {
     return  reinterpret_cast<void*>(LEVEL_LOG);
   }
-  void* get_hint_by_dir(const std::string& dirname) const override;
+  void* get_hint_by_dir(std::string_view dirname) const override;
 
   void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
     if (hint == nullptr)

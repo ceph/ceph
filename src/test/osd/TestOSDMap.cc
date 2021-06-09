@@ -1925,7 +1925,7 @@ TEST_F(OSDMapTest, BUG_48884)
   JSONParser parser;
   parser.parse(ss.str().c_str(), static_cast<int>(ss.str().size()));
   auto iter = parser.find_first();
-  for (const auto bucket : (*iter)->get_array_elements()) {
+  for (const auto& bucket : (*iter)->get_array_elements()) {
     JSONParser parser2;
     parser2.parse(bucket.c_str(), static_cast<int>(bucket.size()));
     auto* obj = parser2.find_obj("name");

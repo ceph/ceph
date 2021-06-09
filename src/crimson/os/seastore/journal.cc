@@ -12,7 +12,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -28,6 +28,16 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 	     << ")";
 }
 
+
+std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
+{
+  return out << "extent_info_t("
+	     << " type: " << info.type
+	     << " addr: " << info.addr
+	     << " len: " << info.len
+	     << ")";
+}
+
 segment_nonce_t generate_nonce(
   segment_seq_t seq,
   const seastore_meta_t &meta)
@@ -39,12 +49,7 @@ segment_nonce_t generate_nonce(
 }
 
 Journal::Journal(SegmentManager &segment_manager)
-  : block_size(segment_manager.get_block_size()),
-    max_record_length(
-      segment_manager.get_segment_size() -
-      p2align(ceph::encoded_sizeof_bounded<segment_header_t>(),
-	      size_t(block_size))),
-    segment_manager(segment_manager) {}
+  : segment_manager(segment_manager) {}
 
 
 Journal::initialize_segment_ertr::future<segment_seq_t>
@@ -120,6 +125,7 @@ ceph::bufferlist Journal::encode_record(
   for (const auto &i: record.deltas) {
     encode(i, bl);
   }
+  auto block_size = segment_manager.get_block_size();
   if (bl.length() % block_size != 0) {
     bl.append_zero(
       block_size - (bl.length() % block_size));
@@ -154,7 +160,7 @@ bool Journal::validate_metadata(const bufferlist &bl)
     ceph::encoded_sizeof_bounded<record_header_t>(),
     -1);
   ceph_le32 recorded_crc_le;
-  ::decode(recorded_crc_le, bliter);
+  decode(recorded_crc_le, bliter);
   uint32_t recorded_crc = recorded_crc_le;
   test_crc = bliter.crc32c(
     bliter.get_remaining(),
@@ -184,7 +190,7 @@ Journal::write_record_ret Journal::write_record(
   ceph::bufferlist to_write = encode_record(
     rsize, std::move(record));
   auto target = written_to;
-  assert((to_write.length() % block_size) == 0);
+  assert((to_write.length() % segment_manager.get_block_size()) == 0);
   written_to += to_write.length();
   logger().debug(
     "write_record, mdlength {}, dlength {}, target {}",
@@ -239,7 +245,7 @@ Journal::record_size_t Journal::get_encoded_record_length(
   for (const auto &i: record.extents) {
     data += i.bl.length();
   }
-  metadata = p2roundup(metadata, block_size);
+  metadata = p2roundup(metadata, (extent_len_t)segment_manager.get_block_size());
   return record_size_t{metadata, data};
 }
 
@@ -283,7 +289,9 @@ Journal::roll_journal_segment()
 Journal::read_segment_header_ret
 Journal::read_segment_header(segment_id_t segment)
 {
-  return segment_manager.read(paddr_t{segment, 0}, block_size
+  return segment_manager.read(
+    paddr_t{segment, 0},
+    segment_manager.get_block_size()
   ).handle_error(
     read_segment_header_ertr::pass_further{},
     crimson::ct_error::assert_all{
@@ -299,7 +307,7 @@ Journal::read_segment_header(segment_id_t segment)
     logger().debug(
       "Journal::read_segment_header: segment {} block crc {}",
       segment,
-      bl.begin().crc32c(block_size, 0));
+      bl.begin().crc32c(segment_manager.get_block_size(), 0));
 
     auto bp = bl.cbegin();
     try {
@@ -330,7 +338,7 @@ Journal::open_for_write_ret Journal::open_for_write()
 	seq,
 	paddr_t{
 	  current_journal_segment->get_segment_id(),
-	  static_cast<segment_off_t>(block_size)}
+	    static_cast<segment_off_t>(segment_manager.get_block_size())}
       });
   });
 }
@@ -425,7 +433,9 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	      assert(0 == "invalid");
 	    }
 	  } else {
-	    replay_from = paddr_t{from->first, (segment_off_t)block_size};
+	    replay_from = paddr_t{
+	      from->first,
+	      (segment_off_t)segment_manager.get_block_size()};
 	  }
 	  auto ret = replay_segments_t(segments.end() - from);
 	  std::transform(
@@ -433,7 +443,9 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	    [this](const auto &p) {
 	      auto ret = journal_seq_t{
 		p.second.journal_segment_seq,
-		paddr_t{p.first, (segment_off_t)block_size}};
+		paddr_t{
+		  p.first,
+		  (segment_off_t)segment_manager.get_block_size()}};
 	      logger().debug(
 		"Journal::find_replay_segments: replaying from  {}",
 		ret);
@@ -451,6 +463,7 @@ Journal::read_validate_record_metadata_ret Journal::read_validate_record_metadat
   paddr_t start,
   segment_nonce_t nonce)
 {
+  auto block_size = segment_manager.get_block_size();
   if (start.offset + block_size > (int64_t)segment_manager.get_segment_size()) {
     return read_validate_record_metadata_ret(
       read_validate_record_metadata_ertr::ready_future_marker{},
@@ -461,6 +474,7 @@ Journal::read_validate_record_metadata_ret Journal::read_validate_record_metadat
     [=](bufferptr bptr) mutable
     -> read_validate_record_metadata_ret {
       logger().debug("read_validate_record_metadata: reading {}", start);
+      auto block_size = segment_manager.get_block_size();
       bufferlist bl;
       bl.append(bptr);
       auto bp = bl.cbegin();
@@ -477,7 +491,7 @@ Journal::read_validate_record_metadata_ret Journal::read_validate_record_metadat
 	  read_validate_record_metadata_ertr::ready_future_marker{},
 	  std::nullopt);
       }
-      if (header.mdlength > block_size) {
+      if (header.mdlength > (extent_len_t)block_size) {
 	if (start.offset + header.mdlength >
 	    (int64_t)segment_manager.get_segment_size()) {
 	  return crimson::ct_error::input_output_error::make();
@@ -672,7 +686,7 @@ Journal::scan_extents_ret Journal::scan_extents(
 	return scan_valid_records(
 	  cursor,
 	  segment_nonce,
-	  std::numeric_limits<size_t>::max(),
+	  bytes_to_read,
 	  dhandler).safe_then([](auto){});
       });
   }).safe_then([ret=std::move(ret)] {
@@ -687,7 +701,7 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
     found_record_handler_t &handler)
 {
   if (cursor.offset.offset == 0) {
-    cursor.offset.offset = block_size;
+    cursor.offset.offset = segment_manager.get_block_size();
   }
   auto retref = std::make_unique<size_t>(0);
   auto budget_used = *retref;

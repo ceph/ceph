@@ -154,7 +154,6 @@ namespace cache {
 namespace pwl {
 
 class ImageExtentBuf;
-typedef std::vector<ImageExtentBuf> ImageExtentBufs;
 
 const int IN_FLIGHT_FLUSH_WRITE_LIMIT = 64;
 const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
@@ -170,7 +169,7 @@ const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
 /**** Write log entries ****/
 const unsigned long int MAX_ALLOC_PER_TRANSACTION = 8;
 const unsigned long int MAX_FREE_PER_TRANSACTION = 1;
-const unsigned int MAX_CONCURRENT_WRITES = 256;
+const unsigned int MAX_CONCURRENT_WRITES = (1024 * 1024);
 
 const uint64_t DEFAULT_POOL_SIZE = 1u<<30;
 const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
@@ -183,7 +182,7 @@ const double RETIRE_HIGH_WATER = 0.50;
 const double RETIRE_LOW_WATER = 0.40;
 const int RETIRE_BATCH_TIME_LIMIT_MS = 250;
 const uint64_t CONTROL_BLOCK_MAX_LOG_ENTRIES = 32;
-const uint64_t SPAN_MAX_DATA_LEN = (16*1024*1024);
+const uint64_t SPAN_MAX_DATA_LEN = (16 * 1024 * 1024);
 
 /* offset of ring on SSD */
 const uint64_t DATA_RING_BUFFER_OFFSET = 8192;

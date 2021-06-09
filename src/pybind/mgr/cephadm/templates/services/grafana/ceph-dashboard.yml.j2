@@ -11,7 +11,7 @@ datasources:
     type: 'prometheus'
     access: 'proxy'
     orgId: 1
-    url: 'http://{{ host }}:9095'
+    url: 'http://{{ host }}'
     basicAuth: false
     isDefault: {{ 'true' if loop.first else 'false' }}
     editable: false

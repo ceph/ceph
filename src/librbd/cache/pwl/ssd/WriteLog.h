@@ -63,7 +63,7 @@ protected:
   using AbstractWriteLog<ImageCtxT>::m_first_valid_entry;
   using AbstractWriteLog<ImageCtxT>::m_bytes_allocated;
 
-  void initialize_pool(Context *on_finish,
+  bool initialize_pool(Context *on_finish,
                        pwl::DeferredContexts &later) override;
   void process_work() override;
   void append_scheduled_ops(void) override;
@@ -99,10 +99,8 @@ private:
   WriteLogPoolRootUpdateList m_poolroot_to_update; /* pool root list to update to SSD */
   bool m_updating_pool_root = false;
 
-  uint64_t m_log_pool_ring_buffer_size; /* Size of ring buffer */
   std::atomic<int> m_async_update_superblock = {0};
   BlockDevice *bdev = nullptr;
-  uint64_t pool_size;
   pwl::WriteLogPoolRoot pool_root;
   Builder<This> *m_builderobj;
 
@@ -135,11 +133,10 @@ private:
   int update_pool_root_sync(std::shared_ptr<pwl::WriteLogPoolRoot> root);
   void update_pool_root(std::shared_ptr<WriteLogPoolRoot> root,
                                           AioTransContext *aio);
-  void pre_io_check(WriteLogCacheEntry *log_entry, uint64_t &length);
   void aio_read_data_block(WriteLogCacheEntry *log_entry, bufferlist *bl,
                            Context *ctx);
-  void aio_read_data_block(std::vector<WriteLogCacheEntry*> &log_entries,
-                           std::vector<bufferlist *> &bls, Context *ctx);
+  void aio_read_data_blocks(std::vector<WriteLogCacheEntry*> &log_entries,
+                            std::vector<bufferlist *> &bls, Context *ctx);
   static void aio_cache_cb(void *priv, void *priv2) {
     AioTransContext *c = static_cast<AioTransContext*>(priv2);
     c->aio_finish();

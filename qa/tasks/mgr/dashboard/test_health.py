@@ -51,6 +51,12 @@ class HealthTest(DashboardTestCase):
         'modified': str,
         'session_timeout': int,
         'flags': int,
+        'flags_state': JObj({
+            'joinable': bool,
+            'allow_snaps': bool,
+            'allow_multimds_snaps': bool,
+            'allow_standby_replay': bool
+        }),
         'ever_allowed_features': int,
         'root': int
     })

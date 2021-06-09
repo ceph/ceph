@@ -31,6 +31,7 @@ class TestNFS(MgrTestCase):
 
     def setUp(self):
         super(TestNFS, self).setUp()
+        self._load_module('nfs')
         self.cluster_id = "test"
         self.export_type = "cephfs"
         self.pseudo_path = "/cephfs"
@@ -118,7 +119,7 @@ class TestNFS(MgrTestCase):
         '''
         # Disable any running nfs ganesha daemon
         self._check_nfs_server_status()
-        self._nfs_cmd('cluster', 'create', self.export_type, self.cluster_id)
+        self._nfs_cmd('cluster', 'create', self.cluster_id)
         # Check for expected status and daemon name (nfs.<cluster_id>)
         self._check_nfs_cluster_status('running', 'NFS Ganesha cluster deployment failed')
 
@@ -126,7 +127,7 @@ class TestNFS(MgrTestCase):
         '''
         Test deletion of a single nfs cluster.
         '''
-        self._nfs_cmd('cluster', 'delete', self.cluster_id)
+        self._nfs_cmd('cluster', 'rm', self.cluster_id)
         self._check_nfs_cluster_status('No daemons reported',
                                        'NFS Ganesha cluster could not be deleted')
 
@@ -178,7 +179,7 @@ class TestNFS(MgrTestCase):
         '''
         Delete an export.
         '''
-        self._nfs_cmd('export', 'delete', self.cluster_id, self.pseudo_path)
+        self._nfs_cmd('export', 'rm', self.cluster_id, self.pseudo_path)
         self._check_auth_ls()
 
     def _test_list_export(self):
@@ -215,11 +216,17 @@ class TestNFS(MgrTestCase):
         self.sample_export['fsal']['user_id'] = self.cluster_id + '4'
         self.assertDictEqual(self.sample_export, nfs_output[3])
 
+    def _get_export(self):
+        '''
+        Returns export block in json format
+        '''
+        return json.loads(self._nfs_cmd('export', 'get', self.cluster_id, self.pseudo_path))
+
     def _test_get_export(self):
         '''
         Test fetching of created export.
         '''
-        nfs_output = json.loads(self._nfs_cmd('export', 'get', self.cluster_id, self.pseudo_path))
+        nfs_output = self._get_export()
         self.assertDictEqual(self.sample_export, nfs_output)
 
     def _check_export_obj_deleted(self, conf_obj=False):
@@ -236,9 +243,9 @@ class TestNFS(MgrTestCase):
         '''
         Return port and ip for a cluster
         '''
-        #{'test': [{'hostname': 'smithi068', 'ip': ['172.21.15.68'], 'port': 2049}]}
-        info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))['test'][0]
-        return info_output["port"], info_output["ip"][0]
+        #{'test': {'backend': [{'hostname': 'smithi068', 'ip': '172.21.15.68', 'port': 2049}]}}
+        info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))['test']['backend'][0]
+        return info_output["port"], info_output["ip"]
 
     def _test_mnt(self, pseudo_path, port, ip, check=True):
         '''
@@ -264,6 +271,17 @@ class TestNFS(MgrTestCase):
         finally:
             self.ctx.cluster.run(args=['sudo', 'umount', '/mnt'])
 
+    def _write_to_read_only_export(self, pseudo_path, port, ip):
+        '''
+        Check if write to read only export fails
+        '''
+        try:
+            self._test_mnt(pseudo_path, port, ip)
+        except CommandFailedError as e:
+            # Write to cephfs export should fail for test to pass
+            if e.exitstatus != errno.EPERM:
+                raise
+
     def test_create_and_delete_cluster(self):
         '''
         Test successful creation and deletion of the nfs cluster.
@@ -278,9 +296,8 @@ class TestNFS(MgrTestCase):
         '''
         Test idempotency of cluster create and delete commands.
         '''
-        self._test_idempotency(self._test_create_cluster, ['nfs', 'cluster', 'create', self.export_type,
-                                                           self.cluster_id])
-        self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'delete', self.cluster_id])
+        self._test_idempotency(self._test_create_cluster, ['nfs', 'cluster', 'create', self.cluster_id])
+        self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'rm', self.cluster_id])
 
     def test_create_cluster_with_invalid_cluster_id(self):
         '''
@@ -288,21 +305,8 @@ class TestNFS(MgrTestCase):
         '''
         try:
             invalid_cluster_id = '/cluster_test'  # Only [A-Za-z0-9-_.] chars are valid
-            self._nfs_cmd('cluster', 'create', self.export_type, invalid_cluster_id)
+            self._nfs_cmd('cluster', 'create', invalid_cluster_id)
             self.fail(f"Cluster successfully created with invalid cluster id {invalid_cluster_id}")
-        except CommandFailedError as e:
-            # Command should fail for test to pass
-            if e.exitstatus != errno.EINVAL:
-                raise
-
-    def test_create_cluster_with_invalid_export_type(self):
-        '''
-        Test nfs cluster deployment failure with invalid export type.
-        '''
-        try:
-            invalid_export_type = 'rgw'  # Only cephfs is valid
-            self._nfs_cmd('cluster', 'create', invalid_export_type, self.cluster_id)
-            self.fail(f"Cluster successfully created with invalid export type {invalid_export_type}")
         except CommandFailedError as e:
             # Command should fail for test to pass
             if e.exitstatus != errno.EINVAL:
@@ -329,7 +333,7 @@ class TestNFS(MgrTestCase):
         self._test_idempotency(self._create_default_export, ['nfs', 'export', 'create', 'cephfs',
                                                              self.fs_name, self.cluster_id,
                                                              self.pseudo_path])
-        self._test_idempotency(self._delete_export, ['nfs', 'export', 'delete', self.cluster_id,
+        self._test_idempotency(self._delete_export, ['nfs', 'export', 'rm', self.cluster_id,
                                                      self.pseudo_path])
         self._test_delete_cluster()
 
@@ -344,7 +348,8 @@ class TestNFS(MgrTestCase):
         # Export-3 for subvolume with r only
         self._cmd('fs', 'subvolume', 'create', self.fs_name, 'sub_vol')
         fs_path = self._cmd('fs', 'subvolume', 'getpath', self.fs_name, 'sub_vol').strip()
-        self._create_export(export_id='3', extra_cmd=[self.pseudo_path+'2', '--readonly', fs_path])
+        self._create_export(export_id='3', extra_cmd=[self.pseudo_path+'2', '--readonly',
+                                                      '--path', fs_path])
         # Export-4 for subvolume
         self._create_export(export_id='4', extra_cmd=[self.pseudo_path+'3', fs_path])
         # Check if exports gets listed
@@ -430,12 +435,7 @@ class TestNFS(MgrTestCase):
         self._test_create_cluster()
         self._create_export(export_id='1', create_fs=True, extra_cmd=[self.pseudo_path, '--readonly'])
         port, ip = self._get_port_ip_info()
-        try:
-            self._test_mnt(self.pseudo_path, port, ip)
-        except CommandFailedError as e:
-            # Write to cephfs export should fail for test to pass
-            if e.exitstatus != errno.EPERM:
-                raise
+        self._write_to_read_only_export(self.pseudo_path, port, ip)
         self._test_delete_cluster()
 
     def test_cluster_info(self):
@@ -444,14 +444,23 @@ class TestNFS(MgrTestCase):
         '''
         self._test_create_cluster()
         info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))
-        info_ip = info_output[self.cluster_id][0].pop("ip")
-        host_details = {self.cluster_id: [{
-            "hostname": self._sys_cmd(['hostname']).decode("utf-8").strip(),
-            "port": 2049
-            }]}
+        print(f'info {info_output}')
+        info_ip = info_output[self.cluster_id].get('backend', [])[0].pop("ip")
+        host_details = {
+            self.cluster_id: {
+                'backend': [
+                    {
+                        "hostname": self._sys_cmd(['hostname']).decode("utf-8").strip(),
+                        "port": 2049
+                    }
+                ],
+                "virtual_ip": None,
+            }
+        }
         host_ip = self._sys_cmd(['hostname', '-I']).decode("utf-8").split()
+        print(f'host_ip is {host_ip}, info_ip is {info_ip}')
         self.assertDictEqual(info_output, host_details)
-        self.assertTrue(any([ip in info_ip for ip in host_ip]))
+        self.assertTrue(info_ip in host_ip)
         self._test_delete_cluster()
 
     def test_cluster_set_reset_user_config(self):
@@ -534,3 +543,79 @@ class TestNFS(MgrTestCase):
             # Command should fail for test to pass
             if e.exitstatus != errno.ENOENT:
                 raise
+
+    def test_update_export(self):
+        '''
+        Test update of exports
+        '''
+        self._create_default_export()
+        port, ip = self._get_port_ip_info()
+        self._test_mnt(self.pseudo_path, port, ip)
+        export_block = self._get_export()
+        new_pseudo_path = '/testing'
+        export_block['pseudo'] = new_pseudo_path
+        export_block['access_type'] = 'RO'
+        self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'update', '-i', '-'],
+                stdin=json.dumps(export_block))
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
+        self._write_to_read_only_export(new_pseudo_path, port, ip)
+        self._test_delete_cluster()
+
+    def test_update_export_with_invalid_values(self):
+        '''
+        Test update of export with invalid values
+        '''
+        self._create_default_export()
+        export_block = self._get_export()
+
+        def update_with_invalid_values(key, value, fsal=False):
+            export_block_new = dict(export_block)
+            if fsal:
+                export_block_new['fsal'] = dict(export_block['fsal'])
+                export_block_new['fsal'][key] = value
+            else:
+                export_block_new[key] = value
+            try:
+                self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'update', '-i', '-'],
+                        stdin=json.dumps(export_block_new))
+            except CommandFailedError:
+                pass
+
+        update_with_invalid_values('export_id', 9)
+        update_with_invalid_values('cluster_id', 'testing_new')
+        update_with_invalid_values('pseudo', 'test_relpath')
+        update_with_invalid_values('access_type', 'W')
+        update_with_invalid_values('squash', 'no_squash')
+        update_with_invalid_values('security_label', 'invalid')
+        update_with_invalid_values('protocols', [2])
+        update_with_invalid_values('transports', ['UD'])
+        update_with_invalid_values('name', 'RGW', True)
+        update_with_invalid_values('user_id', 'testing_export', True)
+        update_with_invalid_values('fs_name', 'b', True)
+        self._test_delete_cluster()
+
+    def test_cmds_without_reqd_args(self):
+        '''
+        Test that cmd fails on not passing required arguments
+        '''
+        def exec_cmd_invalid(*cmd):
+            try:
+                self._nfs_cmd(*cmd)
+                self.fail(f"nfs {cmd} command executed successfully without required arguments")
+            except CommandFailedError as e:
+                # Command should fail for test to pass
+                if e.exitstatus != errno.EINVAL:
+                    raise
+
+        exec_cmd_invalid('cluster', 'create')
+        exec_cmd_invalid('cluster', 'delete')
+        exec_cmd_invalid('cluster', 'config', 'set')
+        exec_cmd_invalid('cluster', 'config', 'reset')
+        exec_cmd_invalid('export', 'create', 'cephfs')
+        exec_cmd_invalid('export', 'create', 'cephfs', 'a_fs')
+        exec_cmd_invalid('export', 'create', 'cephfs', 'a_fs', 'clusterid')
+        exec_cmd_invalid('export', 'ls')
+        exec_cmd_invalid('export', 'delete')
+        exec_cmd_invalid('export', 'delete', 'clusterid')
+        exec_cmd_invalid('export', 'get')
+        exec_cmd_invalid('export', 'get', 'clusterid')

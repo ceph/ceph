@@ -10,7 +10,9 @@ export class HostsPageHelper extends PageHelper {
 
   columnIndex = {
     hostname: 2,
-    labels: 4
+    services: 3,
+    labels: 4,
+    status: 5
   };
 
   check_for_host() {
@@ -115,5 +117,54 @@ export class HostsPageHelper extends PageHelper {
           }
         }
       });
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  maintenance(hostname: string, exit = false, force = false) {
+    if (force) {
+      this.getTableCell(this.columnIndex.hostname, hostname).click();
+      this.clickActionButton('enter-maintenance');
+
+      cy.contains('cd-modal button', 'Continue').click();
+
+      this.getTableCell(this.columnIndex.hostname, hostname)
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+        .should(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          expect(status).to.include('maintenance');
+        });
+    }
+    if (exit) {
+      this.getTableCell(this.columnIndex.hostname, hostname)
+        .click()
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.columnIndex.status})`)
+        .then(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          if (status[0].includes('maintenance')) {
+            this.clickActionButton('exit-maintenance');
+          }
+        });
+
+      this.getTableCell(this.columnIndex.hostname, hostname)
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.columnIndex.status})`)
+        .should(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          expect(status).to.not.include('maintenance');
+        });
+    } else {
+      this.getTableCell(this.columnIndex.hostname, hostname).click();
+      this.clickActionButton('enter-maintenance');
+
+      this.getTableCell(this.columnIndex.hostname, hostname)
+        .parent()
+        .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+        .should(($ele) => {
+          const status = $ele.toArray().map((v) => v.innerText);
+          expect(status).to.include('maintenance');
+        });
+    }
   }
 }

@@ -1,27 +1,45 @@
 # type: ignore
-from typing import List, Optional
-import mock
-from mock import patch, call
-import os
-import sys
-import unittest
-import threading
-import time
+
 import errno
+import mock
+import os
+import pytest
 import socket
+import sys
+import time
+import threading
+import unittest
+
 from http.server import HTTPServer
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-import pytest
+from typing import List, Optional
 
-from .fixtures import exporter
+from .fixtures import (
+    cephadm_fs,
+    exporter,
+    mock_docker,
+    mock_podman,
+    with_cephadm_ctx,
+)
 
-with patch('builtins.open', create=True):
+
+with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
+
 class TestCephAdm(object):
+
+    def test_docker_unit_file(self):
+        ctx = mock.Mock()
+        ctx.container_engine = mock_docker()
+        r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
+        assert 'Requires=docker.service' in r
+        ctx.container_engine = mock_podman()
+        r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
+        assert 'Requires=docker.service' not in r
 
     @mock.patch('cephadm.logger')
     def test_attempt_bind(self, logger):
@@ -85,7 +103,7 @@ class TestCephAdm(object):
             except:
                 assert False
             else:
-                assert _socket.call_args == call(address_family, socket.SOCK_STREAM)
+                assert _socket.call_args == mock.call(address_family, socket.SOCK_STREAM)
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -137,15 +155,15 @@ class TestCephAdm(object):
             cd._parse_args(['deploy', '--name', 'wrong', '--fsid', 'fsid'])
 
     @pytest.mark.parametrize("test_input, expected", [
-        ("podman version 1.6.2", (1,6,2)),
-        ("podman version 1.6.2-stable2", (1,6,2)),
+        ("1.6.2", (1,6,2)),
+        ("1.6.2-stable2", (1,6,2)),
     ])
     def test_parse_podman_version(self, test_input, expected):
         assert cd._parse_podman_version(test_input) == expected
 
     def test_parse_podman_version_invalid(self):
         with pytest.raises(ValueError) as res:
-            cd._parse_podman_version('podman version inval.id')
+            cd._parse_podman_version('inval.id')
         assert 'inval' in str(res.value)
 
     @pytest.mark.parametrize("test_input, expected", [
@@ -169,11 +187,11 @@ default via 192.168.178.1 dev enxd89ef3f34260 proto dhcp metric 100
 195.135.221.12 via 192.168.178.1 dev enxd89ef3f34260 proto static metric 100
 """,
             {
-                '10.4.0.1': ['10.4.0.2'],
-                '172.17.0.0/16': ['172.17.0.1'],
-                '192.168.39.0/24': ['192.168.39.1'],
-                '192.168.122.0/24': ['192.168.122.1'],
-                '192.168.178.0/24': ['192.168.178.28']
+                '10.4.0.1': {'tun0': ['10.4.0.2']},
+                '172.17.0.0/16': {'docker0': ['172.17.0.1']},
+                '192.168.39.0/24': {'virbr1': ['192.168.39.1']},
+                '192.168.122.0/24': {'virbr0': ['192.168.122.1']},
+                '192.168.178.0/24': {'enxd89ef3f34260': ['192.168.178.28']}
             }
         ),        (
 """
@@ -192,10 +210,10 @@ default via 10.3.64.1 dev eno1 proto static metric 100
 192.168.122.0/24 dev virbr0 proto kernel scope link src 192.168.122.1 linkdown
 """,
             {
-                '10.3.64.0/24': ['10.3.64.23', '10.3.64.27'],
-                '10.88.0.0/16': ['10.88.0.1'],
-                '172.21.3.1': ['172.21.3.2'],
-                '192.168.122.0/24': ['192.168.122.1']}
+                '10.3.64.0/24': {'eno1': ['10.3.64.23', '10.3.64.27']},
+                '10.88.0.0/16': {'cni-podman0': ['10.88.0.1']},
+                '172.21.3.1': {'tun0': ['172.21.3.2']},
+                '192.168.122.0/24': {'virbr0': ['192.168.122.1']}}
         ),
     ])
     def test_parse_ipv4_route(self, test_input, expected):
@@ -205,61 +223,144 @@ default via 10.3.64.1 dev eno1 proto static metric 100
         (
 """
 ::1 dev lo proto kernel metric 256 pref medium
-fdbc:7574:21fe:9200::/64 dev wlp2s0 proto ra metric 600 pref medium
-fdd8:591e:4969:6363::/64 dev wlp2s0 proto ra metric 600 pref medium
-fde4:8dba:82e1::/64 dev eth1 proto kernel metric 256 expires 1844sec pref medium
+fe80::/64 dev eno1 proto kernel metric 100 pref medium
+fe80::/64 dev br-3d443496454c proto kernel metric 256 linkdown pref medium
 fe80::/64 dev tun0 proto kernel metric 256 pref medium
-fe80::/64 dev wlp2s0 proto kernel metric 600 pref medium
-default dev tun0 proto static metric 50 pref medium
-default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medium
+fe80::/64 dev br-4355f5dbb528 proto kernel metric 256 pref medium
+fe80::/64 dev docker0 proto kernel metric 256 linkdown pref medium
+fe80::/64 dev cni-podman0 proto kernel metric 256 linkdown pref medium
+fe80::/64 dev veth88ba1e8 proto kernel metric 256 pref medium
+fe80::/64 dev vethb6e5fc7 proto kernel metric 256 pref medium
+fe80::/64 dev vethaddb245 proto kernel metric 256 pref medium
+fe80::/64 dev vethbd14d6b proto kernel metric 256 pref medium
+fe80::/64 dev veth13e8fd2 proto kernel metric 256 pref medium
+fe80::/64 dev veth1d3aa9e proto kernel metric 256 pref medium
+fe80::/64 dev vethe485ca9 proto kernel metric 256 pref medium
+""",
+"""
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eno1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+    inet6 fe80::225:90ff:fee5:26e8/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+6: br-3d443496454c: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 state DOWN 
+    inet6 fe80::42:23ff:fe9d:ee4/64 scope link 
+       valid_lft forever preferred_lft forever
+7: br-4355f5dbb528: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP 
+    inet6 fe80::42:6eff:fe35:41fe/64 scope link 
+       valid_lft forever preferred_lft forever
+8: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 state DOWN 
+    inet6 fe80::42:faff:fee6:40a0/64 scope link 
+       valid_lft forever preferred_lft forever
+11: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 state UNKNOWN qlen 100
+    inet6 fe80::98a6:733e:dafd:350/64 scope link stable-privacy 
+       valid_lft forever preferred_lft forever
+28: cni-podman0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 state DOWN qlen 1000
+    inet6 fe80::3449:cbff:fe89:b87e/64 scope link 
+       valid_lft forever preferred_lft forever
+31: vethaddb245@if30: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP 
+    inet6 fe80::90f7:3eff:feed:a6bb/64 scope link 
+       valid_lft forever preferred_lft forever
+33: veth88ba1e8@if32: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP 
+    inet6 fe80::d:f5ff:fe73:8c82/64 scope link 
+       valid_lft forever preferred_lft forever
+35: vethbd14d6b@if34: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP 
+    inet6 fe80::b44f:8ff:fe6f:813d/64 scope link 
+       valid_lft forever preferred_lft forever
+37: vethb6e5fc7@if36: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP 
+    inet6 fe80::4869:c6ff:feaa:8afe/64 scope link 
+       valid_lft forever preferred_lft forever
+39: veth13e8fd2@if38: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP 
+    inet6 fe80::78f4:71ff:fefe:eb40/64 scope link 
+       valid_lft forever preferred_lft forever
+41: veth1d3aa9e@if40: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP 
+    inet6 fe80::24bd:88ff:fe28:5b18/64 scope link 
+       valid_lft forever preferred_lft forever
+43: vethe485ca9@if42: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP 
+    inet6 fe80::6425:87ff:fe42:b9f0/64 scope link 
+       valid_lft forever preferred_lft forever
+""",
+            {
+                "fe80::/64": {
+                    "eno1": [
+                        "fe80::225:90ff:fee5:26e8"
+                    ],
+                    "br-3d443496454c": [
+                        "fe80::42:23ff:fe9d:ee4"
+                    ],
+                    "tun0": [
+                        "fe80::98a6:733e:dafd:350"
+                    ],
+                    "br-4355f5dbb528": [
+                        "fe80::42:6eff:fe35:41fe"
+                    ],
+                    "docker0": [
+                        "fe80::42:faff:fee6:40a0"
+                    ],
+                    "cni-podman0": [
+                        "fe80::3449:cbff:fe89:b87e"
+                    ],
+                    "veth88ba1e8": [
+                        "fe80::d:f5ff:fe73:8c82"
+                    ],
+                    "vethb6e5fc7": [
+                        "fe80::4869:c6ff:feaa:8afe"
+                    ],
+                    "vethaddb245": [
+                        "fe80::90f7:3eff:feed:a6bb"
+                    ],
+                    "vethbd14d6b": [
+                        "fe80::b44f:8ff:fe6f:813d"
+                    ],
+                    "veth13e8fd2": [
+                        "fe80::78f4:71ff:fefe:eb40"
+                    ],
+                    "veth1d3aa9e": [
+                        "fe80::24bd:88ff:fe28:5b18"
+                    ],
+                    "vethe485ca9": [
+                        "fe80::6425:87ff:fe42:b9f0"
+                    ]
+                }
+            }
+        ),
+        (
+"""
+::1 dev lo proto kernel metric 256 pref medium
+2001:1458:301:eb::100:1a dev ens20f0 proto kernel metric 100 pref medium
+2001:1458:301:eb::/64 dev ens20f0 proto ra metric 100 pref medium
+fd01:1458:304:5e::/64 dev ens20f0 proto ra metric 100 pref medium
+fe80::/64 dev ens20f0 proto kernel metric 100 pref medium
+default proto ra metric 100
+        nexthop via fe80::46ec:ce00:b8a0:d3c8 dev ens20f0 weight 1
+        nexthop via fe80::46ec:ce00:b8a2:33c8 dev ens20f0 weight 1 pref medium
 """,
 """
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
     inet6 ::1/128 scope host
        valid_lft forever preferred_lft forever
-2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
-    inet6 fdd8:591e:4969:6363:4c52:cafe:8dd4:dc4/64 scope global temporary dynamic
-       valid_lft 86394sec preferred_lft 14394sec
-    inet6 fdbc:7574:21fe:9200:4c52:cafe:8dd4:dc4/64 scope global temporary dynamic
-       valid_lft 6745sec preferred_lft 3145sec
-    inet6 fdd8:591e:4969:6363:103a:abcd:af1f:57f3/64 scope global temporary deprecated dynamic
-       valid_lft 86394sec preferred_lft 0sec
-    inet6 fdbc:7574:21fe:9200:103a:abcd:af1f:57f3/64 scope global temporary deprecated dynamic
-       valid_lft 6745sec preferred_lft 0sec
-    inet6 fdd8:591e:4969:6363:a128:1234:2bdd:1b6f/64 scope global temporary deprecated dynamic
-       valid_lft 86394sec preferred_lft 0sec
-    inet6 fdbc:7574:21fe:9200:a128:1234:2bdd:1b6f/64 scope global temporary deprecated dynamic
-       valid_lft 6745sec preferred_lft 0sec
-    inet6 fdd8:591e:4969:6363:d581:4321:380b:3905/64 scope global temporary deprecated dynamic
-       valid_lft 86394sec preferred_lft 0sec
-    inet6 fdbc:7574:21fe:9200:d581:4321:380b:3905/64 scope global temporary deprecated dynamic
-       valid_lft 6745sec preferred_lft 0sec
-    inet6 fe80::1111:2222:3333:4444/64 scope link noprefixroute
-       valid_lft forever preferred_lft forever
-    inet6 fde4:8dba:82e1:0:ec4a:e402:e9df:b357/64 scope global temporary dynamic
-       valid_lft 1074sec preferred_lft 1074sec
-    inet6 fde4:8dba:82e1:0:5054:ff:fe72:61af/64 scope global dynamic mngtmpaddr
-       valid_lft 1074sec preferred_lft 1074sec
-12: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 state UNKNOWN qlen 100
-    inet6 fe80::cafe:cafe:cafe:cafe/64 scope link stable-privacy
+2: ens20f0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+    inet6 2001:1458:301:eb::100:1a/128 scope global dynamic noprefixroute
+       valid_lft 590879sec preferred_lft 590879sec
+    inet6 fe80::2e60:cff:fef8:da41/64 scope link noprefixroute
        valid_lft forever preferred_lft forever
 """,
             {
-                "::1": ["::1"],
-                "fdbc:7574:21fe:9200::/64": ["fdbc:7574:21fe:9200:4c52:cafe:8dd4:dc4",
-                                             "fdbc:7574:21fe:9200:103a:abcd:af1f:57f3",
-                                             "fdbc:7574:21fe:9200:a128:1234:2bdd:1b6f",
-                                             "fdbc:7574:21fe:9200:d581:4321:380b:3905"],
-                "fdd8:591e:4969:6363::/64": ["fdd8:591e:4969:6363:4c52:cafe:8dd4:dc4",
-                                             "fdd8:591e:4969:6363:103a:abcd:af1f:57f3",
-                                             "fdd8:591e:4969:6363:a128:1234:2bdd:1b6f",
-                                             "fdd8:591e:4969:6363:d581:4321:380b:3905"],
-                "fde4:8dba:82e1::/64": ["fde4:8dba:82e1:0:ec4a:e402:e9df:b357",
-                                        "fde4:8dba:82e1:0:5054:ff:fe72:61af"],
-                "fe80::/64": ["fe80::1111:2222:3333:4444",
-                              "fe80::cafe:cafe:cafe:cafe"]
+                '2001:1458:301:eb::/64': {
+                    'ens20f0': [
+                        '2001:1458:301:eb::100:1a'
+                    ],
+                },
+                'fe80::/64': {
+                    'ens20f0': ['fe80::2e60:cff:fef8:da41'],
+                },
+                'fd01:1458:304:5e::/64': {
+                    'ens20f0': []
+                },
             }
-        )])
+        ),
+    ])
     def test_parse_ipv6_route(self, test_routes, test_ips, expected):
         assert cd._parse_ipv6_route(test_routes, test_ips) == expected
 
@@ -305,18 +406,17 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
 
         # test normal valid login with url, username and password specified
         call_throws.return_value = '', '', 0
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'sample-url',
             '--registry-username', 'sample-user', '--registry-password',
             'sample-pass'])
-        assert ctx
+        ctx.container_engine = mock_docker()
         retval = cd.command_registry_login(ctx)
         assert retval == 0
 
         # test bad login attempt with invalid arguments given
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'bad-args-url'])
-        assert ctx
         with pytest.raises(Exception) as e:
             assert cd.command_registry_login(ctx)
         assert str(e.value) == ('Invalid custom registry arguments received. To login to a custom registry include '
@@ -324,17 +424,16 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
 
         # test normal valid login with json file
         get_parm.return_value = {"url": "sample-url", "username": "sample-username", "password": "sample-password"}
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-json', 'sample-json'])
-        assert ctx
+        ctx.container_engine = mock_docker()
         retval = cd.command_registry_login(ctx)
         assert retval == 0
 
         # test bad login attempt with bad json file
         get_parm.return_value = {"bad-json": "bad-json"}
-        ctx: Optional[cd.CephadmContext] =  cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext =  cd.cephadm_init_ctx(
             ['registry-login', '--registry-json', 'sample-json'])
-        assert ctx
         with pytest.raises(Exception) as e:
             assert cd.command_registry_login(ctx)
         assert str(e.value) == ("json provided for custom registry login did not include all necessary fields. "
@@ -347,11 +446,10 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
 
         # test login attempt with valid arguments where login command fails
         call_throws.side_effect = Exception
-        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['registry-login', '--registry-url', 'sample-url',
             '--registry-username', 'sample-user', '--registry-password',
             'sample-pass'])
-        assert ctx
         with pytest.raises(Exception) as e:
             cd.command_registry_login(ctx)
         assert str(e.value) == "Failed to login to custom registry @ sample-url as sample-user with given password"
@@ -416,6 +514,26 @@ docker.io/ceph/daemon-base:octopus
         '''
         image = cd._filter_last_local_ceph_image(out)
         assert image == 'docker.io/ceph/ceph:v15.2.5'
+
+    def test_should_log_to_journald(self):
+        ctx = mock.Mock()
+        # explicit
+        ctx.log_to_journald = True
+        assert cd.should_log_to_journald(ctx)
+
+        ctx.log_to_journald = None
+        # enable if podman support --cgroup=split
+        ctx.container_engine = mock_podman()
+        ctx.container_engine.version = (2, 1, 0)
+        assert cd.should_log_to_journald(ctx)
+
+        # disable on old podman
+        ctx.container_engine.version = (2, 0, 0)
+        assert not cd.should_log_to_journald(ctx)
+
+        # disable on docker
+        ctx.container_engine = mock_docker()
+        assert not cd.should_log_to_journald(ctx)
 
 
 class TestCustomContainer(unittest.TestCase):
@@ -610,13 +728,10 @@ iMN28C2bKGao5UHvdER1rGy7
         assert exporter.unit_run
         lines = exporter.unit_run.split('\n')
         assert len(lines) == 2
-        assert "/var/lib/ceph/foobar/cephadm exporter --fsid foobar --id test --port 9443 &" in lines[1]
+        assert "cephadm exporter --fsid foobar --id test --port 9443 &" in lines[1]
 
     def test_binary_path(self, exporter):
-        # fsid = foobar
-        args = cd._parse_args([])
-        cd.args = args
-        assert exporter.binary_path == "/var/lib/ceph/foobar/cephadm"
+        assert os.path.isfile(exporter.binary_path)
 
     def test_systemd_unit(self, exporter):
         assert exporter.unit_file
@@ -819,3 +934,226 @@ class TestMaintenance:
     def test_parser_BAD(self):
         with pytest.raises(SystemExit):
             cd._parse_args(['host-maintenance', 'wah'])
+
+
+class TestMonitoring(object):
+    @mock.patch('cephadm.call')
+    def test_get_version_alertmanager(self, _call):
+        ctx = mock.Mock()
+        daemon_type = 'alertmanager'
+
+        # binary `prometheus`
+        _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
+        version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        assert version == '0.16.1'
+
+        # binary `prometheus-alertmanager`
+        _call.side_effect = (
+            ('', '', 1),
+            ('', '{}, version 0.16.1'.format(daemon_type), 0),
+        )
+        version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        assert version == '0.16.1'
+
+    @mock.patch('cephadm.call')
+    def test_get_version_prometheus(self, _call):
+        ctx = mock.Mock()
+        daemon_type = 'prometheus'
+        _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
+        version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        assert version == '0.16.1'
+
+    @mock.patch('cephadm.call')
+    def test_get_version_node_exporter(self, _call):
+        ctx = mock.Mock()
+        daemon_type = 'node-exporter'
+        _call.return_value = '', '{}, version 0.16.1'.format(daemon_type.replace('-', '_')), 0
+        version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        assert version == '0.16.1'
+
+    @mock.patch('cephadm.os.fchown')
+    @mock.patch('cephadm.get_parm')
+    @mock.patch('cephadm.makedirs')
+    @mock.patch('cephadm.open')
+    @mock.patch('cephadm.make_log_dir')
+    @mock.patch('cephadm.make_data_dir')
+    def test_create_daemon_dirs_prometheus(self, make_data_dir, make_log_dir, _open, makedirs,
+                                           get_parm, fchown):
+        """
+        Ensures the required and optional files given in the configuration are
+        created and mapped correctly inside the container. Tests absolute and
+        relative file paths given in the configuration.
+        """
+
+        fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
+        daemon_type = 'prometheus'
+        uid, gid = 50, 50
+        daemon_id = 'home'
+        ctx = mock.Mock()
+        ctx.data_dir = '/somedir'
+        files = {
+            'files': {
+                'prometheus.yml': 'foo',
+                '/etc/prometheus/alerting/ceph_alerts.yml': 'bar'
+            }
+        }
+        get_parm.return_value = files
+
+        cd.create_daemon_dirs(ctx,
+                              fsid,
+                              daemon_type,
+                              daemon_id,
+                              uid,
+                              gid,
+                              config=None,
+                              keyring=None)
+
+        prefix = '{data_dir}/{fsid}/{daemon_type}.{daemon_id}'.format(
+            data_dir=ctx.data_dir,
+            fsid=fsid,
+            daemon_type=daemon_type,
+            daemon_id=daemon_id
+        )
+        assert _open.call_args_list == [
+            mock.call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
+                 encoding='utf-8'),
+            mock.call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
+                 encoding='utf-8'),
+        ]
+        assert mock.call().__enter__().write('foo') in _open.mock_calls
+        assert mock.call().__enter__().write('bar') in _open.mock_calls
+
+
+class TestBootstrap(TestCephAdm):
+
+    @staticmethod
+    def _get_cmd(*args):
+        return [
+            'bootstrap',
+            '--allow-mismatched-release',
+            '--skip-prepare-host',
+            '--skip-dashboard',
+            *args,
+        ]
+
+    def test_config(self, cephadm_fs):
+        conf_file = 'foo'
+        cmd = self._get_cmd(
+            '--mon-ip', '192.168.1.1',
+            '--skip-mon-network',
+            '--config', conf_file,
+        )
+
+        with with_cephadm_ctx(cmd) as ctx:
+            msg = r'No such file or directory'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cephadm_fs.create_file(conf_file)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0
+
+    def test_no_mon_addr(self, cephadm_fs):
+        cmd = self._get_cmd()
+        with with_cephadm_ctx(cmd) as ctx:
+            msg = r'must specify --mon-ip or --mon-addrv'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+    def test_skip_mon_network(self, cephadm_fs):
+        cmd = self._get_cmd('--mon-ip', '192.168.1.1')
+
+        with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+            msg = r'Failed to infer CIDR network'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cmd += ['--skip-mon-network']
+        with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0
+
+    @pytest.mark.parametrize('mon_ip, list_networks, result',
+        [
+            # IPv4
+            (
+                'eth0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '0.0.0.0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '192.168.1.0',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '192.168.1.1',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            (
+                '192.168.1.1:1234',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            # IPv6
+            (
+                '::',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '::ffff:192.168.1.0',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                False,
+            ),
+            (
+                '::ffff:192.168.1.1',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+            (
+                '::ffff:c0a8:101',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+            (
+                '0000:0000:0000:0000:0000:FFFF:C0A8:0101',
+                {"ffff::/64": {"eth0": ["::ffff:c0a8:101"]}},
+                True,
+            ),
+        ])
+    def test_mon_ip(self, mon_ip, list_networks, result, cephadm_fs):
+        cmd = self._get_cmd('--mon-ip', mon_ip)
+        if not result:
+            with with_cephadm_ctx(cmd, list_networks={}) as ctx:
+                msg = r'Failed to infer CIDR network'
+                with pytest.raises(cd.Error, match=msg):
+                    cd.command_bootstrap(ctx)
+        else:
+            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+                retval = cd.command_bootstrap(ctx)
+                assert retval == 0
+
+    def test_allow_fqdn_hostname(self, cephadm_fs):
+        hostname = 'foo.bar'
+        cmd = self._get_cmd(
+            '--mon-ip', '192.168.1.1',
+            '--skip-mon-network',
+        )
+
+        with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
+            msg = r'--allow-fqdn-hostname'
+            with pytest.raises(cd.Error, match=msg):
+                cd.command_bootstrap(ctx)
+
+        cmd += ['--allow-fqdn-hostname']
+        with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
+            retval = cd.command_bootstrap(ctx)
+            assert retval == 0

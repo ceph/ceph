@@ -47,6 +47,7 @@ describe('NfsFormComponent', () => {
     component = fixture.componentInstance;
     httpTesting = TestBed.inject(HttpTestingController);
     activatedRoute = <ActivatedRouteStub>TestBed.inject(ActivatedRoute);
+    RgwHelper.selectDaemon();
     fixture.detectChanges();
 
     httpTesting.expectOne('api/nfs-ganesha/daemon').flush([
@@ -57,8 +58,9 @@ describe('NfsFormComponent', () => {
     httpTesting.expectOne('ui-api/nfs-ganesha/fsals').flush(['CEPH', 'RGW']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephx/clients').flush(['admin', 'fs', 'rgw']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    RgwHelper.getCurrentDaemon();
-    httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`).flush(['test', 'dev']);
+    httpTesting
+      .expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`)
+      .flush(['test', 'dev', 'tenant$user']);
     const user_dev = {
       suspended: 0,
       user_id: 'dev',
@@ -71,6 +73,15 @@ describe('NfsFormComponent', () => {
       keys: ['a']
     };
     httpTesting.expectOne(`api/rgw/user/test?${RgwHelper.DAEMON_QUERY_PARAM}`).flush(user_test);
+    const tenantUser = {
+      suspended: 0,
+      tenant: 'tenant',
+      user_id: 'user',
+      keys: ['a']
+    };
+    httpTesting
+      .expectOne(`api/rgw/user/tenant%24user?${RgwHelper.DAEMON_QUERY_PARAM}`)
+      .flush(tenantUser);
     httpTesting.verify();
   });
 
@@ -87,7 +98,7 @@ describe('NfsFormComponent', () => {
     ]);
     expect(component.allCephxClients).toEqual(['admin', 'fs', 'rgw']);
     expect(component.allFsNames).toEqual([{ id: 1, name: 'a' }]);
-    expect(component.allRgwUsers).toEqual(['dev']);
+    expect(component.allRgwUsers).toEqual(['dev', 'tenant$user']);
   });
 
   it('should create the form', () => {
@@ -98,7 +109,7 @@ describe('NfsFormComponent', () => {
       daemons: [],
       fsal: { fs_name: 'a', name: '', rgw_user_id: '', user_id: '' },
       path: '',
-      protocolNfsv3: true,
+      protocolNfsv3: false,
       protocolNfsv4: true,
       pseudo: '',
       sec_label_xattr: 'security.selinux',
@@ -143,6 +154,15 @@ describe('NfsFormComponent', () => {
     component.isEdit = true;
     component.ngOnInit();
     expect(component.nfsForm.get('cluster_id').disabled).toBeTruthy();
+  });
+
+  it('should mark NFSv4 protocol as required', () => {
+    component.nfsForm.patchValue({
+      protocolNfsv4: false
+    });
+    component.nfsForm.updateValueAndValidity({ emitEvent: false });
+    expect(component.nfsForm.valid).toBeFalsy();
+    expect(component.nfsForm.get('protocolNfsv4').hasError('required')).toBeTruthy();
   });
 
   describe('should submit request', () => {

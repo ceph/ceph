@@ -280,7 +280,7 @@ int SnapClient::dump_cache(Formatter *f) const
 {
   if (!is_synced()) {
     dout(5) << "dump_cache: not synced" << dendl;
-    return -EINVAL;
+    return -CEPHFS_EINVAL;
   }
 
   map<snapid_t, const SnapInfo*> snaps;

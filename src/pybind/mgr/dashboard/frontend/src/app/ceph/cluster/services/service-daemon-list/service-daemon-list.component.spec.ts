@@ -69,6 +69,33 @@ describe('ServiceDaemonListComponent', () => {
     }
   ];
 
+  const services = [
+    {
+      service_type: 'osd',
+      service_name: 'osd',
+      status: {
+        container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
+        container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+        size: 3,
+        running: 3,
+        last_refresh: '2020-02-25T04:33:26.465699'
+      },
+      events: '2021-03-22T07:34:48.582163Z service:osd [INFO] "service was created"'
+    },
+    {
+      service_type: 'crash',
+      service_name: 'crash',
+      status: {
+        container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
+        container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+        size: 1,
+        running: 1,
+        last_refresh: '2020-02-25T04:33:26.465766'
+      },
+      events: '2021-03-22T07:34:48.582163Z service:osd [INFO] "service was created"'
+    }
+  ];
+
   const getDaemonsByHostname = (hostname?: string) => {
     return hostname ? _.filter(daemons, { hostname: hostname }) : daemons;
   };
@@ -92,6 +119,7 @@ describe('ServiceDaemonListComponent', () => {
     spyOn(cephServiceService, 'getDaemons').and.callFake(() =>
       of(getDaemonsByServiceName(component.serviceName))
     );
+    spyOn(cephServiceService, 'list').and.returnValue(of(services));
     fixture.detectChanges();
   });
 
@@ -109,6 +137,11 @@ describe('ServiceDaemonListComponent', () => {
     component.serviceName = 'osd';
     component.getDaemons(new CdTableFetchDataContext(() => undefined));
     expect(component.daemons.length).toBe(3);
+  });
+
+  it('should list services', () => {
+    component.getServices(new CdTableFetchDataContext(() => undefined));
+    expect(component.services.length).toBe(2);
   });
 
   it('should not display doc panel if orchestrator is available', () => {

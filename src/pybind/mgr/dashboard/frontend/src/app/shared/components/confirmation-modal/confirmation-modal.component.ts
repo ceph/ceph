@@ -19,9 +19,11 @@ export class ConfirmationModalComponent implements OnInit, OnDestroy {
   description?: TemplateRef<any>;
 
   // Optional
+  warning = false;
   bodyData?: object;
   onCancel?: Function;
   bodyContext?: object;
+  showSubmit = true;
 
   // Component only
   boundCancel = this.cancel.bind(this);

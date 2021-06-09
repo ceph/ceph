@@ -1,24 +1,34 @@
 import pytest
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmExporter, CephadmDaemonDeploySpec
+    RbdMirrorService, CrashService, CephadmDaemonDeploySpec
 from cephadm.services.iscsi import IscsiService
 from cephadm.services.nfs import NFSService
 from cephadm.services.osd import OSDService
 from cephadm.services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
+from cephadm.services.exporter import CephadmExporter
 from ceph.deployment.service_spec import IscsiServiceSpec
 
 from orchestrator import OrchestratorError
+from orchestrator._interface import DaemonDescription
+
+
+class FakeInventory:
+    def get_addr(self, name: str) -> str:
+        return '1.2.3.4'
 
 
 class FakeMgr:
     def __init__(self):
         self.config = ''
         self.check_mon_command = MagicMock(side_effect=self._check_mon_command)
+        self.mon_command = MagicMock(side_effect=self._check_mon_command)
         self.template = MagicMock()
+        self.log = MagicMock()
+        self.inventory = FakeInventory()
 
     def _check_mon_command(self, cmd_dict, inbuf=None):
         prefix = cmd_dict.get('prefix')
@@ -81,36 +91,6 @@ class TestCephadmService:
         }
         return cephadm_services
 
-    def test_iscsi_client_caps(self):
-        mgr = FakeMgr()
-        iscsi_service = self._get_services(mgr)['iscsi']
-
-        iscsi_spec = IscsiServiceSpec(service_type='iscsi', service_id="a")
-        iscsi_spec.daemon_type = "iscsi"
-        iscsi_spec.daemon_id = "a"
-        iscsi_spec.spec = MagicMock()
-        iscsi_spec.spec.daemon_type = "iscsi"
-        iscsi_spec.spec.ssl_cert = ''
-
-        mgr.spec_store = MagicMock()
-        mgr.spec_store.__getitem__.return_value = iscsi_spec
-
-        iscsi_daemon_spec = CephadmDaemonDeploySpec(
-            host='host', daemon_id='a', service_name=iscsi_spec.service_name())
-
-        iscsi_service.prepare_create(iscsi_daemon_spec)
-
-        expected_caps = ['mon',
-                         'profile rbd, allow command "osd blocklist", allow command "config-key get" with "key" prefix "iscsi/"',
-                         'mgr', 'allow command "service status"',
-                         'osd', 'allow rwx']
-
-        expected_call = call({'prefix': 'auth get-or-create',
-                              'entity': 'client.iscsi.a',
-                              'caps': expected_caps})
-
-        assert expected_call in mgr.check_mon_command.mock_calls
-
     def test_get_auth_entity(self):
         mgr = FakeMgr()
         cephadm_services = self._get_services(mgr)
@@ -151,3 +131,95 @@ class TestCephadmService:
                 cephadm_services[daemon_type].get_auth_entity("id1", "host")
                 cephadm_services[daemon_type].get_auth_entity("id1", "")
                 cephadm_services[daemon_type].get_auth_entity("id1")
+
+
+class TestISCSIService:
+
+    mgr = FakeMgr()
+    iscsi_service = IscsiService(mgr)
+
+    iscsi_spec = IscsiServiceSpec(service_type='iscsi', service_id="a")
+    iscsi_spec.daemon_type = "iscsi"
+    iscsi_spec.daemon_id = "a"
+    iscsi_spec.spec = MagicMock()
+    iscsi_spec.spec.daemon_type = "iscsi"
+    iscsi_spec.spec.ssl_cert = ''
+    iscsi_spec.api_user = "user"
+    iscsi_spec.api_password = "password"
+    iscsi_spec.api_port = 5000
+    iscsi_spec.api_secure = False
+    iscsi_spec.ssl_cert = "cert"
+    iscsi_spec.ssl_key = "key"
+
+    mgr.spec_store = MagicMock()
+    mgr.spec_store.all_specs.get.return_value = iscsi_spec
+
+    def test_iscsi_client_caps(self):
+
+        iscsi_daemon_spec = CephadmDaemonDeploySpec(
+            host='host', daemon_id='a', service_name=self.iscsi_spec.service_name())
+
+        self.iscsi_service.prepare_create(iscsi_daemon_spec)
+
+        expected_caps = ['mon',
+                         'profile rbd, allow command "osd blocklist", allow command "config-key get" with "key" prefix "iscsi/"',
+                         'mgr', 'allow command "service status"',
+                         'osd', 'allow rwx']
+
+        expected_call = call({'prefix': 'auth get-or-create',
+                              'entity': 'client.iscsi.a',
+                              'caps': expected_caps})
+        expected_call2 = call({'prefix': 'auth caps',
+                               'entity': 'client.iscsi.a',
+                               'caps': expected_caps})
+
+        assert expected_call in self.mgr.mon_command.mock_calls
+        assert expected_call2 in self.mgr.mon_command.mock_calls
+
+    @patch('cephadm.utils.resolve_ip')
+    def test_iscsi_dashboard_config(self, mock_resolve_ip):
+
+        self.mgr.check_mon_command = MagicMock()
+        self.mgr.check_mon_command.return_value = ('', '{"gateways": {}}', '')
+
+        # Case 1: use IPV4 address
+        id1 = DaemonDescription(daemon_type='iscsi', hostname="testhost1",
+                                daemon_id="a", ip='192.168.1.1')
+        daemon_list = [id1]
+        mock_resolve_ip.return_value = '192.168.1.1'
+
+        self.iscsi_service.config_dashboard(daemon_list)
+
+        dashboard_expected_call = call({'prefix': 'dashboard iscsi-gateway-add',
+                                        'name': 'testhost1'},
+                                       'http://user:password@192.168.1.1:5000')
+
+        assert dashboard_expected_call in self.mgr.check_mon_command.mock_calls
+
+        # Case 2: use IPV6 address
+        self.mgr.check_mon_command.reset_mock()
+
+        id1 = DaemonDescription(daemon_type='iscsi', hostname="testhost1",
+                                daemon_id="a", ip='FEDC:BA98:7654:3210:FEDC:BA98:7654:3210')
+        mock_resolve_ip.return_value = 'FEDC:BA98:7654:3210:FEDC:BA98:7654:3210'
+
+        self.iscsi_service.config_dashboard(daemon_list)
+
+        dashboard_expected_call = call({'prefix': 'dashboard iscsi-gateway-add',
+                                        'name': 'testhost1'},
+                                       'http://user:password@[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]:5000')
+
+        assert dashboard_expected_call in self.mgr.check_mon_command.mock_calls
+
+        # Case 3: IPV6 Address . Secure protocol
+        self.mgr.check_mon_command.reset_mock()
+
+        self.iscsi_spec.api_secure = True
+
+        self.iscsi_service.config_dashboard(daemon_list)
+
+        dashboard_expected_call = call({'prefix': 'dashboard iscsi-gateway-add',
+                                        'name': 'testhost1'},
+                                       'https://user:password@[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]:5000')
+
+        assert dashboard_expected_call in self.mgr.check_mon_command.mock_calls

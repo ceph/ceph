@@ -58,6 +58,7 @@ set(unittest_librbd_srcs
   crypto/test_mock_CryptoObjectDispatch.cc
   crypto/test_mock_FormatRequest.cc
   crypto/test_mock_LoadRequest.cc
+  crypto/test_mock_ShutDownCryptoRequest.cc
   crypto/openssl/test_DataCryptor.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
@@ -132,17 +133,14 @@ set(unittest_librbd_srcs
   )
 
 if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
-   set(unittest_librbd_srcs
-     ${unittest_librbd_srcs}
+   list(APPEND unittest_librbd_srcs
      cache/pwl/test_WriteLogMap.cc)
    if(WITH_RBD_RWL)
-     set(unittest_librbd_srcs
-       ${unittest_librbd_srcs}
+     list(APPEND unittest_librbd_srcs
        cache/pwl/test_mock_ReplicatedWriteLog.cc)
    endif()
    if(WITH_RBD_SSD_CACHE)
-     set(unittest_librbd_srcs
-       ${unittest_librbd_srcs}
+     list(APPEND unittest_librbd_srcs
        cache/pwl/test_mock_SSDWriteLog.cc)
    endif()
 endif()
@@ -157,6 +155,9 @@ add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_compile_definitions(unittest_librbd PRIVATE "TEST_LIBRBD_INTERNALS")
+set_target_properties(unittest_librbd PROPERTIES
+  JOB_POOL_COMPILE heavy_compile_job_pool
+  JOB_POOL_LINK heavy_link_job_pool)
 add_dependencies(unittest_librbd
   cls_journal
   cls_lock

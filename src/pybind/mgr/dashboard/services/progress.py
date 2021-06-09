@@ -7,7 +7,6 @@ executing and completed tasks tacked by the progress mgr module
 using the same structure of dashboard tasks
 '''
 
-from __future__ import absolute_import
 
 import logging
 from datetime import datetime

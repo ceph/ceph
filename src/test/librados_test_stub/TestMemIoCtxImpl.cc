@@ -4,7 +4,6 @@
 #include "test/librados_test_stub/TestMemIoCtxImpl.h"
 #include "test/librados_test_stub/TestMemRadosClient.h"
 #include "common/Clock.h"
-#include "common/RWLock.h"
 #include "include/err.h"
 #include <functional>
 #include <boost/algorithm/string/predicate.hpp>

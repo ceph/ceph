@@ -6,6 +6,7 @@
 
 #include "include/rbd/librbd.hpp"
 #include "librbd/ImageCtx.h"
+#include "librbd/crypto/CryptoInterface.h"
 #include "librbd/crypto/luks/Header.h"
 
 namespace librbd {
@@ -21,13 +22,15 @@ public:
     static FormatRequest* create(
             I* image_ctx, encryption_format_t format,
             encryption_algorithm_t alg, std::string&& passphrase,
-            Context* on_finish, bool insecure_fast_mode) {
+            ceph::ref_t<CryptoInterface>* result_crypto, Context* on_finish,
+            bool insecure_fast_mode) {
       return new FormatRequest(image_ctx, format, alg, std::move(passphrase),
-                               on_finish, insecure_fast_mode);
+                               result_crypto, on_finish, insecure_fast_mode);
     }
 
     FormatRequest(I* image_ctx, encryption_format_t format,
                   encryption_algorithm_t alg, std::string&& passphrase,
+                  ceph::ref_t<CryptoInterface>* result_crypto,
                   Context* on_finish, bool insecure_fast_mode);
     void send();
     void finish(int r);
@@ -38,6 +41,7 @@ private:
     encryption_format_t m_format;
     encryption_algorithm_t m_alg;
     std::string m_passphrase;
+    ceph::ref_t<CryptoInterface>* m_result_crypto;
     Context* m_on_finish;
     bool m_insecure_fast_mode;
     Header m_header;

@@ -78,13 +78,13 @@ class List(object):
                 # ignore non-main devices, for now
                 continue
             whoami = oj[dev]['whoami']
-            result[whoami] = {
+            result[oj[dev]['osd_uuid']] = {
                 'type': 'bluestore',
                 'osd_id': int(whoami),
+                'osd_uuid': oj[dev]['osd_uuid'],
+                'ceph_fsid': oj[dev]['ceph_fsid'],
+                'device': dev
             }
-            for f in ['osd_uuid', 'ceph_fsid']:
-                result[whoami][f] = oj[dev][f]
-            result[whoami]['device'] = dev
         return result
 
     @decorators.needs_root

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# -*- mode:sh; tab-width:4; sh-basic-offset:4; indent-tabs-mode:nil -*-
+# vim: softtabstop=4 shiftwidth=4 expandtab
 #
 # Copyright (C) 2013 Inktank <info@inktank.com>
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
@@ -41,6 +43,34 @@ do_killall() {
     pg=`pgrep -u $MYUID -f $pname`
     [ -n "$pg" ] && kill $pg
     $SUDO killall -u $MYNAME $1
+}
+
+maybe_kill() {
+    local p=$1
+    shift
+    local step=$1
+    shift
+    case $step in
+        0)
+            # killing processes
+            pkill -SIGTERM -u $MYUID $p
+            return 1
+            ;;
+        [1-5])
+            # wait for processes to stop
+            if pkill -0 -u $MYUID $p; then
+                # $p is still alive
+                return 1
+            fi
+            ;;
+        8)
+            # kill and print if some left
+            if pkill -0 -u $MYUID $p; then
+                echo "WARNING: $p did not orderly shutdown, killing it hard!" >&2
+                pkill -SIGKILL -u $MYUID $p
+            fi
+            ;;
+    esac
 }
 
 do_killcephadm() {
@@ -161,13 +191,25 @@ if [ $stop_all -eq 1 ]; then
         do_killcephadm
     fi
 
-    for p in $ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd ; do
-        for try in 0 1 1 1 1 ; do
-            if ! pkill -u $MYUID $p ; then
-                break
+    # killing processes
+    to_kill="$ceph_osd ceph-mon ceph-mds ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd"
+    since_kill=0
+    for step in 0 1 1 2 3 5 8; do
+        sleep $step
+        since_kill=$((since_kill + step))
+        survivors=''
+        for p in $to_kill; do
+            if ! maybe_kill "$p" $step; then
+                survivors+=" $p"
             fi
-            sleep $try
         done
+        if [ -z "$survivors" ]; then
+            break
+        fi
+        to_kill=$survivors
+        if [ $since_kill -gt 0 ]; then
+            echo "WARNING: $to_kill still alive after $since_kill seconds" >&2
+        fi
     done
 
     pkill -u $MYUID -f valgrind.bin.\*ceph-mon

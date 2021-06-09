@@ -34,6 +34,7 @@ class DataProcessor {
 class Pipe : public DataProcessor {
   DataProcessor *next;
  public:
+  explicit Pipe() : next(nullptr) {}
   explicit Pipe(DataProcessor *next) : next(next) {}
 
   // passes the data on to the next processor
@@ -47,6 +48,7 @@ class ChunkProcessor : public Pipe {
   uint64_t chunk_size;
   bufferlist chunk; // leftover bytes from the last call to process()
  public:
+  ChunkProcessor() {}
   ChunkProcessor(DataProcessor *next, uint64_t chunk_size)
     : Pipe(next), chunk_size(chunk_size)
   {}
@@ -68,6 +70,7 @@ class StripeProcessor : public Pipe {
   StripeGenerator *gen;
   std::pair<uint64_t, uint64_t> bounds; // bounds of current stripe
  public:
+  StripeProcessor() {}
   StripeProcessor(DataProcessor *next, StripeGenerator *gen,
                   uint64_t first_stripe_size)
     : Pipe(next), gen(gen), bounds(0, first_stripe_size)

@@ -24,10 +24,6 @@ extern void rgw_flush_formatter_and_reset(struct req_state *s,
 extern void rgw_flush_formatter(struct req_state *s,
 				ceph::Formatter *formatter);
 
-std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
-                                        const uint64_t max_len,
-                                        const bool allow_chunked=true);
-
 inline std::string_view rgw_sanitized_hdrval(ceph::buffer::list& raw)
 {
   /* std::string and thus std::string_view ARE OBLIGED to carry multiple
@@ -46,43 +42,6 @@ inline std::string_view rgw_sanitized_hdrval(ceph::buffer::list& raw)
   }
 
   return std::string_view(data, len);
-}
-
-template <class T>
-int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
-			    uint64_t max_len, bool *empty)
-{
-  if (empty)
-    *empty = false;
-
-  int rv = 0;
-  bufferlist data;
-  std::tie(rv, data) = rgw_rest_read_all_input(s, max_len);
-  if (rv < 0) {
-    return rv;
-  }
-
-  if (!data.length()) {
-    if (empty) {
-      *empty = true;
-    }
-
-    return -EINVAL;
-  }
-
-  JSONParser parser;
-
-  if (!parser.parse(data.c_str(), data.length())) {
-    return -EINVAL;
-  }
-
-  try {
-      decode_json_obj(out, &parser);
-  } catch (JSONDecoder::err& e) {
-      return -EINVAL;
-  }
-
-  return 0;
 }
 
 template <class T>
@@ -162,7 +121,7 @@ protected:
 public:
   RGWGetObj_ObjStore() : sent_header(false) {}
 
-  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::Store* store, struct req_state *s, RGWHandler *h) override {
     RGWGetObj::init(store, s, h);
     sent_header = false;
   }
@@ -543,8 +502,9 @@ public:
 class RGWRESTOp : public RGWOp {
 protected:
   RGWRESTFlusher flusher;
+
 public:
-  void init(rgw::sal::RGWRadosStore *store, struct req_state *s,
+  void init(rgw::sal::Store* store, struct req_state *s,
             RGWHandler *dialect_handler) override {
     RGWOp::init(store, s, dialect_handler);
     flusher.init(s, this);
@@ -637,7 +597,7 @@ public:
   }
 
   virtual RGWHandler_REST* get_handler(
-    rgw::sal::RGWRadosStore *store,
+    rgw::sal::Store* store,
     struct req_state* const s,
     const rgw::auth::StrategyRegistry& auth_registry,
     const std::string& frontend_prefix
@@ -669,7 +629,7 @@ class RGWREST {
   static int preprocess(struct req_state *s, rgw::io::BasicClient* rio);
 public:
   RGWREST() {}
-  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+  RGWHandler_REST *get_handler(rgw::sal::Store* store,
                                struct req_state *s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix,

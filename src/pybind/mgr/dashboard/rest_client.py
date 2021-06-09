@@ -11,7 +11,6 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
 """
-from __future__ import absolute_import
 
 import inspect
 import logging
@@ -445,7 +444,7 @@ class RestClient(object):
                     "{}"  # TODO remove
                     .format(self.client_name, resp.status_code, pf(
                         resp.content)),
-                    resp.status_code,
+                    self._handle_response_status_code(resp.status_code),
                     resp.content)
         except ConnectionError as ex:
             if ex.args:
@@ -507,12 +506,19 @@ class RestClient(object):
             raise RequestException(msg)
 
     @staticmethod
+    def _handle_response_status_code(status_code: int) -> int:
+        """
+        Method to be overridden by subclasses that need specific handling.
+        """
+        return status_code
+
+    @staticmethod
     def api(path, **api_kwargs):
         def call_decorator(func):
             def func_wrapper(self, *args, **kwargs):
                 method = api_kwargs.get('method', None)
                 resp_structure = api_kwargs.get('resp_structure', None)
-                args_name = inspect.getargspec(func).args
+                args_name = inspect.getfullargspec(func).args
                 args_dict = dict(zip(args_name[1:], args))
                 for key, val in kwargs.items():
                     args_dict[key] = val

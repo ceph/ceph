@@ -254,7 +254,7 @@ public:
 } /* rgw::io::DecoratedRestfulClient */;
 
 
-/* Interface that should be provided by a front-end class wanting to to use
+/* Interface that should be provided by a front-end class wanting to use
  * the low-level buffering offered by i.e. StaticOutputBufferer. */
 class BuffererSink {
 public:

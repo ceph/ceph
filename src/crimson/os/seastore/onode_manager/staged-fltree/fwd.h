@@ -17,9 +17,13 @@
 
 namespace crimson::os::seastore::onode {
 
+using eagain_ertr = crimson::errorator<
+  crimson::ct_error::eagain>;
+template <class ValueT=void>
+using eagain_future = eagain_ertr::future<ValueT>;
+
 using crimson::os::seastore::Transaction;
 using crimson::os::seastore::TransactionRef;
-using crimson::os::seastore::make_transaction;
 using crimson::os::seastore::laddr_t;
 using crimson::os::seastore::L_ADDR_MIN;
 using crimson::os::seastore::L_ADDR_NULL;
@@ -74,8 +78,13 @@ inline MatchKindCMP toMatchKindCMP(int value) {
 }
 template <typename Type>
 MatchKindCMP toMatchKindCMP(const Type& l, const Type& r) {
-  int match = l - r;
-  return toMatchKindCMP(match);
+  if (l > r) {
+    return MatchKindCMP::GT;
+  } else if (l < r) {
+    return MatchKindCMP::LT;
+  } else {
+    return MatchKindCMP::EQ;
+  }
 }
 
 inline MatchKindCMP toMatchKindCMP(
@@ -158,6 +167,14 @@ inline std::ostream& operator<<(std::ostream& os, const tree_stats_t& stats) {
      << "\n  ratio key compression = " << stats.ratio_key_compression();
   assert(stats.num_kvs_internal + 1 == stats.num_nodes());
   return os;
+}
+
+template <typename PtrType>
+void reset_ptr(PtrType& ptr, const char* origin_base, const char* new_base) {
+  assert((const char*)ptr > origin_base);
+  assert((const char*)ptr - origin_base < NODE_BLOCK_SIZE);
+  ptr = reinterpret_cast<PtrType>(
+      (const char*)ptr - origin_base + new_base);
 }
 
 }

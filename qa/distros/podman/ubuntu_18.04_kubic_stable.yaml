@@ -1,0 +1,13 @@
+os_type: ubuntu
+os_version: "18.04"
+
+# feel free to remove this test, if Kubic project is no longer maintained.
+tasks:
+- pexec:
+    all:
+    - sudo cp /etc/containers/registries.conf /etc/containers/registries.conf.backup
+    - curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_18.04/Release.key | sudo apt-key add -
+    - echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_18.04/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
+    - sudo apt update
+    - sudo apt -y install podman
+    - sudo cp /etc/containers/registries.conf.backup /etc/containers/registries.conf

@@ -881,6 +881,10 @@ void DaemonServer::_check_offlines_pgs(
   for (const auto& q : pgmap.pg_stat) {
     set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
     bool found = false;
+    if (q.second.state == 0) {
+      report->unknown.insert(q.first);
+      continue;
+    }
     if (q.second.state & PG_STATE_DEGRADED) {
       for (auto& anm : q.second.avail_no_missing) {
 	if (osds.count(anm.osd)) {
@@ -931,7 +935,9 @@ void DaemonServer::_check_offlines_pgs(
     }
   }
   dout(20) << osds << " -> " << report->ok.size() << " ok, "
-	   << report->not_ok.size() << " not ok" << dendl;
+	   << report->not_ok.size() << " not ok, "
+	   << report->unknown.size() << " unknown"
+	   << dendl;
 }
 
 void DaemonServer::_maximize_ok_to_stop_set(
@@ -1040,7 +1046,7 @@ bool DaemonServer::_handle_command(
     if (boost::algorithm::ends_with(prefix, "_json")) {
       format = "json";
     } else {
-      cmd_getval(cmdctx->cmdmap, "format", format, string("plain"));
+      format = cmd_getval_or<string>(cmdctx->cmdmap, "format", "plain");
     }
     f.reset(Formatter::create(format));
   }
@@ -1229,20 +1235,13 @@ bool DaemonServer::_handle_command(
       return true;
     }
     for (auto& con : p->second) {
-      if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
-	vector<spg_t> pgs = { spgid };
-	con->send_message(new MOSDScrub2(monc->get_fsid(),
-					 epoch,
-					 pgs,
-					 scrubop == "repair",
-					 scrubop == "deep-scrub"));
-      } else {
-	vector<pg_t> pgs = { pgid };
-	con->send_message(new MOSDScrub(monc->get_fsid(),
-					pgs,
-					scrubop == "repair",
-					scrubop == "deep-scrub"));
-      }
+      assert(HAVE_FEATURE(con->get_features(), SERVER_OCTOPUS));
+      vector<spg_t> pgs = { spgid };
+      con->send_message(new MOSDScrub2(monc->get_fsid(),
+				       epoch,
+				       pgs,
+				       scrubop == "repair",
+				       scrubop == "deep-scrub"));
     }
     ss << "instructing pg " << spgid << " on osd." << acting_primary
        << " to " << scrubop;
@@ -1409,8 +1408,7 @@ bool DaemonServer::_handle_command(
     bool dry_run =
       prefix == "osd test-reweight-by-pg" ||
       prefix == "osd test-reweight-by-utilization";
-    int64_t oload;
-    cmd_getval(cmdctx->cmdmap, "oload", oload, int64_t(120));
+    int64_t oload = cmd_getval_or<int64_t>(cmdctx->cmdmap, "oload", 120);
     set<int64_t> pools;
     vector<string> poolnames;
     cmd_getval(cmdctx->cmdmap, "pools", poolnames);
@@ -1444,7 +1442,7 @@ bool DaemonServer::_handle_command(
       return true;
     }
     bool no_increasing = false;
-    cmd_getval(cmdctx->cmdmap, "no_increasing", no_increasing);
+    cmd_getval_compat_cephbool(cmdctx->cmdmap, "no_increasing", no_increasing);
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap &osdmap, const PGMap& pgmap) {
@@ -1744,28 +1742,23 @@ bool DaemonServer::_handle_command(
     }
     offline_pg_report out_report;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
-	if (pg_map.num_pg_unknown > 0) {
-	  ss << pg_map.num_pg_unknown << " pgs have unknown state; "
-	     << "cannot draw any conclusions";
-	  r = -EAGAIN;
-	  return;
-	}
 	_maximize_ok_to_stop_set(
 	  osds, max, osdmap, pg_map,
 	  &out_report);
       });
-    if (r < 0) {
-      cmdctx->reply(r, ss);
-      return true;
-    }
     if (!f) {
       f.reset(Formatter::create("json"));
     }
     f->dump_object("ok_to_stop", out_report);
     f->flush(cmdctx->odata);
     cmdctx->odata.append("\n");
+    if (!out_report.unknown.empty()) {
+      ss << out_report.unknown.size() << " pgs have unknown state; "
+	 << "cannot draw any conclusions";
+      cmdctx->reply(-EAGAIN, ss);
+    }
     if (!out_report.ok_to_stop()) {
-      ss << "unsafe to stop osd(s)";
+      ss << "unsafe to stop osd(s) at this time (" << out_report.not_ok.size() << " PGs are or would become offline)";
       cmdctx->reply(-EBUSY, ss);
     } else {
       cmdctx->reply(0, ss);
@@ -2402,10 +2395,12 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
-  dout(10) << "passing through " << cmdctx->cmdmap.size() << dendl;
+  dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix]
                                    (int r_) mutable {
     std::stringstream ss;
+
+    dout(10) << "dispatching command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
 
     // Validate that the module is enabled
     auto& py_handler_name = py_command.module_name;
@@ -2462,6 +2457,7 @@ bool DaemonServer::_handle_command(
 
     cmdctx->odata.append(ds);
     cmdctx->reply(r, ss);
+    dout(10) << " command returned " << r << dendl;
   }));
   return true;
 }
@@ -2531,6 +2527,7 @@ void DaemonServer::send_report()
   }
 
   auto m = ceph::make_message<MMonMgrReport>();
+  m->gid = monc->get_global_id();
   py_modules.get_health_checks(&m->health_checks);
   py_modules.get_progress_events(&m->progress_events);
 
@@ -2834,8 +2831,12 @@ void DaemonServer::adjust_pgs()
 				 max_misplaced / 2.0);
 	      unsigned estmax = std::max<unsigned>(
 		(double)p.get_pg_num() * room, 1u);
+	      unsigned next_min = 0;
+	      if (p.get_pgp_num() > estmax) {
+	        next_min = p.get_pgp_num() - estmax;
+	      }
 	      next = std::clamp(target,
-				p.get_pgp_num() - estmax,
+				next_min,
 				p.get_pgp_num() + estmax);
 	      dout(20) << " room " << room << " estmax " << estmax
 		       << " delta " << (target-p.get_pgp_num())

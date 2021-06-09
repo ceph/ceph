@@ -12,14 +12,14 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
 namespace crimson::os::seastore::collection_manager {
 
 constexpr static segment_off_t MIN_FLAT_BLOCK_SIZE = 4<<10;
-constexpr static segment_off_t MAX_FLAT_BLOCK_SIZE = 4<<20;
+[[maybe_unused]] constexpr static segment_off_t MAX_FLAT_BLOCK_SIZE = 4<<20;
 
 FlatCollectionManager::FlatCollectionManager(
   TransactionManager &tm)
@@ -32,7 +32,7 @@ FlatCollectionManager::mkfs(Transaction &t)
   logger().debug("FlatCollectionManager: {}", __func__);
   return tm.alloc_extent<CollectionNode>(
     t, L_ADDR_MIN, MIN_FLAT_BLOCK_SIZE
-  ).safe_then([this](auto&& root_extent) {
+  ).safe_then([](auto&& root_extent) {
     coll_root_t coll_root = coll_root_t(
       root_extent->get_laddr(),
       MIN_FLAT_BLOCK_SIZE
@@ -47,13 +47,11 @@ FlatCollectionManager::get_coll_root(const coll_root_t &coll_root, Transaction &
   logger().debug("FlatCollectionManager: {}", __func__);
   assert(coll_root.get_location() != L_ADDR_NULL);
   auto cc = get_coll_context(t);
-  return cc.tm.read_extents<CollectionNode>(
+  return cc.tm.read_extent<CollectionNode>(
     cc.t,
     coll_root.get_location(),
     coll_root.get_size()
-  ).safe_then([](auto&& extents) {
-    assert(extents.size() == 1);
-    [[maybe_unused]] auto [laddr, e] = extents.front();
+  ).safe_then([](auto&& e) {
     return get_root_ertr::make_ready_future<CollectionNodeRef>(std::move(e));
   });
 }
@@ -100,14 +98,14 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
       __builtin_unreachable();
     });
   });
-
 }
+
 FlatCollectionManager::list_ret
 FlatCollectionManager::list(const coll_root_t &coll_root, Transaction &t)
 {
   logger().debug("FlatCollectionManager: {}", __func__);
   return get_coll_root(coll_root, t)
-    .safe_then([this, &t] (auto extent) {
+    .safe_then([] (auto extent) {
     return extent->list();
   });
 }

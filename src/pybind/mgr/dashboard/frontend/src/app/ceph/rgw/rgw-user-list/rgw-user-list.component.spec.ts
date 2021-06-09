@@ -4,6 +4,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { of } from 'rxjs';
+
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
@@ -12,6 +15,8 @@ import { RgwUserListComponent } from './rgw-user-list.component';
 describe('RgwUserListComponent', () => {
   let component: RgwUserListComponent;
   let fixture: ComponentFixture<RgwUserListComponent>;
+  let rgwUserService: RgwUserService;
+  let rgwUserServiceListSpy: jasmine.Spy;
 
   configureTestBed({
     declarations: [RgwUserListComponent],
@@ -20,13 +25,18 @@ describe('RgwUserListComponent', () => {
   });
 
   beforeEach(() => {
+    rgwUserService = TestBed.inject(RgwUserService);
+    rgwUserServiceListSpy = spyOn(rgwUserService, 'list');
+    rgwUserServiceListSpy.and.returnValue(of([]));
     fixture = TestBed.createComponent(RgwUserListComponent);
     component = fixture.componentInstance;
+    spyOn(component, 'timeConditionReached').and.stub();
+    fixture.detectChanges();
   });
 
   it('should create', () => {
-    fixture.detectChanges();
     expect(component).toBeTruthy();
+    expect(rgwUserServiceListSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should test all TableActions combinations', () => {
@@ -69,5 +79,88 @@ describe('RgwUserListComponent', () => {
         primary: { multiple: '', executing: '', single: '', no: '' }
       }
     });
+  });
+
+  it('should test if rgw-user data is tranformed correctly', () => {
+    rgwUserServiceListSpy.and.returnValue(
+      of([
+        {
+          user_id: 'testid',
+          stats: {
+            size_actual: 6,
+            num_objects: 6
+          },
+          user_quota: {
+            max_size: 20,
+            max_objects: 10,
+            enabled: true
+          }
+        }
+      ])
+    );
+    component.getUserList(null);
+    expect(rgwUserServiceListSpy).toHaveBeenCalledTimes(2);
+    expect(component.users).toEqual([
+      {
+        user_id: 'testid',
+        stats: {
+          size_actual: 6,
+          num_objects: 6
+        },
+        user_quota: {
+          max_size: 20,
+          max_objects: 10,
+          enabled: true
+        }
+      }
+    ]);
+  });
+
+  it('should usage bars only if quota enabled', () => {
+    rgwUserServiceListSpy.and.returnValue(
+      of([
+        {
+          user_id: 'testid',
+          stats: {
+            size_actual: 6,
+            num_objects: 6
+          },
+          user_quota: {
+            max_size: 1024,
+            max_objects: 10,
+            enabled: true
+          }
+        }
+      ])
+    );
+    component.getUserList(null);
+    expect(rgwUserServiceListSpy).toHaveBeenCalledTimes(2);
+    fixture.detectChanges();
+    const usageBars = fixture.debugElement.nativeElement.querySelectorAll('cd-usage-bar');
+    expect(usageBars.length).toBe(2);
+  });
+
+  it('should not show any usage bars if quota disabled', () => {
+    rgwUserServiceListSpy.and.returnValue(
+      of([
+        {
+          user_id: 'testid',
+          stats: {
+            size_actual: 6,
+            num_objects: 6
+          },
+          user_quota: {
+            max_size: 1024,
+            max_objects: 10,
+            enabled: false
+          }
+        }
+      ])
+    );
+    component.getUserList(null);
+    expect(rgwUserServiceListSpy).toHaveBeenCalledTimes(2);
+    fixture.detectChanges();
+    const usageBars = fixture.debugElement.nativeElement.querySelectorAll('cd-usage-bar');
+    expect(usageBars.length).toBe(0);
   });
 });

@@ -3,7 +3,8 @@ import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from 
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
-import { forkJoin } from 'rxjs';
+import { forkJoin, Observable, of as observableOf, timer as observableTimer } from 'rxjs';
+import { map, switchMapTo } from 'rxjs/operators';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
@@ -62,15 +63,13 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
 
   createForm() {
     const self = this;
-    const eitherDaysOrYears = CdValidators.custom('eitherDaysOrYears', () => {
+    const lockDaysValidator = CdValidators.custom('lockDays', () => {
       if (!self.bucketForm || !_.get(self.bucketForm.getRawValue(), 'lock_enabled')) {
         return false;
       }
-      const years = self.bucketForm.getValue('lock_retention_period_years');
-      const days = self.bucketForm.getValue('lock_retention_period_days');
-      return (days > 0 && years > 0) || (days === 0 && years === 0);
+      const lockDays = Number(self.bucketForm.getValue('lock_retention_period_days'));
+      return !Number.isInteger(lockDays) || lockDays === 0;
     });
-    const lockPeriodDefinition = [0, [CdValidators.number(false), eitherDaysOrYears]];
     this.bucketForm = this.formBuilder.group({
       id: [null],
       bid: [null, [Validators.required], this.editing ? [] : [this.bucketNameValidator()]],
@@ -82,8 +81,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
       'mfa-token-pin': [''],
       lock_enabled: [{ value: false, disabled: this.editing }],
       lock_mode: ['COMPLIANCE'],
-      lock_retention_period_days: lockPeriodDefinition,
-      lock_retention_period_years: lockPeriodDefinition
+      lock_retention_period_days: [0, [CdValidators.number(false), lockDaysValidator]]
     });
   }
 
@@ -134,6 +132,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           // the Angular react framework will throw an error if there is no
           // field for a given key.
           let value: object = _.pick(bidResp, _.keys(defaults));
+          value['lock_retention_period_days'] = this.getLockDays(bidResp);
           value['placement-target'] = bidResp['placement_rule'];
           value['versioning'] = bidResp['versioning'] === RgwBucketVersioning.ENABLED;
           value['mfa-delete'] = bidResp['mfa_delete'] === RgwBucketMfaDelete.ENABLED;
@@ -147,6 +146,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
             this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
             this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
             this.setMfaDeleteValidators();
+            if (value['lock_enabled']) {
+              this.bucketForm.controls['versioning'].disable();
+            }
           }
         }
 
@@ -180,8 +182,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           values['mfa-token-serial'],
           values['mfa-token-pin'],
           values['lock_mode'],
-          values['lock_retention_period_days'],
-          values['lock_retention_period_years']
+          values['lock_retention_period_days']
         )
         .subscribe(
           () => {
@@ -206,8 +207,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           values['placement-target'],
           values['lock_enabled'],
           values['lock_mode'],
-          values['lock_retention_period_days'],
-          values['lock_retention_period_years']
+          values['lock_retention_period_days']
         )
         .subscribe(
           () => {
@@ -239,59 +239,91 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
    *   start and end with a lowercase letter or a number.
    */
   bucketNameValidator(): AsyncValidatorFn {
-    const rgwBucketService = this.rgwBucketService;
-    return (control: AbstractControl): Promise<ValidationErrors | null> => {
-      return new Promise((resolve) => {
-        // Exit immediately if user has not interacted with the control yet
-        // or the control value is empty.
-        if (control.pristine || control.value === '') {
-          resolve(null);
-          return;
+    return (control: AbstractControl): Observable<ValidationErrors | null> => {
+      // Exit immediately if user has not interacted with the control yet
+      // or the control value is empty.
+      if (control.pristine || control.value === '') {
+        return observableOf(null);
+      }
+      const constraints = [];
+      let errorName: string;
+      // - Bucket names cannot be formatted as IP address.
+      constraints.push(() => {
+        const ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
+        const ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
+        const name = this.bucketForm.get('bid').value;
+        let notIP = true;
+        if (ipv4Rgx.test(name) || ipv6Rgx.test(name)) {
+          errorName = 'ipAddress';
+          notIP = false;
         }
-        const constraints = [];
-        // - Bucket names cannot be formatted as IP address.
-        constraints.push((name: AbstractControl) => {
-          const validatorFn = CdValidators.ip();
-          return !validatorFn(name);
-        });
-        // - Bucket names can be between 3 and 63 characters long.
-        constraints.push((name: string) => _.inRange(name.length, 3, 64));
-        // - Bucket names must not contain uppercase characters or underscores.
-        // - Bucket names must start with a lowercase letter or number.
-        // - Bucket names must be a series of one or more labels. Adjacent
-        //   labels are separated by a single period (.). Bucket names can
-        //   contain lowercase letters, numbers, and hyphens. Each label must
-        //   start and end with a lowercase letter or a number.
-        constraints.push((name: string) => {
-          const labels = _.split(name, '.');
-          return _.every(labels, (label) => {
-            // Bucket names must not contain uppercase characters or underscores.
-            if (label !== _.toLower(label) || label.includes('_')) {
-              return false;
-            }
-            // Bucket names can contain lowercase letters, numbers, and hyphens.
-            if (!/[0-9a-z-]/.test(label)) {
-              return false;
-            }
-            // Each label must start and end with a lowercase letter or a number.
-            return _.every([0, label.length], (index) => {
-              return /[a-z]/.test(label[index]) || _.isInteger(_.parseInt(label[index]));
-            });
+        return notIP;
+      });
+      // - Bucket names can be between 3 and 63 characters long.
+      constraints.push((name: string) => {
+        if (!_.inRange(name.length, 3, 64)) {
+          errorName = 'shouldBeInRange';
+          return false;
+        }
+        return true;
+      });
+      // - Bucket names must not contain uppercase characters or underscores.
+      // - Bucket names must start with a lowercase letter or number.
+      // - Bucket names must be a series of one or more labels. Adjacent
+      //   labels are separated by a single period (.). Bucket names can
+      //   contain lowercase letters, numbers, and hyphens. Each label must
+      //   start and end with a lowercase letter or a number.
+      constraints.push((name: string) => {
+        const labels = _.split(name, '.');
+        return _.every(labels, (label) => {
+          // Bucket names must not contain uppercase characters or underscores.
+          if (label !== _.toLower(label) || label.includes('_')) {
+            errorName = 'containsUpperCase';
+            return false;
+          }
+          // Bucket names can contain lowercase letters, numbers, and hyphens.
+          if (!/[0-9a-z-]/.test(label)) {
+            errorName = 'onlyLowerCaseAndNumbers';
+            return false;
+          }
+          // Each label must start and end with a lowercase letter or a number.
+          return _.every([0, label.length - 1], (index) => {
+            errorName = 'lowerCaseOrNumber';
+            return /[a-z]/.test(label[index]) || _.isInteger(_.parseInt(label[index]));
           });
         });
-        if (!_.every(constraints, (func: Function) => func(control.value))) {
-          resolve({ bucketNameInvalid: true });
-          return;
-        }
-        // - Bucket names must be unique.
-        rgwBucketService.exists(control.value).subscribe((resp: boolean) => {
-          if (!resp) {
-            resolve(null);
-          } else {
-            resolve({ bucketNameExists: true });
-          }
-        });
       });
+      if (!_.every(constraints, (func: Function) => func(control.value))) {
+        return observableTimer().pipe(
+          map(() => {
+            switch (errorName) {
+              case 'onlyLowerCaseAndNumbers':
+                return { onlyLowerCaseAndNumbers: true };
+              case 'shouldBeInRange':
+                return { shouldBeInRange: true };
+              case 'ipAddress':
+                return { ipAddress: true };
+              case 'containsUpperCase':
+                return { containsUpperCase: true };
+              case 'lowerCaseOrNumber':
+                return { lowerCaseOrNumber: true };
+              default:
+                return { bucketNameInvalid: true };
+            }
+          })
+        );
+      }
+      // - Bucket names must be unique.
+      return observableTimer().pipe(
+        switchMapTo(this.rgwBucketService.exists.call(this.rgwBucketService, control.value)),
+        map((resp: boolean) => {
+          if (!resp) {
+            return null;
+          } else {
+            return { bucketNameExists: true };
+          }
+        })
+      );
     };
   }
 
@@ -325,5 +357,13 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
 
   getMfaDeleteStatus() {
     return this.isMfaDeleteEnabled ? RgwBucketMfaDelete.ENABLED : RgwBucketMfaDelete.DISABLED;
+  }
+
+  private getLockDays(bucketData: object): number {
+    if (bucketData['lock_retention_period_years'] > 0) {
+      return Math.floor(bucketData['lock_retention_period_years'] * 365.242);
+    }
+
+    return bucketData['lock_retention_period_days'];
   }
 }

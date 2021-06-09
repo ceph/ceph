@@ -16,7 +16,7 @@ namespace ceph {
 class Formatter;
 
 struct BackTrace {
-  const static int max = 100;
+  const static int max = 32;
 
   int skip;
   void *array[max]{};

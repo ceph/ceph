@@ -13,6 +13,8 @@ std::ostream &segment_to_stream(std::ostream &out, const segment_id_t &t)
     return out << "BLOCK_REL_SEG";
   else if (t == RECORD_REL_SEG_ID)
     return out << "RECORD_REL_SEG";
+  else if (t == ZERO_SEG_ID)
+    return out << "ZERO_SEG";
   else if (t == FAKE_SEG_ID)
     return out << "FAKE_SEG";
   else
@@ -53,10 +55,6 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "LADDR_INTERNAL";
   case extent_types_t::LADDR_LEAF:
     return out << "LADDR_LEAF";
-  case extent_types_t::EXTMAP_INNER:
-    return out << "EXTMAP_INNER";
-  case extent_types_t::EXTMAP_LEAF:
-    return out << "EXTMAP_LEAF";
   case extent_types_t::ONODE_BLOCK_STAGED:
     return out << "ONODE_BLOCK_STAGED";
   case extent_types_t::OMAP_INNER:
@@ -65,6 +63,10 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "OMAP_LEAF";
   case extent_types_t::COLL_BLOCK:
     return out << "COLL_BLOCK";
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return out << "OBJECT_DATA_BLOCK";
+  case extent_types_t::RETIRED_PLACEHOLDER:
+    return out << "RETIRED_PLACEHOLDER";
   case extent_types_t::TEST_BLOCK:
     return out << "TEST_BLOCK";
   case extent_types_t::TEST_BLOCK_PHYSICAL:

@@ -29,8 +29,16 @@
 %else
 %bcond_without tcmalloc
 %endif
+%bcond_with system_pmdk
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
+%ifarch x86_64 ppc64le
+%bcond_without rbd_rwl_cache
+%bcond_without rbd_ssd_cache
+%else
+%bcond_with rbd_rwl_cache
+%bcond_with rbd_ssd_cache
+%endif
 %if 0%{?rhel} >= 8
 %bcond_with cephfs_java
 %else
@@ -41,6 +49,8 @@
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
+%global luarocks_package_name luarocks
+%bcond_without lua_packages
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
@@ -50,8 +60,12 @@
 %bcond_with libradosstriper
 %ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
+%bcond_without rbd_rwl_cache
+%bcond_without rbd_ssd_cache
 %else
 %bcond_with lttng
+%bcond_with rbd_rwl_cache
+%bcond_with rbd_ssd_cache
 %endif
 %bcond_with ocf
 %bcond_with selinux
@@ -59,11 +73,24 @@
 %if ! %{defined _fillupdir}
 %global _fillupdir /var/adm/fillup-templates
 %endif
+#luarocks
+%if 0%{?is_opensuse}
+# openSUSE
+%bcond_without lua_packages
+%if 0%{?sle_version}
+# openSUSE Leap
+%global luarocks_package_name lua53-luarocks
+%else
+# openSUSE Tumbleweed
+%global luarocks_package_name lua54-luarocks
+%endif
+%else
+# SLE
+%bcond_with lua_packages
+%endif
 %endif
 %bcond_with seastar
 %bcond_with jaeger
-%bcond_without rbd_rwl_cache
-%bcond_without rbd_ssd_cache
 %if 0%{?fedora} || 0%{?suse_version} >= 1500
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
@@ -84,23 +111,6 @@
 %endif
 %endif
 
-%if 0%{?suse_version}
-%if !0%{?is_opensuse}
-# SLE does not support luarocks
-%bcond_with lua_packages
-%else
-%if 0%{?sle_version} == 150200
-%global luarocks_package_name lua53-luarocks
-%else
-%global luarocks_package_name lua54-luarocks
-%endif
-%bcond_without lua_packages
-%endif
-%else
-%global luarocks_package_name luarocks
-%bcond_without lua_packages
-%endif
-
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %{!?python3_pkgversion: %global python3_pkgversion 3}
@@ -109,13 +119,15 @@
 
 # disable dwz which compresses the debuginfo
 %global _find_debuginfo_dwz_opts %{nil}
+%if ! 0%{?suse_version}
 # use multi-threaded xz compression: xz level 7 using ncpus threads
 %global _source_payload w7T%{_smp_build_ncpus}.xzdio
 %global _binary_payload w7T%{_smp_build_ncpus}.xzdio
+%endif
 
 %define smp_limit_mem_per_job() %( \
   kb_per_job=%1 \
-  kb_total=$(head -1 /proc/meminfo | sed 's/MemTotal:\\s*\\(.*\\) kB.*/\\1/') \
+  kb_total=$(head -3 /proc/meminfo | sed -n 's/MemAvailable:\\s*\\(.*\\) kB.*/\\1/p') \
   jobs=$(( $kb_total / $kb_per_job )) \
   [ $jobs -lt 1 ] && jobs=1 \
   echo $jobs )
@@ -125,8 +137,8 @@
 # 32-bit builds can use 3G memory max, which is not enough even for -j2
 %global _smp_ncpus_max 1
 %else
-# 2.5 GiB mem per job
-%global _smp_ncpus_max %{smp_limit_mem_per_job 2500000}
+# 3.0 GiB mem per job
+%global _smp_ncpus_max %{smp_limit_mem_per_job 3000000}
 %endif
 %endif
 
@@ -175,7 +187,7 @@ BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
-%if 0%{with seastar}
+%if 0%{with seastar} && 0%{?rhel}
 BuildRequires:	gcc-toolset-9-gcc-c++ >= 9.2.1-2.3
 %else
 BuildRequires:	gcc-c++
@@ -207,6 +219,7 @@ BuildRequires:	libtool
 BuildRequires:	libxml2-devel
 BuildRequires:	make
 BuildRequires:	ncurses-devel
+BuildRequires:	libicu-devel
 BuildRequires:	parted
 BuildRequires:	patch
 BuildRequires:	perl
@@ -214,7 +227,10 @@ BuildRequires:	pkgconfig
 BuildRequires:  procps
 BuildRequires:	python%{python3_pkgversion}
 BuildRequires:	python%{python3_pkgversion}-devel
+BuildRequires:	python%{python3_pkgversion}-setuptools
+BuildRequires:	python%{python3_pkgversion}-Cython
 BuildRequires:	snappy-devel
+BuildRequires:	sqlite-devel
 BuildRequires:	sudo
 BuildRequires:	pkgconfig(udev)
 BuildRequires:	util-linux
@@ -262,6 +278,10 @@ BuildRequires:  nlohmann_json-devel
 BuildRequires:  libevent-devel
 BuildRequires:  yaml-cpp-devel
 %endif
+%if 0%{with system_pmdk}
+BuildRequires:  libpmem-devel
+BuildRequires:  libpmemobj-devel
+%endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
 BuildRequires:  gnutls-devel
@@ -293,6 +313,7 @@ BuildRequires:	systemd-rpm-macros
 %{?systemd_requires}
 PreReq:		%fillup_prereq
 BuildRequires:	fdupes
+BuildRequires:  memory-constraints
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
 BuildRequires:	mozilla-nss-devel
@@ -303,9 +324,8 @@ BuildRequires:  openldap2-devel
 #BuildRequires:  krb5
 #BuildRequires:  krb5-devel
 BuildRequires:  cunit-devel
-BuildRequires:	python%{python3_pkgversion}-setuptools
-BuildRequires:	python%{python3_pkgversion}-Cython
 BuildRequires:	python%{python3_pkgversion}-PrettyTable
+BuildRequires:	python%{python3_pkgversion}-PyYAML
 BuildRequires:	python%{python3_pkgversion}-Sphinx
 BuildRequires:  rdma-core-devel
 BuildRequires:	liblz4-devel >= 1.7
@@ -325,16 +345,17 @@ BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	python%{python3_pkgversion}-devel
-BuildRequires:	python%{python3_pkgversion}-setuptools
-BuildRequires:	python%{python3_pkgversion}-Cython
 BuildRequires:	python%{python3_pkgversion}-prettytable
+BuildRequires:	python%{python3_pkgversion}-pyyaml
 BuildRequires:	python%{python3_pkgversion}-sphinx
 BuildRequires:	lz4-devel >= 1.7
 %endif
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
+BuildRequires:	golang-github-prometheus
 BuildRequires:	libtool-ltdl-devel
+BuildRequires:	ninja-build
 BuildRequires:	xmlsec1
 BuildRequires:	xmlsec1-devel
 %ifarch x86_64
@@ -350,9 +371,11 @@ BuildRequires:	python%{python3_pkgversion}-werkzeug
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 %endif
 %if 0%{?suse_version}
+BuildRequires:	golang-github-prometheus-prometheus
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
+BuildRequires:	ninja
 BuildRequires:	python%{python3_pkgversion}-CherryPy
 BuildRequires:	python%{python3_pkgversion}-PyJWT
 BuildRequires:	python%{python3_pkgversion}-Routes
@@ -532,6 +555,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
+Requires:	    libcephsqlite = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
@@ -714,6 +738,7 @@ Summary:	Ceph daemon for immutable object cache
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 %description immutable-object-cache
 Daemon for immutable object cache.
@@ -762,6 +787,7 @@ in realtime.
 %if %{with ocf}
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
+BuildArch:	noarch
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
@@ -804,6 +830,7 @@ Summary:	Ceph Object Storage Daemon (crimson)
 Group:		System/Filesystems
 %endif
 Requires:	ceph-osd = %{_epoch_prefix}%{version}-%{release}
+Requires:	binutils
 %description crimson-osd
 crimson-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -898,6 +925,32 @@ Obsoletes:	python-rados < %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Ceph RADOS
 object store.
+
+%package -n libcephsqlite
+Summary:	SQLite3 VFS for Ceph
+%if 0%{?suse_version}
+Group:		System/Libraries
+%endif
+Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+%description -n libcephsqlite
+A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+distributed object store.
+
+%package -n libcephsqlite-devel
+Summary:	SQLite3 VFS for Ceph headers
+%if 0%{?suse_version}
+Group:		Development/Libraries/C and C++
+%endif
+Requires:	sqlite-devel
+Requires:	libcephsqlite = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
+Provides:	libcephsqlite-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	libcephsqlite-devel < %{_epoch_prefix}%{version}-%{release}
+%description -n libcephsqlite-devel
+A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+distributed object store.
 
 %if 0%{with libradosstriper}
 %package -n libradosstriper1
@@ -1200,8 +1253,7 @@ done
 %endif
 
 %if 0%{?suse_version}
-# the following setting fixed an OOM condition we once encountered in the OBS
-RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
+%limit_build -m 2600
 %endif
 
 export CPPFLAGS="$java_inc"
@@ -1216,8 +1268,11 @@ export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
 
 env | sort
 
-mkdir build
-cd build
+%{?!_vpath_builddir:%global _vpath_builddir %{_target_platform}}
+
+# TODO: drop this step once we can use `cmake -B`
+mkdir -p %{_vpath_builddir}
+pushd %{_vpath_builddir}
 cmake .. \
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
@@ -1284,7 +1339,14 @@ cmake .. \
 %if 0%{with rbd_ssd_cache}
     -DWITH_RBD_SSD_CACHE:BOOL=ON \
 %endif
+%if 0%{with system_pmdk}
+    -DWITH_SYSTEM_PMDK:BOOL=ON \
+%endif
+%if 0%{?suse_version}
+    -DBOOST_J:STRING=%{jobs} \
+%else
     -DBOOST_J:STRING=%{_smp_build_ncpus} \
+%endif
     -DWITH_GRAFANA:BOOL=ON
 
 %if %{with cmake_verbose_logging}
@@ -1292,18 +1354,25 @@ cat ./CMakeFiles/CMakeOutput.log
 cat ./CMakeFiles/CMakeError.log
 %endif
 
+%if 0%{?suse_version}
+make %{_smp_mflags}
+%else
 %make_build
+%endif
+
+popd
 
 %if 0%{with make_check}
 %check
 # run in-tree unittests
-cd build
+pushd %{_vpath_builddir}
 ctest %{_smp_mflags}
+popd
 %endif
 
 
 %install
-pushd build
+pushd %{_vpath_builddir}
 %make_install
 # we have dropped sysvinit bits
 rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
@@ -1339,7 +1408,7 @@ touch %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 chmod 0600 %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 
 # firewall templates and /sbin/mount.ceph symlink
-%if 0%{?suse_version}
+%if 0%{?suse_version} && !0%{?usrmerged}
 mkdir -p %{buildroot}/sbin
 ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 %endif
@@ -1515,13 +1584,15 @@ exit 0
 %{_bindir}/rbd-replay-many
 %{_bindir}/rbdmap
 %{_sbindir}/mount.ceph
-%if 0%{?suse_version}
+%if 0%{?suse_version} && !0%{?usrmerged}
 /sbin/mount.ceph
 %endif
 %if %{with lttng}
 %{_bindir}/rbd-replay-prep
 %endif
 %{_bindir}/ceph-post-file
+%dir %{_libdir}/ceph/denc
+%{_libdir}/ceph/denc/denc-mod-*.so
 %{_tmpfilesdir}/ceph-common.conf
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
@@ -1716,6 +1787,7 @@ fi
 %{_datadir}/ceph/mgr/localpool
 %{_datadir}/ceph/mgr/mds_autoscaler
 %{_datadir}/ceph/mgr/mirroring
+%{_datadir}/ceph/mgr/nfs
 %{_datadir}/ceph/mgr/orchestrator
 %{_datadir}/ceph/mgr/osd_perf_query
 %{_datadir}/ceph/mgr/osd_support
@@ -2126,6 +2198,16 @@ fi
 %{python3_sitearch}/rados.cpython*.so
 %{python3_sitearch}/rados-*.egg-info
 
+%files -n libcephsqlite
+%{_libdir}/libcephsqlite.so
+
+%post -n libcephsqlite -p /sbin/ldconfig
+
+%postun -n libcephsqlite -p /sbin/ldconfig
+
+%files -n libcephsqlite-devel
+%{_includedir}/libcephsqlite.h
+
 %if 0%{with libradosstriper}
 %files -n libradosstriper1
 %{_libdir}/libradosstriper.so.*
@@ -2235,6 +2317,7 @@ fi
 %files -n cephfs-shell
 %{python3_sitelib}/cephfs_shell-*.egg-info
 %{_bindir}/cephfs-shell
+%{_mandir}/man8/cephfs-shell.8*
 %endif
 
 %files -n cephfs-top

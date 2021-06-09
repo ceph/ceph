@@ -263,8 +263,7 @@ protected:
   ImageCtxT &m_image_ctx;
 
   std::string m_log_pool_name;
-  uint64_t m_log_pool_config_size; /* Configured size of RWL */
-  uint64_t m_log_pool_actual_size = 0; /* Actual size of RWL pool */
+  uint64_t m_log_pool_size;
 
   uint32_t m_total_log_entries = 0;
   uint32_t m_free_log_entries = 0;
@@ -352,11 +351,9 @@ protected:
   void complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
 
   bool check_allocation(
-      C_BlockIORequestT *req,
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied,
-      uint64_t &bytes_allocated,
-      uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves, uint64_t bytes_allocated_cap);
+      C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
+      uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
+      uint32_t num_unpublished_reserves);
   void append_scheduled(
       pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
       bool isRWL=false);
@@ -365,7 +362,7 @@ protected:
   virtual void append_scheduled_ops(void) = 0;
   virtual void schedule_append_ops(pwl::GenericLogOperations &ops) = 0;
   virtual void remove_pool_file() = 0;
-  virtual void initialize_pool(Context *on_finish,
+  virtual bool initialize_pool(Context *on_finish,
                                pwl::DeferredContexts &later) = 0;
   virtual void collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
@@ -393,6 +390,10 @@ protected:
       const std::shared_ptr<pwl::GenericLogEntry> log_entry) {
     return nullptr;
   }
+  virtual uint64_t get_max_extent() {
+    return 0;
+  }
+
 };
 
 } // namespace pwl

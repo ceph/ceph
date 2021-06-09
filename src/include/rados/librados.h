@@ -55,7 +55,9 @@ extern "C" {
 /* RADOS lock flags
  * They are also defined in cls_lock_types.h. Keep them in sync!
  */
-#define LIBRADOS_LOCK_FLAG_RENEW 0x1
+#define LIBRADOS_LOCK_FLAG_RENEW       (1u<<0)
+#define LIBRADOS_LOCK_FLAG_MAY_RENEW   LIBRADOS_LOCK_FLAG_RENEW
+#define LIBRADOS_LOCK_FLAG_MUST_RENEW  (1u<<1)
 
 /*
  * Constants for rados_write_op_create().
@@ -165,8 +167,8 @@ typedef enum {
 /*
  * snap id contants
  */
-#define LIBRADOS_SNAP_HEAD  ((uint64_t)(-2))
-#define LIBRADOS_SNAP_DIR   ((uint64_t)(-1))
+#define LIBRADOS_SNAP_HEAD  UINT64_C(-2)
+#define LIBRADOS_SNAP_DIR   UINT64_C(-1)
 
 /**
  * @typedef rados_t
@@ -465,10 +467,10 @@ CEPH_RADOS_API int rados_create_with_context(rados_t *cluster,
  * buffer and length pointers can be NULL, in which case they are
  * not filled in.
  *
- * @param      cluster    cluster handle
- * @param[in]  mon_id     ID of the monitor to ping
- * @param[out] outstr     double pointer with the resulting reply
- * @param[out] outstrlen  pointer with the size of the reply in outstr
+ * @param cluster         cluster handle
+ * @param mon_id [in]     ID of the monitor to ping
+ * @param outstr [out]    double pointer with the resulting reply
+ * @param outstrlen [out] pointer with the size of the reply in outstr
  */
 CEPH_RADOS_API int rados_ping_monitor(rados_t cluster, const char *mon_id,
                                       char **outstr, size_t *outstrlen);
@@ -742,7 +744,7 @@ CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
  * Gets the minimum compatible OSD version
  *
  * @param cluster cluster handle
- * @param[out] require_osd_release minimum compatible OSD version
+ * @param require_osd_release [out] minimum compatible OSD version
  *  based upon the current features
  * @returns 0 on sucess, negative error code on failure
  */
@@ -753,9 +755,9 @@ CEPH_RADOS_API int rados_get_min_compatible_osd(rados_t cluster,
  * Gets the minimum compatible client version
  *
  * @param cluster cluster handle
- * @param[out] min_compat_client minimum compatible client version
+ * @param min_compat_client [out] minimum compatible client version
  *  based upon the current features
- * @param[out] require_min_compat_client required minimum client version
+ * @param require_min_compat_client [out] required minimum client version
  *  based upon explicit setting
  * @returns 0 on success, negative error code on failure
  */
@@ -922,7 +924,7 @@ CEPH_RADOS_API int rados_pool_create_with_all(rados_t cluster,
  *
  * @param cluster the cluster the pool is in
  * @param pool ID of the pool to query
- * @param[out] base_tier base tier, or \c pool if tiering is not configured
+ * @param base_tier [out] base tier, or \c pool if tiering is not configured
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_pool_get_base_tier(rados_t cluster, int64_t pool,
@@ -2379,7 +2381,7 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * @param handle the watcher handle we are notifying
  * @param notifier_id the unique client id for the notifier
  * @param data payload from the notifier
- * @param datalen length of payload buffer
+ * @param data_len length of payload buffer
  */
 typedef void (*rados_watchcb2_t)(void *arg,
 				 uint64_t notify_id,
@@ -2398,6 +2400,7 @@ typedef void (*rados_watchcb2_t)(void *arg,
  * we may have missed notify events.
  *
  * @param pre opaque user-defined value provided to rados_watch2()
+ * @param cookie the internal id assigned to the watch session
  * @param err error code
  */
   typedef void (*rados_watcherrcb_t)(void *pre, uint64_t cookie, int err);

@@ -19,6 +19,8 @@ public:
   virtual int decrypt(ceph::bufferlist* data, uint64_t image_offset) = 0;
   virtual uint64_t get_block_size() const = 0;
   virtual uint64_t get_data_offset() const = 0;
+  virtual const unsigned char* get_key() const = 0;
+  virtual int get_key_length() const = 0;
 
   inline std::pair<uint64_t, uint64_t> get_pre_and_post_align(
           uint64_t off, uint64_t len) {

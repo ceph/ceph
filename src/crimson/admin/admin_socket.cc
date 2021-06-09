@@ -13,6 +13,7 @@
 #include <seastar/core/thread.hh>
 #include <seastar/util/std-compat.hh>
 
+#include "common/options.h"
 #include "common/version.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
@@ -118,7 +119,8 @@ seastar::future<> AdminSocket::finalize_response(
   uint32_t response_length = htonl(outbuf_cont.length());
   logger().info("asok response length: {}", outbuf_cont.length());
 
-  return out.write((char*)&response_length, sizeof(uint32_t))
+  return out.write(reinterpret_cast<char*>(&response_length),
+                   sizeof(response_length))
     .then([&out, outbuf_cont] { return out.write(outbuf_cont.c_str()); });
 }
 
@@ -129,17 +131,17 @@ seastar::future<> AdminSocket::handle_command(crimson::net::ConnectionRef conn,
   return execute_command(m->cmd, std::move(m->get_data())).then(
     [conn, tid=m->get_tid()](auto result) {
     auto [ret, err, out] = std::move(result);
-    auto reply = make_message<MCommandReply>(ret, err);
+    auto reply = crimson::make_message<MCommandReply>(ret, err);
     reply->set_tid(tid);
     reply->set_data(out);
-    return conn->send(reply);
+    return conn->send(std::move(reply));
   });
 }
 
 seastar::future<> AdminSocket::execute_line(std::string cmdline,
                                             seastar::output_stream<char>& out)
 {
-  return execute_command({cmdline}, {}).then([&out, this](auto result) {
+  return execute_command({std::move(cmdline)}, {}).then([&out, this](auto result) {
      auto [ret, stderr, stdout] = std::move(result);
      if (ret < 0) {
        stdout.append(fmt::format("ERROR: {}\n", cpp_strerror(ret)));
@@ -156,7 +158,7 @@ auto AdminSocket::execute_command(const std::vector<std::string>& cmd,
   return seastar::with_shared(servers_tbl_rwlock,
 			      [cmd, buf=std::move(buf), this]() mutable {
     auto maybe_parsed = parse_cmd(cmd);
-    if (auto parsed = std::get_if<parsed_command_t>(&maybe_parsed); parsed) {
+    if (auto* parsed = std::get_if<parsed_command_t>(&maybe_parsed); parsed) {
       stringstream os;
       string desc{parsed->hook.desc};
       if (!validate_cmd(nullptr, desc, parsed->params, os)) {
@@ -501,6 +503,31 @@ public:
   }
 };
 
+/**
+ * listing the configuration values
+ */
+class ConfigHelpHook : public AdminSocketHook {
+public:
+  ConfigHelpHook() :
+    AdminSocketHook{"config help",
+                    "",
+                    "get config setting schema and descriptions"}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    // Output all
+    f->open_array_section("options");
+    for (const auto &option : ceph_options) {
+      f->dump_object("option", option);
+    }
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+};
+
 /// the hooks that are served directly by the admin_socket server
 seastar::future<> AdminSocket::register_admin_commands()
 {
@@ -512,6 +539,7 @@ seastar::future<> AdminSocket::register_admin_commands()
     register_command(std::make_unique<ConfigGetHook>()),
     register_command(std::make_unique<ConfigSetHook>()),
     register_command(std::make_unique<ConfigShowHook>()),
+    register_command(std::make_unique<ConfigHelpHook>()),
     register_command(std::make_unique<InjectArgsHook>())
   ).then_unpack([] {
     return seastar::now();

@@ -123,6 +123,14 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
     }
   }
 
+  if (store.exists("mon_sync", "temp_newer_monmap")) {
+    dout(10) << __func__ << " found temp_newer_monmap" << dendl;
+    int err = store.get("mon_sync", "temp_newer_monmap", bl);
+    ceph_assert(err == 0);
+    ceph_assert(bl.length() > 0);
+    return 0;
+  }
+
   if (store.exists("mkfs", "monmap")) {
     dout(10) << __func__ << " found mkfs monmap" << dendl;
     int err = store.get("mkfs", "monmap", bl);
@@ -210,6 +218,8 @@ static void usage()
        << "        extract the monmap from the local monitor store and exit\n"
        << "  --mon-data <directory>\n"
        << "        where the mon store and keyring are located\n"
+       << "  --set-crush-location <bucket>=<foo>"
+       << "        sets monitor's crush bucket location (only for stretch mode)"
        << std::endl;
   generic_server_usage();
 }
@@ -248,7 +258,7 @@ int main(int argc, const char **argv)
   bool compact = false;
   bool force_sync = false;
   bool yes_really = false;
-  std::string osdmapfn, inject_monmap, extract_monmap;
+  std::string osdmapfn, inject_monmap, extract_monmap, crush_loc;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -331,6 +341,8 @@ int main(int argc, const char **argv)
       inject_monmap = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap", (char*)NULL)) {
       extract_monmap = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--set-crush-location", (char*)NULL)) {
+      crush_loc = val;
     } else {
       ++i;
     }
@@ -743,7 +755,7 @@ int main(int argc, const char **argv)
     if (g_conf().get_val_from_conf_file(my_sections, "mon addr",
 				       mon_addr_str, true) == 0) {
       entity_addr_t conf_addr;
-      if (conf_addr.parse(mon_addr_str.c_str())) {
+      if (conf_addr.parse(mon_addr_str)) {
 	entity_addrvec_t conf_addrs = make_mon_addrs(conf_addr);
         if (ipaddrs != conf_addrs) {
 	  derr << "WARNING: 'mon addr' config option " << conf_addrs
@@ -896,6 +908,7 @@ int main(int argc, const char **argv)
   msgr->start();
   mgr_msgr->start();
 
+  mon->set_mon_crush_location(crush_loc);
   mon->init();
 
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);

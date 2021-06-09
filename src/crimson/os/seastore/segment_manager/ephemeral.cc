@@ -13,7 +13,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -40,8 +40,7 @@ segment_off_t EphemeralSegment::get_write_capacity() const
 
 Segment::close_ertr::future<> EphemeralSegment::close()
 {
-  manager.segment_close(id);
-  return close_ertr::now().safe_then([] {
+  return manager.segment_close(id).safe_then([] {
     return seastar::sleep(std::chrono::milliseconds(1));
   });
 }
@@ -108,7 +107,7 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
     return crimson::ct_error::invarg::make();
   }
 
-  auto addr = ::mmap(
+  void* addr = ::mmap(
     nullptr,
     config.size,
     PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,

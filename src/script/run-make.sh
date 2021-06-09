@@ -43,8 +43,13 @@ function detect_ceph_dev_pkgs() {
     fi
 
     source /etc/os-release
-    if [[ "$ID" == "ubuntu" ]] && [[ "$VERSION" =~ .*Xenial*. ]]; then 
-        cmake_opts+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=NO"
+    if [[ "$ID" == "ubuntu" ]]; then
+        case "$VERSION" in
+            *Xenial*)
+                cmake_opts+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF";;
+            *Focal*)
+                cmake_opts+=" -DWITH_SYSTEM_ZSTD=ON";;
+        esac
     fi
     echo "$cmake_opts"
 }
@@ -121,10 +126,14 @@ function configure() {
 
 function build() {
     local targets="$@"
+    if test -n "$targets"; then
+        targets="--target $targets"
+    fi
     $DRY_RUN cd build
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
-    $DRY_RUN make $BUILD_MAKEOPTS $targets || return 1
+    # older cmake does not support --parallel or -j, so pass it to underlying generator
+    $DRY_RUN cmake --build . $targets -- $BUILD_MAKEOPTS || return 1
     $DRY_RUN ccache -s # print the ccache statistics to evaluate the efficiency
 }
 

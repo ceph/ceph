@@ -209,7 +209,7 @@ void PurgeQueue::open(Context *completion)
     waiting_for_recovery.push_back(completion);
 
   journaler.recover(new LambdaContext([this](int r){
-    if (r == -ENOENT) {
+    if (r == -CEPHFS_ENOENT) {
       dout(1) << "Purge Queue not found, assuming this is an upgrade and "
                  "creating it." << dendl;
       create(NULL);
@@ -244,7 +244,7 @@ void PurgeQueue::wait_for_recovery(Context* c)
     c->complete(0);
   } else if (readonly) {
     dout(10) << "cannot wait for recovery: PurgeQueue is readonly" << dendl;
-    c->complete(-EROFS);
+    c->complete(-CEPHFS_EROFS);
   } else {
     waiting_for_recovery.push_back(c);
   }
@@ -322,7 +322,7 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
 
   if (readonly) {
     dout(10) << "cannot push inode: PurgeQueue is readonly" << dendl;
-    completion->complete(-EROFS);
+    completion->complete(-CEPHFS_EROFS);
     return;
   }
 
@@ -459,7 +459,7 @@ bool PurgeQueue::_consume()
           std::lock_guard l(lock);
           if (r == 0) {
             _consume();
-          } else if (r != -EAGAIN) {
+          } else if (r != -CEPHFS_EAGAIN) {
             _go_readonly(r);
           }
         }));
@@ -482,7 +482,7 @@ bool PurgeQueue::_consume()
     } catch (const buffer::error &err) {
       derr << "Decode error at read_pos=0x" << std::hex
            << journaler.get_read_pos() << dendl;
-      _go_readonly(EIO);
+      _go_readonly(CEPHFS_EIO);
     }
     dout(20) << " executing item (" << item.ino << ")" << dendl;
     _execute_item(item, journaler.get_read_pos());
@@ -563,7 +563,7 @@ void PurgeQueue::_commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_ve
 	              new LambdaContext([this, expire_to](int r) {
     std::lock_guard l(lock);
 
-    if (r == -EBLOCKLISTED) {
+    if (r == -CEPHFS_EBLOCKLISTED) {
       finisher.queue(on_error, r);
       on_error = nullptr;
       return;
@@ -594,8 +594,8 @@ void PurgeQueue::_execute_item(
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
-  files_high_water = std::max(files_high_water,
-                              static_cast<uint64_t>(in_flight.size()));
+  files_high_water = std::max<uint64_t>(files_high_water,
+                              in_flight.size());
   logger->set(l_pq_executing_high_water, files_high_water);
   auto ops = _calculate_ops(item);
   ops_in_flight += ops;
@@ -662,8 +662,8 @@ void PurgeQueue::_execute_item(
     logger->set(l_pq_executing_ops_high_water, ops_high_water);
     in_flight.erase(expire_to);
     logger->set(l_pq_executing, in_flight.size());
-    files_high_water = std::max(files_high_water,
-                                static_cast<uint64_t>(in_flight.size()));
+    files_high_water = std::max<uint64_t>(files_high_water,
+                                in_flight.size());
     logger->set(l_pq_executing_high_water, files_high_water);
     return;
   }
@@ -716,8 +716,8 @@ void PurgeQueue::_execute_item_complete(
 
   in_flight.erase(iter);
   logger->set(l_pq_executing, in_flight.size());
-  files_high_water = std::max(files_high_water,
-                              static_cast<uint64_t>(in_flight.size()));
+  files_high_water = std::max<uint64_t>(files_high_water,
+                              in_flight.size());
   logger->set(l_pq_executing_high_water, files_high_water);
   dout(10) << "in_flight.size() now " << in_flight.size() << dendl;
 

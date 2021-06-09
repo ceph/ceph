@@ -519,7 +519,7 @@ class interval_set {
     std::swap(_size, other._size);
   }    
   
-  void erase(iterator &i) {
+  void erase(const iterator &i) {
     _size -= i.get_len();
     m.erase(i._iter);
   }

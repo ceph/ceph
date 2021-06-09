@@ -13,8 +13,10 @@ except ImportError:
 from mgr_module import ERROR_MSG_NO_INPUT_FILE
 
 from .. import mgr
-from ..controllers.iscsi import Iscsi, IscsiTarget
+from ..controllers.iscsi import Iscsi, IscsiTarget, IscsiUi
+from ..exceptions import DashboardException
 from ..rest_client import RequestException
+from ..services.exception import handle_request_error
 from ..services.iscsi_client import IscsiClient
 from ..services.orchestrator import OrchClient
 from ..tools import NotificationQueue, TaskManager
@@ -48,7 +50,7 @@ class IscsiTestCli(unittest.TestCase, CLICommandTestMixin):
                           inbuf='')
 
         self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
-        self.assertEqual(str(ctx.exception), ERROR_MSG_NO_INPUT_FILE)
+        self.assertIn(ERROR_MSG_NO_INPUT_FILE, str(ctx.exception))
 
     def test_cli_add_gateway(self):
         self.exec_cmd('iscsi-gateway-add', name='node1',
@@ -196,6 +198,124 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         self.assertJsonBody(response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_create_acl_enabled(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw2"
+        request = copy.deepcopy(iscsi_target_request)
+        request['target_iqn'] = target_iqn
+        request['acl_enabled'] = False
+        self._task_post('/api/iscsi/target', request)
+        self.assertStatus(201)
+        self._get('/api/iscsi/target/{}'.format(request['target_iqn']))
+        self.assertStatus(200)
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['acl_enabled'] = False
+        self.assertJsonBody(response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._create')
+    def test_create_error(self, _create_mock):
+        # pylint: disable=protected-access
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw2"
+        request = copy.deepcopy(iscsi_target_request)
+        request['target_iqn'] = target_iqn
+        request['config'] = ""
+        request['settings'] = ""
+        request['task_progress_begin'] = 0
+        request['task_progress_end'] = 100
+        _create_mock.side_effect = RequestException("message error")
+        with self.assertRaises(DashboardException):
+            with handle_request_error('iscsi'):
+                IscsiTarget._create(**request)
+
+    def test_validate_error_iqn(self):
+        # pylint: disable=protected-access
+        with self.assertRaises(DashboardException) as ctx:
+            IscsiTarget._validate(None, None, None, None, None, None)
+        self.assertEquals(ctx.exception.__str__(),
+                          "Target IQN is required")
+
+    def test_validate_error_portals(self):
+        # pylint: disable=protected-access
+        target_iqn = iscsi_target_request['target_iqn']
+        target_controls = iscsi_target_request['target_controls']
+        portals = {}
+        disks = iscsi_target_request['disks']
+        groups = iscsi_target_request['groups']
+        settings = {'config': {'minimum_gateways': 1}}
+        with self.assertRaises(DashboardException) as ctx:
+            IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
+        self.assertEquals(ctx.exception.__str__(),
+                          "At least one portal is required")
+        settings = {'config': {'minimum_gateways': 2}}
+        with self.assertRaises(DashboardException) as ctx:
+            IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
+        self.assertEquals(ctx.exception.__str__(),
+                          "At least 2 portals are required")
+
+    def test_validate_error_target_control(self):
+        # pylint: disable=protected-access
+        target_iqn = iscsi_target_request['target_iqn']
+        target_controls = {
+            'target_name': 0
+        }
+        portals = iscsi_target_request['portals']
+        disks = iscsi_target_request['disks']
+        groups = iscsi_target_request['groups']
+        settings = {
+            'config': {'minimum_gateways': 1},
+            'target_controls_limits': {
+                'target_name': {
+                    'min': 1,
+                    'max': 2,
+                }
+            }
+        }
+        with self.assertRaises(DashboardException) as ctx:
+            IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
+        self.assertEquals(ctx.exception.__str__(),
+                          "Target control target_name must be >= 1")
+        target_controls = {
+            'target_name': 3
+        }
+        with self.assertRaises(DashboardException) as ctx:
+            IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
+        self.assertEquals(ctx.exception.__str__(),
+                          "Target control target_name must be <= 2")
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_validate_error_disk_control(self, _validate_image_mock):
+        # pylint: disable=protected-access
+        target_iqn = iscsi_target_request['target_iqn']
+        target_controls = {}
+        portals = iscsi_target_request['portals']
+        disks = iscsi_target_request['disks']
+        groups = iscsi_target_request['groups']
+        settings = {
+            'config': {'minimum_gateways': 1},
+            'required_rbd_features': {
+                'user:rbd': 0
+            },
+            'unsupported_rbd_features': {
+                'user:rbd': 0
+            },
+            'disk_controls_limits': {
+                'user:rbd': {'max_data_area_mb': {
+                    'min': 129,
+                    'max': 127,
+                }}
+            }
+        }
+        with self.assertRaises(DashboardException) as ctx:
+            IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
+        self.assertEquals(ctx.exception.__str__(),
+                          "Disk control max_data_area_mb must be >= 129")
+        settings['disk_controls_limits']['user:rbd']['max_data_area_mb']['min'] = 1
+        with self.assertRaises(DashboardException) as ctx:
+            IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
+        self.assertEquals(ctx.exception.__str__(),
+                          "Disk control max_data_area_mb must be <= 127")
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_delete(self, _validate_image_mock):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw3"
         request = copy.deepcopy(iscsi_target_request)
@@ -207,6 +327,16 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         self._get('/api/iscsi/target')
         self.assertStatus(200)
         self.assertJsonBody([])
+
+    @mock.patch('dashboard.tools.TaskManager.current_task')
+    def test_delete_raises_exception(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw3"
+        request = copy.deepcopy(iscsi_target_request)
+        request['target_iqn'] = target_iqn
+        configs = {'targets': {target_iqn: {'portals': {}}}}
+        with self.assertRaises(DashboardException):
+            # pylint: disable=protected-access
+            IscsiTarget._delete(target_iqn, configs, 0, 100)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_add_client(self, _validate_image_mock):
@@ -619,6 +749,146 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         self.assertJsonBody(response)
 
 
+class TestIscsiUi(ControllerTestCase):
+    @classmethod
+    def setup_server(cls):
+        # pylint: disable=protected-access
+        IscsiUi._cp_config['tools.authenticate.on'] = False
+        cls.setup_controllers([IscsiUi])
+
+    @mock.patch('dashboard.services.tcmu_service.TcmuService.get_image_info')
+    @mock.patch('dashboard.services.tcmu_service.TcmuService.get_iscsi_info')
+    def test_overview(self, get_iscsi_info_mock, get_image_info_mock):
+        get_iscsi_info_mock.return_value = None
+        get_image_info_mock.return_value = None
+        response = copy.deepcopy(iscsiui_response)
+        response['images'] = []
+        self._get('/ui-api/iscsi/overview')
+        self.assertStatus(200)
+        self.assertJsonBody(response)
+
+    @mock.patch('dashboard.services.iscsi_config.IscsiGatewaysConfig.get_gateways_config')
+    @mock.patch('dashboard.services.tcmu_service.TcmuService.get_image_info')
+    @mock.patch('dashboard.services.tcmu_service.TcmuService.get_iscsi_info')
+    def test_overview_config(self, get_iscsi_info_mock, get_image_info_mock,
+                             get_gateways_config_mock):
+        get_iscsi_info_mock.return_value = None
+        get_image_info_mock.return_value = None
+        response = copy.deepcopy(iscsiui_response)
+        response['images'] = []
+        get_gateways_config_mock.return_value = iscsiui_gateways_config_mock
+        self._get('/ui-api/iscsi/overview')
+        self.assertStatus(200)
+        self.assertJsonBody(response)
+
+        def raise_ex(self):
+            raise RequestException('error')
+        config_method = IscsiClientMock.get_config
+        IscsiClientMock.get_config = raise_ex
+        response['gateways'][0]['num_sessions'] = 'n/a'
+        response['gateways'][1]['num_sessions'] = 'n/a'
+        response['gateways'][0]['num_targets'] = 'n/a'
+        response['gateways'][1]['num_targets'] = 'n/a'
+        self._get('/ui-api/iscsi/overview')
+        self.assertStatus(200)
+        self.assertJsonBody(response)
+        IscsiClientMock.get_config = config_method
+
+    @mock.patch('dashboard.services.iscsi_config.IscsiGatewaysConfig.get_gateways_config')
+    @mock.patch('dashboard.services.tcmu_service.TcmuService.get_image_info')
+    @mock.patch('dashboard.services.tcmu_service.TcmuService.get_iscsi_info')
+    def test_overview_ping(self, get_iscsi_info_mock, get_image_info_mock,
+                           get_gateways_config_mock):
+        get_iscsi_info_mock.return_value = None
+        get_image_info_mock.return_value = None
+        get_gateways_config_mock.return_value = iscsiui_gateways_config_mock
+        response = copy.deepcopy(iscsiui_response)
+        response['gateways'][0]['num_sessions'] = 0
+        response['gateways'][1]['num_sessions'] = 0
+        response['gateways'][0]['num_targets'] = 0
+        response['gateways'][1]['num_targets'] = 0
+        self._get('/ui-api/iscsi/overview')
+        self.assertStatus(200)
+        self.assertJsonBody(response)
+
+        def raise_ex(self):
+            raise RequestException('error')
+        ping_method = IscsiClientMock.ping
+        IscsiClientMock.ping = raise_ex
+        response['gateways'][0]['num_sessions'] = 'n/a'
+        response['gateways'][1]['num_sessions'] = 'n/a'
+        response['gateways'][0]['state'] = 'down'
+        response['gateways'][1]['state'] = 'down'
+        self._get('/ui-api/iscsi/overview')
+        self.assertStatus(200)
+        self.assertJsonBody(response)
+        IscsiClientMock.ping = ping_method
+
+    @mock.patch(
+        'dashboard.services.iscsi_config.IscsiGatewaysConfig.get_gateways_config')
+    @mock.patch('dashboard.services.tcmu_service.TcmuService.get_image_info')
+    @mock.patch('dashboard.services.tcmu_service.TcmuService.get_iscsi_info')
+    def test_overview_images_info(self, get_iscsi_info_mock, get_image_info_mock,
+                                  get_gateways_config_mock):
+        get_iscsi_info_mock.return_value = None
+        image_info = {"optimized_since": "1616735075", "stats": {}, "stats_history": {}}
+        # pylint: disable=protected-access
+        IscsiClientMock._instance.config['disks'] = {
+            1: {"image": "lun1", "pool": "rbd", "backstore": "user:rbd",
+                "optimized_since": "1616735075", "stats": {}, "stats_history": {}},
+            2: {"image": "lun2", "pool": "rbd", "backstore": "user:rbd",
+                "optimized_since": "1616735075", "stats": {}, "stats_history": {}},
+        }
+        response = copy.deepcopy(iscsiui_response)
+        response['images'][0]['optimized_since'] = '1616735075'
+        response['images'][1]['optimized_since'] = '1616735075'
+        response['images'][0]['stats'] = {}
+        response['images'][1]['stats'] = {}
+        response['images'][0]['stats_history'] = {}
+        response['images'][1]['stats_history'] = {}
+        get_gateways_config_mock.return_value = iscsiui_gateways_config_mock
+        get_image_info_mock.return_value = image_info
+        self._get('/ui-api/iscsi/overview')
+        self.assertStatus(200)
+        self.assertJsonBody(response)
+
+
+iscsiui_gateways_config_mock = {
+    'gateways': {
+        'node1': None,
+        'node2': None,
+    },
+    'disks': {
+        1: {"image": "lun1", "pool": "rbd", "backstore": "user:rbd",
+            "controls": {"max_data_area_mb": 128}},
+        2: {"image": "lun2", "pool": "rbd", "backstore": "user:rbd",
+            "controls": {"max_data_area_mb": 128}}
+    }
+}
+iscsiui_response = {
+    "gateways": [
+        {"name": "node1", "state": "up", "num_targets": 0, "num_sessions": 0},
+        {"name": "node2", "state": "up", "num_targets": 0, "num_sessions": 0}
+    ],
+    "images": [
+        {
+            'pool': 'rbd',
+            'image': 'lun1',
+            'backstore': 'user:rbd',
+            'optimized_since': None,
+            'stats': None,
+            'stats_history': None
+        },
+        {
+            'pool': 'rbd',
+            'image': 'lun2',
+            'backstore': 'user:rbd',
+            'optimized_since': None,
+            'stats': None,
+            'stats_history': None
+        }
+    ]
+}
 iscsi_target_request = {
     "target_iqn": "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw",
     "portals": [

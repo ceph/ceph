@@ -11,7 +11,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -31,7 +31,8 @@ BtreeOMapManager::initialize_omap(Transaction &t)
       root_extent->set_size(0);
       omap_node_meta_t meta{1};
       root_extent->set_meta(meta);
-      omap_root_t omap_root = omap_root_t(root_extent->get_laddr(), 1);
+      omap_root_t omap_root;
+      omap_root.update(root_extent->get_laddr(), 1);
       return initialize_omap_ertr::make_ready_future<omap_root_t>(omap_root);
   });
 }
@@ -48,7 +49,7 @@ BtreeOMapManager::handle_root_split_ret
 BtreeOMapManager::handle_root_split(
   omap_context_t oc,
   omap_root_t &omap_root,
-  OMapNode::mutation_result_t mresult)
+  const OMapNode::mutation_result_t& mresult)
 {
   return oc.tm.alloc_extent<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE)
     .safe_then([&omap_root, mresult](auto&& nroot) -> handle_root_split_ret {
@@ -102,6 +103,22 @@ BtreeOMapManager::omap_get_value(
     return omap_get_value_ret(
         omap_get_value_ertr::ready_future_marker{},
         std::move(e));
+  });
+}
+
+BtreeOMapManager::omap_set_keys_ret
+BtreeOMapManager::omap_set_keys(
+  omap_root_t &omap_root,
+  Transaction &t,
+  std::map<std::string, ceph::bufferlist>&& keys)
+{
+  return seastar::do_with(std::move(keys), [&, this](auto& keys) {
+    return crimson::do_for_each(
+      keys.begin(),
+      keys.end(),
+      [&, this](auto &p) {
+      return omap_set_key(omap_root, t, p.first, p.second);
+    });
   });
 }
 
@@ -164,14 +181,17 @@ BtreeOMapManager::omap_list(
   const omap_root_t &omap_root,
   Transaction &t,
   const std::optional<std::string> &start,
-  size_t max_result_size = MAX_SIZE)
+  omap_list_config_t config)
 {
   logger().debug("{}", __func__);
   return get_omap_root(
     get_omap_context(t),
     omap_root
-  ).safe_then([this, &t, &start, max_result_size](auto extent) {
-    return extent->list(get_omap_context(t), start, max_result_size);
+  ).safe_then([this, config, &t, &start](auto extent) {
+    return extent->list(
+      get_omap_context(t),
+      start,
+      config);
   });
 }
 

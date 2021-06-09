@@ -15,6 +15,8 @@ function(add_npm_command)
     DEPENDS ${NC_DEPENDS}
     WORKING_DIRECTORY "${NC_WORKING_DIRECTORY}"
     COMMENT ${NC_COMMENT})
+  set_property(DIRECTORY APPEND
+    PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${NC_OUTPUT}")
 endfunction(add_npm_command)
 
 function(add_npm_options)
@@ -54,7 +56,7 @@ else(WITH_SYSTEM_NPM)
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv ${node_mirror_opt} -p --node=12.18.2
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv --verbose ${node_mirror_opt} -p --node=12.18.2
     COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
@@ -83,28 +85,17 @@ add_npm_command(
   ${nodeenv}
 )
 
-# Glob some frontend files. With CMake 3.6, this can be simplified
-# to *.ts *.html. Just add:
-# list(FILTER frontend_src INCLUDE REGEX "frontend/src")
+# Glob some frontend files.
 file(
   GLOB_RECURSE frontend_src
+  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
   frontend/src/*.ts
-  frontend/src/*.html
-  frontend/src/*/*.ts
-  frontend/src/*/*.html
-  frontend/src/*/*/*.ts
-  frontend/src/*/*/*.html
-  frontend/src/*/*/*/*.ts
-  frontend/src/*/*/*/*.html
-  frontend/src/*/*/*/*/*.ts
-  frontend/src/*/*/*/*/*.html
-  frontend/src/*/*/*/*/*/*.ts
-  frontend/src/*/*/*/*/*/*.html)
+  frontend/src/*.html)
 
 # these files are generated during build
 list(REMOVE_ITEM frontend_src
-  ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/src/environments/environment.prod.ts
-  ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/src/environments/environment.ts)
+  frontend/src/environments/environment.prod.ts
+  frontend/src/environments/environment.ts)
 
 execute_process(
     COMMAND bash -c "jq -r .config.locale ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/package.json"

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
+# pylint: disable=too-many-lines
 
 import unittest
 from unittest.mock import MagicMock, Mock, patch
@@ -18,6 +18,38 @@ from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
 class GaneshaConfTest(unittest.TestCase, KVStoreMockMixin):
+    daemon_raw_config = """
+NFS_CORE_PARAM {
+            Enable_NLM = false;
+            Enable_RQUOTA = false;
+            Protocols = 4;
+            NFS_Port = 14000;
+        }
+
+        MDCACHE {
+           Dir_Chunk = 0;
+        }
+
+        NFSv4 {
+           RecoveryBackend = rados_cluster;
+           Minor_Versions = 1, 2;
+        }
+
+        RADOS_KV {
+           pool = nfs-ganesha;
+           namespace = vstart;
+           UserId = vstart;
+           nodeid = a;
+        }
+
+        RADOS_URLS {
+       Userid = vstart;
+       watch_url = 'rados://nfs-ganesha/vstart/conf-nfs.vstart';
+        }
+
+    %url rados://nfs-ganesha/vstart/conf-nfs.vstart
+"""
+
     export_1 = """
 EXPORT {
     Export_ID=1;
@@ -123,22 +155,14 @@ EXPORT
     def _ioctx_set_namespace_mock(self, namespace):
         self.temp_store_namespace = namespace
 
+    @staticmethod
+    def _set_user_defined_clusters_location(clusters_pool_namespace='ganesha/ns'):
+        Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = clusters_pool_namespace
+
     def setUp(self):
         self.mock_kv_store()
 
         self.clusters = {
-            '_default_': {
-                'pool': 'ganesha',
-                'namespace': 'ns',
-                'type': ClusterType.USER,
-                'daemon_conf': None,
-                'daemons': ['nodea', 'nodeb'],
-                'exports': {
-                    1: ['nodea', 'nodeb'],
-                    2: ['nodea'],
-                    3: ['nodea', 'nodeb']  # for new-added export
-                }
-            },
             'foo': {
                 'pool': 'ganesha2',
                 'namespace': 'ns2',
@@ -153,8 +177,8 @@ EXPORT
             }
         }
 
-        Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = '{pool}/{namespace}'.format_map(
-            self.clusters['_default_'])
+        # Unset user-defined location.
+        self._set_user_defined_clusters_location('')
 
         self.temp_store_namespace = None
         self._reset_temp_store()
@@ -230,6 +254,44 @@ EXPORT
             return result
         ganesha.GaneshaConfOrchestrator._get_orch_nfs_instances = Mock(
             side_effect=_get_nfs_instances)
+
+    def test_parse_daemon_raw_config(self):
+        expected_daemon_config = [
+            {
+                "block_name": "NFS_CORE_PARAM",
+                "enable_nlm": False,
+                "enable_rquota": False,
+                "protocols": 4,
+                "nfs_port": 14000
+            },
+            {
+                "block_name": "MDCACHE",
+                "dir_chunk": 0
+            },
+            {
+                "block_name": "NFSV4",
+                "recoverybackend": "rados_cluster",
+                "minor_versions": [1, 2]
+            },
+            {
+                "block_name": "RADOS_KV",
+                "pool": "nfs-ganesha",
+                "namespace": "vstart",
+                "userid": "vstart",
+                "nodeid": "a"
+            },
+            {
+                "block_name": "RADOS_URLS",
+                "userid": "vstart",
+                "watch_url": "'rados://nfs-ganesha/vstart/conf-nfs.vstart'"
+            },
+            {
+                "block_name": "%url",
+                "value": "rados://nfs-ganesha/vstart/conf-nfs.vstart"
+            }
+        ]
+        daemon_config = GaneshaConfParser(self.daemon_raw_config).parse()
+        self.assertEqual(daemon_config, expected_daemon_config)
 
     def test_export_parser_1(self):
         blocks = GaneshaConfParser(self.export_1).parse()
@@ -789,6 +851,7 @@ EXPORT
             self.io_mock.reset_mock()
 
         # User-defined cluster: reload daemons in the parameter
+        self._set_user_defined_clusters_location()
         conf = GaneshaConf.instance('_default_')
         calls = [mock_call('conf-{}'.format(daemon)) for daemon in ['nodea', 'nodeb']]
         conf.reload_daemons(['nodea', 'nodeb'])
@@ -826,13 +889,14 @@ EXPORT
                 instance.validate(export)
 
     def test_validate_user(self):
+        self._set_user_defined_clusters_location()
         cluster_id = '_default_'
-        cluster_info = self.clusters[cluster_id]
         instance = GaneshaConf.instance(cluster_id)
         export = MagicMock()
 
         # export can be linked to none, partial, or all daemons
-        export_daemons = [[], cluster_info['daemons'][:1], cluster_info['daemons']]
+        fake_daemons = ['nodea', 'nodeb']
+        export_daemons = [[], fake_daemons[:1], fake_daemons]
         for daemons in export_daemons:
             export.daemons = daemons
             instance.validate(export)
@@ -848,25 +912,15 @@ EXPORT
         for cluster_id in cluster_ids:
             self.assertIn(cluster_id, locations)
             cluster = locations.pop(cluster_id)
-            expected_info = self.clusters[cluster_id]
-            self.assertDictEqual(cluster, {key: expected_info[key] for key in [
+            self.assertDictEqual(cluster, {key: cluster[key] for key in [
                 'pool', 'namespace', 'type', 'daemon_conf']})
         self.assertDictEqual(locations, {})
 
     def test_get_cluster_locations(self):
         # pylint: disable=protected-access
-        # There are both Orchstrator cluster and user-defined cluster.
-        locations = ganesha.Ganesha._get_clusters_locations()
-        self._verify_locations(locations, self.clusters.keys())
 
-        # There is only a user-defined cluster.
-        self._mock_orchestrator(False)
-        locations = ganesha.Ganesha._get_clusters_locations()
-        self._verify_locations(locations, ['_default_'])
+        # There is only a Orchestrator cluster.
         self._mock_orchestrator(True)
-
-        # There is only a Orchstrator cluster.
-        Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = ''
         locations = ganesha.Ganesha._get_clusters_locations()
         self._verify_locations(locations, ['foo'])
 
@@ -875,16 +929,38 @@ EXPORT
         with self.assertRaises(NFSException):
             ganesha.Ganesha._get_clusters_locations()
 
+        # There is only a user-defined cluster.
+        self._set_user_defined_clusters_location()
+        self._mock_orchestrator(False)
+        locations = ganesha.Ganesha._get_clusters_locations()
+        self._verify_locations(locations, ['_default_'])
+
+        # There are both Orchestrator cluster and user-defined cluster.
+        self._set_user_defined_clusters_location()
+        self._mock_orchestrator(True)
+        locations = ganesha.Ganesha._get_clusters_locations()
+        self._verify_locations(locations, ['foo', '_default_'])
+
     def test_get_cluster_locations_conflict(self):
         # pylint: disable=protected-access
-        # Raise an exception when there is a user-defined cluster that conlicts
-        # with Orchestrator clusters.
-        old_setting = Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE
-        conflicted_location = ',foo:{pool}/{namespace}'.format_map(
-            self.clusters['foo'])
-        Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = old_setting + conflicted_location
-        with self.assertRaises(NFSException):
+
+        # Pool/namespace collision.
+        self._set_user_defined_clusters_location('ganesha2/ns2')
+        with self.assertRaises(NFSException) as ctx:
             ganesha.Ganesha._get_clusters_locations()
+        self.assertIn('already in use', str(ctx.exception))
+
+        # Cluster name collision with orch. cluster.
+        self._set_user_defined_clusters_location('foo:ganesha/ns')
+        with self.assertRaises(NFSException) as ctx:
+            ganesha.Ganesha._get_clusters_locations()
+        self.assertIn('Detected a conflicting NFS-Ganesha cluster', str(ctx.exception))
+
+        # Cluster name collision with user-defined cluster.
+        self._set_user_defined_clusters_location('cluster1:ganesha/ns,cluster1:fake-pool/fake-ns')
+        with self.assertRaises(NFSException) as ctx:
+            ganesha.Ganesha._get_clusters_locations()
+        self.assertIn('Duplicate Ganesha cluster definition', str(ctx.exception))
 
 
 class NFSGaneshaUiControllerTest(ControllerTestCase):

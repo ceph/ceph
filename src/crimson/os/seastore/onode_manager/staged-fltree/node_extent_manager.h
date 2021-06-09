@@ -41,8 +41,6 @@ class NodeExtent : public LogicalCachedExtent {
   NodeExtent(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
 
   NodeExtentMutable do_get_mutable() {
-    assert(is_pending() || // during mutation
-           is_clean());    // during replay
     return NodeExtentMutable(get_bptr().c_str(), get_length());
   }
 
@@ -57,27 +55,39 @@ class NodeExtent : public LogicalCachedExtent {
 
 using crimson::os::seastore::TransactionManager;
 class NodeExtentManager {
+  using base_ertr = eagain_ertr::extend<
+    crimson::ct_error::input_output_error>;
+
  public:
   virtual ~NodeExtentManager() = default;
-  using tm_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange,
-    crimson::ct_error::eagain>;
-  template <class ValueT=void>
-  using tm_future = tm_ertr::future<ValueT>;
 
   virtual bool is_read_isolated() const = 0;
-  virtual tm_future<NodeExtentRef> read_extent(
+
+  using read_ertr = base_ertr::extend<
+    crimson::ct_error::invarg,
+    crimson::ct_error::enoent,
+    crimson::ct_error::erange>;
+  virtual read_ertr::future<NodeExtentRef> read_extent(
       Transaction&, laddr_t, extent_len_t) = 0;
-  virtual tm_future<NodeExtentRef> alloc_extent(Transaction&, extent_len_t) = 0;
-  virtual tm_future<Super::URef> get_super(Transaction&, RootNodeTracker&) = 0;
+
+  using alloc_ertr = base_ertr;
+  virtual alloc_ertr::future<NodeExtentRef> alloc_extent(
+      Transaction&, extent_len_t) = 0;
+
+  using retire_ertr = base_ertr::extend<
+    crimson::ct_error::enoent>;
+  virtual retire_ertr::future<> retire_extent(
+      Transaction&, NodeExtentRef) = 0;
+
+  using getsuper_ertr = base_ertr;
+  virtual getsuper_ertr::future<Super::URef> get_super(
+      Transaction&, RootNodeTracker&) = 0;
+
   virtual std::ostream& print(std::ostream& os) const = 0;
 
   static NodeExtentManagerURef create_dummy(bool is_sync);
   static NodeExtentManagerURef create_seastore(
-      TransactionManager& tm, laddr_t min_laddr = L_ADDR_MIN);
+      TransactionManager& tm, laddr_t min_laddr = L_ADDR_MIN, double p_eagain = 0.0);
 };
 inline std::ostream& operator<<(std::ostream& os, const NodeExtentManager& nm) {
   return nm.print(os);

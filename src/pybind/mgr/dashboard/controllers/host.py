@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import copy
 import os
@@ -274,10 +273,11 @@ class Host(RESTController):
     @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_CREATE])
     @handle_orchestrator_error('host')
     @host_task('create', {'hostname': '{hostname}'})
-    def create(self, hostname):  # pragma: no cover - requires realtime env
+    def create(self, hostname: str,
+               status: Optional[str] = None):  # pragma: no cover - requires realtime env
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, True)
-        orch_client.hosts.add(hostname)
+        orch_client.hosts.add(hostname, status)
     create._cp_config = {'tools.json_in.force': False}  # pylint: disable=W0212
 
     @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_DELETE])
@@ -363,7 +363,7 @@ class Host(RESTController):
     def daemons(self, hostname: str) -> List[dict]:
         orch = OrchClient.instance()
         daemons = orch.services.list_daemons(hostname=hostname)
-        return [d.to_json() for d in daemons]
+        return [d.to_dict() for d in daemons]
 
     @handle_orchestrator_error('host')
     def get(self, hostname: str) -> Dict:
@@ -373,26 +373,59 @@ class Host(RESTController):
         """
         return get_host(hostname)
 
-    @raise_if_no_orchestrator([OrchFeature.HOST_LABEL_ADD, OrchFeature.HOST_LABEL_REMOVE])
+    @raise_if_no_orchestrator([OrchFeature.HOST_LABEL_ADD,
+                               OrchFeature.HOST_LABEL_REMOVE,
+                               OrchFeature.HOST_MAINTENANCE_ENTER,
+                               OrchFeature.HOST_MAINTENANCE_EXIT])
     @handle_orchestrator_error('host')
-    def set(self, hostname: str, labels: List[str]):
+    @EndpointDoc('',
+                 parameters={
+                     'hostname': (str, 'Hostname'),
+                     'update_labels': (bool, 'Update Labels'),
+                     'labels': ([str], 'Host Labels'),
+                     'maintenance': (bool, 'Enter/Exit Maintenance'),
+                     'force': (bool, 'Force Enter Maintenance')
+                 },
+                 responses={200: None, 204: None})
+    def set(self, hostname: str, update_labels: bool = False,
+            labels: List[str] = None, maintenance: bool = False,
+            force: bool = False):
         """
         Update the specified host.
         Note, this is only supported when Ceph Orchestrator is enabled.
         :param hostname: The name of the host to be processed.
+        :param update_labels: To update the labels.
         :param labels: List of labels.
+        :param maintenance: Enter/Exit maintenance mode.
+        :param force: Force enter maintenance mode.
         """
         orch = OrchClient.instance()
         host = get_host(hostname)
-        current_labels = set(host['labels'])
-        # Remove labels.
-        remove_labels = list(current_labels.difference(set(labels)))
-        for label in remove_labels:
-            orch.hosts.remove_label(hostname, label)
-        # Add labels.
-        add_labels = list(set(labels).difference(current_labels))
-        for label in add_labels:
-            orch.hosts.add_label(hostname, label)
+
+        if maintenance:
+            status = host['status']
+            if status != 'maintenance':
+                orch.hosts.enter_maintenance(hostname, force)
+
+            if status == 'maintenance':
+                orch.hosts.exit_maintenance(hostname)
+
+        if update_labels:
+            # only allow List[str] type for labels
+            if not isinstance(labels, list):
+                raise DashboardException(
+                    msg='Expected list of labels. Please check API documentation.',
+                    http_status_code=400,
+                    component='orchestrator')
+            current_labels = set(host['labels'])
+            # Remove labels.
+            remove_labels = list(current_labels.difference(set(labels)))
+            for label in remove_labels:
+                orch.hosts.remove_label(hostname, label)
+            # Add labels.
+            add_labels = list(set(labels).difference(current_labels))
+            for label in add_labels:
+                orch.hosts.add_label(hostname, label)
 
 
 @UiApiController('/host', Scope.HOSTS)

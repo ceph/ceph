@@ -1,6 +1,8 @@
-from __future__ import absolute_import
 
 import json
+import unittest
+
+import rbd
 
 try:
     import mock
@@ -8,7 +10,8 @@ except ImportError:
     import unittest.mock as mock
 
 from .. import mgr
-from ..controllers.rbd_mirroring import RbdMirroring, RbdMirroringPoolBootstrap, RbdMirroringSummary
+from ..controllers.rbd_mirroring import RbdMirroring, \
+    RbdMirroringPoolBootstrap, RbdMirroringSummary, get_daemons, get_pools
 from ..controllers.summary import Summary
 from ..services import progress
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
@@ -31,7 +34,7 @@ _status = {
         'image_remote_count': 6,
         'image_error_count': 7,
         'image_warning_count': 8,
-        'name': 'pool_name'
+        'name': 'rbd'
     }
 }
 
@@ -45,6 +48,113 @@ mock_osd_map = {
         'application_metadata': {'rbd'}
     }]
 }
+
+
+class GetDaemonAndPoolsTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        mgr.list_servers.return_value = mock_list_servers
+        mgr.get_metadata = mock.Mock(return_value=mock_get_metadata)
+        mgr.get_daemon_status.return_value = mock_get_daemon_status
+        mgr.get.side_effect = lambda key: {
+            'osd_map': mock_osd_map,
+            'health': {'json': '{"status": 1}'},
+            'fs_map': {'filesystems': []},
+            'mgr_map': {
+                'services': {
+                    'dashboard': 'https://ceph.dev:11000/'
+                },
+            }
+        }[key]
+        mgr.url_prefix = ''
+        mgr.get_mgr_id.return_value = 0
+        mgr.have_mon_connection.return_value = True
+        mgr.version = 'ceph version 13.1.0-534-g23d3751b89 ' \
+                      '(23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) ' \
+                      'nautilus (dev)'
+
+        progress.get_progress_tasks = mock.MagicMock()
+        progress.get_progress_tasks.return_value = ([], [])
+
+    @mock.patch('rbd.RBD')
+    def test_get_pools_unknown(self, mock_rbd):
+        mock_rbd_instance = mock_rbd.return_value
+        mock_rbd_instance.mirror_mode_get.side_effect = Exception
+        daemons = get_daemons()
+        res = get_pools(daemons)
+        self.assertTrue(res['rbd']['mirror_mode'] == "unknown")
+
+    @mock.patch('rbd.RBD')
+    def test_get_pools_mode(self, mock_rbd):
+
+        daemons = get_daemons()
+        mock_rbd_instance = mock_rbd.return_value
+        testcases = [
+            (rbd.RBD_MIRROR_MODE_DISABLED, "disabled"),
+            (rbd.RBD_MIRROR_MODE_IMAGE, "image"),
+            (rbd.RBD_MIRROR_MODE_POOL, "pool"),
+        ]
+        mock_rbd_instance.mirror_peer_list.return_value = []
+        for mirror_mode, expected in testcases:
+            mock_rbd_instance.mirror_mode_get.return_value = mirror_mode
+            res = get_pools(daemons)
+            self.assertTrue(res['rbd']['mirror_mode'] == expected)
+
+    @mock.patch('rbd.RBD')
+    def test_get_pools_health(self, mock_rbd):
+
+        mock_rbd_instance = mock_rbd.return_value
+        mock_rbd_instance.mirror_peer_list.return_value = []
+        test_cases = self._get_pool_test_cases()
+        for new_status, mirror_mode, expected_output in test_cases:
+            _status[1].update(new_status)
+            daemon_status = {
+                'json': json.dumps(_status)
+            }
+            mgr.get_daemon_status.return_value = daemon_status
+            daemons = get_daemons()
+            mock_rbd_instance.mirror_mode_get.return_value = mirror_mode
+            res = get_pools(daemons)
+            for k, v in expected_output.items():
+                self.assertTrue(v == res['rbd'][k])
+        mgr.get_daemon_status.return_value = mock_get_daemon_status  # reset return value
+
+    def _get_pool_test_cases(self):
+        test_cases = [
+            (
+                {
+                    'image_error_count': 7,
+                },
+                rbd.RBD_MIRROR_MODE_IMAGE,
+                {
+                    'health_color': 'warning',
+                    'health': 'Warning'
+                }
+            ),
+            (
+                {
+                    'image_error_count': 7,
+                },
+                rbd.RBD_MIRROR_MODE_DISABLED,
+                {
+                    'health_color': 'error',
+                    'health': 'Error'
+                }
+            ),
+            (
+                {
+                    'image_error_count': 0,
+                    'image_warning_count': 0,
+                    'leader_id': 1
+                },
+                rbd.RBD_MIRROR_MODE_DISABLED,
+                {
+                    'health_color': 'info',
+                    'health': 'Disabled'
+                }
+            ),
+        ]
+        return test_cases
 
 
 class RbdMirroringControllerTest(ControllerTestCase):

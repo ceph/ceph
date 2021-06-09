@@ -410,10 +410,12 @@ void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_met
         snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
         int j;
         for (j = 0; name_low[j]; j++) {
-          if (name_low[j] != '_')
-            name_low[j] = tolower(name_low[j]);
-          else
+          if (name_low[j] == '_')
             name_low[j] = '-';
+          else if (name_low[j] == '-')
+            name_low[j] = '_';
+          else
+            name_low[j] = tolower(name_low[j]);
         }
         name_low[j] = 0;
 
@@ -838,6 +840,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
     val_map[name] = val;
   }
 
+// when sub_resources exclusive by object are added, please remember to update obj_sub_resource in RGWHTTPArgs::exist_obj_excl_sub_resource().
   if ((name.compare("acl") == 0) ||
       (name.compare("cors") == 0) ||
       (name.compare("notification") == 0) ||
@@ -1493,7 +1496,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s
 }
 
 
-int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::RGWAttrs& attrs, const bool bypass_perm, const bool bypass_governance_mode) {
+int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::Attrs& attrs, const bool bypass_perm, const bool bypass_governance_mode) {
   auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
   if (aiter != attrs.end()) {
     RGWObjectRetention obj_retention;

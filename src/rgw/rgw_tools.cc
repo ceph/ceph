@@ -11,6 +11,8 @@
 #include "include/types.h"
 #include "include/stringify.h"
 
+#include "librados/AioCompletionImpl.h"
+
 #include "rgw_common.h"
 #include "rgw_tools.h"
 #include "rgw_acl_s3.h"
@@ -33,7 +35,8 @@
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+int rgw_init_ioctx(const DoutPrefixProvider *dpp,
+                   librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx, bool create,
 		   bool mostly_omap)
 {
@@ -41,7 +44,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
   if (r == -ENOENT && create) {
     r = rados->pool_create(pool.name.c_str());
     if (r == -ERANGE) {
-      dout(0)
+      ldpp_dout(dpp, 0)
         << __func__
         << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-r)
         << " (this can be due to a pool or placement group misconfiguration, e.g."
@@ -72,7 +75,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(bias) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
       }
       // set pg_num_min
@@ -83,7 +86,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set pg_num_min on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_num_min on "
 		 << pool.name << dendl;
       }
       // set recovery_priority
@@ -94,7 +97,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	stringify(p) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
-	dout(10) << __func__ << " warning: failed to set recovery_priority on "
+	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set recovery_priority on "
 		 << pool.name << dendl;
       }
     }
@@ -153,7 +156,8 @@ int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
   return 0;
 }
 
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+int rgw_put_system_obj(const DoutPrefixProvider *dpp, 
+                       RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
@@ -169,7 +173,7 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data, y);
+                  .write(dpp, data, y);
 
   return ret;
 }
@@ -201,7 +205,7 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
 
     ret = rop.set_cache_info(cache_info)
              .set_refresh_version(refresh_version)
-             .read(&bl, y);
+             .read(dpp, &bl, y);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -226,7 +230,8 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
   return 0;
 }
 
-int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
+int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
+                          RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
   auto obj_ctx = sysobj_svc->init_obj_ctx();
@@ -234,12 +239,12 @@ int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const 
   rgw_raw_obj obj(pool, oid);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
-               .remove(y);
+               .remove(dpp, y);
 }
 
 thread_local bool is_asio_thread = false;
 
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
                       optional_yield y, int flags)
 {
@@ -258,12 +263,12 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   }
   // work on asio threads should be asynchronous, so warn when they block
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.operate(oid, op, nullptr, flags);
 }
 
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
 		      int flags)
 {
@@ -275,12 +280,12 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     return -ec.value();
   }
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.operate(oid, op, flags);
 }
 
-int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y)
 {
@@ -296,7 +301,7 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
     return -ec.value();
   }
   if (is_asio_thread) {
-    dout(20) << "WARNING: blocking librados call" << dendl;
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
   }
   return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
@@ -407,9 +412,8 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
   }
 }
 
-RGWDataAccess::RGWDataAccess(rgw::sal::RGWRadosStore *_store) : store(_store)
+RGWDataAccess::RGWDataAccess(rgw::sal::Store* _store) : store(_store)
 {
-  sysobj_ctx = std::make_unique<RGWSysObjectCtx>(store->svc()->sysobj->init_obj_ctx());
 }
 
 
@@ -432,16 +436,15 @@ int RGWDataAccess::Bucket::finish_init()
 
 int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  int ret = sd->store->getRados()->get_bucket_info(sd->store->svc(),
-				       tenant, name,
-				       bucket_info,
-				       &mtime,
-                                       y,
-                                       dpp,
-				       &attrs);
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = sd->store->get_bucket(dpp, nullptr, tenant, name, &bucket, y);
   if (ret < 0) {
     return ret;
   }
+
+  bucket_info = bucket->get_info();
+  mtime = bucket->get_modification_time();
+  attrs = bucket->get_attrs();
 
   return finish_init();
 }
@@ -466,7 +469,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
                                const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
-  rgw::sal::RGWRadosStore *store = sd->store;
+  rgw::sal::Store* store = sd->store;
   CephContext *cct = store->ctx();
 
   string tag;
@@ -477,13 +480,13 @@ int RGWDataAccess::Object::put(bufferlist& data,
   rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
   RGWObjectCtx obj_ctx(store);
-  std::unique_ptr<rgw::sal::RGWBucket> b;
+  std::unique_ptr<rgw::sal::Bucket> b;
   store->get_bucket(NULL, bucket_info, &b);
-  std::unique_ptr<rgw::sal::RGWObject> obj = b->get_object(key);
+  std::unique_ptr<rgw::sal::Object> obj = b->get_object(key);
 
   auto& owner = bucket->policy.get_owner();
 
-  string req_id = store->svc()->zone_utils->unique_id(store->getRados()->get_new_req_id());
+  string req_id = store->zone_unique_id(store->get_new_req_id());
 
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, store, b.get(), nullptr,
@@ -499,7 +502,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  const auto& compression_type = store->svc()->zone->get_zone_params().get_compression_type(bucket_info.placement_rule);
+  const auto& compression_type = store->get_zone()->get_params().get_compression_type(bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(store->ctx(), compression_type);
     if (!plugin) {
@@ -592,4 +595,10 @@ void rgw_tools_cleanup()
 {
   delete ext_mime_map;
   ext_mime_map = nullptr;
+}
+
+void rgw_complete_aio_completion(librados::AioCompletion* c, int r) {
+  auto pc = c->pc;
+  librados::CB_AioCompleteAndSafe cb(pc);
+  cb(r);
 }

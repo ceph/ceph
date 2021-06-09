@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=protected-access,too-many-branches,too-many-lines
-from __future__ import absolute_import
 
 import collections
 import importlib
@@ -28,29 +27,54 @@ from ..services.auth import AuthManager, JwtManager
 from ..tools import TaskManager, get_request_body_params, getargspec
 
 try:
-    from typing import Any, List, Optional
+    from typing import Any, Dict, List, Optional, Tuple, Union
 except ImportError:
     pass  # For typing only
 
 
-def EndpointDoc(description="", group="", parameters=None, responses=None):  # noqa: N802
-    if not isinstance(description, str):
-        raise Exception("%s has been called with a description that is not a string: %s"
-                        % (EndpointDoc.__name__, description))
-    if not isinstance(group, str):
-        raise Exception("%s has been called with a groupname that is not a string: %s"
-                        % (EndpointDoc.__name__, group))
-    if parameters and not isinstance(parameters, dict):
-        raise Exception("%s has been called with parameters that is not a dict: %s"
-                        % (EndpointDoc.__name__, parameters))
-    if responses and not isinstance(responses, dict):
-        raise Exception("%s has been called with responses that is not a dict: %s"
-                        % (EndpointDoc.__name__, responses))
+class EndpointDoc:  # noqa: N802
+    DICT_TYPE = Union[Dict[str, Any], Dict[int, Any]]
 
-    if not parameters:
-        parameters = {}
+    def __init__(self, description: str = "", group: str = "",
+                 parameters: Optional[Union[DICT_TYPE, List[Any], Tuple[Any, ...]]] = None,
+                 responses: Optional[DICT_TYPE] = None) -> None:
+        self.description = description
+        self.group = group
+        self.parameters = parameters
+        self.responses = responses
 
-    def _split_param(name, p_type, description, optional=False, default_value=None, nested=False):
+        self.validate_args()
+
+        if not self.parameters:
+            self.parameters = {}  # type: ignore
+
+        self.resp = {}
+        if self.responses:
+            for status_code, response_body in self.responses.items():
+                schema_input = SchemaInput()
+                schema_input.type = SchemaType.ARRAY if \
+                    isinstance(response_body, list) else SchemaType.OBJECT
+                schema_input.params = self._split_parameters(response_body)
+
+                self.resp[str(status_code)] = schema_input
+
+    def validate_args(self) -> None:
+        if not isinstance(self.description, str):
+            raise Exception("%s has been called with a description that is not a string: %s"
+                            % (EndpointDoc.__name__, self.description))
+        if not isinstance(self.group, str):
+            raise Exception("%s has been called with a groupname that is not a string: %s"
+                            % (EndpointDoc.__name__, self.group))
+        if self.parameters and not isinstance(self.parameters, dict):
+            raise Exception("%s has been called with parameters that is not a dict: %s"
+                            % (EndpointDoc.__name__, self.parameters))
+        if self.responses and not isinstance(self.responses, dict):
+            raise Exception("%s has been called with responses that is not a dict: %s"
+                            % (EndpointDoc.__name__, self.responses))
+
+    def _split_param(self, name: str, p_type: Union[type, DICT_TYPE, List[Any], Tuple[Any, ...]],
+                     description: str, optional: bool = False, default_value: Any = None,
+                     nested: bool = False) -> Dict[str, Any]:
         param = {
             'name': name,
             'description': description,
@@ -62,7 +86,7 @@ def EndpointDoc(description="", group="", parameters=None, responses=None):  # n
         if isinstance(p_type, type):
             param['type'] = p_type
         else:
-            nested_params = _split_parameters(p_type, nested=True)
+            nested_params = self._split_parameters(p_type, nested=True)
             if nested_params:
                 param['type'] = type(p_type)
                 param['nested_params'] = nested_params
@@ -72,16 +96,17 @@ def EndpointDoc(description="", group="", parameters=None, responses=None):  # n
 
     #  Optional must be set to True in order to set default value and parameters format must be:
     # 'name: (type or nested parameters, description, [optional], [default value])'
-    def _split_dict(data, nested):
+    def _split_dict(self, data: DICT_TYPE, nested: bool) -> List[Any]:
         splitted = []
         for name, props in data.items():
             if isinstance(name, str) and isinstance(props, tuple):
                 if len(props) == 2:
-                    param = _split_param(name, props[0], props[1], nested=nested)
+                    param = self._split_param(name, props[0], props[1], nested=nested)
                 elif len(props) == 3:
-                    param = _split_param(name, props[0], props[1], optional=props[2], nested=nested)
+                    param = self._split_param(
+                        name, props[0], props[1], optional=props[2], nested=nested)
                 if len(props) == 4:
-                    param = _split_param(name, props[0], props[1], props[2], props[3], nested)
+                    param = self._split_param(name, props[0], props[1], props[2], props[3], nested)
                 splitted.append(param)
             else:
                 raise Exception(
@@ -93,41 +118,30 @@ def EndpointDoc(description="", group="", parameters=None, responses=None):  # n
                     % (name, EndpointDoc.__name__))
         return splitted
 
-    def _split_list(data, nested):
+    def _split_list(self, data: Union[List[Any], Tuple[Any, ...]], nested: bool) -> List[Any]:
         splitted = []  # type: List[Any]
         for item in data:
-            splitted.extend(_split_parameters(item, nested))
+            splitted.extend(self._split_parameters(item, nested))
         return splitted
 
     # nested = True means parameters are inside a dict or array
-    def _split_parameters(data, nested=False):
+    def _split_parameters(self, data: Optional[Union[DICT_TYPE, List[Any], Tuple[Any, ...]]],
+                          nested: bool = False) -> List[Any]:
         param_list = []  # type: List[Any]
         if isinstance(data, dict):
-            param_list.extend(_split_dict(data, nested))
+            param_list.extend(self._split_dict(data, nested))
         elif isinstance(data, (list, tuple)):
-            param_list.extend(_split_list(data, True))
+            param_list.extend(self._split_list(data, True))
         return param_list
 
-    resp = {}
-    if responses:
-        for status_code, response_body in responses.items():
-            schema_input = SchemaInput()
-            schema_input.type = SchemaType.ARRAY if \
-                isinstance(response_body, list) else SchemaType.OBJECT
-            schema_input.params = _split_parameters(response_body)
-
-            resp[str(status_code)] = schema_input
-
-    def _wrapper(func):
+    def __call__(self, func: Any) -> Any:
         func.doc_info = {
-            'summary': description,
-            'tag': group,
-            'parameters': _split_parameters(parameters),
-            'response': resp
+            'summary': self.description,
+            'tag': self.group,
+            'parameters': self._split_parameters(self.parameters),
+            'response': self.resp
         }
         return func
-
-    return _wrapper
 
 
 class ControllerDoc(object):
@@ -202,43 +216,53 @@ class UiApiController(Controller):
         return cls
 
 
-def Endpoint(method=None, path=None, path_params=None, query_params=None,  # noqa: N802
-             json_response=True, proxy=False, xml=False, version=DEFAULT_VERSION):
+class Endpoint:
 
-    if method is None:
-        method = 'GET'
-    elif not isinstance(method, str) or \
-            method.upper() not in ['GET', 'POST', 'DELETE', 'PUT']:
-        raise TypeError("Possible values for method are: 'GET', 'POST', "
-                        "'DELETE', or 'PUT'")
+    def __init__(self, method=None, path=None, path_params=None, query_params=None,  # noqa: N802
+                 json_response=True, proxy=False, xml=False, version=DEFAULT_VERSION):
+        if method is None:
+            method = 'GET'
+        elif not isinstance(method, str) or \
+                method.upper() not in ['GET', 'POST', 'DELETE', 'PUT']:
+            raise TypeError("Possible values for method are: 'GET', 'POST', "
+                            "'DELETE', or 'PUT'")
 
-    method = method.upper()
+        method = method.upper()
 
-    if method in ['GET', 'DELETE']:
-        if path_params is not None:
-            raise TypeError("path_params should not be used for {} "
-                            "endpoints. All function params are considered"
-                            " path parameters by default".format(method))
+        if method in ['GET', 'DELETE']:
+            if path_params is not None:
+                raise TypeError("path_params should not be used for {} "
+                                "endpoints. All function params are considered"
+                                " path parameters by default".format(method))
 
-    if path_params is None:
-        if method in ['POST', 'PUT']:
-            path_params = []
+        if path_params is None:
+            if method in ['POST', 'PUT']:
+                path_params = []
 
-    if query_params is None:
-        query_params = []
+        if query_params is None:
+            query_params = []
 
-    def _wrapper(func):
-        if method in ['POST', 'PUT']:
+        self.method = method
+        self.path = path
+        self.path_params = path_params
+        self.query_params = query_params
+        self.json_response = json_response
+        self.proxy = proxy
+        self.xml = xml
+        self.version = version
+
+    def __call__(self, func):
+        if self.method in ['POST', 'PUT']:
             func_params = _get_function_params(func)
             for param in func_params:
-                if param['name'] in path_params and not param['required']:
+                if param['name'] in self.path_params and not param['required']:
                     raise TypeError("path_params can only reference "
                                     "non-optional function parameters")
 
-        if func.__name__ == '__call__' and path is None:
+        if func.__name__ == '__call__' and self.path is None:
             e_path = ""
         else:
-            e_path = path
+            e_path = self.path
 
         if e_path is not None:
             e_path = e_path.strip()
@@ -248,17 +272,16 @@ def Endpoint(method=None, path=None, path_params=None, query_params=None,  # noq
                 e_path = ""
 
         func._endpoint = {
-            'method': method,
+            'method': self.method,
             'path': e_path,
-            'path_params': path_params,
-            'query_params': query_params,
-            'json_response': json_response,
-            'proxy': proxy,
-            'xml': xml,
-            'version': version
+            'path_params': self.path_params,
+            'query_params': self.query_params,
+            'json_response': self.json_response,
+            'proxy': self.proxy,
+            'xml': self.xml,
+            'version': self.version
         }
         return func
-    return _wrapper
 
 
 def Proxy(path=None):  # noqa: N802
@@ -788,14 +811,14 @@ class RESTController(BaseController):
     }
 
     _method_mapping = collections.OrderedDict([
-        ('list', {'method': 'GET', 'resource': False, 'status': 200}),
-        ('create', {'method': 'POST', 'resource': False, 'status': 201}),
-        ('bulk_set', {'method': 'PUT', 'resource': False, 'status': 200}),
-        ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204}),
-        ('get', {'method': 'GET', 'resource': True, 'status': 200}),
-        ('delete', {'method': 'DELETE', 'resource': True, 'status': 204}),
-        ('set', {'method': 'PUT', 'resource': True, 'status': 200}),
-        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200})
+        ('list', {'method': 'GET', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('create', {'method': 'POST', 'resource': False, 'status': 201, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('bulk_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('get', {'method': 'GET', 'resource': True, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('delete', {'method': 'DELETE', 'resource': True, 'status': 204, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('set', {'method': 'PUT', 'resource': True, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION})  # noqa E501 #pylint: disable=line-too-long
     ])
 
     @classmethod
@@ -819,85 +842,104 @@ class RESTController(BaseController):
         res_id_params = cls.infer_resource_id()
 
         for _, func in inspect.getmembers(cls, predicate=callable):
-            no_resource_id_params = False
-            status = 200
-            method = None
-            query_params = None
-            path = ""
-            version = DEFAULT_VERSION
-            sec_permissions = hasattr(func, '_security_permissions')
-            permission = None
+            endpoint_params = {
+                'no_resource_id_params': False,
+                'status': 200,
+                'method': None,
+                'query_params': None,
+                'path': '',
+                'version': DEFAULT_VERSION,
+                'sec_permissions': hasattr(func, '_security_permissions'),
+                'permission': None,
+            }
 
             if func.__name__ in cls._method_mapping:
-                meth = cls._method_mapping[func.__name__]  # type: dict
+                cls._update_endpoint_params_method_map(
+                    func, res_id_params, endpoint_params)
 
-                if meth['resource']:
-                    if not res_id_params:
-                        no_resource_id_params = True
-                    else:
-                        path_params = ["{{{}}}".format(p) for p in res_id_params]
-                        path += "/{}".format("/".join(path_params))
+            elif hasattr(func, "__collection_method__"):
+                cls._update_endpoint_params_collection_map(func, endpoint_params)
 
-                status = meth['status']
-                method = meth['method']
-                if not sec_permissions:
-                    permission = cls._permission_map[method]
-
-            elif hasattr(func, "_collection_method_"):
-                if func._collection_method_['path']:
-                    path = func._collection_method_['path']
-                else:
-                    path = "/{}".format(func.__name__)
-                status = func._collection_method_['status']
-                method = func._collection_method_['method']
-                query_params = func._collection_method_['query_params']
-                version = func._collection_method_['version']
-                if not sec_permissions:
-                    permission = cls._permission_map[method]
-
-            elif hasattr(func, "_resource_method_"):
-                if not res_id_params:
-                    no_resource_id_params = True
-                else:
-                    path_params = ["{{{}}}".format(p) for p in res_id_params]
-                    path += "/{}".format("/".join(path_params))
-                    if func._resource_method_['path']:
-                        path += func._resource_method_['path']
-                    else:
-                        path += "/{}".format(func.__name__)
-                status = func._resource_method_['status']
-                method = func._resource_method_['method']
-                version = func._resource_method_['version']
-                query_params = func._resource_method_['query_params']
-                if not sec_permissions:
-                    permission = cls._permission_map[method]
+            elif hasattr(func, "__resource_method__"):
+                cls._update_endpoint_params_resource_method(
+                    res_id_params, endpoint_params, func)
 
             else:
                 continue
 
-            if no_resource_id_params:
+            if endpoint_params['no_resource_id_params']:
                 raise TypeError("Could not infer the resource ID parameters for"
                                 " method {} of controller {}. "
                                 "Please specify the resource ID parameters "
                                 "using the RESOURCE_ID class property"
                                 .format(func.__name__, cls.__name__))
 
-            if method in ['GET', 'DELETE']:
+            if endpoint_params['method'] in ['GET', 'DELETE']:
                 params = _get_function_params(func)
                 if res_id_params is None:
                     res_id_params = []
-                if query_params is None:
-                    query_params = [p['name'] for p in params
-                                    if p['name'] not in res_id_params]
+                if endpoint_params['query_params'] is None:
+                    endpoint_params['query_params'] = [p['name'] for p in params  # type: ignore
+                                                       if p['name'] not in res_id_params]
 
-            func = cls._status_code_wrapper(func, status)
-            endp_func = Endpoint(method, path=path,
-                                 query_params=query_params, version=version)(func)
-            if permission:
-                _set_func_permissions(endp_func, [permission])
+            func = cls._status_code_wrapper(func, endpoint_params['status'])
+            endp_func = Endpoint(endpoint_params['method'], path=endpoint_params['path'],
+                                 query_params=endpoint_params['query_params'],
+                                 version=endpoint_params['version'])(func)
+            if endpoint_params['permission']:
+                _set_func_permissions(endp_func, [endpoint_params['permission']])
             result.append(cls.Endpoint(cls, endp_func))
 
         return result
+
+    @classmethod
+    def _update_endpoint_params_resource_method(cls, res_id_params, endpoint_params, func):
+        if not res_id_params:
+            endpoint_params['no_resource_id_params'] = True
+        else:
+            path_params = ["{{{}}}".format(p) for p in res_id_params]
+            endpoint_params['path'] += "/{}".format("/".join(path_params))
+            if func.__resource_method__['path']:
+                endpoint_params['path'] += func.__resource_method__['path']
+            else:
+                endpoint_params['path'] += "/{}".format(func.__name__)
+        endpoint_params['status'] = func.__resource_method__['status']
+        endpoint_params['method'] = func.__resource_method__['method']
+        endpoint_params['version'] = func.__resource_method__['version']
+        endpoint_params['query_params'] = func.__resource_method__['query_params']
+        if not endpoint_params['sec_permissions']:
+            endpoint_params['permission'] = cls._permission_map[endpoint_params['method']]
+
+    @classmethod
+    def _update_endpoint_params_collection_map(cls, func, endpoint_params):
+        if func.__collection_method__['path']:
+            endpoint_params['path'] = func.__collection_method__['path']
+        else:
+            endpoint_params['path'] = "/{}".format(func.__name__)
+        endpoint_params['status'] = func.__collection_method__['status']
+        endpoint_params['method'] = func.__collection_method__['method']
+        endpoint_params['query_params'] = func.__collection_method__['query_params']
+        endpoint_params['version'] = func.__collection_method__['version']
+        if not endpoint_params['sec_permissions']:
+            endpoint_params['permission'] = cls._permission_map[endpoint_params['method']]
+
+    @classmethod
+    def _update_endpoint_params_method_map(cls, func, res_id_params, endpoint_params):
+        meth = cls._method_mapping[func.__name__]  # type: dict
+
+        if meth['resource']:
+            if not res_id_params:
+                endpoint_params['no_resource_id_params'] = True
+            else:
+                path_params = ["{{{}}}".format(p) for p in res_id_params]
+                endpoint_params['path'] += "/{}".format("/".join(path_params))
+
+        endpoint_params['status'] = meth['status']
+        endpoint_params['method'] = meth['method']
+        if hasattr(func, "__method_map_method__"):
+            endpoint_params['version'] = func.__method_map_method__['version']
+        if not endpoint_params['sec_permissions']:
+            endpoint_params['permission'] = cls._permission_map[endpoint_params['method']]
 
     @classmethod
     def _status_code_wrapper(cls, func, status_code):
@@ -918,11 +960,26 @@ class RESTController(BaseController):
             status = 200
 
         def _wrapper(func):
-            func._resource_method_ = {
+            func.__resource_method__ = {
                 'method': method,
                 'path': path,
                 'status': status,
                 'query_params': query_params,
+                'version': version
+            }
+            return func
+        return _wrapper
+
+    @staticmethod
+    def MethodMap(resource=False, status=None, version=DEFAULT_VERSION):  # noqa: N802
+
+        if status is None:
+            status = 200
+
+        def _wrapper(func):
+            func.__method_map_method__ = {
+                'resource': resource,
+                'status': status,
                 'version': version
             }
             return func
@@ -938,7 +995,7 @@ class RESTController(BaseController):
             status = 200
 
         def _wrapper(func):
-            func._collection_method_ = {
+            func.__collection_method__ = {
                 'method': method,
                 'path': path,
                 'status': status,
@@ -947,6 +1004,23 @@ class RESTController(BaseController):
             }
             return func
         return _wrapper
+
+
+class ControllerAuthMixin(object):
+    @staticmethod
+    def _delete_token_cookie(token):
+        cherrypy.response.cookie['token'] = token
+        cherrypy.response.cookie['token']['expires'] = 0
+        cherrypy.response.cookie['token']['max-age'] = 0
+
+    @staticmethod
+    def _set_token_cookie(url_prefix, token):
+        cherrypy.response.cookie['token'] = token
+        if url_prefix == 'https':
+            cherrypy.response.cookie['token']['secure'] = True
+        cherrypy.response.cookie['token']['HttpOnly'] = True
+        cherrypy.response.cookie['token']['path'] = '/'
+        cherrypy.response.cookie['token']['SameSite'] = 'Strict'
 
 
 # Role-based access permissions decorators
@@ -1031,12 +1105,3 @@ def validate_ceph_type(validations, component=''):
             return func(*args, **kwargs)
         return validate_args
     return decorator
-
-
-def set_cookies(url_prefix, token):
-    cherrypy.response.cookie['token'] = token
-    if url_prefix == 'https':
-        cherrypy.response.cookie['token']['secure'] = True
-    cherrypy.response.cookie['token']['HttpOnly'] = True
-    cherrypy.response.cookie['token']['path'] = '/'
-    cherrypy.response.cookie['token']['SameSite'] = 'Strict'

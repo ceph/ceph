@@ -23,6 +23,7 @@ from time import sleep
 import grp
 import os
 import pwd
+import re
 import shutil
 import stat
 import sys
@@ -65,32 +66,40 @@ MYPDIR = os.path.dirname(MYDIR)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
 
-def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
-    execv_cmd = []
-    if 'CEPH_DBG' in os.environ:
-        execv_cmd += ['@Python3_EXECUTABLE@', '-mpdb']
+def add_to_ld_path(path_name, path):
+    paths = re.split('[ :]', os.environ.get(path_name, ''))
+    if path in paths:
+        return 0
+    else:
+        paths.insert(0, path)
+        os.environ[path_name] = ':'.join(paths)
+        return 1
 
+
+def respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path):
     if platform.system() == "Darwin":
         lib_path_var = "DYLD_LIBRARY_PATH"
     else:
         lib_path_var = "LD_LIBRARY_PATH"
 
-    execv_cmd += sys.argv
+    ld_paths_changed = 0
+    preload_libcxx = os.environ.get('CEPH_PRELOAD_LIBCXX')
+    if preload_libcxx:
+        ld_paths_changed += add_to_ld_path('LD_PRELOAD', preload_libcxx)
     if asan_lib_path:
-        os.environ['LD_PRELOAD'] = asan_lib_path
-    if lib_path_var in os.environ:
-        if lib_path not in os.environ[lib_path_var]:
-            os.environ[lib_path_var] += ':' + lib_path
-            if "CEPH_DEV" not in os.environ:
-                print(DEVMODEMSG, file=sys.stderr)
-            os.execvp(execv_cmd[0], execv_cmd)
-    else:
-        os.environ[lib_path_var] = lib_path
+        ld_paths_changed += add_to_ld_path('LD_PRELOAD', asan_lib_path)
+    ld_paths_changed += add_to_ld_path(lib_path_var, lib_path)
+    if ld_paths_changed > 0:
         if "CEPH_DEV" not in os.environ:
             print(DEVMODEMSG, file=sys.stderr)
+        execv_cmd = []
+        if 'CEPH_DBG' in os.environ:
+            execv_cmd += ['@Python3_EXECUTABLE@', '-mpdb']
+        execv_cmd += sys.argv
         os.execvp(execv_cmd[0], execv_cmd)
-    sys.path.insert(0, pybind_path)
-    sys.path.insert(0, pythonlib_path)
+    else:
+        sys.path.insert(0, pybind_path)
+        sys.path.insert(0, pythonlib_path)
 
 
 def get_pythonlib_dir():
@@ -966,8 +975,7 @@ def main():
     if parsed_args.client_name:
         name = parsed_args.client_name
 
-    # default '' means default conf search
-    conffile = ''
+    conffile = rados.Rados.DEFAULT_CONF_FILES
     if parsed_args.cephconf:
         conffile = parsed_args.cephconf
     # For now, --admin-daemon is handled as usual.  Try it

@@ -6,6 +6,7 @@
 #include <seastar/core/future.hh>
 
 #include "crimson/osd/backfill_state.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/scheduler/scheduler.h"
@@ -18,11 +19,15 @@ class PGBackend;
 
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
+  template <typename T = void>
+  using blocking_interruptible_future =
+    ::crimson::blocking_interruptible_future<
+      ::crimson::osd::IOInterruptCondition, T>;
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
   virtual ~PGRecovery() {}
   void start_pglogbased_recovery();
 
-  crimson::blocking_future<bool> start_recovery_ops(size_t max_to_start);
+  blocking_interruptible_future<bool> start_recovery_ops(size_t max_to_start);
   void on_backfill_reserved();
   void dispatch_backfill_event(
     boost::intrusive_ptr<const boost::statechart::event_base> evt);
@@ -32,24 +37,24 @@ private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
     size_t max_to_start,
-    std::vector<crimson::blocking_future<>> *out);
+    std::vector<blocking_interruptible_future<>> *out);
   size_t start_replica_recovery_ops(
     size_t max_to_start,
-    std::vector<crimson::blocking_future<>> *out);
+    std::vector<blocking_interruptible_future<>> *out);
 
   std::vector<pg_shard_t> get_replica_recovery_order() const {
     return pg->get_replica_recovery_order();
   }
-  crimson::blocking_future<> recover_missing(
+  blocking_interruptible_future<> recover_missing(
     const hobject_t &soid, eversion_t need);
   size_t prep_object_replica_deletes(
     const hobject_t& soid,
     eversion_t need,
-    std::vector<crimson::blocking_future<>> *in_progress);
+    std::vector<blocking_interruptible_future<>> *in_progress);
   size_t prep_object_replica_pushes(
     const hobject_t& soid,
     eversion_t need,
-    std::vector<crimson::blocking_future<>> *in_progress);
+    std::vector<blocking_interruptible_future<>> *in_progress);
 
   void on_local_recover(
     const hobject_t& soid,

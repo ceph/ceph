@@ -93,8 +93,8 @@ void usage(ostream& out)
 "   create <obj-name>                create object\n"
 "   rm <obj-name> ...[--force-full]  [force no matter full or not]remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
-"   listxattr <obj-name>\n"
-"   getxattr <obj-name> attr\n"
+"   listxattr <obj-name>             list attrs of this object\n"
+"   getxattr <obj-name> <attr>       get the <attr> attribute of this object\n"
 "   setxattr <obj-name> attr val\n"
 "   rmxattr <obj-name> attr\n"
 "   stat <obj-name>                  stat the named object\n"
@@ -1306,7 +1306,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
     usage_exit();
 
   if (cmd.compare("break") == 0) {
-    string locker(nargs[4]);
+    const char* locker = nargs[4];
     rados::cls::lock::Lock l(lock_name);
     l.set_cookie(lock_cookie);
     l.set_tag(lock_tag);

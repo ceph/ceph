@@ -174,13 +174,21 @@ function install_pkg_on_ubuntu {
 }
 
 function install_boost_on_ubuntu {
-    local codename=$1
-    if apt -qq list ceph-libboost1.72-dev 2>/dev/null | grep -q installed; then
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.72.*'
-	$SUDO rm -f /etc/apt/sources.list.d/ceph-libboost1.72.list
+    local ver=1.75
+    local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
+                              grep -e 'libboost[0-9].[0-9]\+-dev' |
+                              cut -d' ' -f2 |
+                              cut -d'.' -f1,2)
+    if test -n "$installed_ver"; then
+        if echo "$installed_ver" | grep -q "^$ver"; then
+            return
+        else
+            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove "ceph-libboost.*${installed_ver}.*"
+            $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost${installed_ver}.list
+        fi
     fi
+    local codename=$1
     local project=libboost
-    local ver=1.73
     local sha1=7aba8a1882670522ee1d1ee1bba0ea170b292dec
     install_pkg_on_ubuntu \
 	$project \
@@ -215,6 +223,19 @@ function install_libzbd_on_ubuntu {
         $codename \
         check \
         libzbd-dev
+}
+
+function install_libpmem_on_ubuntu {
+    local codename=$1
+    local project=pmem
+    local sha1=7c18b4b1413ae965ea8bcbfc69eb9784f9212319
+    install_pkg_on_ubuntu \
+        $project \
+        $sha1 \
+        $codename \
+        check \
+        libpmem-dev \
+        libpmemobj-dev
 }
 
 function version_lt {
@@ -273,6 +294,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
+        devel/py-yaml \
         www/py-routes \
         www/py-flask \
         www/node \
@@ -292,6 +314,7 @@ else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     [ $WITH_JAEGER ] && with_jaeger=true || with_jaeger=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
+    [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary)
@@ -304,6 +327,11 @@ else
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 $with_zbd && install_libzbd_on_ubuntu bionic
+                ;;
+            *Focal*)
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
+                $with_zbd && install_libzbd_on_ubuntu focal
+                $with_pmem && install_libpmem_on_ubuntu focal
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -351,7 +379,7 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
-                    $SUDO subscription-manager repos --enable "codeready-builder-for-rhel-8-${ARCH}-rpms"
+                    $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                 fi

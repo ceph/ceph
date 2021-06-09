@@ -15,9 +15,6 @@ add_library(crimson-seastore STATIC
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc
   onode.cc
-  onode_manager/simple-fltree/onode_block.cc
-  onode_manager/simple-fltree/onode_delta.cc
-  onode_manager/simple-fltree/onode_node.cc
   onode_manager/staged-fltree/node.cc
   onode_manager/staged-fltree/node_extent_manager.cc
   onode_manager/staged-fltree/node_extent_manager/seastore.cc
@@ -29,15 +26,16 @@ add_library(crimson-seastore STATIC
   onode_manager/staged-fltree/stages/sub_items_stage.cc
   onode_manager/staged-fltree/super.cc
   onode_manager/staged-fltree/value.cc
-  extentmap_manager.cc
-  extentmap_manager/btree/extentmap_btree_node_impl.cc
-  extentmap_manager/btree/btree_extentmap_manager.cc
+  onode_manager/staged-fltree/fltree_onode_manager.cc
   collection_manager.cc
   collection_manager/flat_collection_manager.cc
   collection_manager/collection_flat_node.cc
+  object_data_handler.cc
   seastore.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
 target_link_libraries(crimson-seastore
   crimson)
+set_target_properties(crimson-seastore PROPERTIES
+  JOB_POOL_COMPILE heavy_compile_job_pool)

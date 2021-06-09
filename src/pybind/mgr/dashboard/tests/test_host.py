@@ -131,10 +131,42 @@ class HostControllerTest(ControllerTestCase):
             fake_client.hosts.remove_label = mock.Mock()
             fake_client.hosts.add_label = mock.Mock()
 
-            self._put('{}/node0'.format(self.URL_HOST), {'labels': ['bbb', 'ccc']})
+            payload = {'update_labels': True, 'labels': ['bbb', 'ccc']}
+            self._put('{}/node0'.format(self.URL_HOST), payload)
             self.assertStatus(200)
             fake_client.hosts.remove_label.assert_called_once_with('node0', 'aaa')
             fake_client.hosts.add_label.assert_called_once_with('node0', 'ccc')
+
+            # return 400 if type other than List[str]
+            self._put('{}/node0'.format(self.URL_HOST), {'update_labels': True,
+                                                         'labels': 'ddd'})
+            self.assertStatus(400)
+
+    def test_host_maintenance(self):
+        mgr.list_servers.return_value = []
+        orch_hosts = [
+            HostSpec('node0'),
+            HostSpec('node1')
+        ]
+        with patch_orch(True, hosts=orch_hosts):
+            # enter maintenance mode
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True})
+            self.assertStatus(200)
+
+            # force enter maintenance mode
+            self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True, 'force': True})
+            self.assertStatus(200)
+
+            # exit maintenance mode
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True})
+            self.assertStatus(200)
+            self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True})
+            self.assertStatus(200)
+
+        # maintenance without orchestrator service
+        with patch_orch(False):
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True})
+            self.assertStatus(503)
 
     @mock.patch('dashboard.controllers.host.time')
     def test_identify_device(self, mock_time):

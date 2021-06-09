@@ -152,7 +152,10 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::ConnectionRef,
 void Client::report()
 {
   gate.dispatch_in_background(__func__, *this, [this] {
-    assert(conn);
+    if (!conn) {
+      logger().warn("report: no conn available; raport skipped");
+      return seastar::now();
+    }
     auto pg_stats = with_stats.get_stats();
     return conn->send(std::move(pg_stats));
   });

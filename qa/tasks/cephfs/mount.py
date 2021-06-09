@@ -175,6 +175,30 @@ class CephFSMount(object):
         self.fs.wait_for_daemons()
         log.info('Ready to start {}...'.format(type(self).__name__))
 
+    def _create_mntpt(self):
+        self.client_remote.run(args=f'mkdir -p -v {self.hostfs_mntpt}',
+                               timeout=60)
+        # Use 0000 mode to prevent undesired modifications to the mountpoint on
+        # the local file system.
+        self.client_remote.run(args=f'chmod 0000 {self.hostfs_mntpt}',
+                               timeout=60)
+
+    @property
+    def _nsenter_args(self):
+        return ['nsenter', f'--net=/var/run/netns/{self.netns_name}']
+
+    def _set_filemode_on_mntpt(self):
+        stderr = StringIO()
+        try:
+            self.client_remote.run(
+                args=['sudo', 'chmod', '1777', self.hostfs_mntpt],
+                stderr=stderr, timeout=(5*60))
+        except CommandFailedError:
+            # the client does not have write permissions in the caps it holds
+            # for the Ceph FS that was just mounted.
+            if 'permission denied' in stderr.getvalue().lower():
+                pass
+
     def _setup_brx_and_nat(self):
         # The ip for ceph-brx should be
         ip = IP(self.ceph_brx_net)[-2]
@@ -572,18 +596,6 @@ class CephFSMount(object):
             yield
         finally:
             self.umount_wait()
-
-    def is_blocklisted(self):
-        addr = self.get_global_addr()
-        if addr is None:
-            log.warn("Couldn't get the client address, so the blocklisted status undetermined")
-            return False
-
-        blocklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "blocklist", "ls", "--format=json"))
-        for b in blocklist:
-            if addr == b["addr"]:
-                return True
-        return False
 
     def create_file(self, filename='testfile', dirname=None, user=None,
                     check_status=True):
@@ -1290,8 +1302,10 @@ class CephFSMount(object):
             "available": int(avail)
         }
 
-    def dir_checksum(self, path=None):
+    def dir_checksum(self, path=None, follow_symlinks=False):
         cmd = ["find"]
+        if follow_symlinks:
+            cmd.append("-L")
         if path:
             cmd.append(path)
         cmd.extend(["-type", "f", "-exec", "md5sum", "{}", "+"])

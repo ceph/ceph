@@ -159,10 +159,10 @@ Keystone.
     bucket = s3client.create_bucket(Bucket='my-new-shiny-bucket')
     response = s3client.list_buckets()
     for bucket in response["Buckets"]:
-        print "{name}\t{created}".format(
+        print("{name}\t{created}".format(
                     name = bucket['Name'],
                     created = bucket['CreationDate'],
-    )
+        ))
 
 Similar steps can be performed for using GetSessionToken with LDAP.
 

@@ -1,11 +1,4 @@
-import {
-  ChangeDetectorRef,
-  Component,
-  NgZone,
-  OnInit,
-  TemplateRef,
-  ViewChild
-} from '@angular/core';
+import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
@@ -60,39 +53,13 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
-    private ngZone: NgZone,
-    private changeDetectorRef: ChangeDetectorRef
+    private ngZone: NgZone
   ) {
     super();
-    this.permission = this.authStorageService.getPermissions().rgw;
-    const getBucketUri = () =>
-      this.selection.first() && `${encodeURIComponent(this.selection.first().bid)}`;
-    const addAction: CdTableAction = {
-      permission: 'create',
-      icon: Icons.add,
-      routerLink: () => this.urlBuilder.getCreate(),
-      name: this.actionLabels.CREATE,
-      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
-    };
-    const editAction: CdTableAction = {
-      permission: 'update',
-      icon: Icons.edit,
-      routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
-      name: this.actionLabels.EDIT
-    };
-    const deleteAction: CdTableAction = {
-      permission: 'delete',
-      icon: Icons.destroy,
-      click: () => this.deleteAction(),
-      disable: () => !this.selection.hasSelection,
-      name: this.actionLabels.DELETE,
-      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
-    };
-    this.tableActions = [addAction, editAction, deleteAction];
-    this.timeConditionReached();
   }
 
   ngOnInit() {
+    this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
         name: $localize`Name`,
@@ -129,24 +96,47 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
         flexGrow: 0.8
       }
     ];
+    const getBucketUri = () =>
+      this.selection.first() && `${encodeURIComponent(this.selection.first().bid)}`;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: Icons.add,
+      routerLink: () => this.urlBuilder.getCreate(),
+      name: this.actionLabels.CREATE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
+      name: this.actionLabels.EDIT
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteAction(),
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.DELETE,
+      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+    };
+    this.tableActions = [addAction, editAction, deleteAction];
+    this.timeConditionReached();
   }
 
   transformBucketData() {
     _.forEach(this.buckets, (bucketKey) => {
-      const usageList = bucketKey['usage'];
       const maxBucketSize = bucketKey['bucket_quota']['max_size'];
       const maxBucketObjects = bucketKey['bucket_quota']['max_objects'];
-      let totalBucketSize = 0;
-      let numOfObjects = 0;
-      _.forEach(usageList, (usageKey) => {
-        totalBucketSize = totalBucketSize + usageKey.size_actual;
-        numOfObjects = numOfObjects + usageKey.num_objects;
-      });
-      bucketKey['bucket_size'] = totalBucketSize;
-      bucketKey['num_objects'] = numOfObjects;
-      bucketKey['size_usage'] = maxBucketSize > 0 ? totalBucketSize / maxBucketSize : undefined;
+      bucketKey['bucket_size'] = 0;
+      bucketKey['num_objects'] = 0;
+      if (!_.isEmpty(bucketKey['usage'])) {
+        bucketKey['bucket_size'] = bucketKey['usage']['rgw.main']['size_actual'];
+        bucketKey['num_objects'] = bucketKey['usage']['rgw.main']['num_objects'];
+      }
+      bucketKey['size_usage'] =
+        maxBucketSize > 0 ? bucketKey['bucket_size'] / maxBucketSize : undefined;
       bucketKey['object_usage'] =
-        maxBucketObjects > 0 ? numOfObjects / maxBucketObjects : undefined;
+        maxBucketObjects > 0 ? bucketKey['num_objects'] / maxBucketObjects : undefined;
     });
   }
 
@@ -171,7 +161,6 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
       (resp: object[]) => {
         this.buckets = resp;
         this.transformBucketData();
-        this.changeDetectorRef.detectChanges();
       },
       () => {
         context.error();

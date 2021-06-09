@@ -1,4 +1,8 @@
 install(FILES
+  libcephsqlite.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(FILES
   rados/librados.h
   rados/rados_types.h
   rados/rados_types.hpp
@@ -31,4 +35,11 @@ if(WITH_RADOSGW)
     rados/librgw.h
     rados/rgw_file.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rados)
+endif()
+
+if(WITH_LIBCEPHFS)
+  install(FILES
+    cephfs/libcephfs.h
+    cephfs/ceph_ll_client.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cephfs)
 endif()

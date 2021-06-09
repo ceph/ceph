@@ -1,10 +1,12 @@
 import fileinput
+import glob
 import logging
 import os
 import shutil
 import sys
 import yaml
 import sphinx.util
+
 
 top_level = \
     os.path.dirname(
@@ -44,6 +46,20 @@ pygments_style = 'sphinx'
 
 # HTML output options
 html_theme = 'ceph'
+html_theme_options = {
+    'logo_only': True,
+    'display_version': False,
+    'prev_next_buttons_location': 'bottom',
+    'style_external_links': False,
+    'vcs_pageview_mode': '',
+    'style_nav_header_background': '#eee',
+    # Toc options
+    'collapse_navigation': True,
+    'sticky_navigation': True,
+    'navigation_depth': 4,
+    'includehidden': True,
+    'titles_only': False
+}
 html_theme_path = ['_themes']
 html_title = "Ceph Documentation"
 html_logo = 'logo.png'
@@ -104,6 +120,7 @@ extensions = [
     'breathe',
     'ceph_commands',
     'ceph_releases',
+    'ceph_confval',
     'sphinxcontrib.openapi'
     ]
 
@@ -210,6 +227,12 @@ for c in pybinds:
 openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30')
 openapi_logger.setLevel(logging.WARNING)
 
+# ceph_confval
+ceph_confval_imports = glob.glob(os.path.join(top_level,
+                                              'src/common/options',
+                                              '*.yaml.in'))
+ceph_confval_mgr_module_path = 'src/pybind/mgr'
+ceph_confval_mgr_python_path = 'src/pybind'
 
 # handles edit-on-github and old version warning display
 def setup(app):

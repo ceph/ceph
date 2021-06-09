@@ -20,13 +20,13 @@
 #include "rgw_basic_types.h"
 
 class DoutPrefixProvider;
-namespace rgw::sal { class RGWRadosStore; }
+namespace rgw::sal { class RadosStore; }
 class RGWBucketInfo;
 class RGWBucketSyncPolicyHandler;
 
 // poll the bucket's sync status until it's caught up against all sync sources
 int rgw_bucket_sync_checkpoint(const DoutPrefixProvider* dpp,
-                               rgw::sal::RGWRadosStore *store,
+                               rgw::sal::RadosStore* store,
                                const RGWBucketSyncPolicyHandler& policy,
                                const RGWBucketInfo& info,
                                std::optional<rgw_zone_id> opt_source_zone,

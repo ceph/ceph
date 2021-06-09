@@ -788,24 +788,21 @@ void AsyncMessenger::shutdown_connections(bool queue_reset)
 
   for (const auto& [e, c] : conns) {
     ldout(cct, 5) << __func__ << " mark down " << e << " " << c << dendl;
-    c->get_perf_counter()->dec(l_msgr_active_connections);
     c->stop(queue_reset);
   }
   conns.clear();
 
   for (const auto& c : anon_conns) {
     ldout(cct, 5) << __func__ << " mark down " << c << dendl;
-    c->get_perf_counter()->dec(l_msgr_active_connections);
     c->stop(queue_reset);
   }
   anon_conns.clear();
 
   {
     std::lock_guard l{deleted_lock};
-    if (cct->_conf->subsys.should_gather<ceph_subsys_ms, 5>()) {
-      for (const auto& c : deleted_conns) {
-        ldout(cct, 5) << __func__ << " delete " << c << dendl;
-      }
+    for (const auto& c : deleted_conns) {
+      ldout(cct, 5) << __func__ << " delete " << c << dendl;
+      c->get_perf_counter()->dec(l_msgr_active_connections);
     }
     deleted_conns.clear();
   }
@@ -860,6 +857,7 @@ int AsyncMessenger::accept_conn(const AsyncConnectionRef& conn)
     // If conn already in, we will return 0
     std::lock_guard l{deleted_lock};
     if (deleted_conns.erase(existing)) {
+      it->second->get_perf_counter()->dec(l_msgr_active_connections);
       conns.erase(it);
     } else if (conn != existing) {
       return -1;
@@ -939,6 +937,7 @@ void AsyncMessenger::reap_dead()
         conns.erase(conns_it);
       accepting_conns.erase(c);
       anon_conns.erase(c);
+      c->get_perf_counter()->dec(l_msgr_active_connections);
     }
     deleted_conns.clear();
   }

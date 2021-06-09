@@ -5,12 +5,17 @@
 
 #include <iostream>
 
+#include <boost/intrusive/list.hpp>
+
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/root_block.h"
 
 namespace crimson::os::seastore {
+
+struct retired_extent_gate_t;
+class SeaStore;
 
 /**
  * Transaction
@@ -61,6 +66,10 @@ public:
     }
   }
 
+  void add_to_retired_uncached(paddr_t addr, extent_len_t length) {
+    retired_uncached.emplace_back(std::make_pair(addr, length));
+  }
+
   void add_to_read_set(CachedExtentRef ref) {
     if (is_weak()) return;
 
@@ -109,8 +118,7 @@ public:
 
 private:
   friend class Cache;
-  friend Ref make_transaction();
-  friend Ref make_weak_transaction();
+  friend Ref make_test_transaction();
 
   /**
    * If set, *this may not be used to perform writes and will not provide
@@ -133,11 +141,19 @@ private:
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;
 
+  std::vector<std::pair<paddr_t, extent_len_t>> retired_uncached;
+
+  journal_seq_t initiated_after;
+
+  retired_extent_gate_t::token_t retired_gate_token;
+
 public:
   Transaction(
     OrderingHandle &&handle,
-    bool weak
-  ) : handle(std::move(handle)), weak(weak) {}
+    bool weak,
+    journal_seq_t initiated_after
+  ) : handle(std::move(handle)), weak(weak),
+      retired_gate_token(initiated_after) {}
 
   ~Transaction() {
     for (auto i = write_set.begin();
@@ -146,20 +162,18 @@ public:
       write_set.erase(*i++);
     }
   }
+
+  friend class crimson::os::seastore::SeaStore;
 };
 using TransactionRef = Transaction::Ref;
 
-inline TransactionRef make_transaction() {
+/// Should only be used with dummy staged-fltree node extent manager
+inline TransactionRef make_test_transaction() {
   return std::make_unique<Transaction>(
     get_dummy_ordering_handle(),
-    false
+    false,
+    journal_seq_t{}
   );
-}
-
-inline TransactionRef make_weak_transaction() {
-  return std::make_unique<Transaction>(
-    get_dummy_ordering_handle(),
-    true);
 }
 
 }

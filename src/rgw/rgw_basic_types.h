@@ -297,6 +297,11 @@ struct rgw_bucket {
   // cppcheck-suppress noExplicitConstructor
   explicit rgw_bucket(const rgw_user& u, const cls_user_bucket& b);
 
+  rgw_bucket(const std::string& _tenant,
+	     const std::string& _name,
+	     const std::string& _bucket_id) : tenant(_tenant),
+                                              name(_name),
+                                              bucket_id(_bucket_id) {}
   rgw_bucket(const rgw_bucket_key& bk) : tenant(bk.tenant),
                                          name(bk.name),
                                          bucket_id(bk.bucket_id) {}

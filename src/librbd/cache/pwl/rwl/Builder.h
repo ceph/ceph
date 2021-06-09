@@ -85,6 +85,14 @@ public:
         set, image_offset_bytes, write_bytes, data_len, cct,
         writesame_log_entry);
   }
+  std::shared_ptr<pwl::DiscardLogOperation> create_discard_log_operation(
+      std::shared_ptr<SyncPoint> sync_point, uint64_t image_offset_bytes,
+      uint64_t write_bytes, uint32_t discard_granularity_bytes,
+      utime_t dispatch_time, PerfCounters *perfcounter, CephContext *cct) {
+    return std::make_shared<DiscardLogOperation>(
+        sync_point, image_offset_bytes, write_bytes, discard_granularity_bytes,
+        dispatch_time, perfcounter, cct);
+  }
   C_ReadRequest *create_read_request(CephContext *cct, utime_t arrived,
       PerfCounters *perfcounter, ceph::bufferlist *bl, Context *on_finish) {
     return new C_ReadRequest(cct, arrived, perfcounter, bl, on_finish);

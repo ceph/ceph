@@ -27,12 +27,16 @@ MDS Cache Size
 --------------
 
 You can limit the size of the Metadata Server (MDS) cache by a byte count. This
-is done through the `mds_cache_memory_limit` configuration. For example::
+is done through the `mds_cache_memory_limit` configuration:
 
-    ceph config set mds mds_cache_memory_limit 8GB
+.. confval:: mds_cache_memory_limit
 
 In addition, you can specify a cache reservation by using the
-`mds_cache_reservation` parameter for MDS operations. The cache reservation is
+`mds_cache_reservation` parameter for MDS operations:
+
+.. confval:: mds_cache_reservation
+
+The cache reservation is
 limited as a percentage of the memory and is set to 5% by default. The intent
 of this parameter is to have the MDS maintain an extra reserve of memory for
 its cache for new metadata operations to use. As a consequence, the MDS should
@@ -42,7 +46,9 @@ clients in order to drop unused metadata in its cache.
 If the MDS cannot keep its cache under the target size, the MDS will send a
 health alert to the Monitors indicating the cache is too large. This is
 controlled by the `mds_health_cache_threshold` configuration which is by
-default 150% of the maximum cache size.
+default 150% of the maximum cache size:
+
+.. confval:: mds_health_cache_threshold
 
 Because the cache limit is not a hard limit, potential bugs in the CephFS
 client, MDS, or misbehaving applications might cause the MDS to exceed its
@@ -54,17 +60,9 @@ MDS Cache Trimming
 
 There are two configurations for throttling the rate of cache trimming in the MDS:
 
-::
+.. confval:: mds_cache_trim_threshold
 
-    mds_cache_trim_threshold (default 64k)
-
-
-and
-
-::
-
-    mds_cache_trim_decay_rate (default 1)
-
+.. confval:: mds_cache_trim_decay_rate
 
 The intent of the throttle is to prevent the MDS from spending too much time
 trimming its cache. This may limit its ability to handle client requests or
@@ -95,38 +93,34 @@ via the following configurations:
 
 
 The maximum number of capabilities to recall from a single client in a given recall
-event::
+event:
 
-    mds_recall_max_caps (default: 5000)
+.. confval:: mds_recall_max_caps
 
-The threshold and decay rate for the decay counter on a session::
+The threshold and decay rate for the decay counter on a session:
 
-    mds_recall_max_decay_threshold (default: 16k)
+.. confval:: mds_recall_max_decay_threshold
 
-and::
-
-    mds_recall_max_decay_rate (default: 2.5 seconds)
+.. confval:: mds_recall_max_decay_rate
 
 The session decay counter controls the rate of recall for an individual
 session. The behavior of the counter works the same as for cache trimming
 above. Each capability that is recalled increments the counter.
 
-There is also a global decay counter that throttles for all session recall::
+There is also a global decay counter that throttles for all session recall:
 
-    mds_recall_global_max_decay_threshold (default: 64k)
+.. confval:: mds_recall_global_max_decay_threshold
 
 its decay rate is the same as ``mds_recall_max_decay_rate``. Any recalled
 capability for any session also increments this counter.
 
 If clients are slow to release state, the warning "failing to respond to cache
 pressure" or ``MDS_HEALTH_CLIENT_RECALL`` will be reported. Each session's rate
-of release is monitored by another decay counter configured by::
+of release is monitored by another decay counter configured by:
 
-    mds_recall_warning_threshold (default: 32k)
+.. confval:: mds_recall_warning_threshold
 
-and::
-
-    mds_recall_warning_decay_rate (default: 60.0 seconds)
+.. confval:: mds_recall_warning_decay_rate
 
 Each time a capability is released, the counter is incremented.  If clients do
 not release capabilities quickly enough and there is cache pressure, the
@@ -136,6 +130,45 @@ Some workloads and client behaviors may require faster recall of client state
 to keep up with capability acquisition. It is recommended to increase the above
 counters as needed to resolve any slow recall warnings in the cluster health
 state.
+
+
+MDS Cap Acquisition Throttle
+----------------------------
+
+A trivial "find" command on a large directory hierarchy will cause the client
+to receive caps significantly faster than it will release. The MDS will try
+to have the client reduce its caps below the ``mds_max_caps_per_client`` limit
+but the recall throttles prevent it from catching up to the pace of acquisition.
+So the readdir is throttled to control cap acquisition via the following
+configurations:
+
+
+The threshold and decay rate for the readdir cap acquisition decay counter:
+
+.. confval:: mds_session_cap_acquisition_throttle
+
+.. confval:: mds_session_cap_acquisition_decay_rate
+
+The cap acquisition decay counter controls the rate of cap acquisition via
+readdir. The behavior of the decay counter is the same as for cache trimming or
+caps recall. Each readdir call increments the counter by the number of files in
+the result.
+
+The ratio of ``mds_max_caps_per_client`` that client must exceed before readdir
+maybe throttled by cap acquisition throttle:
+
+.. confval:: mds_session_max_caps_throttle_ratio
+
+The timeout in seconds after which a client request is retried due to cap
+acquisition throttling:
+
+.. confval:: mds_cap_acquisition_throttle_retry_request_timeout
+
+If the number of caps acquired by the client per session is greater than the
+``mds_session_max_caps_throttle_ratio`` and cap acquisition decay counter is
+greater than ``mds_session_cap_acquisition_throttle``, the readdir is throttled.
+The readdir request is retried after ``mds_cap_acquisition_throttle_retry_request_timeout``
+seconds.
 
 
 Session Liveness
@@ -150,13 +183,11 @@ not utilizing its capabilities is unlikely to use those capabilities anytime
 in the near future.
 
 Determining whether a given session is quiescent is controlled by the following
-configuration variables::
+configuration variables:
 
-    mds_session_cache_liveness_magnitude (default: 10)
+.. confval:: mds_session_cache_liveness_magnitude
 
-and::
-
-    mds_session_cache_liveness_decay_rate (default: 5min)
+.. confval:: mds_session_cache_liveness_decay_rate
 
 The configuration ``mds_session_cache_liveness_decay_rate`` indicates the
 half-life for the decay counter tracking the use of capabilities by the client.
@@ -178,9 +209,9 @@ Capability Limit
 The MDS also tries to prevent a single client from acquiring too many
 capabilities. This helps prevent recovery from taking a long time in some
 situations.  It is not generally necessary for a client to have such a large
-cache. The limit is configured via::
+cache. The limit is configured via:
 
-    mds_max_caps_per_client (default: 1M)
+.. confval:: mds_max_caps_per_client
 
 It is not recommended to set this value above 5M but it may be helpful with
 some workloads.

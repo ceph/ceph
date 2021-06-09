@@ -30,10 +30,22 @@ class Module(MgrModule):
     def snapshot_mirorr_peer_add(self,
                                  fs_name: str,
                                  remote_cluster_spec: str,
-                                 remote_fs_name: Optional[str] = None):
+                                 remote_fs_name: Optional[str] = None,
+                                 remote_mon_host: Optional[str] = None,
+                                 cephx_key: Optional[str] = None):
         """Add a remote filesystem peer"""
+        conf = {}
+        if remote_mon_host and cephx_key:
+            conf['mon_host'] = remote_mon_host
+            conf['key'] = cephx_key
         return self.fs_snapshot_mirror.peer_add(fs_name, remote_cluster_spec,
-                                                remote_fs_name)
+                                                remote_fs_name, remote_conf=conf)
+
+    @CLIReadCommand('fs snapshot mirror peer_list')
+    def snapshot_mirror_peer_list(self,
+                                  fs_name: str):
+        """List configured peers for a file system"""
+        return self.fs_snapshot_mirror.peer_list(fs_name)
 
     @CLIWriteCommand('fs snapshot mirror peer_remove')
     def snapshot_mirror_peer_remove(self,
@@ -41,6 +53,21 @@ class Module(MgrModule):
                                     peer_uuid: str):
         """Remove a filesystem peer"""
         return self.fs_snapshot_mirror.peer_remove(fs_name, peer_uuid)
+
+    @CLIWriteCommand('fs snapshot mirror peer_bootstrap create')
+    def snapshot_mirror_peer_bootstrap_create(self,
+                                              fs_name: str,
+                                              client_name: str,
+                                              site_name: str):
+        """Bootstrap a filesystem peer"""
+        return self.fs_snapshot_mirror.peer_bootstrap_create(fs_name, client_name, site_name)
+
+    @CLIWriteCommand('fs snapshot mirror peer_bootstrap import')
+    def snapshot_mirror_peer_bootstrap_import(self,
+                                              fs_name: str,
+                                              token: str):
+        """Import a bootstrap token"""
+        return self.fs_snapshot_mirror.peer_bootstrap_import(fs_name, token)
 
     @CLIWriteCommand('fs snapshot mirror add')
     def snapshot_mirror_add_dir(self,
@@ -68,3 +95,9 @@ class Module(MgrModule):
                                      fs_name: str):
         """Get current instance to directory map for a filesystem"""
         return self.fs_snapshot_mirror.show_distribution(fs_name)
+
+    @CLIReadCommand('fs snapshot mirror daemon status')
+    def snapshot_mirror_daemon_status(self,
+                                      fs_name: str):
+        """Get mirror daemon status"""
+        return self.fs_snapshot_mirror.daemon_status(fs_name)

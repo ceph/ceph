@@ -19,6 +19,7 @@ from collections import defaultdict
 from enum import IntEnum
 import rados
 import re
+import socket
 import sys
 import time
 from ceph_argparse import CephArgtype
@@ -37,8 +38,8 @@ else:
         return getattr(tp, '__origin__', None)
 
 
-ERROR_MSG_EMPTY_INPUT_FILE = 'Empty content: please add a password/secret to the file.'
-ERROR_MSG_NO_INPUT_FILE = 'Please specify the file containing the password/secret with "-i" option.'
+ERROR_MSG_EMPTY_INPUT_FILE = 'Empty input file'
+ERROR_MSG_NO_INPUT_FILE = 'Input file not specified'
 # Full list of strings in "osd_types.cc:pg_state_string()"
 PG_STATES = [
     "active",
@@ -221,6 +222,9 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
     def find_takes(self) -> List[int]:
         return self._find_takes().get('takes', [])
 
+    def find_roots(self) -> List[int]:
+        return self._find_roots().get('roots', [])
+
     def get_take_weight_osd_map(self, root: int) -> Dict[int, float]:
         uglymap = self._get_take_weight_osd_map(root)
         return {int(k): v for k, v in uglymap.get('weights', {}).items()}
@@ -317,22 +321,35 @@ class CLICommand(object):
 
     @staticmethod
     def load_func_metadata(f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
-        desc = inspect.getdoc(f) or ''
+        desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
         arg_spec = full_argspec.annotations
         first_default = len(arg_spec)
         if full_argspec.defaults:
             first_default -= len(full_argspec.defaults)
         args = []
+        positional = True
         for index, arg in enumerate(full_argspec.args):
             if arg in CLICommand.KNOWN_ARGS:
                 continue
+            if arg == '_end_positional_':
+                positional = False
+                continue
+            if (
+                arg == 'format'
+                or arg_spec[arg] is Optional[bool]
+                or arg_spec[arg] is bool
+            ):
+                # implicit switch to non-positional on any
+                # Optional[bool] or the --format option
+                positional = False
             assert arg in arg_spec, \
                 f"'{arg}' is not annotated for {f}: {full_argspec}"
             has_default = index >= first_default
             args.append(CephArgtype.to_argdesc(arg_spec[arg],
                                                dict(name=arg),
-                                               has_default))
+                                               has_default,
+                                               positional))
         return desc, arg_spec, first_default, ' '.join(args)
 
     def store_func_metadata(self, f: HandlerFuncType) -> None:
@@ -409,19 +426,23 @@ def CLIWriteCommand(prefix: str, poll: bool = False) -> CLICommand:
     return CLICommand(prefix, "w", poll)
 
 
-def CLICheckNonemptyFileInput(func: HandlerFuncType) -> HandlerFuncType:
-    @functools.wraps(func)
-    def check(*args: Any, **kwargs: Any) -> Tuple[int, str, str]:
-        if 'inbuf' not in kwargs:
-            return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
-        if isinstance(kwargs['inbuf'], str):
-            # Delete new line separator at EOF (it may have been added by a text editor).
-            kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
-        if not kwargs['inbuf']:
-            return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
-        return func(*args, **kwargs)
-    check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
-    return check
+def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerFuncType]:
+    def CheckFileInput(func: HandlerFuncType) -> HandlerFuncType:
+        @functools.wraps(func)
+        def check(*args: Any, **kwargs: Any) -> Tuple[int, str, str]:
+            if 'inbuf' not in kwargs:
+                return -errno.EINVAL, '', f'{ERROR_MSG_NO_INPUT_FILE}: Please specify the file '\
+                                          f'containing {desc} with "-i" option'
+            if isinstance(kwargs['inbuf'], str):
+                # Delete new line separator at EOF (it may have been added by a text editor).
+                kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
+            if not kwargs['inbuf'] or not kwargs['inbuf'].strip():
+                return -errno.EINVAL, '', f'{ERROR_MSG_EMPTY_INPUT_FILE}: Please add {desc} to '\
+                                           'the file'
+            return func(*args, **kwargs)
+        check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+        return check
+    return CheckFileInput
 
 
 def _get_localized_key(prefix: str, key: str) -> str:
@@ -780,8 +801,20 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_store(key)
 
+    def get_localized_store(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
+        if r is None:
+            r = self._ceph_get_store(key)
+            if r is None:
+                r = default
+        return r
+
     def get_active_uri(self) -> str:
         return self._ceph_get_active_uri()
+
+    def get_mgr_ip(self) -> str:
+        # we don't have get() for standby modules; make do with the hostname
+        return socket.gethostname()
 
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
@@ -1006,11 +1039,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
 
-        :param str data_name: Valid things to fetch are osd_crush_map_text,
+        :param str data_name: Valid things to fetch are osdmap_crush_map_text,
                 osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
                 osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats,
                 health, mon_status, devices, device <devid>, pg_stats,
-                pool_stats, pg_ready, osd_ping_times.
+                pool_stats, pg_ready, osd_ping_times, mgr_map, mgr_ips,
+                modified_config_options, service_map, mds_metadata,
+                have_local_config_map, osd_pool_stats, pg_status.
 
         Note:
             All these structures have their own JSON representations: experiment
@@ -1033,8 +1068,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return ''
 
-    def _perfpath_to_path_labels(self, daemon, path):
-        # type: (str, str) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]
+    def _perfpath_to_path_labels(self, daemon: str,
+                                 path: str) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]:
         label_names = ("ceph_daemon",)  # type: Tuple[str, ...]
         labels = (daemon,)  # type: Tuple[str, ...]
 
@@ -1360,6 +1395,15 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :return: str
         """
         return self._ceph_get_mgr_id()
+
+    def get_ceph_conf_path(self) -> str:
+        return self._ceph_get_ceph_conf_path()
+
+    def get_mgr_ip(self) -> str:
+        ips = self.get("mgr_ips").get('ips', [])
+        if not ips:
+            return socket.gethostname()
+        return ips[0]
 
     def get_ceph_option(self, key: str) -> OptionValue:
         return self._ceph_get_option(key)

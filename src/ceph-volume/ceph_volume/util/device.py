@@ -157,11 +157,11 @@ class Device(object):
         # if the path is not absolute, we have 'vg/lv', let's use LV name
         # to get the LV.
         if self.path[0] == '/':
-            lv = lvm.get_first_lv(filters={'lv_path': self.path})
+            lv = lvm.get_single_lv(filters={'lv_path': self.path})
         else:
             vgname, lvname = self.path.split('/')
-            lv = lvm.get_first_lv(filters={'lv_name': lvname,
-                                           'vg_name': vgname})
+            lv = lvm.get_single_lv(filters={'lv_name': lvname,
+                                            'vg_name': vgname})
         if lv:
             self.lv_api = lv
             self.lvs = [lv]
@@ -257,7 +257,9 @@ class Device(object):
             # retrieve device_id on FreeBSD. Still figuring out if/how the
             # python ioctl implementation does that on FreeBSD
             dev_id = ''
-        dev_id.replace(' ', '_')
+        dev_id = dev_id.replace(' ', '_')
+        while '__' in dev_id:
+            dev_id = dev_id.replace('__', '_')
         return dev_id
 
     def _set_lvm_membership(self):
@@ -478,6 +480,8 @@ class Device(object):
             rejected.append("Used by ceph-disk")
         if self.has_bluestore_label:
             rejected.append('Has BlueStore device label')
+        if self.has_gpt_headers:
+            rejected.append('Has GPT headers')
         return rejected
 
     def _check_lvm_reject_reasons(self):

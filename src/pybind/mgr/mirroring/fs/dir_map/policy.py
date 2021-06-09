@@ -79,16 +79,14 @@ class Policy:
                 self.dir_states[dir_path] = DirectoryState(instance_id, dir_map['last_shuffled'])
                 dir_state = self.dir_states[dir_path]
                 state = State.INITIALIZING if instance_id else State.ASSOCIATING
-                if instance_id:
-                    purging = dir_mapping.get('purging', False)
-                    if purging:
-                        dir_state.purging = True
-                        state = State.DISASSOCIATING
-                    else:
-                        state = State.INITIALIZING
-                else:
-                    state = State.ASSOCIATING
-                log.debug(f'starting state: {dir_path} {state}')
+                purging = dir_map.get('purging', 0)
+                if purging:
+                    dir_state.purging = True
+                    state = State.DISASSOCIATING
+                    if not instance_id:
+                        dir_state.transition = StateTransition.transit(state,
+                                                                       dir_state.transition.action_type)
+                log.debug(f'starting state: {dir_path} {state}: {dir_state}')
                 self.set_state(dir_state, state)
                 log.debug(f'init dir_state: {dir_state}')
 
@@ -182,9 +180,17 @@ class Policy:
                 stalled = not self.execute_policy_action(dir_path, dir_state,
                                                          dir_state.transition.start_policy_action)
                 if stalled:
-                    dir_state.stalled = True
-                    log.debug(f'state machine stalled')
-                    return ActionType.NONE
+                    next_action = ActionType.NONE
+                    if dir_state.purging:
+                        dir_state.next_state = None
+                        dir_state.state = State.UNASSOCIATED
+                        dir_state.transition = StateTransition.transit(State.DISASSOCIATING, ActionType.NONE)
+                        self.set_state(dir_state, State.DISASSOCIATING)
+                        next_action = dir_state.transition.action_type
+                    else:
+                        dir_state.stalled = True
+                        log.debug(f'state machine stalled')
+                    return next_action
             return dir_state.transition.action_type
 
     def finish_action(self, dir_path, r):
@@ -246,7 +252,13 @@ class Policy:
                 return False
             log.debug(f'removing dir_state: {dir_state}')
             dir_state.purging = True
-            return self.set_state(dir_state, State.DISASSOCIATING)
+            # advance the state machine with DISASSOCIATING state for removal
+            if dir_state.stalled:
+                dir_state.state = State.UNASSOCIATED
+                dir_state.transition = StateTransition.transit(State.DISASSOCIATING, ActionType.NONE)
+            r = self.set_state(dir_state, State.DISASSOCIATING)
+            log.debug(f'dir_state: {dir_state}')
+            return r
 
     def add_instances_initial(self, instance_ids):
         """Take care of figuring out instances which no longer exist

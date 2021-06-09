@@ -13,7 +13,6 @@
 #include <string>
 #include <vector>
 
-#include "common/allocator.h"
 #include "common/ceph_mutex.h"
 #include "common/config_proxy.h"
 #include "common/event_socket.h"
@@ -57,6 +56,7 @@ namespace librbd {
   template <typename> class PluginRegistry;
 
   namespace asio { struct ContextWQ; }
+  namespace crypto { class CryptoInterface; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -199,9 +199,7 @@ namespace librbd {
 
     PluginRegistry<ImageCtx>* plugin_registry;
 
-    typedef boost::lockfree::queue<
-      io::AioCompletion*,
-      boost::lockfree::allocator<ceph::allocator<void>>> Completions;
+    using Completions = boost::lockfree::queue<io::AioCompletion*>;
 
     Completions event_socket_completions;
     EventSocket event_socket;
@@ -232,6 +230,8 @@ namespace librbd {
     journal::Policy *journal_policy = nullptr;
 
     ZTracer::Endpoint trace_endpoint;
+
+    crypto::CryptoInterface* crypto = nullptr;
 
     // unit test mock helpers
     static ImageCtx* create(const std::string &image_name,

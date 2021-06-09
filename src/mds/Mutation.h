@@ -116,7 +116,7 @@ public:
   using lock_iterator = lock_set::iterator;
 
   // keep our default values synced with MDRequestParam's
-  MutationImpl() : TrackedOp(nullptr, utime_t()) {}
+  MutationImpl() : TrackedOp(nullptr, ceph_clock_now()) {}
   MutationImpl(OpTracker *tracker, utime_t initiated,
 	       const metareqid_t &ri, __u32 att=0, mds_rank_t peer_to=MDS_RANK_NONE)
     : TrackedOp(tracker, initiated),

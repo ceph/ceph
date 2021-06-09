@@ -1,5 +1,6 @@
-import { Component, NgZone, ViewChild } from '@angular/core';
+import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
@@ -27,9 +28,13 @@ const BASE_URL = 'rgw/user';
   styleUrls: ['./rgw-user-list.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class RgwUserListComponent extends ListWithDetails {
+export class RgwUserListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
+  @ViewChild('userSizeTpl', { static: true })
+  userSizeTpl: TemplateRef<any>;
+  @ViewChild('userObjectTpl', { static: true })
+  userObjectTpl: TemplateRef<any>;
   permission: Permission;
   tableActions: CdTableAction[];
   columns: CdTableColumn[] = [];
@@ -47,6 +52,9 @@ export class RgwUserListComponent extends ListWithDetails {
     private ngZone: NgZone
   ) {
     super();
+  }
+
+  ngOnInit() {
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
@@ -85,6 +93,18 @@ export class RgwUserListComponent extends ListWithDetails {
           '-1': $localize`Disabled`,
           0: $localize`Unlimited`
         }
+      },
+      {
+        name: $localize`Capacity Limit %`,
+        prop: 'size_usage',
+        cellTemplate: this.userSizeTpl,
+        flexGrow: 0.8
+      },
+      {
+        name: $localize`Object Limit %`,
+        prop: 'object_usage',
+        cellTemplate: this.userObjectTpl,
+        flexGrow: 0.8
       }
     ];
     const getUserUri = () =>

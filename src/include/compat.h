@@ -21,6 +21,11 @@
 #define PROCPREFIX
 #endif
 
+#include <fcntl.h>
+#ifndef F_OFD_SETLK
+#define F_OFD_SETLK F_SETLK 
+#endif 
+
 #include <sys/stat.h>
 #ifndef ACCESSPERMS
 #define ACCESSPERMS (S_IRWXU|S_IRWXG|S_IRWXO)
@@ -50,6 +55,10 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
                       cpu_set_t *mask);
 
 #endif /* __FreeBSD__ */
+
+#if defined(__APPLE__)
+struct cpu_set_t;
+#endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
 /* Make sure that ENODATA is defined in the correct way */

@@ -14,14 +14,6 @@ from botocore.client import Config
 
 log = logging.getLogger('rgw_multi.tests')
 
-def put_object_tagging(conn, bucket_name, key, tags):
-    client = boto3.client('s3',
-            endpoint_url='http://'+conn.host+':'+str(conn.port),
-            aws_access_key_id=conn.aws_access_key_id,
-            aws_secret_access_key=conn.aws_secret_access_key,
-            config=Config(signature_version='s3'))
-    return client.put_object(Body='aaaaaaaaaaa', Bucket=bucket_name, Key=key, Tagging=tags)
-
 
 def get_object_tagging(conn, bucket, object_key):
     client = boto3.client('s3',
@@ -145,41 +137,6 @@ class PSTopic:
     def get_list(self):
         """list all topics"""
         return self.send_request('GET', get_list=True)
-
-
-def delete_all_s3_topics(zone, region):
-    try:
-        conn = zone.secure_conn if zone.secure_conn is not None else zone.conn
-        protocol = 'https' if conn.is_secure else 'http'
-        client = boto3.client('sns',
-                endpoint_url=protocol+'://'+conn.host+':'+str(conn.port),
-                aws_access_key_id=conn.aws_access_key_id,
-                aws_secret_access_key=conn.aws_secret_access_key,
-                region_name=region,
-                verify='./cert.pem',
-                config=Config(signature_version='s3'))
-
-        topics = client.list_topics()['Topics']
-        for topic in topics:
-            print('topic cleanup, deleting: ' + topic['TopicArn'])
-            assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
-    except Exception as err:
-        print('failed to do topic cleanup: ' + str(err))
-    
-
-def delete_all_objects(conn, bucket_name):
-    client = boto3.client('s3',
-                      endpoint_url='http://'+conn.host+':'+str(conn.port),
-                      aws_access_key_id=conn.aws_access_key_id,
-                      aws_secret_access_key=conn.aws_secret_access_key)
-
-    objects = []
-    for key in client.list_objects(Bucket=bucket_name)['Contents']:
-        objects.append({'Key': key['Key']})
-    # delete objects from the bucket
-    response = client.delete_objects(Bucket=bucket_name,
-            Delete={'Objects': objects})
-    return response
 
 
 class PSTopicS3:

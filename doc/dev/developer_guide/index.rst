@@ -20,4 +20,5 @@ Contributing to Ceph: A Guide for Developers
    Tests: Integration Tests (Teuthology) <testing_integration_tests/index>
    Tests: Running Tests (Locally) <running-tests-locally>
    Ceph Dashboard Developer Documentation (formerly HACKING.rst) <dash-devel>
-   cephadm Developer Documentation  <../cephadm/index>
+   Tracing Developer Documentation <jaegertracing>
+   Cephadm Developer Documentation  <../cephadm/index>

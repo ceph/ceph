@@ -8,6 +8,7 @@
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/futurized_collection.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/shard_services.h"
 
@@ -24,25 +25,16 @@ namespace crimson::osd{
 class PGBackend;
 
 class RecoveryBackend {
-  void handle_backfill_finish(
-    MOSDPGBackfill& m);
-  seastar::future<> handle_backfill_progress(
-    MOSDPGBackfill& m);
-  seastar::future<> handle_backfill_finish_ack(
-    MOSDPGBackfill& m);
-  seastar::future<> handle_backfill(MOSDPGBackfill& m);
-
-  seastar::future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
-
-  seastar::future<> handle_scan_get_digest(
-    MOSDPGScan& m);
-  seastar::future<> handle_scan_digest(
-    MOSDPGScan& m);
-  seastar::future<> handle_scan(
-    MOSDPGScan& m);
 protected:
   class WaitForObjectRecovery;
 public:
+  template <typename T = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      ::crimson::osd::IOInterruptCondition, T>;
+  using interruptor =
+    ::crimson::interruptible::interruptor<
+      ::crimson::osd::IOInterruptCondition>;
   RecoveryBackend(crimson::osd::PG& pg,
 		  crimson::osd::ShardServices& shard_services,
 		  crimson::os::CollectionRef coll,
@@ -72,20 +64,20 @@ public:
     return recovering.size();
   }
 
-  virtual seastar::future<> handle_recovery_op(
+  virtual interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m);
 
-  virtual seastar::future<> recover_object(
+  virtual interruptible_future<> recover_object(
     const hobject_t& soid,
     eversion_t need) = 0;
-  virtual seastar::future<> recover_delete(
+  virtual interruptible_future<> recover_delete(
     const hobject_t& soid,
     eversion_t need) = 0;
-  virtual seastar::future<> push_delete(
+  virtual interruptible_future<> push_delete(
     const hobject_t& soid,
     eversion_t need) = 0;
 
-  seastar::future<BackfillInterval> scan_for_backfill(
+  interruptible_future<BackfillInterval> scan_for_backfill(
     const hobject_t& from,
     std::int64_t min,
     std::int64_t max);
@@ -146,9 +138,10 @@ protected:
     seastar::future<> wait_for_recovered() {
       return recovered.get_shared_future();
     }
-    crimson::blocking_future<>
+    template <typename InterruptCond>
+    crimson::blocking_interruptible_future<InterruptCond>
     wait_for_recovered_blocking() {
-      return make_blocking_future(
+      return make_blocking_interruptible_future<InterruptCond>(
 	  recovered.get_shared_future());
     }
     seastar::future<> wait_for_pull() {
@@ -200,4 +193,20 @@ protected:
   }
   void clean_up(ceph::os::Transaction& t, std::string_view why);
   virtual seastar::future<> on_stop() = 0;
+private:
+  void handle_backfill_finish(
+    MOSDPGBackfill& m);
+  interruptible_future<> handle_backfill_progress(
+    MOSDPGBackfill& m);
+  interruptible_future<> handle_backfill_finish_ack(
+    MOSDPGBackfill& m);
+  interruptible_future<> handle_backfill(MOSDPGBackfill& m);
+
+  interruptible_future<> handle_scan_get_digest(
+    MOSDPGScan& m);
+  interruptible_future<> handle_scan_digest(
+    MOSDPGScan& m);
+  interruptible_future<> handle_scan(
+    MOSDPGScan& m);
+  interruptible_future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
 };

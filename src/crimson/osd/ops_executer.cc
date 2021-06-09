@@ -28,7 +28,7 @@ namespace {
 
 namespace crimson::osd {
 
-OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
+OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 {
   std::string cname, mname;
   ceph::bufferlist indata;
@@ -79,14 +79,14 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
                  cname, mname, num_read, num_write);
   const auto prev_rd = num_read;
   const auto prev_wr = num_write;
-  return seastar::async(
+  return interruptor::async(
     [this, method, indata=std::move(indata)]() mutable {
       ceph::bufferlist outdata;
       auto cls_context = reinterpret_cast<cls_method_context_t>(this);
       const auto ret = method->exec(cls_context, indata, outdata);
       return std::make_pair(ret, std::move(outdata));
     }
-  ).then(
+  ).then_interruptible(
     [this, prev_rd, prev_wr, &osd_op, flags]
     (auto outcome) -> call_errorator::future<> {
       auto& [ret, outdata] = outcome;
@@ -137,7 +137,7 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 }
 
 static watch_info_t create_watch_info(const OSDOp& osd_op,
-                                      const MOSDOp& msg)
+                                      const OpsExecuter::ExecutableMessage& msg)
 {
   using crimson::common::local_conf;
   const uint32_t timeout =
@@ -150,17 +150,18 @@ static watch_info_t create_watch_info(const OSDOp& osd_op,
   };
 }
 
-OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_watch(
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
   OSDOp& osd_op,
   ObjectState& os,
   ceph::os::Transaction& txn)
 {
+  logger().debug("{}", __func__);
   struct connect_ctx_t {
     ObjectContext::watch_key_t key;
     crimson::net::ConnectionRef conn;
     watch_info_t info;
 
-    connect_ctx_t(const OSDOp& osd_op, const MOSDOp& msg)
+    connect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name),
         conn(msg.get_connection()),
         info(create_watch_info(osd_op, msg)) {
@@ -179,11 +180,12 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_watch(
       }
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG> pg) {
       auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
       if (emplaced) {
         const auto& [cookie, entity] = ctx.key;
-        it->second = crimson::osd::Watch::create(obc, ctx.info, entity);
+        it->second = crimson::osd::Watch::create(
+          obc, ctx.info, entity, std::move(pg));
         logger().info("op_effect: added new watcher: {}", ctx.key);
       } else {
         logger().info("op_effect: found existing watcher: {}", ctx.key);
@@ -192,7 +194,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_watch(
     });
 }
 
-OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_reconnect(
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_reconnect(
   OSDOp& osd_op,
   ObjectState& os,
   ceph::os::Transaction& txn)
@@ -207,7 +209,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_reconnect(
   }
 }
 
-OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
   OSDOp& osd_op,
   ObjectState& os,
   ceph::os::Transaction& txn)
@@ -216,9 +218,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
 
   struct disconnect_ctx_t {
     ObjectContext::watch_key_t key;
-    bool send_disconnect{ false };
-
-    disconnect_ctx_t(const OSDOp& osd_op, const MOSDOp& msg)
+    disconnect_ctx_t(const OSDOp& osd_op, const ExecutableMessage& msg)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name) {
     }
   };
@@ -233,12 +233,12 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
       }
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       if (auto nh = obc->watchers.extract(ctx.key); !nh.empty()) {
         return seastar::do_with(std::move(nh.mapped()),
                          [ctx](auto&& watcher) {
           logger().info("op_effect: disconnect watcher {}", ctx.key);
-          return watcher->remove(ctx.send_disconnect);
+          return watcher->remove();
         });
       } else {
         logger().info("op_effect: disconnect failed to find watcher {}", ctx.key);
@@ -247,7 +247,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_unwatch(
     });
 }
 
-OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_ping(
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_ping(
   OSDOp& osd_op,
   ObjectState& os,
   ceph::os::Transaction& txn)
@@ -271,7 +271,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch_subop_ping(
   return seastar::now();
 }
 
-OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_watch(
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch(
   OSDOp& osd_op,
   ObjectState& os,
   ceph::os::Transaction& txn)
@@ -304,7 +304,7 @@ static uint64_t get_next_notify_id(epoch_t e)
   return (((uint64_t)e) << 32) | ((uint64_t)(next_notify_id++));
 }
 
-OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify(
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
   OSDOp& osd_op,
   const ObjectState& os)
 {
@@ -319,7 +319,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify(
     const uint64_t client_gid;
     const epoch_t epoch;
 
-    notify_ctx_t(const MOSDOp& msg)
+    notify_ctx_t(const ExecutableMessage& msg)
       : conn(msg.get_connection()),
         client_gid(msg.get_reqid().name.num()),
         epoch(msg.get_map_epoch()) {
@@ -346,7 +346,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify(
       ceph::encode(ctx.ninfo.notify_id, osd_op.outdata);
       return seastar::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       auto alive_watchers = obc->watchers | boost::adaptors::map_values
                                           | boost::adaptors::filtered(
         [] (const auto& w) {
@@ -363,7 +363,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify(
   });
 }
 
-OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
   OSDOp& osd_op,
   const ObjectState& os)
 {
@@ -375,7 +375,8 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
     uint64_t notify_id;
     ceph::bufferlist reply_bl;
 
-    notifyack_ctx_t(const MOSDOp& msg) : entity(msg.get_reqid().name) {
+    notifyack_ctx_t(const ExecutableMessage& msg)
+      : entity(msg.get_reqid().name) {
     }
   };
   return with_effect_on_obc(notifyack_ctx_t{ get_message() },
@@ -395,7 +396,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
       }
       return watch_errorator::now();
     },
-    [] (auto&& ctx, ObjectContextRef obc) {
+    [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
       logger().info("notify_ack watch_cookie={}, notify_id={}",
                     ctx.watch_cookie, ctx.notify_id);
       return seastar::do_for_each(obc->watchers,
@@ -421,7 +422,7 @@ OpsExecuter::watch_errorator::future<> OpsExecuter::do_op_notify_ack(
   });
 }
 
-OpsExecuter::osd_op_errorator::future<>
+OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
   // TODO: dispatch via call table?
@@ -459,7 +460,8 @@ OpsExecuter::execute_op(OSDOp& osd_op)
       return backend.get_xattrs(os, osd_op);
     });
   case CEPH_OSD_OP_RMXATTR:
-    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+    return do_write_op(
+      [&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.rm_xattr(os, osd_op, txn);
     }, true);
   case CEPH_OSD_OP_CREATE:
@@ -642,7 +644,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   return filter;
 }
 
-static seastar::future<hobject_t> pgls_filter(
+static PG::interruptible_future<hobject_t> pgls_filter(
   const PGLSFilter& filter,
   const PGBackend& backend,
   const hobject_t& sobj)
@@ -650,19 +652,17 @@ static seastar::future<hobject_t> pgls_filter(
   if (const auto xattr = filter.get_xattr(); !xattr.empty()) {
     logger().debug("pgls_filter: filter is interested in xattr={} for obj={}",
                    xattr, sobj);
-    return backend.getxattr(sobj, xattr).safe_then(
-      [&filter, sobj] (ceph::bufferptr bp) {
+    return backend.getxattr(sobj, xattr).safe_then_interruptible(
+      [&filter, sobj] (ceph::bufferlist val) {
         logger().debug("pgls_filter: got xvalue for obj={}", sobj);
 
-        ceph::bufferlist val;
-        val.push_back(std::move(bp));
         const bool filtered = filter.filter(sobj, val);
         return seastar::make_ready_future<hobject_t>(filtered ? sobj : hobject_t{});
       }, PGBackend::get_attr_errorator::all_same_way([&filter, sobj] {
         logger().debug("pgls_filter: got error for obj={}", sobj);
 
         if (filter.reject_empty_xattr()) {
-          return seastar::make_ready_future<hobject_t>(hobject_t{});
+          return seastar::make_ready_future<hobject_t>();
         }
         ceph::bufferlist val;
         const bool filtered = filter.filter(sobj, val);
@@ -675,7 +675,7 @@ static seastar::future<hobject_t> pgls_filter(
   }
 }
 
-static seastar::future<ceph::bufferlist> do_pgnls_common(
+static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
   const hobject_t& pg_start,
   const hobject_t& pg_end,
   const PGBackend& backend,
@@ -691,8 +691,9 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
     throw std::invalid_argument("outside of PG bounds");
   }
 
-  return backend.list_objects(lower_bound, limit).then(
-    [&backend, filter, nspace](auto&& ret) {
+  return backend.list_objects(lower_bound, limit).then_interruptible(
+    [&backend, filter, nspace](auto&& ret)
+    -> PG::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>> {
       auto& [objects, next] = ret;
       auto in_my_namespace = [&nspace](const hobject_t& obj) {
         using crimson::common::local_conf;
@@ -704,7 +705,8 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
           return obj.get_namespace() == nspace;
         }
       };
-      auto to_pglsed = [&backend, filter] (const hobject_t& obj) {
+      auto to_pglsed = [&backend, filter] (const hobject_t& obj)
+		       -> PG::interruptible_future<hobject_t> {
         // this transformation looks costly. However, I don't have any
         // reason to think PGLS* operations are critical for, let's say,
         // general performance.
@@ -731,9 +733,9 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
           logger().debug("do_pgnls_common: 1st done");
           return seastar::make_ready_future<
             std::tuple<std::vector<hobject_t>, hobject_t>>(
-              std::make_tuple(std::move(items), std::move(next)));
+              std::move(items), std::move(next));
       });
-  }).then(
+  }).then_interruptible(
     [pg_end] (auto&& ret) {
       auto& [items, next] = ret;
       auto is_matched = [] (const auto& obj) {
@@ -757,7 +759,7 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
   });
 }
 
-static seastar::future<> do_pgnls(
+static PG::interruptible_future<> do_pgnls(
   const PG& pg,
   const std::string& nspace,
   OSDOp& osd_op)
@@ -778,13 +780,13 @@ static seastar::future<> do_pgnls(
                          nspace,
                          osd_op.op.pgls.count,
                          nullptr /* no filter */)
-    .then([&osd_op](bufferlist bl) {
+    .then_interruptible([&osd_op](bufferlist bl) {
       osd_op.outdata = std::move(bl);
       return seastar::now();
   });
 }
 
-static seastar::future<> do_pgnls_filtered(
+static PG::interruptible_future<> do_pgnls_filtered(
   const PG& pg,
   const std::string& nspace,
   OSDOp& osd_op)
@@ -822,14 +824,14 @@ static seastar::future<> do_pgnls_filtered(
                              nspace,
                              osd_op.op.pgls.count,
                              filter.get())
-        .then([&osd_op](bufferlist bl) {
+        .then_interruptible([&osd_op](bufferlist bl) {
           osd_op.outdata = std::move(bl);
           return seastar::now();
       });
   });
 }
 
-static seastar::future<ceph::bufferlist> do_pgls_common(
+static PG::interruptible_future<ceph::bufferlist> do_pgls_common(
   const hobject_t& pg_start,
   const hobject_t& pg_end,
   const PGBackend& backend,
@@ -846,12 +848,13 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
   }
 
   using entries_t = decltype(pg_ls_response_t::entries);
-  return backend.list_objects(lower_bound, limit).then(
+  return backend.list_objects(lower_bound, limit).then_interruptible(
     [&backend, filter, nspace](auto&& ret) {
       auto& [objects, next] = ret;
-      return seastar::when_all(
-        seastar::map_reduce(std::move(objects),
-          [&backend, filter, nspace](const hobject_t& obj) {
+      return PG::interruptor::when_all(
+        PG::interruptor::map_reduce(std::move(objects),
+          [&backend, filter, nspace](const hobject_t& obj)
+	  -> PG::interruptible_future<hobject_t>{
             if (obj.get_namespace() == nspace) {
               if (filter) {
                 return pgls_filter(*filter, backend, obj);
@@ -859,7 +862,7 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
                 return seastar::make_ready_future<hobject_t>(obj);
               }
             } else {
-              return seastar::make_ready_future<hobject_t>(hobject_t{});
+              return seastar::make_ready_future<hobject_t>();
             }
           },
           entries_t{},
@@ -870,7 +873,7 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
             return entries;
           }),
         seastar::make_ready_future<hobject_t>(next));
-    }).then([pg_end](auto&& ret) {
+    }).then_interruptible([pg_end](auto&& ret) {
       auto entries = std::move(std::get<0>(ret).get0());
       auto next = std::move(std::get<1>(ret).get0());
       pg_ls_response_t response;
@@ -884,7 +887,7 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
   });
 }
 
-static seastar::future<> do_pgls(
+static PG::interruptible_future<> do_pgls(
    const PG& pg,
    const std::string& nspace,
    OSDOp& osd_op)
@@ -906,13 +909,13 @@ static seastar::future<> do_pgls(
 			nspace,
 			osd_op.op.pgls.count,
 			nullptr /* no filter */)
-    .then([&osd_op](bufferlist bl) {
+    .then_interruptible([&osd_op](bufferlist bl) {
       osd_op.outdata = std::move(bl);
       return seastar::now();
     });
 }
 
-static seastar::future<> do_pgls_filtered(
+static PG::interruptible_future<> do_pgls_filtered(
   const PG& pg,
   const std::string& nspace,
   OSDOp& osd_op)
@@ -950,14 +953,14 @@ static seastar::future<> do_pgls_filtered(
                             nspace,
                             osd_op.op.pgls.count,
                             filter.get())
-        .then([&osd_op](bufferlist bl) {
+        .then_interruptible([&osd_op](bufferlist bl) {
           osd_op.outdata = std::move(bl);
           return seastar::now();
       });
   });
 }
 
-seastar::future<>
+PgOpsExecuter::interruptible_future<>
 PgOpsExecuter::execute_op(OSDOp& osd_op)
 {
   logger().warn("handling op {}", ceph_osd_op_name(osd_op.op.op));

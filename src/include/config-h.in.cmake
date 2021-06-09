@@ -3,6 +3,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+/* Define to 1 if you have the `memset_s()` function. */
+#cmakedefine HAVE_MEMSET_S
+
 /* fallocate(2) is supported */
 #cmakedefine CEPH_HAVE_FALLOCATE
 
@@ -62,6 +65,12 @@
 
 /* Define to 1 if the system has the type `__u8'. */
 #cmakedefine HAVE___U8 1
+
+/* Define if the system has the type `in_addr_t' */
+#cmakedefine HAVE_IN_ADDR_T
+
+/* Define if you have suseconds_t */
+#cmakedefine HAVE_SUSECONDS_T
 
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
@@ -130,6 +139,9 @@
 /* define if cephfs enabled */
 #cmakedefine WITH_CEPHFS
 
+/* define if systemed is enabled */
+#cmakedefine WITH_SYSTEMD
+
 /*define if GSSAPI/KRB5 enabled */
 #cmakedefine HAVE_GSSAPI
 
@@ -145,14 +157,8 @@
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
 
-/* define if radosgw enabled */
-#cmakedefine WITH_RADOSGW_FCGI_FRONTEND
-
 /* define if leveldb is enabled */
 #cmakedefine WITH_LEVELDB
-
-/* define if radosgw's beast frontend enabled */
-#cmakedefine WITH_RADOSGW_BEAST_FRONTEND
 
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
@@ -247,14 +253,11 @@
 /* we have a recent nasm and are x86_64 */
 #cmakedefine HAVE_NASM_X64
 
-/* nasm can also build the isa-l:avx2 */
-#cmakedefine HAVE_NASM_X64_AVX2
-
 /* nasm can also build the isa-l:avx512 */
 #cmakedefine HAVE_NASM_X64_AVX512
 
-/* Define if isa-l is compiled for arm64 */
-#cmakedefine HAVE_ARMV8_SIMD
+/* Define if the erasure code isa-l plugin is compiled */
+#cmakedefine WITH_EC_ISA_PLUGIN
 
 /* Define to 1 if strerror_r returns char *. */
 #cmakedefine STRERROR_R_CHAR_P 1
@@ -267,6 +270,9 @@
 
 /* Define if the C compiler supports __PRETTY_FUNCTION__ */
 #cmakedefine HAVE_PRETTY_FUNC
+
+/* Define if the C compiler supports __asm__(".symver ..") */
+#cmakedefine HAVE_ASM_SYMVER
 
 /* Have eventfd extension. */
 #cmakedefine HAVE_EVENTFD
@@ -324,9 +330,6 @@
 
 #cmakedefine MGR_PYTHON_EXECUTABLE "@MGR_PYTHON_EXECUTABLE@"
 
-/* the default value of "mgr_disabled_module" option */
-#cmakedefine MGR_DISABLED_MODULES "@MGR_DISABLED_MODULES@"
-
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
 
@@ -362,6 +365,9 @@
 
 /* Define if RBD QCOW migration format is enabled */
 #cmakedefine WITH_RBD_MIGRATION_FORMAT_QCOW_V1
+
+/* Define if libcephsqlite is enabled */
+#cmakedefine WITH_LIBCEPHSQLITE
 
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL

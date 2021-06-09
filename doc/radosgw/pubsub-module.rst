@@ -38,6 +38,8 @@ be accessed directly, but need to be pulled and acked using the new REST API.
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
+.. note:: To enable bucket notifications API, the `rgw_enable_apis` configuration parameter should contain: "notifications".
+
 PubSub Zone Configuration
 -------------------------
 

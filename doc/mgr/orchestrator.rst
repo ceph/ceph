@@ -103,7 +103,7 @@ The ``name`` parameter is an identifier of the group of instances:
 Creating/growing/shrinking/removing services::
 
     ceph orch apply mds <fs_name> [--placement=<placement>] [--dry-run]
-    ceph orch apply rgw <realm> <zone> [--subcluster=<subcluster>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
+    ceph orch apply rgw <name> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
     ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>] [--dry-run]
     ceph orch rm <service_name> [--force]
 
@@ -157,7 +157,7 @@ This is an overview of the current implementation status of the orchestrators.
  apply nfs                           ✔      ✔
  apply osd                           ✔      ✔
  apply rbd-mirror                    ✔      ✔
- apply rgw                           ⚪      ✔
+ apply rgw                           ✔      ✔
  apply container                     ⚪      ✔
  host add                            ⚪      ✔
  host ls                             ✔      ✔

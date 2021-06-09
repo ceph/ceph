@@ -13,7 +13,7 @@ Adding a field to a structure
 You can see examples of this all over the Ceph code, but here's an
 example:
 
-::
+.. code-block:: cpp
 
     class AcmeClass
     {
@@ -55,7 +55,7 @@ at the end of the ``encode`` and ``decode`` functions, and incrementing
 the versions in ``ENCODE_START`` and ``DECODE_START``.  For example, here's how
 to add a third field to ``AcmeClass``:
 
-::
+.. code-block:: cpp
 
     class AcmeClass
     {

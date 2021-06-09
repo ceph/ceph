@@ -322,9 +322,9 @@ int PyModule::load(PyThreadState *pMainThreadState)
       const wchar_t *argv[] = {L"ceph-mgr"};
       PySys_SetArgv(1, (wchar_t**)argv);
       // Configure sys.path to include mgr_module_path
-      string paths = (":" + g_conf().get_val<std::string>("mgr_module_path") +
-		      ":" + get_site_packages());
-      wstring sys_path(Py_GetPath() + wstring(begin(paths), end(paths)));
+      string paths = (g_conf().get_val<std::string>("mgr_module_path") + ':' +
+                      get_site_packages() + ':');
+      wstring sys_path(wstring(begin(paths), end(paths)) + Py_GetPath());
       PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
       dout(10) << "Computed sys.path '"
 	       << string(begin(sys_path), end(sys_path)) << "'" << dendl;
@@ -562,7 +562,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "enum_allowed");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q) {
 	  auto r = PyObject_Str(q);
@@ -573,7 +573,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "see_also");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
 	  option.see_also.insert(PyUnicode_AsUTF8(q));
@@ -582,7 +582,7 @@ int PyModule::load_options()
     }
     p = PyDict_GetItemString(pOption, "tags");
     if (p && PyObject_TypeCheck(p, &PyList_Type)) {
-      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+      for (Py_ssize_t i = 0; i < PyList_Size(p); ++i) {
 	auto q = PyList_GetItem(p, i);
 	if (q && PyObject_TypeCheck(q, &PyUnicode_Type)) {
 	  option.tags.insert(PyUnicode_AsUTF8(q));

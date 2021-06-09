@@ -10,11 +10,14 @@ add_executable(crimson-osd
   pg_meta.cc
   replicated_backend.cc
   shard_services.cc
+  stop_signal.cc
   object_context.cc
   ops_executer.cc
   osd_operation.cc
   osd_operations/client_request.cc
+  osd_operations/client_request_common.cc
   osd_operations/compound_peering_request.cc
+  osd_operations/internal_client_request.cc
   osd_operations/peering_event.cc
   osd_operations/pg_advance_map.cc
   osd_operations/replicated_request.cc
@@ -27,6 +30,7 @@ add_executable(crimson-osd
   scheduler/mclock_scheduler.cc
   osdmap_gate.cc
   pg_map.cc
+  pg_interval_interrupt_condition.cc
   objclass.cc
   ${PROJECT_SOURCE_DIR}/src/objclass/class_api.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ClassHandler.cc

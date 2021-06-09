@@ -16,7 +16,6 @@ LockPersonality=true
 NoNewPrivileges=true
 PrivateDevices=yes
 PrivateTmp=true
-ProtectClock=true
 ProtectControlGroups=true
 ProtectHome=true
 ProtectHostname=true
