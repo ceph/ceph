@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Set, no_type_check
 
 import cherrypy
 from mgr_module import CLICommand, Option
@@ -16,11 +16,6 @@ from ..controllers.rgw import Rgw, RgwBucket, RgwDaemon, RgwUser
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
 from .ttl_cache import ttl_cache
-
-try:
-    from typing import Set, no_type_check
-except ImportError:
-    no_type_check = object()  # Just for type checking
 
 
 class Features(Enum):

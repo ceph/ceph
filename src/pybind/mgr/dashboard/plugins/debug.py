@@ -3,15 +3,11 @@
 
 import json
 from enum import Enum
+from typing import no_type_check
 
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
 from .plugin import SimplePlugin as SP
-
-try:
-    from typing import no_type_check
-except ImportError:
-    no_type_check = object()  # Just for type checking
 
 
 class Actions(Enum):
