@@ -6077,6 +6077,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
       accounted_size += obj_part.accounted_size;
     }
   } while (truncated);
+
   hash.Final((unsigned char *)final_etag);
 
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
@@ -6122,17 +6123,24 @@ void RGWCompleteMultipart::execute(optional_yield y)
   obj_op->params.completeMultipart = true;
   obj_op->params.olh_epoch = olh_epoch;
   obj_op->params.attrs = &attrs;
+
   op_ret = obj_op->prepare(s->yield);
-  if (op_ret < 0)
+  if (op_ret < 0) {
     return;
+  }
 
   op_ret = obj_op->write_meta(this, ofs, accounted_size, s->yield);
-  if (op_ret < 0)
+  if (op_ret < 0) {
     return;
+  }
 
-  // remove the upload obj
+  // remove the upload meta object
   string version_id;
-  int r = meta_obj->delete_object(this, s->obj_ctx, ACLOwner(), ACLOwner(), ceph::real_time(), false, 0, version_id, null_yield);
+
+  // remove the upload meta object ; the meta object is not versioned
+  // when the bucket is, as that would add an unneeded delete marker
+  int r = meta_obj->delete_object(this, s->obj_ctx, ACLOwner(), ACLOwner(), ceph::real_time(), false, 0,
+				  version_id, null_yield, true /* prevent versioning*/ );
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer->clear_locked();
@@ -6146,7 +6154,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
-}
+} // RGWCompleteMultipart::execute
 
 void RGWCompleteMultipart::complete()
 {
@@ -6602,7 +6610,8 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     std::unique_ptr<rgw::sal::RGWObject> obj = bucket->get_object(path.obj_key);
     obj->set_atomic(s->obj_ctx);
 
-    ret = obj->delete_object(dpp, s->obj_ctx, bowner, bucket_owner, ceph::real_time(), false, 0, version_id, s->yield);
+    ret = obj->delete_object(dpp, s->obj_ctx, bowner, bucket_owner, ceph::real_time(), false, 0,
+			     version_id, s->yield);
     if (ret < 0) {
       goto delop_fail;
     }
