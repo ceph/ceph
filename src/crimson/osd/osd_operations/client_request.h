@@ -57,6 +57,10 @@ public:
 
 public:
   seastar::future<> start();
+  uint64_t get_prev_id() const {
+    assert(prev_op_id.has_value());
+    return *prev_op_id;
+  }
 
 private:
   interruptible_future<> do_process(
