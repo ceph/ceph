@@ -1483,6 +1483,41 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s
                                   op);
 }
 
+
+int verify_object_lock(const DoutPrefixProvider* dpp, const rgw::sal::RGWAttrs& attrs, const bool bypass_perm, const bool bypass_governance_mode) {
+  auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  if (aiter != attrs.end()) {
+    RGWObjectRetention obj_retention;
+    try {
+      decode(obj_retention, aiter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+      return -EIO;
+    }
+    if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) > ceph_clock_now()) {
+      if (obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
+        return -EACCES;
+      }
+    }
+  }
+  aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  if (aiter != attrs.end()) {
+    RGWObjectLegalHold obj_legal_hold;
+    try {
+      decode(obj_legal_hold, aiter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
+      return -EIO;
+    }
+    if (obj_legal_hold.is_enabled()) {
+      return -EACCES;
+    }
+  }
+  
+  return 0;
+}
+
+
 class HexTable
 {
   char table[256];
