@@ -160,7 +160,7 @@ class ObjectCache {
   unsigned long lru_size;
   unsigned long lru_counter;
   unsigned long lru_window;
-  ceph::shared_mutex lock = ceph::make_shared_mutex("ObjectCache");
+  ceph::mutex lock = ceph::make_mutex("ObjectCache");
   CephContext *cct;
 
   vector<RGWChainedCache *> chained_cache;
@@ -187,7 +187,7 @@ public:
 
   template<typename F>
   void for_each(const F& f) {
-    std::shared_lock l{lock};
+    std::lock_guard l(lock);
     if (enabled) {
       auto now  = ceph::coarse_mono_clock::now();
       for (const auto& [name, entry] : cache_map) {

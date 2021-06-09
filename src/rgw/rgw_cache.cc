@@ -11,8 +11,7 @@
 
 int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {
-
-  std::shared_lock rl{lock};
+  std::lock_guard l(lock);
   if (!enabled) {
     return -ENOENT;
   }
@@ -28,8 +27,6 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
   if (expiry.count() &&
        (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
     ldpp_dout(dpp, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
-    rl.unlock();
-    std::unique_lock wl{lock};  // write lock for insertion
     // check that wasn't already removed by other thread
     iter = cache_map.find(name);
     if (iter != cache_map.end()) {
@@ -49,8 +46,6 @@ int ObjectCache::get(const DoutPrefixProvider *dpp, const string& name, ObjectCa
   if (lru_counter - entry->lru_promotion_ts > lru_window) {
     ldpp_dout(dpp, 20) << "cache get: touching lru, lru_counter=" << lru_counter
                    << " promotion_ts=" << entry->lru_promotion_ts << dendl;
-    rl.unlock();
-    std::unique_lock wl{lock};  // write lock for insertion
     /* need to redo this because entry might have dropped off the cache */
     iter = cache_map.find(name);
     if (iter == cache_map.end()) {
@@ -97,8 +92,7 @@ bool ObjectCache::chain_cache_entry(const DoutPrefixProvider *dpp,
                                     std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
 				    RGWChainedCache::Entry *chained_entry)
 {
-  std::unique_lock l{lock};
-
+  std::lock_guard l(lock);
   if (!enabled) {
     return false;
   }
@@ -139,8 +133,7 @@ bool ObjectCache::chain_cache_entry(const DoutPrefixProvider *dpp,
 
 void ObjectCache::put(const DoutPrefixProvider *dpp, const string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
 {
-  std::unique_lock l{lock};
-
+  std::lock_guard l(lock);
   if (!enabled) {
     return;
   }
@@ -214,8 +207,7 @@ void ObjectCache::put(const DoutPrefixProvider *dpp, const string& name, ObjectC
 
 bool ObjectCache::remove(const DoutPrefixProvider *dpp, const string& name)
 {
-  std::unique_lock l{lock};
-
+  std::lock_guard l(lock);
   if (!enabled) {
     return false;
   }
@@ -298,8 +290,7 @@ void ObjectCache::invalidate_lru(ObjectCacheEntry& entry)
 
 void ObjectCache::set_enabled(bool status)
 {
-  std::unique_lock l{lock};
-
+  std::lock_guard l(lock);
   enabled = status;
 
   if (!enabled) {
@@ -309,8 +300,7 @@ void ObjectCache::set_enabled(bool status)
 
 void ObjectCache::invalidate_all()
 {
-  std::unique_lock l{lock};
-
+  std::lock_guard l(lock);
   do_invalidate_all();
 }
 
@@ -329,13 +319,12 @@ void ObjectCache::do_invalidate_all()
 }
 
 void ObjectCache::chain_cache(RGWChainedCache *cache) {
-  std::unique_lock l{lock};
+  std::lock_guard l(lock);
   chained_cache.push_back(cache);
 }
 
 void ObjectCache::unchain_cache(RGWChainedCache *cache) {
-  std::unique_lock l{lock};
-
+  std::lock_guard l(lock);
   auto iter = chained_cache.begin();
   for (; iter != chained_cache.end(); ++iter) {
     if (cache == *iter) {
