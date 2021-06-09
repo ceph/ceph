@@ -51,19 +51,14 @@ struct rgw_sync_bucket_pipe;
 struct rgw_bucket_sync_pair_info {
   RGWBucketSyncFlowManager::pipe_handler handler; /* responsible for sync filters */
   rgw_bucket_shard source_bs;
-  rgw_bucket_shard dest_bs;
+  rgw_bucket dest_bucket;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const rgw_bucket_sync_pair_info& p) {
-  if (p.source_bs.bucket == p.dest_bs.bucket) {
+  if (p.source_bs.bucket == p.dest_bucket) {
     return out << p.source_bs;
   }
-
-  out << p.source_bs;
-
-  out << "->" << p.dest_bs.bucket;
-
-  return out;
+  return out << p.source_bs << "->" << p.dest_bucket;
 }
 
 struct rgw_bucket_sync_pipe {
