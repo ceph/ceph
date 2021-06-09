@@ -180,6 +180,17 @@ private:
   int _check_and_encode_caps(const std::map<std::string, std::string>& caps,
     std::map<std::string, bufferlist>& encoded_caps, std::stringstream& ss);
 
+  int _update_or_create_entity(const EntityName& entity,
+    const std::map<std::string, std::string>& caps, MonOpRequestRef op,
+    std::stringstream& ds, bufferlist* rdata=nullptr, Formatter* fmtr=nullptr,
+    bool create_entity=false);
+  int _create_entity(const EntityName& entity,
+    const std::map<std::string, std::string>& caps, MonOpRequestRef op,
+    std::stringstream& ds, bufferlist* rdata, Formatter* fmtr);
+  int _update_caps(const EntityName& entity,
+    const std::map<std::string, std::string>& caps, MonOpRequestRef op,
+    std::stringstream& ds, bufferlist* rdata, Formatter* fmtr);
+
   bool check_rotate();
   void process_used_pending_keys(const std::map<EntityName,CryptoKey>& keys);
 

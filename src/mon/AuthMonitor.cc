@@ -1810,44 +1810,19 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    KeyServerData::Incremental auth_inc;
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    auth_inc.name = entity;
-    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
-    auth_inc.auth.caps = wanted_caps;
-
-    push_cephx_inc(auth_inc);
-
-    _encode_key(entity, auth_inc.auth, rdata, f.get(), false,
-		&wanted_caps);
-    rdata.append(ds);
-    getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
-						  get_last_committed() + 1));
-    return true;
+    err = _create_entity(entity, wanted_caps, op, ds, &rdata, f.get());
+    if (err == 0) {
+      return true;
+    } else {
+      goto done;
+    }
   } else if (prefix == "auth caps" && !entity_name.empty()) {
-    KeyServerData::Incremental auth_inc;
-    auth_inc.name = entity;
-    if (!mon.key_server.get_auth(auth_inc.name, auth_inc.auth)) {
-      ss << "couldn't find entry " << auth_inc.name;
-      err = -ENOENT;
+    err = _update_caps(entity, ceph_caps, op, ds, &rdata, f.get());
+    if (err == 0) {
+      return true;
+    } else {
       goto done;
     }
-
-    map<string, bufferlist> newcaps;
-    if (err = _check_and_encode_caps(ceph_caps, newcaps, ss); err < 0) {
-      goto done;
-    }
-
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    auth_inc.auth.caps = newcaps;
-    push_cephx_inc(auth_inc);
-
-    ss << "updated caps for " << auth_inc.name;
-    getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-					      get_last_committed() + 1));
-    return true;
   } else if ((prefix == "auth del" || prefix == "auth rm") &&
              !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -1927,6 +1902,68 @@ int AuthMonitor::_check_and_encode_caps(const map<string, string>& caps,
   }
 
   return 0;
+}
+
+/* Pass both, rdata as well as fmtr, to enable printing of the key after
+ * update and set create to True to allow authorizing a new entity instead
+ * of updating its caps. */
+int AuthMonitor::_update_or_create_entity(const EntityName& entity,
+  const map<string, string>& caps, MonOpRequestRef op, stringstream& ds,
+  bufferlist* rdata, Formatter* fmtr, bool create_entity)
+{
+  stringstream ss;
+  KeyServerData::Incremental auth_inc;
+  auth_inc.name = entity;
+
+  if (!create_entity &&
+      !mon.key_server.get_auth(auth_inc.name, auth_inc.auth)) {
+    ss << "couldn't find entry " << auth_inc.name;
+    return -ENOENT;
+  }
+
+  map<string, bufferlist> encoded_caps;
+  if (auto err = _check_and_encode_caps(caps, encoded_caps, ss); err < 0) {
+    return err;
+  }
+
+  auth_inc.op = KeyServerData::AUTH_INC_ADD;
+  auth_inc.auth.caps = encoded_caps;
+  if (create_entity) {
+    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+  }
+
+  push_cephx_inc(auth_inc);
+
+  if (!create_entity) {
+    ss << "updated caps for " << auth_inc.name;
+  }
+
+  if (rdata != nullptr) {
+    _encode_auth(entity, auth_inc.auth, *rdata, fmtr, false, &encoded_caps);
+    rdata->append(ds);
+  }
+
+  string rs;
+  getline(ss, rs);
+  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+			     *rdata, get_last_committed() + 1));
+  return 0;
+}
+
+int AuthMonitor::_update_caps(const EntityName& entity,
+  const map<string, string>& caps, MonOpRequestRef op, stringstream& ds,
+  bufferlist* rdata, Formatter* fmtr)
+{
+  return _update_or_create_entity(entity, caps, op, ds, rdata, fmtr,
+				  false);
+}
+
+int AuthMonitor::_create_entity(const EntityName& entity,
+  const map<string, string>& caps, MonOpRequestRef op, stringstream& ds,
+  bufferlist* rdata, Formatter* fmtr)
+{
+  return _update_or_create_entity(entity, caps, op, ds, rdata, fmtr,
+				  true);
 }
 
 bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
