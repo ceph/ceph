@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
+# -*- mode:python; tab-width:4; indent-tabs-mode:nil; coding:utf-8 -*-
 # vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
 # Ceph - scalable distributed file system
