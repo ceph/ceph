@@ -849,34 +849,8 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
 
   ceph_assert(m_initialized);
 
-  /* Split image extents larger than 1M. This isn't strictly necessary but
-   * makes libpmemobj allocator's job easier and reduces pmemobj_defrag() cost.
-   * We plan to manage pmem space and allocation by ourselves in the future.
-   */
-  Extents split_image_extents;
-  uint64_t max_extent_size = get_max_extent();
-  if (max_extent_size != 0) {
-    for (auto extent : image_extents) {
-      if (extent.second > max_extent_size) {
-        uint64_t off = extent.first;
-        uint64_t extent_bytes = extent.second;
-        for (int i = 0; extent_bytes != 0; ++i) {
-          Extent _ext;
-          _ext.first = off + i * max_extent_size;
-          _ext.second = std::min(max_extent_size, extent_bytes);
-          extent_bytes = extent_bytes - _ext.second ;
-          split_image_extents.emplace_back(_ext);
-        }
-      } else {
-        split_image_extents.emplace_back(extent);
-      }
-    }
-  } else {
-    split_image_extents = image_extents;
-  }
-
   C_WriteRequestT *write_req =
-    m_builder->create_write_request(*this, now, std::move(split_image_extents),
+    m_builder->create_write_request(*this, now, std::move(image_extents),
                                     std::move(bl), fadvise_flags, m_lock,
                                     m_perfcounter, on_finish);
   m_perfcounter->inc(l_librbd_pwl_wr_bytes,
