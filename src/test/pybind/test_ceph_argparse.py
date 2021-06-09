@@ -155,6 +155,8 @@ class TestPG(TestArgparse):
                                    'osds',
                                    'pgs',
                                    'pgs_brief'])
+        self.assert_valid_command('pg dump --dumpcontents summary,sum'.split())
+        self.assert_valid_command('pg dump summary,sum'.split())
         assert_equal({}, validate_command(sigdict, ['pg', 'dump', 'invalid']))
 
     def test_dump_json(self):
