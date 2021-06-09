@@ -3,7 +3,6 @@
 
 #include "rgw_service.h"
 
-#include "services/svc_finisher.h"
 #include "services/svc_bi_rados.h"
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bucket_sobj.h"
@@ -50,7 +49,6 @@ int RGWServices_Def::init(CephContext *cct,
 			  optional_yield y,
                           const DoutPrefixProvider *dpp)
 {
-  finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
   bucket_sync_sobj = std::make_unique<RGWSI_Bucket_Sync_SObj>(cct);
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
@@ -79,7 +77,6 @@ int RGWServices_Def::init(CephContext *cct,
 
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
-  finisher->init();
   bi_rados->init(zone.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
@@ -95,7 +92,7 @@ int RGWServices_Def::init(CephContext *cct,
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
-  notify->init(zone.get(), rados.get(), finisher.get());
+  notify->init(zone.get(), rados.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   rados->init();
   zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
@@ -114,11 +111,7 @@ int RGWServices_Def::init(CephContext *cct,
 
   can_shutdown = true;
 
-  int r = finisher->start(y, dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to start finisher service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
+  int r = 0;
 
   if (!raw) {
     r = notify->start(y, dpp);
@@ -284,7 +277,6 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
     return r;
   }
 
-  finisher = _svc.finisher.get();
   bi_rados = _svc.bi_rados.get();
   bi = bi_rados;
   bilog_rados = _svc.bilog_rados.get();
