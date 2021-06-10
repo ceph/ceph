@@ -243,13 +243,13 @@ Or in YAML:
 Setting a limit
 ---------------
 
-By specifying ``count``, only that number of daemons will be created:
+By specifying ``count``, only the number of daemons specified will be created:
 
    .. prompt:: bash #
 
     orch apply prometheus --placement=3
 
-To deploy *daemons* on a subset of hosts, also specify the count:
+To deploy *daemons* on a subset of hosts, specify the count:
 
    .. prompt:: bash #
 
@@ -261,9 +261,9 @@ If the count is bigger than the amount of hosts, cephadm deploys one per host:
 
     orch apply prometheus --placement="3 host1 host2"
 
-results in two Prometheus daemons.
+The command immediately above results in two Prometheus daemons.
 
-Or in YAML:
+YAML can also be used to specify limits, in the following way:
 
 .. code-block:: yaml
 
@@ -271,7 +271,7 @@ Or in YAML:
     placement:
       count: 3
 
-Or with hosts:
+YAML can also be used to specify limits on hosts:
 
 .. code-block:: yaml
 
