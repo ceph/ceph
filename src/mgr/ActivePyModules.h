@@ -56,7 +56,7 @@ class ActivePyModules
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
-  TTLCache<string ,PyObject*> ttl_cache;
+  TTLCache<string, PyObject*> ttl_cache;
 public:
   Finisher cmd_finisher;
 private:
@@ -220,5 +220,7 @@ public:
 
   void cluster_log(const std::string &channel, clog_type prio,
     const std::string &message);
+
+  void update_ttl_cache();
 };
 
