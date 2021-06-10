@@ -355,7 +355,16 @@ struct cls_rbd_rwlcache_map {
     }
   };
 
+  // cache allocated but not receive ack in uncommitted_caches
+  std::map<epoch_t, std::pair<utime_t, struct Cache>> uncommitted_caches;
+
+  // uncommitted_cache recive ack in time and result is ok. Move cahe from uncommitted_cache
+  // to caches.
   std::map<epoch_t, struct Cache> caches;
+
+  // Primary can't free related daemon's cache-file, etc rdma-disconnect.
+  // So cache move uncommitted_caches or caches to free_daemon_space_caches;
+  std::map<epoch_t, struct Cache> free_daemon_space_caches;
 
   cls_rbd_rwlcache_map() {
     current_cache_id = 0;
@@ -365,7 +374,9 @@ struct cls_rbd_rwlcache_map {
     ENCODE_START(1, 1, bl);
     encode(current_cache_id, bl);
     encode(daemons, bl, features);
+    encode(uncommitted_caches, bl, features);
     encode(caches, bl, features);
+    encode(free_daemon_space_caches, bl, features);
     ENCODE_FINISH(bl);
   }
 
@@ -373,7 +384,9 @@ struct cls_rbd_rwlcache_map {
     DECODE_START(1, it);
     decode(current_cache_id, it);
     decode(daemons, it);
+    decode(uncommitted_caches, it);
     decode(caches, it);
+    decode(free_daemon_space_caches, it);
     DECODE_FINISH(it);
   }
 

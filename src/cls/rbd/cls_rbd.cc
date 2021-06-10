@@ -8079,6 +8079,26 @@ int sparsify(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 #define RWLCACHE_MAP_KEY "rwlcache_map"
 
+static void check_expiration_cache(cls_rbd_rwlcache_map &map)
+{
+  utime_t now = ceph_clock_now();
+  for (auto it = map.uncommitted_caches.begin(); it != map.uncommitted_caches.end();) {
+    if (it->second.first < now) {
+      CLS_LOG(10, "cache(%u) request_ack timeout, will be remove from uncommitted_caches", it->first);
+
+      cls_rbd_rwlcache_map::Cache &cache = it->second.second;
+      for (auto &id : cache.daemons) {
+	map.daemons[id].need_free_caches.insert(it->first);
+      }
+      map.free_daemon_space_caches.insert(std::make_pair(it->first, cache));
+      it = map.uncommitted_caches.erase(it);
+    } else {
+      it++;
+    }
+  }
+}
+
+
 /**
  * Report rwlcache daemon-info
  *
@@ -8140,6 +8160,8 @@ int rwlcache_daemoninfo(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   ceph_assert(r == 0);
 
   map.daemons.emplace(info.id, cls_rbd_rwlcache_map::Daemon(info, inst));
+
+  check_expiration_cache(map);
 
   value.clear();
   encode(map, value, get_encode_features(hctx));
@@ -8222,8 +8244,11 @@ int rwlcache_request(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       daemon.free_size -= req.size;
     }
 
-    map.caches.emplace(map.current_cache_id,
-		       cls_rbd_rwlcache_map::Cache(map.current_cache_id, req, inst.addr, daemons));
+    utime_t expiration = ceph_clock_now() + utime_t(RBD_RWLCACHE_REQUEST_ACK_TIMEOUT, 0);
+    map.uncommitted_caches.emplace(map.current_cache_id,
+		       std::make_pair(expiration, cls_rbd_rwlcache_map::Cache(map.current_cache_id, req, inst.addr, daemons)));
+
+    check_expiration_cache(map);
 
     encode(map, value, get_encode_features(hctx));
     r = cls_cxx_map_set_val(hctx, RWLCACHE_MAP_KEY, &value);
@@ -8280,12 +8305,13 @@ int rwlcache_get_cacheinfo(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EIO;
   }
 
-  if (map.caches.count(cache_id)) {
-    auto &cache = map.caches[cache_id];
+  if (map.uncommitted_caches.count(cache_id)) {
+    auto &cache = map.uncommitted_caches[cache_id].second;
 
     info.cache_id = cache.cache_id;
     for (auto &id : cache.daemons) {
       auto &daemon = map.daemons[id];
+
       info.daemons.push_back(cls::rbd::RwlCacheInfo::DaemonInfo{daemon.id, daemon.rdma_address, daemon.rdma_port});
     }
 
@@ -8293,6 +8319,84 @@ int rwlcache_get_cacheinfo(cls_method_context_t hctx, bufferlist *in, bufferlist
   } else {
     return -ENOENT;
   }
+  return 0;
+}
+
+/*
+ * Send result for rwlcache_requestreply
+ *
+ * Input
+ * @param ack info (cls::rbd::RwlCacheRequestReplyAck)
+ *
+ * Output
+ * @return -ETIMEDOUT if cache already moved from uncommitted_caches.
+ * @return 0 on success, negative error code on failure
+ */
+int rwlcache_request_ack(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::RwlCacheRequestAck ack;
+  cls_rbd_rwlcache_map map;
+
+  try {
+    auto it = in->cbegin();
+    decode(ack, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, " request ack from cache id %u\n", ack.cache_id);
+
+  bufferlist value;
+  int r = cls_cxx_map_get_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if (r < 0) {
+    CLS_LOG(5, "error reading key %s: %s", RWLCACHE_MAP_KEY, cpp_strerror(r).c_str());
+    return r;
+  }
+
+  try {
+    auto it = value.cbegin();
+    decode(map, it);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("decode map error");
+    return -EIO;
+  }
+
+  auto it = map.uncommitted_caches.find(ack.cache_id);
+  if (it != map.uncommitted_caches.end()) {
+    if (ack.result == 0) {
+      map.caches.insert(std::make_pair(it->first, it->second.second));
+    } else { //handle error cases
+      cls_rbd_rwlcache_map::Cache &cache = it->second.second;
+
+      for (auto it = cache.daemons.begin(); it != cache.daemons.end(); ) {
+	if (ack.need_free_daemons.count(*it) == 0) {
+	  map.daemons[*it].free_size += cache.cache_size;
+	  it = cache.daemons.erase(it);
+	} else {
+	  map.daemons[*it].need_free_caches.insert(ack.cache_id);
+	  it++;
+	}
+      }
+      // Still has daemon space need to free
+      if (cache.daemons.size()) {
+	map.free_daemon_space_caches.insert(std::make_pair(it->first, cache));
+      }
+    }
+    map.uncommitted_caches.erase(it);
+
+    check_expiration_cache(map);
+
+    value.clear();
+    encode(map, value, get_encode_features(hctx));
+    r = cls_cxx_map_set_val(hctx, RWLCACHE_MAP_KEY, &value);
+    if (r < 0) {
+      CLS_ERR("error updating daemon info: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  } else {
+    r = -ETIMEDOUT;
+  }
+
   return 0;
 }
 
@@ -8434,6 +8538,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_rwlcache_daemoninfo;
   cls_method_handle_t h_rwlcache_request;
   cls_method_handle_t h_rwlcache_get_cacheinfo;
+  cls_method_handle_t h_rwlcache_request_ack;
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
@@ -8858,4 +8963,7 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "rwlcache_get_cacheinfo",
 			  CLS_METHOD_RD,
 			  rwlcache_get_cacheinfo, &h_rwlcache_get_cacheinfo);
+  cls_register_cxx_method(h_class, "rwlcache_request_ack",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  rwlcache_request_ack, &h_rwlcache_request_ack);
 }

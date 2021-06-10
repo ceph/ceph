@@ -1019,6 +1019,7 @@ std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state);
 void sanitize_entity_inst(entity_inst_t* entity_inst);
 
 #define RBD_RWLCACHE_MAP_OBJECT_NAME "rbd_rwlcache_map"
+#define RBD_RWLCACHE_REQUEST_ACK_TIMEOUT 120 //Unit is second
 
 struct RwlCacheDaemonInfo {
     uint64_t id;
@@ -1060,6 +1061,23 @@ struct RwlCacheInfo {
 };
 WRITE_CLASS_ENCODER(RwlCacheInfo::DaemonInfo)
 WRITE_CLASS_ENCODER(RwlCacheInfo)
+
+struct RwlCacheRequestAck {
+  epoch_t cache_id;
+
+  // result == 0, mean initialize success. others mean error
+  int result;
+
+  // If initialize failed:
+  // daemon maybe already allocated space and
+  // primary can't free(etc, rdma disconnect).
+  // So objclass need send free message to daemons.
+  std::set<uint64_t> need_free_daemons;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+};
+WRITE_CLASS_ENCODER(RwlCacheRequestAck)
 
 } // namespace rbd
 } // namespace cls
