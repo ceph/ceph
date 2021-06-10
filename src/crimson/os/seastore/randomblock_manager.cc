@@ -434,11 +434,7 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::complete_allocation
 	    }
 	  }
 	  logger().debug("complete_alloction: complete to allocate {} blocks", alloc_block_count);
-	  if (alloc_block_count > 0) {
-	    super.free_block_count -= alloc_block_count;
-	  } else {
-	    super.free_block_count += alloc_block_count;
-	  }
+	  super.free_block_count -= alloc_block_count;
 	  return write_ertr::now();
 	  });
   });

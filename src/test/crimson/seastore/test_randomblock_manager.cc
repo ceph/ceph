@@ -331,5 +331,20 @@ TEST_F(rbm_test_t, check_free_blocks)
    rbm_manager->rbm_sync_block_bitmap_by_range(10, 12, bitmap_op_types_t::ALL_SET).unsafe_get0();
    rbm_manager->check_bitmap_blocks().unsafe_get0();
    ASSERT_TRUE(rbm_manager->get_free_blocks() == DEFAULT_TEST_SIZE/DEFAULT_BLOCK_SIZE - 5);
+   auto free = rbm_manager->get_free_blocks();
+   interval_set<blk_id_t> alloc_ids;
+   auto t = tm->create_transaction();
+   alloc_extent(*t, DEFAULT_BLOCK_SIZE * 4);
+   alloc_ids = get_allocated_blk_ids(*t);
+   ASSERT_TRUE(submit_transaction(*t));
+   complete_allocation(*t);
+   ASSERT_TRUE(rbm_manager->get_free_blocks() == free - 4);
+
+   free = rbm_manager->get_free_blocks();
+   auto t2 = tm->create_transaction();
+   free_extent(*t2, alloc_ids);
+   ASSERT_TRUE(submit_transaction(*t2));
+   complete_allocation(*t2);
+   ASSERT_TRUE(rbm_manager->get_free_blocks() == free + 4);
  });
 }
