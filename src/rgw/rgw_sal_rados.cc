@@ -19,6 +19,8 @@
 #include <unistd.h>
 #include <sstream>
 
+#include "auth/AuthRegistry.h"
+
 #include "common/Clock.h"
 #include "common/errno.h"
 
@@ -36,7 +38,6 @@
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_quota.h"
-#include "services/svc_config_key.h"
 #include "services/svc_zone_utils.h"
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -1043,9 +1044,37 @@ int RadosStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epo
   return rados->trim_usage(dpp, uid, bucket_name, start_epoch, end_epoch);
 }
 
-int RadosStore::get_config_key_val(std::string name, bufferlist* bl)
+void RadosStore::configkey_data::warn_if_insecure(RadosStore* rs)
 {
-  return svc()->config_key->get(name, true, bl);
+  if (!maybe_insecure_mon_conn ||
+      warned_insecure.test_and_set()) {
+    return;
+  }
+
+  auto s = "rgw is configured to optionally allow insecure connections to the "
+    "monitors (auth_supported, ms_mon_client_mode), ssl certificates stored at "
+    "the monitor configuration could leak"sv;
+
+  rs->clog_warn(s);
+
+  lderr(rs->rados->ctx()) << __func__ << "(): WARNING: " << s << dendl;
+}
+
+int RadosStore::get_config_key_val(std::string_view name, bufferlist* bl)
+{
+  auto cmd = fmt::format(
+    "{{"
+      "\"prefix\": \"config-key get\", "
+      "\"key\": \"{}\""
+    "}}", name);
+
+  bufferlist inbl;
+  int ret = rados->get_rados_handle()->mon_command(cmd, inbl, bl, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  ckd.warn_if_insecure(this);
+  return 0;
 }
 
 int RadosStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle)
@@ -1075,8 +1104,39 @@ int RadosStore::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata
 
 void RadosStore::finalize(void)
 {
-  if (rados)
+  if (rados) {
     rados->finalize();
+    ckd.maybe_insecure_mon_conn = !check_secure_mon_conn();
+  }
+}
+
+bool RadosStore::check_secure_mon_conn() const
+{
+  AuthRegistry reg(rados->ctx());
+
+  reg.refresh_config();
+
+  std::vector<uint32_t> methods;
+  std::vector<uint32_t> modes;
+
+  reg.get_supported_methods(CEPH_ENTITY_TYPE_MON, &methods, &modes);
+  ldout(rados->ctx(), 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
+
+  for (auto method : methods) {
+    if (!reg.is_secure_method(method)) {
+      ldout(rados->ctx(), 20) << __func__ << "(): method " << method << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  for (auto mode : modes) {
+    if (!reg.is_secure_mode(mode)) {
+      ldout(rados->ctx(), 20) << __func__ << "(): mode " << mode << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  return true;
 }
 
 std::unique_ptr<LuaScriptManager> RadosStore::get_lua_script_manager()
@@ -1212,6 +1272,18 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
 int RadosStore::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx* ioctx)
 {
   return rados->get_obj_head_ioctx(dpp, bucket_info, obj, ioctx);
+}
+
+int RadosStore::clog_warn(std::string_view msg)
+{
+  auto cmd = fmt::format(
+    "{{"
+      "\"prefix\": \"log\", "
+      "\"level\": \"warn\", "
+      "\"logtext\": [\"{}\"]"
+    "}}", msg);
+
+  return rados->get_rados_handle()->mon_command(cmd, {}, nullptr, nullptr);
 }
 
 int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)

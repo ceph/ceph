@@ -16,7 +16,7 @@
 
 #define RGW_USER_ANON_ID "anonymous"
 
-class RGWCtl;
+struct RGWCtl;
 
 namespace rgw {
 namespace auth {
