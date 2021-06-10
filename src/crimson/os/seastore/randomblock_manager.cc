@@ -186,10 +186,15 @@ RandomBlockManager::find_block_ret RandomBlockManager::find_free_block(Transacti
 	      auto allocated_blocks = t.get_rbm_allocated_blocks();
 	      for (uint64_t i = 0; i < max && (uint64_t)size/super.block_size > allocated; i++) {
 		auto block_id = convert_bitmap_block_no_to_block_id(i, addr);
+		bool out = false;
 		for (auto b : allocated_blocks) {
 		  if (b.alloc_blk_ids.intersects(block_id, 1)) {
-		    continue;
+		    out = true;
+		    break;
 		  }
+		}
+		if (out) {
+		  continue;
 		}
 		if (b_block.is_allocated(i)) {
 		  continue;
