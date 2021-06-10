@@ -976,9 +976,9 @@ ostream& operator <<(ostream& m, const Condition& c) {
 
 Effect Statement::eval(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida,
-		       uint64_t act, const ARN& res) const {
+		       uint64_t act, const ARN& res, boost::optional<PolicyPrincipal&> princ_type) const {
 
-  if (eval_principal(e, ida) == Effect::Deny) {
+  if (eval_principal(e, ida, princ_type) == Effect::Deny) {
     return Effect::Pass;
   }
 
@@ -1012,13 +1012,34 @@ Effect Statement::eval(const Environment& e,
 }
 
 Effect Statement::eval_principal(const Environment& e,
-		       boost::optional<const rgw::auth::Identity&> ida) const {
+		       boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type) const {
+  if (princ_type) {
+    *princ_type = PolicyPrincipal::Other;
+  }
   if (ida) {
     if (princ.empty() && noprinc.empty()) {
       return Effect::Deny;
     }
-    if (!princ.empty() && !ida->is_identity(princ)) {
+    if (ida->get_identity_type() != TYPE_ROLE && !princ.empty() && !ida->is_identity(princ)) {
       return Effect::Deny;
+    }
+    if (ida->get_identity_type() == TYPE_ROLE && !princ.empty()) {
+      bool princ_matched = false;
+      for (auto p : princ) { // Check each principal to determine the type of the one that has matched
+        boost::container::flat_set<Principal> id;
+        id.insert(p);
+        if (ida->is_identity(id)) {
+          if (p.is_assumed_role() || p.is_user()) {
+            if (princ_type) *princ_type = PolicyPrincipal::Session;
+          } else {
+            if (princ_type) *princ_type = PolicyPrincipal::Role;
+          }
+          princ_matched = true;
+        }
+      }
+      if (!princ_matched) {
+        return Effect::Deny;
+      }
     } else if (!noprinc.empty() && ida->is_identity(noprinc)) {
       return Effect::Deny;
     }
@@ -1391,10 +1412,11 @@ Policy::Policy(CephContext* cct, const string& tenant,
 
 Effect Policy::eval(const Environment& e,
 		    boost::optional<const rgw::auth::Identity&> ida,
-		    std::uint64_t action, const ARN& resource) const {
+		    std::uint64_t action, const ARN& resource,
+        boost::optional<PolicyPrincipal&> princ_type) const {
   auto allowed = false;
   for (auto& s : statements) {
-    auto g = s.eval(e, ida, action, resource);
+    auto g = s.eval(e, ida, action, resource, princ_type);
     if (g == Effect::Deny) {
       return g;
     } else if (g == Effect::Allow) {
@@ -1405,10 +1427,10 @@ Effect Policy::eval(const Environment& e,
 }
 
 Effect Policy::eval_principal(const Environment& e,
-		    boost::optional<const rgw::auth::Identity&> ida) const {
+		    boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type) const {
   auto allowed = false;
   for (auto& s : statements) {
-    auto g = s.eval_principal(e, ida);
+    auto g = s.eval_principal(e, ida, princ_type);
     if (g == Effect::Deny) {
       return g;
     } else if (g == Effect::Allow) {

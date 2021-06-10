@@ -495,7 +495,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
     if (bucket_owner.compare(s->user->get_id()) != 0 &&
         ! s->auth.identity->is_admin_of(bucket_owner)) {
-      auto r = eval_user_policies(s->iam_user_policies, s->env,
+      auto r = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                   *s->auth.identity, rgw::IAM::s3ListBucket,
                                   ARN(bucket->get_key()));
       if (r == Effect::Allow)
@@ -504,6 +504,15 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
         return -EACCES;
       if (policy) {
         r = policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket->get_key()));
+        if (r == Effect::Allow)
+          return -ENOENT;
+        if (r == Effect::Deny)
+          return -EACCES;
+      }
+      if (! s->session_policies.empty()) {
+        r = eval_identity_or_session_policies(s->session_policies, s->env,
+                                  *s->auth.identity, rgw::IAM::s3ListBucket,
+                                  ARN(bucket->get_key()));
         if (r == Effect::Allow)
           return -ENOENT;
         if (r == Effect::Deny)
@@ -1574,7 +1583,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
     ldpp_dout(this, 2) << "overriding permissions due to admin operation" << dendl;
   } else if (!verify_object_permission(this, s, part->get_obj(), s->user_acl.get(),
 				       bucket_acl, &obj_policy, bucket_policy,
-				       s->iam_user_policies, action)) {
+				       s->iam_user_policies, s->session_policies, action)) {
     return -EPERM;
   }
   if (ent.meta.size == 0) {
@@ -3529,24 +3538,49 @@ int RGWPutObj::verify_permission(optional_yield y)
     /* Object needs a bucket from this point */
     s->object->set_bucket(s->bucket.get());
 
-    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+    auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                             boost::none,
                                             rgw::IAM::s3PutObject,
                                             s->object->get_obj());
-    if (usr_policy_res == Effect::Deny)
+    if (identity_policy_res == Effect::Deny)
       return -EACCES;
 
     rgw::IAM::Effect e = Effect::Pass;
+    rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     if (s->iam_policy) {
       e = s->iam_policy->eval(s->env, *s->auth.identity,
           rgw::IAM::s3PutObject,
-          s->object->get_obj());
+          s->object->get_obj(),
+          princ_type);
     }
-    if (e == Effect::Allow) {
-      return 0;
-    } else if (e == Effect::Deny) {
+    if (e == Effect::Deny) {
       return -EACCES;
-    } else if (usr_policy_res == Effect::Allow) {
+    }
+
+    if (!s->session_policies.empty()) {
+      auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                              boost::none,
+                                              rgw::IAM::s3PutObject,
+                                              s->object->get_obj());
+      if (session_policy_res == Effect::Deny) {
+          return -EACCES;
+      }
+      if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
+            (session_policy_res == Effect::Allow && e == Effect::Allow))
+          return 0;
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+        //Intersection of session policy and identity policy plus bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || e == Effect::Allow)
+          return 0;
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+        if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow)
+          return 0;
+      }
+      return -EACCES;
+    }
+    if (e == Effect::Allow || identity_policy_res == Effect::Allow) {
       return 0;
     }
   }
@@ -4089,26 +4123,61 @@ void RGWPostObj::execute(optional_yield y)
     return;
   }
 
-  if (s->iam_policy || ! s->iam_user_policies.empty()) {
-    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+  if (s->iam_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
+    auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                             boost::none,
                                             rgw::IAM::s3PutObject,
                                             s->object->get_obj());
-    if (usr_policy_res == Effect::Deny) {
+    if (identity_policy_res == Effect::Deny) {
       op_ret = -EACCES;
       return;
     }
 
     rgw::IAM::Effect e = Effect::Pass;
+    rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     if (s->iam_policy) {
       e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
-				 s->object->get_obj());
+				 s->object->get_obj(),
+         princ_type);
     }
     if (e == Effect::Deny) {
       op_ret = -EACCES;
       return;
-    } else if (usr_policy_res == Effect::Pass && e == Effect::Pass && !verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
+    }
+
+    if (!s->session_policies.empty()) {
+      auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                              boost::none,
+                                              rgw::IAM::s3PutObject,
+                                              s->object->get_obj());
+      if (session_policy_res == Effect::Deny) {
+          op_ret = -EACCES;
+          return;
+      }
+      if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
+            (session_policy_res == Effect::Allow && e == Effect::Allow)) {
+          op_ret = 0;
+          return;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+        //Intersection of session policy and identity policy plus bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || e == Effect::Allow) {
+          op_ret = 0;
+          return;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+        if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) {
+          op_ret = 0;
+          return;
+        }
+      }
+      op_ret = -EACCES;
+      return;
+    }
+    if (identity_policy_res == Effect::Pass && e == Effect::Pass && !verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
       op_ret = -EACCES;
       return;
     }
@@ -4628,9 +4697,9 @@ int RGWDeleteObj::verify_permission(optional_yield y)
   if (op_ret) {
     return op_ret;
   }
-  if (s->iam_policy || ! s->iam_user_policies.empty()) {
+  if (s->iam_policy || ! s->iam_user_policies.empty() || ! s->session_policies.empty()) {
     if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
-      auto r = eval_user_policies(s->iam_user_policies, s->env, boost::none,
+      auto r = eval_identity_or_session_policies(s->iam_user_policies, s->env, boost::none,
                                                rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key(), s->object->get_name()));
       if (r == Effect::Deny) {
         bypass_perm = false;
@@ -4640,31 +4709,66 @@ int RGWDeleteObj::verify_permission(optional_yield y)
         if (r == Effect::Deny) {
           bypass_perm = false;
         }
+      } else if (r == Effect::Pass && !s->session_policies.empty()) {
+        r = eval_identity_or_session_policies(s->session_policies, s->env, boost::none,
+                                               rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key(), s->object->get_name()));
+        if (r == Effect::Deny) {
+          bypass_perm = false;
+        }
       }
     }
-    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+    auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               s->object->get_instance().empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
                                               ARN(s->bucket->get_key(), s->object->get_name()));
-    if (usr_policy_res == Effect::Deny) {
+    if (identity_policy_res == Effect::Deny) {
       return -EACCES;
     }
 
     rgw::IAM::Effect r = Effect::Pass;
+    rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     if (s->iam_policy) {
       r = s->iam_policy->eval(s->env, *s->auth.identity,
 				 s->object->get_instance().empty() ?
 				 rgw::IAM::s3DeleteObject :
 				 rgw::IAM::s3DeleteObjectVersion,
-				 ARN(s->bucket->get_key(), s->object->get_name()));
+				 ARN(s->bucket->get_key(), s->object->get_name()),
+         princ_type);
     }
-    if (r == Effect::Allow)
-      return 0;
-    else if (r == Effect::Deny)
+    if (r == Effect::Deny)
       return -EACCES;
-    else if (usr_policy_res == Effect::Allow)
+
+    if (!s->session_policies.empty()) {
+      auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                              boost::none,
+                                              s->object->get_instance().empty() ?
+                                              rgw::IAM::s3DeleteObject :
+                                              rgw::IAM::s3DeleteObjectVersion,
+                                              ARN(s->bucket->get_key(), s->object->get_name()));
+      if (session_policy_res == Effect::Deny) {
+          return -EACCES;
+      }
+      if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
+            (session_policy_res == Effect::Allow && r == Effect::Allow)) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+        //Intersection of session policy and identity policy plus bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || r == Effect::Allow) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+        if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) {
+          return 0;
+        }
+      }
+      return -EACCES;
+    }
+    if (r == Effect::Allow || identity_policy_res == Effect::Allow)
       return 0;
   }
 
@@ -5695,26 +5799,54 @@ void RGWSetRequestPayment::execute(optional_yield y)
 
 int RGWInitMultipart::verify_permission(optional_yield y)
 {
-  if (s->iam_policy || ! s->iam_user_policies.empty()) {
-    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+  if (s->iam_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
+    auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               rgw::IAM::s3PutObject,
                                               s->object->get_obj());
-    if (usr_policy_res == Effect::Deny) {
+    if (identity_policy_res == Effect::Deny) {
       return -EACCES;
     }
 
     rgw::IAM::Effect e = Effect::Pass;
+    rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     if (s->iam_policy) {
       e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
-				 s->object->get_obj());
+				 s->object->get_obj(),
+         princ_type);
     }
-    if (e == Effect::Allow) {
-      return 0;
-    } else if (e == Effect::Deny) {
+    if (e == Effect::Deny) {
       return -EACCES;
-    } else if (usr_policy_res == Effect::Allow) {
+    }
+
+    if (!s->session_policies.empty()) {
+      auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                              boost::none,
+                                              rgw::IAM::s3PutObject,
+                                              s->object->get_obj());
+      if (session_policy_res == Effect::Deny) {
+          return -EACCES;
+      }
+      if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
+            (session_policy_res == Effect::Allow && e == Effect::Allow)) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+        //Intersection of session policy and identity policy plus bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || e == Effect::Allow) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+        if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) {
+          return 0;
+        }
+      }
+      return -EACCES;
+    }
+    if (e == Effect::Allow || identity_policy_res == Effect::Allow) {
       return 0;
     }
   }
@@ -5812,26 +5944,54 @@ void RGWInitMultipart::execute(optional_yield y)
 
 int RGWCompleteMultipart::verify_permission(optional_yield y)
 {
-  if (s->iam_policy || ! s->iam_user_policies.empty()) {
-    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+  if (s->iam_policy || ! s->iam_user_policies.empty() || ! s->session_policies.empty()) {
+    auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               rgw::IAM::s3PutObject,
                                               s->object->get_obj());
-    if (usr_policy_res == Effect::Deny) {
+    if (identity_policy_res == Effect::Deny) {
       return -EACCES;
     }
 
     rgw::IAM::Effect e = Effect::Pass;
+    rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     if (s->iam_policy) {
       e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
-				 s->object->get_obj());
+				 s->object->get_obj(),
+         princ_type);
     }
-    if (e == Effect::Allow) {
-      return 0;
-    } else if (e == Effect::Deny) {
+    if (e == Effect::Deny) {
       return -EACCES;
-    } else if (usr_policy_res == Effect::Allow) {
+    }
+
+    if (!s->session_policies.empty()) {
+      auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                              boost::none,
+                                              rgw::IAM::s3PutObject,
+                                              s->object->get_obj());
+      if (session_policy_res == Effect::Deny) {
+          return -EACCES;
+      }
+      if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
+            (session_policy_res == Effect::Allow && e == Effect::Allow)) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+        //Intersection of session policy and identity policy plus bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || e == Effect::Allow) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+        if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) {
+          return 0;
+        }
+      }
+      return -EACCES;
+    }
+    if (e == Effect::Allow || identity_policy_res == Effect::Allow) {
       return 0;
     }
   }
@@ -6187,27 +6347,56 @@ void RGWCompleteMultipart::complete()
 
 int RGWAbortMultipart::verify_permission(optional_yield y)
 {
-  if (s->iam_policy || ! s->iam_user_policies.empty()) {
-    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+  if (s->iam_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
+    auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               rgw::IAM::s3AbortMultipartUpload,
                                               s->object->get_obj());
-    if (usr_policy_res == Effect::Deny) {
+    if (identity_policy_res == Effect::Deny) {
       return -EACCES;
     }
 
     rgw::IAM::Effect e = Effect::Pass;
+    rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     if (s->iam_policy) {
       e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3AbortMultipartUpload,
-				 s->object->get_obj());
+				 s->object->get_obj(), princ_type);
     }
-    if (e == Effect::Allow) {
-      return 0;
-    } else if (e == Effect::Deny) {
+
+    if (e == Effect::Deny) {
       return -EACCES;
-    } else if (usr_policy_res == Effect::Allow)
+    }
+
+    if (!s->session_policies.empty()) {
+      auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                              boost::none,
+                                              rgw::IAM::s3PutObject,
+                                              s->object->get_obj());
+      if (session_policy_res == Effect::Deny) {
+          return -EACCES;
+      }
+      if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
+            (session_policy_res == Effect::Allow && e == Effect::Allow)) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+        //Intersection of session policy and identity policy plus bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || e == Effect::Allow) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+        if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) {
+          return 0;
+        }
+      }
+      return -EACCES;
+    }
+    if (e == Effect::Allow || identity_policy_res == Effect::Allow) {
       return 0;
+    }
   }
 
   if (!verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
@@ -6366,9 +6555,9 @@ int RGWDeleteMultiObj::verify_permission(optional_yield y)
     return op_ret;
   }
 
-  if (s->iam_policy || ! s->iam_user_policies.empty()) {
+  if (s->iam_policy || ! s->iam_user_policies.empty() || ! s->session_policies.empty()) {
     if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
-      auto r = eval_user_policies(s->iam_user_policies, s->env, boost::none,
+      auto r = eval_identity_or_session_policies(s->iam_user_policies, s->env, boost::none,
                                                rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key()));
       if (r == Effect::Deny) {
         bypass_perm = false;
@@ -6378,34 +6567,69 @@ int RGWDeleteMultiObj::verify_permission(optional_yield y)
         if (r == Effect::Deny) {
           bypass_perm = false;
         }
+      } else if (r == Effect::Pass && !s->session_policies.empty()) {
+        r = eval_identity_or_session_policies(s->session_policies, s->env, boost::none,
+                                               rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key()));
+        if (r == Effect::Deny) {
+          bypass_perm = false;
+        }
       }
     }
 
     bool not_versioned = rgw::sal::Object::empty(s->object.get()) || s->object->get_instance().empty();
 
-    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+    auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               not_versioned ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
                                               ARN(s->bucket->get_key()));
-    if (usr_policy_res == Effect::Deny) {
+    if (identity_policy_res == Effect::Deny) {
       return -EACCES;
     }
 
     rgw::IAM::Effect r = Effect::Pass;
+    rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     if (s->iam_policy) {
       r = s->iam_policy->eval(s->env, *s->auth.identity,
 				 not_versioned ?
 				 rgw::IAM::s3DeleteObject :
 				 rgw::IAM::s3DeleteObjectVersion,
-				 ARN(s->bucket->get_key()));
+				 ARN(s->bucket->get_key()),
+         princ_type);
     }
-    if (r == Effect::Allow)
-      return 0;
-    else if (r == Effect::Deny)
+    if (r == Effect::Deny)
       return -EACCES;
-    else if (usr_policy_res == Effect::Allow)
+
+    if (!s->session_policies.empty()) {
+      auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                              boost::none,
+                                              not_versioned ?
+                                              rgw::IAM::s3DeleteObject :
+                                              rgw::IAM::s3DeleteObjectVersion,
+                                              ARN(s->bucket->get_key()));
+      if (session_policy_res == Effect::Deny) {
+          return -EACCES;
+      }
+      if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
+            (session_policy_res == Effect::Allow && r == Effect::Allow)) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+        //Intersection of session policy and identity policy plus bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || r == Effect::Allow) {
+          return 0;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+        if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) {
+          return 0;
+        }
+      }
+      return -EACCES;
+    }
+    if (r == Effect::Allow || identity_policy_res == Effect::Allow)
       return 0;
   }
 
@@ -6490,29 +6714,69 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         ++iter) {
     std::string version_id;
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(*iter);
-    if (s->iam_policy || ! s->iam_user_policies.empty()) {
-      auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+    if (s->iam_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
+      auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               iter->instance.empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
                                               ARN(obj->get_obj()));
-      if (usr_policy_res == Effect::Deny) {
+      if (identity_policy_res == Effect::Deny) {
         send_partial_response(*iter, false, "", -EACCES);
         continue;
       }
 
       rgw::IAM::Effect e = Effect::Pass;
+      rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
       if (s->iam_policy) {
         e = s->iam_policy->eval(s->env,
 				   *s->auth.identity,
 				   iter->instance.empty() ?
 				   rgw::IAM::s3DeleteObject :
 				   rgw::IAM::s3DeleteObjectVersion,
-				   ARN(obj->get_obj()));
+				   ARN(obj->get_obj()),
+           princ_type);
       }
-      if ((e == Effect::Deny) || 
-          (usr_policy_res == Effect::Pass && e == Effect::Pass && !acl_allowed)) {
+      if (e == Effect::Deny) {
+        send_partial_response(*iter, false, "", -EACCES);
+	      continue;
+      }
+
+      if (!s->session_policies.empty()) {
+        auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                                boost::none,
+                                              iter->instance.empty() ?
+                                              rgw::IAM::s3DeleteObject :
+                                              rgw::IAM::s3DeleteObjectVersion,
+                                              ARN(obj->get_obj()));
+        if (session_policy_res == Effect::Deny) {
+          send_partial_response(*iter, false, "", -EACCES);
+	        continue;
+        }
+        if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+          //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+          if ((session_policy_res != Effect::Allow || identity_policy_res != Effect::Allow) &&
+              (session_policy_res != Effect::Allow || e != Effect::Allow)) {
+            send_partial_response(*iter, false, "", -EACCES);
+	          continue;
+          }
+        } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+          //Intersection of session policy and identity policy plus bucket policy
+          if ((session_policy_res != Effect::Allow || identity_policy_res != Effect::Allow) && e != Effect::Allow) {
+            send_partial_response(*iter, false, "", -EACCES);
+	          continue;
+          }
+        } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+          if (session_policy_res != Effect::Allow || identity_policy_res != Effect::Allow) {
+            send_partial_response(*iter, false, "", -EACCES);
+	          continue;
+          }
+        }
+        send_partial_response(*iter, false, "", -EACCES);
+	      continue;
+      }
+
+      if ((identity_policy_res == Effect::Pass && e == Effect::Pass && !acl_allowed)) {
 	      send_partial_response(*iter, false, "", -EACCES);
 	      continue;
       }
@@ -6613,7 +6877,7 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
   /* We can use global user_acl because each BulkDelete request is allowed
    * to work on entities from a single account only. */
   return verify_bucket_permission(dpp, s, binfo.bucket, s->user_acl.get(),
-				  &bacl, policy, s->iam_user_policies, rgw::IAM::s3DeleteBucket);
+				  &bacl, policy, s->iam_user_policies, s->session_policies, rgw::IAM::s3DeleteBucket);
 }
 
 bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yield y)
@@ -6939,20 +7203,47 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
   auto policy = get_iam_policy_from_attr(s->cct, battrs, binfo.bucket.tenant);
 
   bucket_owner = bacl.get_owner();
-  if (policy || ! s->iam_user_policies.empty()) {
-    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+  if (policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
+    auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                               boost::none,
                                               rgw::IAM::s3PutObject, obj);
-    if (usr_policy_res == Effect::Deny) {
+    if (identity_policy_res == Effect::Deny) {
       return false;
     }
+
+    rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     auto e = policy->eval(s->env, *s->auth.identity,
-			  rgw::IAM::s3PutObject, obj);
-    if (e == Effect::Allow) {
-      return true;
-    } else if (e == Effect::Deny) {
+			  rgw::IAM::s3PutObject, obj, princ_type);
+    if (e == Effect::Deny) {
       return false;
-    } else if (usr_policy_res == Effect::Allow) {
+    }
+  
+    if (!s->session_policies.empty()) {
+      auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
+                                              boost::none,
+                                              rgw::IAM::s3PutObject, obj);
+      if (session_policy_res == Effect::Deny) {
+          return false;
+      }
+      if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
+            (session_policy_res == Effect::Allow && e == Effect::Allow)) {
+          return true;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+        //Intersection of session policy and identity policy plus bucket policy
+        if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || e == Effect::Allow) {
+          return true;
+        }
+      } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+        if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (e == Effect::Allow || identity_policy_res == Effect::Allow) {
       return true;
     }
   }
