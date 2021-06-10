@@ -169,15 +169,24 @@ PyObject *ActivePyModules::get_daemon_status_python(
 }
 
 bool ttl_cache_on() {
-  return g_conf().get_val<int64_t>("mgr_ttl_cache_expire_seconds") > 0;
+  return g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds") > 0;
+}
+
+void ActivePyModules::update_ttl_cache() {
+  ttl_cache.set_ttl(g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds"));
 }
 
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
+  update_ttl_cache();
   if(ttl_cache_on()) {
-    PyObject *cached = ttl_cache.get(what);
+    boost::optional<PyObject*> cached = ttl_cache.get(what);
+    ttl_cache.set_erase_callback([](PyObject *obj) {
+	Py_DECREF(obj);
+    });
     if (cached) {
-      return cached;
+      Py_INCREF(*cached);
+      return *cached;
     }
   }
   PyObject *obj = _get_python(what);

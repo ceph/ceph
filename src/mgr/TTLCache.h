@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Python.h>
+#include <boost/optional.hpp>
 #include <chrono>
-#include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -48,13 +48,13 @@ public:
   std::pair<uint64_t, uint64_t> get_hit_miss_ratio() {
     return std::make_pair(hits, misses);
   }
+  int size() { return content.size(); }
   ~Cache(){};
 };
 
 typedef std::chrono::time_point<std::chrono::steady_clock> ttl_time_point;
 template <class Key, class Value>
-class TTLCache
-    : public Cache<Key, std::pair<Value, ttl_time_point>> {
+class TTLCache : public Cache<Key, std::pair<Value, ttl_time_point>> {
 private:
   uint16_t ttl;
   typedef std::pair<Value, ttl_time_point> value_type;
@@ -63,26 +63,28 @@ private:
   ttl_time_point get_value_time_point(Key key);
   bool exists(Key key);
   bool expired(Key key);
-  void update_ttl();
+  std::function<void(Value)> erase_callback = nullptr;
 
 public:
   TTLCache(uint16_t ttl_ = 0, uint16_t size = UINT16_MAX)
       : Cache<Key, value_type>(size), ttl{ttl_} {
+
   }
   ~TTLCache(){};
   void insert(Key key, Value value);
-  Value get(Key key);
+  boost::optional<Value> get(Key key);
   void erase(Key key);
   void clear();
   void set_ttl(uint16_t ttl);
+  void set_erase_callback(std::function<void(Value)> cb) { erase_callback = cb; }
 };
 
 template <class Key, class Value>
 void TTLCache<Key, Value>::insert(Key key, Value value) {
   auto now = std::chrono::steady_clock::now();
 
-  update_ttl();
-  if(!ttl) return;
+  if (!ttl)
+    return;
   uint16_t ttl_spread = ttl * 0.25;
   // in order not to have spikes of misses we increase or decrease by 25% of
   // the ttl
@@ -93,29 +95,23 @@ void TTLCache<Key, Value>::insert(Key key, Value value) {
 }
 
 template <class Key, class Value>
-void TTLCache<Key, Value>::update_ttl() {
-	ttl = g_conf().get_val<int64_t>("mgr_ttl_cache_expire_seconds");
-}
-
-template <class Key, class Value> Value TTLCache<Key, Value>::get(Key key) {
+boost::optional<Value> TTLCache<Key, Value>::get(Key key) {
+  boost::optional<Value> value;
   if (!this->exists(key)) {
-    return nullptr;
+    return value;
   }
   if (expired(key)) {
-             << Py_REFCNT(get_value(key)) << "\n";
     erase(key);
-    return nullptr;
-  }
-  if (PyObject *obj = dynamic_cast<PyObject *>(get_value(key))) {
-    Py_INCREF(obj);
+    return value;
   }
   this->Cache<Key, value_type>::hit();
-  return get_value(key);
+  value = {get_value(key)};
+  return value;
 }
 
 template <class Key, class Value> void TTLCache<Key, Value>::erase(Key key) {
-  if (PyObject *obj = dynamic_cast<PyObject *>(get_value(key))) {
-    Py_DECREF(obj);
+  if (erase_callback) {
+    erase_callback(get_value(key));
   }
   this->Cache<Key, value_type>::erase(key);
 }
