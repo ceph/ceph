@@ -8077,6 +8077,81 @@ int sparsify(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+#define RWLCACHE_MAP_KEY "rwlcache_map"
+
+/**
+ * Report rwlcache daemon-info
+ *
+ * Input:
+ * @param daemon info (cls::rbd::RwlCacheDaemonInfo)
+ *
+ * Output:
+ * @return -EEXIST if daemon_id or rdma_address&rdma_port existed.
+ * @returns 0 on success, negative error code on failure
+ *
+ */
+int rwlcache_daemoninfo(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::RwlCacheDaemonInfo info;
+  cls_rbd_rwlcache_map map;
+
+  try {
+    auto it = in->cbegin();
+    decode(info, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "new rwlcache daemon id=%lu, rdma_address=%s:%u, total_size=%lu",
+      info.id, info.rdma_address.c_str(), info.rdma_port, info.total_size);
+
+  bufferlist value;
+  int r = cls_cxx_map_get_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if ((r < 0) && (r != -ENOENT)) {
+    CLS_ERR("error reading key %s: %s", RWLCACHE_MAP_KEY, cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (r >= 0) {
+    try {
+      auto it = value.cbegin();
+      decode(map, it);
+    } catch (ceph::buffer::error &err) {
+      CLS_ERR("decode %s error", RWLCACHE_MAP_KEY);
+      return -EIO;
+    }
+  }
+
+  if (map.daemons.count(info.id)) {
+    CLS_LOG(5, "existed daemon id (%lu)", info.id);
+    return -EEXIST;
+  }
+
+  for (const auto &[id, daemon] : map.daemons) {
+    if ((daemon.rdma_address == info.rdma_address) &&
+	(daemon.rdma_port == info.rdma_port)) {
+      CLS_LOG(10, "existed rdma_address && rdma_port");
+      return -EEXIST;
+    }
+  }
+
+  entity_inst_t inst;;
+  r = cls_get_request_origin(hctx, &inst);
+  ceph_assert(r == 0);
+
+  map.daemons.emplace(info.id, cls_rbd_rwlcache_map::Daemon(info, inst));
+
+  value.clear();
+  encode(map, value, get_encode_features(hctx));
+
+  r = cls_cxx_map_set_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if (r < 0) {
+    CLS_ERR("error updating daemon info: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
 CLS_INIT(rbd)
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -8212,6 +8287,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_sparse_copyup;
   cls_method_handle_t h_assert_snapc_seq;
   cls_method_handle_t h_sparsify;
+  cls_method_handle_t h_rwlcache_daemoninfo;
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
@@ -8625,4 +8701,10 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "sparsify",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  sparsify, &h_sparsify);
+
+  /* rwl_cache_map object methods */
+  cls_register_cxx_method(h_class, "rwlcache_daemoninfo",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  rwlcache_daemoninfo, &h_rwlcache_daemoninfo);
+
 }

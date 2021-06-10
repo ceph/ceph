@@ -1018,6 +1018,19 @@ std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state);
 
 void sanitize_entity_inst(entity_inst_t* entity_inst);
 
+#define RBD_RWLCACHE_MAP_OBJECT_NAME "rbd_rwlcache_map"
+
+struct RwlCacheDaemonInfo {
+    uint64_t id;
+    std::string rdma_address;
+    int32_t rdma_port;
+    uint64_t total_size;
+
+    void encode(ceph::buffer::list &bl) const;
+    void decode(ceph::buffer::list::const_iterator &it);
+};
+WRITE_CLASS_ENCODER(RwlCacheDaemonInfo)
+
 } // namespace rbd
 } // namespace cls
 

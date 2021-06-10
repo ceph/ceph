@@ -9,6 +9,7 @@
 #include "include/rbd_types.h"
 #include "common/Formatter.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "common/Clock.h"
 
 /// information about our parent image, if any
 struct cls_rbd_parent {
@@ -259,6 +260,20 @@ struct cls_rbd_rwlcache_map {
     utime_t expiration;
 
     struct entity_addr_t daemon_addr;
+
+    Daemon() {
+    }
+
+    Daemon(const cls::rbd::RwlCacheDaemonInfo &info,
+	   const entity_inst_t &inst) :
+      id(info.id),
+      rdma_address(info.rdma_address),
+      rdma_port(info.rdma_port),
+      total_size(info.total_size),
+      free_size(info.total_size),
+      expiration(ceph_clock_now()),
+      daemon_addr(inst.addr) {
+    }
 
     void encode(ceph::buffer::list &bl, uint64_t features) const {
       ENCODE_START(1, 1, bl);

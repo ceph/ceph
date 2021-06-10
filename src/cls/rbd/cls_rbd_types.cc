@@ -1351,5 +1351,25 @@ void sanitize_entity_inst(entity_inst_t* entity_inst) {
   entity_inst->addr.set_type(entity_addr_t::TYPE_ANY);
 }
 
+void RwlCacheDaemonInfo::encode(bufferlist &bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(id, bl);
+  encode(rdma_address, bl);
+  encode(rdma_port, bl);
+  encode(total_size, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheDaemonInfo::decode(bufferlist::const_iterator &it) {
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(id, it);
+  decode(rdma_address, it);
+  decode(rdma_port, it);
+  decode(total_size, it);
+  DECODE_FINISH(it);
+}
+
 } // namespace rbd
 } // namespace cls
