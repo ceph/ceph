@@ -196,4 +196,8 @@ ceph::bufferlist encode_record(
   return bl;
 }
 
+bool need_delayed_allocation(device_type_t type) {
+  return type <= RANDOM_BLOCK;
+}
+
 }

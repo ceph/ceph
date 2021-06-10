@@ -238,6 +238,21 @@ using objaddr_t = uint32_t;
 constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
 constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX - 1;
 
+enum class ool_placement_hint_t {
+  NONE,     /// Denotes empty hint
+  NUM_HINTS /// Constant for number of hints
+};
+
+enum device_type_t {
+  NONE = 0,
+  SEGMENTED, // i.e. Hard_Disk, SATA_SSD, NAND_NVME
+  RANDOM_BLOCK, // i.e. RANDOM_BD
+  PMEM, // i.e. NVDIMM, PMEM
+  NUM_TYPES
+};
+
+bool need_delayed_allocation(device_type_t type);
+
 /* Monotonically increasing identifier for the location of a
  * journal_record.
  */

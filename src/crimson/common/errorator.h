@@ -782,6 +782,11 @@ public:
     }
   };
 
+  template <typename T>
+  static future<T> make_errorator_future(seastar::future<T>&& fut) {
+    return std::move(fut);
+  }
+
   // assert_all{ "TODO" };
   class assert_all {
     const char* const msg = nullptr;

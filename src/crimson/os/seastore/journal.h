@@ -22,6 +22,7 @@
 namespace crimson::os::seastore {
 
 class SegmentProvider;
+class SegmentedAllocator;
 
 /**
  * Manages stream of atomically written records to a SegmentManager.
@@ -315,6 +316,7 @@ private:
   );
 
   extent_len_t max_record_length() const;
+  friend class crimson::os::seastore::SegmentedAllocator;
 };
 using JournalRef = std::unique_ptr<Journal>;
 

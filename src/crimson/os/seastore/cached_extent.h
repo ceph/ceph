@@ -17,9 +17,12 @@
 
 namespace crimson::os::seastore {
 
+class ool_record_t;
 class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
+class SegmentedAllocator;
+class TransactionManager;
 
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
@@ -320,6 +323,15 @@ public:
 
   virtual ~CachedExtent();
 
+  /// type of the backend device that will hold this extent
+  device_type_t backend_type = device_type_t::NONE;
+
+  /// hint for allocators
+  ool_placement_hint_t hint;
+
+  bool is_relative() const {
+    return poffset.is_relative();
+  }
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -456,6 +468,9 @@ protected:
     }
   }
 
+  friend class crimson::os::seastore::ool_record_t;
+  friend class crimson::os::seastore::SegmentedAllocator;
+  friend class crimson::os::seastore::TransactionManager;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
