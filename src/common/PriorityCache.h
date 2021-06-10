@@ -34,6 +34,8 @@ namespace PriorityCache {
     M_MAPPED_BYTES,
     M_UNMAPPED_BYTES,
     M_HEAP_BYTES,
+    M_MAX_THREADCACHE_BYTES,
+    M_CURR_THREADCACHE_BYTES,
     M_CACHE_BYTES,
     M_LAST,
   };
