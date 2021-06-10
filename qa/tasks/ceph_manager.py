@@ -2888,13 +2888,13 @@ class CephManager:
         Loop until quorum size is reached.
         """
         self.log('waiting for quorum size %d' % size)
-        start = time.time()
-        while not len(self.get_mon_quorum()) == size:
-            if timeout is not None:
-                assert time.time() - start < timeout, \
-                    ('failed to reach quorum size %d '
-                     'before timeout expired' % size)
-            time.sleep(3)
+        sleep = 3
+        with safe_while(sleep=sleep,
+                        tries=timeout // sleep,
+                        action=f'wait for quorum size {size}') as proceed:
+            while proceed():
+                if len(self.get_mon_quorum()) == size:
+                    break
         self.log("quorum is size %d" % size)
 
     def get_mon_health(self, debug=False):
