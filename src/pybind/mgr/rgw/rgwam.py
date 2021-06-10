@@ -21,6 +21,9 @@ from urllib.parse import urlparse
 
 from .types import RGWAMException, RGWAMCmdRunException, RGWPeriod, RGWUser, RealmToken
 
+from ceph.deployment.service_spec import RGWSpec
+
+
 DEFAULT_PORT = 8000
 
 log = logging.getLogger(__name__)
@@ -47,21 +50,22 @@ def get_endpoints(endpoints, period = None):
         port += 1
 
 
-class CephCommonArgs:
-    def __init__(self, ceph_conf, ceph_name, ceph_keyring):
+class EnvArgs:
+    def __init__(self, mgr, ceph_conf, ceph_name, ceph_keyring):
+        self.mgr = mgr
         self.ceph_conf = ceph_conf
         self.ceph_name = ceph_name
         self.ceph_keyring = ceph_keyring
 
 class RGWCmdBase:
-    def __init__(self, prog, common_args):
+    def __init__(self, prog, env):
         self.cmd_prefix = [ prog ]
-        if common_args.ceph_conf:
-            self.cmd_prefix += [ '-c', common_args.ceph_conf ]
-        if common_args.ceph_name:
-            self.cmd_prefix += [ '-n', common_args.ceph_name ]
-        if common_args.ceph_keyring:
-            self.cmd_prefix += [ '-k', common_args.ceph_keyring ]
+        if env.ceph_conf:
+            self.cmd_prefix += [ '-c', env.ceph_conf ]
+        if env.ceph_name:
+            self.cmd_prefix += [ '-n', env.ceph_name ]
+        if env.ceph_keyring:
+            self.cmd_prefix += [ '-k', env.ceph_keyring ]
 
     def run(self, cmd):
         run_cmd = self.cmd_prefix + cmd
@@ -82,12 +86,12 @@ class RGWCmdBase:
         return (stdout, stderr)
 
 class RGWAdminCmd(RGWCmdBase):
-    def __init__(self, common_args):
-        super().__init__('radosgw-admin', common_args)
+    def __init__(self, env):
+        super().__init__('radosgw-admin', env)
 
 class RGWAdminJSONCmd(RGWAdminCmd):
-    def __init__(self, common_args):
-        super().__init__(common_args)
+    def __init__(self, env):
+        super().__init__(env)
 
     def run(self, cmd):
         stdout, _ = RGWAdminCmd.run(self, cmd)
@@ -96,12 +100,12 @@ class RGWAdminJSONCmd(RGWAdminCmd):
 
 
 class RGWCmd(RGWCmdBase):
-    def __init__(self, common_args):
-        super().__init__('radosgw', common_args)
+    def __init__(self, env):
+        super().__init__('radosgw', env)
 
 class RealmOp(RGWAdminCmd):
-    def __init__(self, common_args):
-        super().__init__(common_args)
+    def __init__(self, env):
+        super().__init__(env)
         
     def get(self):
         params = [ 'realm',
@@ -136,8 +140,8 @@ class RealmOp(RGWAdminCmd):
         return RGWAdminJSONCmd.run(self, params)
 
 class ZonegroupOp(RGWAdminCmd):
-    def __init__(self, common_args):
-        super().__init__(common_args)
+    def __init__(self, env):
+        super().__init__(env)
         
     def create(self, realm, name = None, endpoints = None, is_master = True, is_default = True):
         self.name = name
@@ -163,8 +167,8 @@ class ZonegroupOp(RGWAdminCmd):
         return self.info
 
 class ZoneOp(RGWAdminCmd):
-    def __init__(self, common_args):
-        super().__init__(common_args)
+    def __init__(self, env):
+        super().__init__(env)
         
     def get(self):
         params = [ 'zone',
@@ -221,8 +225,8 @@ class ZoneOp(RGWAdminCmd):
         return RGWAdminJSONCmd.run(self, params)
 
 class PeriodOp(RGWAdminCmd):
-    def __init__(self, common_args):
-        super().__init__(common_args)
+    def __init__(self, env):
+        super().__init__(env)
         
     def update(self, realm, commit = True):
 
@@ -245,8 +249,8 @@ class PeriodOp(RGWAdminCmd):
         return RGWAdminJSONCmd.run(self, params)
 
 class UserOp(RGWAdminCmd):
-    def __init__(self, common_args):
-        super().__init__(common_args)
+    def __init__(self, env):
+        super().__init__(env)
         
     def create(self, uid = None, uid_prefix = None, display_name = None, email = None, is_system = False):
         self.uid = uid
@@ -272,23 +276,23 @@ class UserOp(RGWAdminCmd):
         return RGWAdminJSONCmd.run(self, params)
 
 class RGWAM:
-    def __init__(self, common_args):
-        self.common_args = common_args
+    def __init__(self, env):
+        self.env = env
 
     def realm_op(self):
-        return RealmOp(self.common_args)
+        return RealmOp(self.env)
 
     def period_op(self):
-        return PeriodOp(self.common_args)
+        return PeriodOp(self.env)
 
     def zonegroup_op(self):
-        return ZonegroupOp(self.common_args)
+        return ZonegroupOp(self.env)
 
     def zone_op(self):
-        return ZoneOp(self.common_args)
+        return ZoneOp(self.env)
 
     def user_op(self):
-        return UserOp(self.common_args)
+        return UserOp(self.env)
 
     def realm_bootstrap(self, realm, zonegroup, zone, endpoints, sys_uid, uid, start_radosgw):
         endpoints = get_endpoints(endpoints)
@@ -365,7 +369,12 @@ class RGWAM:
             ep = eps[0]
             if start_radosgw:
                 o = urlparse(ep)
-                self.run_radosgw(port = o.port)
+                svc_id = realm_name  + '.' + zone_name
+                spec = RGWSpec(service_id = svc_id,
+                               rgw_realm = realm_name,
+                               rgw_zone = zone_name,
+                               rgw_frontend_port = o.port)
+                self.env.mgr.apply_rgw(spec)
 
         realm_token = RealmToken(ep, sys_user.uid, sys_access_key, sys_secret)
 
@@ -483,15 +492,43 @@ class RGWAM:
 
         logging.debug(period.to_json())
 
-        if start_radosgw:
-            eps = endpoints.split(',')
-            ep = ''
-            if len(eps) > 0:
-                ep = eps[0]
-                o = urlparse(ep)
-                ret = self.run_radosgw(port = o.port)
-                if not ret:
-                    logging.warning('failed to start radosgw')
+        svc_id = realm_name  + '.' + zone_name
+
+        #if endpoints:
+        #    eps = endpoints.split(',')
+        #    ep = ''
+        #    if len(eps) > 0:
+        #        ep = eps[0]
+        #        o = urlparse(ep)
+        #        port = o.port
+        #        spec = RGWSpec(service_id = svc_id,
+        #                       rgw_realm = realm_name,
+        #                       rgw_zone = zone_name,
+        #                       rgw_frontend_port = o.port)
+        #        self.env.mgr.apply_rgw(spec)
+
+        spec = RGWSpec(service_id = svc_id,
+                       rgw_realm = realm_name,
+                       rgw_zone = zone_name)
+
+        completion = self.env.mgr.apply_rgw(spec)
+        orchestrator.raise_if_exception(completion)
+
+        completion = self.env.mgr.list_daemons(svc_id, 'rgw', refresh=True)
+
+        daemons = orchestrator.raise_if_exception(completion)
+
+        ep = []
+        for s in daemons:
+            for p in s.ports:
+                ep.append('http://%s:%d' % (s.hostname, p))
+
+        log.error('ERROR: ep=%s' % ','.join(ep))
+
+        try:
+            zone_info = self.zone_op().modify(zone_name, endpoints = ','.join(ep))
+        except RGWAMException as e:
+            raise RGWAMException('failed to modify zone', e)
 
         return (0, success_message, '')
 
@@ -513,7 +550,7 @@ class RGWAM:
         if debug_rgw:
             params += [ '--debug-rgw', debug_rgw ]
 
-        (retcode, stdout, stderr) = RGWCmd(self.common_args).run(params)
+        (retcode, stdout, stderr) = RGWCmd(self.env).run(params)
 
         return (retcode, stdout, stderr)
 

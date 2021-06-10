@@ -4,33 +4,40 @@ import os
 import subprocess
 
 from mgr_module import MgrModule, CLICommand, HandleCommandResult, Option
+import orchestrator
 
 from typing import cast, Any, Optional, Sequence
 
 from . import *
 from .types import RGWAMException
-from .rgwam import CephCommonArgs, RGWAM
+from .rgwam import EnvArgs, RGWAM
 
 
-class Module(MgrModule):
+class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS = []
 
     # These are "native" Ceph options that this module cares about.
     NATIVE_OPTIONS = []
 
     def __init__(self, *args: Any, **kwargs: Any):
-        super().__init__(*args, **kwargs)
+        self.inited = False
+        self.lock = threading.Lock()
+        super(Module, self).__init__(*args, **kwargs)
+
+        # ensure config options members are initialized; see config_notify()
+        self.config_notify()
+
+        with self.lock:
+            self.inited = True
+            self.env = EnvArgs(self,
+                               str(self.get_ceph_conf_path()),
+                               f'mgr.{self.get_mgr_id()}',
+                               str(self.get_ceph_option('keyring')))
 
         # set up some members to enable the serve() method and shutdown()
         self.run = True
         self.event = threading.Event()
 
-        # ensure config options members are initialized; see config_notify()
-        self.config_notify()
-
-        self.ceph_common_args = CephCommonArgs(str(self.get_ceph_conf_path()),
-                                 f'mgr.{self.get_mgr_id()}',
-                                 str(self.get_ceph_option('keyring')))
 
 
     def config_notify(self) -> None:
@@ -86,7 +93,7 @@ class Module(MgrModule):
 
 
         try:
-            retval, out, err = RGWAM(self.ceph_common_args).realm_bootstrap(realm_name, zonegroup_name,
+            retval, out, err = RGWAM(self.env).realm_bootstrap(realm_name, zonegroup_name,
                     zone_name, endpoints, sys_uid, uid, start_radosgw)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
@@ -101,7 +108,7 @@ class Module(MgrModule):
         """Create credentials for new zone creation"""
 
         try:
-            retval, out, err = RGWAM(self.ceph_common_args).realm_new_zone_creds(endpoints, sys_uid)
+            retval, out, err = RGWAM(self.env).realm_new_zone_creds(endpoints, sys_uid)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return (e.retcode, e.message, e.stderr)
@@ -118,7 +125,7 @@ class Module(MgrModule):
         """Bootstrap new rgw zone that syncs with existing zone"""
 
         try:
-            retval, out, err = RGWAM(self.ceph_common_args).zone_create(realm_token, zonegroup_name,
+            retval, out, err = RGWAM(self.env).zone_create(realm_token, zonegroup_name,
                     zone_name, endpoints, start_radosgw)
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
