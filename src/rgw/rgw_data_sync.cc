@@ -2805,8 +2805,11 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
                                                                     source_bucket_info.bucket,
                                                                     dest_bucket))
 {
-  int num_shards = (source_bucket_info.layout.current_index.layout.normal.num_shards <= 0 ? 
-                    1 : source_bucket_info.layout.current_index.layout.normal.num_shards);
+  rgw_bucket_index_marker_info remote_info;
+  BucketIndexShardsManager remote_markers;
+  rgw_read_remote_bilog_info(dpp, conn, source_bucket_info.bucket,
+                             remote_info, remote_markers, null_yield);
+  int num_shards = remote_markers.get().size();
 
   sync_pairs.resize(num_shards);
 
@@ -5159,6 +5162,8 @@ class RGWSyncBucketCR : public RGWCoroutine {
   rgw_bucket_index_marker_info info;
 
   RGWSyncTraceNodeRef tn;
+  rgw_bucket_index_marker_info remote_info;
+  BucketIndexShardsManager remote_markers;
 
 public:
   RGWSyncBucketCR(RGWDataSyncCtx *_sc,
@@ -5341,7 +5346,9 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
         // init sync status
         yield {
           init_check_compat = objv.read_version.ver <= 1; // newly-created
-          const int num_shards = sync_pipe.dest_bucket_info.layout.current_index.layout.normal.num_shards;
+          rgw_read_remote_bilog_info(dpp, sc->conn, sync_pair.source_bs.bucket,
+                                      remote_info, remote_markers, null_yield);
+          const int num_shards = remote_markers.get().size();
           call(new InitBucketFullSyncStatusCR(sc, sync_pair, status_obj,
                                               bucket_status, objv, num_shards,
                                               init_check_compat, info));
