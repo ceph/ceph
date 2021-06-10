@@ -524,7 +524,9 @@ class [[nodiscard]] interruptible_future_detail<
   : private ErroratedFuture<::crimson::errorated_future_marker<T>>
 {
 public:
-  using core_type = ErroratedFuture<::crimson::errorated_future_marker<T>>;
+  using core_type = ErroratedFuture<crimson::errorated_future_marker<T>>;
+  using errorator_type = typename core_type::errorator_type;
+
   template <typename U>
   using interrupt_futurize_t =
     typename interruptor<InterruptCond>::template futurize_t<U>;
@@ -542,14 +544,7 @@ public:
   [[gnu::always_inline]]
   interruptible_future_detail(
     ErroratedFuture2<::crimson::errorated_future_marker<U...>>&& fut)
-    : core_type(std::move(fut)) {
-    using src_errorator_t = \
-      typename ErroratedFuture2<
-	::crimson::errorated_future_marker<U...>>::errorator_type;
-    static_assert(core_type::errorator_type::template contains_once_v<
-		    src_errorator_t>,
-		  "conversion is only possible from less-or-eq errorated future!");
-  }
+    : core_type(std::move(fut)) {}
 
   template <template <typename...> typename ErroratedFuture2,
 	    typename... U>
