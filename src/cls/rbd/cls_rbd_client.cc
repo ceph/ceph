@@ -3046,5 +3046,28 @@ int rwlcache_request(librados::IoCtx *ioctx, struct cls::rbd::RwlCacheRequest &r
   return 0;
 }
 
+int rwlcache_get_cacheinfo(librados::IoCtx *ioctx, epoch_t cache_id, struct cls::rbd::RwlCacheInfo &cache)
+{
+  bufferlist in, out;
+  librados::ObjectReadOperation op;
+
+  encode(cache_id, in);
+  op.exec("rbd", "rwlcache_get_cacheinfo", in);
+
+  int r = ioctx->operate(RBD_RWLCACHE_MAP_OBJECT_NAME, &op, &out);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out.cbegin();
+  try {
+    decode(cache, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+
+  return 0;
+}
+
 } // namespace cls_client
 } // namespace librbd
