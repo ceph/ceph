@@ -798,6 +798,35 @@ public:
     auto fut = core_type::finally(std::forward<Func>(func));
     return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
   }
+
+  template <typename Func>
+  [[gnu::always_inline]]
+  auto handle_interruption(Func&& func) {
+    // see errorator.h safe_then definition
+    using func_result_t =
+      typename std::invoke_result<Func, std::exception_ptr>::type;
+    using func_ertr_t =
+      typename core_type::template get_errorator_t<func_result_t>;
+    using this_ertr_t = typename core_type::errorator_type;
+    using ret_ertr_t = typename this_ertr_t::template extend_ertr<func_ertr_t>;
+    using futurator_t = typename ret_ertr_t::template futurize<func_result_t>;
+    return core_type::then_wrapped(
+      [func=std::move(func),
+       interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable
+      -> typename futurator_t::type {
+	if (fut.failed()) {
+	  std::exception_ptr ex = fut.get_exception();
+	  if (interrupt_condition->is_interruption(ex)) {
+	    return futurator_t::invoke(std::move(func), std::move(ex));
+	  } else {
+	    return futurator_t::make_exception_future(std::move(ex));
+	  }
+	} else {
+	  return std::move(fut);
+	}
+      });
+  }
+
 private:
   ErroratedFuture<::crimson::errorated_future_marker<T>>
   to_future() {
