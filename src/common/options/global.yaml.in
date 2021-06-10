@@ -3682,6 +3682,29 @@ options:
   min: 896_M
   flags:
   - runtime
+- name: osd_memory_thread_cache_bytes
+  type: size
+  level: basic
+  desc: When tcmalloc is enabled it specifies thread cache size
+  long_desc: Sets tcmalloc.max_total_thread_cache_bytes value.
+    If set this will override settings privided via environment variable
+    TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES.
+  fmt_desc: TCMalloc assigns each thread a thread-local cache.
+    Small allocations are satisfied from the thread-local cache.
+    Objects are moved from central data structures into a thread-local cache as needed,
+    and periodic garbage collections are used to migrate memory back from
+    a thread-local cache into the central data structures.
+    Programs with intensive use of dynamic memory for thread-local, short-lived objects
+    do benefit greately from having large cache.
+    TCMalloc default - 32_M. TCMalloc minimum - 512_K. Recommended for OSD - 128_M.
+  default: 0
+  see_also:
+  - bluestore_cache_autotune
+  - osd_memory_cache_min
+  - osd_memory_base
+  - osd_memory_target_autotune
+  flags:
+  - runtime
 - name: osd_memory_target_autotune
   type: bool
   default: false

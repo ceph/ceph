@@ -54,4 +54,5 @@ bool ceph_heap_set_numeric_property(const char *property, size_t value);
 void ceph_heap_profiler_handle_command(const std::vector<std::string> &cmd,
                                        std::ostream& out);
 
+void ceph_heap_track_thread_cache(const char* conf_variable_name);
 #endif /* HEAP_PROFILER_H_ */
