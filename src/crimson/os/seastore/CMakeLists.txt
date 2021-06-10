@@ -30,6 +30,7 @@ add_library(crimson-seastore STATIC
   collection_manager.cc
   collection_manager/flat_collection_manager.cc
   collection_manager/collection_flat_node.cc
+  extent_placement_manager.cc
   object_data_handler.cc
   seastore.cc
   random_block_manager/nvme_manager.cc
