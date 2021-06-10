@@ -8707,7 +8707,7 @@ next:
       }
     }
 
-    auto datalog_svc = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados;
+    auto datalog_svc = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog;
     RGWDataChangesLog::LogMarker log_marker;
 
     do {
@@ -8752,7 +8752,7 @@ next:
       list<cls_log_entry> entries;
 
       RGWDataChangesLogInfo info;
-      static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->get_info(dpp(), i, &info);
+      static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->get_info(dpp(), i, &info);
 
       ::encode_json("info", info, formatter.get());
 
@@ -8811,7 +8811,7 @@ next:
 
     // loop until -ENODATA
     do {
-      auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados;
+      auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog;
       ret = datalog->trim_entries(dpp(), shard_id, marker);
     } while (ret == 0);
 
@@ -8826,7 +8826,7 @@ next:
       std::cerr << "log-type not specified." << std::endl;
       return -EINVAL;
     }
-    auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados;
+    auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog;
     ret = datalog->change_format(dpp(), *opt_log_type, null_yield);
     if (ret < 0) {
       cerr << "ERROR: change_format(): " << cpp_strerror(-ret) << std::endl;
@@ -8835,7 +8835,7 @@ next:
   }
 
   if (opt_cmd == OPT::DATALOG_PRUNE) {
-    auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados;
+    auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog;
     std::optional<uint64_t> through;
     ret = datalog->trim_generations(dpp(), through);
 

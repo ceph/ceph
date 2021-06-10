@@ -69,7 +69,6 @@ class RGWSI_SysObj;
 class RGWSI_SysObj_Core;
 class RGWSI_SysObj_Cache;
 class RGWSI_User;
-class RGWSI_User_RADOS;
 class RGWDataChangesLog;
 
 struct RGWServices_Def
@@ -96,8 +95,8 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj> sysobj;
   std::unique_ptr<RGWSI_SysObj_Core> sysobj_core;
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
-  std::unique_ptr<RGWSI_User_RADOS> user_rados;
-  std::unique_ptr<RGWDataChangesLog> datalog_rados;
+  std::unique_ptr<RGWSI_User> user;
+  std::unique_ptr<RGWDataChangesLog> datalog;
 
   RGWServices_Def();
   ~RGWServices_Def();
@@ -120,7 +119,7 @@ struct RGWServices
   RGWSI_BucketIndex *bi{nullptr};
   RGWSI_BILog *bilog{nullptr};
   RGWSI_Cls *cls{nullptr};
-  RGWDataChangesLog *datalog_rados{nullptr};
+  RGWDataChangesLog *datalog{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
   RGWSI_Meta *meta{nullptr};
   RGWSI_MetaBackend *meta_be_sobj{nullptr};

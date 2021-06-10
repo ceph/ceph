@@ -45,7 +45,7 @@ class DatalogTrimImplCR : public RGWSimpleCoroutine {
   int send_request(const DoutPrefixProvider *dpp) override {
     set_status() << "sending request";
     cn = stack->create_completion_notifier();
-    return store->svc()->datalog_rados->trim_entries(dpp, shard, marker,
+    return store->svc()->datalog->trim_entries(dpp, shard, marker,
 						     cn->completion());
   }
   int request_complete() override {
@@ -59,7 +59,7 @@ class DatalogTrimImplCR : public RGWSimpleCoroutine {
     }
     // nothing left to trim, update last_trim_marker
     if (*last_trim_marker < marker &&
-	marker != store->svc()->datalog_rados->max_marker()) {
+	marker != store->svc()->datalog->max_marker()) {
       *last_trim_marker = marker;
     }
     return 0;
@@ -114,7 +114,7 @@ class DataLogTrimCR : public RGWCoroutine {
       zone_id(store->svc()->zone->get_zone().id),
       peer_status(store->svc()->zone->get_zone_data_notify_to_map().size()),
       min_shard_markers(num_shards,
-			std::string(store->svc()->datalog_rados->max_marker())),
+			std::string(store->svc()->datalog->max_marker())),
       last_trim(last_trim)
   {}
 
@@ -205,7 +205,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
                     int num_shards, utime_t interval)
     : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards), interval(interval),
-      lock_oid(store->svc()->datalog_rados->get_oid(0, 0)),
+      lock_oid(store->svc()->datalog->get_oid(0, 0)),
       lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       last_trim(num_shards)
   {}

@@ -586,7 +586,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
 
   // Note that last_marker is updated to be the marker of the last
   // entry listed
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->list_entries(this, shard_id,
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->list_entries(this, shard_id,
 						     max_entries, entries,
 						     marker, &last_marker,
 						     &truncated);
@@ -647,7 +647,7 @@ void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->get_info(this, shard_id, &info);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->get_info(this, shard_id, &info);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
@@ -745,7 +745,7 @@ void RGWOp_DATALog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->trim_entries(this, shard_id, marker);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->trim_entries(this, shard_id, marker);
 }
 
 // not in header to avoid pulling in rgw_sync.h
