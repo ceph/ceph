@@ -1033,6 +1033,7 @@ std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state);
 void sanitize_entity_inst(entity_inst_t* entity_inst);
 
 #define RBD_RWLCACHE_MAP_OBJECT_NAME "rbd_rwlcache_map"
+#define RBD_RWLCACHE_REQUEST_ACK_TIMEOUT 120 //Unit is second
 
 struct RwlCacheDaemonInfo {
     uint64_t id;
@@ -1044,6 +1045,16 @@ struct RwlCacheDaemonInfo {
     void decode(ceph::buffer::list::const_iterator &it);
 };
 WRITE_CLASS_ENCODER(RwlCacheDaemonInfo)
+
+struct RwlCacheRequest{
+  uint64_t id;
+  uint64_t size;
+  uint32_t copies;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+};
+WRITE_CLASS_ENCODER(RwlCacheRequest)
 
 } // namespace rbd
 } // namespace cls
