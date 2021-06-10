@@ -4084,7 +4084,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_max_write_op_reply_len", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(32)
+    .set_default(64)
     .set_description("Max size of the per-op payload for requests with the RETURNVEC flag set")
     .set_long_description("This value caps the amount of data (per op; a request may have many ops) that will be sent back to the client and recorded in the PG log."),
 
