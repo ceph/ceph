@@ -1105,7 +1105,7 @@ static void show_roles_info(vector<std::unique_ptr<rgw::sal::RGWRole>>& roles, F
 }
 
 static void show_reshard_status(
-  const list<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
+  const vector<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
 {
   formatter->open_array_section("status");
   for (const auto& entry : status) {
@@ -7025,7 +7025,7 @@ next:
     }
 
     RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), bucket->get_attrs(), nullptr /* no callback */);
-    list<cls_rgw_bucket_instance_entry> status;
+    std::vector<cls_rgw_bucket_instance_entry> status;
     int r = br.get_status(dpp(), &status);
     if (r < 0) {
       cerr << "ERROR: could not get resharding status for bucket " <<
@@ -8142,7 +8142,7 @@ next:
       max_entries = 1000;
 
     do {
-      list<rgw_bi_log_entry> entries;
+      std::vector<rgw_bi_log_entry> entries;
       ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_list(dpp(), bucket->get_info(), shard_id, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -8151,7 +8151,7 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_bi_log_entry& entry = *iter;
         encode_json("entry", entry, formatter.get());
 

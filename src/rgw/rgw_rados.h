@@ -668,7 +668,7 @@ public:
     RGWRados *store;
     rgw_bucket bucket;
     int shard_id;
-    RGWSI_RADOS::Obj bucket_obj;
+    std::pair<librados::IoCtx, std::string> bucket_obj;
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj, RGWBucketInfo* out, const DoutPrefixProvider *dpp);

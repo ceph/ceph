@@ -75,7 +75,8 @@ int RGWServices_Def::init(CephContext *cct,
 
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
-  bi->init(zone.get(), rados.get(), bilog.get(), datalog.get());
+  rados->init();
+  bi->init(rados->get_rados_handle(), zone.get(), bilog.get(), datalog.get());
   bilog->init(bi.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi.get(), meta.get(), meta_be_sobj.get(),
@@ -91,7 +92,6 @@ int RGWServices_Def::init(CephContext *cct,
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
   notify->init(zone.get(), rados.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
-  rados->init();
   zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());

@@ -107,7 +107,8 @@ public:
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
-  int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
+  int get_status(const DoutPrefixProvider *dpp,
+		 std::vector<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider *dpp);
   static int clear_resharding(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
 			      const RGWBucketInfo& bucket_info);

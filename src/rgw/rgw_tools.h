@@ -54,9 +54,9 @@ static inline int rgw_shards_mod(unsigned hval, int max_shards)
 }
 
 // used for logging and tagging
-inline int rgw_shard_id(const string& key, int max_shards)
+inline int rgw_shard_id(std::string_view key, int max_shards)
 {
-  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
+  return rgw_shards_mod(ceph_str_hash_linux(key.data(), key.size()),
 			max_shards);
 }
 

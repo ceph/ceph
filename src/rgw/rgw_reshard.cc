@@ -159,7 +159,8 @@ public:
     if (ret < 0) {
       return ret;
     }
-    ret = bs.bucket_obj.aio_operate(c, &op);
+    auto& [ioctx, oid] = bs.bucket_obj;
+    ret = ioctx.aio_operate(oid, c, &op);
     if (ret < 0) {
       derr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << dendl;
       return ret;
@@ -700,7 +701,8 @@ int RGWBucketReshard::do_reshard(int num_shards,
   // NB: some error clean-up is done by ~BucketInfoReshardUpdate
 } // RGWBucketReshard::do_reshard
 
-int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_bucket_instance_entry> *status)
+int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp,
+				 std::vector<cls_rgw_bucket_instance_entry> *status)
 {
   return store->svc()->bi->get_reshard_status(dpp, bucket_info, status);
 }

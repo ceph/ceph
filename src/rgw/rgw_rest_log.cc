@@ -402,7 +402,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
 
   send_response();
   do {
-    list<rgw_bi_log_entry> entries;
+    std::vector<rgw_bi_log_entry> entries;
     int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_list(s, bucket->get_info(), shard_id,
                                                marker, max_entries - count, 
                                                entries, &truncated);
@@ -435,9 +435,9 @@ void RGWOp_BILog_List::send_response() {
   s->formatter->open_array_section("entries");
 }
 
-void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& marker)
+void RGWOp_BILog_List::send_response(std::vector<rgw_bi_log_entry>& entries, string& marker)
 {
-  for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+  for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
     rgw_bi_log_entry& entry = *iter;
     encode_json("entry", entry, s->formatter);
 
