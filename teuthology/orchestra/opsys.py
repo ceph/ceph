@@ -26,6 +26,7 @@ DISTRO_CODENAME_MAP = {
         "6": "santiago",
     },
     "centos": {
+        "9": "stream",
         "8": "core",
         "7": "core",
         "6": "core",
