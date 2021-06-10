@@ -139,7 +139,10 @@ int main(int argc, const char **argv)
     args, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
-
+  uint64_t max_threadcache_bytes = g_conf().get_val<Option::size_t>("osd_memory_thread_cache_bytes");
+  if (max_threadcache_bytes != 0) {
+    ceph_heap_set_numeric_property("tcmalloc.max_total_thread_cache_bytes", max_threadcache_bytes);
+  }
   Preforker forker;
 
   // osd specific args
