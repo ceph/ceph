@@ -8239,6 +8239,63 @@ int rwlcache_request(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/*
+ * Get cache info
+ *
+ * Input
+ * @param cache_id
+ *
+ * Output:
+ * @param allocated daemon-space info(cls::rbd::RwlCacheInfo)
+ * @return 0 on success, negative error code on failure
+ */
+int rwlcache_get_cacheinfo(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::RwlCacheInfo info;
+  cls_rbd_rwlcache_map map;
+  epoch_t cache_id;
+  int r;
+
+  try {
+    auto it = in->cbegin();
+    decode(cache_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "get cache info(%u)", cache_id);
+
+  bufferlist value;
+  r = cls_cxx_map_get_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if (r < 0) {
+    CLS_LOG(5, "error reading key %s: %s", RWLCACHE_MAP_KEY, cpp_strerror(r).c_str());
+    return r;
+  }
+
+  try {
+    auto it = value.cbegin();
+    decode(map, it);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("decode rwlcache map error");
+    return -EIO;
+  }
+
+  if (map.caches.count(cache_id)) {
+    auto &cache = map.caches[cache_id];
+
+    info.cache_id = cache.cache_id;
+    for (auto &id : cache.daemons) {
+      auto &daemon = map.daemons[id];
+      info.daemons.push_back(cls::rbd::RwlCacheInfo::DaemonInfo{daemon.id, daemon.rdma_address, daemon.rdma_port});
+    }
+
+    encode(info, *out);
+  } else {
+    return -ENOENT;
+  }
+  return 0;
+}
+
 CLS_INIT(rbd)
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -8376,6 +8433,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_sparsify;
   cls_method_handle_t h_rwlcache_daemoninfo;
   cls_method_handle_t h_rwlcache_request;
+  cls_method_handle_t h_rwlcache_get_cacheinfo;
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
@@ -8797,4 +8855,7 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "rwlcache_request",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  rwlcache_request, &h_rwlcache_request);
+  cls_register_cxx_method(h_class, "rwlcache_get_cacheinfo",
+			  CLS_METHOD_RD,
+			  rwlcache_get_cacheinfo, &h_rwlcache_get_cacheinfo);
 }

@@ -1041,6 +1041,26 @@ struct RwlCacheRequest{
 };
 WRITE_CLASS_ENCODER(RwlCacheRequest)
 
+struct RwlCacheInfo {
+  epoch_t cache_id;
+
+  struct DaemonInfo {
+    uint64_t id;
+    std::string rdma_address;
+    int32_t rdma_port;
+
+    void encode(ceph::buffer::list &bl) const;
+    void decode(ceph::buffer::list::const_iterator &it);
+  };
+
+  std::vector<struct DaemonInfo> daemons;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+};
+WRITE_CLASS_ENCODER(RwlCacheInfo::DaemonInfo)
+WRITE_CLASS_ENCODER(RwlCacheInfo)
+
 } // namespace rbd
 } // namespace cls
 
