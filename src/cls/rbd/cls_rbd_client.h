@@ -660,6 +660,9 @@ int sparsify(librados::IoCtx *ioctx, const std::string &oid, uint64_t sparse_siz
 // operations on rwlcache object
 void rwlcache_daemoninfo(librados::ObjectWriteOperation *op, struct cls::rbd::RwlCacheDaemonInfo &req);
 int rwlcache_daemoninfo(librados::IoCtx *ioct, struct cls::rbd::RwlCacheDaemonInfo &req);
+
+int rwlcache_request(librados::IoCtx *ioct, struct cls::rbd::RwlCacheRequest &req, epoch_t &cache_id);
+
 } // namespace cls_client
 } // namespace librbd
 

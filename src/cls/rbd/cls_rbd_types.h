@@ -1031,6 +1031,16 @@ struct RwlCacheDaemonInfo {
 };
 WRITE_CLASS_ENCODER(RwlCacheDaemonInfo)
 
+struct RwlCacheRequest{
+  uint64_t id;
+  uint64_t size;
+  uint32_t copies;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+};
+WRITE_CLASS_ENCODER(RwlCacheRequest)
+
 } // namespace rbd
 } // namespace cls
 

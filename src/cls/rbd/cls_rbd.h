@@ -317,6 +317,21 @@ struct cls_rbd_rwlcache_map {
     // unfree space daemons. Before free, daemons.size() == copies
     std::set<uint64_t> daemons;
 
+    Cache() {
+    }
+
+    Cache(epoch_t cache_id,
+	  const cls::rbd::RwlCacheRequest &req,
+	  const struct entity_addr_t &addr,
+	  const std::set<uint64_t> &daemons) :
+      cache_id(cache_id),
+      primary_id(req.id),
+      primary_addr(addr),
+      cache_size(req.size),
+      copies(req.copies),
+      daemons(daemons) {
+    }
+
     void encode(ceph::buffer::list &bl, uint64_t features) const {
       ENCODE_START(1, 1, bl);
       encode(cache_id, bl);

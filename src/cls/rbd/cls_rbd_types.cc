@@ -1371,5 +1371,23 @@ void RwlCacheDaemonInfo::decode(bufferlist::const_iterator &it) {
   DECODE_FINISH(it);
 }
 
+void RwlCacheRequest::encode(bufferlist &bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(id, bl);
+  encode(size, bl);
+  encode(copies, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheRequest::decode(bufferlist::const_iterator &it) {
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(id, it);
+  decode(size, it);
+  decode(copies, it);
+  DECODE_FINISH(it);
+}
+
 } // namespace rbd
 } // namespace cls
