@@ -889,6 +889,13 @@ public:
       return seastar::futurize<T>::apply(std::forward<Func>(func),
 					 std::forward<std::tuple<Args...>>(args));
     }
+
+    template <typename Func, typename... Args>
+    static type invoke(Func&& func, Args&&... args) noexcept {
+      return seastar::futurize<T>::invoke(
+	std::forward<Func>(func),
+	std::forward<Args>(args)...);
+    }
   };
 
   template <typename FutureType>
@@ -900,6 +907,13 @@ public:
       return seastar::futurize<FutureType>::apply(
 	  std::forward<Func>(func),
 	  std::forward<std::tuple<Args...>>(args));
+    }
+
+    template <typename Func, typename... Args>
+    static type invoke(Func&& func, Args&&... args) noexcept {
+      return seastar::futurize<FutureType>::invoke(
+	  std::forward<Func>(func),
+	  std::forward<Args>(args)...);
     }
   };
 
