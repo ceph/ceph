@@ -702,7 +702,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
 int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_bucket_instance_entry> *status)
 {
-  return store->svc()->bi_rados->get_reshard_status(dpp, bucket_info, status);
+  return store->svc()->bi->get_reshard_status(dpp, bucket_info, status);
 }
 
 

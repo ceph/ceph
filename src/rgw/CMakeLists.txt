@@ -14,8 +14,8 @@ endfunction()
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
-  services/svc_bi_rados.cc
-  services/svc_bilog_rados.cc
+  services/svc_bi.cc
+  services/svc_bilog.cc
   services/svc_bucket.cc
   services/svc_bucket_sobj.cc
   services/svc_bucket_sync_sobj.cc

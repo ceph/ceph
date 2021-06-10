@@ -21,19 +21,16 @@
 
 #include "svc_rados.h"
 
-
-
-
-class RGWSI_BILog_RADOS : public RGWServiceInstance
+class RGWSI_BILog final : public RGWServiceInstance
 {
 public:
   struct Svc {
-    RGWSI_BucketIndex_RADOS *bi{nullptr};
+    RGWSI_BucketIndex *bi{nullptr};
   } svc;
 
-  RGWSI_BILog_RADOS(CephContext *cct);
+  RGWSI_BILog(CephContext *cct);
 
-  void init(RGWSI_BucketIndex_RADOS *bi_rados_svc);
+  void init(RGWSI_BucketIndex *bi_rados_svc);
 
   int log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id);
   int log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id);
@@ -57,4 +54,3 @@ public:
                      map<int, string> *markers,
                      optional_yield y);
 };
-

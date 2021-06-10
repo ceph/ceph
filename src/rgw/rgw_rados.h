@@ -28,7 +28,7 @@
 #include "rgw_sal.h"
 
 #include "services/svc_rados.h"
-#include "services/svc_bi_rados.h"
+#include "services/svc_bi.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -588,7 +588,7 @@ public:
   int get_max_chunk_size(const rgw_placement_rule& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size, const DoutPrefixProvider *dpp, uint64_t *palignment = nullptr);
 
   uint32_t get_max_bucket_shards() {
-    return RGWSI_BucketIndex_RADOS::shards_max();
+    return RGWSI_BucketIndex::shards_max();
   }
 
 

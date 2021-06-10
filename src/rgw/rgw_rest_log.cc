@@ -28,7 +28,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_bilog_rados.h"
+#include "services/svc_bilog.h"
 
 #include "common/errno.h"
 #include "include/ceph_assert.h"
@@ -403,7 +403,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(s, bucket->get_info(), shard_id,
+    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_list(s, bucket->get_info(), shard_id,
                                                marker, max_entries - count, 
                                                entries, &truncated);
     if (ret < 0) {
@@ -542,7 +542,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_trim(s, bucket->get_info(), shard_id, start_marker, end_marker);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_trim(s, bucket->get_info(), shard_id, start_marker, end_marker);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }

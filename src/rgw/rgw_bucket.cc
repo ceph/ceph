@@ -36,7 +36,7 @@
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_user.h"
 #include "services/svc_cls.h"
-#include "services/svc_bilog_rados.h"
+#include "services/svc_bilog.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -808,13 +808,13 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
   int shard_id = bucket->get_info().layout.current_index.layout.normal.num_shards? 0 : -1;
 
   if (!sync) {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_stop(dpp, bucket->get_info(), -1);
+    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_stop(dpp, bucket->get_info(), -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing stop bilog:" + cpp_strerror(-r));
       return r;
     }
   } else {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_start(dpp, bucket->get_info(), -1);
+    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_start(dpp, bucket->get_info(), -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing resync bilog:" + cpp_strerror(-r));
       return r;

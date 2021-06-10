@@ -3,8 +3,8 @@
 
 #include "rgw_service.h"
 
-#include "services/svc_bi_rados.h"
-#include "services/svc_bilog_rados.h"
+#include "services/svc_bi.h"
+#include "services/svc_bilog.h"
 #include "services/svc_bucket_sobj.h"
 #include "services/svc_bucket_sync_sobj.h"
 #include "services/svc_cls.h"
@@ -50,8 +50,8 @@ int RGWServices_Def::init(CephContext *cct,
 {
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
   bucket_sync_sobj = std::make_unique<RGWSI_Bucket_Sync_SObj>(cct);
-  bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
-  bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
+  bi = std::make_unique<RGWSI_BucketIndex>(cct);
+  bilog = std::make_unique<RGWSI_BILog>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   datalog_rados = std::make_unique<RGWDataChangesLog>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
@@ -75,10 +75,10 @@ int RGWServices_Def::init(CephContext *cct,
 
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
-  bi_rados->init(zone.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
-  bilog_rados->init(bi_rados.get());
+  bi->init(zone.get(), rados.get(), bilog.get(), datalog_rados.get());
+  bilog->init(bi.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
-                    bi_rados.get(), meta.get(), meta_be_sobj.get(),
+                    bi.get(), meta.get(), meta_be_sobj.get(),
                     sync_modules.get(), bucket_sync_sobj.get());
   bucket_sync_sobj->init(zone.get(),
                          sysobj.get(),
@@ -268,9 +268,8 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
     return r;
   }
 
-  bi_rados = _svc.bi_rados.get();
-  bi = bi_rados;
-  bilog_rados = _svc.bilog_rados.get();
+  bi = _svc.bi.get();
+  bilog = _svc.bilog.get();
   bucket_sobj = _svc.bucket_sobj.get();
   bucket = bucket_sobj;
   bucket_sync_sobj = _svc.bucket_sync_sobj.get();
