@@ -606,11 +606,17 @@ Journal::replay_segment(
 		 * Note, this comparison exploits the fact that
 		 * SEGMENT_SEQ_NULL is a large number.
 		 */
+		logger().debug("Journal::replay_segment: delta paddr {}", delta.paddr);
 		if (delta.paddr != P_ADDR_NULL &&
 		    (segment_provider->get_seq(delta.paddr.segment) >
-		     seq.segment_seq)) {
+		     seq.segment_seq &&
+		     // segments for rewrites appears closed and with no valid segment_seq,
+		     // need to rule out these segments
+		     segment_provider->get_segment_state(delta.paddr.segment) !=
+		     Segment::segment_state_t::CLOSED)) {
 		  return replay_ertr::now();
 		} else {
+		  logger().debug("Journal::replay_segment: handling delta paddr {}", delta.paddr);
 		  return handler(
 		    journal_seq_t{seq.segment_seq, base},
 		    base.add_offset(header.mdlength),

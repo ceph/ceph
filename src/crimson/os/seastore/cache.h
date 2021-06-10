@@ -358,6 +358,21 @@ public:
   /**
    * alloc_new_extent
    *
+   * Allocates a fresh extent the paddr of which will be decided later.
+   */
+  template <typename T>
+  TCachedExtentRef<T> alloc_new_extent(
+    segment_off_t length
+  ) {
+    auto ret = CachedExtent::make_cached_extent_ref<T>(
+      alloc_cache_buf(length));
+    ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
+    return ret;
+  }
+
+  /**
+   * alloc_new_extent
+   *
    * Allocates a fresh extent.  addr will be relative until commit.
    */
   CachedExtentRef alloc_new_extent_by_type(

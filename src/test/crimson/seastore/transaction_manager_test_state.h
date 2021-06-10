@@ -7,6 +7,7 @@
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 #include "crimson/os/seastore/seastore.h"
@@ -75,7 +76,14 @@ auto get_transaction_manager(
     true);
   auto journal = std::make_unique<Journal>(segment_manager);
   auto cache = std::make_unique<Cache>(segment_manager);
-  auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache);
+  auto epm = std::make_unique<ExtentPlacementManager>(*cache);
+  epm->add_allocator(
+    0,
+    std::make_unique<SegmentedAllocator>(
+      *segment_cleaner,
+      segment_manager,
+      *cache));
+  auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache, std::move(epm));
 
   journal->set_segment_provider(&*segment_cleaner);
 

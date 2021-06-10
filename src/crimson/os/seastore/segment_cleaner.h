@@ -65,7 +65,13 @@ public:
   virtual void init_mark_segment_closed(
     segment_id_t segment, segment_seq_t seq) {}
 
+  virtual void init_mark_segment_closed(segment_id_t) {}
+
   virtual segment_seq_t get_seq(segment_id_t id) { return 0; }
+
+  virtual Segment::segment_state_t get_segment_state(segment_id_t id) {
+    return Segment::segment_state_t::EMPTY;
+  }
 
   virtual ~SegmentProvider() {}
 };
@@ -307,9 +313,13 @@ public:
      */
     using rewrite_extent_iertr = extent_mapping_iertr;
     using rewrite_extent_ret = rewrite_extent_iertr::future<>;
-    virtual rewrite_extent_ret rewrite_extent(
+    virtual rewrite_extent_ret rewrite_physical_extent(
       Transaction &t,
       CachedExtentRef extent) = 0;
+
+    virtual rewrite_extent_ret rewrite_extents(
+      Transaction &t,
+      std::vector<CachedExtentRef>& extents) = 0;
 
     /**
      * get_extent_if_live
@@ -477,8 +487,19 @@ public:
     segments[segment].journal_segment_seq = seq;
   }
 
+  void init_mark_segment_closed(segment_id_t segment) final {
+    crimson::get_logger(ceph_subsys_seastore).debug(
+      "SegmentCleaner::init_mark_segment_closed: segment {}",
+      segment);
+    mark_closed(segment);
+  }
+
   segment_seq_t get_seq(segment_id_t id) final {
     return segments[id].journal_segment_seq;
+  }
+
+  Segment::segment_state_t get_segment_state(segment_id_t id) final {
+    return segments[id].state;
   }
 
   void mark_segment_released(segment_id_t segment) {

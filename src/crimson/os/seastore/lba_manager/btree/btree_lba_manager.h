@@ -18,6 +18,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/segment_manager.h"
 
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
@@ -45,7 +46,8 @@ class BtreeLBAManager : public LBAManager {
 public:
   BtreeLBAManager(
     SegmentManager &segment_manager,
-    Cache &cache);
+    Cache &cache,
+    crimson::os::seastore::ExtentPlacementManagerRef&& epm);
 
   mkfs_ret mkfs(
     Transaction &t) final;
@@ -106,9 +108,18 @@ public:
     Transaction &t,
     scan_mapped_space_func_t &&f) final;
 
-  rewrite_extent_ret rewrite_extent(
+  rewrite_extent_ret rewrite_physical_extent(
     Transaction &t,
     CachedExtentRef extent) final;
+
+  rewrite_extent_ret rewrite_logical_extent_p1(
+    Transaction &t,
+    LogicalCachedExtentRef& lextent);
+
+  rewrite_extent_ret rewrite_logical_extent_p2(
+    Transaction &t,
+    LogicalCachedExtentRef lextent,
+    LogicalCachedExtentRef nextent);
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
@@ -123,10 +134,15 @@ public:
     bpin->parent = nullptr;
   }
 
+  ExtentPlacementManager& get_extent_placement_manager() {
+    return *epm;
+  }
+
   ~BtreeLBAManager();
 private:
   SegmentManager &segment_manager;
   Cache &cache;
+  crimson::os::seastore::ExtentPlacementManagerRef epm;
 
   btree_pin_set_t pin_set;
 

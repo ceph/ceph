@@ -371,23 +371,35 @@ void Cache::complete_commit(
   LOG_PREFIX(Cache::complete_commit);
   DEBUGT("enter", t);
 
-  for (auto &i: t.fresh_block_list) {
-    i->set_paddr(final_block_start.add_relative(i->get_paddr()));
+  auto extent_initializer = [this, cleaner, &t](CachedExtentRef i) {
     i->last_committed_crc = i->get_crc32c();
     i->on_initial_write();
 
     if (!i->is_valid()) {
-      DEBUGT("invalid {}", t, *i);
-      continue;
+      LOGGER.debug("complete_commit({}): invalid {}", (void*)&t, *i);
+      return;
     }
 
     i->state = CachedExtent::extent_state_t::CLEAN;
-    DEBUGT("fresh {}", t, *i);
+    LOGGER.debug("complete_commit({}): fresh {}", (void*)&t, *i);
     add_extent(i);
     if (cleaner) {
       cleaner->mark_space_used(
 	i->get_paddr(),
 	i->get_length());
+    }
+  };
+
+  for (auto &i: t.fresh_block_list) {
+    i->set_paddr(final_block_start.add_relative(i->get_paddr()));
+    extent_initializer(i);
+  }
+
+  for (auto& i : t.rewrite_block_list) {
+    for (auto& ext : i.second) {
+      ext->rewrite_paddr();
+      extent_initializer(ext);
+      ext->old_extent.reset();
     }
   }
 

@@ -7,6 +7,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 
 using namespace crimson;
@@ -62,7 +63,7 @@ struct record_validator_t {
   }
 };
 
-struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
+struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   WritePipeline pipeline;
   std::unique_ptr<Journal> journal;

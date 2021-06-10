@@ -25,7 +25,7 @@ void SegmentedRewriter::add_extent_to_write(
   // transaction "complete_commit"s, we can't do complete_io() here, otherwise,
   // there might be consistency problem.
   extent->set_io_wait();
-  extent->set_paddr(
+  extent->set_rewriting_paddr(
     {current_segment->get_segment_id(),
     allocated_to + bl.length()});
   bl.append(extent->get_bptr());

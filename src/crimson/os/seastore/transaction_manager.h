@@ -396,9 +396,13 @@ public:
     size_t max_bytes) final;
 
   using SegmentCleaner::ExtentCallbackInterface::rewrite_extent_ret;
-  rewrite_extent_ret rewrite_extent(
+  rewrite_extent_ret rewrite_physical_extent(
     Transaction &t,
     CachedExtentRef extent) final;
+
+  rewrite_extent_ret rewrite_extents(
+    Transaction &t,
+    std::vector<CachedExtentRef>& extents) final;
 
   using SegmentCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
   get_extent_if_live_ret get_extent_if_live(

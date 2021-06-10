@@ -8,6 +8,7 @@
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
 
 namespace crimson::os::seastore {
 
@@ -71,8 +72,11 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   LOG_PREFIX(TransactionManager::mount);
   cache->init();
   segment_cleaner->mount(segment_manager);
-  return journal->replay([this](auto seq, auto paddr, const auto &e) {
-    return cache->replay_delta(seq, paddr, e);
+  return lba_manager->get_extent_placement_manager().scan_devices().safe_then(
+    [this] {
+    return journal->replay([this](auto seq, auto paddr, const auto &e) {
+      return cache->replay_delta(seq, paddr, e);
+    });
   }).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this, FNAME](auto addr) {
@@ -245,8 +249,8 @@ TransactionManager::submit_transaction_direct(
 
     DEBUGT("about to submit to journal", tref);
 
-    return journal->submit_record(std::move(record), tref.get_handle()
-    ).safe_then([this, FNAME, &tref](auto p) mutable {
+    return journal->submit_record(std::move(record), tref.get_handle())
+    .safe_then([this, FNAME, &tref](auto p) mutable {
       auto [addr, journal_seq] = p;
       DEBUGT("journal commit to {} seq {}", tref, addr, journal_seq);
       segment_cleaner->set_journal_head(journal_seq);
@@ -283,11 +287,67 @@ TransactionManager::get_next_dirty_extents(
   return cache->get_next_dirty_extents(seq, max_bytes);
 }
 
-TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
+TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extents(
+  Transaction &t,
+  std::vector<CachedExtentRef>& extents)
+{
+  LOG_PREFIX(TransactionManager::rewrite_extent);
+  std::vector<LogicalCachedExtentRef> logical_extents;
+  return seastar::do_with(
+    std::vector<LogicalCachedExtentRef>(),
+    [this, &extents, &t, FNAME](auto& logical_extents) mutable {
+    return trans_intr::do_for_each(extents,
+      [this, &logical_extents, &t, FNAME](CachedExtentRef& extent) mutable
+      -> rewrite_extent_ret {
+      if (extent->is_logical()) {
+	logical_extents.emplace_back(extent->cast<LogicalCachedExtent>());
+	return seastar::now();
+      } else {
+	DEBUGT("cleaning {}", t, *extent);
+	return rewrite_physical_extent(t, extent);
+      }
+    }).si_then([this, &logical_extents, &t, FNAME]() mutable {
+      return trans_intr::do_for_each(logical_extents,
+	[this, &t, FNAME](LogicalCachedExtentRef& extent) {
+	auto updated = cache->update_extent_from_transaction(t, extent);
+	if (!updated) {
+	  DEBUGT("{} is already retired, skipping", t, *extent);
+	  return rewrite_extent_iertr::now();
+	}
+	assert(updated->is_logical());
+	extent = updated->cast<LogicalCachedExtent>();
+	DEBUGT("cleaning {}", t, *extent);
+	return lba_manager->rewrite_logical_extent_p1(t, extent);
+      }).si_then([this, &t]() mutable {
+	return trans_intr::parallel_for_each(
+	  t.get_rewrite_block_list(),
+	  [](auto& p) {
+	  auto& writer = p.first;
+	  auto& lextents = p.second;
+	  return writer->write(lextents);
+	}).si_then([this, &t]() mutable {
+	  return trans_intr::do_for_each(t.get_rewrite_block_list(),
+					 [this, &t](auto& p) mutable {
+	    return trans_intr::do_for_each(p.second,
+	      [this, &t](LogicalCachedExtentRef& nlextent) mutable {
+	      auto lextent = nlextent->get_old_extent()->cast<LogicalCachedExtent>();
+	      return lba_manager->rewrite_logical_extent_p2(t, lextent, nlextent);
+	    });
+	  });
+	});
+      });
+    });
+  }).handle_error_interruptible(
+    crimson::ct_error::input_output_error::pass_further{},
+    crimson::ct_error::eagain::pass_further{},
+    crimson::ct_error::assert_all{"Invalid error when rewriting extent"});
+}
+
+TransactionManager::rewrite_extent_ret TransactionManager::rewrite_physical_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
-  LOG_PREFIX(TransactionManager::rewrite_extent);
+  LOG_PREFIX(TransactionManager::rewrite_physical_extent);
   {
     auto updated = cache->update_extent_from_transaction(t, extent);
     if (!updated) {
@@ -302,7 +362,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     cache->duplicate_for_write(t, extent);
     return rewrite_extent_iertr::now();
   }
-  return lba_manager->rewrite_extent(t, extent);
+  return lba_manager->rewrite_physical_extent(t, extent);
 }
 
 TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_live(

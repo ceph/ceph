@@ -123,7 +123,7 @@ public:
     auto& writer = iter->second;
 
     auto nextent = cache.alloc_new_extent<T>(length);
-    nextent->set_paddr({UNKNOWN_ABSOLUTE_ADDR, fake_paddr_off});
+    nextent->set_paddr({ZERO_SEG_ID, fake_paddr_off});
     fake_paddr_off += length;
     nextent->extent_writer = writer.get();
     return nextent;
