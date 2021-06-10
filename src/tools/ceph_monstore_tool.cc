@@ -905,12 +905,12 @@ int main(int argc, char **argv) {
       }
     }
 
-    BOOST_SCOPE_EXIT((&r) (&fd) (&outpath)) {
+    auto close_fd = make_scope_guard([&] {
       ::close(fd);
       if (r < 0 && fd != STDOUT_FILENO) {
         ::remove(outpath.c_str());
       }
-    } BOOST_SCOPE_EXIT_END
+    });
 
     bufferlist bl;
     r = 0;
