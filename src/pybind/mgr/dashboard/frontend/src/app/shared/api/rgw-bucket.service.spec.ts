@@ -85,4 +85,10 @@ describe('RgwBucketService', () => {
     req.flush(['foo', 'bar']);
     expect(result).toBe(true);
   });
+
+  it('should convert lock retention period to days', () => {
+    expect(service.getLockDays({ lock_retention_period_years: 1000 })).toBe(365242);
+    expect(service.getLockDays({ lock_retention_period_days: 5 })).toBe(5);
+    expect(service.getLockDays({})).toBe(0);
+  });
 });

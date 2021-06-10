@@ -372,10 +372,5 @@ describe('RgwBucketFormComponent', () => {
     it('should have valid values [2]', () => {
       expectValidLockInputs(false, 'Compliance', '2');
     });
-
-    it('should convert retention years to days', () => {
-      expect(component['getLockDays']({ lock_retention_period_years: 1000 })).toBe(365242);
-      expect(component['getLockDays']({ lock_retention_period_days: 5 })).toBe(5);
-    });
   });
 });

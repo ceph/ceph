@@ -108,4 +108,12 @@ export class RgwBucketService {
       })
     );
   }
+
+  getLockDays(bucketData: object): number {
+    if (bucketData['lock_retention_period_years'] > 0) {
+      return Math.floor(bucketData['lock_retention_period_years'] * 365.242);
+    }
+
+    return bucketData['lock_retention_period_days'] || 0;
+  }
 }

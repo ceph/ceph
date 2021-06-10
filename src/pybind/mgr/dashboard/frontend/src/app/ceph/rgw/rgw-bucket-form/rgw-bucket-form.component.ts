@@ -132,7 +132,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           // the Angular react framework will throw an error if there is no
           // field for a given key.
           let value: object = _.pick(bidResp, _.keys(defaults));
-          value['lock_retention_period_days'] = this.getLockDays(bidResp);
+          value['lock_retention_period_days'] = this.rgwBucketService.getLockDays(bidResp);
           value['placement-target'] = bidResp['placement_rule'];
           value['versioning'] = bidResp['versioning'] === RgwBucketVersioning.ENABLED;
           value['mfa-delete'] = bidResp['mfa_delete'] === RgwBucketMfaDelete.ENABLED;
@@ -357,13 +357,5 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
 
   getMfaDeleteStatus() {
     return this.isMfaDeleteEnabled ? RgwBucketMfaDelete.ENABLED : RgwBucketMfaDelete.DISABLED;
-  }
-
-  private getLockDays(bucketData: object): number {
-    if (bucketData['lock_retention_period_years'] > 0) {
-      return Math.floor(bucketData['lock_retention_period_years'] * 365.242);
-    }
-
-    return bucketData['lock_retention_period_days'];
   }
 }
