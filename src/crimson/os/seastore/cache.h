@@ -367,21 +367,29 @@ public:
     }
   }
 
-  /**
-   * alloc_new_extent
-   *
-   * Allocates a fresh extent.  addr will be relative until commit.
-   */
   template <typename T>
   TCachedExtentRef<T> alloc_new_extent(
-    Transaction &t,      ///< [in, out] current transaction
-    segment_off_t length ///< [in] length
+    Transaction &t,       ///< [in, out] current transaction
+    segment_off_t length, ///< [in] length
+    bool delayed = false  ///< [in] whether the paddr allocation of extent is delayed
   ) {
     auto ret = CachedExtent::make_cached_extent_ref<T>(
       alloc_cache_buf(length));
-    t.add_fresh_extent(ret);
+    t.add_fresh_extent(ret, delayed);
     ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
     return ret;
+  }
+
+  void mark_delayed_extent_inline(
+    Transaction& t,
+    LogicalCachedExtentRef& ref) {
+    t.mark_delayed_extent_inline(ref);
+  }
+
+  void mark_delayed_extent_ool(
+    Transaction& t,
+    LogicalCachedExtentRef& ref) {
+    t.mark_delayed_extent_ool(ref);
   }
 
   /**
@@ -392,7 +400,8 @@ public:
   CachedExtentRef alloc_new_extent_by_type(
     Transaction &t,       ///< [in, out] current transaction
     extent_types_t type,  ///< [in] type tag
-    segment_off_t length  ///< [in] length
+    segment_off_t length, ///< [in] length
+    bool delayed = false  ///< [in] whether delay addr allocation
     );
 
   /**

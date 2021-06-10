@@ -710,7 +710,8 @@ void Cache::on_transaction_destruct(Transaction& t)
 CachedExtentRef Cache::alloc_new_extent_by_type(
   Transaction &t,       ///< [in, out] current transaction
   extent_types_t type,  ///< [in] type tag
-  segment_off_t length  ///< [in] length
+  segment_off_t length, ///< [in] length
+  bool delay 		///< [in] whether to delay paddr alloc
 )
 {
   switch (type) {
@@ -718,26 +719,26 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
     assert(0 == "ROOT is never directly alloc'd");
     return CachedExtentRef();
   case extent_types_t::LADDR_INTERNAL:
-    return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length);
+    return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length, delay);
   case extent_types_t::LADDR_LEAF:
-    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length);
+    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length, delay);
   case extent_types_t::ONODE_BLOCK_STAGED:
-    return alloc_new_extent<onode::SeastoreNodeExtent>(t, length);
+    return alloc_new_extent<onode::SeastoreNodeExtent>(t, length, delay);
   case extent_types_t::OMAP_INNER:
-    return alloc_new_extent<omap_manager::OMapInnerNode>(t, length);
+    return alloc_new_extent<omap_manager::OMapInnerNode>(t, length, delay);
   case extent_types_t::OMAP_LEAF:
-    return alloc_new_extent<omap_manager::OMapLeafNode>(t, length);
+    return alloc_new_extent<omap_manager::OMapLeafNode>(t, length, delay);
   case extent_types_t::COLL_BLOCK:
-    return alloc_new_extent<collection_manager::CollectionNode>(t, length);
+    return alloc_new_extent<collection_manager::CollectionNode>(t, length, delay);
   case extent_types_t::OBJECT_DATA_BLOCK:
-    return alloc_new_extent<ObjectDataBlock>(t, length);
+    return alloc_new_extent<ObjectDataBlock>(t, length, delay);
   case extent_types_t::RETIRED_PLACEHOLDER:
     ceph_assert(0 == "impossible");
     return CachedExtentRef();
   case extent_types_t::TEST_BLOCK:
-    return alloc_new_extent<TestBlock>(t, length);
+    return alloc_new_extent<TestBlock>(t, length, delay);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
-    return alloc_new_extent<TestBlockPhysical>(t, length);
+    return alloc_new_extent<TestBlockPhysical>(t, length, delay);
   case extent_types_t::NONE: {
     ceph_assert(0 == "NONE is an invalid extent type");
     return CachedExtentRef();

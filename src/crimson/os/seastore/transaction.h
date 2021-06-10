@@ -83,11 +83,35 @@ public:
     ceph_assert(inserted);
   }
 
-  void add_fresh_extent(CachedExtentRef ref) {
+  void add_fresh_extent(
+    CachedExtentRef ref,
+    bool delayed = false) {
     ceph_assert(!is_weak());
-    fresh_block_list.push_back(ref);
+    if (delayed) {
+      assert(ref->is_logical());
+      delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
+      delayed_set.insert(*ref);
+    } else {
+      ref->set_paddr(make_record_relative_paddr(offset));
+      offset += ref->get_length();
+      fresh_block_list.push_back(ref);
+      write_set.insert(*ref);
+    }
+  }
+
+  void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
     ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
+    delayed_set.erase(*ref);
+    fresh_block_list.push_back(ref);
+    write_set.insert(*ref);
+  }
+
+  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref) {
+    assert(!ref->get_paddr().is_null());
+    assert(!ref->is_inline());
+    delayed_set.erase(*ref);
+    fresh_block_list.push_back(ref);
     write_set.insert(*ref);
   }
 
@@ -131,6 +155,10 @@ public:
 
   const auto &get_fresh_block_list() {
     return fresh_block_list;
+  }
+
+  auto& get_delayed_alloc_list() {
+    return delayed_alloc_list;
   }
 
   const auto &get_mutated_block_list() {
@@ -200,6 +228,7 @@ public:
     write_set.clear();
     fresh_block_list.clear();
     mutated_block_list.clear();
+    delayed_alloc_list.clear();
     retired_set.clear();
     onode_tree_stats = {};
     lba_tree_stats = {};
@@ -251,6 +280,9 @@ private:
 
   std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
   std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
+  ///< list of ool extents whose addresses are not
+  //   determine until transaction submission
+  std::list<LogicalCachedExtentRef> delayed_alloc_list;
 
   pextent_set_t retired_set; ///< list of extents mutated by this transaction
 
