@@ -9562,7 +9562,8 @@ int BlueStore::read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  TrackedOpRef op)
 {
   auto start = mono_clock::now();
   Collection *c = static_cast<Collection *>(c_.get());
@@ -9583,6 +9584,9 @@ int BlueStore::read(
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
       cct->_conf->bluestore_log_op_age);
+    if (op) {
+      op->mark_tracepoint("get onode");
+    }
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -9591,7 +9595,7 @@ int BlueStore::read(
     if (offset == length && offset == 0)
       length = o->onode.size;
 
-    r = _do_read(c, o, offset, length, bl, op_flags);
+    r = _do_read(c, o, offset, length, bl, op_flags, 0, op);
     if (r == -EIO) {
       logger->inc(l_bluestore_read_eio);
     }
@@ -9611,6 +9615,9 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
+  if (op) {
+    op->mark_tracepoint("read finished");
+  }
   log_latency(__func__,
     l_bluestore_read_lat,
     mono_clock::now() - start,
@@ -9884,7 +9891,8 @@ int BlueStore::_do_read(
   size_t length,
   bufferlist& bl,
   uint32_t op_flags,
-  uint64_t retry_count)
+  uint64_t retry_count,
+  TrackedOpRef op)
 {
   FUNCTRACE(cct);
   int r = 0;
@@ -9918,6 +9926,9 @@ int BlueStore::_do_read(
 
   auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
+  if (op) {
+    op->mark_tracepoint("read onode meta");
+  }
   log_latency(__func__,
     l_bluestore_read_onode_meta_lat,
     mono_clock::now() - start,
@@ -9959,6 +9970,9 @@ int BlueStore::_do_read(
       ceph_assert(r == -EIO); // no other errors allowed
       return -EIO;
     }
+  }
+  if (op) {
+    op->mark_tracepoint("aio read finished");
   }
   log_latency_fn(__func__,
     l_bluestore_read_wait_aio_lat,
