@@ -1004,7 +1004,7 @@ class TestMonitoring(object):
         assert mock.call().__enter__().write('bar') in _open.mock_calls
 
 
-class TestBootstrap(TestCephAdm):
+class TestBootstrap(object):
 
     @staticmethod
     def _get_cmd(*args):
