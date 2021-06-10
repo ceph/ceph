@@ -59,12 +59,12 @@ DISTRO_CODENAME_MAP = {
 }
 
 DEFAULT_OS_VERSION = dict(
-    ubuntu="18.04",
+    ubuntu="20.04",
     fedora="25",
-    centos="8.1",
+    centos="8.4",
     opensuse="15.0",
     sle="15.0",
-    rhel="8.1",
+    rhel="8.4",
     debian='8.0'
 )
 
