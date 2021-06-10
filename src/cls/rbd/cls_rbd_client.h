@@ -661,6 +661,9 @@ void sparsify(librados::ObjectWriteOperation *op, uint64_t sparse_size,
 int sparsify(librados::IoCtx *ioctx, const std::string &oid, uint64_t sparse_size,
              bool remove_empty);
 
+// operations on rwlcache object
+void rwlcache_daemoninfo(librados::ObjectWriteOperation *op, struct cls::rbd::RwlCacheDaemonInfo &req);
+int rwlcache_daemoninfo(librados::IoCtx *ioct, struct cls::rbd::RwlCacheDaemonInfo &req);
 } // namespace cls_client
 } // namespace librbd
 
