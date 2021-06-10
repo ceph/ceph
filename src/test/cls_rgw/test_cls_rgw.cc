@@ -483,7 +483,7 @@ TEST(cls_rgw, bi_list)
   uint64_t num_objs = 35;
 
   for (uint64_t i = 0; i < num_objs; i++) {
-    string obj = str_int("obj", i);
+    string obj = str_int(i % 4 ? "obj" : "об'єкт", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
     index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc, RGW_BILOG_FLAG_VERSIONED_OP);
@@ -497,8 +497,8 @@ TEST(cls_rgw, bi_list)
   ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, num_objs + 10, &entries,
 			    &is_truncated);
   ASSERT_EQ(ret, 0);
-  if (cct->_conf->osd_max_omap_entries_per_request < num_objs) {
-    ASSERT_EQ(entries.size(), cct->_conf->osd_max_omap_entries_per_request);
+  if (is_truncated) {
+    ASSERT_LT(entries.size(), num_objs);
   } else {
     ASSERT_EQ(entries.size(), num_objs);
   }
@@ -511,7 +511,7 @@ TEST(cls_rgw, bi_list)
 			  &is_truncated);
     ASSERT_EQ(ret, 0);
     if (is_truncated) {
-      ASSERT_EQ(entries.size(), std::min(max, cct->_conf->osd_max_omap_entries_per_request));
+      ASSERT_LT(entries.size(), num_objs - num_entries);
     } else {
       ASSERT_EQ(entries.size(), num_objs - num_entries);
     }
@@ -535,7 +535,7 @@ TEST(cls_rgw, bi_list)
 			    &is_truncated);
       ASSERT_EQ(ret, 0);
       if (is_truncated) {
-	ASSERT_EQ(entries.size(), cct->_conf->osd_max_omap_entries_per_request);
+	ASSERT_LT(entries.size(), num_objs - num_entries);
       } else {
 	ASSERT_EQ(entries.size(), num_objs - num_entries);
       }
