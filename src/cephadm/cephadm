@@ -6000,6 +6000,13 @@ class YumDnf(Packager):
                                      self.distro_code)
 
     def add_repo(self):
+        if self.distro_code.startswith('fc'):
+            raise Error('Ceph team does not build Fedora specific packages and therefore cannot add repos for this distro')
+        if self.distro_code == 'el7':
+            if self.stable and self.stable >= 'pacific':
+                raise Error('Ceph does not support pacific or later for this version of this linux distro and therefore cannot add a repo for it')
+            if self.version and self.version.split('.')[0] >= '16':
+                raise Error('Ceph does not support 16.y.z or later for this version of this linux distro and therefore cannot add a repo for it')
         if self.stable or self.version:
             content = ''
             for n, t in {
