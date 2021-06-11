@@ -385,14 +385,16 @@ class Export:
             protocols = [protocols]
 
         transports = export_block.values.get('transports')
-        if not isinstance(transports, list):
+        if isinstance(transports, str):
             transports = [transports]
+        elif not transports:
+            transports = []
 
         return cls(export_block.values['export_id'],
                    export_block.values['path'],
                    cluster_id,
                    export_block.values['pseudo'],
-                   export_block.values['access_type'],
+                   export_block.values.get('access_type', 'none'),
                    export_block.values.get('squash', 'no_root_squash'),
                    export_block.values.get('security_label', True),
                    protocols,
@@ -453,7 +455,7 @@ class Export:
     @staticmethod
     def validate_access_type(access_type: str) -> None:
         valid_access_types = ['rw', 'ro', 'none']
-        if access_type.lower() not in valid_access_types:
+        if not isinstance(access_type, str) or access_type.lower() not in valid_access_types:
             raise NFSInvalidOperation(
                 f'{access_type} is invalid, valid access type are'
                 f'{valid_access_types}'
@@ -466,7 +468,7 @@ class Export:
             "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
             "allanonymous", "no_root_squash", "none", "noidsquash",
         ]
-        if squash not in valid_squash_ls:
+        if squash.lower() not in valid_squash_ls:
             raise NFSInvalidOperation(
                 f"squash {squash} not in valid list {valid_squash_ls}"
             )
@@ -494,8 +496,10 @@ class Export:
                 raise NFSInvalidOperation(f'{trans} is not a valid transport protocol')
 
         for client in self.clients:
-            self.validate_squash(client.squash)
-            self.validate_access_type(client.access_type)
+            if client.squash:
+                self.validate_squash(client.squash)
+            if client.access_type:
+                self.validate_access_type(client.access_type)
 
         if self.fsal.name == 'CEPH':
             fs = cast(CephFSFSAL, self.fsal)
