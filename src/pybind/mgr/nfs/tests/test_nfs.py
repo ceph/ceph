@@ -389,7 +389,7 @@ NFS_CORE_PARAM {
                            'pseudo': '/cephfs_a/',
                            'security_label': True,
                            'squash': 'no_root_squash',
-                           'transports': [None]}
+                           'transports': []}
 
         export = [e for e in conf.exports['foo'] if e.export_id == 2][0]
         ex_dict = export.to_dict()
@@ -534,7 +534,25 @@ NFS_CORE_PARAM {
         export2 = Export.from_dict(j['export_id'], j)
         j2 = export2.to_dict()
         assert j == j2
-    """
+
+    @pytest.mark.parametrize(
+        "block",
+        [
+            export_1,
+            export_2,
+        ]
+    )
+    def test_export_validate(self, block):
+        cluster_id = 'foo'
+        blocks = GaneshaConfParser(block).parse()
+        print(block)
+        export = Export.from_export_block(blocks[0], cluster_id)
+        print(export.__dict__)
+        nfs_mod = Module('nfs', '', '')
+        with mock.patch('nfs.export_utils.check_fs', return_value=True):
+            export.validate(nfs_mod)
+
+        """
     def test_update_export(self):
         for cluster_id, info in self.clusters.items():
             self._do_test_update_export(cluster_id, info['exports'])
