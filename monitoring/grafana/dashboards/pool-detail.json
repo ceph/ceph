@@ -658,7 +658,7 @@
       "30d"
     ]
   },
-  "timezone": "browser",
+  "timezone": "",
   "title": "Ceph Pool Details",
   "uid": "-xyV8KCiz",
   "version": 1
