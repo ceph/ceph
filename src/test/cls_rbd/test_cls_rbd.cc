@@ -3418,3 +3418,78 @@ TEST_F(TestClsRbd, sparsify)
   ASSERT_EQ(0, ioctx.remove(oid));
   ioctx.close();
 }
+
+TEST_F(TestClsRbd, rwlcache)
+{
+  // make option: rbd_persistent_replicated_cache_cls_pool is equal _pool_name
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  cls::rbd::RwlCacheDaemonInfo d_info = {1000, "192.168.0.1", 8000, 100UL * 1024 * 1024 * 1024};
+
+  ASSERT_EQ(0, rwlcache_daemoninfo(&ioctx, d_info));
+
+  {
+    cls::rbd::RwlCacheDaemonInfo d_info1 = {1000, "192.168.0.1", 8000, 100UL * 1024 * 1024 * 1024};
+    ASSERT_EQ(-EEXIST, rwlcache_daemoninfo(&ioctx, d_info1));
+
+    d_info1.id = 1001;
+    ASSERT_EQ(-EEXIST, rwlcache_daemoninfo(&ioctx, d_info1));
+  }
+
+  {
+    cls::rbd::RwlCacheRequest req = {1002, 50UL * 1024  * 1024 * 1024, 1};
+    epoch_t cache_id;
+
+    ASSERT_EQ(0, rwlcache_request(&ioctx, req, cache_id));
+    ASSERT_TRUE(cache_id == 1);
+
+    cls::rbd::RwlCacheInfo info;
+    ASSERT_EQ(0, rwlcache_get_cacheinfo(&ioctx, cache_id, info));
+    ASSERT_TRUE(info.cache_id == cache_id);
+    auto &daemon = info.daemons[0];
+    ASSERT_TRUE(daemon.rdma_address == "192.168.0.1" && daemon.rdma_port == 8000);
+
+    cls::rbd::RwlCacheRequestAck ack = {cache_id, 0};
+    ASSERT_EQ(0, rwlcache_request_ack(&ioctx, ack));
+
+    cls::rbd::RwlCacheRequest req1 = {1004, 60UL * 1024  * 1024 * 1024, 1};
+    ASSERT_EQ(-ENOSPC, rwlcache_request(&ioctx, req1, cache_id));
+
+    cls::rbd::RwlCacheFree free = {info.cache_id};
+    ASSERT_EQ(0, rwlcache_free(&ioctx, free));
+
+    // After freeing req
+    ASSERT_EQ(0, rwlcache_request(&ioctx, req1, cache_id));
+    ASSERT_EQ(0, rwlcache_get_cacheinfo(&ioctx, cache_id, info));
+    ASSERT_TRUE(info.daemons[0].id == 1000);
+    ASSERT_TRUE(cache_id == info.cache_id);
+
+    cls::rbd::RwlCacheRequestAck ack1 = {cache_id, 0};
+    ASSERT_EQ(0, rwlcache_request_ack(&ioctx, ack1));
+
+    cls::rbd::RwlCacheDaemonPing ping = {d_info.id};
+    bool has_need_free_cache = true;
+    ASSERT_EQ(0, rwlcache_daemonping(&ioctx, ping, has_need_free_cache));
+    ASSERT_TRUE(!has_need_free_cache);
+
+    bool has_removed_daemon = true;
+    ASSERT_EQ(0, rwlcache_primaryping(&ioctx, cache_id, has_removed_daemon));
+    ASSERT_TRUE(!has_removed_daemon);
+
+    cls::rbd::RwlCacheFree free1;
+    free1.cache_id = cache_id;
+    free1.need_free_daemons.insert(info.daemons[0].id);
+    ASSERT_EQ(0, rwlcache_free(&ioctx, free1));
+
+    ASSERT_EQ(0, rwlcache_daemonping(&ioctx, ping, has_need_free_cache));
+    ASSERT_TRUE(has_need_free_cache);
+
+    struct cls::rbd::RwlCacheDaemonNeedFreeCaches need_free_caches;
+    ASSERT_EQ(0, rwlcache_get_needfree_caches(&ioctx, d_info.id, need_free_caches));
+    ASSERT_TRUE(need_free_caches.need_free_caches.count(cache_id) == 1);
+  }
+
+  ioctx.close();
+
+}
