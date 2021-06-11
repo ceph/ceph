@@ -122,6 +122,8 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   all_admin_daemons ${CLUSTER1} rbd mirror status
 fi
 
+remove_image_retry ${CLUSTER2} ${POOL} ${image1}
+
 testlog "TEST: test image rename"
 new_name="${image}_RENAMED"
 rename_image ${CLUSTER2} ${POOL} ${image} ${new_name}
@@ -143,6 +145,18 @@ wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 trash_restore ${CLUSTER2} ${POOL} ${image_id}
 enable_mirror ${CLUSTER2} ${POOL} ${image} snapshot
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+
+testlog "TEST: check if removed images' OMAP are removed (with rbd-mirror on one cluster)"
+remove_image_retry ${CLUSTER2} ${POOL} ${image}
+
+wait_for_image_in_omap ${CLUSTER1} ${POOL}
+wait_for_image_in_omap ${CLUSTER2} ${POOL}
+
+create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+write_image ${CLUSTER2} ${POOL} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
 testlog "TEST: failover and failback"
 start_mirrors ${CLUSTER2}
@@ -222,6 +236,8 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${force_promote_image} 'up+stopp
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${force_promote_image} 'up+stopped'
 write_image ${CLUSTER1} ${POOL} ${force_promote_image} 100
 write_image ${CLUSTER2} ${POOL} ${force_promote_image} 100
+remove_image_retry ${CLUSTER1} ${POOL} ${force_promote_image}
+remove_image_retry ${CLUSTER2} ${POOL} ${force_promote_image}
 
 testlog "TEST: cloned images"
 testlog " - default"
@@ -246,6 +262,7 @@ wait_for_image_replay_started ${CLUSTER1} ${POOL} ${clone_image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${clone_image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying'
 compare_images ${POOL} ${clone_image}
+remove_image_retry ${CLUSTER2} ${POOL} ${clone_image}
 
 testlog " - clone v1"
 clone_image_and_enable_mirror ${CLUSTER1} ${PARENT_POOL} ${parent_image} \
@@ -256,6 +273,10 @@ clone_image_and_enable_mirror ${CLUSTER2} ${PARENT_POOL} ${parent_image} \
 test $(get_clone_format ${CLUSTER2} ${POOL} ${clone_image}_v1) = 1
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${clone_image}_v1
 test $(get_clone_format ${CLUSTER1} ${POOL} ${clone_image}_v1) = 1
+remove_image_retry ${CLUSTER2} ${POOL} ${clone_image}_v1
+remove_image_retry ${CLUSTER1} ${POOL} ${clone_image}1
+unprotect_snapshot_retry ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+remove_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
 
 testlog " - clone v2"
 parent_snap=snap_v2
@@ -288,6 +309,7 @@ mirror_image_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image}
 wait_for_snap_moved_to_trash ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap}
 remove_image_retry ${CLUSTER1} ${POOL} ${clone_image}_v2
 wait_for_snap_removed_from_trash ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap}
+remove_image_retry ${CLUSTER2} ${PARENT_POOL} ${parent_image}
 
 testlog "TEST: data pool"
 dp_image=test_data_pool
@@ -306,6 +328,7 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${dp_image} 'up+replaying'
 compare_images ${POOL} ${dp_image}@snap1
 compare_images ${POOL} ${dp_image}@snap2
 compare_images ${POOL} ${dp_image}
+remove_image_retry ${CLUSTER2} ${POOL} ${dp_image}
 
 testlog "TEST: disable mirroring / delete non-primary image"
 image2=test2
@@ -354,7 +377,18 @@ done
 mirror_image_snapshot ${CLUSTER2} ${POOL} ${image2}
 wait_for_snap_present ${CLUSTER1} ${POOL} ${image2} "${snap_name}_${i}"
 
+unprotect_snapshot ${CLUSTER2} ${POOL} ${image4} 'snap1'
+unprotect_snapshot ${CLUSTER2} ${POOL} ${image4} 'snap2'
+for i in ${image2} ${image4}; do
+    remove_image_retry ${CLUSTER2} ${POOL} ${i}
+done
+
 testlog "TEST: disable mirror while daemon is stopped"
+# TODO: workaround for the daemon to ack the deletion, to remove when
+#       image_map cleanup is fixed
+for i in ${image2} ${image4}; do
+        wait_for_image_present ${CLUSTER1} ${POOL} ${i} 'deleted'
+done
 stop_mirrors ${CLUSTER1}
 stop_mirrors ${CLUSTER2}
 disable_mirror ${CLUSTER2} ${POOL} ${image}
@@ -362,6 +396,11 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   test_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 fi
 start_mirrors ${CLUSTER1}
+start_mirrors ${CLUSTER2} # TODO: remove start/stop of cluster2 deamons when
+                          #       image_map cleanup at startup is resolved
+wait_for_image_in_omap ${CLUSTER1} ${POOL}
+wait_for_image_in_omap ${CLUSTER2} ${POOL}
+stop_mirrors ${CLUSTER2}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 enable_mirror ${CLUSTER2} ${POOL} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
@@ -387,6 +426,7 @@ remove_image_retry ${CLUSTER2} ${POOL}/${NS1} ${image}
 disable_mirror ${CLUSTER2} ${POOL}/${NS2} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL}/${NS1} ${image} 'deleted'
 wait_for_image_present ${CLUSTER1} ${POOL}/${NS2} ${image} 'deleted'
+remove_image_retry ${CLUSTER2} ${POOL}/${NS2} ${image}
 
 testlog " - data pool"
 dp_image=test_data_pool
@@ -400,6 +440,7 @@ write_image ${CLUSTER2} ${POOL}/${NS1} ${dp_image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${dp_image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${dp_image} 'up+replaying'
 compare_images ${POOL}/${NS1} ${dp_image}
+remove_image_retry ${CLUSTER2} ${POOL}/${NS1} ${dp_image}
 
 testlog "TEST: simple image resync"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
@@ -432,6 +473,7 @@ wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 compare_images ${POOL} ${image}
+remove_image_retry ${CLUSTER2} ${POOL} ${image}
 
 testlog "TEST: split-brain"
 image=split-brain
@@ -445,6 +487,12 @@ demote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'split-brain'
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+remove_image_retry ${CLUSTER2} ${POOL} ${image}
+
+testlog "TEST: check if removed images' OMAP are removed"
+start_mirrors ${CLUSTER2}
+wait_for_image_in_omap ${CLUSTER1} ${POOL}
+wait_for_image_in_omap ${CLUSTER2} ${POOL}
 
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   # teuthology will trash the daemon
