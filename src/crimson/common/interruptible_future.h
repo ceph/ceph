@@ -711,6 +711,19 @@ public:
 	    typename ErrorVisitorHeadT,
 	    typename... ErrorVisitorTailT>
   [[gnu::always_inline]]
+  auto safe_then_interruptible(ValueInterruptCondT&& valfunc,
+			       ErrorVisitorHeadT&& err_func_head,
+			       ErrorVisitorTailT&&... err_func_tail) {
+    return safe_then_interruptible(
+	std::forward<ValueInterruptCondT>(valfunc),
+	::crimson::composer(std::forward<ErrorVisitorHeadT>(err_func_head),
+			    std::forward<ErrorVisitorTailT>(err_func_tail)...));
+  }
+
+  template <typename ValueInterruptCondT,
+	    typename ErrorVisitorHeadT,
+	    typename... ErrorVisitorTailT>
+  [[gnu::always_inline]]
   auto safe_then_interruptible_tuple(ValueInterruptCondT&& valfunc,
 			       ErrorVisitorHeadT&& err_func_head,
 			       ErrorVisitorTailT&&... err_func_tail) {
