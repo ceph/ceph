@@ -67,6 +67,10 @@ class HostManger(ResourceManager):
         return self.api.add_host(HostSpec(hostname, addr=addr, labels=labels))
 
     @wait_api_result
+    def get_facts(self, hostname: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self.api.get_facts(hostname)
+
+    @wait_api_result
     def remove(self, hostname: str):
         return self.api.remove_host(hostname)
 
