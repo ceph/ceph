@@ -9,7 +9,7 @@
 #include "crimson/common/log.h"
 
 #include "include/buffer.h"
-#include "crimson/os/seastore/nvmedevice/nvmedevice.h"
+#include "nvmedevice.h"
 
 namespace {
   seastar::logger& logger() {
