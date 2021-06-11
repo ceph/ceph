@@ -14,38 +14,6 @@ from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
 
 class TestNFS:
-    daemon_raw_config = """
-NFS_CORE_PARAM {
-            Enable_NLM = false;
-            Enable_RQUOTA = false;
-            Protocols = 4;
-            NFS_Port = 14000;
-        }
-
-        MDCACHE {
-           Dir_Chunk = 0;
-        }
-
-        NFSv4 {
-           RecoveryBackend = rados_cluster;
-           Minor_Versions = 1, 2;
-        }
-
-        RADOS_KV {
-           pool = nfs-ganesha;
-           namespace = vstart;
-           UserId = vstart;
-           nodeid = a;
-        }
-
-        RADOS_URLS {
-       Userid = vstart;
-       watch_url = 'rados://nfs-ganesha/vstart/conf-nfs.vstart';
-        }
-
-    %url rados://nfs-ganesha/vstart/conf-nfs.vstart
-"""
-
     export_1 = """
 EXPORT {
     Export_ID=1;
@@ -265,7 +233,38 @@ EXPORT
                 "value": "rados://nfs-ganesha/vstart/conf-nfs.vstart"
             })
         ]
-        daemon_config = GaneshaConfParser(self.daemon_raw_config).parse()
+        daemon_raw_config = """
+NFS_CORE_PARAM {
+            Enable_NLM = false;
+            Enable_RQUOTA = false;
+            Protocols = 4;
+            NFS_Port = 14000;
+        }
+
+        MDCACHE {
+           Dir_Chunk = 0;
+        }
+
+        NFSv4 {
+           RecoveryBackend = rados_cluster;
+           Minor_Versions = 1, 2;
+        }
+
+        RADOS_KV {
+           pool = nfs-ganesha;
+           namespace = vstart;
+           UserId = vstart;
+           nodeid = a;
+        }
+
+        RADOS_URLS {
+       Userid = vstart;
+       watch_url = 'rados://nfs-ganesha/vstart/conf-nfs.vstart';
+        }
+
+    %url rados://nfs-ganesha/vstart/conf-nfs.vstart
+"""
+        daemon_config = GaneshaConfParser(daemon_raw_config).parse()
         assert daemon_config == expected_daemon_config
 
     def _validate_export_1(self, export: Export):
