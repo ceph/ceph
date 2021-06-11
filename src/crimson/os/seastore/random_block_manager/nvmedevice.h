@@ -166,9 +166,9 @@ public:
    * Caller can construct and execute its own nvme command
    */
   virtual nvme_command_ertr::future<> pass_through_io(
-    NVMePassThroughCommand& command) { return nvme_command_ertr::now(); }
+    const NVMePassThroughCommand& command) { return nvme_command_ertr::now(); }
   virtual nvme_command_ertr::future<> pass_admin(
-    nvme_admin_command_t& command) { return nvme_command_ertr::now(); }
+    const nvme_admin_command_t& command) { return nvme_command_ertr::now(); }
 
   /*
    * End-to-End Data Protection
