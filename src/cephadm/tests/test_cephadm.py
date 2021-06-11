@@ -1045,7 +1045,7 @@ class TestBootstrap(object):
         cmd = self._get_cmd('--mon-ip', '192.168.1.1')
 
         with with_cephadm_ctx(cmd, list_networks={}) as ctx:
-            msg = r'Failed to infer CIDR network'
+            msg = r'--skip-mon-network'
             with pytest.raises(cd.Error, match=msg):
                 cd.command_bootstrap(ctx)
 
@@ -1112,8 +1112,8 @@ class TestBootstrap(object):
     def test_mon_ip(self, mon_ip, list_networks, result, cephadm_fs):
         cmd = self._get_cmd('--mon-ip', mon_ip)
         if not result:
-            with with_cephadm_ctx(cmd, list_networks={}) as ctx:
-                msg = r'Failed to infer CIDR network'
+            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+                msg = r'--skip-mon-network'
                 with pytest.raises(cd.Error, match=msg):
                     cd.command_bootstrap(ctx)
         else:
