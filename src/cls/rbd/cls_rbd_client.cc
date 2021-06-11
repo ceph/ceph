@@ -3046,6 +3046,30 @@ int rwlcache_daemonping(librados::IoCtx *ioctx, struct cls::rbd::RwlCacheDaemonP
   return 0;
 }
 
+int rwlcache_get_needfree_caches(librados::IoCtx *ioctx, uint64_t daemon_id,
+				  struct cls::rbd::RwlCacheDaemonNeedFreeCaches &need_free_caches)
+{
+  bufferlist in, out;
+  librados::ObjectReadOperation op;
+
+  encode(daemon_id, in);
+  op.exec("rbd", "rwlcache_get_needfree_caches", in);
+
+  int r = ioctx->operate(RBD_RWLCACHE_MAP_OBJECT_NAME, &op, &out);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out.cbegin();
+  try {
+    decode(need_free_caches, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+
+  return 0;
+}
+
 int rwlcache_request(librados::IoCtx *ioctx, struct cls::rbd::RwlCacheRequest &req,
 		      epoch_t &cache_id)
 {
