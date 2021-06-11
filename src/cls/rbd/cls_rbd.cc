@@ -8334,6 +8334,57 @@ int rwlcache_daemonping(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 }
 
 /*
+ * Get need free caches of Daemon
+ *
+ * Input
+ * @param daemon id
+ *
+ * Output:
+ * @param need free caches info(cls::rbd::RwlCacheNeedFreeCaches)
+ * @return 0 on success, negative error code on failure
+ */
+int rwlcache_get_needfree_caches(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls_rbd_rwlcache_map map;
+  uint64_t daemon_id;
+  int r;
+
+  try {
+    auto it = in->cbegin();
+    decode(daemon_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "get daemon need-free caches(%lu)", daemon_id);
+
+  bufferlist value;
+  r = cls_cxx_map_get_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if (r < 0) {
+    CLS_LOG(5, "error reading key %s: %s", RWLCACHE_MAP_KEY, cpp_strerror(r).c_str());
+    return r;
+  }
+
+  try {
+    auto it = value.cbegin();
+    decode(map, it);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("decode rwlcache map error");
+    return -EIO;
+  }
+
+  if (map.daemons.count(daemon_id)) {
+    cls::rbd::RwlCacheDaemonNeedFreeCaches need_free_caches;
+
+    need_free_caches.need_free_caches = map.daemons[daemon_id].need_free_caches;
+    encode(need_free_caches, *out);
+  } else {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+/*
  * Request repliacted cache-space
  *
  * Input
@@ -8771,6 +8822,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_sparsify;
   cls_method_handle_t h_rwlcache_daemoninfo;
   cls_method_handle_t h_rwlcache_daemonping;
+  cls_method_handle_t h_rwlcache_get_needfree_caches;
   cls_method_handle_t h_rwlcache_request;
   cls_method_handle_t h_rwlcache_get_cacheinfo;
   cls_method_handle_t h_rwlcache_request_ack;
@@ -9196,6 +9248,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "rwlcache_daemonping",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  rwlcache_daemonping, &h_rwlcache_daemonping);
+  cls_register_cxx_method(h_class, "rwlcache_get_needfree_caches",
+			  CLS_METHOD_RD,
+			  rwlcache_get_needfree_caches, &h_rwlcache_get_needfree_caches);
   cls_register_cxx_method(h_class, "rwlcache_request",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  rwlcache_request, &h_rwlcache_request);

@@ -664,6 +664,9 @@ int rwlcache_daemoninfo(librados::IoCtx *ioct, struct cls::rbd::RwlCacheDaemonIn
 int rwlcache_daemonping(librados::IoCtx *ioct, struct cls::rbd::RwlCacheDaemonPing &ping,
 			bool &has_need_free_cache);
 
+int rwlcache_get_needfree_caches(librados::IoCtx *ioctx, uint64_t daemon_id,
+				  struct cls::rbd::RwlCacheDaemonNeedFreeCaches &need_free_caches);
+
 int rwlcache_request(librados::IoCtx *ioct, struct cls::rbd::RwlCacheRequest &req, epoch_t &cache_id);
 int rwlcache_get_cacheinfo(librados::IoCtx *ioct, epoch_t cache_id, struct cls::rbd::RwlCacheInfo &cache);
 

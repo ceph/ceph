@@ -1389,6 +1389,22 @@ void RwlCacheDaemonPing::decode(bufferlist::const_iterator &it)
   DECODE_FINISH(it);
 }
 
+void RwlCacheDaemonNeedFreeCaches::encode(bufferlist &bl) const
+{
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(need_free_caches, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheDaemonNeedFreeCaches::decode(bufferlist::const_iterator &it)
+{
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(need_free_caches, it);
+  DECODE_FINISH(it);
+}
+
 void RwlCacheRequest::encode(bufferlist &bl) const {
   using ceph::encode;
   ENCODE_START(1, 1, bl);

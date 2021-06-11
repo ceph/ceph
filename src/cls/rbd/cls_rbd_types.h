@@ -1042,6 +1042,14 @@ struct RwlCacheDaemonPing {
 };
 WRITE_CLASS_ENCODER(RwlCacheDaemonPing)
 
+struct RwlCacheDaemonNeedFreeCaches {
+  std::set<epoch_t> need_free_caches;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+};
+WRITE_CLASS_ENCODER(RwlCacheDaemonNeedFreeCaches)
+
 struct RwlCacheRequest{
   uint64_t id;
   uint64_t size;
