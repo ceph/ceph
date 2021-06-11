@@ -188,8 +188,13 @@ public:
    * will be corrupted very soon. Caller can overwrite, unmap or refresh data to
    * protect data
    */
-   virtual nvme_command_ertr::future<> get_data_health(
-     std::list<uint64_t>& fragile_lbas) { return nvme_command_ertr::now(); }
+   virtual nvme_command_ertr::future<std::list<uint64_t>> get_data_health() {
+     std::list<uint64_t> fragile_lbas;
+     return nvme_command_ertr::future<std::list<uint64_t>>(
+	nvme_command_ertr::ready_future_marker{},
+	fragile_lbas
+     );
+   }
 
   /*
    * Recovery Level
