@@ -58,51 +58,6 @@ struct nvme_admin_command_t {
   static const uint8_t OPCODE_IDENTIFY = 0x06;
 };
 
-struct nvme_version_t {
-  uint32_t major_ver : 16;
-  uint32_t minor_ver : 8;
-  uint32_t tertiary_ver : 8;
-};
-
-struct admin_command_support_t {
-  uint16_t unused : 5;
-  uint16_t support_directives : 1;
-  uint16_t unused2 : 10;
-};
-
-struct identify_controller_data_t {
-  union
-  {
-    struct
-    {
-      uint8_t raw[1024];
-    };
-    struct
-    {
-      uint8_t unused[80];
-      nvme_version_t version;
-      uint8_t unused2[172];
-      admin_command_support_t oacs;
-    };
-  };
-};
-
-struct identify_namespace_data_t {
-  union
-  {
-    struct
-    {
-      uint8_t raw[4096];
-    };
-    struct
-    {
-      uint8_t unused[64];
-      uint16_t npwg;
-      uint16_t npwa;
-    };
-  };
-};
-
 using NVMePassThroughCommand = nvme_passthru_cmd;
 
 using read_ertr = crimson::errorator<
