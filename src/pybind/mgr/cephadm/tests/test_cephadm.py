@@ -1278,8 +1278,17 @@ Traceback (most recent call last):
                 }]
             }
             _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
+            _run_cephadm.reset_mock()
             assert cephadm_module._osd_activate(
                 ['test']).stdout == "Created osd(s) 1 on host 'test'"
+            assert _run_cephadm.mock_calls == [
+                mock.call('test', 'osd', 'ceph-volume',
+                          ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image=''),
+                mock.call('test', 'osd.1', 'deploy',
+                          ['--name', 'osd.1', '--meta-json', mock.ANY,
+                              '--config-json', '-', '--osd-fsid', 'uuid'],
+                          stdin=mock.ANY, image=''),
+            ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_osd_activate_datadevice_dbdevice(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -1311,5 +1320,14 @@ Traceback (most recent call last):
                 }]
             }
             _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
+            _run_cephadm.reset_mock()
             assert cephadm_module._osd_activate(
                 ['test']).stdout == "Created osd(s) 1 on host 'test'"
+            assert _run_cephadm.mock_calls == [
+                mock.call('test', 'osd', 'ceph-volume',
+                          ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image=''),
+                mock.call('test', 'osd.1', 'deploy',
+                          ['--name', 'osd.1', '--meta-json', mock.ANY,
+                              '--config-json', '-', '--osd-fsid', 'uuid'],
+                          stdin=mock.ANY, image=''),
+            ]
