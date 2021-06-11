@@ -54,8 +54,8 @@ class TestCephAdm(object):
 
         for side_effect, expected_exception in (
             (os_error(errno.EADDRINUSE), cd.PortOccupiedError),
-            (os_error(errno.EAFNOSUPPORT), OSError),
-            (os_error(errno.EADDRNOTAVAIL), OSError),
+            (os_error(errno.EAFNOSUPPORT), cd.Error),
+            (os_error(errno.EADDRNOTAVAIL), cd.Error),
             (None, None),
         ):
             _socket = mock.Mock()
@@ -122,8 +122,8 @@ class TestCephAdm(object):
         ):
             for side_effect, expected_exception in (
                 (os_error(errno.EADDRINUSE), cd.PortOccupiedError),
-                (os_error(errno.EADDRNOTAVAIL), OSError),
-                (os_error(errno.EAFNOSUPPORT), OSError),
+                (os_error(errno.EADDRNOTAVAIL), cd.Error),
+                (os_error(errno.EAFNOSUPPORT), cd.Error),
                 (None, None),
             ):
                 mock_socket_obj = mock.Mock()
