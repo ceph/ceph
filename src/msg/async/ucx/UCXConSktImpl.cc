@@ -20,10 +20,13 @@ static ostream& _prefix(std::ostream *_dout,
   return *_dout << "UCXConSktImpl: " << func_name << ": ";
 }
 
-UCXConSktImpl::UCXConSktImpl(CephContext *cct, UCXWorker *ucx_worker)
-  : cct(cct), ucx_worker(ucx_worker),
+UCXConSktImpl::UCXConSktImpl(CephContext *cct, UCXWorker *ucx_worker,
+                             std::shared_ptr<UCXProEngine> ucp_worker_engine)
+  : cct(cct), ucx_worker(ucx_worker), ucp_worker_engine(ucp_worker_engine),
     is_server(false), active(false), pending(false)
 {
+  data_event_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
+  ldout(cct, 20) << "connected fd: " << data_event_fd << dendl;
 }
 
 UCXConSktImpl::~UCXConSktImpl()
@@ -32,6 +35,11 @@ UCXConSktImpl::~UCXConSktImpl()
   ucx_worker->remove_pending_conn(this);
 
   std::lock_guard l{lock};
+}
+
+void UCXConSktImpl::set_connection_status(int con_status)
+{
+  connected = con_status;
 }
 
 int UCXConSktImpl::is_connected()
@@ -60,5 +68,63 @@ void UCXConSktImpl::close()
 
 int UCXConSktImpl::fd() const
 {
-  return event_fd;
+  return data_event_fd;
+}
+
+void UCXConSktImpl::set_conn_request(const conn_req_t &conn_request)
+{
+  this->conn_request = conn_request;
+  is_server = true;
+}
+
+void UCXConSktImpl::handle_connection_error(ucs_status_t status)
+{
+  lderr(cct) << "detected error: " << ucs_status_string(status)
+             << dendl;
+}
+
+void UCXConSktImpl::ep_error_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
+{
+  UCXConSktImpl *self_this = reinterpret_cast<UCXConSktImpl*>(arg);
+  lderr(self_this->cct) << dendl;
+  self_this->handle_connection_error(status);
+}
+
+ucs_status_t UCXConSktImpl::create_server_ep()
+{
+  ucp_conn_request_attr_t conn_req_attr;
+  conn_req_attr.field_mask =
+    UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+
+  ucs_status_t status =
+    ucp_conn_request_query(conn_request.conn_request, &conn_req_attr);
+  if (status != UCS_OK) {
+    lderr(cct) << "ucp_conn_request_query() failed: "
+               << ucs_status_string(status)
+	       << dendl;
+  }
+
+  ucp_ep_params_t ep_params;
+  ep_params.field_mask = UCP_EP_PARAM_FIELD_ERR_HANDLER |
+                         UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                         UCP_EP_PARAM_FIELD_CONN_REQUEST;
+  ep_params.conn_request = conn_request.conn_request;
+  ep_params.err_mode = UCP_ERR_HANDLING_MODE_PEER;
+  ep_params.err_handler.cb = ep_error_cb;
+  ep_params.err_handler.arg = reinterpret_cast<void*>(this);
+
+  status = ucp_ep_create(ucp_worker_engine->get_ucp_worker(),
+                         &ep_params, &conn_ep);
+  if (status != UCS_OK) {
+    ceph_assert(conn_ep == NULL);
+    lderr(cct) << "ucp_ep_create() failed : "
+               << ucs_status_string(status)
+	       << dendl;
+    handle_connection_error(status);
+    return status;
+  }
+
+  conn_id = reinterpret_cast<uint64_t>(conn_ep);
+  ucp_worker_engine->add_connections(conn_id, this);
+  return UCS_OK;
 }

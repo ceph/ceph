@@ -61,19 +61,52 @@ int UCXSerSktImpl::listen(const SocketOptions &skt_opts)
 
   ldout(cct, 20) << "started listener " << ucp_ser_listener << " on "
                  << sockaddr_str((const sockaddr*)&listen_addr, sizeof(listen_addr)) << ", "
-                 << "server listen fd: " << listen_skt_notify_fd
+                 << "sever listen fd: " << listen_skt_notify_fd
                  << dendl;
   return true;
 }
 
-int UCXSerSktImpl::accept(ConnectedSocket *peer_socket, const SocketOptions &opt,
+int UCXSerSktImpl::accept(ConnectedSocket *ser_con_socket, const SocketOptions &opt,
                           entity_addr_t *peer_addr, Worker *ucx_worker)
 {
-  ldout(cct, 15) << dendl;
+  eventfd_t listen_sync_val = 0xdead;
+  int rst = eventfd_read(listen_skt_notify_fd, &listen_sync_val);
+  ldout(cct, 20) << "listen_skt_notify_fd : " << listen_sync_val << ", "
+                 << "rst = " << rst << dendl;
+  if (listen_sync_val == 0xdead) {
+    ceph_assert(conn_requests.empty());
+    return -EAGAIN;
+  }
 
-  int rst = 0;
+  ceph_assert(ser_con_socket);
+  ceph_assert(!conn_requests.empty());
 
-  return rst;
+  auto conn_request = conn_requests.front();
+  conn_requests.pop_front();
+
+  auto ucx_ser_conskt = new UCXConSktImpl(cct,
+                                          dynamic_cast<UCXWorker*>(ucx_worker),
+                                          ucp_worker_engine);
+  ucx_ser_conskt->set_conn_request(conn_request);
+  ucs_status_t status = ucx_ser_conskt->create_server_ep();
+  if (status == UCS_OK) {
+    ucp_conn_request_attr_t conn_req_attr;
+    conn_req_attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+    status = ucp_conn_request_query(conn_request.conn_request, &conn_req_attr);
+    if (status == UCS_OK) {
+      peer_addr->set_type(addr_type);
+      peer_addr->set_sockaddr((sockaddr*)(&conn_req_attr.client_address));
+    }
+  } else {
+    lderr(cct) << "failed to create accept ep"
+               << dendl;
+    return -1;
+  }
+
+  ucx_ser_conskt->set_connection_status(1);
+  *ser_con_socket = ConnectedSocket(std::unique_ptr<UCXConSktImpl>(ucx_ser_conskt));
+
+  return 0;
 }
 
 void UCXSerSktImpl::abort_accept()
@@ -155,4 +188,5 @@ void UCXSerSktImpl::recv_req_con_cb(ucp_conn_request_h conn_req, void *arg)
   gettimeofday(&conn_request.arrival_time, NULL);
 
   this_self->conn_requests.push_back(conn_request);
+  this_self->listen_notify(); // notify upper layer to accept connection
 }

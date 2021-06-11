@@ -64,7 +64,7 @@ int UCXWorker::connect(const entity_addr_t &peer_addr,
 {
   int rst = 0;
 
-  auto ucx_peerskt = new UCXConSktImpl(cct, this);
+  auto ucx_peerskt = new UCXConSktImpl(cct, this, ucp_worker_engine);
 
   if (rst < 0) {
     lderr(cct) << "connect" << peer_addr << " failed." << dendl;
@@ -119,6 +119,11 @@ void UCXProEngine::progress()
 ucp_worker_h UCXProEngine::get_ucp_worker()
 {
   return ucp_worker;
+}
+
+void UCXProEngine::add_connections(uint64_t conn_id, UCXConSktImpl* ucx_con)
+{
+  ucx_connections[conn_id] = ucx_con;
 }
 
 ucs_status_t

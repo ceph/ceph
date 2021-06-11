@@ -25,6 +25,13 @@
 #include "msg/async/Stack.h"
 
 class UCXWorker;
+class UCXConSktImpl;
+
+typedef struct {
+    ucp_conn_request_h conn_request;
+    struct timeval     arrival_time;
+} conn_req_t;
+
 
 /*
  * UCX callback for send/receive completion
@@ -50,12 +57,14 @@ private:
   ceph::mutex lock = ceph::make_mutex("UCXProEngine::lock");
   std::thread thread_engine;
   ucp_worker_h ucp_worker;
+  std::map<uint64_t, UCXConSktImpl*> ucx_connections;
 public:
   UCXProEngine(CephContext *cct, ucp_worker_h ucp_worker);
 
   void fire_polling();
   void progress();
   ucp_worker_h get_ucp_worker();
+  void add_connections(uint64_t conn_id, UCXConSktImpl* ucx_con);
 
   static ucs_status_t
   am_recv_callback(void *arg, const void *header,
@@ -66,20 +75,29 @@ public:
 };
 
 class UCXConSktImpl : public ConnectedSocketImpl {
-protected:
+public:
   CephContext *cct;
+private:
   UCXWorker* ucx_worker;
+  std::shared_ptr<UCXProEngine> ucp_worker_engine;
   int connected = -1;
-  int tcp_fd = -1;
-  int event_fd = -1;
+  int data_event_fd = -1;
+  conn_req_t conn_request;
+  uint64_t conn_id = -1;
+  ucp_ep_h conn_ep = NULL;
 
   ceph::mutex lock = ceph::make_mutex("UCXConSktImpl::lock");
   bool is_server;
   bool active;
   bool pending;
 
+  void handle_connection_error(ucs_status_t status);
+  static
+  void ep_error_cb(void *arg, ucp_ep_h ep, ucs_status_t status);
+
 public:
-  UCXConSktImpl(CephContext *cct, UCXWorker *ucx_worker);
+  UCXConSktImpl(CephContext *cct, UCXWorker *ucx_worker,
+                std::shared_ptr<UCXProEngine> ucp_worker_engine);
   ~UCXConSktImpl();
 
   int is_connected() override;
@@ -88,13 +106,12 @@ public:
   void shutdown() override;
   void close() override;
   int fd() const override;
+  void set_conn_request(const conn_req_t &conn_request);
+  ucs_status_t create_server_ep();
+  void set_connection_status(int con_status);
 };
 
 class UCXSerSktImpl : public ServerSocketImpl {
-  typedef struct {
-      ucp_conn_request_h conn_request;
-      struct timeval     arrival_time;
-  } conn_req_t;
 public:
   CephContext *cct;
 private:
@@ -115,7 +132,7 @@ public:
 
   int listen(const SocketOptions &skt_opts);
 
-  int accept(ConnectedSocket *peer_socket, const SocketOptions &opts,
+  int accept(ConnectedSocket *ser_con_socket, const SocketOptions &opts,
              entity_addr_t *peer_addr, Worker *ucx_worker) override;
   void abort_accept() override;
   int fd() const override;
