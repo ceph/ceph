@@ -8685,6 +8685,69 @@ int rwlcache_free(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/*
+ * ping from librbd primary
+ *
+ * Input
+ * @param cache id (epoch_t)
+ *
+ * Output
+ * @param has removed daemons (bool)
+ * @return 0 on success, negative error code on failure
+ */
+int rwlcache_primaryping(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  epoch_t cache_id;
+  cls_rbd_rwlcache_map map;
+  int r;
+
+  try {
+    auto it = in->cbegin();
+    decode(cache_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+  CLS_LOG(20, "primaryping with cache %u", cache_id);
+
+  bufferlist value;
+  r = cls_cxx_map_get_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if (r < 0) {
+    CLS_ERR("error reading key %s: %s", RWLCACHE_MAP_KEY, cpp_strerror(r).c_str());
+    return r;
+  }
+
+  try {
+    auto it = value.cbegin();
+    decode(map, it);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("decode map error");
+    return -EIO;
+  }
+
+  bool has_removed_daemon = false;
+  cls_rbd_rwlcache_map::Cache &cache = map.caches[cache_id];
+  for (auto id : cache.daemons) {
+    if (map.daemons.count(id) == 0) {
+	has_removed_daemon = true;
+	break;
+    }
+  }
+
+  check_expiration_cache(map);
+  check_expiration_daemon(map);
+
+  value.clear();
+  encode(map, value, get_encode_features(hctx));
+  r = cls_cxx_map_set_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if (r < 0) {
+    CLS_ERR("error updating daemon info: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  encode(has_removed_daemon, *out);
+  return 0;
+}
+
 CLS_INIT(rbd)
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -8827,6 +8890,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_rwlcache_get_cacheinfo;
   cls_method_handle_t h_rwlcache_request_ack;
   cls_method_handle_t h_rwlcache_free;
+  cls_method_handle_t h_rwlcache_primaryping;
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
@@ -9263,4 +9327,7 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "rwlcache_free",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  rwlcache_free, &h_rwlcache_free);
+  cls_register_cxx_method(h_class, "rwlcache_primaryping",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  rwlcache_primaryping, &h_rwlcache_primaryping);
 }

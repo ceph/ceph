@@ -3126,5 +3126,29 @@ int rwlcache_free(librados::IoCtx *ioctx, struct cls::rbd::RwlCacheFree &req)
   return  ioctx->operate(std::string(RBD_RWLCACHE_MAP_OBJECT_NAME), &op);
 }
 
+int rwlcache_primaryping(librados::IoCtx *ioctx, epoch_t cache_id, bool &has_removed_daemon)
+{
+  bufferlist in, out;
+  librados::ObjectWriteOperation op;
+  int prval;
+
+  encode(cache_id, in);
+  op.exec("rbd", "rwlcache_primaryping", in, &out, &prval);
+
+  int r = ioctx->operate(RBD_RWLCACHE_MAP_OBJECT_NAME, &op, librados::OPERATION_RETURNVEC);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out.cbegin();
+  try {
+    decode(has_removed_daemon, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+
+  return 0;
+}
+
 } // namespace cls_client
 } // namespace librbd
