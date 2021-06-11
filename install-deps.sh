@@ -361,6 +361,7 @@ else
     centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
         echo "Using dnf to install dependencies"
+	$SUDO dnf install -y libarchive
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
