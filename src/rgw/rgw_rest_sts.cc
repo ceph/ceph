@@ -189,11 +189,11 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (error == -EACCES) {
       throw -EACCES;
     }
-    ldpp_dout(dpp, 5) << "Invalid JWT" << dendl;
+    ldpp_dout(dpp, 5) << "Invalid JWT: " << error << dendl;
     return boost::none;
   }
-  catch (...) {
-    ldpp_dout(dpp, 5) << "Invalid JWT" << dendl;
+  catch (const std::exception& e) {
+    ldpp_dout(dpp, 5) << "Invalid JWT: " << e.what() << dendl;
     return boost::none;
   }
   return t;
@@ -335,7 +335,7 @@ WebTokenEngine::validate_signature_using_cert(const DoutPrefixProvider* dpp, con
 
       verifier.verify(decoded);
     }
-  } catch (std::runtime_error& e) {
+  } catch (const std::exception& e) {
     ldpp_dout(dpp, 0) << "Signature validation using x5c failed: " << e.what() << dendl;
     throw;
   }
@@ -363,7 +363,7 @@ WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, cons
                   .allow_algorithm(jwt::algorithm::rs512().setModulusAndExponent(n,e));
       verifier.verify(decoded);
     }
-  } catch (std::runtime_error& e) {
+  } catch (const std::exception& e) {
     ldpp_dout(dpp, 0) << "Signature validation using n, e failed: " << e.what() << dendl;
     throw;
   }

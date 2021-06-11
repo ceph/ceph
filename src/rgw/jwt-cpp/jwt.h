@@ -14,7 +14,7 @@
 #include <openssl/bn.h>
 #include <openssl/rsa.h>
 
-#include "../rgw_b64.h"
+#include "rgw/rgw_b64.h"
 
 //If openssl version less than 1.1
 #if OPENSSL_VERSION_NUMBER < 269484032
@@ -312,9 +312,9 @@ namespace jwt {
 			std::shared_ptr<EVP_PKEY> pkey;
 			/// Hash generator
 			const EVP_MD*(*md)();
-			// Modulus
+			/// Modulus
 			std::string modulus;
-			// Exponent
+			/// Exponent
 			std::string exponent;
 			/// Algorithmname
 			const std::string alg_name;
