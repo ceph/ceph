@@ -1,5 +1,6 @@
 # flake8: noqa
 
+import pytest
 from typing import Optional, Tuple, Iterator, List, Any, Dict
 
 from contextlib import contextmanager
@@ -502,6 +503,37 @@ NFS_CORE_PARAM {
 #        assert export.daemons == set(expected_exports[2])
         assert export.cluster_id == cluster_id
 
+    @pytest.mark.parametrize(
+        "block",
+        [
+            export_1,
+            export_2,
+        ]
+    )
+    def test_export_from_to_export_block(self, block):
+        cluster_id = 'foo'
+        blocks = GaneshaConfParser(block).parse()
+        export = Export.from_export_block(blocks[0], cluster_id)
+        newblock = export.to_export_block()
+        export2 = Export.from_export_block(newblock, cluster_id)
+        newblock2 = export2.to_export_block()
+        assert newblock == newblock2
+
+    @pytest.mark.parametrize(
+        "block",
+        [
+            export_1,
+            export_2,
+        ]
+    )
+    def test_export_from_to_dict(self, block):
+        cluster_id = 'foo'
+        blocks = GaneshaConfParser(block).parse()
+        export = Export.from_export_block(blocks[0], cluster_id)
+        j = export.to_dict()
+        export2 = Export.from_dict(j['export_id'], j)
+        j2 = export2.to_dict()
+        assert j == j2
     """
     def test_update_export(self):
         for cluster_id, info in self.clusters.items():
