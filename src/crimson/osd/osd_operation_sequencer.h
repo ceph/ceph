@@ -4,6 +4,7 @@
 #pragma once
 
 #include <map>
+#include <fmt/format.h>
 #include <seastar/core/condition-variable.hh>
 #include "crimson/common/operation.h"
 #include "osd/osd_types.h"
@@ -103,7 +104,10 @@ private:
   // the id of last op which is completed
   uint64_t last_completed = 0;
   seastar::condition_variable unblocked;
+
+  friend fmt::formatter<OpSequencer>;
 };
+
 
 class OpSequencers {
 public:
@@ -118,3 +122,20 @@ private:
   std::map<spg_t, OpSequencer> pg_ops;
 };
 } // namespace crimson::osd
+
+template <>
+struct fmt::formatter<crimson::osd::OpSequencer> {
+  // ignore the format string
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const crimson::osd::OpSequencer& sequencer,
+              FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(),
+                          "(last_completed={},last_unblocked={},last_issued={})",
+                          sequencer.last_completed,
+                          sequencer.last_unblocked,
+                          sequencer.last_issued);
+  }
+};
