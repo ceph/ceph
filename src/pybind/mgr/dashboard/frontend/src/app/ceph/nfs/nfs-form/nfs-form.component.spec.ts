@@ -94,7 +94,7 @@ describe('NfsFormComponent', () => {
       daemons: [],
       fsal: { fs_name: 'a', name: '', rgw_user_id: '', user_id: '' },
       path: '',
-      protocolNfsv3: true,
+      protocolNfsv3: false,
       protocolNfsv4: true,
       pseudo: '',
       sec_label_xattr: 'security.selinux',
@@ -139,6 +139,15 @@ describe('NfsFormComponent', () => {
     component.isEdit = true;
     component.ngOnInit();
     expect(component.nfsForm.get('cluster_id').disabled).toBeTruthy();
+  });
+
+  it('should mark NFSv4 protocol as required', () => {
+    component.nfsForm.patchValue({
+      protocolNfsv4: false
+    });
+    component.nfsForm.updateValueAndValidity({ emitEvent: false });
+    expect(component.nfsForm.valid).toBeFalsy();
+    expect(component.nfsForm.get('protocolNfsv4').hasError('required')).toBeTruthy();
   });
 
   describe('should submit request', () => {
