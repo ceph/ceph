@@ -50,40 +50,40 @@ public:
   mkfs_ret mkfs(
     Transaction &t) final;
 
-  get_mappings_ret get_mappings(
+  get_mappings_ret _get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) final;
 
-  get_mappings_ret get_mappings(
+  get_mappings_ret _get_mappings(
     Transaction &t,
     laddr_list_t &&list) final;
 
-  get_mapping_ret get_mapping(
+  get_mapping_ret _get_mapping(
     Transaction &t,
     laddr_t offset) final;
 
-  find_hole_ret find_hole(
+  find_hole_ret _find_hole(
     Transaction &t,
     laddr_t hint,
     extent_len_t) final;
 
-  alloc_extent_ret alloc_extent(
+  alloc_extent_ret _alloc_extent(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
     paddr_t addr) final;
 
-  set_extent_ret set_extent(
+  set_extent_ret _set_extent(
     Transaction &t,
     laddr_t off, extent_len_t len, paddr_t addr) final;
 
-  ref_ret decref_extent(
+  ref_ret _decref_extent(
     Transaction &t,
     laddr_t addr) final {
     return update_refcount(t, addr, -1);
   }
 
-  ref_ret incref_extent(
+  ref_ret _incref_extent(
     Transaction &t,
     laddr_t addr) final {
     return update_refcount(t, addr, 1);
@@ -92,25 +92,25 @@ public:
   void complete_transaction(
     Transaction &t) final;
 
-  init_cached_extent_ret init_cached_extent(
+  init_cached_extent_ret _init_cached_extent(
     Transaction &t,
     CachedExtentRef e) final;
 
-  scan_mappings_ret scan_mappings(
+  scan_mappings_ret _scan_mappings(
     Transaction &t,
     laddr_t begin,
     laddr_t end,
     scan_mappings_func_t &&f) final;
 
-  scan_mapped_space_ret scan_mapped_space(
+  scan_mapped_space_ret _scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) final;
 
-  rewrite_extent_ret rewrite_extent(
+  rewrite_extent_ret _rewrite_extent(
     Transaction &t,
-    CachedExtentRef extent);
+    CachedExtentRef extent) final;
 
-  get_physical_extent_if_live_ret get_physical_extent_if_live(
+  get_physical_extent_if_live_ret _get_physical_extent_if_live(
     Transaction &t,
     extent_types_t type,
     paddr_t addr,
@@ -126,7 +126,7 @@ public:
   ~BtreeLBAManager();
 private:
   SegmentManager &segment_manager;
-  InterruptedCache cache;
+  Cache &cache;
 
   btree_pin_set_t pin_set;
 
@@ -142,8 +142,8 @@ private:
    *
    * Get a reference to the root LBANode.
    */
-  using get_root_ertr = base_ertr;
-  using get_root_ret = get_root_ertr::future<LBANodeRef>;
+  using get_root_iertr = base_iertr;
+  using get_root_ret = get_root_iertr::future<LBANodeRef>;
   get_root_ret get_root(Transaction &);
 
   /**
@@ -151,8 +151,8 @@ private:
    *
    * Insert a lba mapping into the tree
    */
-  using insert_mapping_ertr = base_ertr;
-  using insert_mapping_ret = insert_mapping_ertr::future<LBAPinRef>;
+  using insert_mapping_iertr = base_iertr;
+  using insert_mapping_ret = insert_mapping_iertr::future<LBAPinRef>;
   insert_mapping_ret insert_mapping(
     Transaction &t,   ///< [in,out] transaction
     LBANodeRef root,  ///< [in] root node
@@ -176,15 +176,15 @@ private:
    *
    * Updates mapping, removes if f returns nullopt
    */
-  using update_mapping_ertr = ref_ertr;
-  using update_mapping_ret = ref_ertr::future<lba_map_val_t>;
+  using update_mapping_iertr = ref_iertr;
+  using update_mapping_ret = ref_iertr::future<lba_map_val_t>;
   using update_func_t = LBANode::mutate_func_t;
   update_mapping_ret update_mapping(
     Transaction &t,
     laddr_t addr,
     update_func_t &&f);
 
-  using update_internal_mapping_ertr = LBANode::mutate_internal_address_ertr;
+  using update_internal_mapping_iertr = LBANode::mutate_internal_address_iertr;
   using update_internal_mapping_ret = LBANode::mutate_internal_address_ret;
   update_internal_mapping_ret update_internal_mapping(
     Transaction &t,
