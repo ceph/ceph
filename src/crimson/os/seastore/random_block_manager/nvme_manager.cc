@@ -294,13 +294,13 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
 }
 
 NVMeManager::free_block_ertr::future<> NVMeManager::free_extent(
-    Transaction &t, blk_paddr_t from, blk_paddr_t to)
+    Transaction &t, blk_paddr_t from, size_t len)
 {
+  ceph_assert(!(len % super.block_size));
   blk_id_t blk_id_start = from / super.block_size;
-  blk_id_t blk_id_end = to / super.block_size;
 
   interval_set<blk_id_t> free_extent;
-  free_extent.insert(blk_id_start, blk_id_end - blk_id_start + 1);
+  free_extent.insert(blk_id_start, len / super.block_size);
   rbm_alloc_delta_t alloc_info {
     extent_types_t::RBM_ALLOC_INFO,
     free_extent,

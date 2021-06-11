@@ -79,7 +79,7 @@ public:
     crimson::ct_error::invarg
     >;
   // TODO: will include trim if necessary
-  virtual free_block_ertr::future<> free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to) = 0;
+  virtual free_block_ertr::future<> free_extent(Transaction &t, blk_paddr_t from, size_t len) = 0;
 
   using abort_allocation_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
