@@ -89,23 +89,27 @@ steps below:
 
      ceph orch apply grafana 1
 
-Cephadm takes care of the configuration of Prometheus, Grafana, and Alertmanager
-automatically.
+Manually setting the Grafana URL
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-However, there is one exception to this rule. In a some setups, the Dashboard
-user's browser might not be able to access the Grafana URL configured in Ceph
-Dashboard. One such scenario is when the cluster and the accessing user are each
-in a different DNS zone.
+Cephadm automatically configures Prometheus, Grafana, and Alertmanager in
+all cases except one.
 
-For this case, there is an extra configuration option for Ceph Dashboard, which
-can be used to configure the URL for accessing Grafana by the user's browser.
-This value will never be altered by cephadm. To set this configuration option,
-issue the following command::
+In a some setups, the Dashboard user's browser might not be able to access the
+Grafana URL that is configured in Ceph Dashboard. This can happen when the
+cluster and the accessing user are in different DNS zones.
 
-  $ ceph dashboard set-grafana-frontend-api-url <grafana-server-api>
+If this is the case, you can use a configuration option for Ceph Dashboard
+to set the URL that the user's browser will use to access Grafana. This
+value will never be altered by cephadm. To set this configuration option,
+issue the following command:
 
-It may take a minute or two for services to be deployed.  Once
-completed, you should see something like this from ``ceph orch ls``
+   .. prompt:: bash $
+
+     ceph dashboard set-grafana-frontend-api-url <grafana-server-api>
+
+It might take a minute or two for services to be deployed. After the
+services have been deployed, you should see something like this when you issue the command ``ceph orch ls``:
 
 .. code-block:: console
 
