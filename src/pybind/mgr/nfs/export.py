@@ -592,6 +592,15 @@ class FSExport(ExportMgr):
                     cast(str, new_fsal.user_id)
                 )
             new_fsal.cephx_key = old_fsal.cephx_key
+        if old_export.fsal.name == 'RGW':
+            old_rgw_fsal = cast(RGWFSAL, old_export.fsal)
+            new_rgw_fsal = cast(RGWFSAL, new_export.fsal)
+            if old_rgw_fsal.user_id != new_rgw_fsal.user_id:
+                raise NFSInvalidOperation('user_id change is not allowed')
+            if old_rgw_fsal.access_key_id != new_rgw_fsal.access_key_id:
+                raise NFSInvalidOperation('access_key_id change is not allowed')
+            if old_rgw_fsal.secret_access_key != new_rgw_fsal.secret_access_key:
+                raise NFSInvalidOperation('secret_access_key change is not allowed')
 
         self.exports[cluster_id].remove(old_export)
         self._update_export(cluster_id, new_export)
