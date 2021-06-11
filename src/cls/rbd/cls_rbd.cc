@@ -8400,6 +8400,74 @@ int rwlcache_request_ack(cls_method_context_t hctx, bufferlist *in, bufferlist *
   return 0;
 }
 
+/*
+ * Free Allocated cache
+ *
+ * Input
+ * @param cache id(cls::rbd::RwlCacheFree)
+ *
+ * Output
+ * @return 0 on success, negative error code on failure
+ */
+int rwlcache_free(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::RwlCacheFree req;
+  cls_rbd_rwlcache_map map;
+  int r;
+
+  try {
+    auto it = in->cbegin();
+    decode(req, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+  CLS_LOG(20, "free cache %u", req.cache_id);
+
+  bufferlist value;
+  r = cls_cxx_map_get_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if (r < 0) {
+    CLS_ERR("error reading key %s: %s", RWLCACHE_MAP_KEY, cpp_strerror(r).c_str());
+    return r;
+  }
+
+  try {
+    auto it = value.cbegin();
+    decode(map, it);
+  } catch (const ceph::buffer::error &err) {
+    CLS_ERR("decode map error");
+    return -EIO;
+  }
+
+  cls_rbd_rwlcache_map::Cache &cache = map.caches[req.cache_id];
+  for (auto it = cache.daemons.begin(); it != cache.daemons.end();) {
+    if (req.need_free_daemons.count(*it) == 0) {
+      map.daemons[*it].free_size += cache.cache_size;
+      it = cache.daemons.erase(it);
+    } else {
+      map.daemons[*it].need_free_caches.insert(req.cache_id);
+      it++;
+    }
+  }
+  // Still has daemon to free space
+  if (cache.daemons.size()) {
+    map.free_daemon_space_caches.insert(std::make_pair(req.cache_id, cache));
+  }
+
+  map.caches.erase(req.cache_id);
+
+  check_expiration_cache(map);
+
+  value.clear();
+  encode(map, value, get_encode_features(hctx));
+  r = cls_cxx_map_set_val(hctx, RWLCACHE_MAP_KEY, &value);
+  if (r < 0) {
+    CLS_ERR("error updating daemon info: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
 CLS_INIT(rbd)
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -8539,6 +8607,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_rwlcache_request;
   cls_method_handle_t h_rwlcache_get_cacheinfo;
   cls_method_handle_t h_rwlcache_request_ack;
+  cls_method_handle_t h_rwlcache_free;
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
@@ -8966,4 +9035,7 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "rwlcache_request_ack",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  rwlcache_request_ack, &h_rwlcache_request_ack);
+  cls_register_cxx_method(h_class, "rwlcache_free",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  rwlcache_free, &h_rwlcache_free);
 }

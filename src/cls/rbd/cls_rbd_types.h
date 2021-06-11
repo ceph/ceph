@@ -1079,6 +1079,17 @@ struct RwlCacheRequestAck {
 };
 WRITE_CLASS_ENCODER(RwlCacheRequestAck)
 
+struct RwlCacheFree {
+  epoch_t cache_id;
+  // Primary can't free daemon space, need objclass help
+  std::set<uint64_t> need_free_daemons;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+
+};
+WRITE_CLASS_ENCODER(RwlCacheFree)
+
 } // namespace rbd
 } // namespace cls
 
