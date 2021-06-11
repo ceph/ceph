@@ -22,7 +22,7 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
 			       int64_t size,
 			       int64_t blk_size,
 			       std::string_view name)
-    : Allocator(name, size, blk_size),
+    : Allocator(name, size, blk_size & 0x00000000ffffffff),
       cct(cct),
       num_free(0),
       size(size),
