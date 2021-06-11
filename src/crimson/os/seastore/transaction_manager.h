@@ -127,7 +127,7 @@ public:
    * Get the logical pin at offset
    */
   using get_pin_ertr = LBAManager::get_mapping_ertr;
-  using get_pin_ret = LBAManager::get_mapping_ret;
+  using get_pin_ret = LBAManager::get_mapping_ertr::future<LBAPinRef>;
   get_pin_ret get_pin(
     Transaction &t,
     laddr_t offset) {
@@ -337,7 +337,9 @@ public:
   }
 
   using find_hole_ertr = LBAManager::find_hole_ertr;
-  using find_hole_ret = LBAManager::find_hole_ret;
+  using find_hole_ret = LBAManager::find_hole_ertr::future<
+    std::pair<laddr_t, extent_len_t>
+    >;
   find_hole_ret find_hole(
     Transaction &t,
     laddr_t hint,

@@ -275,16 +275,16 @@ struct LBAInternalNode
     return std::make_pair(retl, retr);
   }
 
-  using split_ertr = base_ertr;
-  using split_ret = split_ertr::future<LBANodeRef>;
+  using split_iertr = base_iertr;
+  using split_ret = split_iertr::future<LBANodeRef>;
   split_ret split_entry(
     op_context_t c,
     laddr_t addr,
     internal_iterator_t,
     LBANodeRef entry);
 
-  using merge_ertr = base_ertr;
-  using merge_ret = merge_ertr::future<LBANodeRef>;
+  using merge_iertr = base_iertr;
+  using merge_ret = merge_iertr::future<LBANodeRef>;
   merge_ret merge_entry(
     op_context_t c,
     laddr_t addr,
@@ -369,7 +369,7 @@ struct LBALeafNode
   lookup_ret lookup(op_context_t c, laddr_t addr, depth_t depth) final
   {
     return lookup_ret(
-      lookup_ertr::ready_future_marker{},
+      interruptible::ready_future_marker{},
       this);
   }
 
