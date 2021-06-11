@@ -181,6 +181,10 @@ public:
     bufferptr &bptr,
     uint16_t stream = 0) { return write_ertr::now(); }
 
+   virtual read_ertr::future<> protected_read(
+    uint64_t offset,
+    bufferptr &bptr) { return read_ertr::now(); }
+
   /*
    * Data Health
    *
