@@ -3501,19 +3501,21 @@ def prepare_mon_addresses(
     if not ctx.skip_mon_network:
         # make sure IP is configured locally, and then figure out the
         # CIDR network
+        errmsg = f'Cannot infer CIDR network for mon IP `{base_ip}`'
         for net, ifaces in list_networks(ctx).items():
             ips: List[str] = []
             for iface, ls in ifaces.items():
                 ips.extend(ls)
-            if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
-                    [ipaddress.ip_address(ip) for ip in ips]:
-                mon_network = net
-                logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
-                                                                 mon_network))
-                break
+            try:
+                if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
+                        [ipaddress.ip_address(ip) for ip in ips]:
+                    mon_network = net
+                    logger.info(f'Mon IP `{base_ip}` is in CIDR network `{mon_network}`')
+                    break
+            except ValueError as e:
+                logger.warning(f'{errmsg}: {e}')
         if not mon_network:
-            raise Error('Failed to infer CIDR network for mon ip %s; pass '
-                        '--skip-mon-network to configure it later' % base_ip)
+            raise Error(f'{errmsg}: pass --skip-mon-network to configure it later')
 
     return (addr_arg, ipv6, mon_network)
 
