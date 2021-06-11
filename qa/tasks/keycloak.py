@@ -67,6 +67,11 @@ def install_packages(ctx, config):
     finally:
         log.info('Removing packaged dependencies of Keycloak...')
         for client in config:
+            current_version = get_keycloak_version(config)
+            ctx.cluster.only(client).run(
+                args=['cd', '{tdir}'.format(tdir=get_keycloak_dir(ctx,config)), run.Raw('&&'), 'rm', '-rf', 'keycloak-wildfly-adapter-dist-' + current_version + '.tar.gz'],
+            )
+
             ctx.cluster.only(client).run(
                 args=['rm', '-rf', '{tdir}'.format(tdir=get_keycloak_dir(ctx,config))],
             )
