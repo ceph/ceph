@@ -271,7 +271,7 @@ struct cls_rbd_rwlcache_map {
       rdma_port(info.rdma_port),
       total_size(info.total_size),
       free_size(info.total_size),
-      expiration(ceph_clock_now()),
+      expiration(ceph_clock_now() + utime_t(RBD_RWLCACHE_DAEMON_PING_TIMEOUT, 0)),
       daemon_addr(inst.addr) {
     }
 
