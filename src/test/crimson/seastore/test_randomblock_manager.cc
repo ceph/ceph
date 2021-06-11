@@ -93,10 +93,10 @@ struct rbm_test_t : public  seastar_test_suite_t,
 
   auto free_extent(Transaction &t, interval_set<blk_id_t> range) {
     for (auto r : range) {
-      logger().debug("free_extent: start {} end {}", r.first * DEFAULT_BLOCK_SIZE,
-		      (r.first + r.second - 1) * DEFAULT_BLOCK_SIZE);
+      logger().debug("free_extent: start {} len {}", r.first * DEFAULT_BLOCK_SIZE,
+		      r.second * DEFAULT_BLOCK_SIZE);
       return rbm_manager->free_extent(t, r.first * DEFAULT_BLOCK_SIZE,
-	      (r.first + r.second - 1) * DEFAULT_BLOCK_SIZE).unsafe_get0();
+	     r.second * DEFAULT_BLOCK_SIZE).unsafe_get0();
     }
   }
 

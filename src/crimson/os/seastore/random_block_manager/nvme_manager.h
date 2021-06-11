@@ -212,7 +212,7 @@ public:
    */
   // TODO: will include trim if necessary
   free_block_ertr::future<> free_extent(
-      Transaction &t, blk_paddr_t from, blk_paddr_t to) final;
+      Transaction &t, blk_paddr_t from, size_t len) final;
   abort_allocation_ertr::future<> abort_allocation(Transaction &t) final;
   write_ertr::future<> complete_allocation(Transaction &t) final;
 
