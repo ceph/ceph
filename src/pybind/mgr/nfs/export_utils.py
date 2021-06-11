@@ -274,7 +274,7 @@ class RGWFSAL(FSAL):
     def from_fsal_block(cls, fsal_block: RawBlock) -> 'RGWFSAL':
         return cls(fsal_block.values['name'],
                    fsal_block.values.get('user_id'),
-                   fsal_block.values.get('access_key'),
+                   fsal_block.values.get('access_key_id'),
                    fsal_block.values.get('secret_access_key'))
 
     def to_fsal_block(self) -> RawBlock:
