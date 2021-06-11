@@ -79,6 +79,10 @@ def get_grafana_dashboards(base_dir):
                 assert dashboard_config['id'] is None, \
                     "'id' not null: '{}'".format(dashboard_config['id'])
 
+                assert 'timezone' not in dashboard_config or dashboard_config['timezone'] == '', \
+                    ("'timezone' field must not be set to anything but an empty string or be "
+                     "omitted completely")
+
                 # Grafana dashboard checks
                 title = dashboard_config['title']
                 assert len(title) > 0, \

@@ -1245,7 +1245,7 @@
       "30d"
     ]
   },
-  "timezone": "browser",
+  "timezone": "",
   "title": "Ceph - Cluster",
   "version": 13
     }
