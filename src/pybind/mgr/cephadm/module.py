@@ -1578,6 +1578,19 @@ Then run the following:
         return list(self.inventory.all_specs())
 
     @handle_orch_error
+    def get_facts(self, hostname: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Return a list of hosts metadata(gather_facts) managed by the orchestrator.
+
+        Notes:
+          - skip async: manager reads from cache.
+        """
+        if hostname:
+            return [self.cache.get_facts(hostname)]
+
+        return [self.cache.get_facts(hostname) for hostname in self.cache.get_hosts()]
+
+    @handle_orch_error
     def add_host_label(self, host: str, label: str) -> str:
         self.inventory.add_label(host, label)
         self.log.info('Added label %s to host %s' % (label, host))
