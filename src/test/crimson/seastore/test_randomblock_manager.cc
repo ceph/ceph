@@ -6,8 +6,8 @@
 #include <random>
 
 #include "crimson/common/log.h"
-#include "crimson/os/seastore/randomblock_manager.h"
-#include "crimson/os/seastore/nvmedevice/nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager/nvme_manager.h"
+#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/cache.h"
@@ -30,7 +30,7 @@ struct rbm_test_t : public  seastar_test_suite_t,
   TMTestState {
   segment_manager::EphemeralSegmentManagerRef segment_manager; // Need to be deleted, just for Cache
   Cache cache;
-  std::unique_ptr<RandomBlockManager> rbm_manager;
+  std::unique_ptr<NVMeManager> rbm_manager;
   nvme_device::NVMeBlockDevice *device;
 
   std::default_random_engine generator;
@@ -45,7 +45,7 @@ struct rbm_test_t : public  seastar_test_suite_t,
       cache(*segment_manager)
   {
     device = new nvme_device::TestMemory(DEFAULT_TEST_SIZE);
-    rbm_manager.reset(new RandomBlockManager(device, std::string()));
+    rbm_manager.reset(new NVMeManager(device, std::string()));
     config.start = 0;
     config.end = DEFAULT_TEST_SIZE;
     config.block_size = DEFAULT_BLOCK_SIZE;

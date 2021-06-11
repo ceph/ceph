@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/buffer.h"
-#include "crimson/os/seastore/nvmedevice/nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
 #include "test/crimson/gtest_seastar.h"
 #include "include/stringify.h"
 

@@ -256,8 +256,8 @@ public:
 /*
  * Implementation of NVMeBlockDevice with POSIX APIs
  *
- * PosixNVMeDevice provides NVMe SSD interfaces through POSIX APIs which is generally
- * available at most operating environment.
+ * PosixNVMeDevice provides NVMe SSD interfaces through POSIX APIs which is
+ * generally available at most operating environment.
  */
 class PosixNVMeDevice : public NVMeBlockDevice {
 public:

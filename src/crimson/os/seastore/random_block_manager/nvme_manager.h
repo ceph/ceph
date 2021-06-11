@@ -15,8 +15,8 @@
 #include "crimson/osd/exceptions.h"
 
 #include "crimson/os/seastore/transaction.h"
-//#include "crimson/os/seastore/nvmedevice/block.h"
-#include "crimson/os/seastore/nvmedevice/nvmedevice.h"
+#include "nvmedevice.h"
+#include "crimson/os/seastore/random_block_manager.h"
 
 #include "crimson/common/layout.h"
 #include "include/buffer.h"
@@ -30,7 +30,8 @@ using NVMeBlockDevice = nvme_device::NVMeBlockDevice;
 using NVMeBlockDeviceRef = std::unique_ptr<NVMeBlockDevice>;
 
 enum {
-  RBM_NVME_END_TO_END_PROTECTION = 1, // TODO: This allows the device to manage crc on a block by itself
+  // TODO: This allows the device to manage crc on a block by itself
+  RBM_NVME_END_TO_END_PROTECTION = 1,
   RBM_BITMAP_BLOCK_CRC = 2,
 };
 
@@ -170,71 +171,28 @@ WRITE_CLASS_DENC_BOUNDED(
 
 namespace crimson::os::seastore {
 
-class RandomBlockManager {
+class NVMeManager final : public RandomBlockManager {
 public:
-
-  struct mkfs_config_t {
-    std::string path;
-    blk_paddr_t start;
-    blk_paddr_t end;
-    size_t block_size = 0;
-    size_t total_size = 0;
-    seastore_meta_t meta;
-  };
-  using mkfs_ertr = crimson::errorator<
-	crimson::ct_error::input_output_error,
-	crimson::ct_error::invarg
-	>;
   /*
    * Ondisk layout
    *
-   * -------------------------------------------------------------------------------------------------
-   * | rbm_metadata_header_t | rbm_bitmap_block_t 1 | rbm_bitmap_block_t 2 | ... |    data blocks    |
-   * -------------------------------------------------------------------------------------------------
+   * ---------------------------------------------------------------------------
+   * | rbm_metadata_header_t | rbm_bitmap_block_t 1 |  ... |    data blocks    |
+   * ---------------------------------------------------------------------------
    */
 
-  mkfs_ertr::future<> mkfs(mkfs_config_t);
+  mkfs_ertr::future<> mkfs(mkfs_config_t) final;
+  read_ertr::future<> read(uint64_t addr, bufferptr &buffer) final;
+  write_ertr::future<> write(uint64_t addr, bufferptr &buf) final;
+  open_ertr::future<> open(const std::string &path, blk_paddr_t start) final;
+  close_ertr::future<> close() final;
 
-  using read_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
-  read_ertr::future<> read(uint64_t addr, bufferptr &buffer);
-
-  using write_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::ebadf,
-    crimson::ct_error::enospc,
-    crimson::ct_error::erange
-    >;
-  write_ertr::future<> write(uint64_t addr, bufferptr &buf);
-
-  using open_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent>;
-  open_ertr::future<> open(const std::string &path, blk_paddr_t start);
-
-  using close_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg>;
-  close_ertr::future<> close();
-
-  using allocate_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enospc
-    >;
-  using allocate_ret = allocate_ertr::future<
-    std::optional<bufferptr>
-    >;
   /*
    * alloc_extent
    *
    * The role of this function is to find out free blocks the transaction requires.
-   * To do so, alloc_extent() looks into both in-memory allocator and freebitmap blocks.
+   * To do so, alloc_extent() looks into both in-memory allocator
+   * and freebitmap blocks.
    * But, in-memory allocator is the future work, and is not implemented yet,
    * we use freebitmap directly to allocate freeblocks for now.
    *
@@ -243,40 +201,27 @@ public:
    * TODO: multiple allocation
    *
    */
-  allocate_ertr::future<> alloc_extent(Transaction &t, size_t size); // allocator, return blocks
+  allocate_ertr::future<> alloc_extent(
+      Transaction &t, size_t size) final; // allocator, return blocks
 
-  using free_block_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg
-    >;
   /*
    * free_extent
    *
    * add a range of free blocks to transaction
    *
    */
-  free_block_ertr::future<> free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to); // TODO: will include trim if necessary
-
-  using abort_allocation_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg
-    >;
-  abort_allocation_ertr::future<> abort_allocation(Transaction &t);
-
-  using complete_allocation_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange
-    >;
-  write_ertr::future<> complete_allocation(Transaction &t);
+  // TODO: will include trim if necessary
+  free_block_ertr::future<> free_extent(
+      Transaction &t, blk_paddr_t from, blk_paddr_t to) final;
+  abort_allocation_ertr::future<> abort_allocation(Transaction &t) final;
+  write_ertr::future<> complete_allocation(Transaction &t) final;
 
   open_ertr::future<> _open_device(const std::string path);
   read_ertr::future<rbm_metadata_header_t> read_rbm_header(blk_paddr_t addr);
   write_ertr::future<> write_rbm_header();
 
-  size_t get_size() { return super.size; };
-  size_t get_block_size() { return super.block_size; }
+  size_t get_size() const final { return super.size; };
+  size_t get_block_size() const final { return super.block_size; }
 
   // max block number a block can represent using bitmap
   uint64_t max_block_by_bitmap_block() {
@@ -335,21 +280,22 @@ public:
    * @param uint64_t the block number the rbm_bitmap_block_t will be stored
    *
    */
-  write_ertr::future<> rbm_sync_block_bitmap(rbm_bitmap_block_t &block, blk_id_t block_no);
+  write_ertr::future<> rbm_sync_block_bitmap(
+      rbm_bitmap_block_t &block, blk_id_t block_no);
 
   using check_bitmap_blocks_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg>;
   check_bitmap_blocks_ertr::future<> check_bitmap_blocks();
-  uint64_t get_free_blocks() {
+  uint64_t get_free_blocks() const {
     return super.free_block_count;
   }
   /*
-   * We will have mulitple partitions (circularjournals and randbomblockmanagers) on a device,
-   * so start and end location of the device  are needed to support such case.
-   *
+   * We will have mulitple partitions (circularjournals and randbomblockmanagers)
+   * on a device, so start and end location of the device are needed to
+   * support such case.
    */
-  RandomBlockManager(NVMeBlockDevice * device, std::string path)
+  NVMeManager(NVMeBlockDevice * device, std::string path)
     : device(device), path(path) {}
 
   /*
@@ -392,8 +338,10 @@ public:
     return block_end - block_start + 1;
   }
 
-  write_ertr::future<> rbm_sync_block_bitmap_by_range(blk_id_t start, blk_id_t end, bitmap_op_types_t op);
-  void add_cont_bitmap_blocks_to_buf(bufferlist& buf, int num_block, bitmap_op_types_t op) {
+  write_ertr::future<> rbm_sync_block_bitmap_by_range(
+      blk_id_t start, blk_id_t end, bitmap_op_types_t op);
+  void add_cont_bitmap_blocks_to_buf(
+      bufferlist& buf, int num_block, bitmap_op_types_t op) {
     rbm_bitmap_block_t b_block(super.block_size);
     alloc_rbm_bitmap_block_buf(b_block);
     if (op == bitmap_op_types_t::ALL_SET) {
@@ -409,13 +357,16 @@ public:
   write_ertr::future<> write(blk_paddr_t addr, bufferlist &bl);
 
 private:
-  rbm_metadata_header_t super; // this contains the number of bitmap blocks, free blocks and rbm specific information
+  /*
+   * this contains the number of bitmap blocks, free blocks and
+   * rbm specific information
+   */
+  rbm_metadata_header_t super;
   //FreelistManager free_manager; // TODO: block management
   NVMeBlockDevice * device;
   std::string path;
   int stream_id; // for multi-stream
 };
-using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;
-
+using NVMeManagerRef = std::unique_ptr<NVMeManager>;
 
 }

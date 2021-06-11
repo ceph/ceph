@@ -7,10 +7,10 @@
 #include "crimson/common/log.h"
 
 #include "include/buffer.h"
-#include "randomblock_manager.h"
-#include "crimson/os/seastore/nvmedevice/nvmedevice.h"
+#include "nvmedevice.h"
 #include "include/interval_set.h"
 #include "include/intarith.h"
+#include "nvme_manager.h"
 
 namespace {
   seastar::logger& logger() {
@@ -20,7 +20,8 @@ namespace {
 
 namespace crimson::os::seastore {
 
-RandomBlockManager::write_ertr::future<> RandomBlockManager::rbm_sync_block_bitmap(rbm_bitmap_block_t &block, blk_id_t block_no)
+NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap(
+    rbm_bitmap_block_t &block, blk_id_t block_no)
 {
   bufferptr bptr;
   try {
@@ -43,7 +44,7 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::rbm_sync_block_bitm
 		       bptr);
 }
 
-RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::initialize_blk_alloc_area() {
+NVMeManager::mkfs_ertr::future<> NVMeManager::initialize_blk_alloc_area() {
   auto start = super.start_data_area / super.block_size;
   logger().debug("initialize_alloc_area: start to read at {} ", start);
 
@@ -67,7 +68,8 @@ RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::initialize_blk_alloc
     return rbm_sync_block_bitmap_by_range(
             start,
             end,
-            bitmap_op_types_t::ALL_CLEAR).safe_then([this, b_block, start]() mutable {
+            bitmap_op_types_t::ALL_CLEAR
+	    ).safe_then([this, b_block, start]() mutable {
       /*
        * Set rest of the block bitmap, which is not used, to 1
        * To do so, we only mark 1 to empty bitmap blocks
@@ -90,8 +92,8 @@ RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::initialize_blk_alloc
             ).handle_error(
                 mkfs_ertr::pass_further{},
                 crimson::ct_error::assert_all{
-                  "Invalid error rbm_sync_block_bitmap to update last bitmap block \
-                   in RandomBlockManager::initialize_blk_alloc_area"
+                  "Invalid error rbm_sync_block_bitmap to update \
+		  last bitmap block in NVMeManager::initialize_blk_alloc_area"
                 }
               );
       }
@@ -99,19 +101,21 @@ RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::initialize_blk_alloc
     }).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-        "Invalid error rbm_sync_block_bitmap in RandomBlockManager::initialize_blk_alloc_area"
+        "Invalid error rbm_sync_block_bitmap \
+	  in NVMeManager::initialize_blk_alloc_area"
       }
       );
   }).handle_error(
     mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error rbm_sync_block_bitmap_by_range in RandomBlockManager::initialize_blk_alloc_area"
+      "Invalid error rbm_sync_block_bitmap_by_range \
+	in NVMeManager::initialize_blk_alloc_area"
     }
     );
 
 }
 
-RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::mkfs(mkfs_config_t config)
+NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
 {
   logger().debug("path {}", path);
   return _open_device(path).safe_then([this, &config]() {
@@ -131,7 +135,8 @@ RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::mkfs(mkfs_config_t c
 	    super.free_block_count = config.total_size/config.block_size - 2;
 	    super.alloc_area_size = get_alloc_area_size();
 	    super.start_alloc_area = RBM_SUPERBLOCK_SIZE;
-	    super.start_data_area = super.start_alloc_area + super.alloc_area_size;
+	    super.start_data_area =
+	      super.start_alloc_area + super.alloc_area_size;
 	    super.crc = 0;
 	    super.feature |= RBM_BITMAP_BLOCK_CRC;
 
@@ -142,18 +147,18 @@ RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::mkfs(mkfs_config_t c
 	      }).handle_error(
 		mkfs_ertr::pass_further{},
 		crimson::ct_error::assert_all{
-		  "Invalid error write_rbm_header in RandomBlockManager::mkfs"
+		  "Invalid error write_rbm_header in NVMeManager::mkfs"
 		});
 	    }),
 	  mkfs_ertr::pass_further{},
 	  crimson::ct_error::assert_all{
-	    "Invalid error read_rbm_header in RandomBlockManager::mkfs"
+	    "Invalid error read_rbm_header in NVMeManager::mkfs"
 	  }
 	);
     }).handle_error(
 	mkfs_ertr::pass_further{},
 	crimson::ct_error::assert_all{
-	  "Invalid error open_device in RandomBlockManager::mkfs"
+	  "Invalid error open_device in NVMeManager::mkfs"
 	}
     ).finally([this] {
       if (device) {
@@ -166,17 +171,21 @@ RandomBlockManager::mkfs_ertr::future<> RandomBlockManager::mkfs(mkfs_config_t c
 
 }
 
-RandomBlockManager::find_block_ret RandomBlockManager::find_free_block(Transaction &t, size_t size)
+NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t size)
 {
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
-  return seastar::do_with(uint64_t(0), uint64_t(super.start_alloc_area), interval_set<blk_id_t>(), bp,
-	  [&, this] (auto &allocated, auto &addr, auto &alloc_extent, auto &bp) mutable {
+  return seastar::do_with(uint64_t(0),
+    uint64_t(super.start_alloc_area),
+    interval_set<blk_id_t>(),
+    bp,
+    [&, this] (auto &allocated, auto &addr, auto &alloc_extent, auto &bp) mutable {
     return crimson::do_until(
 	[&, this] () mutable {
 	return device->read(
 	    addr,
 	    bp
-	    ).safe_then([&bp, &addr, size, &allocated, &t, &alloc_extent, this]() mutable {
+	    ).safe_then(
+	      [&bp, &addr, size, &allocated, &t, &alloc_extent, this]() mutable {
 	      logger().debug("find_free_list: allocate {}, addr {}", allocated, addr);
 	      rbm_bitmap_block_t b_block(super.block_size);
 	      bufferlist bl_bitmap_block;
@@ -184,7 +193,8 @@ RandomBlockManager::find_block_ret RandomBlockManager::find_free_block(Transacti
 	      decode(b_block, bl_bitmap_block);
 	      auto max = max_block_by_bitmap_block();
 	      auto allocated_blocks = t.get_rbm_allocated_blocks();
-	      for (uint64_t i = 0; i < max && (uint64_t)size/super.block_size > allocated; i++) {
+	      for (uint64_t i = 0;
+		  i < max && (uint64_t)size/super.block_size > allocated; i++) {
 		auto block_id = convert_bitmap_block_no_to_block_id(i, addr);
 		bool out = false;
 		for (auto b : allocated_blocks) {
@@ -203,7 +213,8 @@ RandomBlockManager::find_block_ret RandomBlockManager::find_free_block(Transacti
 			       convert_bitmap_block_no_to_block_id(i, addr), i);
 		if (allocated != 0 && alloc_extent.range_end() != block_id) {
 		  /*
-		   * if not continous block, just restart to find continuous blocks at the next block.
+		   * if not continous block, just restart to find continuous blocks
+		   * at the next block.
 		   * in-memory allocator can handle this efficiently.
 		   */
 		  allocated = 0;
@@ -215,7 +226,8 @@ RandomBlockManager::find_block_ret RandomBlockManager::find_free_block(Transacti
 		alloc_extent.insert(block_id);
 	      }
 	      addr += super.block_size;
-	      logger().debug("find_free_list: allocated: {} alloc_extent {}", allocated, alloc_extent);
+	      logger().debug("find_free_list: allocated: {} alloc_extent {}",
+			      allocated, alloc_extent);
 	      if (((uint64_t)size)/super.block_size == allocated) {
 		return find_block_ertr::make_ready_future<bool>(true);
 	      } else if (addr >= super.start_data_area) {
@@ -225,7 +237,8 @@ RandomBlockManager::find_block_ret RandomBlockManager::find_free_block(Transacti
 	      return find_block_ertr::make_ready_future<bool>(false);
 	      });
 	}).safe_then([&allocated, &alloc_extent, &t, size, this] () {
-	  logger().debug(" allocated: {} size {} ", allocated * super.block_size, size);
+	  logger().debug(" allocated: {} size {} ",
+			  allocated * super.block_size, size);
 	  if (allocated * super.block_size < size) {
 	    alloc_extent.clear();
 	  }
@@ -235,26 +248,29 @@ RandomBlockManager::find_block_ret RandomBlockManager::find_free_block(Transacti
 	  }).handle_error(
 	      find_block_ertr::pass_further{},
 	      crimson::ct_error::assert_all{
-		"Invalid error in RandomBlockManager::find_free_block"
+		"Invalid error in NVMeManager::find_free_block"
 	      }
 	    );
     });
 }
 
 /* TODO : block allocator */
-RandomBlockManager::allocate_ertr::future<> RandomBlockManager::alloc_extent(Transaction &t, size_t size)
+NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
+    Transaction &t, size_t size)
 {
 
   /*
    * 1. find free blocks using block allocator
-   * 2. add free blocks to transaction (free block is reserved state, but not stored)
+   * 2. add free blocks to transaction
+   *    (the free block is reserved state, not stored)
    * 3. link free blocks to onode
    * Due to in-memory block allocator is the next work to do,
-   * just read the block bitmap directly to find free blocks here.
+   * just read the block bitmap directly to find free blocks.
    *
    */
   return find_free_block(t, size
-      ).safe_then([this, &t, size] (auto alloc_extent) mutable -> allocate_ertr::future<> {
+      ).safe_then([this, &t, size] (auto alloc_extent) mutable
+	-> allocate_ertr::future<> {
 	logger().debug("after find_free_block: allocated {}", alloc_extent);
 	if (!alloc_extent.empty()) {
 	  // add alloc info to delta
@@ -272,12 +288,13 @@ RandomBlockManager::allocate_ertr::future<> RandomBlockManager::alloc_extent(Tra
       ).handle_error(
 	allocate_ertr::pass_further{},
 	crimson::ct_error::assert_all{
-	  "Invalid error find_free_block in RandomBlockManager::alloc_extent"
+	  "Invalid error find_free_block in NVMeManager::alloc_extent"
 	}
 	);
 }
 
-RandomBlockManager::free_block_ertr::future<> RandomBlockManager::free_extent(Transaction &t, blk_paddr_t from, blk_paddr_t to)
+NVMeManager::free_block_ertr::future<> NVMeManager::free_extent(
+    Transaction &t, blk_paddr_t from, blk_paddr_t to)
 {
   blk_id_t blk_id_start = from / super.block_size;
   blk_id_t blk_id_end = to / super.block_size;
@@ -293,7 +310,8 @@ RandomBlockManager::free_block_ertr::future<> RandomBlockManager::free_extent(Tr
   return free_block_ertr::now();
 }
 
-RandomBlockManager::write_ertr::future<> RandomBlockManager::rbm_sync_block_bitmap_by_range(blk_id_t start, blk_id_t end, bitmap_op_types_t op)
+NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap_by_range(
+    blk_id_t start, blk_id_t end, bitmap_op_types_t op)
 {
   auto addr = super.start_alloc_area +
 	      (start / max_block_by_bitmap_block())
@@ -328,7 +346,8 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::rbm_sync_block_bitm
 	  }
 	}
 	auto num_block = num_block_between_blk_ids(start, end);
-	logger().debug("rbm_sync_block_bitmap_by_range: start {}, end {}, loop_end {}, num_block {}",
+	logger().debug("rbm_sync_block_bitmap_by_range: start {}, end {}, \
+			loop_end {}, num_block {}",
 			start, end, loop_end, num_block);
 
 	bl_bitmap_block.clear();
@@ -356,16 +375,19 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::rbm_sync_block_bitm
 		    (end / max_block_by_bitmap_block())
 		    * super.block_size;
 	auto bptr = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
-	// | front (unaligned) | middle | end (unaligned) | or | front (unaligned) | end (unaligned) |
+	// | front (unaligned) | middle | end (unaligned) | or
+	// | front (unaligned) | end (unaligned) |
 	return device->read(
 	    next_addr,
-	    bptr).safe_then([bptr, bl_bitmap_block, start, end, op, addr, this]() mutable {
+	    bptr).safe_then(
+	      [bptr, bl_bitmap_block, start, end, op, addr, this]() mutable {
 	      rbm_bitmap_block_t b_block(super.block_size);
 	      bufferlist block;
 	      block.append(bptr);
 	      decode(b_block, block);
 	      auto max = max_block_by_bitmap_block();
-	      for (uint64_t i = (end - (end % max)) % max; i <= (end % max); i++) {
+	      for (uint64_t i = (end - (end % max)) % max;
+		  i <= (end % max); i++) {
 		if (op == bitmap_op_types_t::ALL_SET) {
 		  b_block.set_bit(i);
 		} else {
@@ -380,18 +402,19 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::rbm_sync_block_bitm
 	      }).handle_error(
 		write_ertr::pass_further{},
 		crimson::ct_error::assert_all{
-		  "Invalid error in RandomBlockManager::rbm_sync_block_bitmap_by_range"
+		  "Invalid error in NVMeManager::rbm_sync_block_bitmap_by_range"
 		}
 	      );
 	}).handle_error(
 	  write_ertr::pass_further{},
 	  crimson::ct_error::assert_all{
-	    "Invalid error in RandomBlockManager::rbm_sync_block_bitmap_by_range"
+	    "Invalid error in NVMeManager::rbm_sync_block_bitmap_by_range"
 	  }
 	);
 }
 
-RandomBlockManager::abort_allocation_ertr::future<> RandomBlockManager::abort_allocation(Transaction &t)
+NVMeManager::abort_allocation_ertr::future<> NVMeManager::abort_allocation(
+    Transaction &t)
 {
   /*
    * TODO: clear all allocation infos associated with transaction in in-memory allocator
@@ -400,7 +423,8 @@ RandomBlockManager::abort_allocation_ertr::future<> RandomBlockManager::abort_al
   return abort_allocation_ertr::now();
 }
 
-RandomBlockManager::write_ertr::future<> RandomBlockManager::complete_allocation(Transaction &t)
+NVMeManager::write_ertr::future<> NVMeManager::complete_allocation(
+    Transaction &t)
 {
   auto alloc_blocks = t.get_rbm_allocated_blocks();
   if (alloc_blocks.empty()) {
@@ -415,8 +439,10 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::complete_allocation
 	      alloc.alloc_blk_ids,
 	      [this, &alloc] (auto &range) -> write_ertr::future<> {
 		logger().debug("range {} ~ {}", range.first, range.second);
-		bitmap_op_types_t op = (alloc.op == rbm_alloc_delta_t::op_types_t::SET) ?
-				    bitmap_op_types_t::ALL_SET : bitmap_op_types_t::ALL_CLEAR;
+		bitmap_op_types_t op =
+		  (alloc.op == rbm_alloc_delta_t::op_types_t::SET) ?
+				    bitmap_op_types_t::ALL_SET :
+				    bitmap_op_types_t::ALL_CLEAR;
 		return rbm_sync_block_bitmap_by_range(
 			range.first,
 			range.first + range.second - 1,
@@ -438,19 +464,22 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::complete_allocation
 	      }
 	    }
 	  }
-	  logger().debug("complete_alloction: complete to allocate {} blocks", alloc_block_count);
+	  logger().debug("complete_alloction: complete to allocate {} blocks",
+			  alloc_block_count);
 	  super.free_block_count -= alloc_block_count;
 	  return write_ertr::now();
 	  });
   });
 }
 
-RandomBlockManager::open_ertr::future<> RandomBlockManager::open(const std::string &path, blk_paddr_t addr)
+NVMeManager::open_ertr::future<> NVMeManager::open(
+    const std::string &path, blk_paddr_t addr)
 {
   logger().debug("open: path{}", path);
   return _open_device(path
       ).safe_then([this, addr]() {
-      return read_rbm_header(addr).safe_then([&](auto s) -> open_ertr::future<> {
+      return read_rbm_header(addr).safe_then([&](auto s)
+	-> open_ertr::future<> {
 	if (s.magic != 0xFF) {
 	  return crimson::ct_error::enoent::make();
 	}
@@ -462,13 +491,13 @@ RandomBlockManager::open_ertr::future<> RandomBlockManager::open(const std::stri
       ).handle_error(
 	open_ertr::pass_further{},
 	crimson::ct_error::assert_all{
-	  "Invalid error read_rbm_header in RandomBlockManager::open"
+	  "Invalid error read_rbm_header in NVMeManager::open"
 	}
       );
     });
 }
 
-RandomBlockManager::write_ertr::future<> RandomBlockManager::write(
+NVMeManager::write_ertr::future<> NVMeManager::write(
   blk_paddr_t addr,
   bufferptr &bptr)
 {
@@ -482,7 +511,7 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::write(
     bptr);
 }
 
-RandomBlockManager::read_ertr::future<> RandomBlockManager::read(
+NVMeManager::read_ertr::future<> NVMeManager::read(
   blk_paddr_t addr,
   bufferptr &bptr)
 {
@@ -496,13 +525,14 @@ RandomBlockManager::read_ertr::future<> RandomBlockManager::read(
       bptr);
 }
 
-RandomBlockManager::close_ertr::future<> RandomBlockManager::close()
+NVMeManager::close_ertr::future<> NVMeManager::close()
 {
   ceph_assert(device);
   return device->close();
 }
 
-RandomBlockManager::open_ertr::future<> RandomBlockManager::_open_device(const std::string path)
+NVMeManager::open_ertr::future<> NVMeManager::_open_device(
+    const std::string path)
 {
   ceph_assert(device);
   return device->open(path, seastar::open_flags::rw
@@ -511,7 +541,7 @@ RandomBlockManager::open_ertr::future<> RandomBlockManager::_open_device(const s
   });
 }
 
-RandomBlockManager::write_ertr::future<> RandomBlockManager::write_rbm_header()
+NVMeManager::write_ertr::future<> NVMeManager::write_rbm_header()
 {
   bufferlist meta_b_header;
   super.crc = 0;
@@ -531,15 +561,18 @@ RandomBlockManager::write_ertr::future<> RandomBlockManager::write_rbm_header()
 	});
 }
 
-RandomBlockManager::read_ertr::future<rbm_metadata_header_t> RandomBlockManager::read_rbm_header(blk_paddr_t addr)
+NVMeManager::read_ertr::future<rbm_metadata_header_t> NVMeManager::read_rbm_header(
+    blk_paddr_t addr)
 {
   ceph_assert(device);
-  bufferptr bptr = bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
+  bufferptr bptr =
+    bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
   bptr.zero();
   return device->read(
     addr,
     bptr
-  ).safe_then([length=bptr.length(), this, bptr]() -> read_ertr::future<rbm_metadata_header_t> {
+  ).safe_then([length=bptr.length(), this, bptr]()
+    -> read_ertr::future<rbm_metadata_header_t> {
     bufferlist bl;
     bl.append(bptr);
     auto p = bl.cbegin();
@@ -548,7 +581,8 @@ RandomBlockManager::read_ertr::future<rbm_metadata_header_t> RandomBlockManager:
       decode(super_block, p);
     }
     catch (ceph::buffer::error& e) {
-      logger().debug(" read_rbm_header: unable to decode rbm super block {}", e.what());
+      logger().debug(" read_rbm_header: unable to decode rbm super block {}",
+		      e.what());
       return crimson::ct_error::enoent::make();
     }
     checksum_t crc = super_block.crc;
@@ -556,7 +590,8 @@ RandomBlockManager::read_ertr::future<rbm_metadata_header_t> RandomBlockManager:
     super_block.crc = 0;
     encode(super_block, meta_b_header);
     if (meta_b_header.crc32c(-1) != crc) {
-      logger().debug(" bad crc on super block, expected {} != actual {} ", meta_b_header.crc32c(-1), crc);
+      logger().debug(" bad crc on super block, expected {} != actual {} ",
+		      meta_b_header.crc32c(-1), crc);
       return crimson::ct_error::input_output_error::make();
     }
     logger().debug(" got {} ", super);
@@ -568,12 +603,12 @@ RandomBlockManager::read_ertr::future<rbm_metadata_header_t> RandomBlockManager:
   }).handle_error(
     read_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error in RandomBlockManager::read_rbm_header"
+      "Invalid error in NVMeManager::read_rbm_header"
     }
     );
 }
 
-RandomBlockManager::check_bitmap_blocks_ertr::future<> RandomBlockManager::check_bitmap_blocks()
+NVMeManager::check_bitmap_blocks_ertr::future<> NVMeManager::check_bitmap_blocks()
 {
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   return seastar::do_with(uint64_t(super.start_alloc_area), uint64_t(0), bp,
@@ -608,14 +643,14 @@ RandomBlockManager::check_bitmap_blocks_ertr::future<> RandomBlockManager::check
 	  }).handle_error(
 	      check_bitmap_blocks_ertr::pass_further{},
 	      crimson::ct_error::assert_all{
-		"Invalid error in RandomBlockManager::find_free_block"
+		"Invalid error in NVMeManager::find_free_block"
 	      }
 	    );
 
     });
 }
 
-RandomBlockManager::write_ertr::future<> RandomBlockManager::write(
+NVMeManager::write_ertr::future<> NVMeManager::write(
   blk_paddr_t addr,
   bufferlist &bl)
 {
@@ -656,7 +691,8 @@ std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
   return out << ")";
 }
 
-std::ostream &operator<<(std::ostream &out, const rbm_bitmap_block_header_t &header)
+std::ostream &operator<<(std::ostream &out,
+    const rbm_bitmap_block_header_t &header)
 {
   out << " rbm_bitmap_block_header_t(size=" << header.size
        << ", checksum=" << header.checksum;
