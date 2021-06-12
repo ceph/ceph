@@ -194,25 +194,14 @@ class GlobalRecoveryEvent(Event):
         self._active_clean_num = active_clean_num
         self._refresh()
 
-    def global_event_update_progress(self, pg_dump):
-        # type: (Dict) -> None
+    def global_event_update_progress(self):
+        # type: () -> None
         "Update progress of Global Recovery Event"
-
-        pgs = pg_dump['pg_stats']
-        new_active_clean_num = 0
-        for pg in pgs:
-
-            if int(pg['reported_epoch']) < int(self._start_epoch):
-                continue
-
-            state = pg['state']
-
-            states = state.split("+")
-
-            if "active" in states and "clean" in states:
-                new_active_clean_num += 1
-
-        total_pg_num = len(pgs)
+        global _module
+        assert _module
+        active_clean = _module.get("active_clean")
+        total_pg_num = active_clean["num_pg"]
+        new_active_clean_num = active_clean["num_active_clean_pg"]
         if self._active_clean_num != new_active_clean_num:
             # Have this case to know when need to update
             # the progress
@@ -287,7 +276,7 @@ class PgRecoveryEvent(Event):
         self._original_pg_count = len(self._pgs)
         self._original_bytes_recovered = None  # type: Optional[Dict[PgId, float]]
         self._progress = 0.0
-        # self._start_epoch = _module.get_osdmap().get_epoch()
+
         self._start_epoch = start_epoch
         self._refresh()
 
@@ -538,7 +527,6 @@ class Module(MgrModule):
         self.log.warning("{0} PGs affected by osd.{1} being marked {2}".format(
             len(affected_pgs), osd_id, marked))
 
-
         # In the case of the osd coming back in, we might need to cancel
         # previous recovery event for that osd
         if marked == "in":
@@ -585,22 +573,14 @@ class Module(MgrModule):
                     self.log.warning("osd.{0} marked in".format(osd_id))
                     self._osd_in_out(old_osdmap, old_dump, new_osdmap, osd_id, "in")
 
-    def _pg_state_changed(self, pg_dump):
+    def _pg_state_changed(self):
 
         # This function both constructs and updates
         # the global recovery event if one of the
         # PGs is not at active+clean state
-
-        pgs = pg_dump['pg_stats']
-        total_pg_num = len(pgs)
-        active_clean_num = 0
-        for pg in pgs:
-            state = pg['state']
-
-            states = state.split("+")
-
-            if "active" in states and "clean" in states:
-                active_clean_num += 1
+        active_clean = self.get("active_clean")
+        total_pg_num = active_clean["num_pg"]
+        active_clean_num = active_clean["num_active_clean_pg"]
         try:
             # There might be a case where there is no pg_num
             progress = float(active_clean_num) / total_pg_num
@@ -608,11 +588,11 @@ class Module(MgrModule):
             return
         if progress < 1.0:
             ev = GlobalRecoveryEvent("Global Recovery Event",
-                    refs=[("global","")],
+                    refs=[("global", "")],
                     add_to_ceph_s=True,
                     start_epoch=self.get_osdmap().get_epoch(),
                     active_clean_num=active_clean_num)
-            ev.global_event_update_progress(pg_dump)
+            ev.global_event_update_progress()
             self._events[ev.id] = ev
 
     def notify(self, notify_type, notify_data):
@@ -640,20 +620,19 @@ class Module(MgrModule):
             ready = self.get("pg_ready")
             for ev_id in list(self._events):
                 ev = self._events[ev_id]
-                # Check for types of events
                 # we have to update
                 if isinstance(ev, PgRecoveryEvent):
                     ev.pg_update(data, ready, self.log)
                     self.maybe_complete(ev)
                 elif isinstance(ev, GlobalRecoveryEvent):
                     global_event = True
-                    ev.global_event_update_progress(data)
+                    ev.global_event_update_progress()
                     self.maybe_complete(ev)
 
             if not global_event:
                 # If there is no global event
                 # we create one
-                self._pg_state_changed(data)
+                self._pg_state_changed()
 
     def maybe_complete(self, event):
         # type: (Event) -> None
