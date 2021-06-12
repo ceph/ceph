@@ -38,8 +38,11 @@ class item_iterator_t {
   using value_input_t = value_input_type_t<NODE_TYPE>;
   using value_t = value_type_t<NODE_TYPE>;
  public:
-  item_iterator_t(const memory_range_t& range)
-      : p_items_start(range.p_start), p_items_end(range.p_end) {
+  item_iterator_t(const container_range_t& range)
+      : node_size{range.node_size},
+        p_items_start(range.range.p_start),
+        p_items_end(range.range.p_end) {
+    assert(is_valid_node_size(node_size));
     assert(p_items_start < p_items_end);
     next_item_range(p_items_end);
   }
@@ -62,19 +65,19 @@ class item_iterator_t {
   }
   node_offset_t size() const {
     size_t ret = item_range.p_end - item_range.p_start + sizeof(node_offset_t);
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < node_size);
     return ret;
   };
   node_offset_t size_to_nxt() const {
     size_t ret = get_key().size() + sizeof(node_offset_t);
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < node_size);
     return ret;
   }
   node_offset_t size_overhead() const {
     return sizeof(node_offset_t) + get_key().size_overhead();
   }
-  memory_range_t get_nxt_container() const {
-    return {item_range.p_start, get_key().p_start()};
+  container_range_t get_nxt_container() const {
+    return {{item_range.p_start, get_key().p_start()}, node_size};
   }
   bool has_next() const {
     assert(p_items_start <= item_range.p_start);
@@ -89,27 +92,31 @@ class item_iterator_t {
   }
   void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
     int start_offset = p_items_start - p_node_start;
-    int end_offset = p_items_end - p_node_start;
-    assert(start_offset > 0 && start_offset < NODE_BLOCK_SIZE);
-    assert(end_offset > 0 && end_offset <= NODE_BLOCK_SIZE);
+    int stage_size = p_items_end - p_items_start;
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert(start_offset + stage_size <= (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
-    ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
+    ceph::encode(static_cast<node_offset_t>(stage_size), encoded);
     ceph::encode(_index, encoded);
   }
 
   static item_iterator_t decode(const char* p_node_start,
+                                extent_len_t node_size,
                                 ceph::bufferlist::const_iterator& delta) {
     node_offset_t start_offset;
     ceph::decode(start_offset, delta);
-    node_offset_t end_offset;
-    ceph::decode(end_offset, delta);
-    assert(start_offset < end_offset);
-    assert(end_offset <= NODE_BLOCK_SIZE);
+    node_offset_t stage_size;
+    ceph::decode(stage_size, delta);
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert((unsigned)start_offset + stage_size <= node_size);
     index_t index;
     ceph::decode(index, delta);
 
-    item_iterator_t ret({p_node_start + start_offset,
-                         p_node_start + end_offset});
+    item_iterator_t ret({{p_node_start + start_offset,
+                          p_node_start + start_offset + stage_size},
+                         node_size});
     while (index > 0) {
       ++ret;
       --index;
@@ -155,6 +162,7 @@ class item_iterator_t {
     item_range = {p_item_start, p_item_end};
   }
 
+  extent_len_t node_size;
   const char* p_items_start;
   const char* p_items_end;
   mutable memory_range_t item_range;

@@ -68,7 +68,7 @@ class NodeExtentManager {
     crimson::ct_error::enoent,
     crimson::ct_error::erange>;
   virtual read_ertr::future<NodeExtentRef> read_extent(
-      Transaction&, laddr_t, extent_len_t) = 0;
+      Transaction&, laddr_t) = 0;
 
   using alloc_ertr = base_ertr;
   virtual alloc_ertr::future<NodeExtentRef> alloc_extent(
