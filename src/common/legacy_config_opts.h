@@ -1532,6 +1532,19 @@ OPTION(rgw_crypt_kmip_s3_key_template, OPT_STR) // sse-s3; kmip key names
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms
                                                       // defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="
 OPTION(rgw_crypt_suppress_logs, OPT_BOOL)   // suppress logs that might print customer key
+OPTION(rgw_crypt_sse_s3_backend, OPT_STR) // Where SSE-S3 encryption keys are stored
+OPTION(rgw_crypt_sse_s3_vault_secret_engine, OPT_STR) // Vault Secret Engine to be used to retrieve encryption keys
+OPTION(rgw_crypt_sse_s3_vault_secret_engine, OPT_STR) // only transit for now
+OPTION(rgw_crypt_sse_s3_key_template, OPT_STR) // template for per-bucket sse-s3 keys in vault
+OPTION(rgw_crypt_sse_s3_vault_auth, OPT_STR) // Type of authentication method to be used with SSE-S3 and Vault
+OPTION(rgw_crypt_sse_s3_vault_token_file, OPT_STR) // Path to token file for type == 'token'
+OPTION(rgw_crypt_sse_s3_vault_addr, OPT_STR) // SSE-S3 Vault server base address
+OPTION(rgw_crypt_sse_s3_vault_prefix, OPT_STR) // SSE-S3 Vault secret URL prefix
+OPTION(rgw_crypt_sse_s3_vault_namespace, OPT_STR) // vault enterprise tenant
+OPTION(rgw_crypt_sse_s3_vault_verify_ssl, OPT_BOOL) // Should RGW verify the vault server SSL certificate
+OPTION(rgw_crypt_sse_s3_vault_ssl_cacert, OPT_STR) // path to custom CA for vault server
+OPTION(rgw_crypt_sse_s3_vault_ssl_clientcert, OPT_STR) // path to client cert for vault server
+OPTION(rgw_crypt_sse_s3_vault_ssl_clientkey, OPT_STR) // path to client key for vault server
 OPTION(rgw_list_bucket_min_readahead, OPT_INT) // minimum number of entries to read from rados for bucket listing
 
 OPTION(rgw_rest_getusage_op_compat, OPT_BOOL) // dump description of total stats for s3 GetUsage API

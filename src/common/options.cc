@@ -7291,6 +7291,89 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description("Suppress logs that might print client key"),
 
+    Option("rgw_crypt_sse_s3_backend", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("vault")
+    .set_enum_allowed({"vault"})
+    .set_description("Where the SSE-S3 encryption keys are stored. The only valid "
+                     "choice here is HashiCorp Vault ('vault')."),
+
+    Option("rgw_crypt_sse_s3_vault_secret_engine", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("transit")
+    .set_enum_allowed({"transit"})
+    .set_description("Vault Secret Engine to be used to retrieve encryption keys.  "
+                     "The only valid choice here is transit.")
+    .add_see_also("rgw_crypt_sse_s3_backend")
+    .add_see_also("rgw_crypt_sse_s3_vault_auth")
+    .add_see_also("rgw_crypt_sse_s3_vault_addr"),
+
+    Option("rgw_crypt_sse_s3_key_template", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("%bucket_id")
+    .set_description("template for per-bucket sse-s3 keys in vault."
+    .set_long_description("This is the template for per-bucket sse-s3 keys.  "
+                          "This string may include "
+                          "``%bucket_id`` which will be expanded out to "
+                          "the bucket marker, a unique "
+                          "uuid assigned to that bucket.  It could "
+                          "contain ``%owner_id``, which will expand "
+                          "out to the owner's id.  Any other use of % "
+                          "is reserved and should not be used.  If the "
+                          "template contains ``%bucket_id``, associated "
+                          "bucket keys will be automatically removed "
+                          "when the bucket is removed.")
+    .add_see_also("rgw_crypt_sse_s3_backend")
+    .add_see_also("rgw_crypt_sse_s3_vault_auth")
+    .add_see_also("rgw_crypt_sse_s3_vault_addr"),
+
+    Option("rgw_crypt_sse_s3_vault_auth", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("token")
+    .set_enum_allowed({"token", "agent"})
+    .set_description("Type of authentication method to be used. The only "
+                           "method currently supported is ``token``.")
+    .add_see_also("rgw_crypt_sse_s3_backend")
+    .add_see_also("rgw_crypt_sse_s3_vault_addr")
+    .add_see_also("rgw_crypt_sse_s3_vault_token_file"),
+
+    Option("rgw_crypt_sse_s3_vault_token_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("If authentication method is 'token', provide a path to "
+                           "the token file, which for security reasons should "
+                           "readable only by Rados Gateway.")
+    .add_see_also("rgw_crypt_sse_s3_backend")
+    .add_see_also("rgw_crypt_sse_s3_vault_auth")
+    .add_see_also("rgw_crypt_sse_s3_vault_addr"),
+
+    Option("rgw_crypt_sse_s3_vault_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("SSE-S3 Vault server base address.")
+    .add_see_also("rgw_crypt_sse_s3_backend")
+    .add_see_also("rgw_crypt_sse_s3_vault_auth")
+    .add_see_also("rgw_crypt_sse_s3_vault_prefix"),
+
+    Option("rgw_crypt_sse_s3_vault_prefix", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("SSE-S3 Vault secret URL prefix, which can be used to "
+                           "restrict access to a particular subset of the "
+                           "Vault secret space.")
+    .add_see_also("rgw_crypt_sse_s3_backend")
+    .add_see_also("rgw_crypt_sse_s3_vault_addr")
+    .add_see_also("rgw_crypt_sse_s3_vault_auth"),
+
+    Option("rgw_crypt_sse_s3_vault_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("Vault Namespace to be used to select your tenant")
+    .add_see_also("rgw_crypt_sse_s3_backend")
+    .add_see_also("rgw_crypt_sse_s3_vault_addr")
+    .add_see_also("rgw_crypt_sse_s3_vault_auth"),
+
+    Option("rgw_crypt_sse_s3_vault_verify_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Should RGW verify the vault server SSL certificate."),
+
+    Option("rgw_crypt_sse_s3_vault_ssl_cacert", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("Path for custom ca certificate for accessing vault server"),
+
+    Option("rgw_crypt_sse_s3_vault_ssl_clientcert", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("Path for custom client certificate for accessing vault server"),
+
+    Option("rgw_crypt_sse_s3_vault_ssl_clientkey", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("Path for private key required for client cert"),
+
     Option("rgw_list_bucket_min_readahead", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description("Minimum number of entries to request from rados for bucket listing"),
