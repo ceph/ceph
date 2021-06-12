@@ -14,7 +14,7 @@ class TestProgress(MgrTestCase):
 
     # How long we expect to wait at most between taking an OSD out
     # and seeing the progress event pop up.
-    EVENT_CREATION_PERIOD = 5
+    EVENT_CREATION_PERIOD = 15
 
     WRITE_PERIOD = 30
 
