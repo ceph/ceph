@@ -50,10 +50,6 @@ function munge_ceph_spec_in {
 function munge_debian_control {
     local version=$1
     shift
-    local with_seastar=$1
-    shift
-    local for_make_check=$1
-    shift
     local control=$1
     case "$version" in
         *squeeze*|*wheezy*)
@@ -61,15 +57,9 @@ function munge_debian_control {
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
-    if $with_seastar; then
-	sed -i -e 's/^# Crimson[[:space:]]//g' $control
-    fi
     if $with_jaeger; then
 	sed -i -e 's/^# Jaeger[[:space:]]//g' $control
 	sed -i -e 's/^# Crimson      libyaml-cpp-dev,/d' $control
-    fi
-    if $for_make_check; then
-        sed -i 's/^# Make-Check[[:space:]]/             /g' $control
     fi
     echo $control
 }
@@ -344,7 +334,7 @@ else
         touch $DIR/status
 
 	backports=""
-	control=$(munge_debian_control "$VERSION" "$with_seastar" "$for_make_check" "debian/control")
+	control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"
@@ -354,7 +344,17 @@ else
 	# make a metapackage that expresses the build dependencies,
 	# install it, rm the .deb; then uninstall the package as its
 	# work is done
-	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
+	build_profiles=""
+	if $for_make_check; then
+	    build_profiles+=",pkg.ceph.check"
+	fi
+	if $with_seastar; then
+	    build_profiles+=",pkg.ceph.crimson"
+	fi
+	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
+	      --build-profiles "${build_profiles#,}" \
+	      --install --remove \
+	      --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
