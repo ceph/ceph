@@ -27,6 +27,34 @@
 class UCXWorker;
 class UCXConSktImpl;
 
+typedef enum {
+  UNKNOWN,
+  IO_READ,
+  IO_WRITE,
+  IO_READ_COMP,
+  IO_WRITE_COMP
+} io_op_t;
+
+constexpr const char *io_op_names[] = {
+  "unknown",
+  "read",
+  "write",
+  "read completion",
+  "write completion"
+};
+
+typedef enum {
+    WAIT_STATUS_OK,
+    WAIT_STATUS_FAILED,
+    WAIT_STATUS_TIMED_OUT
+} wait_status_t;
+
+typedef struct {
+  uint64_t sn;
+  uint32_t data_size;
+  uint32_t op_code;
+} iomsg_t;
+
 typedef struct {
     ucp_conn_request_h conn_request;
     struct timeval     arrival_time;
@@ -51,6 +79,7 @@ struct ucx_request {
     ucs_list_link_t pos;
 };
 
+// Need to use shared_from_this, reason: am_recv_callback
 class UCXProEngine {
 private:
   CephContext *cct;
@@ -58,6 +87,9 @@ private:
   std::thread thread_engine;
   ucp_worker_h ucp_worker;
   std::map<uint64_t, UCXConSktImpl*> ucx_connections;
+  void dispatch_am_message(UCXConSktImpl *ucx_con,
+                           const void *header, size_t header_length,
+                           void *data, const ucp_am_recv_param_t *param);
 public:
   UCXProEngine(CephContext *cct, ucp_worker_h ucp_worker);
 
@@ -71,7 +103,8 @@ public:
                    size_t header_length,
                    void *data, size_t length,
                    const ucp_am_recv_param_t *param);
-
+  wait_status_t
+  wait_completion(ucs_status_ptr_t status_ptr, double timeout = 1e6);
 };
 
 class UCXConSktImpl : public ConnectedSocketImpl {
@@ -85,6 +118,7 @@ private:
   conn_req_t conn_request;
   uint64_t conn_id = -1;
   ucp_ep_h conn_ep = NULL;
+  bufferlist recv_pending_bl;
 
   ceph::mutex lock = ceph::make_mutex("UCXConSktImpl::lock");
   bool is_server;
@@ -94,6 +128,9 @@ private:
   void handle_connection_error(ucs_status_t status);
   static
   void ep_error_cb(void *arg, ucp_ep_h ep, ucs_status_t status);
+  static
+  void am_data_recv_callback(void *request, ucs_status_t status,
+                             size_t length, void *user_data);
 
 public:
   UCXConSktImpl(CephContext *cct, UCXWorker *ucx_worker,
@@ -110,6 +147,9 @@ public:
   ucs_status_t create_server_ep();
   void set_connection_status(int con_status);
   int client_start_connect(const entity_addr_t &server_addr, const SocketOptions &opts);
+  void data_notify();
+  void handle_io_am_write_request(const iomsg_t *msg, void *data,
+                                  const ucp_am_recv_param_t *param);
 };
 
 class UCXSerSktImpl : public ServerSocketImpl {

@@ -51,7 +51,24 @@ int UCXConSktImpl::is_connected()
 
 ssize_t UCXConSktImpl::read(char* buf, size_t len)
 {
-  return 0;
+  eventfd_t data_event_val = 0;
+  int rst = eventfd_read(data_event_fd, &data_event_val);
+  ldout(cct, 20) << "data_event_fd  : " << data_event_val << ", "
+                 << "rst = " << rst << dendl;
+
+  if (recv_pending_bl.length() == 0 || len == 0 || buf == 0) {
+    return 0;
+  }
+
+  bufferlist::iterator bl_it(&recv_pending_bl);
+  auto bl_len = recv_pending_bl.length();
+  len = len > bl_len ? bl_len : len;
+  bl_it.copy(len, buf);
+  recv_pending_bl.splice(0, len);
+  if (recv_pending_bl.length()) {
+    data_notify();
+  }
+  return len;
 }
 
 ssize_t UCXConSktImpl::send(ceph::bufferlist &bl, bool more)
@@ -73,6 +90,42 @@ int UCXConSktImpl::fd() const
   return data_event_fd;
 }
 
+void
+UCXConSktImpl::handle_io_am_write_request(const iomsg_t *msg, void *data,
+                                          const ucp_am_recv_param_t *param)
+{
+  ldout(cct, 25) << "receiving AM IO write data" << dendl;
+  ceph_assert(msg->data_size != 0);
+  ceph_assert(conn_ep != NULL);
+
+  bufferlist bl(msg->data_size);
+
+  if (!(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)) {
+    bl.append((char*)data, msg->data_size);
+  } else {
+    ucp_request_param_t params;
+    params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    //params.cb.recv_am = am_data_recv_callback; TODO
+    params.cb.recv_am = NULL;
+    ucs_status_ptr_t recv_req = ucp_am_recv_data_nbx(
+                                  ucp_worker_engine->get_ucp_worker(),
+                                  data, bl.c_str(), msg->data_size, &params);
+    //TODO: recv_am_data// process_request;
+    wait_status_t wait_status = ucp_worker_engine->wait_completion(recv_req, 5);
+    if (wait_status == WAIT_STATUS_TIMED_OUT) {
+      wait_status = ucp_worker_engine->wait_completion(recv_req);
+    }
+    if (wait_status != WAIT_STATUS_OK) {
+      lderr(cct) << "failed to recv data" << dendl;
+      lderr(cct) << "potential mem leak " << recv_req << dendl;
+      return;
+    }
+  }
+  recv_pending_bl.claim_append(bl);
+  data_notify();
+}
+
 void UCXConSktImpl::set_conn_request(const conn_req_t &conn_request)
 {
   this->conn_request = conn_request;
@@ -90,6 +143,24 @@ void UCXConSktImpl::ep_error_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
   UCXConSktImpl *self_this = reinterpret_cast<UCXConSktImpl*>(arg);
   lderr(self_this->cct) << dendl;
   self_this->handle_connection_error(status);
+}
+
+void UCXConSktImpl::am_data_recv_callback(void *request, ucs_status_t status,
+                                          size_t length, void *user_data)
+{
+  ucx_request *r = reinterpret_cast<ucx_request*>(request);
+  r->status = status;
+  r->completed = true;
+
+  // mock:
+  r->callback = NULL;
+  r->status = UCS_OK;
+  r->completed = false;
+  r->recv_length = 0;
+  r->pos.next = NULL;
+  r->pos.prev = NULL;
+
+  ucp_request_free(request);
 }
 
 ucs_status_t UCXConSktImpl::create_server_ep()
@@ -129,6 +200,13 @@ ucs_status_t UCXConSktImpl::create_server_ep()
   conn_id = reinterpret_cast<uint64_t>(conn_ep);
   ucp_worker_engine->add_connections(conn_id, this);
   return UCS_OK;
+}
+
+void UCXConSktImpl::data_notify()
+{
+   eventfd_t data_event_notify = 0x1;
+   int rst = eventfd_write(data_event_fd, data_event_notify);
+   ceph_assert(rst == 0);
 }
 
 int UCXConSktImpl::client_start_connect(const entity_addr_t &server_addr,

@@ -123,15 +123,71 @@ void UCXProEngine::add_connections(uint64_t conn_id, UCXConSktImpl* ucx_con)
   ucx_connections[conn_id] = ucx_con;
 }
 
+wait_status_t
+UCXProEngine::wait_completion(ucs_status_ptr_t status_ptr, double timeout)
+{
+    if (status_ptr == NULL) {
+        return WAIT_STATUS_OK;
+    } else if (UCS_PTR_IS_PTR(status_ptr)) {
+        ucx_request *request = (ucx_request*)UCS_STATUS_PTR(status_ptr);
+        ucs_status_t status;
+        struct timeval tv_start;
+        gettimeofday(&tv_start, NULL);
+        do {
+            struct timeval tv_current, elapsed;
+            gettimeofday(&tv_current, NULL);
+            timersub(&tv_current, &tv_start, &elapsed);
+            if (elapsed.tv_sec + (elapsed.tv_usec * 1e-6) > timeout) {
+                return WAIT_STATUS_TIMED_OUT;
+            }
+            ucp_worker_progress(ucp_worker);
+            status = ucp_request_check_status(request);
+        } while (status == UCS_INPROGRESS);
+        return (status == UCS_OK) ? WAIT_STATUS_OK : WAIT_STATUS_FAILED;
+    } else {
+        assert(UCS_PTR_IS_ERR(status_ptr));
+        return WAIT_STATUS_FAILED;
+    }
+}
+
 ucs_status_t
 UCXProEngine::am_recv_callback(void *arg, const void *header,
                                size_t header_length,
                                void *data, size_t length,
                                const ucp_am_recv_param_t *param)
 {
-  // TODO:
+  // TODO: really need to solve this problem:
+  //       store all connections into UCXProEngine
+  UCXProEngine *self_this = reinterpret_cast<UCXProEngine*>(arg);
+
+  ceph_assert(param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP);
+
+  uint64_t conn_id = reinterpret_cast<uint64_t>(param->reply_ep);
+  auto iter = self_this->ucx_connections.find(conn_id);
+  if (iter == self_this->ucx_connections.end()) {
+    lderr(self_this->cct) << "can not find connection with ep " << param->reply_ep
+                          << "(" << conn_id << ")"
+			  << dendl;
+  }
+  auto ucx_con = iter->second;
+  self_this->dispatch_am_message(ucx_con, header, header_length, data, param);
+
   return UCS_OK;
 }
+
+void UCXProEngine::dispatch_am_message(UCXConSktImpl *ucx_con,
+                         const void *header, size_t header_length,
+                         void *data, const ucp_am_recv_param_t *param)
+{
+  const iomsg_t *msg = reinterpret_cast<const iomsg_t*>(header);
+  ldout(cct, 15) << "got io (AM) message " << io_op_names[msg->op_code] << ", "
+                 << "sn " << msg->sn << ", "
+		 << "data size " << msg->data_size
+		 << dendl;
+  ceph_assert(msg->op_code == IO_WRITE);
+  ucx_con->handle_io_am_write_request(msg, data, param);
+}
+
 
 UCXStack::UCXStack(CephContext *cct)
   : NetworkStack(cct)
