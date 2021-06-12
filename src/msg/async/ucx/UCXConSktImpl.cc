@@ -7,6 +7,8 @@
  *
  */
 
+#include <ucs/sys/sock.h>
+
 #include "UCXStack.h"
 
 #define FN_NAME (__CEPH_ASSERT_FUNCTION == nullptr ? __func__ : __CEPH_ASSERT_FUNCTION)
@@ -122,6 +124,48 @@ ucs_status_t UCXConSktImpl::create_server_ep()
 	       << dendl;
     handle_connection_error(status);
     return status;
+  }
+
+  conn_id = reinterpret_cast<uint64_t>(conn_ep);
+  ucp_worker_engine->add_connections(conn_id, this);
+  return UCS_OK;
+}
+
+int UCXConSktImpl::client_start_connect(const entity_addr_t &server_addr,
+                                        const SocketOptions &opts)
+{
+  struct sockaddr_in connect_addr = server_addr.u.sin;
+  char sockaddr_str[UCS_SOCKADDR_STRING_LEN] = {0};
+  ldout(cct, 20) << "Connecting to "
+                 << ucs_sockaddr_str((struct sockaddr *)&connect_addr,
+		                     sockaddr_str,
+                                     UCS_SOCKADDR_STRING_LEN)
+		 << dendl;
+
+  ucp_ep_params_t ep_params;
+  ep_params.flags = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
+  ep_params.field_mask = UCP_EP_PARAM_FIELD_FLAGS |
+                         UCP_EP_PARAM_FIELD_SOCK_ADDR |
+			 UCP_EP_PARAM_FIELD_ERR_HANDLER |
+			 UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+  ep_params.err_mode = UCP_ERR_HANDLING_MODE_PEER;
+  ep_params.err_handler.cb = ep_error_cb;
+  ep_params.err_handler.arg = reinterpret_cast<void*>(this);
+  ep_params.sockaddr.addr = (struct sockaddr *)&connect_addr;
+  ep_params.sockaddr.addrlen = sizeof(connect_addr);
+
+  ucs_status_t
+  status = ucp_ep_create(ucp_worker_engine->get_ucp_worker(),
+                         &ep_params, &conn_ep);
+  if (status != UCS_OK) {
+    ceph_assert(conn_ep == NULL);
+    lderr(cct) << "ucp_ep_create() failed : "
+               << ucs_status_string(status)
+	       << dendl;
+    handle_connection_error(status);
+    return status;
+  } else {
+    set_connection_status(1);
   }
 
   conn_id = reinterpret_cast<uint64_t>(conn_ep);

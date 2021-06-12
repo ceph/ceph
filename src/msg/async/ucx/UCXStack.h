@@ -109,6 +109,7 @@ public:
   void set_conn_request(const conn_req_t &conn_request);
   ucs_status_t create_server_ep();
   void set_connection_status(int con_status);
+  int client_start_connect(const entity_addr_t &server_addr, const SocketOptions &opts);
 };
 
 class UCXSerSktImpl : public ServerSocketImpl {

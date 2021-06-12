@@ -63,8 +63,10 @@ int UCXWorker::connect(const entity_addr_t &peer_addr,
                        ConnectedSocket *peer_skt)
 {
   int rst = 0;
+  ucp_worker_engine->fire_polling();
 
   auto ucx_peerskt = new UCXConSktImpl(cct, this, ucp_worker_engine);
+  rst = ucx_peerskt->client_start_connect(peer_addr, peer_opts);
 
   if (rst < 0) {
     lderr(cct) << "connect" << peer_addr << " failed." << dendl;
@@ -73,11 +75,6 @@ int UCXWorker::connect(const entity_addr_t &peer_addr,
   }
 
   *peer_skt = ConnectedSocket(std::unique_ptr<UCXConSktImpl>(ucx_peerskt));
-
-  ucp_params_t ucp_params;
-  ucp_context_h _context;
-  ucs_status_t status = ucp_init(&ucp_params, NULL, &_context);
-  (void)status;
 
   return rst;
 }
