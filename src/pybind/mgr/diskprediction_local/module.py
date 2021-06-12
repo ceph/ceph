@@ -92,13 +92,9 @@ class Module(MgrModule):
                     seconds -= seconds % predicted_frequency
                     seconds += predicted_frequency
                     next_predicted = datetime.datetime.utcfromtimestamp(seconds)
-                    if last_predicted:
-                        self.log.debug('Last scrape %s, next scrape due %s',
-                                       last_predicted.strftime(TIME_FORMAT),
-                                       next_predicted.strftime(TIME_FORMAT))
-                    else:
-                        self.log.debug('Last scrape never, next scrape due %s',
-                                       next_predicted.strftime(TIME_FORMAT))
+                    self.log.debug('Last scrape %s, next scrape due %s',
+                                   last_predicted.strftime(TIME_FORMAT),
+                                   next_predicted.strftime(TIME_FORMAT))
                 if now >= next_predicted:
                     self.predict_all_devices()
                     last_predicted = now
