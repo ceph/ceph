@@ -208,13 +208,13 @@ struct staged {
     *   CONTAINER_TYPE = ContainerType::INDEXABLE
     *   keys() const -> index_t
     *   operator[](index_t) const -> key_get_type
-    *   size_before(index_t) const -> node_offset_t
+    *   size_before(index_t) const -> extent_len_t
     *   size_overhead_at(index_t) const -> node_offset_t
     *   (IS_BOTTOM) get_p_value(index_t) const -> const value_t*
     *   (!IS_BOTTOM) size_to_nxt_at(index_t) const -> node_offset_t
     *   (!IS_BOTTOM) get_nxt_container(index_t) const
     *   encode(p_node_start, encoded)
-    *   decode(p_node_start, delta) -> container_t
+    *   decode(p_node_start, node_size, delta) -> container_t
     * static:
     *   header_size() -> node_offset_t
     *   estimate_insert(key, value) -> node_offset_t
@@ -480,8 +480,10 @@ struct staged {
     }
 
     static me_t decode(const char* p_node_start,
+                       extent_len_t node_size,
                        ceph::bufferlist::const_iterator& delta) {
-      auto container = container_t::decode(p_node_start, delta);
+      auto container = container_t::decode(
+          p_node_start, node_size, delta);
       auto ret = me_t(container);
       index_t index;
       ceph::decode(index, delta);
@@ -517,7 +519,7 @@ struct staged {
      *   get_nxt_container() const
      *   has_next() const -> bool
      *   encode(p_node_start, encoded)
-     *   decode(p_node_start, delta) -> container_t
+     *   decode(p_node_start, node_length, delta) -> container_t
      *   operator++()
      * static:
      *   header_size() -> node_offset_t
@@ -817,8 +819,10 @@ struct staged {
     }
 
     static me_t decode(const char* p_node_start,
+                       extent_len_t node_size,
                        ceph::bufferlist::const_iterator& delta) {
-      auto container = container_t::decode(p_node_start, delta);
+      auto container = container_t::decode(
+          p_node_start, node_size, delta);
       auto ret = me_t(container);
       uint8_t is_end;
       ceph::decode(is_end, delta);
@@ -855,7 +859,7 @@ struct staged {
    *   size() -> node_offset_t
    *   size_overhead() -> node_offset_t
    *   (IS_BOTTOM) get_p_value() -> const value_t*
-   *   (!IS_BOTTOM) get_nxt_container() -> nxt_stage::container_t
+   *   (!IS_BOTTOM) get_nxt_container() -> container_range_t
    *   (!IS_BOTTOM) size_to_nxt() -> node_offset_t
    * seek:
    *   operator++() -> iterator_t&
@@ -886,7 +890,7 @@ struct staged {
    *   (!IS_BOTTOM)get_appender_opened(p_mut) -> Appender
    * denc:
    *   encode(p_node_start, encoded)
-   *   decode(p_node_start, delta) -> iterator_t
+   *   decode(p_node_start, node_size, delta) -> iterator_t
    * static:
    *   header_size() -> node_offset_t
    *   estimate_insert(key, value) -> node_offset_t
@@ -1707,14 +1711,17 @@ struct staged {
       }
     }
     static StagedIterator decode(const char* p_node_start,
+                                 extent_len_t node_size,
                                  ceph::bufferlist::const_iterator& delta) {
       StagedIterator ret;
       uint8_t present;
       ceph::decode(present, delta);
       if (present) {
-        ret.iter = iterator_t::decode(p_node_start, delta);
+        ret.iter = iterator_t::decode(
+            p_node_start, node_size, delta);
         if constexpr (!IS_BOTTOM) {
-          ret._nxt = NXT_STAGE_T::StagedIterator::decode(p_node_start, delta);
+          ret._nxt = NXT_STAGE_T::StagedIterator::decode(
+              p_node_start, node_size, delta);
         }
       }
       return ret;

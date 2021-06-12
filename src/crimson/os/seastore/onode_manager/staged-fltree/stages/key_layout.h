@@ -144,8 +144,6 @@ inline MatchKindCMP compare_to(const snap_gen_t& l, const snap_gen_t& r) {
  */
 struct string_key_view_t {
   enum class Type {MIN, STR, MAX};
-  // presumably the maximum string length is 2KiB
-  using string_size_t = uint16_t;
   static constexpr auto MARKER_MAX = std::numeric_limits<string_size_t>::max();
   static constexpr auto MARKER_MIN = std::numeric_limits<string_size_t>::max() - 1;
   static constexpr auto VALID_UPPER_BOUND = std::numeric_limits<string_size_t>::max() - 2;
@@ -190,7 +188,7 @@ struct string_key_view_t {
   }
   node_offset_t size() const {
     size_t ret = length + sizeof(string_size_t);
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < MAX_NODE_SIZE);
     return ret;
   }
   node_offset_t size_logical() const {
@@ -219,9 +217,11 @@ struct string_key_view_t {
   }
   bool operator!=(const string_key_view_t& x) const { return !(*this == x); }
 
-  void reset_to(const char* origin_base, const char* new_base) {
-    reset_ptr(p_key, origin_base, new_base);
-    reset_ptr(p_length, origin_base, new_base);
+  void reset_to(const char* origin_base,
+                const char* new_base,
+                extent_len_t node_size) {
+    reset_ptr(p_key, origin_base, new_base, node_size);
+    reset_ptr(p_length, origin_base, new_base, node_size);
 #ifndef NDEBUG
     string_size_t current_length;
     std::memcpy(&current_length, p_length, sizeof(string_size_t));
@@ -273,7 +273,6 @@ struct string_key_view_t {
  */
 class string_view_masked_t {
  public:
-  using string_size_t = string_key_view_t::string_size_t;
   using Type = string_key_view_t::Type;
   explicit string_view_masked_t(const string_key_view_t& index)
       : type{index.type()} {
@@ -392,7 +391,6 @@ inline std::ostream& operator<<(std::ostream& os, const string_view_masked_t& ma
 }
 
 struct ns_oid_view_t {
-  using string_size_t = string_key_view_t::string_size_t;
   using Type = string_key_view_t::Type;
 
   ns_oid_view_t(const char* p_end) : nspace(p_end), oid(nspace.p_next_end()) {}
@@ -401,7 +399,7 @@ struct ns_oid_view_t {
   node_offset_t size() const {
     if (type() == Type::STR) {
       size_t ret = nspace.size() + oid.size();
-      assert(ret < NODE_BLOCK_SIZE);
+      assert(ret < MAX_NODE_SIZE);
       return ret;
     } else {
       return sizeof(string_size_t);
@@ -421,9 +419,11 @@ struct ns_oid_view_t {
   }
   bool operator!=(const ns_oid_view_t& x) const { return !(*this == x); }
 
-  void reset_to(const char* origin_base, const char* new_base) {
-    nspace.reset_to(origin_base, new_base);
-    oid.reset_to(origin_base, new_base);
+  void reset_to(const char* origin_base,
+                const char* new_base,
+                extent_len_t node_size) {
+    nspace.reset_to(origin_base, new_base, node_size);
+    oid.reset_to(origin_base, new_base, node_size);
   }
 
   template <KeyT KT>
@@ -596,13 +596,6 @@ inline std::ostream& operator<<(std::ostream& os, const key_hobj_t& key) {
  */
 class key_view_t {
  public:
-  //FIXME: the length of ns and oid should be defined by osd_max_object_name_len
-  //       and object_max_object_namespace_len in the future
-  static constexpr int MAX_NS_OID_LENGTH =
-    (4096 - sizeof(onode_layout_t) * 2) / 4
-    - sizeof(shard_pool_t) - sizeof(crush_t) - sizeof(snap_gen_t)
-    - 8; // size of length field of oid and ns
-
   /**
    * common interfaces as a full_key_t
    */
@@ -711,18 +704,20 @@ class key_view_t {
     replace(key);
   }
 
-  void reset_to(const char* origin_base, const char* new_base) {
+  void reset_to(const char* origin_base,
+                const char* new_base,
+                extent_len_t node_size) {
     if (p_shard_pool != nullptr) {
-      reset_ptr(p_shard_pool, origin_base, new_base);
+      reset_ptr(p_shard_pool, origin_base, new_base, node_size);
     }
     if (p_crush != nullptr) {
-      reset_ptr(p_crush, origin_base, new_base);
+      reset_ptr(p_crush, origin_base, new_base, node_size);
     }
     if (p_ns_oid.has_value()) {
-      p_ns_oid->reset_to(origin_base, new_base);
+      p_ns_oid->reset_to(origin_base, new_base, node_size);
     }
     if (p_snap_gen != nullptr) {
-      reset_ptr(p_snap_gen, origin_base, new_base);
+      reset_ptr(p_snap_gen, origin_base, new_base, node_size);
     }
   }
 

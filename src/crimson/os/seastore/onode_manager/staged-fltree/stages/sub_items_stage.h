@@ -42,7 +42,10 @@ class internal_sub_items_t {
  public:
   using num_keys_t = index_t;
 
-  internal_sub_items_t(const memory_range_t& range) {
+  internal_sub_items_t(const container_range_t& _range)
+      : node_size{_range.node_size} {
+    assert(is_valid_node_size(node_size));
+    auto& range = _range.range;
     assert(range.p_start < range.p_end);
     assert((range.p_end - range.p_start) % sizeof(internal_sub_item_t) == 0);
     num_items = (range.p_end - range.p_start) / sizeof(internal_sub_item_t);
@@ -61,7 +64,7 @@ class internal_sub_items_t {
   }
   node_offset_t size_before(index_t index) const {
     size_t ret = index * sizeof(internal_sub_item_t);
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < node_size);
     return ret;
   }
   const laddr_packed_t* get_p_value(index_t index) const {
@@ -74,24 +77,28 @@ class internal_sub_items_t {
                  sizeof(internal_sub_item_t);
     auto p_start = p_end - num_items * sizeof(internal_sub_item_t);
     int start_offset = p_start - p_node_start;
-    int end_offset = p_end - p_node_start;
-    assert(start_offset > 0 &&
-           start_offset < end_offset &&
-           end_offset < NODE_BLOCK_SIZE);
+    int stage_size = p_end - p_start;
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert(start_offset + stage_size < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
-    ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
+    ceph::encode(static_cast<node_offset_t>(stage_size), encoded);
   }
 
   static internal_sub_items_t decode(
-      const char* p_node_start, ceph::bufferlist::const_iterator& delta) {
+      const char* p_node_start,
+      extent_len_t node_size,
+      ceph::bufferlist::const_iterator& delta) {
     node_offset_t start_offset;
     ceph::decode(start_offset, delta);
-    node_offset_t end_offset;
-    ceph::decode(end_offset, delta);
-    assert(start_offset < end_offset);
-    assert(end_offset <= NODE_BLOCK_SIZE);
-    return internal_sub_items_t({p_node_start + start_offset,
-                                 p_node_start + end_offset});
+    node_offset_t stage_size;
+    ceph::decode(stage_size, delta);
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert((unsigned)start_offset + stage_size < node_size);
+    return internal_sub_items_t({{p_node_start + start_offset,
+                                  p_node_start + start_offset + stage_size},
+                                 node_size});
   }
 
   static node_offset_t header_size() { return 0u; }
@@ -117,6 +124,7 @@ class internal_sub_items_t {
   class Appender;
 
  private:
+  extent_len_t node_size;
   index_t num_items;
   const internal_sub_item_t* p_first_item;
 };
@@ -159,15 +167,22 @@ class internal_sub_items_t::Appender {
  */
 class leaf_sub_items_t {
  public:
-  // TODO: decide by NODE_BLOCK_SIZE, sizeof(snap_gen_t),
-  //       and the minimal size of value
-  using num_keys_t = uint8_t;
+  // should be enough to index all keys under 64 KiB node
+  using num_keys_t = uint16_t;
 
-  leaf_sub_items_t(const memory_range_t& range) {
+  // TODO: remove if num_keys_t is aligned
+  struct num_keys_packed_t {
+    num_keys_t value;
+  } __attribute__((packed));
+
+  leaf_sub_items_t(const container_range_t& _range)
+      : node_size{_range.node_size} {
+    assert(is_valid_node_size(node_size));
+    auto& range = _range.range;
     assert(range.p_start < range.p_end);
     auto _p_num_keys = range.p_end - sizeof(num_keys_t);
     assert(range.p_start < _p_num_keys);
-    p_num_keys = reinterpret_cast<const num_keys_t*>(_p_num_keys);
+    p_num_keys = reinterpret_cast<const num_keys_packed_t*>(_p_num_keys);
     assert(keys());
     auto _p_offsets = _p_num_keys - sizeof(node_offset_t);
     assert(range.p_start < _p_offsets);
@@ -206,7 +221,7 @@ class leaf_sub_items_t {
   // container type system
   using key_get_type = const snap_gen_t&;
   static constexpr auto CONTAINER_TYPE = ContainerType::INDEXABLE;
-  num_keys_t keys() const { return *p_num_keys; }
+  num_keys_t keys() const { return p_num_keys->value; }
   key_get_type operator[](index_t index) const {
     assert(index < keys());
     auto pointer = get_item_end(index);
@@ -226,7 +241,7 @@ class leaf_sub_items_t {
             (index + 1) * sizeof(node_offset_t) +
             get_offset(index).value;
     }
-    assert(ret < NODE_BLOCK_SIZE);
+    assert(ret < node_size);
     return ret;
   }
   node_offset_t size_overhead_at(index_t index) const { return sizeof(node_offset_t); }
@@ -242,24 +257,28 @@ class leaf_sub_items_t {
     auto p_end = reinterpret_cast<const char*>(p_num_keys) +
                   sizeof(num_keys_t);
     int start_offset = p_start() - p_node_start;
-    int end_offset = p_end - p_node_start;
-    assert(start_offset > 0 &&
-           start_offset < end_offset &&
-           end_offset < NODE_BLOCK_SIZE);
+    int stage_size = p_end - p_start();
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert(start_offset + stage_size < (int)node_size);
     ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
-    ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
+    ceph::encode(static_cast<node_offset_t>(stage_size), encoded);
   }
 
   static leaf_sub_items_t decode(
-      const char* p_node_start, ceph::bufferlist::const_iterator& delta) {
+      const char* p_node_start,
+      extent_len_t node_size,
+      ceph::bufferlist::const_iterator& delta) {
     node_offset_t start_offset;
     ceph::decode(start_offset, delta);
-    node_offset_t end_offset;
-    ceph::decode(end_offset, delta);
-    assert(start_offset < end_offset);
-    assert(end_offset <= NODE_BLOCK_SIZE);
-    return leaf_sub_items_t({p_node_start + start_offset,
-                             p_node_start + end_offset});
+    node_offset_t stage_size;
+    ceph::decode(stage_size, delta);
+    assert(start_offset > 0);
+    assert(stage_size > 0);
+    assert((unsigned)start_offset + stage_size < node_size);
+    return leaf_sub_items_t({{p_node_start + start_offset,
+                              p_node_start + start_offset + stage_size},
+                             node_size});
   }
 
   static node_offset_t header_size() { return sizeof(num_keys_t); }
@@ -285,8 +304,8 @@ class leaf_sub_items_t {
   class Appender;
 
  private:
-  // TODO: support unaligned access
-  const num_keys_t* p_num_keys;
+  extent_len_t node_size;
+  const num_keys_packed_t* p_num_keys;
   const node_offset_packed_t* p_offsets;
   const char* p_items_end;
 };

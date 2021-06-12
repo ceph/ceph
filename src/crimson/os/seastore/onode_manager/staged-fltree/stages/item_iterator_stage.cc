@@ -56,17 +56,17 @@ void ITER_T::update_size(
 {
   node_offset_t offset = iter.get_back_offset();
   int new_size = change + offset;
-  assert(new_size > 0 && new_size < NODE_BLOCK_SIZE);
+  assert(new_size > 0 && new_size < (int)mut.get_length());
   mut.copy_in_absolute(
       (void*)iter.get_item_range().p_end, node_offset_t(new_size));
 }
 
 template <node_type_t NODE_TYPE>
-node_offset_t ITER_T::trim_until(NodeExtentMutable&, const ITER_T& iter)
+node_offset_t ITER_T::trim_until(NodeExtentMutable& mut, const ITER_T& iter)
 {
   assert(iter.index() != 0);
   size_t ret = iter.p_end() - iter.p_items_start;
-  assert(ret < NODE_BLOCK_SIZE);
+  assert(ret < mut.get_length());
   return ret;
 }
 
@@ -75,7 +75,7 @@ node_offset_t ITER_T::trim_at(
     NodeExtentMutable& mut, const ITER_T& iter, node_offset_t trimmed)
 {
   size_t trim_size = iter.p_start() - iter.p_items_start + trimmed;
-  assert(trim_size < NODE_BLOCK_SIZE);
+  assert(trim_size < mut.get_length());
   assert(iter.get_back_offset() > trimmed);
   node_offset_t new_offset = iter.get_back_offset() - trimmed;
   mut.copy_in_absolute((void*)iter.item_range.p_end, new_offset);

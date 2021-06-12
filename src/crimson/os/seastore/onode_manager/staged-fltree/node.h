@@ -613,6 +613,7 @@ class LeafNode final : public Node {
   bool is_level_tail() const;
   node_version_t get_version() const;
   const char* read() const;
+  extent_len_t get_node_size() const;
   std::tuple<key_view_t, const value_header_t*> get_kv(const search_position_t&) const;
   eagain_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
 

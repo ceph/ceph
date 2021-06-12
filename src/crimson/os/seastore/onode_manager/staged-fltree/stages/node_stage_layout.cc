@@ -36,26 +36,30 @@ void F013_T::update_size_at(
     NodeExtentMutable& mut, const me_t& node, index_t index, int change)
 {
   assert(index <= node.num_keys);
+  extent_len_t node_size = mut.get_length();
 #ifndef NDEBUG
   // check underflow
   if (change < 0 && index != node.num_keys) {
-    assert(node.get_item_start_offset(index) <
-           node.get_item_end_offset(index));
+    assert(node.get_item_start_offset(index, node_size) <
+           node.get_item_end_offset(index, node_size));
   }
 #endif
   for (const auto* p_slot = &node.slots[index];
        p_slot < &node.slots[node.num_keys];
        ++p_slot) {
     node_offset_t offset = p_slot->right_offset;
+    int new_offset = offset - change;
+    assert(new_offset > 0);
+    assert(new_offset < (int)node_size);
     mut.copy_in_absolute(
         (void*)&(p_slot->right_offset),
-        node_offset_t(offset - change));
+        node_offset_t(new_offset));
   }
 #ifndef NDEBUG
   // check overflow
   if (change > 0 && index != node.num_keys) {
     assert(node.num_keys > 0);
-    assert(node.get_key_start_offset(node.num_keys) <=
+    assert(node.get_key_start_offset(node.num_keys, node_size) <=
            node.slots[node.num_keys - 1].right_offset);
   }
 #endif
@@ -84,14 +88,19 @@ void F013_T::insert_at(
     const me_t& node, index_t index, node_offset_t size_right)
 {
   assert(index <= node.num_keys);
+  extent_len_t node_size = mut.get_length();
   update_size_at(mut, node, index, size_right);
   auto p_insert = const_cast<char*>(fields_start(node)) +
-                  node.get_key_start_offset(index);
-  auto p_shift_end = fields_start(node) + node.get_key_start_offset(node.num_keys);
+                  node.get_key_start_offset(index, node_size);
+  auto p_shift_end = fields_start(node) +
+                     node.get_key_start_offset(node.num_keys, node_size);
   mut.shift_absolute(p_insert, p_shift_end - p_insert, estimate_insert_one());
   mut.copy_in_absolute((void*)&node.num_keys, num_keys_t(node.num_keys + 1));
   append_key(mut, key_t::template from_key<KT>(key), p_insert);
-  append_offset(mut, node.get_item_end_offset(index) - size_right, p_insert);
+  int new_offset = node.get_item_end_offset(index, node_size) - size_right;
+  assert(new_offset > 0);
+  assert(new_offset < (int)node_size);
+  append_offset(mut, new_offset, p_insert);
 }
 #define IA_TEMPLATE(ST, KT) template void F013_INST(ST)::      \
     insert_at<KT>(NodeExtentMutable&, const full_key_t<KT>&, \
@@ -107,13 +116,15 @@ template <typename SlotType>
 node_offset_t F013_T::erase_at(
     NodeExtentMutable& mut, const me_t& node, index_t index, const char* p_left_bound)
 {
-  auto offset_item_start = node.get_item_start_offset(index);
-  auto offset_item_end = node.get_item_end_offset(index);
+  extent_len_t node_size = mut.get_length();
+  auto offset_item_start = node.get_item_start_offset(index, node_size);
+  auto offset_item_end = node.get_item_end_offset(index, node_size);
   assert(offset_item_start < offset_item_end);
   auto erase_size = offset_item_end - offset_item_start;
   // fix and shift the left part
   update_size_at(mut, node, index + 1, -erase_size);
-  const char* p_shift_start = fields_start(node) + node.get_key_start_offset(index + 1);
+  const char* p_shift_start = fields_start(node) +
+                              node.get_key_start_offset(index + 1, node_size);
   extent_len_t shift_len = sizeof(SlotType) * (node.num_keys - index - 1);
   int shift_off = -(int)sizeof(SlotType);
   mut.shift_absolute(p_shift_start, shift_len, shift_off);

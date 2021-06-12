@@ -16,15 +16,21 @@ namespace crimson::os::seastore::onode {
 // value size up to 64 KiB
 using value_size_t = uint16_t;
 enum class value_magic_t : uint8_t {
-  TEST = 0x52,
-  ONODE,
+  ONODE = 0x52,
+  TEST_UNBOUND,
+  TEST_BOUNDED,
+  TEST_EXTENDED,
 };
 inline std::ostream& operator<<(std::ostream& os, const value_magic_t& magic) {
   switch (magic) {
-  case value_magic_t::TEST:
-    return os << "TEST";
   case value_magic_t::ONODE:
     return os << "ONODE";
+  case value_magic_t::TEST_UNBOUND:
+    return os << "TEST_UNBOUND";
+  case value_magic_t::TEST_BOUNDED:
+    return os << "TEST_BOUNDED";
+  case value_magic_t::TEST_EXTENDED:
+    return os << "TEST_EXTENDED";
   default:
     return os << "UNKNOWN(" << magic << ")";
   }
@@ -147,6 +153,21 @@ class ValueDeltaRecorder {
   ceph::bufferlist& encoded;
 };
 
+/**
+ * tree_conf_t
+ *
+ * Hard limits and compile-time configurations.
+ */
+struct tree_conf_t {
+  value_magic_t value_magic;
+  string_size_t max_ns_size;
+  string_size_t max_oid_size;
+  value_size_t max_value_payload_size;
+  extent_len_t internal_node_size;
+  extent_len_t leaf_node_size;
+  bool do_split_check = true;
+};
+
 class tree_cursor_t;
 /**
  * Value
@@ -240,6 +261,11 @@ class Value {
  */
 struct ValueBuilder {
   virtual value_magic_t get_header_magic() const = 0;
+  virtual string_size_t get_max_ns_size() const = 0;
+  virtual string_size_t get_max_oid_size() const = 0;
+  virtual value_size_t get_max_value_payload_size() const = 0;
+  virtual extent_len_t get_internal_node_size() const = 0;
+  virtual extent_len_t get_leaf_node_size() const = 0;
   virtual std::unique_ptr<ValueDeltaRecorder>
   build_value_recorder(ceph::bufferlist&) const = 0;
 };
@@ -251,8 +277,27 @@ struct ValueBuilder {
  */
 template <typename ValueImpl>
 struct ValueBuilderImpl final : public ValueBuilder {
+  ValueBuilderImpl() {
+    validate_tree_config(ValueImpl::TREE_CONF);
+  }
+
   value_magic_t get_header_magic() const {
-    return ValueImpl::HEADER_MAGIC;
+    return ValueImpl::TREE_CONF.value_magic;
+  }
+  string_size_t get_max_ns_size() const override {
+    return ValueImpl::TREE_CONF.max_ns_size;
+  }
+  string_size_t get_max_oid_size() const override {
+    return ValueImpl::TREE_CONF.max_oid_size;
+  }
+  value_size_t get_max_value_payload_size() const override {
+    return ValueImpl::TREE_CONF.max_value_payload_size;
+  }
+  extent_len_t get_internal_node_size() const override {
+    return ValueImpl::TREE_CONF.internal_node_size;
+  }
+  extent_len_t get_leaf_node_size() const override {
+    return ValueImpl::TREE_CONF.leaf_node_size;
   }
 
   std::unique_ptr<ValueDeltaRecorder>
@@ -270,6 +315,8 @@ struct ValueBuilderImpl final : public ValueBuilder {
     return ValueImpl(nm, vb, p_cursor);
   }
 };
+
+void validate_tree_config(const tree_conf_t& conf);
 
 /**
  * Get the value recorder by type (the magic value) when the ValueBuilder is

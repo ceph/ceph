@@ -4,7 +4,6 @@
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/stages/key_layout.h"
 
 namespace crimson::os::seastore::onode {
 
@@ -41,10 +40,6 @@ FLTreeOnodeManager::get_or_create_onode(
   const ghobject_t &hoid)
 {
   LOG_PREFIX(FLTreeOnodeManager::get_or_create_onode);
-  if (hoid.hobj.oid.name.length() + hoid.hobj.nspace.length()
-      > key_view_t::MAX_NS_OID_LENGTH) {
-    return crimson::ct_error::value_too_large::make();
-  }
   return tree.insert(
     trans, hoid,
     OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}

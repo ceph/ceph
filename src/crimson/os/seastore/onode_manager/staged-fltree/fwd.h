@@ -52,6 +52,8 @@ using InternalNodeImplURef = std::unique_ptr<InternalNodeImpl>;
 using NodeImplURef = std::unique_ptr<NodeImpl>;
 
 using level_t = uint8_t;
+constexpr auto MAX_LEVEL = std::numeric_limits<level_t>::max();
+
 // a type only to index within a node, 32 bits should be enough
 using index_t = uint32_t;
 constexpr auto INDEX_END = std::numeric_limits<index_t>::max();
@@ -59,10 +61,18 @@ constexpr auto INDEX_LAST = INDEX_END - 0x4;
 constexpr auto INDEX_UPPER_BOUND = INDEX_END - 0x8;
 inline bool is_valid_index(index_t index) { return index < INDEX_UPPER_BOUND; }
 
-// TODO: decide by NODE_BLOCK_SIZE
+// we support up to 64 KiB tree nodes
 using node_offset_t = uint16_t;
 constexpr node_offset_t DISK_BLOCK_SIZE = 1u << 12;
-constexpr node_offset_t NODE_BLOCK_SIZE = DISK_BLOCK_SIZE * 1u;
+constexpr auto MAX_NODE_SIZE =
+    (extent_len_t)std::numeric_limits<node_offset_t>::max() + 1;
+inline bool is_valid_node_size(extent_len_t node_size) {
+  return (node_size > 0 &&
+          node_size <= MAX_NODE_SIZE &&
+          node_size % DISK_BLOCK_SIZE == 0);
+}
+
+using string_size_t = uint16_t;
 
 enum class MatchKindBS : int8_t { NE = -1, EQ = 0 };
 
@@ -170,9 +180,10 @@ inline std::ostream& operator<<(std::ostream& os, const tree_stats_t& stats) {
 }
 
 template <typename PtrType>
-void reset_ptr(PtrType& ptr, const char* origin_base, const char* new_base) {
+void reset_ptr(PtrType& ptr, const char* origin_base,
+               const char* new_base, extent_len_t node_size) {
   assert((const char*)ptr > origin_base);
-  assert((const char*)ptr - origin_base < NODE_BLOCK_SIZE);
+  assert((const char*)ptr - origin_base < (int)node_size);
   ptr = reinterpret_cast<PtrType>(
       (const char*)ptr - origin_base + new_base);
 }
