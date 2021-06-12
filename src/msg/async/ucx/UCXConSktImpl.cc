@@ -103,24 +103,7 @@ UCXConSktImpl::handle_io_am_write_request(const iomsg_t *msg, void *data,
   if (!(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)) {
     bl.append((char*)data, msg->data_size);
   } else {
-    ucp_request_param_t params;
-    params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
-                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
-    //params.cb.recv_am = am_data_recv_callback; TODO
-    params.cb.recv_am = NULL;
-    ucs_status_ptr_t recv_req = ucp_am_recv_data_nbx(
-                                  ucp_worker_engine->get_ucp_worker(),
-                                  data, bl.c_str(), msg->data_size, &params);
-    //TODO: recv_am_data// process_request;
-    wait_status_t wait_status = ucp_worker_engine->wait_completion(recv_req, 5);
-    if (wait_status == WAIT_STATUS_TIMED_OUT) {
-      wait_status = ucp_worker_engine->wait_completion(recv_req);
-    }
-    if (wait_status != WAIT_STATUS_OK) {
-      lderr(cct) << "failed to recv data" << dendl;
-      lderr(cct) << "potential mem leak " << recv_req << dendl;
-      return;
-    }
+    ceph_assert(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV); // todo: implment support RNDV
   }
   recv_pending_bl.claim_append(bl);
   data_notify();
