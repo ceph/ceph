@@ -229,6 +229,22 @@ HashiCorp Vault Settings
 .. confval:: rgw_crypt_vault_secret_engine
 .. confval:: rgw_crypt_vault_namespace
 
+SSE-S3 Settings
+===============
+
+.. confval:: rgw_crypt_sse_s3_backend
+.. confval:: rgw_crypt_sse_s3_vault_secret_engine
+.. confval:: rgw_crypt_sse_s3_key_template
+.. confval:: rgw_crypt_sse_s3_vault_auth
+.. confval:: rgw_crypt_sse_s3_vault_token_file
+.. confval:: rgw_crypt_sse_s3_vault_addr
+.. confval:: rgw_crypt_sse_s3_vault_prefix
+.. confval:: rgw_crypt_sse_s3_vault_namespace
+.. confval:: rgw_crypt_sse_s3_vault_verify_ssl
+.. confval:: rgw_crypt_sse_s3_vault_ssl_cacert
+.. confval:: rgw_crypt_sse_s3_vault_ssl_clientcert
+.. confval:: rgw_crypt_sse_s3_vault_ssl_clientkey
+
 
 QoS settings
 ------------
