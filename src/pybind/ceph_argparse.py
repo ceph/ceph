@@ -256,8 +256,7 @@ class CephInt(CephArgtype):
         if range == '':
             self.range = list()
         else:
-            self.range = list(range.split('|'))
-            self.range = [int(x) for x in self.range]
+            self.range = [int(x) for x in range.split('|')]
 
     def valid(self, s, partial=False):
         try:
@@ -283,7 +282,7 @@ class CephInt(CephArgtype):
 
     def argdesc(self, attrs):
         if self.range:
-            attrs['range'] = '|'.join(self.range)
+            attrs['range'] = '|'.join(str(v) for v in self.range)
         return super().argdesc(attrs)
 
 
@@ -296,8 +295,7 @@ class CephFloat(CephArgtype):
         if range == '':
             self.range = list()
         else:
-            self.range = list(range.split('|'))
-            self.range = [float(x) for x in self.range]
+            self.range = [float(x) for x in range.split('|')]
 
     def valid(self, s, partial=False):
         try:
@@ -322,7 +320,7 @@ class CephFloat(CephArgtype):
 
     def argdesc(self, attrs):
         if self.range:
-            attrs['range'] = '|'.join(self.range)
+            attrs['range'] = '|'.join(str(v) for v in self.range)
         return super().argdesc(attrs)
 
 
