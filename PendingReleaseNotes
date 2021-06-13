@@ -17,6 +17,9 @@
   that were storing state in RADOS omap, especially without striping which
   limits scalability.
 
+* The ``device_health_metrics`` pool has been renamed ``.mgr``. It is now
+  used as a common store for all ``ceph-mgr`` modules.
+
 * RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
   is consistent with the help message.
 

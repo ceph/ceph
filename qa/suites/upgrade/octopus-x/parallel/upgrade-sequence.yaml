@@ -13,3 +13,20 @@ upgrade-sequence:
          - ceph versions | jq -e '.overall | keys' | grep $sha1
    - print: "**** done end upgrade, wait..."
 
+   - print: "**** verifying SMART data upgrade"
+
+   - cephadm.shell:
+       mon.a:
+         # check device_health_metrics pool is gone
+         - rados --pool=device_health_metrics ls && exit 1 || true
+         # check device_health_metrics pool is now .mgr
+         - rados --pool=.mgr --all ls | wc -l
+         # debugging
+         - ceph device ls
+         # more than 0 devices
+         - ceph device ls --format=json | jq -e  '. | length > 0'
+         # dump metrics
+         - "for devid in $(ceph device ls --format=json | jq -r  '.[].devid'); do ceph device get-health-metrics $devid; done"
+         # check scraped sanity
+         - "for devid in $(ceph device ls --format=json | jq -r  '.[].devid'); do ceph device get-health-metrics $devid | jq '. | length > 0'; done"
+

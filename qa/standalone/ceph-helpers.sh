@@ -556,7 +556,7 @@ function run_mgr() {
     shift
     local data=$dir/$id
 
-    ceph config set mgr mgr/devicehealth/enable_monitoring off --force
+    ceph config set mgr mgr_pool false --force
     ceph-mgr \
         --id $id \
         $EXTRA_OPTS \
