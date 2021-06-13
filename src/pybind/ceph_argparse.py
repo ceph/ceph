@@ -127,7 +127,7 @@ class CephArgtype(object):
         set any per-instance validation parameters here
         from kwargs (fixed string sets, integer ranges, etc)
         """
-        pass
+        self.typeargs = None
 
     def valid(self, s, partial=False):
         """
@@ -148,7 +148,7 @@ class CephArgtype(object):
         'name/type' description for use in command format help messages.
         """
         a = ''
-        if hasattr(self, 'typeargs'):
+        if self.typeargs is not None:
             a = self.typeargs
         return '{0}(\'{1}\')'.format(self.__class__.__name__, a)
 
