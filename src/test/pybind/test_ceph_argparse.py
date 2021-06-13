@@ -146,19 +146,26 @@ class TestPG(TestArgparse):
         self.assert_valid_command(['pg', 'getmap'])
 
     def test_dump(self):
-        self.assert_valid_command(['pg', 'dump'])
-        self.assert_valid_command(['pg', 'dump',
-                                   'all',
-                                   'summary',
-                                   'sum',
-                                   'delta',
-                                   'pools',
-                                   'osds',
-                                   'pgs',
-                                   'pgs_brief'])
-        self.assert_valid_command('pg dump --dumpcontents summary,sum'.split())
-        self.assert_valid_command('pg dump summary,sum'.split())
-        assert_equal({}, validate_command(sigdict, ['pg', 'dump', 'invalid']))
+        valid_commands = {
+            'pg dump': {'prefix': 'pg dump'},
+            'pg dump all summary sum delta pools osds pgs pgs_brief':
+            {'prefix': 'pg dump',
+             'dumpcontents':
+             'all summary sum delta pools osds pgs pgs_brief'.split()
+             },
+            'pg dump --dumpcontents summary,sum':
+            {'prefix': 'pg dump',
+             'dumpcontents': 'summary,sum'.split(',')
+             }
+        }
+        for command, expected_result in valid_commands.items():
+            actual_result = validate_command(sigdict, command.split())
+            expected_result['target'] = ('mon-mgr', '')
+            assert_equal(expected_result, actual_result)
+        invalid_commands = ['pg dump invalid']
+        for command in invalid_commands:
+            actual_result = validate_command(sigdict, command.split())
+            assert_equal({}, actual_result)
 
     def test_dump_json(self):
         self.assert_valid_command(['pg', 'dump_json'])
