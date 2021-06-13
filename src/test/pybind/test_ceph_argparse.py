@@ -267,6 +267,21 @@ class TestAuth(TestArgparse):
 
     def test_get_or_create_key(self):
         self.check_1_or_more_string_args('auth', 'get-or-create-key')
+        prefix = 'auth get-or-create-key'
+        entity = 'client.test'
+        caps = ['mon',
+                'allow r',
+                'osd',
+                'allow rw pool=nfs-ganesha namespace=test, allow rw tag cephfs data=user_test_fs',
+                'mds',
+                'allow rw path=/']
+        cmd = prefix.split() + [entity] + caps
+        assert_equal(
+            {
+                'prefix': prefix,
+                'entity': entity,
+                'caps': caps
+            }, validate_command(sigdict, cmd))
 
     def test_get_or_create(self):
         self.check_1_or_more_string_args('auth', 'get-or-create')
@@ -496,6 +511,12 @@ class TestOSD(TestArgparse):
 
     def test_osd_tree(self):
         self.check_0_or_1_natural_arg('osd', 'tree')
+        cmd = 'osd tree down,out'
+        assert_equal(
+            {
+                'prefix': 'osd tree',
+                'states': ['down', 'out']
+            }, validate_command(sigdict, cmd.split()))
 
     def test_osd_ls(self):
         self.check_0_or_1_natural_arg('osd', 'ls')
