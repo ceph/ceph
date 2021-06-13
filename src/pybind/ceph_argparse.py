@@ -486,15 +486,15 @@ class CephPgid(CephArgtype):
     def valid(self, s, partial=False):
         if s.find('.') == -1:
             raise ArgumentFormat('pgid has no .')
-        poolid, pgnum = s.split('.', 1)
+        poolid_s, pgnum_s = s.split('.', 1)
         try:
-            poolid = int(poolid)
+            poolid = int(poolid_s)
         except ValueError:
             raise ArgumentFormat('pool {0} not integer'.format(poolid))
         if poolid < 0:
             raise ArgumentFormat('pool {0} < 0'.format(poolid))
         try:
-            pgnum = int(pgnum, 16)
+            pgnum = int(pgnum_s, 16)
         except ValueError:
             raise ArgumentFormat('pgnum {0} not hex integer'.format(pgnum))
         self.val = s
@@ -536,9 +536,9 @@ class CephName(CephArgtype):
             if t == 'osd':
                 if i != '*':
                     try:
-                        i = int(i)
+                        int(i)
                     except ValueError:
-                        raise ArgumentFormat('osd id ' + i + ' not integer')
+                        raise ArgumentFormat(f'osd id {i} not integer')
             self.nametype = t
         self.val = s
         self.nameid = i
@@ -569,14 +569,14 @@ class CephOsdName(CephArgtype):
             t = 'osd'
             i = s
         try:
-            i = int(i)
+            v = int(i)
         except ValueError:
-            raise ArgumentFormat('osd id ' + i + ' not integer')
-        if i < 0:
-            raise ArgumentFormat('osd id {0} is less than 0'.format(i))
+            raise ArgumentFormat(f'osd id {i} not integer')
+        if v < 0:
+            raise ArgumentFormat(f'osd id {v} is less than 0')
         self.nametype = t
-        self.nameid = i
-        self.val = i
+        self.nameid = v
+        self.val = v
 
     def __str__(self):
         return '<osdname (id|osd.id)>'
@@ -1550,7 +1550,7 @@ def send_command(cluster,
                 print('submit {0} to osd.{1}'.format(cmd, osdid),
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
-                cluster.osd_command, osdid, cmd, inbuf, timeout=timeout)
+                cluster.osd_command, int(osdid), cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mgr':
             name = ''     # non-None empty string means "current active mgr"
