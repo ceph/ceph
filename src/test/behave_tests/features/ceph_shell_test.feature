@@ -9,7 +9,11 @@ Feature: Testing basic ceph shell commands
 
   Scenario: Execute ceph command to check status
     Given I log as root into ceph-node-00
+<<<<<<< HEAD
     When I execute in cephadm_shell
+=======
+    When I execute
+>>>>>>> 94dea3b46dd (behave_test: Implemented basic bahave test scenario's)
         """
         ceph orch status
         """
@@ -23,7 +27,11 @@ Feature: Testing basic ceph shell commands
 
   Scenario: Execute ceph command to check orch host list
     Given I log as root into ceph-node-00
+<<<<<<< HEAD
     When I execute in cephadm_shell
+=======
+    When I execute
+>>>>>>> 94dea3b46dd (behave_test: Implemented basic bahave test scenario's)
         """
         ceph orch host ls
         """
