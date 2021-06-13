@@ -2683,6 +2683,35 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
         + (' &' if background else '') + '\n')
 
 
+def clean_cgroup(ctx: CephadmContext, unit_name: str):
+    # systemd may fail to cleanup cgroups from previous stopped unit, which will cause next "systemctl start" to fail.
+    # see https://tracker.ceph.com/issues/50998
+
+    # In bootstrap we set the context fsid at the end.
+    if not ctx.fsid:
+        return
+
+    CGROUPV2_PATH = Path('/sys/fs/cgroup')
+    if not (CGROUPV2_PATH / 'system.slice').exists():
+        # Only unified cgroup is affected, skip if not the case
+        return
+
+    slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
+    cg_path = CGROUPV2_PATH / 'system.slice' / slice_name / f'{unit_name}.service'
+    if not cg_path.exists():
+        return
+
+    def cg_trim(path: Path):
+        for p in path.iterdir():
+            if p.is_dir():
+                cg_trim(p)
+        path.rmdir()
+    try:
+        cg_trim(cg_path)
+    except OSError:
+        logger.warning(f'Failed to trim old cgroups {cg_path}')
+
+
 def deploy_daemon_units(
     ctx: CephadmContext,
     fsid: str,
@@ -2819,6 +2848,7 @@ def deploy_daemon_units(
     if enable:
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
+        clean_cgroup(ctx, unit_name)
         call_throws(ctx, ['systemctl', 'start', unit_name])
 
 
@@ -5522,7 +5552,7 @@ def command_rm_cluster(ctx):
         call(ctx, ['systemctl', 'disable', unit_name],
              verbosity=CallVerbosity.DEBUG)
 
-    slice_name = 'system-%s.slice' % (('ceph-%s' % ctx.fsid).replace('-', '\\x2d'))
+    slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
     call(ctx, ['systemctl', 'stop', slice_name],
          verbosity=CallVerbosity.DEBUG)
 
