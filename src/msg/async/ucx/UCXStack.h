@@ -119,6 +119,7 @@ private:
   uint64_t conn_id = -1;
   ucp_ep_h conn_ep = NULL;
   bufferlist recv_pending_bl;
+  bufferlist send_pending_bl;
 
   ceph::mutex lock = ceph::make_mutex("UCXConSktImpl::lock");
   bool is_server;
@@ -131,6 +132,9 @@ private:
   static
   void am_data_recv_callback(void *request, ucs_status_t status,
                              size_t length, void *user_data);
+  static
+  void am_data_send_callback(void *request, ucs_status_t status,
+                             void *user_data);
 
 public:
   UCXConSktImpl(CephContext *cct, UCXWorker *ucx_worker,
@@ -148,6 +152,7 @@ public:
   void set_connection_status(int con_status);
   int client_start_connect(const entity_addr_t &server_addr, const SocketOptions &opts);
   void data_notify();
+  ssize_t send_submit(bool more);
   void handle_io_am_write_request(const iomsg_t *msg, void *data,
                                   const ucp_am_recv_param_t *param);
 };

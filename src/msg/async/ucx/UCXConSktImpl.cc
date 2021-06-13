@@ -71,9 +71,66 @@ ssize_t UCXConSktImpl::read(char* buf, size_t len)
   return len;
 }
 
+ssize_t UCXConSktImpl::send_submit(bool more)
+{
+  if (send_pending_bl.length() == 0) {
+    return 0;
+  }
+  size_t sent_bytes = 0;
+  auto pb = std::cbegin(send_pending_bl.buffers());
+  uint64_t left_pbrs = send_pending_bl.get_num_buffers();
+
+  ucp_request_param_t param;
+  param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                       UCP_OP_ATTR_FIELD_FLAGS;
+  param.cb.send      = am_data_send_callback;
+  param.flags        = UCP_AM_SEND_FLAG_EAGER | UCP_AM_RECV_ATTR_FIELD_REPLY_EP;
+  param.datatype     = 0;
+
+  while (left_pbrs) {
+    iomsg_t msg{0, pb->length(), IO_WRITE};
+    ucs_status_ptr_t send_req = ucp_am_send_nbx(conn_ep, 0xcafebeef, &msg,
+	                                    sizeof(msg), pb->c_str(),
+					    pb->length(), &param);
+    //TODO: send_am// process_request;
+    wait_status_t wait_status = ucp_worker_engine->wait_completion(send_req, 5);
+    if (wait_status == WAIT_STATUS_TIMED_OUT) {
+      wait_status = ucp_worker_engine->wait_completion(send_req);
+    }
+    if (wait_status != WAIT_STATUS_OK) {
+      lderr(cct) << "failed to send data" << dendl;
+      lderr(cct) << "potential mem leak " << send_req << dendl;
+      break;
+    }
+    sent_bytes += pb->length();
+    left_pbrs--;
+    pb++;
+  }
+  if (sent_bytes) {
+    bufferlist swapped;
+    if (sent_bytes < send_pending_bl.length()) {
+      send_pending_bl.splice(sent_bytes, send_pending_bl.length() - sent_bytes,
+	                     &swapped);
+      send_pending_bl.swap(swapped);
+    } else {
+      send_pending_bl.clear();
+    }
+  }
+  return sent_bytes;
+}
+
 ssize_t UCXConSktImpl::send(ceph::bufferlist &bl, bool more)
 {
-  return 0;
+  size_t bytes = bl.length();
+  if (bytes == 0) {
+    return 0;
+  }
+  send_pending_bl.claim_append(bl);
+  ssize_t rst = send_submit(more);
+  if (rst < 0 && rst != -EAGAIN) {
+    return rst;
+  }
+  return bytes;
 }
 
 void UCXConSktImpl::shutdown()
@@ -130,6 +187,24 @@ void UCXConSktImpl::ep_error_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 
 void UCXConSktImpl::am_data_recv_callback(void *request, ucs_status_t status,
                                           size_t length, void *user_data)
+{
+  ucx_request *r = reinterpret_cast<ucx_request*>(request);
+  r->status = status;
+  r->completed = true;
+
+  // mock:
+  r->callback = NULL;
+  r->status = UCS_OK;
+  r->completed = false;
+  r->recv_length = 0;
+  r->pos.next = NULL;
+  r->pos.prev = NULL;
+
+  ucp_request_free(request);
+}
+
+void UCXConSktImpl::am_data_send_callback(void *request, ucs_status_t status,
+                                          void *user_data)
 {
   ucx_request *r = reinterpret_cast<ucx_request*>(request);
   r->status = status;
