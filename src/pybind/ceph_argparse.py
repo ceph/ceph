@@ -912,13 +912,6 @@ def descsort_key(sh):
     return concise_sig(sh['sig'])
 
 
-def descsort(sh1, sh2):
-    """
-    Deprecated; use (key=descsort_key) instead of (cmp=descsort)
-    """
-    return cmp(descsort_key(sh1), descsort_key(sh2))
-
-
 def parse_funcsig(sig: Sequence[Union[str, Dict[str, str]]]) -> List[argdesc]:
     """
     parse a single descriptor (array of strings or dicts) into a
