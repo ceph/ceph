@@ -46,7 +46,9 @@
 
 namespace rgw::sal {
 
-RadosObject::~RadosObject() {}
+// default number of entries to list with each bucket listing call
+// (use marker to bridge between calls)
+static constexpr size_t listing_max_entries = 1000;
 
 static int decode_policy(CephContext* cct,
                          bufferlist& bl,
@@ -311,6 +313,139 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
       }
       return ret;
     }
+  }
+
+  return ret;
+}
+
+int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
+					 keep_index_consistent,
+					 optional_yield y, const
+					 DoutPrefixProvider *dpp)
+{
+  int ret;
+  map<RGWObjCategory, RGWStorageStats> stats;
+  map<string, bool> common_prefixes;
+  RGWObjectCtx obj_ctx(store);
+  CephContext *cct = store->ctx();
+
+  string bucket_ver, master_ver;
+
+  ret = get_bucket_info(dpp, null_yield);
+  if (ret < 0)
+    return ret;
+
+  ret = get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  if (ret < 0)
+    return ret;
+
+  string prefix, delimiter;
+
+  ret = abort_bucket_multiparts(dpp, store, cct, this, prefix, delimiter);
+  if (ret < 0) {
+    return ret;
+  }
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+
+  params.list_versions = true;
+  params.allow_unordered = true;
+
+  std::unique_ptr<rgw::sal::Completions> handles = store->get_completions();
+
+  int max_aio = concurrent_max;
+  results.is_truncated = true;
+
+  while (results.is_truncated) {
+    ret = list(dpp, params, listing_max_entries, results, null_yield);
+    if (ret < 0)
+      return ret;
+
+    std::vector<rgw_bucket_dir_entry>::iterator it = results.objs.begin();
+    for (; it != results.objs.end(); ++it) {
+      RGWObjState *astate = NULL;
+      std::unique_ptr<rgw::sal::Object> obj = get_object((*it).key);
+
+      ret = obj->get_obj_state(dpp, &obj_ctx, &astate, y, false);
+      if (ret == -ENOENT) {
+        ldpp_dout(dpp, 1) << "WARNING: cannot find obj state for obj " << obj << dendl;
+        continue;
+      }
+      if (ret < 0) {
+        ldpp_dout(dpp, -1) << "ERROR: get obj state returned with error " << ret << dendl;
+        return ret;
+      }
+
+      if (astate->manifest) {
+        RGWObjManifest& manifest = *astate->manifest;
+        RGWObjManifest::obj_iterator miter = manifest.obj_begin(dpp);
+	std::unique_ptr<rgw::sal::Object> head_obj = get_object(manifest.get_obj().key);
+        rgw_raw_obj raw_head_obj;
+	dynamic_cast<RadosObject*>(head_obj.get())->get_raw_obj(&raw_head_obj);
+
+        for (; miter != manifest.obj_end(dpp) && max_aio--; ++miter) {
+          if (!max_aio) {
+            ret = handles->drain();
+            if (ret < 0) {
+              ldpp_dout(dpp, -1) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
+              return ret;
+            }
+            max_aio = concurrent_max;
+          }
+
+          rgw_raw_obj last_obj = miter.get_location().get_raw_obj(store);
+          if (last_obj == raw_head_obj) {
+            // have the head obj deleted at the end
+            continue;
+          }
+
+          ret = store->delete_raw_obj_aio(dpp, last_obj, handles.get());
+          if (ret < 0) {
+            ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
+            return ret;
+          }
+        } // for all shadow objs
+
+	ret = head_obj->delete_obj_aio(dpp, astate, handles.get(), keep_index_consistent, null_yield);
+        if (ret < 0) {
+          ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
+          return ret;
+        }
+      }
+
+      if (!max_aio) {
+        ret = handles->drain();
+        if (ret < 0) {
+          ldpp_dout(dpp, -1) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
+          return ret;
+        }
+        max_aio = concurrent_max;
+      }
+      obj_ctx.invalidate(obj->get_obj());
+    } // for all RGW objects
+  }
+
+  ret = handles->drain();
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
+    return ret;
+  }
+
+  sync_user_stats(dpp, y);
+  if (ret < 0) {
+     ldpp_dout(dpp, 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  }
+
+  RGWObjVersionTracker objv_tracker;
+
+  // this function can only be run if caller wanted children to be
+  // deleted, so we can ignore the check for children as any that
+  // remain are detritus from a prior bug
+  ret = remove_bucket(dpp, true, std::string(), std::string(), false, nullptr, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << this << dendl;
+    return ret;
   }
 
   return ret;
@@ -1242,6 +1377,8 @@ int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
   return 0;
 }
 
+RadosObject::~RadosObject() {}
+
 int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh)
 {
   return store->getRados()->get_obj_state(dpp, rctx, bucket->get_info(), get_obj(), state, follow_olh, y);
@@ -1996,7 +2133,7 @@ RadosWriter::~RadosWriter()
   std::optional<rgw_raw_obj> raw_head;
   if (!rgw::sal::Object::empty(head_obj.get())) {
     raw_head.emplace();
-    head_obj->get_raw_obj(&*raw_head);
+    dynamic_cast<RadosObject*>(head_obj.get())->get_raw_obj(&*raw_head);
   }
 
   /**

@@ -220,7 +220,6 @@ public:
 };
 
 extern int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::Bucket* bucket, rgw_obj_key& key);
-extern int rgw_remove_bucket_bypass_gc(rgw::sal::Store* store, rgw::sal::Bucket* bucket, int concurrent_max, optional_yield y);
 
 extern int rgw_object_get_attr(rgw::sal::Store* store, rgw::sal::Object* obj,
 			       const char* attr_name, bufferlist& out_bl,

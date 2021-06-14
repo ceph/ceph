@@ -186,7 +186,7 @@ class RadosObject : public Object {
     virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
     virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) override;
-    virtual void get_raw_obj(rgw_raw_obj* raw_obj) override;
+    void get_raw_obj(rgw_raw_obj* raw_obj);
     virtual std::unique_ptr<Object> clone() override {
       return std::unique_ptr<Object>(new RadosObject(*this));
     }
@@ -294,6 +294,10 @@ class RadosBucket : public Bucket {
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) override;
     Object* create_object(const rgw_obj_key& key /* Attributes */) override;
     virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
+    virtual int remove_bucket_bypass_gc(int concurrent_max, bool
+					keep_index_consistent,
+					optional_yield y, const
+					DoutPrefixProvider *dpp) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int get_bucket_info(const DoutPrefixProvider* dpp, optional_yield y) override;
