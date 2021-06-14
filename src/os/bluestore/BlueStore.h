@@ -1590,8 +1590,8 @@ public:
     // negative of the previous ondisk offset.  We need to maintain a vector of
     // offsets because *within the same transaction* an object may be truncated
     // and then written again, or an object may be overwritten multiple times to
-    // different zones.  See update_cleaning_metadata function for how this map
-    // is used.
+    // different zones.  See _zoned_update_cleaning_metadata function for how
+    // this map is used.
     std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
 #endif
     
@@ -2400,7 +2400,7 @@ private:
   uint64_t _zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size);
   int _zoned_check_config_settings();
   void _zoned_update_cleaning_metadata(TransContext *txc);
-  std::string _zoned_get_prefix(uint64_t offset);
+  std::string _zoned_key(uint64_t offset, const ghobject_t *oid);
 #endif
 
 public:
