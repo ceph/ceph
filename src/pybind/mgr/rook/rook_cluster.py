@@ -592,7 +592,8 @@ class RookCluster(object):
                         if block_devices:
                             if not hasattr(current_node, 'devices'):
                                 current_node.devices = ccl.DevicesList()
-                            new_devices = list(set(block_devices) - set([d.name for d in current_node.devices]))
+                            current_device_names = set(d.name for d in current_node.devices)
+                            new_devices = [bd for bd in block_devices if bd.path not in current_device_names]
                             current_node.devices.extend(
                                 ccl.DevicesItem(name=n.path) for n in new_devices
                             )
