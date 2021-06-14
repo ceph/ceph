@@ -268,7 +268,7 @@ It is possible to stop queued OSD removals by using the following command:
 
 .. prompt:: bash #
 
-  ceph orch osd rm stop <svc_id(s)>
+  ceph orch osd rm stop <osd_id(s)>
 
 Example:
 
@@ -288,7 +288,7 @@ Replacing an OSD
 
 .. prompt:: bash #
 
-  orch osd rm <svc_id(s)> --replace [--force]
+  orch osd rm <osd_id(s)> --replace [--force]
 
 Example:
 
