@@ -2452,7 +2452,9 @@ def get_container(ctx: CephadmContext,
     entrypoint: str = ''
     name: str = ''
     ceph_args: List[str] = []
-    envs: List[str] = []
+    envs: List[str] = [
+        'TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728',
+    ]
     host_network: bool = True
 
     if container_args is None:
