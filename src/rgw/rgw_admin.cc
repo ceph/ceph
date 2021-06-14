@@ -2306,10 +2306,6 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     return r;
   }
 
-  const size_t total_shards = status.size();
-
-  out << indented{width} << "incremental sync on " << total_shards << " shards\n";
-
   rgw_bucket_index_marker_info remote_info;
   BucketIndexShardsManager remote_markers;
   r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(),
@@ -2318,6 +2314,12 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     ldpp_dout(dpp, -1) << "failed to read remote log: " << cpp_strerror(r) << dendl;
     return r;
   }
+
+  status.resize(remote_markers.get().size());
+
+  const size_t total_shards = status.size();
+
+  out << indented{width} << "incremental sync on " << total_shards << " shards\n";
 
   std::set<int> shards_behind;
   for (auto& r : remote_markers.get()) {
