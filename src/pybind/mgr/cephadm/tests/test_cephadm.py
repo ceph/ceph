@@ -160,6 +160,66 @@ class TestCephadm(object):
                     assert out == expected
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_service_ls_service_type_flag(self, cephadm_module):
+        with with_host(cephadm_module, 'host1'):
+            with with_host(cephadm_module, 'host2'):
+                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), CephadmOrchestrator.apply_mgr, ''):
+                    with with_service(cephadm_module, ServiceSpec('mds', 'test-id', placement=PlacementSpec(count=2)), CephadmOrchestrator.apply_mds, ''):
+
+                        # with no service-type. Should provide info fot both services
+                        c = cephadm_module.describe_service()
+                        out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
+                        expected = [
+                            {
+                                'placement': {'count': 2},
+                                'service_name': 'mgr',
+                                'service_type': 'mgr',
+                                'status': {'created': mock.ANY,
+                                           'running': 2,
+                                           'size': 2}
+                            },
+                            {
+                                'placement': {'count': 2},
+                                'service_id': 'test-id',
+                                'service_name': 'mds.test-id',
+                                'service_type': 'mds',
+                                'status': {'created': mock.ANY,
+                                           'running': 2,
+                                           'size': 2}
+                            },
+                        ]
+
+                        for o in out:
+                            if 'events' in o:
+                                del o['events']  # delete it, as it contains a timestamp
+                        assert out == expected
+
+                        # with service-type. Should provide info fot only mds
+                        c = cephadm_module.describe_service(service_type='mds')
+                        out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
+                        expected = [
+                            {
+                                'placement': {'count': 2},
+                                'service_id': 'test-id',
+                                'service_name': 'mds.test-id',
+                                'service_type': 'mds',
+                                'status': {'created': mock.ANY,
+                                           'running': 2,
+                                           'size': 2}
+                            },
+                        ]
+
+                        for o in out:
+                            if 'events' in o:
+                                del o['events']  # delete it, as it contains a timestamp
+                        assert out == expected
+
+                        # service-type should not match with service names
+                        c = cephadm_module.describe_service(service_type='mds.test-id')
+                        out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
+                        assert out == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_device_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.get_inventory()

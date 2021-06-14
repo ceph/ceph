@@ -1747,8 +1747,7 @@ Then run the following:
 
                 if (
                     service_type
-                    and service_type != n
-                    and not dd.daemon_type.startswith(n + '.')
+                    and service_type != daemon_type_to_service(dd.daemon_type)
                 ):
                     continue
                 if service_name and service_name != n:
