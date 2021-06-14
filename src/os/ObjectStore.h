@@ -417,7 +417,7 @@ public:
    */
 
   /**
-   * exists -- Test for existance of object
+   * exists -- Test for existence of object
    *
    * @param cid collection for object
    * @param oid oid of object
