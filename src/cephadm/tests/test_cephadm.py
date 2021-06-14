@@ -1157,3 +1157,24 @@ class TestBootstrap(TestCephAdm):
         with with_cephadm_ctx(cmd, hostname=hostname) as ctx:
             retval = cd.command_bootstrap(ctx)
             assert retval == 0
+
+    @pytest.mark.parametrize('fsid, err',
+        [
+            ('', None),
+            ('00000000-0000-0000-0000-0000deadbeef', None),
+            ('00000000-0000-0000-0000-0000deadbeez', 'not an fsid'),
+        ])
+    def test_fsid(self, fsid, err, cephadm_fs):
+        cmd = self._get_cmd(
+            '--mon-ip', '192.168.1.1',
+            '--skip-mon-network',
+            '--fsid', fsid,
+        )
+
+        with with_cephadm_ctx(cmd) as ctx:
+            if err:
+                with pytest.raises(cd.Error, match=err):
+                    cd.command_bootstrap(ctx)
+            else:
+                retval = cd.command_bootstrap(ctx)
+                assert retval == 0
