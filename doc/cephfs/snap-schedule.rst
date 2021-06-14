@@ -91,9 +91,9 @@ path.
 Examples::
 
   ceph fs snap-schedule status /
-  ceph fs snap-schedule status /foo/bar format=json
+  ceph fs snap-schedule status /foo/bar --format=json
   ceph fs snap-schedule list /
-  ceph fs snap-schedule list / recursive=true # list all schedules in the tree
+  ceph fs snap-schedule list / --recursive=true # list all schedules in the tree
 
 
 Add and remove schedules
@@ -117,7 +117,7 @@ Examples::
   ceph fs snap-schedule add / 1h 11:55
   ceph fs snap-schedule add / 2h 11:55
   ceph fs snap-schedule remove / 1h 11:55 # removes one single schedule
-  ceph fs snap-schedule remove / 1h # removes all schedules with repeat=1h
+  ceph fs snap-schedule remove / 1h # removes all schedules with --repeat=1h
   ceph fs snap-schedule remove / # removes all schedules on path /
 
 Add and remove retention policies
