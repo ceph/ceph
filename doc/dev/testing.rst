@@ -32,7 +32,7 @@ Using
 
 #. Smoke test::
 
-     ninja && ctest -j12
+     ./run-make-check.sh
 
 #. Push to ceph-ci::
 
