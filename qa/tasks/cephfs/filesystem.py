@@ -8,7 +8,6 @@ import datetime
 import re
 import errno
 import random
-import traceback
 
 from io import BytesIO, StringIO
 from errno import EBUSY
@@ -540,41 +539,10 @@ class Filesystem(MDSCluster):
             raise RuntimeError("cannot specify fscid when configuring overlay")
         self.metadata_overlay = overlay
 
-    def deactivate(self, rank):
-        if rank < 0:
-            raise RuntimeError("invalid rank")
-        elif rank == 0:
-            raise RuntimeError("cannot deactivate rank 0")
-        self.mon_manager.raw_cluster_cmd("mds", "deactivate", "%d:%d" % (self.id, rank))
-
     def reach_max_mds(self):
-        # Try to reach rank count == max_mds, up or down (UPGRADE SENSITIVE!)
-        status = self.getinfo()
+        status = self.wait_for_daemons()
         mds_map = self.get_mds_map(status=status)
-        max_mds = mds_map['max_mds']
-
-        count = len(list(self.get_ranks(status=status)))
-        if count > max_mds:
-            try:
-                # deactivate mds in decending order
-                status = self.wait_for_daemons(status=status, skip_max_mds_check=True)
-                while count > max_mds:
-                    targets = sorted(self.get_ranks(status=status), key=lambda r: r['rank'], reverse=True)
-                    target = targets[0]
-                    log.debug("deactivating rank %d" % target['rank'])
-                    self.deactivate(target['rank'])
-                    status = self.wait_for_daemons(skip_max_mds_check=True)
-                    count = len(list(self.get_ranks(status=status)))
-            except:
-                # In Mimic, deactivation is done automatically:
-                log.info("Error:\n{}".format(traceback.format_exc()))
-                status = self.wait_for_daemons()
-        else:
-            status = self.wait_for_daemons()
-
-        mds_map = self.get_mds_map(status=status)
-        assert(mds_map['max_mds'] == max_mds)
-        assert(mds_map['in'] == list(range(0, max_mds)))
+        assert(mds_map['in'] == list(range(0, mds_map['max_mds'])))
 
     def reset(self):
         self.mon_manager.raw_cluster_cmd("fs", "reset", str(self.name), '--yes-i-really-mean-it')
