@@ -109,6 +109,7 @@
         {
           "expr": "ceph_health_status{instance=~'$instance'}",
           "format": "time_series",
+          "instant": true,
           "interval": "$interval",
           "intervalFactor": 1,
           "refId": "A",
