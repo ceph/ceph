@@ -378,6 +378,10 @@ class Bucket {
     virtual Attrs& get_attrs(void) { return attrs; }
     virtual int set_attrs(Attrs a) { attrs = a; return 0; }
     virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) = 0;
+    virtual int remove_bucket_bypass_gc(int concurrent_max, bool
+					keep_index_consistent,
+					optional_yield y, const
+					DoutPrefixProvider *dpp) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) = 0;
     virtual int get_bucket_info(const DoutPrefixProvider* dpp, optional_yield y) = 0;
@@ -686,7 +690,6 @@ class Object {
     virtual bool is_expired() = 0;
     virtual void gen_rand_obj_instance_name() = 0;
     virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) = 0;
-    virtual void get_raw_obj(rgw_raw_obj* raw_obj) = 0;
     virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) = 0;
     virtual int transition(RGWObjectCtx& rctx,
 			   Bucket* bucket,
