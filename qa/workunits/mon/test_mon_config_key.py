@@ -20,6 +20,7 @@ import string
 import subprocess
 import sys
 import time
+from typing import List, Dict
 
 #
 # Accepted Environment variables:
@@ -64,9 +65,9 @@ OPS = {
     'dump': ['existing', 'enoent'],
 }
 
-CONFIG_PUT = []  # list: keys
-CONFIG_DEL = []  # list: keys
-CONFIG_EXISTING = {}  # map: key -> size
+CONFIG_PUT: List[str] = []  # list: keys
+CONFIG_DEL: List[str] = []  # list: keys
+CONFIG_EXISTING: Dict[str, int] = {}  # map: key -> size
 
 
 def run_cmd(cmd, expects=0):

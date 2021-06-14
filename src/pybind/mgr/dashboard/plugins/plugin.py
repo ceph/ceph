@@ -1,12 +1,9 @@
+from typing import no_type_check
+
 from mgr_module import Command, Option
 
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
-
-try:
-    from typing import no_type_check
-except ImportError:
-    no_type_check = object()  # Just for type checking
 
 
 class SimplePlugin(I.CanMgr, I.HasOptions, I.HasCommands):
