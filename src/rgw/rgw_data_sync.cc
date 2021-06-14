@@ -2779,13 +2779,14 @@ public:
         status.encode_all_attrs(attrs);
         call(new RGWSimpleRadosWriteAttrsCR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
                                             obj, attrs, &objv_tracker, exclusive));
-        ldout(cct, 20) << "init marker position: " << status.inc_marker.position << 
-          ". written to shard status object: " << sync_status_oid << dendl;
       }
 
       if (retcode < 0) {
+        ldout(cct, 20) << "ERROR: init marker position failed. error: " << retcode << dendl;
         return set_cr_error(retcode);
       }
+      ldout(cct, 20) << "init marker position: " << status.inc_marker.position << 
+        ". written to shard status object: " << sync_status_oid << dendl;
       return set_cr_done();
     }
     return 0;
@@ -5298,7 +5299,11 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
           RELEASE_LOCK(bucket_lease_cr);
           return set_cr_done();
 			  }
-        bucket_stopped = false;
+        if (bucket_stopped) {
+          tn->log(20, SSTR("ERROR: switched from 'stop' to 'start' sync. while state is: " << bucket_status.state));
+          bucket_stopped = false;
+          bucket_status.state = BucketSyncState::Init;
+        }
       }
 
       if (bucket_status.state != BucketSyncState::Incremental) {
@@ -5328,6 +5333,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
           tn->log(20, SSTR("ERROR: reading the status after acquiring the lock failed. error: " << retcode));
           return set_cr_error(retcode);
         }
+        tn->log(20, SSTR("status after acquiring the lock is: " << bucket_status.state));
 
         // init sync status
         yield {
