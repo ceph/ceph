@@ -12735,6 +12735,14 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
       (long unsigned)in->snap_btime.nsec());
 }
 
+size_t Client::_vxattrcb_caps(Inode *in, char *val, size_t size)
+{
+  int issued;
+
+  in->caps_issued(&issued);
+  return snprintf(val, size, "%s/0x%x", ccap_string(issued).c_str(), issued);
+}
+
 bool Client::_vxattrcb_mirror_info_exists(Inode *in)
 {
   // checking one of the xattrs would suffice
@@ -12841,6 +12849,13 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     exists_cb: &Client::_vxattrcb_mirror_info_exists,
     flags: 0,
   },
+  {
+    name: "ceph.caps",
+    getxattr_cb: &Client::_vxattrcb_caps,
+    readonly: true,
+    exists_cb: NULL,
+    flags: 0,
+  },
   { name: "" }     /* Required table terminator */
 };
 
@@ -12862,6 +12877,13 @@ const Client::VXattr Client::_file_vxattrs[] = {
     getxattr_cb: &Client::_vxattrcb_snap_btime,
     readonly: true,
     exists_cb: &Client::_vxattrcb_snap_btime_exists,
+    flags: 0,
+  },
+  {
+    name: "ceph.caps",
+    getxattr_cb: &Client::_vxattrcb_caps,
+    readonly: true,
+    exists_cb: NULL,
     flags: 0,
   },
   { name: "" }     /* Required table terminator */
