@@ -61,8 +61,10 @@ class ForwardScrubber(Thrasher, Greenlet):
 
     def _scrub(self, path="/", recursive=True):
         self.logger.info(f"scrubbing fs: {self.fs.name}")
-        recopt = ["recursive", "force"] if recursive else ["force"]
-        out_json = self.fs.run_scrub(["start", path] + recopt)
+        scrubopts = ["force"]
+        if recursive:
+            scrubopts.append("recursive")
+        out_json = self.fs.run_scrub(["start", path, ",".join(scrubopts)])
         assert out_json is not None
 
         tag = out_json['scrub_tag']

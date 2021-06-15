@@ -103,7 +103,7 @@ class DupInodeWorkload(Workload):
         self._filesystem.wait_for_daemons()
 
     def validate(self):
-        out_json = self._filesystem.run_scrub(["start", "/", "recursive", "repair"])
+        out_json = self._filesystem.run_scrub(["start", "/", "recursive,repair"])
         self.assertNotEqual(out_json, None)
         self.assertEqual(out_json["return_code"], 0)
         self.assertEqual(self._filesystem.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
@@ -134,7 +134,7 @@ class TestScrub(CephFSTestCase):
         # Apply any data damage the workload wants
         workload.damage()
 
-        out_json = self.fs.run_scrub(["start", "/", "recursive", "repair"])
+        out_json = self.fs.run_scrub(["start", "/", "recursive,repair"])
         self.assertNotEqual(out_json, None)
         self.assertEqual(out_json["return_code"], 0)
         self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
