@@ -5,7 +5,8 @@ import contextlib
 import time
 from tasks import ceph_manager
 from teuthology import misc
-from teuthology.orchestra.run import CommandFailedError, Raw
+from teuthology.orchestra.run import CommandFailedError
+from teuthology.orchestra.run_helper import Raw
 
 log = logging.getLogger(__name__)
 

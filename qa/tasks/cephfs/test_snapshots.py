@@ -4,7 +4,8 @@ import signal
 from textwrap import dedent
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from teuthology.orchestra.run import CommandFailedError, Raw
+from teuthology.orchestra.run import CommandFailedError
+from teuthology.orchestra.run_helper import Raw
 
 log = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ Helper methods to test that MON and MDS caps are enforced properly.
 """
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
-from teuthology.orchestra.run import Raw
+from teuthology.orchestra.run_helper import Raw
 
 class CapsHelper(CephFSTestCase):
 
