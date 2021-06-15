@@ -106,16 +106,19 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       }
     }
     return tm.read_extent<SeastoreNodeExtent>(t, addr
-    ).safe_then([addr, &t](auto&& e) {
+    ).safe_then([addr, &t](auto&& e) 
+      -> read_ertr::future<NodeExtentRef> {
       TRACET("read {}B at {:#x} -- {}",
              t, e->get_length(), e->get_laddr(), *e);
+      //XXX: this should be remove when interruptible futures are involved
       if (!e->is_valid()) {
         ERRORT("read invalid extent: {}", t, *e);
-        ceph_abort("fatal error");
+	return crimson::ct_error::eagain::make();
       }
       assert(e->get_laddr() == addr);
       std::ignore = addr;
-      return NodeExtentRef(e);
+      return read_ertr::make_ready_future<NodeExtentRef>(
+	  NodeExtentRef(e));
     });
   }
 
