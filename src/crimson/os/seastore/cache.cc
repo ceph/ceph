@@ -123,7 +123,7 @@ void Cache::retire_extent(CachedExtentRef ref)
   remove_from_dirty(ref);
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
   retired_extent_gate.add_extent(*ref);
-  ref->state = CachedExtent::extent_state_t::RETIRED;
+  ref->state = CachedExtent::extent_state_t::INVALID;
 }
 
 void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)

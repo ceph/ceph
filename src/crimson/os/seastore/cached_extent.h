@@ -48,7 +48,6 @@ class CachedExtent : public boost::intrusive_ref_counter<
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
                            //  version > 0
-    RETIRED,               // In ExtentIndex while in retired_extent_gate
     INVALID                // Part of no ExtentIndex set
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
@@ -225,12 +224,7 @@ public:
 
   /// Returns true if extent has not been superceded or retired
   bool is_valid() const {
-    return state != extent_state_t::INVALID && state != extent_state_t::RETIRED;
-  }
-
-  /// True iff extent is in state RETIRED
-  bool is_retired() const {
-    return state == extent_state_t::RETIRED;
+    return state != extent_state_t::INVALID;
   }
 
   /// Returns true if extent or prior_instance has been invalidated
@@ -246,7 +240,7 @@ public:
 
   /// Return journal location of oldest relevant delta, only valid while RETIRED
   auto get_retired_at() const {
-    ceph_assert(is_retired());
+    ceph_assert(!is_valid());
     return dirty_from_or_retired_at;
   }
 
@@ -376,7 +370,7 @@ protected:
     poffset(other.poffset) {}
 
   struct retired_placeholder_t{};
-  CachedExtent(retired_placeholder_t) : state(extent_state_t::RETIRED) {}
+  CachedExtent(retired_placeholder_t) : state(extent_state_t::INVALID) {}
 
   friend class Cache;
   template <typename T, typename... Args>
