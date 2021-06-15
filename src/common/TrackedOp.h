@@ -303,19 +303,19 @@ public:
   void set_osd_parent_span(...) {}
 #endif
 
-  void mark_tracepoint(const char* name) {
+  void mark_tracepoint(std::string_view name) {
 #ifdef HAVE_JAEGER
       if (osd_parent_span) {
-        jaeger_tracing::child_span(name, osd_parent_span);
+        jaeger_tracing::child_span(name.data(), osd_parent_span);
       }
 #endif
   }
 
-  void mark_tracepoint(const char* name,
+  void mark_tracepoint(std::string_view name,
                        std::map<const char*, int64_t> kvs) {
 #ifdef HAVE_JAEGER
       if (osd_parent_span) {
-        auto sp = jaeger_tracing::child_span(name, osd_parent_span);
+        auto sp = jaeger_tracing::child_span(name.data(), osd_parent_span);
         for (auto i : kvs) {
           sp->Log({{i.first, i.second}});
         }
