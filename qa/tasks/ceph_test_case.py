@@ -3,7 +3,7 @@ import unittest
 import time
 import logging
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 
 if TYPE_CHECKING:
     from tasks.mgr.mgr_test_case import MgrCluster

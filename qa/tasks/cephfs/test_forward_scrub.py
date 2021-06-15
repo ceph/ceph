@@ -14,7 +14,7 @@ from collections import namedtuple
 from io import BytesIO
 from textwrap import dedent
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 import struct
