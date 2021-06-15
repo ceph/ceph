@@ -6,7 +6,7 @@ from logging import getLogger
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
-from teuthology.orchestra.run import Raw
+from teuthology.orchestra.run_helper import Raw
 
 
 log = getLogger(__name__)

@@ -6,7 +6,7 @@ import datetime
 import gevent
 
 from teuthology.exceptions import CommandFailedError
-from teuthology.orchestra.run import Raw
+from teuthology.orchestra.run_helper import Raw
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 log = logging.getLogger(__name__)

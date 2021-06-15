@@ -76,7 +76,7 @@ from argparse import Namespace
 
 from unittest import suite, loader
 
-from teuthology.orchestra.run import quote, PIPE
+from teuthology.orchestra.run_helper import Raw, quote, PIPE
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import RemoteShell
 from teuthology.config import config as teuth_config
