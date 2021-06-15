@@ -3240,8 +3240,10 @@ paths:
             schema:
               properties:
                 hostname:
+                  description: Hostname
                   type: string
                 status:
+                  description: Host Status
                   type: string
               required:
               - hostname

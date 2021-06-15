@@ -39,7 +39,7 @@ describe('HostFormComponent', () => {
   });
 
   it('should select maintenance mode', () => {
-    component.hostForm.get('maintenance').setValue('maintenance');
+    component.hostForm.get('maintenance').setValue(true);
     fixture.detectChanges();
     component.submit();
     expect(component.status).toBe('maintenance');

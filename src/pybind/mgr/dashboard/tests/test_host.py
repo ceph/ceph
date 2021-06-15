@@ -122,6 +122,17 @@ class HostControllerTest(ControllerTestCase):
             self.assertStatus(200)
             self.assertIn('labels', self.json_body())
 
+    @mock.patch('dashboard.controllers.host.add_host')
+    def test_add_host(self, mock_add_host):
+        with patch_orch(True):
+            payload = {
+                'hostname': 'node0',
+                'status': 'maintenance'
+            }
+            self._post(self.URL_HOST, payload)
+            self.assertStatus(201)
+            mock_add_host.assert_called()
+
     def test_set_labels(self):
         mgr.list_servers.return_value = []
         orch_hosts = [
