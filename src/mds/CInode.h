@@ -599,7 +599,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   pair<bool,bool> split_need_snapflush(CInode *cowin, CInode *in);
 
   // -- accessors --
-  bool is_root() const { return inode.ino == MDS_INO_ROOT; }
+  bool is_root() const { return ino() == CEPH_INO_ROOT; }
   bool is_stray() const { return MDS_INO_IS_STRAY(inode.ino); }
   mds_rank_t get_stray_owner() const {
     return (mds_rank_t)MDS_INO_STRAY_OWNER(inode.ino);
