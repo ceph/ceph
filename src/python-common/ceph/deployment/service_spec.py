@@ -4,7 +4,7 @@ from collections import OrderedDict
 from functools import wraps
 from ipaddress import ip_network, ip_address
 from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
-    NamedTuple
+    NamedTuple, Mapping
 
 import yaml
 
@@ -656,7 +656,7 @@ class ServiceSpec(object):
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceSpec') -> Any:
-        return dumper.represent_dict(data.to_json().items())
+        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
 yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
