@@ -414,6 +414,8 @@ class RookCluster(object):
                     namespace=self.rook_env.namespace,
                 ),
                 spec=cfs.Spec(
+                    None,
+                    None,
                     metadataServer=cfs.MetadataServer(
                         activeCount=spec.placement.count or 1,
                         activeStandby=True
@@ -468,9 +470,13 @@ class RookCluster(object):
                 
 
         def _update_zone(new: cos.CephObjectStore) -> cos.CephObjectStore:
-            new.spec.gateway.instances = spec.placement.count or 1
+            if new.spec.gateway:
+                new.spec.gateway.instances = spec.placement.count or 1
+            else: 
+                new.spec.gateway=cos.Gateway(
+                    instances=spec.placement.count or 1
+                )
             return new
-
         return self._create_or_patch(
             cos.CephObjectStore, 'cephobjectstores', name,
             _update_zone, _create_zone)
@@ -495,6 +501,7 @@ class RookCluster(object):
                         ),
                     spec=cnfs.Spec(
                         rados=cnfs.Rados(
+                            namespace=self.rook_env.namespace,
                             pool=spec.pool
                             ),
                         server=cnfs.Server(
@@ -565,6 +572,8 @@ class RookCluster(object):
             # FIXME: this is all not really atomic, because jsonpatch doesn't
             # let us do "test" operations that would check if items with
             # matching names were in existing lists.
+            if not new_cluster.spec.storage:
+                raise orchestrator.OrchestratorError('new_cluster missing storage attribute')
 
             if not hasattr(new_cluster.spec.storage, 'nodes'):
                 new_cluster.spec.storage.nodes = ccl.NodesList()
@@ -575,7 +584,10 @@ class RookCluster(object):
             if matching_host not in [n.name for n in current_nodes]:
                 pd = ccl.NodesItem(
                     name=matching_host,
-                    config=ccl.Config(
+                    # config=ccl.Config(
+                    #     storeType=drive_group.objectstore
+                    # )
+                    config=object(  
                         storeType=drive_group.objectstore
                     )
                 )
