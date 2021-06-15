@@ -656,7 +656,7 @@ class ServiceSpec(object):
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceSpec') -> Any:
-        return dumper.represent_dict(data.to_json().items())
+        return dumper.represent_dict(data.to_json())
 
 
 yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
