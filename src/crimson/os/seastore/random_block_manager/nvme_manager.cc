@@ -192,20 +192,9 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
 	      bl_bitmap_block.append(bp);
 	      decode(b_block, bl_bitmap_block);
 	      auto max = max_block_by_bitmap_block();
-	      auto allocated_blocks = t.get_rbm_allocated_blocks();
 	      for (uint64_t i = 0;
 		  i < max && (uint64_t)size/super.block_size > allocated; i++) {
 		auto block_id = convert_bitmap_block_no_to_block_id(i, addr);
-		bool out = false;
-		for (auto b : allocated_blocks) {
-		  if (b.alloc_blk_ids.intersects(block_id, 1)) {
-		    out = true;
-		    break;
-		  }
-		}
-		if (out) {
-		  continue;
-		}
 		if (b_block.is_allocated(i)) {
 		  continue;
 		}
@@ -273,13 +262,12 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
 	-> allocate_ertr::future<> {
 	logger().debug("after find_free_block: allocated {}", alloc_extent);
 	if (!alloc_extent.empty()) {
-	  // add alloc info to delta
 	  rbm_alloc_delta_t alloc_info {
 	    extent_types_t::RBM_ALLOC_INFO,
 	    alloc_extent,
 	    rbm_alloc_delta_t::op_types_t::SET
 	  };
-	  t.add_rbm_allocated_blocks(alloc_info);
+	  // TODO: add alloc info to delta
 	} else {
 	  return crimson::ct_error::enospc::make();
 	}
@@ -296,6 +284,12 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
 NVMeManager::free_block_ertr::future<> NVMeManager::free_extent(
     Transaction &t, blk_paddr_t from, size_t len)
 {
+  return free_block_ertr::now();
+}
+
+NVMeManager::free_block_ertr::future<> NVMeManager::add_free_extent(
+    std::vector<rbm_alloc_delta_t>& v, blk_paddr_t from, size_t len)
+{
   ceph_assert(!(len % super.block_size));
   blk_id_t blk_id_start = from / super.block_size;
 
@@ -306,7 +300,7 @@ NVMeManager::free_block_ertr::future<> NVMeManager::free_extent(
     free_extent,
     rbm_alloc_delta_t::op_types_t::CLEAR
   };
-  t.add_rbm_allocated_blocks(alloc_info);
+  v.push_back(alloc_info);
   return free_block_ertr::now();
 }
 
@@ -419,14 +413,18 @@ NVMeManager::abort_allocation_ertr::future<> NVMeManager::abort_allocation(
   /*
    * TODO: clear all allocation infos associated with transaction in in-memory allocator
    */
-  t.clear_rbm_allocated_blocks();
   return abort_allocation_ertr::now();
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::complete_allocation(
     Transaction &t)
 {
-  auto alloc_blocks = t.get_rbm_allocated_blocks();
+  return write_ertr::now();
+}
+
+NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
+    std::vector<rbm_alloc_delta_t> &alloc_blocks)
+{
   if (alloc_blocks.empty()) {
     return write_ertr::now();
   }

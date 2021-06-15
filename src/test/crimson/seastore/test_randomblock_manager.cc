@@ -33,6 +33,21 @@ struct rbm_test_t : public  seastar_test_suite_t,
   std::unique_ptr<NVMeManager> rbm_manager;
   nvme_device::NVMeBlockDevice *device;
 
+  struct rbm_transaction {
+    void add_rbm_allocated_blocks(rbm_alloc_delta_t &d) {
+      allocated_blocks.push_back(d);
+    }
+    void clear_rbm_allocated_blocks() {
+      if (!allocated_blocks.empty()) {
+	allocated_blocks.clear();
+      }
+    }
+    const auto &get_rbm_allocated_blocks() {
+      return allocated_blocks;
+    }
+    std::vector<rbm_alloc_delta_t> allocated_blocks;
+  };
+
   std::default_random_engine generator;
 
   const uint64_t block_size = DEFAULT_BLOCK_SIZE;
@@ -83,33 +98,33 @@ struct rbm_test_t : public  seastar_test_suite_t,
     return rbm_manager->read(addr, ptr).unsafe_get0();
   }
 
-  auto create_transaction() {
-    return tm->create_transaction();
+  auto create_rbm_transaction() {
+    return std::make_unique<rbm_transaction>();
   }
 
-  auto alloc_extent(Transaction &t, size_t size) {
-    return rbm_manager->alloc_extent(t, size).unsafe_get0();
+  auto alloc_extent(rbm_transaction &t, size_t size) {
+    auto tt = tm->create_transaction(); // dummy transaction
+    auto extent = rbm_manager->find_free_block(*tt, size).unsafe_get0();
+    if (!extent.empty()) {
+      rbm_alloc_delta_t alloc_info {
+	extent_types_t::RBM_ALLOC_INFO,
+	  extent,
+	  rbm_alloc_delta_t::op_types_t::SET
+      };
+      t.add_rbm_allocated_blocks(alloc_info);
+    }
   }
 
-  auto free_extent(Transaction &t, interval_set<blk_id_t> range) {
+  auto free_extent(rbm_transaction &t, interval_set<blk_id_t> range) {
     for (auto r : range) {
       logger().debug("free_extent: start {} len {}", r.first * DEFAULT_BLOCK_SIZE,
 		      r.second * DEFAULT_BLOCK_SIZE);
-      return rbm_manager->free_extent(t, r.first * DEFAULT_BLOCK_SIZE,
-	     r.second * DEFAULT_BLOCK_SIZE).unsafe_get0();
+      rbm_manager->add_free_extent(t.allocated_blocks, r.first * DEFAULT_BLOCK_SIZE,
+				    r.second * DEFAULT_BLOCK_SIZE);
     }
   }
 
-  auto submit_transaction(Transaction &t) {
-    auto record = cache.try_construct_record(t);
-    if (!record) {
-      return false;
-    }
-    // TODO: write record on journal
-    return true;
-  }
-
-  interval_set<blk_id_t> get_allocated_blk_ids(Transaction &t) {
+  interval_set<blk_id_t> get_allocated_blk_ids(rbm_transaction &t) {
     auto allocated_blocks = t.get_rbm_allocated_blocks();
     interval_set<blk_id_t> alloc_ids;
     for (auto p : allocated_blocks) {
@@ -152,8 +167,9 @@ struct rbm_test_t : public  seastar_test_suite_t,
     return ret;
   }
 
-  auto complete_allocation(Transaction &t) {
-    return rbm_manager->complete_allocation(t).unsafe_get0();
+  auto complete_allocation(rbm_transaction &t) {
+    auto alloc_blocks = t.get_rbm_allocated_blocks();
+    return rbm_manager->sync_allocation(alloc_blocks).unsafe_get0();
   }
 
   bufferptr generate_extent(size_t blocks) {
@@ -215,17 +231,15 @@ TEST_F(rbm_test_t, block_alloc_test)
  run_async([this] {
    mkfs();
    open();
-   auto t = tm->create_transaction();
+   auto t = create_rbm_transaction();
    alloc_extent(*t, DEFAULT_BLOCK_SIZE);
    auto alloc_ids = get_allocated_blk_ids(*t);
-   ASSERT_TRUE(submit_transaction(*t));
    complete_allocation(*t);
    ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
 
-   auto t2 = tm->create_transaction();
+   auto t2 = create_rbm_transaction();
    alloc_extent(*t2, DEFAULT_BLOCK_SIZE * 3);
    alloc_ids = get_allocated_blk_ids(*t2);
-   ASSERT_TRUE(submit_transaction(*t2));
    complete_allocation(*t2);
    ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
  });
@@ -236,32 +250,28 @@ TEST_F(rbm_test_t, block_alloc_free_test)
  run_async([this] {
    mkfs();
    open();
-   auto t = tm->create_transaction();
+   auto t = create_rbm_transaction();
    alloc_extent(*t, DEFAULT_BLOCK_SIZE);
    auto alloc_ids = get_allocated_blk_ids(*t);
    free_extent(*t, alloc_ids);
-   ASSERT_TRUE(submit_transaction(*t));
    complete_allocation(*t);
    ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
 
-   auto t2 = tm->create_transaction();
+   auto t2 = create_rbm_transaction();
    alloc_extent(*t2, DEFAULT_BLOCK_SIZE * 4);
    alloc_ids = get_allocated_blk_ids(*t2);
    free_extent(*t2, alloc_ids);
-   ASSERT_TRUE(submit_transaction(*t2));
    complete_allocation(*t2);
    ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
 
-   auto t3 = tm->create_transaction();
+   auto t3 = create_rbm_transaction();
    alloc_extent(*t3, DEFAULT_BLOCK_SIZE * 8);
    alloc_ids = get_allocated_blk_ids(*t3);
-   ASSERT_TRUE(submit_transaction(*t3));
    complete_allocation(*t3);
    ASSERT_TRUE(check_ids_are_allocated(alloc_ids));
 
-   auto t4 = tm->create_transaction();
+   auto t4 = create_rbm_transaction();
    free_extent(*t4, alloc_ids);
-   ASSERT_TRUE(submit_transaction(*t4));
    complete_allocation(*t4);
    ASSERT_TRUE(check_ids_are_allocated(alloc_ids, false));
  });
@@ -333,17 +343,15 @@ TEST_F(rbm_test_t, check_free_blocks)
    ASSERT_TRUE(rbm_manager->get_free_blocks() == DEFAULT_TEST_SIZE/DEFAULT_BLOCK_SIZE - 5);
    auto free = rbm_manager->get_free_blocks();
    interval_set<blk_id_t> alloc_ids;
-   auto t = tm->create_transaction();
+   auto t = create_rbm_transaction();
    alloc_extent(*t, DEFAULT_BLOCK_SIZE * 4);
    alloc_ids = get_allocated_blk_ids(*t);
-   ASSERT_TRUE(submit_transaction(*t));
    complete_allocation(*t);
    ASSERT_TRUE(rbm_manager->get_free_blocks() == free - 4);
 
    free = rbm_manager->get_free_blocks();
-   auto t2 = tm->create_transaction();
+   auto t2 = create_rbm_transaction();
    free_extent(*t2, alloc_ids);
-   ASSERT_TRUE(submit_transaction(*t2));
    complete_allocation(*t2);
    ASSERT_TRUE(rbm_manager->get_free_blocks() == free + 4);
  });
