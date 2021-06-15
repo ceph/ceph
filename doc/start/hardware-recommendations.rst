@@ -57,7 +57,7 @@ daemons will need more RAM than they do during steady-state operation, so plan
 for peak usage.  For very small clusters, 32 GB suffices.  For
 clusters of up to, say, 300 OSDs go with 64GB.  For clusters built with (or
 which will grow to) even more OSDS you should provision
-129GB.  You may also want to consider tuning settings like ``mon_osd_cache_size``
+128GB.  You may also want to consider tuning settings like ``mon_osd_cache_size``
 or ``rocksdb_cache_size`` after careful research.
 
 Metadata servers (ceph-mds)
