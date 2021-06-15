@@ -355,6 +355,10 @@ public:
   }
 
   write_ertr::future<> write(blk_paddr_t addr, bufferlist &bl);
+  write_ertr::future<> sync_allocation(
+      std::vector<rbm_alloc_delta_t>& alloc_blocks);
+  free_block_ertr::future<> add_free_extent(
+      std::vector<rbm_alloc_delta_t>& v, blk_paddr_t from, size_t len);
 
 private:
   /*

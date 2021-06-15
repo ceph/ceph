@@ -313,15 +313,6 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       });
   }
 
-  for (auto b : t.allocated_blocks) {
-    bufferlist bl;
-    encode(b.alloc_blk_ids, bl);
-    delta_info_t delta;
-    delta.type = extent_types_t::RBM_ALLOC_INFO;
-    delta.bl = bl;
-    record.deltas.push_back(delta);
-  }
-
   return std::make_optional<record_t>(std::move(record));
 }
 
