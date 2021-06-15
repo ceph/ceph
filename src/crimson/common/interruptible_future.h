@@ -460,6 +460,8 @@ private:
 
 template <typename InterruptCond, typename Errorator>
 struct interruptible_errorator {
+  using base_ertr = Errorator;
+
   template <typename ValueT = void>
   using future = interruptible_future_detail<InterruptCond,
 	typename Errorator::template future<ValueT>>;
