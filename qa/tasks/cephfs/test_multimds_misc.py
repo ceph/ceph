@@ -2,7 +2,7 @@ import logging
 import errno
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.contextutil import safe_while
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 

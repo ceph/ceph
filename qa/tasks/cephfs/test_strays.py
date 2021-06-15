@@ -5,7 +5,8 @@ from textwrap import dedent
 import datetime
 import gevent
 
-from teuthology.orchestra.run import CommandFailedError, Raw
+from teuthology.exceptions import CommandFailedError
+from teuthology.orchestra.run import Raw
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 log = logging.getLogger(__name__)
