@@ -96,6 +96,8 @@ add_executable(osdmaptool ${osdomaptool_srcs})
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
+install(PROGRAMS crushdiff DESTINATION bin)
+
 set(ceph-diff-sorted_srcs ceph-diff-sorted.cc)
 add_executable(ceph-diff-sorted ${ceph-diff-sorted_srcs})
 set_target_properties(ceph-diff-sorted PROPERTIES
