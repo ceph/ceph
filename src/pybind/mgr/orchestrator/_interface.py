@@ -16,9 +16,9 @@ import re
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 from functools import wraps, reduce
-
 from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
     Sequence, Dict, cast
+from yaml.nodes import Node
 
 try:
     from typing import Protocol  # Protocol was added in Python 3.8
@@ -1035,7 +1035,7 @@ class DaemonDescription(object):
         return DaemonDescription.from_json(self.to_json())
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Any:
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Node:
         return dumper.represent_dict(data.to_json())
 
 
@@ -1174,7 +1174,7 @@ class ServiceDescription(object):
         return cls(spec=spec, events=events, **c_status)
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Any:
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Node:
         return dumper.represent_dict(data.to_json())
 
 
