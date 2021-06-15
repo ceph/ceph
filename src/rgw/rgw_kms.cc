@@ -201,8 +201,7 @@ protected:
     while (res && isspace(buf[res-1])) {
       --res;
     }
-    vault_token->assign(std::string{buf, static_cast<size_t>(res)});
-    memset(buf, 0, sizeof(buf));
+    vault_token->assign(std::string{buf, static_cast<size_t>(res)});    
     ::ceph::crypto::zeroize_for_security(buf, sizeof(buf));
     return res;
   }
