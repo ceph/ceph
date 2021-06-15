@@ -109,4 +109,4 @@ for pr in prs:
 
 print('--- done. these PRs were included:')
 print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
-print('--- perhaps you want to: make && ctest -j12 && git push ci %s' % branch)
+print('--- perhaps you want to: ./run-make-check.sh && git push ci %s' % branch)
