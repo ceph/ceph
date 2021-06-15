@@ -1195,6 +1195,7 @@ class BIVerObjEntry {
 
 public:
   BIVerObjEntry(cls_method_context_t& _hctx, const cls_rgw_obj_key& _key) : hctx(_hctx), key(_key), initialized(false) {
+    // empty
   }
 
   int init(bool check_delete_marker = true) {
@@ -1532,17 +1533,48 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  BIVerObjEntry obj(hctx, op.key);
-  BIOLHEntry olh(hctx, op.key);
-
   /* read instance entry */
+  BIVerObjEntry obj(hctx, op.key);
   int ret = obj.init(op.delete_marker);
+
+  /* NOTE: When a delete is issued, a key instance is always provided,
+   * either the one for which the delete is requested or a new random
+   * one when no instance is specified. So we need to see which of
+   * these two cases we're dealing with. The variable `existed` will
+   * be true if the instance was specified and false if it was
+   * randomly generated. It might have been cleaner if the instance
+   * were empty and randomly generated here and returned in the reply,
+   * as that would better allow a typo in the instance id. This code
+   * should be audited and possibly cleaned up. */
+
   bool existed = (ret == 0);
   if (ret == -ENOENT && op.delete_marker) {
     ret = 0;
   }
   if (ret < 0) {
     return ret;
+  }
+
+  BIOLHEntry olh(hctx, op.key);
+  bool olh_read_attempt = false;
+  bool olh_found = false;
+  if (!existed && op.delete_marker) {
+    /* read olh */
+    ret = olh.init(&olh_found);
+    if (ret < 0) {
+      return ret;
+    }
+    olh_read_attempt = true;
+
+    // if we're deleting (i.e., adding a delete marker, and the OLH
+    // indicates it already refers to a delete marker, error out)
+    if (olh_found && olh.get_entry().delete_marker) {
+      CLS_LOG(10,
+	      "%s: delete marker received for \"%s\" although OLH"
+	      " already refers to a delete marker\n",
+	      __func__, escape_str(op.key.to_string()).c_str());
+      return -ENOENT;
+    }
   }
 
   if (existed && !real_clock::is_zero(op.unmod_since)) {
@@ -1597,11 +1629,14 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* read olh */
-  bool olh_found;
-  ret = olh.init(&olh_found);
-  if (ret < 0) {
-    return ret;
+  if (!olh_read_attempt) { // only read if we didn't attempt earlier
+    ret = olh.init(&olh_found);
+    if (ret < 0) {
+      return ret;
+    }
+    olh_read_attempt = true;
   }
+
   const uint64_t prev_epoch = olh.get_epoch();
 
   if (!olh.start_modify(op.olh_epoch)) {
