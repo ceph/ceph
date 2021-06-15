@@ -58,13 +58,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                              read_only=readonly, squash='none',
                                              addr=addr)
 
-    @CLICommand('nfs export import', perm='rw')
-    def _cmd_nfs_export_import(self,
-                               cluster_id: str,
-                               inbuf: str) -> Tuple[int, str, str]:
-        """Create one or more exports from JSON specification"""
-        return self.export_mgr.import_export(cluster_id, inbuf)
-
     @CLICommand('nfs export rm', perm='rw')
     def _cmd_nfs_export_rm(self, cluster_id: str, binding: str) -> Tuple[int, str, str]:
         """Remove a cephfs export"""
@@ -85,12 +78,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Fetch a export of a NFS cluster given the pseudo path/binding"""
         return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=binding)
 
-    @CLICommand('nfs export update', perm='rw')
-    @CLICheckNonemptyFileInput(desc='CephFS Export configuration')
-    def _cmd_nfs_export_update(self, cluster_id: str, inbuf: str) -> Tuple[int, str, str]:
-        """Update an export of a NFS cluster by `-i <json_file>`"""
-        # The export <json_file> is passed to -i and it's processing is handled by the Ceph CLI.
-        return self.export_mgr.update_export(cluster_id, export_config=inbuf)
+    @CLICommand('nfs export apply', perm='rw')
+    @CLICheckNonemptyFileInput(desc='Export JSON specification')
+    def _cmd_nfs_export_apply(self, cluster_id: str, inbuf: str) -> Tuple[int, str, str]:
+        """Create or update an export by `-i <json_file>`"""
+        # The export <json_file> is passed to -i and it's processing
+        # is handled by the Ceph CLI.
+        return self.export_mgr.apply_export(cluster_id, export_config=inbuf)
 
     @CLICommand('nfs cluster create', perm='rw')
     def _cmd_nfs_cluster_create(self,

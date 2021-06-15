@@ -8,7 +8,7 @@ from os.path import normpath
 from rados import TimedOut, ObjectNotFound
 
 from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
-from .exception import NFSException, NFSInvalidOperation, NFSObjectNotFound, FSNotFound, \
+from .exception import NFSException, NFSInvalidOperation, FSNotFound, \
     ClusterNotFound
 from .utils import POOL_NAME, available_clusters, check_fs, restart_nfs_service
 
@@ -344,27 +344,17 @@ class ExportMgr:
         except Exception as e:
             return exception_handler(e, f"Failed to get {pseudo_path} export for {cluster_id}")
 
-    def update_export(self, cluster_id: str, export_config: str) -> Tuple[int, str, str]:
-        try:
-            new_export = json.loads(export_config)
-            # check export type
-            return FSExport(self).update_export_1(cluster_id, new_export, False)
-        except NotImplementedError:
-            return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
-        except Exception as e:
-            return exception_handler(e, f'Failed to update export: {e}')
-
-    def import_export(self, cluster_id: str, export_config: str) -> Tuple[int, str, str]:
+    def apply_export(self, cluster_id: str, export_config: str) -> Tuple[int, str, str]:
         try:
             if not export_config:
                 raise NFSInvalidOperation("Empty Config!!")
             new_export = json.loads(export_config)
             # check export type
-            return FSExport(self).update_export_1(cluster_id, new_export, True)
+            return FSExport(self).update_export_1(cluster_id, new_export)
         except NotImplementedError:
             return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
         except Exception as e:
-            return exception_handler(e, f'Failed to import export: {e}')
+            return exception_handler(e, f'Failed to update export: {e}')
 
 
 class FSExport(ExportMgr):
@@ -492,7 +482,7 @@ class FSExport(ExportMgr):
                 ret, out, err = self._exec(['radosgw-admin', 'user', 'create', '--uid', uid,
                                             '--display-name', uid])
                 if ret:
-                    raise NFSException(f'Failed to create user {uid}')
+                    raise NFSException(-1, f'Failed to create user {uid}')
             j = json.loads(out)
             # FIXME: make this more tolerate of unexpected output?
             access_key = j['keys'][0]['access_key']
@@ -535,7 +525,6 @@ class FSExport(ExportMgr):
             self,
             cluster_id: str,
             new_export: Dict,
-            can_create: bool
     ) -> Tuple[int, str, str]:
         for k in ['cluster_id', 'path', 'pseudo']:
             if k not in new_export:
@@ -550,17 +539,17 @@ class FSExport(ExportMgr):
                                         new_export['pseudo'])
         if old_export:
             # Check if export id matches
-            if old_export.export_id != new_export.get('export_id'):
-                raise NFSInvalidOperation('Export ID changed, Cannot update export')
+            if new_export.get('export_id'):
+                if old_export.export_id != new_export.get('export_id'):
+                    raise NFSInvalidOperation('Export ID changed, Cannot update export')
+            else:
+                new_export['export_id'] = old_export.export_id
         elif new_export.get('export_id'):
             old_export = self._fetch_export_obj(cluster_id, new_export['export_id'])
             if old_export:
                 # re-fetch via old pseudo
                 old_export = self._fetch_export(cluster_id, old_export.pseudo)
                 self.mgr.log.debug(f"export {old_export.export_id} pseudo {old_export.pseudo} -> {new_export_dict['pseudo']}")
-
-        if not old_export and not can_create:
-            raise NFSObjectNotFound('Export does not exist')
 
         new_export = Export.from_dict(
             new_export.get('export_id', self._gen_export_id(cluster_id)),
