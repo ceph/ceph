@@ -97,7 +97,7 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.radosm(["rmxattr", file_obj_name, "parent"])
 
-        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive", "force"], 0)
+        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive,force"], 0)
         self.assertNotEqual(out_json, None)
         self.assertEqual(out_json["return_code"], 0)
         self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
@@ -140,7 +140,7 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.radosm(["rmxattr", file_obj_name, "parent"])
 
-        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive", "force"], 0)
+        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive,force"], 0)
         self.assertNotEqual(out_json, None)
         
         res = self.fs.run_scrub(["abort"])
@@ -163,7 +163,7 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.radosm(["rmxattr", file_obj_name, "parent"])
 
-        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive", "force"], 0)
+        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive,force"], 0)
         self.assertNotEqual(out_json, None)
 
         res = self.fs.run_scrub(["pause"])
@@ -192,7 +192,7 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.radosm(["rmxattr", file_obj_name, "parent"])
 
-        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive", "force"], 0)
+        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive,force"], 0)
         self.assertNotEqual(out_json, None)
 
         res = self.fs.run_scrub(["pause"])
