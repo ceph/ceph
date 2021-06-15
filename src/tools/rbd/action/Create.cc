@@ -175,14 +175,9 @@ err_writesame:
 
 int thick_write(const std::string &image_name,librados::IoCtx &io_ctx,
                 librbd::ImageOptions &opts, bool no_progress) {
-  int r = 0;
+  int r;
   librbd::Image image;
 
-  // To prevent writesame from discarding data, thick_write sets
-  // the rbd_discard_on_zeroed_write_same option to false.
-  ceph_assert(g_ceph_context != nullptr);
-  r = g_conf().set_val("rbd_discard_on_zeroed_write_same", "false");
-  ceph_assert(r == 0);
   r = utils::open_image(io_ctx, image_name, false, &image);
   if (r < 0) {
     return r;
