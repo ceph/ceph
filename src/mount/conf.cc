@@ -27,9 +27,9 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
   KeyRing keyring;
   CryptoKey secret;
   std::string secret_str;
+  std::ostringstream oss;
   std::string monaddrs;
   vector<const char *> args = { "--name", name };
-  bool first = true;
 
   if (config_file) {
     args.push_back("--conf");
@@ -66,26 +66,20 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
 	continue;
     }
 
-    std::string addr;
-    addr += eaddr.ip_only_to_str();
-    addr += ":";
-    addr += std::to_string(eaddr.get_port());
-    /* If this will overrun cci_mons, stop here */
-    if (monaddrs.length() + 1 + addr.length() + 1 > sizeof(cci->cci_mons))
-      break;
-
-    if (first)
-      first = false;
-    else
-      monaddrs += ",";
-
-    monaddrs += addr;
+    if (oss.tellp() > 0) {
+      oss << ",";
+    }
+    oss << eaddr.get_sockaddr();
   }
 
-  if (monaddrs.length())
+  monaddrs = oss.str();
+  if (monaddrs.length() + 1 > sizeof(cci->cci_mons)) {
+    mount_ceph_debug("Monitor addresses are too long (length parsed: %d, max length: %d)\n", monaddrs.length() + 1, sizeof(cci->cci_mons));
+  } else if (monaddrs.length()) {
     strcpy(cci->cci_mons, monaddrs.c_str());
-  else
+  } else {
     mount_ceph_debug("Could not discover monitor addresses\n");
+  }
 
 scrape_keyring:
   err = keyring.from_ceph_context(cct.get());
