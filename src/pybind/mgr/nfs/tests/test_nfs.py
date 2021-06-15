@@ -610,7 +610,7 @@ NFS_CORE_PARAM {
     def _do_test_update_export(self, cluster_id, expected_exports):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
-        r = conf.update_export(cluster_id, json.dumps({
+        r = conf.apply_export(cluster_id, json.dumps({
             'export_id': 2,
             'daemons': expected_exports[2],
             'path': 'bucket',
@@ -644,6 +644,93 @@ NFS_CORE_PARAM {
         assert export.squash == "all_squash"
         assert export.protocols == [4, 3]
         assert export.transports == ["TCP", "UDP"]
+        assert export.fsal.name == "RGW"
+        assert export.fsal.user_id == "testuser"
+        assert export.fsal.access_key_id == "access_key"
+        assert export.fsal.secret_access_key == "secret_key"
+        assert len(export.clients) == 1
+        assert export.clients[0].squash is None
+        assert export.clients[0].access_type is None
+        assert export.cluster_id == cluster_id
+
+        # do it again, with changes
+        r = conf.apply_export(cluster_id, json.dumps({
+            'export_id': 2,
+            'daemons': expected_exports[2],
+            'path': 'newbucket',
+            'pseudo': '/rgw/bucket',
+            'cluster_id': cluster_id,
+            'tag': 'bucket_tag',
+            'access_type': 'RO',
+            'squash': 'root',
+            'security_label': False,
+            'protocols': [4],
+            'transports': ['TCP'],
+            'clients': [{
+                'addresses': ["192.168.10.0/16"],
+                'access_type': None,
+                'squash': None
+            }],
+            'fsal': {
+                'name': 'RGW',
+                'user_id': 'testuser',
+                'access_key_id': 'access_key',
+                'secret_access_key': 'secret_key',
+            }
+        }))
+        assert r[0] == 0
+
+        export = conf._fetch_export('foo', '/rgw/bucket')
+        assert export.export_id == 2
+        assert export.path == "newbucket"
+        assert export.pseudo == "/rgw/bucket"
+        assert export.access_type == "RO"
+        assert export.squash == "root"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP"]
+        assert export.fsal.name == "RGW"
+        assert export.fsal.user_id == "testuser"
+        assert export.fsal.access_key_id == "access_key"
+        assert export.fsal.secret_access_key == "secret_key"
+        assert len(export.clients) == 1
+        assert export.clients[0].squash is None
+        assert export.clients[0].access_type is None
+        assert export.cluster_id == cluster_id
+
+        # again, but without export_id
+        r = conf.apply_export(cluster_id, json.dumps({
+            'daemons': expected_exports[2],
+            'path': 'newestbucket',
+            'pseudo': '/rgw/bucket',
+            'cluster_id': cluster_id,
+            'tag': 'bucket_tag',
+            'access_type': 'RW',
+            'squash': 'root',
+            'security_label': False,
+            'protocols': [4],
+            'transports': ['TCP'],
+            'clients': [{
+                'addresses': ["192.168.10.0/16"],
+                'access_type': None,
+                'squash': None
+            }],
+            'fsal': {
+                'name': 'RGW',
+                'user_id': 'testuser',
+                'access_key_id': 'access_key',
+                'secret_access_key': 'secret_key',
+            }
+        }))
+        assert r[0] == 0
+
+        export = conf._fetch_export('foo', '/rgw/bucket')
+        assert export.export_id == 2
+        assert export.path == "newestbucket"
+        assert export.pseudo == "/rgw/bucket"
+        assert export.access_type == "RW"
+        assert export.squash == "root"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
         assert export.fsal.user_id == "testuser"
         assert export.fsal.access_key_id == "access_key"
