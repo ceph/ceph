@@ -134,6 +134,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
+    @CLICommand('rgw realm reconcile', perm='rw')
+    def _cmd_rgw_realm_reconcile(self,
+                             realm_name : Optional[str] = None,
+                             zonegroup_name: Optional[str] = None,
+                             zone_name: Optional[str] = None,
+                             update: Optional[bool] = False):
+        """Bootstrap new rgw zone that syncs with existing zone"""
+
+        try:
+            retval, out, err = RGWAM(self.env).realm_reconcile(realm_name, zonegroup_name,
+                                                               zone_name, update)
+        except RGWAMException as e:
+            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            return (e.retcode, e.message, e.stderr)
+
+        return HandleCommandResult(retval=retval, stdout=out, stderr=err)
+
     def shutdown(self) -> None:
         """
         This method is called by the mgr when the module needs to shut

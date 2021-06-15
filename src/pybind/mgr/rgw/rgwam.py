@@ -22,6 +22,7 @@ import orchestrator
 from urllib.parse import urlparse
 
 from .types import RGWAMException, RGWAMCmdRunException, RGWPeriod, RGWUser, RealmToken
+from .diff import RealmsEPs
 
 from ceph.deployment.service_spec import RGWSpec
 
@@ -190,6 +191,15 @@ class RGWCmd(RGWCmdBase):
 class RealmOp:
     def __init__(self, env : EnvArgs):
         self.env = env
+
+    def list(self):
+        ze = ZoneEnv(self.env)
+
+        params = [ 'realm',
+                   'list' ]
+
+        return RGWAdminJSONCmd(ze).run(params)
+
         
     def get(self, realm : EntityKey = None):
 
@@ -591,6 +601,130 @@ class RGWAM:
             raise RGWAMException('failed to modify zone', e)
 
         return (0, success_message, '')
+
+
+    def _get_daemon_eps(self, realm_name = None, zonegroup_name = None, zone_name = None):
+        # get running daemons info
+        service_name = None
+        if realm_name and zone_name:
+            service_name = 'rgw.%s.%s' % (realm_name, zone_name)
+
+        daemon_type = 'rgw'
+        daemon_id = None
+        hostname = None
+        refresh = True
+
+        completion = self.env.mgr.list_daemons(service_name,
+                                               daemon_type,
+                                               daemon_id=daemon_id,
+                                               host=hostname,
+                                               refresh=refresh)
+
+        daemons = orchestrator.raise_if_exception(completion)
+
+        rep = RealmsEPs()
+
+        for s in daemons:
+            for p in s.ports:
+                svc_id = s.service_id()
+                l = svc_id.split('.')
+                if len(l) < 2:
+                    log.error('ERROR: service id cannot be parsed: (svc_id=%s)' % svc_id)
+                    continue
+
+                svc_realm = l[0]
+                svc_zone = l[1]
+
+                if realm_name and svc_realm != realm_name:
+                    log.debug('skipping realm %s' % svc_realm)
+                    continue
+
+                if zone_name and svc_zone != zone_name:
+                    log.debug('skipping zone %s' % svc_zone)
+                    continue
+
+                ep = 'http://%s:%d' % (s.hostname, p) # ssl?
+
+                rep.add(svc_realm, svc_zone, ep)
+
+        return rep
+
+
+
+    def _get_rgw_eps(self, realm_name = None, zonegroup_name = None, zone_name = None):
+        rep = RealmsEPs()
+
+        try:
+            realm_list_ret = self.realm_op().list()
+        except RGWAMException as e:
+            raise RGWAMException('failed to list realms', e)
+
+        realms = realm_list_ret.get('realms') or []
+
+        zones_map = {}
+
+        for realm in realms:
+            if realm_name and realm != realm_name:
+                log.debug('skipping realm %s' % realm)
+                continue
+
+            period_info = self.period_op().get(EntityName(realm))
+
+            period = RGWPeriod(period_info)
+
+            zones_map[realm] = {}
+
+            for zg in period.iter_zonegroups():
+                if zonegroup_name and zg.name != zonegroup_name:
+                    log.debug('skipping zonegroup %s' % zg.name)
+                    continue
+
+                for zone in zg.iter_zones():
+                    if zone_name and zone.name != zone_name:
+                        log.debug('skipping zone %s' % zone.name)
+                        continue
+
+                    zones_map[realm][zone.name] = zg.name
+
+                    if len(zone.endpoints) == 0:
+                        rep.add(realm, zone.name, None)
+                        continue
+
+                    for ep in zone.endpoints:
+                        rep.add(realm, zone.name, ep)
+
+        return (rep, zones_map)
+
+    def realm_reconcile(self, realm_name = None, zonegroup_name = None, zone_name = None, update = False):
+
+        daemon_rep = self._get_daemon_eps(realm_name, zonegroup_name, zone_name)
+
+        rgw_rep, zones_map = self._get_rgw_eps(realm_name, zonegroup_name, zone_name)
+
+        diff = daemon_rep.diff(rgw_rep)
+
+        diffj = json.dumps(diff)
+
+        if not update:
+            return (0, diffj, '')
+
+        for realm, realm_diff in diff.items():
+            for zone, endpoints in realm_diff.items():
+
+                zg = zones_map[realm][zone]
+
+                try:
+                    zone_info = self.zone_op().modify(EntityName(zone), EntityName(zg), endpoints = ','.join(diff[realm][zone]))
+                except RGWAMException as e:
+                    raise RGWAMException('failed to modify zone', e)
+
+            try:
+                period_info = self.period_op().update(EntityName(realm), EntityName(zg), EntityName(zone), True)
+            except RGWAMException as e:
+                raise RGWAMException('failed to update period', e)
+
+        return (0, 'Updated: ' + diffj, '')
+
 
     def run_radosgw(self, port = None, log_file = None, debug_ms = None, debug_rgw = None):
 
