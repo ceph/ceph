@@ -194,36 +194,36 @@ def test_osd_unmanaged():
     assert dg_spec.unmanaged == True
 
 def test_yaml():
-    y = """service_type: crash
-service_name: crash
-placement:
+    y = """placement:
   host_pattern: '*'
----
+service_name: crash
 service_type: crash
-service_name: crash
+---
 placement:
   host_pattern: '*'
+service_name: crash
+service_type: crash
 unmanaged: true
 ---
-service_type: rgw
-service_id: default-rgw-realm.eu-central-1.1
-service_name: rgw.default-rgw-realm.eu-central-1.1
-placement:
-  hosts:
-  - ceph-001
 networks:
 - 10.0.0.0/8
 - 192.168.0.0/16
+placement:
+  hosts:
+  - ceph-001
+service_id: default-rgw-realm.eu-central-1.1
+service_name: rgw.default-rgw-realm.eu-central-1.1
+service_type: rgw
 spec:
   rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
 ---
-service_type: osd
-service_id: osd_spec_default
-service_name: osd.osd_spec_default
 placement:
   host_pattern: '*'
+service_id: osd_spec_default
+service_name: osd.osd_spec_default
+service_type: osd
 spec:
   data_devices:
     model: MC-55-44-XZ
@@ -239,8 +239,8 @@ spec:
         data = yaml.safe_load(y)
         object = ServiceSpec.from_json(data)
 
-        assert yaml.dump(object) == y
-        assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+        assert yaml.dump(object, sort_keys=True) == y
+        assert yaml.dump(ServiceSpec.from_json(object.to_json()), sort_keys=True) == y
 
 @pytest.mark.parametrize("spec1, spec2, eq",
                          [

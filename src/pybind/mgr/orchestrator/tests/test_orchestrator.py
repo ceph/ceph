@@ -81,20 +81,22 @@ def test_apply():
 
 
 def test_yaml():
-    y = """daemon_type: crash
-daemon_id: ubuntu
-hostname: ubuntu
-status: 1
-status_desc: starting
-is_active: false
+    y = """daemon_id: ubuntu
+daemon_type: crash
 events:
 - 2020-06-10T10:08:22.933241Z daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on
   host 'ubuntu'"
+hostname: ubuntu
+is_active: false
+status: 1
+status_desc: starting
 ---
-service_type: crash
-service_name: crash
+events:
+- 2020-06-10T10:37:31.139159Z service:crash [INFO] "service was created"
 placement:
   host_pattern: '*'
+service_name: crash
+service_type: crash
 status:
   container_image_id: 74803e884bea289d2d2d3ebdf6d37cd560499e955595695b1390a89800f4e37a
   container_image_name: docker.io/ceph/daemon-base:latest-master-devel
@@ -102,8 +104,6 @@ status:
   last_refresh: '2020-06-10T10:57:40.715637Z'
   running: 1
   size: 1
-events:
-- 2020-06-10T10:37:31.139159Z service:crash [INFO] "service was created"
 """
     types = (DaemonDescription, ServiceDescription)
 
