@@ -339,7 +339,6 @@ class NodeExtentAccessorT {
 
   bool is_retired() const {
     if (extent) {
-      assert(!extent->is_retired());
       return false;
     } else {
       return true;
