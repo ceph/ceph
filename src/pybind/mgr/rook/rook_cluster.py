@@ -438,7 +438,6 @@ class RookCluster(object):
             # translate . to - (fingers crossed!) instead.
             name = spec.service_id.replace('.', '-')
 
-        # FIXME: pass realm and/or zone through to the CR
 
         def _create_zone() -> cos.CephObjectStore:
             port = None
@@ -447,21 +446,26 @@ class RookCluster(object):
                 secure_port = spec.get_port()
             else:
                 port = spec.get_port()
-            return cos.CephObjectStore(
-                apiVersion=self.rook_env.api_name,
-                metadata=dict(
-                    name=name,
-                    namespace=self.rook_env.namespace
-                ),
-                spec=cos.Spec(
-                    gateway=cos.Gateway(
-                        type='s3',
-                        port=port,
-                        securePort=secure_port,
-                        instances=spec.placement.count or 1,
+            object_store = cos.CephObjectStore(
+                    apiVersion=self.rook_env.api_name,
+                    metadata=dict(
+                        name=name,
+                        namespace=self.rook_env.namespace
+                    ),
+                    spec=cos.Spec(
+                        gateway=cos.Gateway(
+                            port=port,
+                            securePort=secure_port,
+                            instances=spec.placement.count or 1,
+                        )
                     )
                 )
-            )
+            if spec.rgw_zone:
+                object_store.spec.zone=cos.Zone(
+                            name=spec.rgw_zone
+                        )
+            return object_store
+                
 
         def _update_zone(new: cos.CephObjectStore) -> cos.CephObjectStore:
             new.spec.gateway.instances = spec.placement.count or 1
