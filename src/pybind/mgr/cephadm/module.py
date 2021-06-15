@@ -518,7 +518,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         path = self.get_ceph_option('cephadm_path')
         try:
             assert isinstance(path, str)
-            with open(path, 'r') as f:
+            with open(path, 'rb') as f:
                 self._cephadm = f.read()
         except (IOError, TypeError) as e:
             raise RuntimeError("unable to read cephadm at '%s': %s" % (
@@ -621,7 +621,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_cephadm_binary_path(self) -> str:
         import hashlib
         m = hashlib.sha256()
-        m.update(self._cephadm.encode())
+        m.update(self._cephadm)
         return f'/var/lib/ceph/{self._cluster_fsid}/cephadm.{m.hexdigest()}'
 
     def _kick_serve_loop(self) -> None:
