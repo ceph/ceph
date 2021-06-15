@@ -39,7 +39,7 @@ prompt_pool() {
 	error_out "rados lspools" "$lspools_err"
     fi
     >&2 sed 's/^/    /' "$temp_file" # list pools and indent
-    >&2 printf "Which pool do you want to search for orphans? "
+    >&2 printf "Which pool do you want to search for orphans (for multiple, use space-separated list)? "
     local mypool
     read mypool
     echo $mypool
@@ -47,10 +47,8 @@ prompt_pool() {
 
 if [ $# -eq 0 ] ;then
     pool="$(prompt_pool)"
-elif [ $# -eq 1 ] ;then
-    pool="$1"
 else
-    error_out "Usage: $0 [pool]"
+    pool="$*"
 fi
 
 echo "Pool is \"$pool\"."
@@ -59,10 +57,15 @@ echo "Note: output files produced will be tagged with the current timestamp -- $
 
 echo "running 'rados ls' at $(date)"
 # since --format is not specified, plain should be used
-rados ls --pool="$pool" --all >"$rados_out" 2>"$rados_err"
-if [ "$?" -ne 0 ] ;then
-    error_out "rados ls" "$rados_err"
-fi
+
+rm -f "$rados_out" &> /dev/null
+for mypool in $pool ; do
+    echo "running 'rados ls' on pool ${mypool}."
+    rados ls --pool="$mypool" --all >>"$rados_out" 2>"$rados_err"
+    if [ "$?" -ne 0 ] ;then
+	error_out "rados ls" "$rados_err"
+    fi
+done
 
 # NOTE: Each entry (line of output) of `rados ls --all` should be in
 # one of four formats depending on whether or not an entry has a
