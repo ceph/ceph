@@ -1,6 +1,5 @@
 import fnmatch
 import re
-from collections import OrderedDict
 from functools import wraps
 from ipaddress import ip_network, ip_address
 from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
@@ -588,9 +587,8 @@ class ServiceSpec(object):
     def get_virtual_ip(self) -> Optional[str]:
         return None
 
-    def to_json(self):
-        # type: () -> OrderedDict[str, Any]
-        ret: OrderedDict[str, Any] = OrderedDict()
+    def to_json(self) -> Dict[str, Any]:
+        ret: Dict[str, Any] = dict()
         ret['service_type'] = self.service_type
         if self.service_id:
             ret['service_id'] = self.service_id

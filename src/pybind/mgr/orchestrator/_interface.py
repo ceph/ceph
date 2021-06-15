@@ -1112,7 +1112,7 @@ class ServiceDescription(object):
             return ''
         return f"{(self.virtual_ip or '?').split('/')[0]}:{','.join(map(str, self.ports or []))}"
 
-    def to_json(self) -> OrderedDict:
+    def to_json(self) -> dict:
         out = self.spec.to_json()
         status = {
             'container_image_id': self.container_image_id,
@@ -1135,7 +1135,7 @@ class ServiceDescription(object):
             out['events'] = [e.to_json() for e in self.events]
         return out
 
-    def to_dict(self) -> OrderedDict:
+    def to_dict(self) -> dict:
         out = self.spec.to_json()
         status = {
             'container_image_id': self.container_image_id,
