@@ -69,6 +69,10 @@ class RGWZoneGroup(JSONObj):
 
         return z.endpoints
 
+    def iter_zones(self):
+        for zone in self.zones_by_id.values():
+            yield zone
+
 class RGWPeriod(JSONObj):
     def __init__(self, period_dict):
         self.id = period_dict['id']
@@ -103,6 +107,10 @@ class RGWPeriod(JSONObj):
             return None
 
         return zg.get_zone_endpoints(zone_id)
+
+    def iter_zonegroups(self):
+        for zg in self.zonegroups_by_id.values():
+            yield zg
 
         
 
