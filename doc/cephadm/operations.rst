@@ -363,10 +363,10 @@ is also distributed (see above).  To write config files to hosts without client 
 By default, the configs are written to all hosts (i.e., those listed
 by ``ceph orch host ls``).  To specify which hosts get a ``ceph.conf``::
 
-    ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_host <placement spec>
+    ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_hosts <placement spec>
 
 For example, to distribute configs to hosts with the ``bare_config`` label,::
 
-    ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_host label:bare_config
+    ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_hosts label:bare_config
 
 (See :ref:`orchestrator-cli-placement-spec` for more information about placement specs.)
