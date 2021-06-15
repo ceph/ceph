@@ -255,9 +255,12 @@ public:
     segment_off_t length  ///< [in] length
   ) {
     CachedExtentRef ret;
-    auto result = t.get_extent(offset, &ret);
+    auto result = t.get_extent(offset, &ret, true);
     if (result != Transaction::get_extent_ret::ABSENT) {
       assert(result != Transaction::get_extent_ret::RETIRED);
+      if (result == Transaction::get_extent_ret::INVALIDATED) {
+	return crimson::ct_error::eagain::make();
+      }
       return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	ret->cast<T>());
     } else {
@@ -497,7 +500,8 @@ public:
       }
     } else {
       auto result = t.get_extent(extent->get_paddr(), &extent);
-      if (result == Transaction::get_extent_ret::RETIRED) {
+      if (result == Transaction::get_extent_ret::RETIRED ||
+	  result == Transaction::get_extent_ret::INVALIDATED) {
 	return CachedExtentRef();
       } else {
 	if (result == Transaction::get_extent_ret::ABSENT) {
@@ -605,7 +609,8 @@ private:
     paddr_t offset,
     CachedExtentRef *out) {
     auto result = t.get_extent(offset, out);
-    if (result != Transaction::get_extent_ret::ABSENT) {
+    if (result != Transaction::get_extent_ret::ABSENT &&
+	result != Transaction::get_extent_ret::INVALIDATED) {
       return result;
     } else {
       return query_cache_for_extent(offset, out);

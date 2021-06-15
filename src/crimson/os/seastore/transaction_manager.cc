@@ -289,7 +289,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   {
     auto updated = cache->update_extent_from_transaction(t, extent);
     if (!updated) {
-      DEBUGT("{} is already retired, skipping", t, *extent);
+      DEBUGT("{} is already retired or invalidated, skipping", t, *extent);
       return rewrite_extent_ertr::now();
     }
     extent = updated;
