@@ -1174,7 +1174,7 @@ class ServiceDescription(object):
         return cls(spec=spec, events=events, **c_status)
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Node:
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceDescription') -> Node:
         return dumper.represent_dict(data.to_json())
 
 
