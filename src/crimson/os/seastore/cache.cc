@@ -226,6 +226,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
   // First, validate read set
   for (auto &i: t.read_set) {
     if (i->state == CachedExtent::extent_state_t::INVALID) {
+      DEBUGT("invalidated read_set extent: {}", t, *i);
       return std::nullopt;
     }
   }
