@@ -28,6 +28,8 @@ from ceph.deployment.service_spec import \
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.agent import CherryPyThread, CephadmAgentHelpers
+
 
 from mgr_module import MgrModule, HandleCommandResult, Option
 from mgr_util import create_self_signed_cert
@@ -45,7 +47,7 @@ from . import utils
 from . import ssh
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, CephfsMirrorService
+    RbdMirrorService, CrashService, CephadmService, CephfsMirrorService, CephadmAgent
 from .services.ingress import IngressService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
@@ -78,6 +80,16 @@ Host *
   UserKnownHostsFile /dev/null
   ConnectTimeout=30
 """
+
+# cherrypy likes to sys.exit on error.  don't let it take us down too!
+
+
+def os_exit_noop(status: int) -> None:
+    pass
+
+
+os._exit = os_exit_noop   # type: ignore
+
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
@@ -334,6 +346,30 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=10 * 60,
             desc='how frequently to autotune daemon memory'
         ),
+        Option(
+            'use_agent',
+            type='bool',
+            default=True,
+            desc='Use cephadm agent on each host to gather and send metadata'
+        ),
+        Option(
+            'agent_refresh_rate',
+            type='secs',
+            default=20,
+            desc='How often agent on each host will try to gather and send metadata'
+        ),
+        Option(
+            'endpoint_port',
+            type='int',
+            default=8499,
+            desc='Which port cephadm http endpoint will listen on'
+        ),
+        Option(
+            'agent_starting_port',
+            type='int',
+            default=4721,
+            desc='First port agent will try to bind to (will also try up to next 1000 subsequent ports if blocked)'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -393,6 +429,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self._temp_files: List = []
             self.ssh_key: Optional[str] = None
             self.ssh_pub: Optional[str] = None
+            self.use_agent = False
+            self.agent_refresh_rate = 0
+            self.endpoint_port = 0
+            self.agent_starting_port = 0
 
         self.notify('mon_map', None)
         self.config_notify()
@@ -450,7 +490,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, CrashService, IscsiService,
-            IngressService, CustomContainerService, CephadmExporter, CephfsMirrorService
+            IngressService, CustomContainerService, CephadmExporter, CephfsMirrorService,
+            CephadmAgent
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -467,10 +508,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.config_checker = CephadmConfigChecks(self)
 
+        self.cherrypy_thread = None
+        self.agent_helpers = CephadmAgentHelpers(self)
+
+        if self.use_agent:
+            try:
+                if not self.cherrypy_thread:
+                    self.cherrypy_thread = CherryPyThread(self)
+                    self.cherrypy_thread.start()
+                if 'agent' not in self.spec_store:
+                    self.agent_helpers._apply_agent()
+            except Exception as e:
+                self.log.error(f'Failed to initialize agent spec and cherrypy server: {e}')
+
     def shutdown(self) -> None:
         self.log.debug('shutdown')
         self._worker_pool.close()
         self._worker_pool.join()
+        if self.cherrypy_thread:
+            self.cherrypy_thread.shutdown()
+            self.cherrypy_thread = None
         self.run = False
         self.event.set()
 
@@ -587,7 +644,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'cephadm-exporter',
+            'container', 'cephadm-exporter', 'agent'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -631,6 +688,65 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if not os.path.isfile(ssh_config_fname):
             raise OrchestratorValidationError("ssh_config \"{}\" does not exist".format(
                 ssh_config_fname))
+
+    def _process_ls_output(self, host: str, ls: List[Dict[str, Any]]) -> None:
+        dm = {}
+        for d in ls:
+            if not d['style'].startswith('cephadm'):
+                continue
+            if d['fsid'] != self._cluster_fsid:
+                continue
+            if '.' not in d['name']:
+                continue
+            sd = orchestrator.DaemonDescription()
+            sd.last_refresh = datetime_now()
+            for k in ['created', 'started', 'last_configured', 'last_deployed']:
+                v = d.get(k, None)
+                if v:
+                    setattr(sd, k, str_to_datetime(d[k]))
+            sd.daemon_type = d['name'].split('.')[0]
+            if sd.daemon_type not in orchestrator.KNOWN_DAEMON_TYPES:
+                logger.warning(f"Found unknown daemon type {sd.daemon_type} on host {host}")
+                continue
+
+            sd.daemon_id = '.'.join(d['name'].split('.')[1:])
+            sd.hostname = host
+            sd.container_id = d.get('container_id')
+            if sd.container_id:
+                # shorten the hash
+                sd.container_id = sd.container_id[0:12]
+            sd.container_image_name = d.get('container_image_name')
+            sd.container_image_id = d.get('container_image_id')
+            sd.container_image_digests = d.get('container_image_digests')
+            sd.memory_usage = d.get('memory_usage')
+            sd.memory_request = d.get('memory_request')
+            sd.memory_limit = d.get('memory_limit')
+            sd._service_name = d.get('service_name')
+            sd.deployed_by = d.get('deployed_by')
+            sd.version = d.get('version')
+            sd.ports = d.get('ports')
+            sd.ip = d.get('ip')
+            sd.rank = int(d['rank']) if d.get('rank') is not None else None
+            sd.rank_generation = int(d['rank_generation']) if d.get(
+                'rank_generation') is not None else None
+            if sd.daemon_type == 'osd':
+                sd.osdspec_affinity = self.osd_service.get_osdspec_affinity(sd.daemon_id)
+            if 'state' in d:
+                sd.status_desc = d['state']
+                sd.status = {
+                    'running': DaemonDescriptionStatus.running,
+                    'stopped': DaemonDescriptionStatus.stopped,
+                    'error': DaemonDescriptionStatus.error,
+                    'unknown': DaemonDescriptionStatus.error,
+                }[d['state']]
+            else:
+                sd.status_desc = 'unknown'
+                sd.status = None
+            dm[sd.name()] = sd
+        self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
+        self.cache.update_host_daemons(host, dm)
+        self.cache.save_host(host)
+        return None
 
     def offline_hosts_remove(self, host: str) -> None:
         if host in self.offline_hosts:
@@ -1963,10 +2079,12 @@ Then run the following:
                 for h in host_filter.hosts:
                     self.log.debug(f'will refresh {h} devs')
                     self.cache.invalidate_host_devices(h)
+                    self.cache.invalidate_host_networks(h)
             else:
                 for h in self.cache.get_hosts():
                     self.log.debug(f'will refresh {h} devs')
                     self.cache.invalidate_host_devices(h)
+                    self.cache.invalidate_host_networks(h)
 
             self.event.set()
             self.log.debug('Kicked serve() loop to refresh devices')
@@ -2004,6 +2122,7 @@ Then run the following:
             ['--', 'lvm', 'zap', '--destroy', path],
             error_ok=True)
         self.cache.invalidate_host_devices(host)
+        self.cache.invalidate_host_networks(host)
         if code:
             raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
         return '\n'.join(out + err)
@@ -2152,6 +2271,11 @@ Then run the following:
                 return []
             daemons = self.cache.get_daemons_by_service(spec.service_name())
             deps = [d.name() for d in daemons if d.daemon_type == 'haproxy']
+        elif daemon_type == 'agent':
+            root_cert = ''
+            if self.cherrypy_thread and self.cherrypy_thread.ssl_certs.root_cert:
+                root_cert = self.cherrypy_thread.ssl_certs.get_root_cert()
+            deps = [self.get_mgr_ip(), str(self.endpoint_port), root_cert]
         else:
             need = {
                 'prometheus': ['mgr', 'alertmanager', 'node-exporter', 'ingress'],

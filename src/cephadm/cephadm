@@ -42,7 +42,7 @@ from glob import glob
 from io import StringIO
 from threading import Thread, RLock
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 from pathlib import Path
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -1005,6 +1005,7 @@ def get_supported_daemons():
     supported_daemons.append(CephadmDaemon.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
+    supported_daemons.append(CephadmAgent.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -2093,6 +2094,9 @@ def check_units(ctx, units, enabler=None):
 
 
 def is_container_running(ctx: CephadmContext, c: 'CephContainer') -> bool:
+    if ctx.name.split('.', 1)[0] in ['agent', 'cephadm-exporter']:
+        # these are non-containerized daemon types
+        return False
     return bool(get_running_container_name(ctx, c))
 
 
@@ -2697,6 +2701,15 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
 
             cephadm_exporter = CephadmDaemon(ctx, fsid, daemon_id, port)
             cephadm_exporter.deploy_daemon_unit(config_js)
+        elif daemon_type == CephadmAgent.daemon_type:
+            if ctx.config_json == '-':
+                config_js = get_parm('-')
+            else:
+                config_js = get_parm(ctx.config_json)
+            assert isinstance(config_js, dict)
+
+            cephadm_agent = CephadmAgent(ctx, fsid, daemon_id)
+            cephadm_agent.deploy_daemon_unit(config_js)
         else:
             if c:
                 deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id,
@@ -3447,6 +3460,205 @@ class CephContainer:
                                 desc=self.entrypoint, timeout=timeout)
         return out
 
+
+#####################################
+
+class MgrListener(Thread):
+    def __init__(self, agent: 'CephadmAgent') -> None:
+        self.agent = agent
+        self.stop = False
+        super(MgrListener, self).__init__(target=self.run)
+
+    def run(self) -> None:
+        listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
+        listenSocket.settimeout(60)
+        listenSocket.listen(1)
+        while not self.stop:
+            try:
+                conn, _ = listenSocket.accept()
+            except socket.timeout:
+                continue
+            while True:
+                data = conn.recv(self.agent.socket_buffer_size).decode()
+                if not data:
+                    break
+                try:
+                    self.agent.ack = int(data)
+                except Exception as e:
+                    err_str = f'Failed to extract timestamp integer from message: {e}'
+                    conn.send(err_str.encode())
+                    self.agent.ack = -1
+                else:
+                    conn.send(b'ACK')
+                self.agent.wakeup()
+                logger.debug(f'Got mgr message {data}')
+
+    def shutdown(self) -> None:
+        self.stop = True
+
+
+class CephadmAgent():
+
+    daemon_type = 'agent'
+    default_port = 8498
+    loop_interval = 30
+    socket_buffer_size = 256
+    stop = False
+
+    required_files = ['cephadm', 'agent.json', 'keyring']
+
+    def __init__(self, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str] = ''):
+        self.ctx = ctx
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.target_ip = ''
+        self.target_port = ''
+        self.host = ''
+        self.daemon_dir = os.path.join(ctx.data_dir, self.fsid, f'{self.daemon_type}.{self.daemon_id}')
+        self.binary_path = os.path.join(self.daemon_dir, 'cephadm')
+        self.config_path = os.path.join(self.daemon_dir, 'agent.json')
+        self.keyring_path = os.path.join(self.daemon_dir, 'keyring')
+        self.ca_path = os.path.join(self.daemon_dir, 'root_cert.pem')
+        self.listener_port = ''
+        self.ack = -1
+        self.event = threading.Event()
+        self.mgr_listener = MgrListener(self)
+
+    def deploy_daemon_unit(self, config: Dict[str, str] = {}) -> None:
+        if not config:
+            raise Error('Agent needs a config')
+        assert isinstance(config, dict)
+
+        # Create the required config files in the daemons dir, with restricted permissions
+        for filename in config:
+            with open(os.path.join(self.daemon_dir, filename), 'w') as f:
+                f.write(config[filename])
+
+        with open(os.path.join(self.daemon_dir, 'unit.run'), 'w') as f:
+            f.write(self.unit_run())
+
+        unit_file_path = os.path.join(self.ctx.unit_dir, self.unit_name())
+        with open(unit_file_path + '.new', 'w') as f:
+            f.write(self.unit_file())
+            os.rename(unit_file_path + '.new', unit_file_path)
+
+        call_throws(self.ctx, ['systemctl', 'daemon-reload'])
+        call(self.ctx, ['systemctl', 'stop', self.unit_name()],
+             verbosity=CallVerbosity.DEBUG)
+        call(self.ctx, ['systemctl', 'reset-failed', self.unit_name()],
+             verbosity=CallVerbosity.DEBUG)
+        call_throws(self.ctx, ['systemctl', 'enable', '--now', self.unit_name()])
+
+    def unit_name(self) -> str:
+        return '{}.service'.format(get_unit_name(self.fsid, self.daemon_type, self.daemon_id))
+
+    def unit_run(self) -> str:
+        py3 = shutil.which('python3')
+        return ('set -e\n' + f'{py3} {self.binary_path} agent --fsid {self.fsid} --daemon-id {self.daemon_id} &\n')
+
+    def unit_file(self) -> str:
+        return """#generated by cephadm
+[Unit]
+Description=cephadm agent for cluster {fsid}
+
+PartOf=ceph-{fsid}.target
+Before=ceph-{fsid}.target
+
+[Service]
+Type=forking
+ExecStart=/bin/bash {data_dir}/unit.run
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=ceph-{fsid}.target
+""".format(
+            fsid=self.fsid,
+            data_dir=self.daemon_dir
+        )
+
+    def shutdown(self) -> None:
+        self.stop = True
+        if self.mgr_listener.is_alive():
+            self.mgr_listener.shutdown()
+
+    def wakeup(self) -> None:
+        self.event.set()
+
+    def run(self) -> None:
+        try:
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+                self.target_ip = config['target_ip']
+                self.target_port = config['target_port']
+                self.loop_interval = int(config['refresh_period'])
+                starting_port = int(config['listener_port'])
+                self.host = config['host']
+        except Exception as e:
+            self.shutdown()
+            raise Error(f'Failed to get agent target ip and port from config: {e}')
+
+        try:
+            with open(self.keyring_path, 'r') as f:
+                self.keyring = f.read()
+        except Exception as e:
+            self.shutdown()
+            raise Error(f'Failed to get agent keyring: {e}')
+
+        assert self.target_ip and self.target_port
+
+        try:
+            for _ in range(1001):
+                if not port_in_use(self.ctx, starting_port):
+                    self.listener_port = str(starting_port)
+                    break
+                starting_port += 1
+            if not self.listener_port:
+                raise Error(f'All 1000 ports starting at {str(starting_port - 1001)} taken.')
+        except Exception as e:
+            raise Error(f'Failed to pick port for agent to listen on: {e}')
+
+        if not self.mgr_listener.is_alive():
+            self.mgr_listener.start()
+
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        ssl_ctx.check_hostname = True
+        ssl_ctx.load_verify_locations(self.ca_path)
+
+        while not self.stop:
+            ack = self.ack
+
+            data = json.dumps({'host': self.host,
+                              'ls': list_daemons(self.ctx),
+                               'networks': list_networks(self.ctx),
+                               'facts': HostFacts(self.ctx).dump(),
+                               'ack': str(ack),
+                               'keyring': self.keyring,
+                               'port': self.listener_port})
+            data = data.encode('ascii')
+
+            url = f'https://{self.target_ip}:{self.target_port}/data'
+            try:
+                req = Request(url, data, {'Content-Type': 'application/json'})
+                urlopen(req, context=ssl_ctx)
+            except Exception as e:
+                logger.error(f'Failed to send metadata to mgr: {e}')
+
+            self.event.wait(self.loop_interval)
+            self.event.clear()
+
+
+def command_agent(ctx: CephadmContext) -> None:
+    agent = CephadmAgent(ctx, ctx.fsid, ctx.daemon_id)
+
+    if not os.path.isdir(agent.daemon_dir):
+        raise Error(f'Agent daemon directory {agent.daemon_dir} does not exist. Perhaps agent was never deployed?')
+
+    agent.run()
+
+
 ##################################
 
 
@@ -3542,7 +3754,7 @@ def get_image_info_from_inspect(out, image):
         'image_id': normalize_container_id(image_id)
     }  # type: Dict[str, Union[str,List[str]]]
     if digests:
-        r['repo_digests'] = list(map(normalize_image_digest, digests[1:-1].split(' ')))
+        r['repo_digests'] = list(map(normalize_image_digest, digests[1: -1].split(' ')))
     return r
 
 ##################################
@@ -3578,7 +3790,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
 def unwrap_ipv6(address):
     # type: (str) -> str
     if address.startswith('[') and address.endswith(']'):
-        return address[1:-1]
+        return address[1: -1]
     return address
 
 
@@ -3643,7 +3855,7 @@ def prepare_mon_addresses(
             raise Error('--mon-addrv value %s must use square backets' %
                         addr_arg)
         ipv6 = addr_arg.count('[') > 1
-        for addr in addr_arg[1:-1].split(','):
+        for addr in addr_arg[1: -1].split(','):
             hasport = r.findall(addr)
             if not hasport:
                 raise Error('--mon-addrv value %s must include port number' %
@@ -4233,13 +4445,11 @@ def command_bootstrap(ctx):
     (uid, gid) = extract_uid_gid(ctx)
 
     # create some initial keys
-    (mon_key, mgr_key, admin_key, bootstrap_keyring, admin_keyring) = \
-        create_initial_keys(ctx, uid, gid, mgr_id)
+    (mon_key, mgr_key, admin_key, bootstrap_keyring, admin_keyring) = create_initial_keys(ctx, uid, gid, mgr_id)
 
     monmap = create_initial_monmap(ctx, uid, gid, fsid, mon_id, addr_arg)
-    (mon_dir, log_dir) = \
-        prepare_create_mon(ctx, uid, gid, fsid, mon_id,
-                           bootstrap_keyring.name, monmap.name)
+    (mon_dir, log_dir) = prepare_create_mon(ctx, uid, gid, fsid, mon_id,
+                                            bootstrap_keyring.name, monmap.name)
 
     with open(mon_dir + '/config', 'w') as f:
         os.fchown(f.fileno(), uid, gid)
@@ -4597,6 +4807,13 @@ def command_deploy(ctx):
 
         CephadmDaemon.validate_config(config_js)
 
+        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
+                      uid, gid, ports=daemon_ports)
+
+    elif daemon_type == CephadmAgent.daemon_type:
+        # get current user gid and uid
+        uid = os.getuid()
+        gid = os.getgid()
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
                       uid, gid, ports=daemon_ports)
 
@@ -5002,8 +5219,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         'systemd_unit': legacy_unit_name,
                     }
                     if detail:
-                        (val['enabled'], val['state'], _) = \
-                            check_unit(ctx, legacy_unit_name)
+                        (val['enabled'], val['state'], _) = check_unit(ctx, legacy_unit_name)
                         if not host_version:
                             try:
                                 out, err, code = call(ctx,
@@ -5034,8 +5250,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                     }
                     if detail:
                         # get container id
-                        (val['enabled'], val['state'], _) = \
-                            check_unit(ctx, unit_name)
+                        (val['enabled'], val['state'], _) = check_unit(ctx, unit_name)
                         container_id = None
                         image_name = None
                         image_id = None
@@ -8422,6 +8637,17 @@ def _get_parser():
         choices=['enter', 'exit'],
         help='Maintenance action - enter maintenance, or exit maintenance')
     parser_maintenance.set_defaults(func=command_maintenance)
+
+    parser_agent = subparsers.add_parser(
+        'agent', help='start cephadm agent')
+    parser_agent.set_defaults(func=command_agent)
+    parser_agent.add_argument(
+        '--fsid',
+        required=True,
+        help='cluster FSID')
+    parser_agent.add_argument(
+        '--daemon-id',
+        help='daemon id for agent')
 
     return parser
 
