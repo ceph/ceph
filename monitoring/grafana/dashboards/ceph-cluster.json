@@ -263,7 +263,7 @@
       "decimals": 2,
       "format": "percentunit",
       "gauge": {
-        "maxValue": 100,
+        "maxValue": 1,
         "minValue": 0,
         "show": true,
         "thresholdLabels": false,
@@ -319,7 +319,7 @@
           "refId": "A"
         }
       ],
-      "thresholds": "70,80",
+      "thresholds": "0.7,0.8",
       "title": "Capacity used",
       "type": "singlestat",
       "valueFontSize": "80%",
