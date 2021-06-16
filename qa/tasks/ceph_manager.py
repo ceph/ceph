@@ -3,6 +3,7 @@ ceph manager -- Thrasher and CephManager objects
 """
 from functools import wraps
 import contextlib
+import errno
 import random
 import signal
 import time
@@ -3091,13 +3092,22 @@ class CephManager:
         Loop until quorum size is reached.
         """
         self.log('waiting for quorum size %d' % size)
-        start = time.time()
-        while not len(self.get_mon_quorum()) == size:
-            if timeout is not None:
-                assert time.time() - start < timeout, \
-                    ('failed to reach quorum size %d '
-                     'before timeout expired' % size)
-            time.sleep(3)
+        sleep = 3
+        with safe_while(sleep=sleep,
+                        tries=timeout // sleep,
+                        action=f'wait for quorum size {size}') as proceed:
+            while proceed():
+                try:
+                    if len(self.get_mon_quorum()) == size:
+                        break
+                except CommandFailedError as e:
+                    # could fail instea4d of blocked if the rotating key of the
+                    # connected monitor is not updated yet after they form the
+                    # quorum
+                    if e.exitstatus == errno.EACCES:
+                        pass
+                    else:
+                        raise
         self.log("quorum is size %d" % size)
 
     def get_mon_health(self, debug=False):
