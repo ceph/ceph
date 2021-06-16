@@ -82,6 +82,7 @@
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGDiscoverRes.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGInfo2.h"
@@ -557,6 +558,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_PG_LOG:
     m = make_message<MOSDPGLog>();
+    break;
+  case MSG_OSD_PG_DISC_RES:
+    m = make_message<MOSDPGDiscoverRes>();
     break;
   case MSG_OSD_PG_REMOVE:
     m = make_message<MOSDPGRemove>();
