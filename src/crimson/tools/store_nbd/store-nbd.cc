@@ -8,7 +8,7 @@
  *
  * Example usage:
  *
- *  $ ./bin/crimson-store-nbd --device-path /dev/nvme1n1 -c 1 --total-device-size=107374182400 --mkfs true --uds-path /tmp/store_nbd_socket.sock
+ *  $ ./bin/crimson-store-nbd --device-path /dev/nvme1n1 -c 1 --mkfs true --uds-path /tmp/store_nbd_socket.sock
  *
  *  $ cat nbd.fio
  *  [global]
