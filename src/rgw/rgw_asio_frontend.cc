@@ -807,7 +807,11 @@ int AsioFrontend::init_ssl()
       lderr(ctx()) << "no ssl_certificate configured for ssl_options" << dendl;
       return -EINVAL;
     }
+  } else if (cert) {
+    options = "no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1";
+  }
 
+  if (options) {
     for (auto &option : ceph::split(*options, ":")) {
       if (option == "default_workarounds") {
         ssl_context->set_options(ssl::context::default_workarounds);
