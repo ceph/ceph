@@ -160,8 +160,9 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
   }).finally([this] {
     if (device) {
       return device->close();
+    } else {
+      return seastar::now();
     }
-    return mkfs_ertr::now();
   });
 }
 
