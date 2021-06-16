@@ -73,8 +73,8 @@ curl-based installation
 
 * Although the standalone script is sufficient to get a cluster started, it is
   convenient to have the ``cephadm`` command installed on the host.  To install
-  the packages that provide the ``cephadm`` command for the Octopus release,
-  run the following commands:
+  the packages that provide the ``cephadm`` command, run the following
+  commands:
 
   .. prompt:: bash #
      :substitutions:
