@@ -800,7 +800,7 @@ class OSDRemovalQueue(object):
 
     def idling_osds(self) -> List["OSD"]:
         with self.lock:
-            return [osd for osd in self.osds if not osd.is_draining and not osd.is_empty]
+            return [osd for osd in self.osds if not osd.is_draining]
 
     def empty_osds(self) -> List["OSD"]:
         with self.lock:
