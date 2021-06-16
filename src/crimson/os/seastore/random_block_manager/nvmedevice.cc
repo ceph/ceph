@@ -51,7 +51,7 @@ write_ertr::future<> PosixNVMeDevice::write(
   assert((length % block_size) == 0);
 
   return device.dma_write(offset, bptr.c_str(), length).handle_exception(
-    [length](auto e) -> write_ertr::future<size_t> {
+    [](auto e) -> write_ertr::future<size_t> {
       logger().error("write: dma_write got error{}", e);
       return crimson::ct_error::input_output_error::make();
     }).then([length](auto result) -> write_ertr::future<> {
@@ -75,7 +75,7 @@ read_ertr::future<> PosixNVMeDevice::read(
   assert((length % block_size) == 0);
 
   return device.dma_read(offset, bptr.c_str(), length).handle_exception(
-    [length](auto e) -> read_ertr::future<size_t> {
+    [](auto e) -> read_ertr::future<size_t> {
       logger().error("read: dma_read got error{}", e);
       return crimson::ct_error::input_output_error::make();
     }).then([length](auto result) -> read_ertr::future<> {
