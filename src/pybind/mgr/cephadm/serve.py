@@ -3,18 +3,19 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator, Set
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec
-from ceph.utils import str_to_datetime, datetime_now
+from ceph.utils import datetime_now
 
 import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
+from cephadm.agent import CherryPyThread
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
@@ -90,6 +91,19 @@ class CephadmServe:
                     self._check_daemons()
 
                     self._purge_deleted_services()
+
+                    if self.mgr.use_agent:
+                        if not self.mgr.cherrypy_thread:
+                            self.mgr.cherrypy_thread = CherryPyThread(self.mgr)
+                            self.mgr.cherrypy_thread.start()
+                        if 'agent' not in self.mgr.spec_store:
+                            self.mgr.agent_helpers._apply_agent()
+                    else:
+                        if self.mgr.cherrypy_thread:
+                            self.mgr.cherrypy_thread.shutdown()
+                            self.mgr.cherrypy_thread = None
+                        if 'agent' in self.mgr.spec_store:
+                            self.mgr.spec_store.rm('agent')
 
                     if self.mgr.upgrade.continue_upgrade():
                         continue
@@ -242,6 +256,8 @@ class CephadmServe:
                 self.log.warning(
                     f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
 
+        agents_down: List[str] = []
+
         @forall_hosts
         def refresh(host: str) -> None:
 
@@ -249,15 +265,48 @@ class CephadmServe:
             if self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
                 return
 
+            if self.mgr.use_agent and self.mgr.agent_helpers._agent_down(host):
+                if host in self.mgr.offline_hosts:
+                    return
+                self.mgr.offline_hosts.add(host)
+                self.mgr._reset_con(host)
+                agents_down.append(host)
+                # try to schedule redeploy of agent in case it is individually down
+                try:
+                    agent = [a for a in self.mgr.cache.get_daemons_by_host(
+                        host) if a.hostname == host][0]
+                    self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
+                except Exception as e:
+                    self.log.debug(
+                        f'Failed to find entry for agent deployed on host {host}. Agent possibly never deployed: {e}')
+                return
+            else:
+                self.mgr.offline_hosts_remove(host)
+
             if self.mgr.cache.host_needs_check(host):
                 r = self._check_host(host)
                 if r is not None:
                     bad_hosts.append(r)
-            if self.mgr.cache.host_needs_daemon_refresh(host):
-                self.log.debug('refreshing %s daemons' % host)
-                r = self._refresh_host_daemons(host)
-                if r:
-                    failures.append(r)
+
+            if not self.mgr.use_agent:
+                if self.mgr.cache.host_needs_daemon_refresh(host):
+                    self.log.debug('refreshing %s daemons' % host)
+                    r = self._refresh_host_daemons(host)
+                    if r:
+                        failures.append(r)
+
+                if self.mgr.cache.host_needs_facts_refresh(host):
+                    self.log.debug(('Refreshing %s facts' % host))
+                    r = self._refresh_facts(host)
+                    if r:
+                        failures.append(r)
+
+                if self.mgr.cache.host_needs_network_refresh(host):
+                    self.log.debug(('Refreshing %s networks' % host))
+                    r = self._refresh_host_networks(host)
+                    if r:
+                        failures.append(r)
+                self.mgr.cache.metadata_up_to_date[host] = True
 
             if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
                 self.log.debug(f"Logging `{host}` into custom registry")
@@ -269,12 +318,6 @@ class CephadmServe:
             if self.mgr.cache.host_needs_device_refresh(host):
                 self.log.debug('refreshing %s devices' % host)
                 r = self._refresh_host_devices(host)
-                if r:
-                    failures.append(r)
-
-            if self.mgr.cache.host_needs_facts_refresh(host):
-                self.log.debug(('Refreshing %s facts' % host))
-                r = self._refresh_facts(host)
                 if r:
                     failures.append(r)
 
@@ -315,6 +358,23 @@ class CephadmServe:
                 self.mgr.cache.save_host(host)
 
         refresh(self.mgr.cache.get_hosts())
+
+        if 'CEPHADM_AGENT_DOWN' in self.mgr.health_checks:
+            del self.mgr.health_checks['CEPHADM_AGENT_DOWN']
+        if agents_down:
+            detail: List[str] = []
+            for agent in agents_down:
+                detail.append((f'Cephadm agent on host {agent} has not reported in '
+                              f'{2.5 * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
+                               'down and host has been marked offline.'))
+            self.mgr.health_checks['CEPHADM_AGENT_DOWN'] = {
+                'severity': 'warning',
+                'summary': '%d Cephadm Agent(s) are not reporting. '
+                'Hosts marked offline' % (len(agents_down)),
+                'count': len(agents_down),
+                'detail': detail,
+            }
+            self.mgr.set_health_checks(self.mgr.health_checks)
 
         self.mgr.config_checker.run_checks()
 
@@ -387,62 +447,7 @@ class CephadmServe:
             ls = self._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True)
         except OrchestratorError as e:
             return str(e)
-        dm = {}
-        for d in ls:
-            if not d['style'].startswith('cephadm'):
-                continue
-            if d['fsid'] != self.mgr._cluster_fsid:
-                continue
-            if '.' not in d['name']:
-                continue
-            sd = orchestrator.DaemonDescription()
-            sd.last_refresh = datetime_now()
-            for k in ['created', 'started', 'last_configured', 'last_deployed']:
-                v = d.get(k, None)
-                if v:
-                    setattr(sd, k, str_to_datetime(d[k]))
-            sd.daemon_type = d['name'].split('.')[0]
-            if sd.daemon_type not in orchestrator.KNOWN_DAEMON_TYPES:
-                logger.warning(f"Found unknown daemon type {sd.daemon_type} on host {host}")
-                continue
-
-            sd.daemon_id = '.'.join(d['name'].split('.')[1:])
-            sd.hostname = host
-            sd.container_id = d.get('container_id')
-            if sd.container_id:
-                # shorten the hash
-                sd.container_id = sd.container_id[0:12]
-            sd.container_image_name = d.get('container_image_name')
-            sd.container_image_id = d.get('container_image_id')
-            sd.container_image_digests = d.get('container_image_digests')
-            sd.memory_usage = d.get('memory_usage')
-            sd.memory_request = d.get('memory_request')
-            sd.memory_limit = d.get('memory_limit')
-            sd._service_name = d.get('service_name')
-            sd.deployed_by = d.get('deployed_by')
-            sd.version = d.get('version')
-            sd.ports = d.get('ports')
-            sd.ip = d.get('ip')
-            sd.rank = int(d['rank']) if d.get('rank') is not None else None
-            sd.rank_generation = int(d['rank_generation']) if d.get(
-                'rank_generation') is not None else None
-            if sd.daemon_type == 'osd':
-                sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
-            if 'state' in d:
-                sd.status_desc = d['state']
-                sd.status = {
-                    'running': DaemonDescriptionStatus.running,
-                    'stopped': DaemonDescriptionStatus.stopped,
-                    'error': DaemonDescriptionStatus.error,
-                    'unknown': DaemonDescriptionStatus.error,
-                }[d['state']]
-            else:
-                sd.status_desc = 'unknown'
-                sd.status = None
-            dm[sd.name()] = sd
-        self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
-        self.mgr.cache.update_host_daemons(host, dm)
-        self.mgr.cache.save_host(host)
+        self.mgr._process_ls_output(host, ls)
         return None
 
     def _refresh_facts(self, host: str) -> Optional[str]:
@@ -456,7 +461,6 @@ class CephadmServe:
         return None
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
-
         with_lsm = self.mgr.get_module_option('device_enhanced_scan')
         inventory_args = ['--', 'inventory',
                           '--format=json',
@@ -477,15 +481,26 @@ class CephadmServe:
                 else:
                     raise
 
+        except OrchestratorError as e:
+            return str(e)
+
+        self.log.debug('Refreshed host %s devices (%d)' % (
+            host, len(devices)))
+        ret = inventory.Devices.from_json(devices)
+        self.mgr.cache.update_host_devices(host, ret.devices)
+        self.update_osdspec_previews(host)
+        self.mgr.cache.save_host(host)
+        return None
+
+    def _refresh_host_networks(self, host: str) -> Optional[str]:
+        try:
             networks = self._run_cephadm_json(host, 'mon', 'list-networks', [], no_fsid=True)
         except OrchestratorError as e:
             return str(e)
 
-        self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
-            host, len(devices), len(networks)))
-        ret = inventory.Devices.from_json(devices)
-        self.mgr.cache.update_host_devices_networks(host, ret.devices, networks)
-        self.update_osdspec_previews(host)
+        self.log.debug('Refreshed host %s networks (%s)' % (
+            host, len(networks)))
+        self.mgr.cache.update_host_networks(host, networks)
         self.mgr.cache.save_host(host)
         return None
 
@@ -578,8 +593,20 @@ class CephadmServe:
     def _apply_all_services(self) -> bool:
         r = False
         specs = []  # type: List[ServiceSpec]
-        for sn, spec in self.mgr.spec_store.active_specs.items():
-            specs.append(spec)
+        # if metadata is not up to date, we still need to apply spec for agent
+        # since the agent is the one who gather the metadata. If we don't we
+        # end up stuck between wanting metadata to be up to date to apply specs
+        # and needing to apply the agent spec to get up to date metadata
+        if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
+            try:
+                specs.append(self.mgr.spec_store['agent'].spec)
+            except Exception as e:
+                self.log.debug(f'Failed to find agent spec: {e}')
+                self.mgr.agent_helpers._apply_agent()
+                return r
+        else:
+            for sn, spec in self.mgr.spec_store.active_specs.items():
+                specs.append(spec)
         for spec in specs:
             try:
                 if self._apply_service(spec):
@@ -673,7 +700,7 @@ class CephadmServe:
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
         ha = HostAssignment(
             spec=spec,
-            hosts=self.mgr._schedulable_hosts(),
+            hosts=self.mgr.inventory.all_specs() if spec.service_name() == 'agent' else self.mgr._schedulable_hosts(),
             unreachable_hosts=self.mgr._unreachable_hosts(),
             daemons=daemons,
             networks=self.mgr.cache.networks,
@@ -733,6 +760,8 @@ class CephadmServe:
 
         self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
         self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
+
+        hosts_altered: Set[str] = set()
 
         try:
             # assign names
@@ -812,6 +841,7 @@ class CephadmServe:
                     r = True
                     progress_done += 1
                     update_progress()
+                    hosts_altered.add(daemon_spec.host)
                 except (RuntimeError, OrchestratorError) as e:
                     msg = (f"Failed while placing {slot.daemon_type}.{daemon_id} "
                            f"on {slot.hostname}: {e}")
@@ -851,11 +881,17 @@ class CephadmServe:
 
                 progress_done += 1
                 update_progress()
+                hosts_altered.add(d.hostname)
 
             self.mgr.remote('progress', 'complete', progress_id)
         except Exception as e:
             self.mgr.remote('progress', 'fail', progress_id, str(e))
             raise
+        finally:
+            if self.mgr.use_agent:
+                # can only send ack to agents if we know for sure port they bound to
+                hosts_altered = set([h for h in hosts_altered if h in self.mgr.cache.agent_ports])
+                self.mgr.agent_helpers._request_agent_acks(hosts_altered)
 
         if r is None:
             r = False
@@ -871,7 +907,7 @@ class CephadmServe:
             assert dd.hostname is not None
             assert dd.daemon_type is not None
             assert dd.daemon_id is not None
-            if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
+            if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd', 'agent']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())
@@ -1055,6 +1091,9 @@ class CephadmServe:
                     stdin=json.dumps(daemon_spec.final_config),
                     image=image)
 
+                if daemon_spec.daemon_type == 'agent':
+                    self.mgr.cache.agent_timestamp[daemon_spec.host] = datetime_now()
+
                 # refresh daemon state?  (ceph daemon reconfig does not need it)
                 if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
                     if not code and daemon_spec.host in self.mgr.cache.daemons:
@@ -1165,7 +1204,7 @@ class CephadmServe:
         self.log.debug(f"_run_cephadm : command = {command}")
         self.log.debug(f"_run_cephadm : args = {args}")
 
-        bypass_image = ('cephadm-exporter',)
+        bypass_image = ('cephadm-exporter', 'agent')
 
         assert image or entity
         # Skip the image check for daemons deployed that are not ceph containers
@@ -1198,7 +1237,9 @@ class CephadmServe:
         # exec
         self.log.debug('args: %s' % (' '.join(final_args)))
         if self.mgr.mode == 'root':
-            if stdin:
+            # agent has cephadm binary as an extra file which is
+            # therefore passed over stdin. Even for debug logs it's too much
+            if stdin and 'agent' not in str(entity):
                 self.log.debug('stdin: %s' % stdin)
 
             cmd = ['which', 'python3']

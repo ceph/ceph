@@ -6,9 +6,9 @@ import pytest
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import CephadmUpgrade
-from cephadm.serve import CephadmServe
 from orchestrator import OrchestratorError, DaemonDescription
-from .fixtures import _run_cephadm, wait, with_host, with_service
+from .fixtures import _run_cephadm, wait, with_host, with_service, \
+    receive_agent_metadata
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -95,7 +95,8 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                         )
                     ])
                 )):
-                    CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
+                    receive_agent_metadata(cephadm_module, 'host1', ['ls'])
+                    receive_agent_metadata(cephadm_module, 'host2', ['ls'])
 
                 with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({
                     'image_id': 'image_id',
