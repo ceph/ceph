@@ -11,6 +11,7 @@
 #include "include/buffer.h"
 #include "include/cmp.h"
 #include "include/uuid.h"
+#include "include/interval_set.h"
 
 namespace crimson::os::seastore {
 
@@ -337,6 +338,7 @@ enum class extent_types_t : uint8_t {
   OBJECT_DATA_BLOCK = 8,
   RETIRED_PLACEHOLDER = 9,
 
+  RBM_ALLOC_INFO = 0xE0,
   // Test Block Types
   TEST_BLOCK = 0xF0,
   TEST_BLOCK_PHYSICAL = 0xF1,
@@ -691,6 +693,22 @@ struct __attribute__((packed)) root_t {
     ::memset(meta, 0, MAX_META_LENGTH);
     ::memcpy(meta, bptr.c_str(), bl.length());
   }
+};
+
+using blk_id_t = uint64_t;
+constexpr blk_id_t NULL_BLK_ID =
+  std::numeric_limits<blk_id_t>::max();
+
+// use absolute address
+using blk_paddr_t = uint64_t;
+struct rbm_alloc_delta_t {
+  enum class op_types_t : uint8_t {
+    SET = 1,
+    CLEAR = 2
+  };
+  extent_types_t type;
+  interval_set<blk_id_t> alloc_blk_ids;
+  op_types_t op;
 };
 
 }
