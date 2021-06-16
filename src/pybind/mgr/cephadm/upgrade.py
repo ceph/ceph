@@ -8,6 +8,7 @@ import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, MONITORING_STACK_TYPES
+from ceph.utils import datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
 if TYPE_CHECKING:
@@ -91,6 +92,7 @@ class CephadmUpgrade:
             self.upgrade_state: Optional[UpgradeState] = UpgradeState.from_json(json.loads(t))
         else:
             self.upgrade_state = None
+        self.upgrade_completion_message = ''
 
     @property
     def target_image(self) -> str:
@@ -119,6 +121,8 @@ class CephadmUpgrade:
                 r.message = 'Error: ' + self.upgrade_state.error
             elif self.upgrade_state.paused:
                 r.message = 'Upgrade paused'
+        else:
+            r.message = self.upgrade_completion_message
         return r
 
     def _get_upgrade_info(self) -> Tuple[str, List[str]]:
@@ -211,6 +215,7 @@ class CephadmUpgrade:
             target_name=target_name,
             progress_id=str(uuid.uuid4())
         )
+        self.upgrade_completion_message = ''
         self._update_upgrade_progress(0.0)
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
@@ -246,6 +251,8 @@ class CephadmUpgrade:
                             self.upgrade_state.progress_id)
         target_image = self.target_image
         self.mgr.log.info('Upgrade: Stopped')
+        self.upgrade_completion_message = 'Stopped upgrade to %s at %s' % (
+            self.upgrade_state._target_name, datetime_to_str(datetime_now()))
         self.upgrade_state = None
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
@@ -448,7 +455,8 @@ class CephadmUpgrade:
         if not target_id or not target_version or not target_digests:
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
-            self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
+            self.upgrade_info_str = 'Doing first pull of %s image' % (
+                self.upgrade_state._target_name)
             try:
                 target_id, target_version, target_digests = CephadmServe(self.mgr)._get_container_image_info(
                     target_image)
@@ -613,7 +621,7 @@ class CephadmUpgrade:
                     logger.info('Upgrade: Pulling %s on %s' % (target_image,
                                                                d.hostname))
                     self.upgrade_info_str = 'Pulling %s image on host %s' % (
-                        target_image, d.hostname)
+                        self.upgrade_state._target_name, d.hostname)
                     out, errs, code = CephadmServe(self.mgr)._run_cephadm(
                         d.hostname, '', 'pull', [],
                         image=target_image, no_fsid=True, error_ok=True)
@@ -632,7 +640,7 @@ class CephadmUpgrade:
                         logger.info('Upgrade: image %s pull on %s got new digests %s (not %s), restarting' % (
                             target_image, d.hostname, r['repo_digests'], target_digests))
                         self.upgrade_info_str = 'Image %s pull on %s got new digests %s (not %s), restarting' % (
-                            target_image, d.hostname, r['repo_digests'], target_digests)
+                            self.upgrade_state._target_name, d.hostname, r['repo_digests'], target_digests)
                         self.upgrade_state.target_digests = r['repo_digests']
                         self._save_upgrade_state()
                         return
@@ -776,6 +784,8 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
+        self.upgrade_completion_message = 'Completed upgrade to %s at %s' % (
+            self.upgrade_state._target_name, datetime_to_str(datetime_now()))
         self.upgrade_state = None
         self._save_upgrade_state()
         return

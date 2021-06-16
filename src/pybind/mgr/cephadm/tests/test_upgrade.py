@@ -142,3 +142,41 @@ def test_enough_mons_for_ok_to_stop(check_mon_command, cephadm_module: CephadmOr
     check_mon_command.return_value = (
         0, '{"monmap": {"mons": [{"name": "mon.1"}, {"name": "mon.2"}, {"name": "mon.3"}]}}', '')
     assert cephadm_module.upgrade._enough_mons_for_ok_to_stop()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.serve.CephadmServe._get_container_image_info")
+@mock.patch("cephadm.CephadmOrchestrator.lookup_release_name")
+@mock.patch("cephadm.upgrade.CephadmUpgrade._check_target_version")
+@mock.patch("cephadm.upgrade.CephadmUpgrade.get_distinct_container_image_settings")
+@mock.patch('cephadm.upgrade.CEPH_UPGRADE_ORDER', [])
+def test_completion_message(get_distinct_container_image_settings, _check_target_version, lookup_release_name,
+                            _get_container_image_info, cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        with with_host(cephadm_module, 'host2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), CephadmOrchestrator.apply_mgr, ''):
+                wait(cephadm_module, cephadm_module.upgrade_start('image_id', None))
+                assert wait(cephadm_module, cephadm_module.upgrade_status()
+                            ).message == ''
+
+                _get_container_image_info.return_value = (
+                    'image_id', 'ceph version 99.0.0 (abc)', ['image@digest'])
+                _check_target_version.return_value = None
+
+                # check upgrade completion message is set
+                cephadm_module.upgrade._do_upgrade()
+                msg = wait(cephadm_module, cephadm_module.upgrade_status()
+                           ).message
+                assert msg.startswith("Completed upgrade to docker.io/image_id at")
+
+                # check upgrade completion message is removed when new upgrade is started
+                wait(cephadm_module, cephadm_module.upgrade_start('image_id', None))
+                msg = wait(cephadm_module, cephadm_module.upgrade_status()
+                           ).message
+                assert not msg.startswith("Completed")
+
+                # check upgrade atopped message is set when upgrade is stopped
+                wait(cephadm_module, cephadm_module.upgrade_stop())
+                msg = wait(cephadm_module, cephadm_module.upgrade_status()
+                           ).message
+                assert msg.startswith("Stopped upgrade to docker.io/image_id at")
