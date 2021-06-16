@@ -551,16 +551,18 @@ class RookCluster(object):
             # type: (ccl.CephCluster, ccl.CephCluster) -> ccl.CephCluster
             if newcount is None:
                 raise orchestrator.OrchestratorError('unable to set mon count to None')
+            if not new.spec.mon:
+                raise orchestrator.OrchestratorError("mon attribute not specified in new spec")
             new.spec.mon.count = newcount
             return new
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _update_mon_count)
-
+    """
     def add_osds(self, drive_group, matching_hosts):
         # type: (DriveGroupSpec, List[str]) -> str
-        """
-        Rook currently (0.8) can only do single-drive OSDs, so we
-        treat all drive groups as just a list of individual OSDs.
-        """
+        
+        # Rook currently (0.8) can only do single-drive OSDs, so we
+        # treat all drive groups as just a list of individual OSDs.
+        
         block_devices = drive_group.data_devices.paths if drive_group.data_devices else []
         directories = drive_group.data_directories
 
@@ -580,14 +582,14 @@ class RookCluster(object):
 
             current_nodes = getattr(current_cluster.spec.storage, 'nodes', ccl.NodesList())
             matching_host = matching_hosts[0]
-
+            
             if matching_host not in [n.name for n in current_nodes]:
+                # FIXME: ccl.Config stopped existing since rook changed
+                # their CRDs, check if config is actually necessary for this
+                
                 pd = ccl.NodesItem(
                     name=matching_host,
-                    # config=ccl.Config(
-                    #     storeType=drive_group.objectstore
-                    # )
-                    config=object(  
+                    config=ccl.Config(
                         storeType=drive_group.objectstore
                     )
                 )
@@ -624,7 +626,7 @@ class RookCluster(object):
             return new_cluster
 
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _add_osds)
-
+    """
     def _patch(self, crd: Type, crd_name: str, cr_name: str, func: Callable[[CrdClassT, CrdClassT], CrdClassT]) -> str:
         current_json = self.rook_api_get(
             "{}/{}".format(crd_name, cr_name)
