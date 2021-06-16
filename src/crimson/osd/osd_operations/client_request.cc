@@ -89,10 +89,11 @@ seastar::future<> ClientRequest::start()
           logger().debug("{} same_interval_since: {}", *this, same_interval_since);
           const bool has_pg_op = is_pg_op();
           auto interruptible_do_op =
-            interruptor::wrap_function([this, has_pg_op, pgref]() -> interruptible_future<> {
+            interruptor::wrap_function([this, has_pg_op, pgref] {
               PG &pg = *pgref;
               if (pg.can_discard_op(*m)) {
-                return osd.send_incremental_map(conn, m->get_map_epoch());
+                return interruptible_future<>(
+                  osd.send_incremental_map(conn, m->get_map_epoch()));
               }
               return with_blocking_future_interruptible<IOInterruptCondition>(
                 handle.enter(pp(pg).await_map)
