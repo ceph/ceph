@@ -87,12 +87,8 @@ seastar::future<> ClientRequest::start()
 	return interruptor::with_interruption([this, pgref]() mutable {
           epoch_t same_interval_since = pgref->get_interval_start_epoch();
           logger().debug("{} same_interval_since: {}", *this, same_interval_since);
-          may_set_prev_op();
-          return sequencer.start_op(
-            *this,
-            handle,
-            interruptor::wrap_function(
-              [this, pgref]() mutable -> interruptible_future<> {
+          return with_sequencer(
+            interruptor::wrap_function([this, pgref]() -> interruptible_future<> {
               PG &pg = *pgref;
               if (pg.can_discard_op(*m)) {
                 return osd.send_incremental_map(conn, m->get_map_epoch());
@@ -119,8 +115,7 @@ seastar::future<> ClientRequest::start()
                 }
               });
             })
-          ).then_interruptible([this, pgref]() {
-            sequencer.finish_op(*this);
+          ).then_interruptible([pgref]() {
             return seastar::stop_iteration::yes;
           });
 	}, [this, pgref](std::exception_ptr eptr) {
