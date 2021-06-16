@@ -2524,8 +2524,21 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
 
   // allocate some more space (before we run out)?
   // BTW: this triggers `flush()` in the `page_aligned_appender` of `log_writer`.
+  int64_t estimate_log_t_size = 0;
+  {
+    bufferlist bl;
+    ::encode(log_t, bl);
+
+    bluefs_transaction_t tmp_log_t;
+    tmp_log_t.op_file_update(log_writer->file->fnode);
+    bufferlist tmp_bl;
+    ::encode(tmp_log_t, tmp_bl);
+
+    estimate_log_t_size = round_up_to(bl.length(), super.block_size) + round_up_to(tmp_bl.length(), super.block_size);
+  }
+
   int64_t runway = log_writer->file->fnode.get_allocated() -
-    log_writer->get_effective_write_pos();
+    log_writer->get_effective_write_pos() - estimate_log_t_size;
   bool just_expanded_log = false;
   if (runway < (int64_t)cct->_conf->bluefs_min_log_runway) {
     dout(10) << __func__ << " allocating more log runway (0x"
@@ -2535,11 +2548,14 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
       log_cond.wait(l);
     }
     vselector->sub_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
-    int r = _allocate(
-      vselector->select_prefer_bdev(log_writer->file->vselector_hint),
-      cct->_conf->bluefs_max_log_runway,
-      &log_writer->file->fnode);
-    ceph_assert(r == 0);
+    do {
+      int r = _allocate(
+        vselector->select_prefer_bdev(log_writer->file->vselector_hint),
+        cct->_conf->bluefs_max_log_runway,
+        &log_writer->file->fnode);
+      ceph_assert(r == 0);
+      runway += cct->_conf->bluefs_max_log_runway;
+    } while (runway < (int64_t)cct->_conf->bluefs_min_log_runway);
     vselector->add_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
     log_t.op_file_update(log_writer->file->fnode);
     just_expanded_log = true;
