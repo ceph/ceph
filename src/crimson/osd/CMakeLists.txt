@@ -10,7 +10,6 @@ add_executable(crimson-osd
   pg_meta.cc
   replicated_backend.cc
   shard_services.cc
-  stop_signal.cc
   object_context.cc
   ops_executer.cc
   osd_operation.cc
