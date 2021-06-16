@@ -377,21 +377,27 @@ TransactionManager::~TransactionManager() {}
 
 void TransactionManager::register_metrics()
 {
-  namespace sm = seastar::metrics;
-  metrics.add_group("tm", {
-    sm::make_counter("extents_retired_total", stats.extents_retired_total,
-		     sm::description("total number of retired extents in TransactionManager")),
-    sm::make_counter("extents_retired_bytes", stats.extents_retired_bytes,
-		     sm::description("total size of retired extents in TransactionManager")),
-    sm::make_counter("extents_mutated_total", stats.extents_mutated_total,
-		     sm::description("total number of mutated extents in TransactionManager")),
-    sm::make_counter("extents_mutated_bytes", stats.extents_mutated_bytes,
-		     sm::description("total size of mutated extents in TransactionManager")),
-    sm::make_counter("extents_allocated_total", stats.extents_allocated_total,
-		     sm::description("total number of allocated extents in TransactionManager")),
-    sm::make_counter("extents_allocated_bytes", stats.extents_allocated_bytes,
-		     sm::description("total size of allocated extents in TransactionManager")),
-  });
+  LOG_PREFIX(TransactionManager::register_metrics);
+  try {
+    namespace sm = seastar::metrics;
+    metrics.add_group("tm", {
+      sm::make_counter("extents_retired_total", stats.extents_retired_total,
+                       sm::description("total number of retired extents in TransactionManager")),
+      sm::make_counter("extents_retired_bytes", stats.extents_retired_bytes,
+                       sm::description("total size of retired extents in TransactionManager")),
+      sm::make_counter("extents_mutated_total", stats.extents_mutated_total,
+                       sm::description("total number of mutated extents in TransactionManager")),
+      sm::make_counter("extents_mutated_bytes", stats.extents_mutated_bytes,
+                       sm::description("total size of mutated extents in TransactionManager")),
+      sm::make_counter("extents_allocated_total", stats.extents_allocated_total,
+                       sm::description("total number of allocated extents in TransactionManager")),
+      sm::make_counter("extents_allocated_bytes", stats.extents_allocated_bytes,
+                       sm::description("total size of allocated extents in TransactionManager")),
+    });
+  } catch (...) {
+    ERROR("got unexpected exception {}", std::current_exception());
+    ceph_abort();
+  }
 }
 
 }
