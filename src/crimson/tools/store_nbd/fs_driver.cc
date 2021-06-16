@@ -159,6 +159,7 @@ seastar::future<> FSDriver::close()
 
 void FSDriver::init()
 {
+  fs.reset();
   fs = FuturizedStore::create(
     config.get_fs_type(),
     *config.path,
