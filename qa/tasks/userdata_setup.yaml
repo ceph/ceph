@@ -14,6 +14,8 @@
   #!/usr/bin/env bash
 
   # mount a NFS share for storing logs
+  sed -i 's/archive.ubuntu.com/old-releases.ubuntu.com/' /etc/apt/sources.list
+  sed -i 's/security.ubuntu.com/old-releases.ubuntu.com/' /etc/apt/sources.list
   apt-get update
   apt-get -y install nfs-common
   mkdir /mnt/log

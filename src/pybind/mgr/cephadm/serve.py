@@ -1,5 +1,7 @@
+import hashlib
 import json
 import logging
+import uuid
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
@@ -14,7 +16,7 @@ except ImportError:
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, IngressSpec, CustomContainerSpec
+from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
@@ -22,9 +24,11 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
     DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
+from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
 from mgr_module import MonCommandFailed
+from mgr_util import format_bytes
 
 from . import utils
 
@@ -127,9 +131,116 @@ class CephadmServe:
                 del self.mgr.health_checks['CEPHADM_PAUSED']
                 self.mgr.set_health_checks(self.mgr.health_checks)
 
+    def _autotune_host_memory(self, host: str) -> None:
+        total_mem = self.mgr.cache.get_facts(host).get('memory_total_kb', 0)
+        if not total_mem:
+            val = None
+        else:
+            total_mem *= 1024   # kb -> bytes
+            total_mem *= self.mgr.autotune_memory_target_ratio
+            a = MemoryAutotuner(
+                daemons=self.mgr.cache.get_daemons_by_host(host),
+                config_get=self.mgr.get_foreign_ceph_option,
+                total_mem=total_mem,
+            )
+            val, osds = a.tune()
+            any_changed = False
+            for o in osds:
+                if self.mgr.get_foreign_ceph_option(o, 'osd_memory_target') != val:
+                    self.mgr.check_mon_command({
+                        'prefix': 'config rm',
+                        'who': o,
+                        'name': 'osd_memory_target',
+                    })
+                    any_changed = True
+        if val is not None:
+            if any_changed:
+                self.mgr.log.info(
+                    f'Adjusting osd_memory_target on {host} to {format_bytes(val, 6)}'
+                )
+                ret, out, err = self.mgr.mon_command({
+                    'prefix': 'config set',
+                    'who': f'osd/host:{host}',
+                    'name': 'osd_memory_target',
+                    'value': str(val),
+                })
+                if ret:
+                    self.log.warning(
+                        f'Unable to set osd_memory_target on {host} to {val}: {err}'
+                    )
+        else:
+            self.mgr.check_mon_command({
+                'prefix': 'config rm',
+                'who': f'osd/host:{host}',
+                'name': 'osd_memory_target',
+            })
+        self.mgr.cache.update_autotune(host)
+
     def _refresh_hosts_and_daemons(self) -> None:
         bad_hosts = []
         failures = []
+
+        # host -> path -> (mode, uid, gid, content, digest)
+        client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]] = {}
+
+        # ceph.conf
+        if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
+            config = self.mgr.get_minimal_ceph_conf().encode('utf-8')
+            config_digest = ''.join('%02x' % c for c in hashlib.sha256(config).digest())
+
+        if self.mgr.manage_etc_ceph_ceph_conf:
+            try:
+                pspec = PlacementSpec.from_string(self.mgr.manage_etc_ceph_ceph_conf_hosts)
+                ha = HostAssignment(
+                    spec=ServiceSpec('mon', placement=pspec),
+                    hosts=self.mgr._schedulable_hosts(),
+                    daemons=[],
+                    networks=self.mgr.cache.networks,
+                )
+                all_slots, _, _ = ha.place()
+                for host in {s.hostname for s in all_slots}:
+                    if host not in client_files:
+                        client_files[host] = {}
+                    client_files[host]['/etc/ceph/ceph.conf'] = (
+                        0o644, 0, 0, bytes(config), str(config_digest)
+                    )
+            except Exception as e:
+                self.mgr.log.warning(
+                    f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
+
+        # client keyrings
+        for ks in self.mgr.keys.keys.values():
+            assert config
+            assert config_digest
+            try:
+                ret, keyring, err = self.mgr.mon_command({
+                    'prefix': 'auth get',
+                    'entity': ks.entity,
+                })
+                if ret:
+                    self.log.warning(f'unable to fetch keyring for {ks.entity}')
+                    continue
+                digest = ''.join('%02x' % c for c in hashlib.sha256(
+                    keyring.encode('utf-8')).digest())
+                ha = HostAssignment(
+                    spec=ServiceSpec('mon', placement=ks.placement),
+                    hosts=self.mgr._schedulable_hosts(),
+                    daemons=[],
+                    networks=self.mgr.cache.networks,
+                )
+                all_slots, _, _ = ha.place()
+                for host in {s.hostname for s in all_slots}:
+                    if host not in client_files:
+                        client_files[host] = {}
+                    client_files[host]['/etc/ceph/ceph.conf'] = (
+                        0o644, 0, 0, bytes(config), str(config_digest)
+                    )
+                    client_files[host][ks.path] = (
+                        ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest
+                    )
+            except Exception as e:
+                self.log.warning(
+                    f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
 
         @forall_hosts
         def refresh(host: str) -> None:
@@ -173,11 +284,38 @@ class CephadmServe:
                 if r:
                     failures.append(r)
 
-            if self.mgr.cache.host_needs_new_etc_ceph_ceph_conf(host):
-                self.log.debug(f"deploying new /etc/ceph/ceph.conf on `{host}`")
-                r = self._deploy_etc_ceph_ceph_conf(host)
-                if r:
-                    bad_hosts.append(r)
+            if (
+                    self.mgr.cache.host_needs_autotune_memory(host)
+                    and not self.mgr.inventory.has_label(host, '_no_autotune_memory')
+            ):
+                self.log.debug(f"autotuning memory for {host}")
+                self._autotune_host_memory(host)
+
+            # client files
+            updated_files = False
+            old_files = self.mgr.cache.get_host_client_files(host).copy()
+            for path, m in client_files.get(host, {}).items():
+                mode, uid, gid, content, digest = m
+                if path in old_files:
+                    match = old_files[path] == (digest, mode, uid, gid)
+                    del old_files[path]
+                    if match:
+                        continue
+                self.log.info(f'Updating {host}:{path}')
+                self._write_remote_file(host, path, content, mode, uid, gid)
+                self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
+                updated_files = True
+            for path in old_files.keys():
+                self.log.info(f'Removing {host}:{path}')
+                with self._remote_connection(host) as tpl:
+                    conn, connr = tpl
+                    out, err, code = remoto.process.check(
+                        conn,
+                        ['rm', '-f', path])
+                updated_files = True
+                self.mgr.cache.removed_client_file(host, path)
+            if updated_files:
+                self.mgr.cache.save_host(host)
 
         refresh(self.mgr.cache.get_hosts())
 
@@ -283,6 +421,8 @@ class CephadmServe:
             sd.version = d.get('version')
             sd.ports = d.get('ports')
             sd.ip = d.get('ip')
+            sd.rank = int(d['rank']) if d.get('rank') is not None else None
+            sd.rank_generation = int(d['rank_generation']) if d.get('rank_generation') is not None else None
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:
@@ -363,30 +503,6 @@ class CephadmServe:
         self.mgr.cache.osdspec_previews[search_host] = previews
         # Unset global 'pending' flag for host
         self.mgr.cache.loading_osdspec_preview.remove(search_host)
-
-    def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
-        config = self.mgr.get_minimal_ceph_conf()
-
-        try:
-            with self._remote_connection(host) as tpl:
-                conn, connr = tpl
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['mkdir', '-p', '/etc/ceph'])
-                if code:
-                    return f'failed to create /etc/ceph on {host}: {err}'
-                out, err, code = remoto.process.check(
-                    conn,
-                    ['dd', 'of=/etc/ceph/ceph.conf'],
-                    stdin=config.encode('utf-8')
-                )
-                if code:
-                    return f'failed to create /etc/ceph/ceph.conf on {host}: {err}'
-                self.mgr.cache.update_last_etc_ceph_ceph_conf(host)
-                self.mgr.cache.save_host(host)
-        except OrchestratorError as e:
-            return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
-        return None
 
     def _check_for_strays(self) -> None:
         self.log.debug('_check_for_strays')
@@ -529,24 +645,32 @@ class CephadmServe:
         svc = self.mgr.cephadm_services[service_type]
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
 
-        public_network = None
+        public_networks: List[str] = []
         if service_type == 'mon':
             out = str(self.mgr.get_foreign_ceph_option('mon', 'public_network'))
             if '/' in out:
-                public_network = out.strip()
-                self.log.debug('mon public_network is %s' % public_network)
+                public_networks = [x.strip() for x in out.split(',')]
+                self.log.debug('mon public_network(s) is %s' % public_networks)
 
         def matches_network(host):
             # type: (str) -> bool
-            if not public_network:
-                return False
-            # make sure we have 1 or more IPs for that network on that
+            # make sure we have 1 or more IPs for any of those networks on that
             # host
-            return len(self.mgr.cache.networks[host].get(public_network, [])) > 0
+            for network in public_networks:
+                if len(self.mgr.cache.networks[host].get(network, [])) > 0:
+                    return True
+            self.log.info(
+                f"Filtered out host {host}: does not belong to mon public_network"
+                f" ({','.join(public_networks)})"
+            )
+            return False
 
+        rank_map = None
+        if svc.ranked():
+            rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
         ha = HostAssignment(
             spec=spec,
-            hosts=self.mgr._hosts_with_daemon_inventory(),
+            hosts=self.mgr._schedulable_hosts(),
             daemons=daemons,
             networks=self.mgr.cache.networks,
             filter_new_host=(
@@ -556,10 +680,13 @@ class CephadmServe:
             allow_colo=svc.allow_colo(),
             primary_daemon_type=svc.primary_daemon_type(),
             per_host_daemon_type=svc.per_host_daemon_type(),
+            rank_map=rank_map,
         )
 
         try:
             all_slots, slots_to_add, daemons_to_remove = ha.place()
+            daemons_to_remove = [d for d in daemons_to_remove if (d.hostname and self.mgr.inventory._inventory[d.hostname].get(
+                'status', '').lower() not in ['maintenance', 'offline'])]
             self.log.debug('Add %s, remove %s' % (slots_to_add, daemons_to_remove))
         except OrchestratorError as e:
             self.log.error('Failed to apply %s spec %s: %s' % (
@@ -575,12 +702,68 @@ class CephadmServe:
             self.log.debug('cannot scale mon|mgr below 1)')
             return False
 
+        # progress
+        progress_id = str(uuid.uuid4())
+        delta: List[str] = []
+        if slots_to_add:
+            delta += [f'+{len(slots_to_add)}']
+        if daemons_to_remove:
+            delta += [f'-{len(daemons_to_remove)}']
+        progress_title = f'Updating {spec.service_name()} deployment ({" ".join(delta)} -> {len(all_slots)})'
+        progress_total = len(slots_to_add) + len(daemons_to_remove)
+        progress_done = 0
+
+        def update_progress() -> None:
+            self.mgr.remote(
+                'progress', 'update', progress_id,
+                ev_msg=progress_title,
+                ev_progress=(progress_done / progress_total),
+                add_to_ceph_s=True,
+            )
+
+        if progress_total:
+            update_progress()
+
         # add any?
         did_config = False
 
         self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
         self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
 
+        # assign names
+        for i in range(len(slots_to_add)):
+            slot = slots_to_add[i]
+            slot = slot.assign_name(self.mgr.get_unique_name(
+                slot.daemon_type,
+                slot.hostname,
+                daemons,
+                prefix=spec.service_id,
+                forcename=slot.name,
+                rank=slot.rank,
+                rank_generation=slot.rank_generation,
+            ))
+            slots_to_add[i] = slot
+            if rank_map is not None:
+                assert slot.rank is not None
+                assert slot.rank_generation is not None
+                assert rank_map[slot.rank][slot.rank_generation] is None
+                rank_map[slot.rank][slot.rank_generation] = slot.name
+
+        if rank_map:
+            # record the rank_map before we make changes so that if we fail the
+            # next mgr will clean up.
+            self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+
+            # remove daemons now, since we are going to fence them anyway
+            for d in daemons_to_remove:
+                assert d.hostname is not None
+                self._remove_daemon(d.name(), d.hostname)
+            daemons_to_remove = []
+
+            # fence them
+            svc.fence_old_ranks(spec, rank_map, len(all_slots))
+
+        # create daemons
         for slot in slots_to_add:
             # first remove daemon on conflicting port?
             if slot.ports:
@@ -598,16 +781,11 @@ class CephadmServe:
                     # there is only 1 gateway.
                     self._remove_daemon(d.name(), d.hostname)
                     daemons_to_remove.remove(d)
+                    progress_done += 1
                     break
 
             # deploy new daemon
-            daemon_id = self.mgr.get_unique_name(
-                slot.daemon_type,
-                slot.hostname,
-                daemons,
-                prefix=spec.service_id,
-                forcename=slot.name)
-
+            daemon_id = slot.name
             if not did_config:
                 svc.config(spec, daemon_id)
                 did_config = True
@@ -617,6 +795,8 @@ class CephadmServe:
                 daemon_type=slot.daemon_type,
                 ports=slot.ports,
                 ip=slot.ip,
+                rank=slot.rank,
+                rank_generation=slot.rank_generation,
             )
             self.log.debug('Placing %s.%s on host %s' % (
                 slot.daemon_type, daemon_id, slot.hostname))
@@ -625,15 +805,19 @@ class CephadmServe:
                 daemon_spec = svc.prepare_create(daemon_spec)
                 self._create_daemon(daemon_spec)
                 r = True
+                progress_done += 1
+                update_progress()
             except (RuntimeError, OrchestratorError) as e:
-                self.mgr.events.for_service(
-                    spec, 'ERROR',
-                    f"Failed while placing {slot.daemon_type}.{daemon_id} "
-                    f"on {slot.hostname}: {e}")
+                msg = (f"Failed while placing {slot.daemon_type}.{daemon_id} "
+                       f"on {slot.hostname}: {e}")
+                self.mgr.events.for_service(spec, 'ERROR', msg)
+                self.mgr.log.error(msg)
                 # only return "no change" if no one else has already succeeded.
                 # later successes will also change to True
                 if r is None:
                     r = False
+                progress_done += 1
+                update_progress()
                 continue
 
             # add to daemon list so next name(s) will also be unique
@@ -660,6 +844,11 @@ class CephadmServe:
             assert d.hostname is not None
             self._remove_daemon(d.name(), d.hostname)
 
+            progress_done += 1
+            update_progress()
+
+        self.mgr.remote('progress', 'complete', progress_id)
+
         if r is None:
             r = False
         return r
@@ -682,6 +871,10 @@ class CephadmServe:
 
             # ignore unmanaged services
             if spec and spec.unmanaged:
+                continue
+
+            # ignore daemons for deleted services
+            if dd.service_name() in self.mgr.spec_store.spec_deleted:
                 continue
 
             # These daemon types require additional configs after creation
@@ -809,16 +1002,6 @@ class CephadmServe:
                         assert daemon_spec.host
                         self._deploy_cephadm_binary(daemon_spec.host)
 
-                if daemon_spec.daemon_type == 'haproxy':
-                    haspec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-                    if haspec.haproxy_container_image:
-                        image = haspec.haproxy_container_image
-
-                if daemon_spec.daemon_type == 'keepalived':
-                    haspec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-                    if haspec.keepalived_container_image:
-                        image = haspec.keepalived_container_image
-
                 # TCP port to open in the host firewall
                 if len(ports) > 0:
                     daemon_spec.extra_args.extend([
@@ -856,6 +1039,8 @@ class CephadmServe:
                             'ports': daemon_spec.ports,
                             'ip': daemon_spec.ip,
                             'deployed_by': self.mgr.get_active_mgr_digests(),
+                            'rank': daemon_spec.rank,
+                            'rank_generation': daemon_spec.rank_generation,
                         }),
                         '--config-json', '-',
                     ] + daemon_spec.extra_args,
@@ -1121,6 +1306,24 @@ class CephadmServe:
             self.log.warning(msg)
             raise OrchestratorError(msg)
 
+    def _write_remote_file(self,
+                           host: str,
+                           path: str,
+                           content: bytes,
+                           mode: int,
+                           uid: int,
+                           gid: int) -> None:
+        with self._remote_connection(host) as tpl:
+            conn, connr = tpl
+            try:
+                errmsg = connr.write_file(path, content, mode, uid, gid)
+                if errmsg is not None:
+                    raise OrchestratorError(errmsg)
+            except Exception as e:
+                msg = f"Unable to write {host}:{path}: {e}"
+                self.log.warning(msg)
+                raise OrchestratorError(msg)
+
     @contextmanager
     def _remote_connection(self,
                            host: str,
@@ -1161,7 +1364,10 @@ To add the cephadm SSH key to the host:
 > ceph cephadm get-pub-key > ~/ceph.pub
 > ssh-copy-id -f -i ~/ceph.pub {user}@{addr}
 
-To check that the host is reachable:
+To check that the host is reachable open a new shell with the --no-hosts flag:
+> cephadm shell --no-hosts
+
+Then run the following:
 > ceph cephadm get-ssh-config > ssh_config
 > ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
 > chmod 0600 ~/cephadm_private_key

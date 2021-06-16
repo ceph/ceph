@@ -361,7 +361,6 @@ int md_config_t::parse_config_files(ConfigValues& values,
     values.cluster = get_cluster_name(nullptr);
   }
   // open new conf
-  string conffile;
   for (auto& fn : get_conffile_paths(values, conf_files_str, warnings, flags)) {
     bufferlist bl;
     std::string error;
@@ -373,7 +372,7 @@ int md_config_t::parse_config_files(ConfigValues& values,
     int ret = parse_buffer(values, tracker, bl.c_str(), bl.length(), &oss);
     if (ret == 0) {
       parse_error.clear();
-      conffile = fn;
+      conf_path = fn;
       break;
     }
     parse_error = oss.str();
@@ -382,11 +381,11 @@ int md_config_t::parse_config_files(ConfigValues& values,
     }
   }
   // it must have been all ENOENTs, that's the only way we got here
-  if (conffile.empty()) {
+  if (conf_path.empty()) {
     return -ENOENT;
   }
   if (values.cluster.empty()) {
-    values.cluster = get_cluster_name(conffile.c_str());
+    values.cluster = get_cluster_name(conf_path.c_str());
   }
   update_legacy_vals(values);
   return 0;

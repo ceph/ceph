@@ -431,11 +431,12 @@ RGWPubSub::RGWPubSub(rgw::sal::RGWRadosStore* _store, const std::string& _tenant
     get_meta_obj(&meta_obj);
 }
 
-int RGWPubSub::remove(const rgw_raw_obj& obj,
+int RGWPubSub::remove(const DoutPrefixProvider *dpp, 
+                          const rgw_raw_obj& obj,
 			  RGWObjVersionTracker *objv_tracker,
 			  optional_yield y)
 {
-  int ret = rgw_delete_system_obj(store->svc()->sysobj, obj.pool, obj.oid, objv_tracker, y);
+  int ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, obj.pool, obj.oid, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -453,12 +454,12 @@ int RGWPubSub::read_topics(rgw_pubsub_topics *result, RGWObjVersionTracker *objv
   return 0;
 }
 
-int RGWPubSub::write_topics(const rgw_pubsub_topics& topics,
+int RGWPubSub::write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
 				     RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
-  int ret = write(meta_obj, topics, objv_tracker, y);
+  int ret = write(dpp, meta_obj, topics, objv_tracker, y);
   if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
   return 0;
@@ -479,11 +480,11 @@ int RGWPubSub::Bucket::read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersi
   return 0;
 }
 
-int RGWPubSub::Bucket::write_topics(const rgw_pubsub_bucket_topics& topics,
+int RGWPubSub::Bucket::write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_bucket_topics& topics,
 					RGWObjVersionTracker *objv_tracker,
 					optional_yield y)
 {
-  int ret = ps->write(bucket_meta_obj, topics, objv_tracker, y);
+  int ret = ps->write(dpp, bucket_meta_obj, topics, objv_tracker, y);
   if (ret < 0) {
     ldout(ps->store->ctx(), 1) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
     return ret;
@@ -535,31 +536,30 @@ int RGWPubSub::get_topic(const string& name, rgw_pubsub_topic *result)
   return 0;
 }
 
-int RGWPubSub::Bucket::create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, optional_yield y) {
-  return create_notification(topic_name, events, std::nullopt, "", y);
+int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const string& topic_name, const rgw::notify::EventTypeList& events, optional_yield y) {
+  return create_notification(dpp, topic_name, events, std::nullopt, "", y);
 }
 
-int RGWPubSub::Bucket::create_notification(const string& topic_name,const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) {
+int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const string& topic_name,const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) {
   rgw_pubsub_topic_subs topic_info;
-  rgw::sal::RGWRadosStore *store = ps->store;
 
   int ret = ps->get_topic(topic_name, &topic_info);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topic '" << topic_name << "' info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read topic '" << topic_name << "' info: ret=" << ret << dendl;
     return ret;
   }
-  ldout(store->ctx(), 20) << "successfully read topic '" << topic_name << "' info" << dendl;
+  ldpp_dout(dpp, 20) << "successfully read topic '" << topic_name << "' info" << dendl;
 
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_bucket_topics bucket_topics;
 
   ret = read_topics(&bucket_topics, &objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topics from bucket '" << 
+    ldpp_dout(dpp, 1) << "ERROR: failed to read topics from bucket '" << 
       bucket.name << "': ret=" << ret << dendl;
     return ret;
   }
-  ldout(store->ctx(), 20) << "successfully read " << bucket_topics.topics.size() << " topics from bucket '" << 
+  ldpp_dout(dpp, 20) << "successfully read " << bucket_topics.topics.size() << " topics from bucket '" << 
     bucket.name << "'" << dendl;
 
   auto& topic_filter = bucket_topics.topics[topic_name];
@@ -570,25 +570,24 @@ int RGWPubSub::Bucket::create_notification(const string& topic_name,const rgw::n
     topic_filter.s3_filter = *s3_filter;
   }
 
-  ret = write_topics(bucket_topics, &objv_tracker, y);
+  ret = write_topics(dpp, bucket_topics, &objv_tracker, y);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to write topics to bucket '" << bucket.name << "': ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to write topics to bucket '" << bucket.name << "': ret=" << ret << dendl;
     return ret;
   }
     
-  ldout(store->ctx(), 20) << "successfully wrote " << bucket_topics.topics.size() << " topics to bucket '" << bucket.name << "'" << dendl;
+  ldpp_dout(dpp, 20) << "successfully wrote " << bucket_topics.topics.size() << " topics to bucket '" << bucket.name << "'" << dendl;
 
   return 0;
 }
 
-int RGWPubSub::Bucket::remove_notification(const string& topic_name, optional_yield y)
+int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const string& topic_name, optional_yield y)
 {
   rgw_pubsub_topic_subs topic_info;
-  rgw::sal::RGWRadosStore *store = ps->store;
 
   int ret = ps->get_topic(topic_name, &topic_info);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topic info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read topic info: ret=" << ret << dendl;
     return ret;
   }
 
@@ -597,62 +596,62 @@ int RGWPubSub::Bucket::remove_notification(const string& topic_name, optional_yi
 
   ret = read_topics(&bucket_topics, &objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
     return ret;
   }
 
   bucket_topics.topics.erase(topic_name);
 
-  ret = write_topics(bucket_topics, &objv_tracker, y);
+  ret = write_topics(dpp, bucket_topics, &objv_tracker, y);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
   return 0;
 }
 
-int RGWPubSub::Bucket::remove_notifications(optional_yield y)
+int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optional_yield y)
 {
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
   auto ret  = get_topics(&bucket_topics);
   if (ret < 0 && ret != -ENOENT) {
-    ldout(ps->store->ctx(), 1) << "ERROR: failed to get list of topics from bucket '" << bucket.name << "', ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to get list of topics from bucket '" << bucket.name << "', ret=" << ret << dendl;
     return ret ;
   }
 
   // remove all auto-genrated topics
   for (const auto& topic : bucket_topics.topics) {
     const auto& topic_name = topic.first;
-    ret = ps->remove_topic(topic_name, y);
+    ret = ps->remove_topic(dpp, topic_name, y);
     if (ret < 0 && ret != -ENOENT) {
-      ldout(ps->store->ctx(), 5) << "WARNING: failed to remove auto-generated topic '" << topic_name << "', ret=" << ret << dendl;
+      ldpp_dout(dpp, 5) << "WARNING: failed to remove auto-generated topic '" << topic_name << "', ret=" << ret << dendl;
     }
   }
 
   // delete all notification of on a bucket
-  ret = ps->remove(bucket_meta_obj, nullptr, y);
+  ret = ps->remove(dpp, bucket_meta_obj, nullptr, y);
   if (ret < 0 && ret != -ENOENT) {
-    ldout(ps->store->ctx(), 1) << "ERROR: failed to remove bucket topics: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove bucket topics: ret=" << ret << dendl;
     return ret;
   }
 
   return 0;
 }
 
-int RGWPubSub::create_topic(const string& name, optional_yield y) {
-  return create_topic(name, rgw_pubsub_sub_dest(), "", "", y);
+int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, optional_yield y) {
+  return create_topic(dpp, name, rgw_pubsub_sub_dest(), "", "", y);
 }
 
-int RGWPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y) {
+int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data, optional_yield y) {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
   int ret = read_topics(&topics, &objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
     // its not an error if not topics exist, we create one
-    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
   }
  
@@ -663,35 +662,35 @@ int RGWPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest,
   new_topic.topic.arn = arn;
   new_topic.topic.opaque_data = opaque_data;
 
-  ret = write_topics(topics, &objv_tracker, y);
+  ret = write_topics(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
   return 0;
 }
 
-int RGWPubSub::remove_topic(const string& name, optional_yield y)
+int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const string& name, optional_yield y)
 {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
   int ret = read_topics(&topics, &objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
   } else if (ret == -ENOENT) {
       // its not an error if no topics exist, just a no-op
-      ldout(store->ctx(), 10) << "WARNING: failed to read topics info, deletion is a no-op: ret=" << ret << dendl;
+      ldpp_dout(dpp, 10) << "WARNING: failed to read topics info, deletion is a no-op: ret=" << ret << dendl;
       return 0;
   }
 
   topics.topics.erase(name);
 
-  ret = write_topics(topics, &objv_tracker, y);
+  ret = write_topics(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to remove topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove topics info: ret=" << ret << dendl;
     return ret;
   }
 
@@ -708,25 +707,26 @@ int RGWPubSub::Sub::read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker
   return 0;
 }
 
-int RGWPubSub::Sub::write_sub(const rgw_pubsub_sub_config& sub_conf,
+int RGWPubSub::Sub::write_sub(const DoutPrefixProvider *dpp, 
+                              const rgw_pubsub_sub_config& sub_conf,
 				  RGWObjVersionTracker *objv_tracker,
 				  optional_yield y)
 {
-  int ret = ps->write(sub_meta_obj, sub_conf, objv_tracker, y);
+  int ret = ps->write(dpp, sub_meta_obj, sub_conf, objv_tracker, y);
   if (ret < 0) {
-    ldout(ps->store->ctx(), 1) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;
   }
 
   return 0;
 }
 
-int RGWPubSub::Sub::remove_sub(RGWObjVersionTracker *objv_tracker,
+int RGWPubSub::Sub::remove_sub(const DoutPrefixProvider *dpp, RGWObjVersionTracker *objv_tracker,
 				   optional_yield y)
 {
-  int ret = ps->remove(sub_meta_obj, objv_tracker, y);
+  int ret = ps->remove(dpp, sub_meta_obj, objv_tracker, y);
   if (ret < 0) {
-    ldout(ps->store->ctx(), 1) << "ERROR: failed to remove subscription info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove subscription info: ret=" << ret << dendl;
     return ret;
   }
 
@@ -738,21 +738,20 @@ int RGWPubSub::Sub::get_conf(rgw_pubsub_sub_config *result)
   return read_sub(result, nullptr);
 }
 
-int RGWPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest& dest, optional_yield y, const std::string& s3_id)
+int RGWPubSub::Sub::subscribe(const DoutPrefixProvider *dpp, const string& topic, const rgw_pubsub_sub_dest& dest, optional_yield y, const std::string& s3_id)
 {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
-  rgw::sal::RGWRadosStore *store = ps->store;
 
   int ret = ps->read_topics(&topics, &objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret != -ENOENT ? ret : -EINVAL;
   }
 
   auto iter = topics.topics.find(topic);
   if (iter == topics.topics.end()) {
-    ldout(store->ctx(), 1) << "ERROR: cannot add subscription to topic: topic not found" << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: cannot add subscription to topic: topic not found" << dendl;
     return -EINVAL;
   }
 
@@ -768,31 +767,30 @@ int RGWPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest& de
 
   t.subs.insert(sub);
 
-  ret = ps->write_topics(topics, &objv_tracker, y);
+  ret = ps->write_topics(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
-  ret = write_sub(sub_conf, nullptr, y);
+  ret = write_sub(dpp, sub_conf, nullptr, y);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;
   }
   return 0;
 }
 
-int RGWPubSub::Sub::unsubscribe(const string& _topic, optional_yield y)
+int RGWPubSub::Sub::unsubscribe(const DoutPrefixProvider *dpp, const string& _topic, optional_yield y)
 {
   string topic = _topic;
   RGWObjVersionTracker sobjv_tracker;
-  rgw::sal::RGWRadosStore *store = ps->store;
 
   if (topic.empty()) {
     rgw_pubsub_sub_config sub_conf;
     int ret = read_sub(&sub_conf, &sobjv_tracker);
     if (ret < 0) {
-      ldout(store->ctx(), 1) << "ERROR: failed to read subscription info: ret=" << ret << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to read subscription info: ret=" << ret << dendl;
       return ret;
     }
     topic = sub_conf.topic;
@@ -804,7 +802,7 @@ int RGWPubSub::Sub::unsubscribe(const string& _topic, optional_yield y)
   int ret = ps->read_topics(&topics, &objv_tracker);
   if (ret < 0) {
     // not an error - could be that topic was already deleted
-    ldout(store->ctx(), 10) << "WARNING: failed to read topics info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 10) << "WARNING: failed to read topics info: ret=" << ret << dendl;
   } else {
     auto iter = topics.topics.find(topic);
     if (iter != topics.topics.end()) {
@@ -812,17 +810,17 @@ int RGWPubSub::Sub::unsubscribe(const string& _topic, optional_yield y)
 
       t.subs.erase(sub);
 
-      ret = ps->write_topics(topics, &objv_tracker, y);
+      ret = ps->write_topics(dpp, topics, &objv_tracker, y);
       if (ret < 0) {
-        ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
         return ret;
       }
     }
   }
 
-  ret = remove_sub(&sobjv_tracker, y);
+  ret = remove_sub(dpp, &sobjv_tracker, y);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to delete subscription info: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to delete subscription info: ret=" << ret << dendl;
     return ret;
   }
   return 0;
@@ -841,13 +839,13 @@ void RGWPubSub::SubWithEvents<EventType>::list_events_result::dump(Formatter *f)
 }
 
 template<typename EventType>
-int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int max_events)
+int RGWPubSub::SubWithEvents<EventType>::list_events(const DoutPrefixProvider *dpp, const string& marker, int max_events)
 {
   RGWRados *store = ps->store->getRados();
   rgw_pubsub_sub_config sub_conf;
   int ret = get_conf(&sub_conf);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read sub config: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read sub config: ret=" << ret << dendl;
     return ret;
   }
 
@@ -859,7 +857,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int m
     return 0;
   }
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
   }
 
@@ -871,9 +869,9 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int m
 
   std::vector<rgw_bucket_dir_entry> objs;
 
-  ret = list_op.list_objects(max_events, &objs, nullptr, &list.is_truncated, null_yield);
+  ret = list_op.list_objects(dpp, max_events, &objs, nullptr, &list.is_truncated, null_yield);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to list bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to list bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
   }
   if (list.is_truncated) {
@@ -887,7 +885,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int m
     try {
       bl.decode_base64(bl64);
     } catch (buffer::error& err) {
-      ldout(store->ctx(), 1) << "ERROR: failed to event (not a valid base64)" << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to event (not a valid base64)" << dendl;
       continue;
     }
     EventType event;
@@ -896,7 +894,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int m
     try {
       decode(event, iter);
     } catch (buffer::error& err) {
-      ldout(store->ctx(), 1) << "ERROR: failed to decode event" << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to decode event" << dendl;
       continue;
     };
 
@@ -906,13 +904,13 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int m
 }
 
 template<typename EventType>
-int RGWPubSub::SubWithEvents<EventType>::remove_event(const string& event_id)
+int RGWPubSub::SubWithEvents<EventType>::remove_event(const DoutPrefixProvider *dpp, const string& event_id)
 {
   rgw::sal::RGWRadosStore *store = ps->store;
   rgw_pubsub_sub_config sub_conf;
   int ret = get_conf(&sub_conf);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read sub config: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read sub config: ret=" << ret << dendl;
     return ret;
   }
 
@@ -920,7 +918,7 @@ int RGWPubSub::SubWithEvents<EventType>::remove_event(const string& event_id)
   string tenant;
   ret = store->getRados()->get_bucket_info(store->svc(), tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, null_yield, nullptr);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
   }
 
@@ -937,9 +935,9 @@ int RGWPubSub::SubWithEvents<EventType>::remove_event(const string& event_id)
   del_op.params.bucket_owner = bucket_info.owner;
   del_op.params.versioning_status = bucket_info.versioning_status();
 
-  ret = del_op.delete_obj(null_yield);
+  ret = del_op.delete_obj(null_yield, dpp);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
   }
   return 0;
 }

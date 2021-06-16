@@ -433,6 +433,9 @@ class ServiceSpec(object):
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
             'container': CustomContainerSpec,
+            'grafana': MonitoringSpec,
+            'node-exporter': MonitoringSpec,
+            'prometheus': MonitoringSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
@@ -660,16 +663,19 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
+    DEFAULT_POOL = 'nfs-ganesha'
+
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
-                 pool: Optional[str] = None,
-                 namespace: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 pool: Optional[str] = None,
+                 namespace: Optional[str] = None,
+                 port: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -678,10 +684,17 @@ class NFSServiceSpec(ServiceSpec):
             config=config, networks=networks)
 
         #: RADOS pool where NFS client recovery data is stored.
-        self.pool = pool
+        self.pool = pool or self.DEFAULT_POOL
 
         #: RADOS namespace where NFS client recovery data is stored in the pool.
-        self.namespace = namespace
+        self.namespace = namespace or self.service_id
+
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        if self.port:
+            return [self.port]
+        return []
 
     def validate(self) -> None:
         super(NFSServiceSpec, self).validate()
@@ -842,6 +855,7 @@ class AlertManagerSpec(ServiceSpec):
                  user_data: Optional[Dict[str, Any]] = None,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 port: Optional[int] = None,
                  ):
         assert service_type == 'alertmanager'
         super(AlertManagerSpec, self).__init__(
@@ -864,6 +878,23 @@ class AlertManagerSpec(ServiceSpec):
         #                        added to the default receivers'
         #                        <webhook_configs> configuration.
         self.user_data = user_data or {}
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port(), 9094]
+
+    def get_port(self) -> int:
+        if self.port:
+            return self.port
+        else:
+            return 9093
+
+    def validate(self) -> None:
+        super(AlertManagerSpec, self).validate()
+
+        if self.port == 9094:
+            raise SpecValidationError(
+                'Port 9094 is reserved for AlertManager cluster listen address')
 
 
 yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
@@ -879,6 +910,7 @@ class IngressSpec(ServiceSpec):
                  backend_service: Optional[str] = None,
                  frontend_port: Optional[int] = None,
                  ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
                  ssl_dh_param: Optional[str] = None,
                  ssl_ciphers: Optional[List[str]] = None,
                  ssl_options: Optional[List[str]] = None,
@@ -889,8 +921,8 @@ class IngressSpec(ServiceSpec):
                  keepalived_password: Optional[str] = None,
                  virtual_ip: Optional[str] = None,
                  virtual_interface_networks: Optional[List[str]] = [],
-                 haproxy_container_image: Optional[str] = None,
-                 keepalived_container_image: Optional[str] = None,
+                 unmanaged: bool = False,
+                 ssl: bool = False
                  ):
         assert service_type == 'ingress'
         super(IngressSpec, self).__init__(
@@ -901,6 +933,7 @@ class IngressSpec(ServiceSpec):
         self.backend_service = backend_service
         self.frontend_port = frontend_port
         self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
         self.ssl_dh_param = ssl_dh_param
         self.ssl_ciphers = ssl_ciphers
         self.ssl_options = ssl_options
@@ -910,8 +943,8 @@ class IngressSpec(ServiceSpec):
         self.keepalived_password = keepalived_password
         self.virtual_ip = virtual_ip
         self.virtual_interface_networks = virtual_interface_networks or []
-        self.haproxy_container_image = haproxy_container_image
-        self.keepalived_container_image = keepalived_container_image
+        self.unmanaged = unmanaged
+        self.ssl = ssl
 
     def get_port_start(self) -> List[int]:
         return [cast(int, self.frontend_port),
@@ -935,6 +968,9 @@ class IngressSpec(ServiceSpec):
         if not self.virtual_ip:
             raise SpecValidationError(
                 'Cannot add ingress: No virtual_ip provided')
+
+
+yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
 
 
 class CustomContainerSpec(ServiceSpec):
@@ -1002,3 +1038,37 @@ class CustomContainerSpec(ServiceSpec):
 
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
+
+
+class MonitoringSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str,
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 port: Optional[int] = None,
+                 ):
+        assert service_type in ['grafana', 'node-exporter', 'prometheus']
+
+        super(MonitoringSpec, self).__init__(
+            service_type, service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only, config=config,
+            networks=networks)
+
+        self.service_type = service_type
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port()]
+
+    def get_port(self) -> int:
+        if self.port:
+            return self.port
+        else:
+            return {'prometheus': 9095,
+                    'node-exporter': 9100,
+                    'grafana': 3000}[self.service_type]

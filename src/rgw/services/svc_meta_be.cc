@@ -15,7 +15,8 @@ RGWSI_MetaBackend::PutParams::~PutParams() {} // ...
 RGWSI_MetaBackend::GetParams::~GetParams() {} // ...
 RGWSI_MetaBackend::RemoveParams::~RemoveParams() {} // ...
 
-int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
+int RGWSI_MetaBackend::pre_modify(const DoutPrefixProvider *dpp, 
+                                  RGWSI_MetaBackend::Context *ctx,
                                   const string& key,
                                   RGWMetadataLogData& log_data,
                                   RGWObjVersionTracker *objv_tracker,
@@ -34,7 +35,8 @@ int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
   return 0;
 }
 
-int RGWSI_MetaBackend::post_modify(RGWSI_MetaBackend::Context *ctx,
+int RGWSI_MetaBackend::post_modify(const DoutPrefixProvider *dpp, 
+                                   RGWSI_MetaBackend::Context *ctx,
                                    const string& key,
                                    RGWMetadataLogData& log_data,
                                    RGWObjVersionTracker *objv_tracker, int ret,
@@ -47,12 +49,13 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
                                       const string& key,
                                       const real_time& mtime,
                                       RGWObjVersionTracker *objv_tracker,
-                                      optional_yield y)
+                                      optional_yield y,
+                                      const DoutPrefixProvider *dpp)
 {
   real_time orig_mtime;
 
   int ret = call_with_get_params(&orig_mtime, [&](GetParams& params) {
-    return get_entry(ctx, key, params, objv_tracker, y);
+    return get_entry(ctx, key, params, objv_tracker, y, dpp);
   });
   if (ret < 0 && ret != -ENOENT) {
     return ret;
@@ -76,12 +79,13 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
 				 RGWMDLogStatus op_type,
                                  optional_yield y,
 				 std::function<int()> f,
-				 bool generic_prepare)
+				 bool generic_prepare,
+                                 const DoutPrefixProvider *dpp)
 {
   int ret;
 
   if (generic_prepare) {
-    ret = prepare_mutate(ctx, key, mtime, objv_tracker, y);
+    ret = prepare_mutate(ctx, key, mtime, objv_tracker, y, dpp);
     if (ret < 0 ||
 	ret == STATUS_NO_APPLY) {
       return ret;
@@ -89,7 +93,7 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
   }
 
   RGWMetadataLogData log_data;
-  ret = pre_modify(ctx, key, log_data, objv_tracker, op_type, y);
+  ret = pre_modify(dpp, ctx, key, log_data, objv_tracker, op_type, y);
   if (ret < 0) {
     return ret;
   }
@@ -98,7 +102,7 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
 
   /* cascading ret into post_modify() */
 
-  ret = post_modify(ctx, key, log_data, objv_tracker, ret, y);
+  ret = post_modify(dpp, ctx, key, log_data, objv_tracker, ret, y);
   if (ret < 0)
     return ret;
 
@@ -109,43 +113,48 @@ int RGWSI_MetaBackend::get(Context *ctx,
 			   const string& key,
 			   GetParams& params,
 			   RGWObjVersionTracker *objv_tracker,
-                           optional_yield y)
+                           optional_yield y,
+                           const DoutPrefixProvider *dpp)
 {
-  return get_entry(ctx, key, params, objv_tracker, y);
+  return get_entry(ctx, key, params, objv_tracker, y, dpp);
 }
 
 int RGWSI_MetaBackend::put(Context *ctx,
 			   const string& key,
 			   PutParams& params,
 			   RGWObjVersionTracker *objv_tracker,
-                           optional_yield y)
+                           optional_yield y,
+                           const DoutPrefixProvider *dpp)
 {
   std::function<int()> f = [&]() {
-    return put_entry(ctx, key, params, objv_tracker, y);
+    return put_entry(dpp, ctx, key, params, objv_tracker, y);
   };
 
   return do_mutate(ctx, key, params.mtime, objv_tracker,
                 MDLOG_STATUS_WRITE,
                 y,
                 f,
-                false);
+                false,
+                dpp);
 }
 
 int RGWSI_MetaBackend::remove(Context *ctx,
                               const string& key,
                               RemoveParams& params,
                               RGWObjVersionTracker *objv_tracker,
-                              optional_yield y)
+                              optional_yield y,
+                              const DoutPrefixProvider *dpp)
 {
   std::function<int()> f = [&]() {
-    return remove_entry(ctx, key, params, objv_tracker, y);
+    return remove_entry(dpp, ctx, key, params, objv_tracker, y);
   };
 
   return do_mutate(ctx, key, params.mtime, objv_tracker,
                 MDLOG_STATUS_REMOVE,
                 y,
                 f,
-                false);
+                false,
+                dpp);
 }
 
 int RGWSI_MetaBackend::mutate(Context *ctx,
@@ -153,12 +162,14 @@ int RGWSI_MetaBackend::mutate(Context *ctx,
 			      MutateParams& params,
 			      RGWObjVersionTracker *objv_tracker,
                               optional_yield y,
-			      std::function<int()> f)
+			      std::function<int()> f,
+                              const DoutPrefixProvider *dpp)
 {
   return do_mutate(ctx, key, params.mtime, objv_tracker,
 		   params.op_type, y,
 		   f,
-		   false);
+		   false,
+                   dpp);
 }
 
 int RGWSI_MetaBackend_Handler::call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,

@@ -69,22 +69,25 @@ public:
 
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
-  virtual int get(string& entry, RGWMetadataObject **obj, optional_yield) = 0;
+  virtual int get(string& entry, RGWMetadataObject **obj, optional_yield, const DoutPrefixProvider *dpp) = 0;
   virtual int put(string& entry,
                   RGWMetadataObject *obj,
                   RGWObjVersionTracker& objv_tracker,
-                  optional_yield, RGWMDLogSyncType type,
+                  optional_yield, 
+                  const DoutPrefixProvider *dpp,
+                  RGWMDLogSyncType type,
                   bool from_remote_zone) = 0;
-  virtual int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield) = 0;
+  virtual int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp) = 0;
 
   virtual int mutate(const string& entry,
 		     const ceph::real_time& mtime,
 		     RGWObjVersionTracker *objv_tracker,
                      optional_yield y,
+                     const DoutPrefixProvider *dpp,
 		     RGWMDLogStatus op_type,
 		     std::function<int()> f) = 0;
 
-  virtual int list_keys_init(const string& marker, void **phandle) = 0;
+  virtual int list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 
@@ -108,12 +111,13 @@ public:
 protected:
   RGWSI_MetaBackend_Handler *be_handler;
 
-  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y) = 0;
+  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) = 0;
   virtual int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject *obj,
                      RGWObjVersionTracker& objv_tracker, optional_yield y,
-                     RGWMDLogSyncType type, bool from_remote_zone) = 0;
-  virtual int do_put_operate(Put *put_op);
-  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y) = 0;
+                     const DoutPrefixProvider *dpp, RGWMDLogSyncType type, 
+                     bool from_remote_zone) = 0;
+  virtual int do_put_operate(Put *put_op, const DoutPrefixProvider *dpp);
+  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) = 0;
 
 public:
   RGWMetadataHandler_GenericMetaBE() {}
@@ -139,8 +143,8 @@ public:
     optional_yield y;
     bool from_remote_zone{false};
 
-    int get(RGWMetadataObject **obj) {
-      return handler->do_get(op, entry, obj, y);
+    int get(RGWMetadataObject **obj, const DoutPrefixProvider *dpp) {
+      return handler->do_get(op, entry, obj, y, dpp);
     }
   public:
     Put(RGWMetadataHandler_GenericMetaBE *_handler, RGWSI_MetaBackend_Handler::Op *_op,
@@ -150,13 +154,13 @@ public:
 
     virtual ~Put() {}
 
-    virtual int put_pre() {
+    virtual int put_pre(const DoutPrefixProvider *dpp) {
       return 0;
     }
-    virtual int put() {
+    virtual int put(const DoutPrefixProvider *dpp) {
       return 0;
     }
-    virtual int put_post() {
+    virtual int put_post(const DoutPrefixProvider *dpp) {
       return 0;
     }
     virtual int finalize() {
@@ -164,20 +168,21 @@ public:
     }
   };
 
-  int get(string& entry, RGWMetadataObject **obj, optional_yield) override;
-  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, RGWMDLogSyncType type, bool from_remote_zone) override;
-  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield) override;
+  int get(string& entry, RGWMetadataObject **obj, optional_yield, const DoutPrefixProvider *dpp) override;
+  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp, RGWMDLogSyncType type, bool from_remote_zone) override;
+  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp) override;
 
   int mutate(const string& entry,
 	     const ceph::real_time& mtime,
 	     RGWObjVersionTracker *objv_tracker,
              optional_yield y,
+             const DoutPrefixProvider *dpp,
 	     RGWMDLogStatus op_type,
 	     std::function<int()> f) override;
 
   int get_shard_id(const string& entry, int *shard_id) override;
 
-  int list_keys_init(const std::string& marker, void **phandle) override;
+  int list_keys_init(const DoutPrefixProvider *dpp, const std::string& marker, void **phandle) override;
   int list_keys_next(void *handle, int max, std::list<string>& keys, bool *truncated) override;
   void list_keys_complete(void *handle) override;
 
@@ -233,22 +238,24 @@ public:
 
   RGWMetadataHandler *get_handler(const string& type);
 
-  int get(string& metadata_key, Formatter *f, optional_yield y);
+  int get(string& metadata_key, Formatter *f, optional_yield y, const DoutPrefixProvider *dpp);
   int put(string& metadata_key, bufferlist& bl, optional_yield y,
+          const DoutPrefixProvider *dpp,
           RGWMDLogSyncType sync_mode,
           bool from_remote_zone,
           obj_version *existing_version = NULL);
-  int remove(string& metadata_key, optional_yield y);
+  int remove(string& metadata_key, optional_yield y, const DoutPrefixProvider *dpp);
 
   int mutate(const string& metadata_key,
 	     const ceph::real_time& mtime,
 	     RGWObjVersionTracker *objv_tracker,
              optional_yield y,
+             const DoutPrefixProvider *dpp,
 	     RGWMDLogStatus op_type,
 	     std::function<int()> f);
 
-  int list_keys_init(const string& section, void **phandle);
-  int list_keys_init(const string& section, const string& marker, void **phandle);
+  int list_keys_init(const DoutPrefixProvider *dpp, const string& section, void **phandle);
+  int list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 
@@ -277,12 +284,12 @@ public:
                              RGWMDLogSyncType type, bool from_remote_zone);
   ~RGWMetadataHandlerPut_SObj();
 
-  int put_pre() override;
-  int put() override;
-  virtual int put_check() {
+  int put_pre(const DoutPrefixProvider *dpp) override;
+  int put(const DoutPrefixProvider *dpp) override;
+  virtual int put_check(const DoutPrefixProvider *dpp) {
     return 0;
   }
-  virtual int put_checked();
+  virtual int put_checked(const DoutPrefixProvider *dpp);
   virtual void encode_obj(bufferlist *bl) {}
 };
 

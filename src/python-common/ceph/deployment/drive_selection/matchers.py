@@ -286,7 +286,7 @@ class SizeMatcher(Matcher):
         :return: A Tuple with normalized output (10, 'GB')
         :rtype: tuple
         """
-        return re.findall(r"\d+", data)[0], cls._parse_suffix(data)
+        return re.findall(r"\d+\.?\d*", data)[0], cls._parse_suffix(data)
 
     def _parse_filter(self) -> None:
         """ Identifies which type of 'size' filter is applied
@@ -322,7 +322,7 @@ class SizeMatcher(Matcher):
         if high:
             self.high = self._get_k_v(high.group())
 
-        exact = re.match(r"^\d+[A-Z]{1,2}$", self.value)
+        exact = re.match(r"^\d+\.?\d*[A-Z]{1,2}$", self.value)
         if exact:
             self.exact = self._get_k_v(exact.group())
 

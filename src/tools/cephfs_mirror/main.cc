@@ -18,7 +18,9 @@
 void usage() {
   std::cout << "usage: cephfs-mirror [options...]" << std::endl;
   std::cout << "options:\n";
-  std::cout << "  --log-file=<logfile>  file to log debug output\n";
+  std::cout << "  --mon-host monaddress[:port]  connect to specified monitor\n";
+  std::cout << "  --keyring=<path>              path to keyring for local cluster\n";
+  std::cout << "  --log-file=<logfile>          file to log debug output\n";
   std::cout << "  --debug-cephfs-mirror=<log-level>/<memory-level>  set cephfs-mirror debug level\n";
   generic_server_usage();
 }

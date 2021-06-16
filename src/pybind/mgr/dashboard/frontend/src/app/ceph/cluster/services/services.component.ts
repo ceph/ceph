@@ -1,6 +1,6 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 
-import { delay, finalize } from 'rxjs/operators';
+import { delay } from 'rxjs/operators';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -8,7 +8,6 @@ import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -97,24 +96,10 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         flexGrow: 1
       },
       {
-        name: $localize`Container image name`,
-        prop: 'status.container_image_name',
-        flexGrow: 3
-      },
-      {
-        name: $localize`Container image ID`,
-        prop: 'status.container_image_id',
-        flexGrow: 3,
-        cellTransformation: CellTemplate.truncate,
-        customTemplateConfig: {
-          length: 12
-        }
-      },
-      {
         name: $localize`Placement`,
         prop: '',
         pipe: new PlacementPipe(),
-        flexGrow: 1
+        flexGrow: 2
       },
       {
         name: $localize`Running`,
@@ -201,15 +186,10 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
           })
           .pipe(
             // Delay closing the dialog, otherwise the datatable still
-            // shows the deleted service after forcing a reload.
+            // shows the deleted service after an auto-reload.
             // Showing the dialog while delaying is done to increase
             // the user experience.
-            delay(2000),
-            finalize(() => {
-              // Force reloading the data table content because it is
-              // auto-reloaded only every 60s.
-              this.table.refreshBtn();
-            })
+            delay(5000)
           )
     });
   }

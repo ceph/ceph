@@ -3204,18 +3204,22 @@ std::vector<Option> get_global_options() {
 
     Option("osd_snap_trim_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next snap trim (overrides values below)"),
 
     Option("osd_snap_trim_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next snap trim for HDDs"),
 
     Option("osd_snap_trim_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next snap trim for SSDs"),
 
     Option("osd_snap_trim_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next snap trim when data is on HDD and journal is on SSD"),
 
     Option("osd_scrub_invalid_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3437,6 +3441,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Duration to inject a delay during scrubbing"),
 
     Option("osd_scrub_extended_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -3745,18 +3750,22 @@ std::vector<Option> get_global_options() {
 
     Option("osd_delete_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next removal transaction (overrides values below)"),
 
     Option("osd_delete_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next removal transaction for HDDs"),
 
     Option("osd_delete_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next removal transaction for SSDs"),
 
     Option("osd_delete_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next removal transaction when data is on HDD and journal is on SSD"),
 
     Option("osd_failsafe_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -4078,8 +4087,14 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_cache_autotune")
     .add_see_also("osd_memory_cache_min")
     .add_see_also("osd_memory_base")
+    .add_see_also("osd_memory_target_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, try to keep this many bytes mapped in memory.")
     .set_long_description("The minimum value must be at least equal to osd_memory_base + osd_memory_cache_min."),
+
+    Option("osd_memory_target_autotune", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .add_see_also("osd_memory_target")
+    .set_description("If enabled, allow orchestrator to automatically tune osd_memory_target"),
 
     Option("osd_memory_target_cgroup_limit_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.8)
@@ -4534,7 +4549,7 @@ std::vector<Option> get_global_options() {
     .set_description("How frequently we trim the bluestore cache"),
 
     Option("bluestore_cache_trim_max_skip_pinned", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(64)
+    .set_default(1000)
     .set_description("Max pinned cache entries we consider before giving up"),
 
     Option("bluestore_cache_type", Option::TYPE_STR, Option::LEVEL_DEV)
@@ -5445,6 +5460,17 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("Filesystem path to manager modules."),
 
+    Option("mgr_standby_modules", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Start modules in standby (redirect) mode when mgr is standby")
+    .set_long_description(
+      "By default, the standby modules will answer incoming requests with a "
+      "HTTP redirect to the active manager, allowing users to point their browser at any "
+      "mgr node and find their way to an active mgr.  However, this mode is problematic "
+      "when using a load balancer because (1) the redirect locations are usually private "
+      "IPs and (2) the load balancer can't identify which mgr is the right one to send "
+      "traffic to. If a load balancer is being used, set this to false."),
+
     Option("mgr_disabled_modules", Option::TYPE_STR, Option::LEVEL_ADVANCED)
 #ifdef MGR_DISABLED_MODULES
     .set_default(MGR_DISABLED_MODULES)
@@ -5460,7 +5486,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("mgr_module_path"),
 
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("restful iostat")
+    .set_default("restful iostat nfs")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .add_service("mon")
@@ -9136,6 +9162,12 @@ std::vector<Option> get_cephfs_mirror_options() {
     .set_min(0)
     .set_description("interval to restart failed mirror instances")
     .set_long_description("Interval in seconds to restart failed mirror instances. Setting to zero (0) disables restarting failed mirror instances."),
+
+    Option("cephfs_mirror_mount_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_min(0)
+    .set_description("timeout for mounting primary/seconday ceph file system")
+    .set_long_description("Timeout in seconds for mounting primary or secondary (remote) ceph file system by the cephfs-mirror daemon. Setting this to a higher value could result in the mirror daemon getting stalled when mounting a file system if the cluster is not reachable. This option is used to override the usual client_mount_timeout."),
     });
 }
 

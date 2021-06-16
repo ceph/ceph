@@ -182,7 +182,20 @@ int replay_and_check_for_duplicate(char* fname)
       continue;
     }
 
+    string alloc_type = "bitmap";
     sp = strstr(s, "BitmapAllocator");
+    if (!sp) {
+      alloc_type = "avl";
+      sp = strstr(s, "AvlAllocator");
+    }
+    if (!sp) {
+      alloc_type = "hybrid";
+      sp = strstr(s, "HybridAllocator");
+    }
+    if (!sp) {
+      alloc_type = "stupid";
+      sp = strstr(s, "StupidAllocator");
+    }
     if (sp) {
       // 2019-05-30 03:23:43.460 7f889a5edf00 10 fbmap_alloc 0x5642ed36e900 BitmapAllocator 0x15940000000/100000
       std::cout << s << std::endl;
@@ -202,7 +215,7 @@ int replay_and_check_for_duplicate(char* fname)
 	std::cerr << "error: invalid init: " << s << std::endl;
       return -1;
       }
-      alloc.reset(Allocator::create(g_ceph_context, string("bitmap"), total,
+      alloc.reset(Allocator::create(g_ceph_context, alloc_type, total,
 				    alloc_unit));
       owned_by_app.insert(0, total);
 

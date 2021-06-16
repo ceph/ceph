@@ -24,7 +24,7 @@ class RGWSI_ZoneUtils : public RGWServiceInstance
     zone_svc = _zone_svc;
   }
 
-  int do_start(optional_yield) override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
   void init_unique_trans_id_deps();
 

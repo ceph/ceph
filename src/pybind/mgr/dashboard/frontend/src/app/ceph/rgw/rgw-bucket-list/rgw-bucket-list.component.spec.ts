@@ -98,7 +98,7 @@ describe('RgwBucketListComponent', () => {
               size_actual: 4,
               num_objects: 2
             },
-            'rgw.another': {
+            'rgw.none': {
               size_actual: 6,
               num_objects: 6
             }
@@ -119,17 +119,17 @@ describe('RgwBucketListComponent', () => {
         owner: 'testid',
         usage: {
           'rgw.main': { size_actual: 4, num_objects: 2 },
-          'rgw.another': { size_actual: 6, num_objects: 6 }
+          'rgw.none': { size_actual: 6, num_objects: 6 }
         },
         bucket_quota: {
           max_size: 20,
           max_objects: 10,
           enabled: true
         },
-        bucket_size: 10,
-        num_objects: 8,
-        size_usage: 0.5,
-        object_usage: 0.8
+        bucket_size: 4,
+        num_objects: 2,
+        size_usage: 0.2,
+        object_usage: 0.2
       }
     ]);
   });

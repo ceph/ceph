@@ -63,8 +63,8 @@ public:
   RGWRESTSimpleRequest(CephContext *_cct, const string& _method, const string& _url,
                        param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params) {}
 
-  int execute(RGWAccessKey& key, const char *method, const char *resource, optional_yield y);
-  int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
+  int execute(const DoutPrefixProvider *dpp, RGWAccessKey& key, const char *method, const char *resource, optional_yield y);
+  int forward_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 };
 
 class RGWWriteDrainCB {
@@ -86,10 +86,10 @@ public:
   RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv *_env, req_info *_info) : cct(_cct), new_env(_env), new_info(_info) {}
   void init(const string& method, const string& url, const string& resource, const param_vec_t& params);
   void set_extra_headers(const map<string, string>& extra_headers);
-  int set_obj_attrs(map<string, bufferlist>& rgw_attrs);
+  int set_obj_attrs(const DoutPrefixProvider *dpp, map<string, bufferlist>& rgw_attrs);
   void set_http_attrs(const map<string, string>& http_attrs);
   void set_policy(RGWAccessControlPolicy& policy);
-  int sign(RGWAccessKey& key);
+  int sign(const DoutPrefixProvider *dpp, RGWAccessKey& key);
 
   const string& get_url() { return url; }
 };
@@ -169,12 +169,12 @@ public:
   }
   virtual ~RGWRESTStreamRWRequest() override {}
 
-  int send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = nullptr /* optional input data */);
-  int send_prepare(RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj);
+  int send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = nullptr /* optional input data */);
+  int send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj);
   int send(RGWHTTPManager *mgr);
 
-  int send_request(RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr);
-  int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
+  int send_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr);
+  int send_request(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
 
   int complete_request(optional_yield y,
                        string *etag = nullptr,
@@ -186,7 +186,7 @@ public:
   void add_params(param_vec_t *params);
 
 private:
-  int do_send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = nullptr /* optional input data */);
+  int do_send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = nullptr /* optional input data */);
 };
 
 class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {
@@ -213,12 +213,12 @@ public:
   ~RGWRESTStreamS3PutObj() override;
 
   void send_init(rgw::sal::RGWObject* obj);
-  int send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send);
-  int send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
+  int send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send);
+  int send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, const map<string, string>& http_attrs,
                  RGWAccessControlPolicy& policy, bool send);
-  int send_ready(RGWAccessKey& key, bool send);
+  int send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, bool send);
 
-  int put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
+  int put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }
 };

@@ -66,17 +66,17 @@ int seed::get_torrent_file(rgw::sal::RGWObject* object,
 
   string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
-  ldout(s->cct, 20) << "NOTICE: head obj oid= " << oid << dendl;
+  ldpp_dout(s, 20) << "NOTICE: head obj oid= " << oid << dendl;
 
   const set<string> obj_key{RGW_OBJ_TORRENT};
   map<string, bufferlist> m;
-  const int r = object->omap_get_vals_by_keys(oid, obj_key, &m);
+  const int r = object->omap_get_vals_by_keys(s, oid, obj_key, &m);
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
+    ldpp_dout(s, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
     return r;
   }
   if (m.size() != 1) {
-    ldout(s->cct, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
+    ldpp_dout(s, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
     return -EINVAL;
   }
   bl.append(std::move(m.begin()->second));
@@ -116,7 +116,7 @@ int seed::complete(optional_yield y)
   ret = save_torrent_file(y);
   if (0 != ret)
   {
-    ldout(s->cct, 0) << "ERROR: failed to save_torrent_file() ret= "<< ret << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to save_torrent_file() ret= "<< ret << dendl;
     return ret;
   }
 
@@ -204,7 +204,7 @@ void seed::set_announce()
 
   if (announce_list.empty())
   {
-    ldout(s->cct, 5) << "NOTICE: announce_list is empty " << dendl;    
+    ldpp_dout(s, 5) << "NOTICE: announce_list is empty " << dendl;    
     return;
   }
 
@@ -257,10 +257,10 @@ int seed::save_torrent_file(optional_yield y)
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_obj);
 
-  op_ret = sysobj.omap().set(key, bl, y);
+  op_ret = sysobj.omap().set(s, key, bl, y);
   if (op_ret < 0)
   {
-    ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;
     return op_ret;
   }
 

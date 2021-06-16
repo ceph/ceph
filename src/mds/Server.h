@@ -426,7 +426,8 @@ private:
       return true;
     }
 
-    return xattr_name == "ceph.mirror.info";
+    return xattr_name == "ceph.mirror.info" ||
+           xattr_name == "ceph.mirror.dirty_snap_id";
   }
 
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);

@@ -25,8 +25,12 @@ export class HostService {
     return this.http.get<object[]>(this.baseURL);
   }
 
-  create(hostname: string) {
-    return this.http.post(this.baseURL, { hostname: hostname }, { observe: 'response' });
+  create(hostname: string, status: string) {
+    return this.http.post(
+      this.baseURL,
+      { hostname: hostname, status: status },
+      { observe: 'response' }
+    );
   }
 
   delete(hostname: string) {

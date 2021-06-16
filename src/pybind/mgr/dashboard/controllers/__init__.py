@@ -788,14 +788,14 @@ class RESTController(BaseController):
     }
 
     _method_mapping = collections.OrderedDict([
-        ('list', {'method': 'GET', 'resource': False, 'status': 200}),
-        ('create', {'method': 'POST', 'resource': False, 'status': 201}),
-        ('bulk_set', {'method': 'PUT', 'resource': False, 'status': 200}),
-        ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204}),
-        ('get', {'method': 'GET', 'resource': True, 'status': 200}),
-        ('delete', {'method': 'DELETE', 'resource': True, 'status': 204}),
-        ('set', {'method': 'PUT', 'resource': True, 'status': 200}),
-        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200})
+        ('list', {'method': 'GET', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('create', {'method': 'POST', 'resource': False, 'status': 201, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('bulk_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('bulk_delete', {'method': 'DELETE', 'resource': False, 'status': 204, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('get', {'method': 'GET', 'resource': True, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('delete', {'method': 'DELETE', 'resource': True, 'status': 204, 'version': DEFAULT_VERSION}),  # noqa E501 #pylint: disable=line-too-long
+        ('set', {'method': 'PUT', 'resource': True, 'status': 200, 'version': DEFAULT_VERSION}),
+        ('singleton_set', {'method': 'PUT', 'resource': False, 'status': 200, 'version': DEFAULT_VERSION})  # noqa E501 #pylint: disable=line-too-long
     ])
 
     @classmethod
@@ -840,35 +840,37 @@ class RESTController(BaseController):
 
                 status = meth['status']
                 method = meth['method']
+                if hasattr(func, "__method_map_method__"):
+                    version = func.__method_map_method__['version']
                 if not sec_permissions:
                     permission = cls._permission_map[method]
 
-            elif hasattr(func, "_collection_method_"):
-                if func._collection_method_['path']:
-                    path = func._collection_method_['path']
+            elif hasattr(func, "__collection_method__"):
+                if func.__collection_method__['path']:
+                    path = func.__collection_method__['path']
                 else:
                     path = "/{}".format(func.__name__)
-                status = func._collection_method_['status']
-                method = func._collection_method_['method']
-                query_params = func._collection_method_['query_params']
-                version = func._collection_method_['version']
+                status = func.__collection_method__['status']
+                method = func.__collection_method__['method']
+                query_params = func.__collection_method__['query_params']
+                version = func.__collection_method__['version']
                 if not sec_permissions:
                     permission = cls._permission_map[method]
 
-            elif hasattr(func, "_resource_method_"):
+            elif hasattr(func, "__resource_method__"):
                 if not res_id_params:
                     no_resource_id_params = True
                 else:
                     path_params = ["{{{}}}".format(p) for p in res_id_params]
                     path += "/{}".format("/".join(path_params))
-                    if func._resource_method_['path']:
-                        path += func._resource_method_['path']
+                    if func.__resource_method__['path']:
+                        path += func.__resource_method__['path']
                     else:
                         path += "/{}".format(func.__name__)
-                status = func._resource_method_['status']
-                method = func._resource_method_['method']
-                version = func._resource_method_['version']
-                query_params = func._resource_method_['query_params']
+                status = func.__resource_method__['status']
+                method = func.__resource_method__['method']
+                version = func.__resource_method__['version']
+                query_params = func.__resource_method__['query_params']
                 if not sec_permissions:
                     permission = cls._permission_map[method]
 
@@ -918,11 +920,26 @@ class RESTController(BaseController):
             status = 200
 
         def _wrapper(func):
-            func._resource_method_ = {
+            func.__resource_method__ = {
                 'method': method,
                 'path': path,
                 'status': status,
                 'query_params': query_params,
+                'version': version
+            }
+            return func
+        return _wrapper
+
+    @staticmethod
+    def MethodMap(resource=False, status=None, version=DEFAULT_VERSION):  # noqa: N802
+
+        if status is None:
+            status = 200
+
+        def _wrapper(func):
+            func.__method_map_method__ = {
+                'resource': resource,
+                'status': status,
                 'version': version
             }
             return func
@@ -938,7 +955,7 @@ class RESTController(BaseController):
             status = 200
 
         def _wrapper(func):
-            func._collection_method_ = {
+            func.__collection_method__ = {
                 'method': method,
                 'path': path,
                 'status': status,

@@ -148,8 +148,9 @@ void RGWCORSRule::format_exp_headers(string& s) {
     if (s.length() > 0)
       s.append(",");
     // these values are sent to clients in a 'Access-Control-Expose-Headers'
-    // response header, so we escape '\n' to avoid header injection
-    boost::replace_all_copy(std::back_inserter(s), header, "\n", "\\n");
+    // response header, so we escape '\n' and '\r' to avoid header injection
+    std::string tmp = boost::replace_all_copy(header, "\n", "\\n");
+    boost::replace_all_copy(std::back_inserter(s), tmp, "\r", "\\r");
   }
 }
 

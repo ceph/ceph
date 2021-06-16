@@ -26,7 +26,8 @@ namespace rgw { namespace sal {
 struct obj_version;
 
 
-int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+int rgw_init_ioctx(const DoutPrefixProvider *dpp,
+                   librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx,
 		   bool create = false,
 		   bool mostly_omap = false);
@@ -71,13 +72,14 @@ struct rgw_name_to_flag {
 int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
 			    const string& str, uint32_t *perm);
 
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
-int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
+int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
+                          RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y);
 
 const char *rgw_find_mime_by_ext(string& ext);
@@ -90,13 +92,13 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
 extern thread_local bool is_asio_thread;
 
 /// perform the rados operation, using the yield context when given
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
                       optional_yield y, int flags = 0);
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y,
 		      int flags = 0);
-int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y);
 
@@ -177,7 +179,7 @@ public:
                                        name(_name),
 				       bucket_id(_bucket_id) {}
     Bucket(RGWDataAccess *_sd) : sd(_sd) {}
-    int init(optional_yield y);
+    int init(const DoutPrefixProvider *dpp, optional_yield y);
     int init(const RGWBucketInfo& _bucket_info, const map<string, bufferlist>& _attrs);
   public:
     int get_object(const rgw_obj_key& key,
@@ -232,13 +234,14 @@ public:
     friend class Bucket;
   };
 
-  int get_bucket(const string& tenant,
+  int get_bucket(const DoutPrefixProvider *dpp, 
+                 const string& tenant,
 		 const string name,
 		 const string bucket_id,
 		 BucketRef *bucket,
 		 optional_yield y) {
     bucket->reset(new Bucket(this, tenant, name, bucket_id));
-    return (*bucket)->init(y);
+    return (*bucket)->init(dpp, y);
   }
 
   int get_bucket(const RGWBucketInfo& bucket_info,

@@ -5,7 +5,6 @@ import json
 import math
 import os
 import re
-import socket
 import threading
 import time
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT
@@ -1345,10 +1344,9 @@ class Module(MgrModule):
 
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        self.set_uri('http://{0}:{1}/'.format(
-            socket.getfqdn() if server_addr in ['::', '0.0.0.0'] else server_addr,
-            server_port
-        ))
+        if server_addr in ['::', '0.0.0.0']:
+            server_addr = self.get_mgr_ip()
+        self.set_uri('http://{0}:{1}/'.format(server_addr, server_port))
 
         cherrypy.config.update({
             'server.socket_host': server_addr,

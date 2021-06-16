@@ -1466,6 +1466,25 @@ same applies to other request types:
 | DELETE       | Yes        | delete         | 204         |
 +--------------+------------+----------------+-------------+
 
+To use a custom endpoint for the above listed methods, you can
+use ``@RESTController.MethodMap``
+
+.. code-block:: python
+
+  import cherrypy
+  from ..tools import ApiController, RESTController
+
+    @RESTController.MethodMap(version='0.1')
+    def create(self):
+      return {"msg": "Hello"}
+
+This decorator supports three parameters to customize the
+endpoint:
+
+* ``resource"``: resource id.
+* ``status=200``: set the HTTP status response code
+* ``version``: version
+
 How to use a custom API endpoint in a RESTController?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1494,7 +1513,7 @@ used. To use a custom endpoint inside a restricted ``RESTController`` use
     def some_post_endpoint(self, **data):
       return {"msg": data}
 
-Both decorators also support four parameters to customize the
+Both decorators also support five parameters to customize the
 endpoint:
 
 * ``method="GET"``: the HTTP method allowed to access this endpoint.
@@ -1503,6 +1522,7 @@ endpoint:
 * ``status=200``: set the HTTP status response code
 * ``query_params=[]``: list of method parameter names that correspond to URL
   query parameters.
+* ``version``: version
 
 How to restrict access to a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

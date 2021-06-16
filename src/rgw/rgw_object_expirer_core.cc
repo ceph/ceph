@@ -85,7 +85,8 @@ static int objexp_hint_parse(CephContext *cct, cls_timeindex_entry &ti_entry,
   return 0;
 }
 
-int RGWObjExpStore::objexp_hint_add(const ceph::real_time& delete_at,
+int RGWObjExpStore::objexp_hint_add(const DoutPrefixProvider *dpp, 
+                              const ceph::real_time& delete_at,
                               const string& tenant_name,
                               const string& bucket_name,
                               const string& bucket_id,
@@ -106,15 +107,16 @@ int RGWObjExpStore::objexp_hint_add(const ceph::real_time& delete_at,
 
   string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key, cct->_conf->rgw_objexp_hints_num_shards));
   auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, shard_name));
-  int r = obj.open();
+  int r = obj.open(dpp);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
     return r;
   }
-  return obj.operate(&op, null_yield);
+  return obj.operate(dpp, &op, null_yield);
 }
 
-int RGWObjExpStore::objexp_hint_list(const string& oid,
+int RGWObjExpStore::objexp_hint_list(const DoutPrefixProvider *dpp, 
+                               const string& oid,
                                const ceph::real_time& start_time,
                                const ceph::real_time& end_time,
                                const int max_entries,
@@ -128,13 +130,13 @@ int RGWObjExpStore::objexp_hint_list(const string& oid,
         out_marker, truncated);
 
   auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, oid));
-  int r = obj.open();
+  int r = obj.open(dpp);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
     return r;
   }
   bufferlist obl;
-  int ret = obj.operate(&op, &obl, null_yield);
+  int ret = obj.operate(dpp, &op, &obl, null_yield);
 
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
@@ -147,7 +149,8 @@ int RGWObjExpStore::objexp_hint_list(const string& oid,
   return 0;
 }
 
-static int cls_timeindex_trim_repeat(rgw_rados_ref ref,
+static int cls_timeindex_trim_repeat(const DoutPrefixProvider *dpp, 
+                                rgw_rados_ref ref,
                                 const string& oid,
                                 const utime_t& from_time,
                                 const utime_t& to_time,
@@ -158,7 +161,7 @@ static int cls_timeindex_trim_repeat(rgw_rados_ref ref,
   do {
     librados::ObjectWriteOperation op;
     cls_timeindex_trim(op, from_time, to_time, from_marker, to_marker);
-    int r = rgw_rados_operate(ref.pool.ioctx(), oid, &op, null_yield);
+    int r = rgw_rados_operate(dpp, ref.pool.ioctx(), oid, &op, null_yield);
     if (r == -ENODATA)
       done = true;
     else if (r < 0)
@@ -168,20 +171,21 @@ static int cls_timeindex_trim_repeat(rgw_rados_ref ref,
   return 0;
 }
 
-int RGWObjExpStore::objexp_hint_trim(const string& oid,
+int RGWObjExpStore::objexp_hint_trim(const DoutPrefixProvider *dpp, 
+                               const string& oid,
                                const ceph::real_time& start_time,
                                const ceph::real_time& end_time,
                                const string& from_marker,
                                const string& to_marker)
 {
   auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, oid));
-  int r = obj.open();
+  int r = obj.open(dpp);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
     return r;
   }
   auto& ref = obj.get_ref();
-  int ret = cls_timeindex_trim_repeat(ref, oid, utime_t(start_time), utime_t(end_time),
+  int ret = cls_timeindex_trim_repeat(dpp, ref, oid, utime_t(start_time), utime_t(end_time),
           from_marker, to_marker);
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
@@ -210,18 +214,18 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
 
 }
 
-int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
+int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint)
 {
   RGWBucketInfo bucket_info;
 
   int ret = init_bucket_info(hint.tenant, hint.bucket_name,
           hint.bucket_id, bucket_info);
   if (-ENOENT == ret) {
-    ldout(store->ctx(), 15) << "NOTICE: cannot find bucket = " \
+    ldpp_dout(dpp, 15) << "NOTICE: cannot find bucket = " \
         << hint.bucket_name << ". The object must be already removed" << dendl;
     return -ERR_PRECONDITION_FAILED;
   } else if (ret < 0) {
-    ldout(store->ctx(),  1) << "ERROR: could not init bucket = " \
+    ldpp_dout(dpp, 1) << "ERROR: could not init bucket = " \
         << hint.bucket_name << "due to ret = " << ret << dendl;
     return ret;
   }
@@ -235,13 +239,14 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
 
   rgw_obj obj(bucket_info.bucket, key);
   store->getRados()->set_atomic(&rctx, obj);
-  ret = store->getRados()->delete_obj(rctx, bucket_info, obj,
+  ret = store->getRados()->delete_obj(dpp, rctx, bucket_info, obj,
           bucket_info.versioning_status(), 0, hint.exp_time);
 
   return ret;
 }
 
-void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /* in  */
+void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp, 
+                                  list<cls_timeindex_entry>& entries,      /* in  */
                                   bool& need_trim)                         /* out */
 {
   need_trim = false;
@@ -251,22 +256,22 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
        ++iter)
   {
     objexp_hint_entry hint;
-    ldout(store->ctx(), 15) << "got removal hint for: " << iter->key_ts.sec() \
+    ldpp_dout(dpp, 15) << "got removal hint for: " << iter->key_ts.sec() \
         << " - " << iter->key_ext << dendl;
 
     int ret = objexp_hint_parse(store->getRados()->ctx(), *iter, &hint);
     if (ret < 0) {
-      ldout(store->ctx(), 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
+      ldpp_dout(dpp, 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
       continue;
     }
 
     /* PRECOND_FAILED simply means that our hint is not valid.
      * We can silently ignore that and move forward. */
-    ret = garbage_single_object(hint);
+    ret = garbage_single_object(dpp, hint);
     if (ret == -ERR_PRECONDITION_FAILED) {
-      ldout(store->ctx(), 15) << "not actual hint for object: " << hint.obj_key << dendl;
+      ldpp_dout(dpp, 15) << "not actual hint for object: " << hint.obj_key << dendl;
     } else if (ret < 0) {
-      ldout(store->ctx(), 1) << "cannot remove expired object: " << hint.obj_key << dendl;
+      ldpp_dout(dpp, 1) << "cannot remove expired object: " << hint.obj_key << dendl;
     }
 
     need_trim = true;
@@ -275,28 +280,30 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
   return;
 }
 
-void RGWObjectExpirer::trim_chunk(const string& shard,
+void RGWObjectExpirer::trim_chunk(const DoutPrefixProvider *dpp, 
+                                  const string& shard,
                                   const utime_t& from,
                                   const utime_t& to,
                                   const string& from_marker,
                                   const string& to_marker)
 {
-  ldout(store->ctx(), 20) << "trying to trim removal hints to=" << to
+  ldpp_dout(dpp, 20) << "trying to trim removal hints to=" << to
                           << ", to_marker=" << to_marker << dendl;
 
   real_time rt_from = from.to_real_time();
   real_time rt_to = to.to_real_time();
 
-  int ret = exp_store.objexp_hint_trim(shard, rt_from, rt_to,
+  int ret = exp_store.objexp_hint_trim(dpp, shard, rt_from, rt_to,
                                        from_marker, to_marker);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR during trim: " << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR during trim: " << ret << dendl;
   }
 
   return;
 }
 
-bool RGWObjectExpirer::process_single_shard(const string& shard,
+bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp, 
+                                            const string& shard,
                                             const utime_t& last_run,
                                             const utime_t& round_start)
 {
@@ -319,7 +326,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
 
   int ret = l.lock_exclusive(&store->getRados()->objexp_pool_ctx, shard);
   if (ret == -EBUSY) { /* already locked by another processor */
-    dout(5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
+    ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
     return false;
   }
 
@@ -328,20 +335,20 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
     real_time rt_start = round_start.to_real_time();
 
     list<cls_timeindex_entry> entries;
-    ret = exp_store.objexp_hint_list(shard, rt_last, rt_start,
+    ret = exp_store.objexp_hint_list(dpp, shard, rt_last, rt_start,
                                      num_entries, marker, entries,
                                      &out_marker, &truncated);
     if (ret < 0) {
-      ldout(cct, 10) << "cannot get removal hints from shard: " << shard
+      ldpp_dout(dpp, 10) << "cannot get removal hints from shard: " << shard
                      << dendl;
       continue;
     }
 
     bool need_trim;
-    garbage_chunk(entries, need_trim);
+    garbage_chunk(dpp, entries, need_trim);
 
     if (need_trim) {
-      trim_chunk(shard, last_run, round_start, marker, out_marker);
+      trim_chunk(dpp, shard, last_run, round_start, marker, out_marker);
     }
 
     utime_t now = ceph_clock_now();
@@ -358,7 +365,8 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
 }
 
 /* Returns true if all shards have been processed successfully. */
-bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
+bool RGWObjectExpirer::inspect_all_shards(const DoutPrefixProvider *dpp, 
+                                          const utime_t& last_run,
                                           const utime_t& round_start)
 {
   CephContext * const cct = store->ctx();
@@ -369,9 +377,9 @@ bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
     string shard;
     objexp_get_shard(i, &shard);
 
-    ldout(store->ctx(), 20) << "processing shard = " << shard << dendl;
+    ldpp_dout(dpp, 20) << "processing shard = " << shard << dendl;
 
-    if (! process_single_shard(shard, last_run, round_start)) {
+    if (! process_single_shard(dpp, shard, last_run, round_start)) {
       all_done = false;
     }
   }
@@ -406,7 +414,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     ldout(cct, 2) << "object expiration: start" << dendl;
-    if (oe->inspect_all_shards(last_run, start)) {
+    if (oe->inspect_all_shards(this, last_run, start)) {
       /* All shards have been processed properly. Next time we can start
        * from this moment. */
       last_run = start;
@@ -439,3 +447,17 @@ void RGWObjectExpirer::OEWorker::stop()
   cond.notify_all();
 }
 
+CephContext *RGWObjectExpirer::OEWorker::get_cct() const 
+{ 
+  return cct; 
+}
+
+unsigned RGWObjectExpirer::OEWorker::get_subsys() const 
+{
+    return dout_subsys;
+}
+
+std::ostream& RGWObjectExpirer::OEWorker::gen_prefix(std::ostream& out) const 
+{ 
+  return out << "rgw object expirer Worker thread: "; 
+}

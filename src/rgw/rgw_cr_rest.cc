@@ -87,7 +87,7 @@ RGWStreamReadHTTPResourceCRF::~RGWStreamReadHTTPResourceCRF()
   }
 }
 
-int RGWStreamReadHTTPResourceCRF::init()
+int RGWStreamReadHTTPResourceCRF::init(const DoutPrefixProvider *dpp)
 {
   env->stack->init_new_io(req);
 
@@ -191,7 +191,7 @@ RGWStreamWriteHTTPResourceCRF::~RGWStreamWriteHTTPResourceCRF()
   }
 }
 
-void RGWStreamWriteHTTPResourceCRF::send_ready(const rgw_rest_obj& rest_obj)
+void RGWStreamWriteHTTPResourceCRF::send_ready(const DoutPrefixProvider *dpp, const rgw_rest_obj& rest_obj)
 {
   req->set_send_length(rest_obj.content_len);
   for (auto h : rest_obj.attrs) {
@@ -264,10 +264,10 @@ RGWStreamSpliceCR::RGWStreamSpliceCR(CephContext *_cct, RGWHTTPManager *_mgr,
                                                                in_crf(_in_crf), out_crf(_out_crf) {}
 RGWStreamSpliceCR::~RGWStreamSpliceCR() { }
 
-int RGWStreamSpliceCR::operate() {
+int RGWStreamSpliceCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
     {
-      int ret = in_crf->init();
+      int ret = in_crf->init(dpp);
       if (ret < 0) {
         return set_cr_error(ret);
       }
@@ -303,7 +303,7 @@ int RGWStreamSpliceCR::operate() {
         if (ret < 0) {
           return set_cr_error(ret);
         }
-        out_crf->send_ready(in_crf->get_rest_obj());
+        out_crf->send_ready(dpp, in_crf->get_rest_obj());
         ret = out_crf->send();
         if (ret < 0) {
           return set_cr_error(ret);

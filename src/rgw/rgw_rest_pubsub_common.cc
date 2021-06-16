@@ -54,12 +54,12 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
   }
 
   ps.emplace(store, s->owner.get_id().tenant);
-  op_ret = ps->create_topic(topic_name, dest, topic_arn, opaque_data, y);
+  op_ret = ps->create_topic(this, topic_name, dest, topic_arn, opaque_data, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully created topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully created topic '" << topic_name << "'" << dendl;
 }
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
@@ -68,15 +68,15 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get topics, ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get topics, ret=" << op_ret << dendl;
     return;
   }
   if (topics_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
-    ldout(s->cct, 1) << "topics contain secret and cannot be sent over insecure transport" << dendl;
+    ldpp_dout(this, 1) << "topics contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
     return;
   }
-  ldout(s->cct, 20) << "successfully got topics" << dendl;
+  ldpp_dout(this, 20) << "successfully got topics" << dendl;
 }
 
 void RGWPSGetTopicOp::execute(optional_yield y) {
@@ -87,15 +87,15 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   ps.emplace(store, s->owner.get_id().tenant);
   op_ret = ps->get_topic(topic_name, &result);
   if (topic_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
-    ldout(s->cct, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
+    ldpp_dout(this, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
     return;
   }
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 1) << "successfully got topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 1) << "successfully got topic '" << topic_name << "'" << dendl;
 }
 
 void RGWPSDeleteTopicOp::execute(optional_yield y) {
@@ -104,12 +104,12 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
     return;
   }
   ps.emplace(store, s->owner.get_id().tenant);
-  op_ret = ps->remove_topic(topic_name, y);
+  op_ret = ps->remove_topic(this, topic_name, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
 void RGWPSCreateSubOp::execute(optional_yield y) {
@@ -119,12 +119,12 @@ void RGWPSCreateSubOp::execute(optional_yield y) {
   }
   ps.emplace(store, s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
-  op_ret = sub->subscribe(topic_name, dest, y);
+  op_ret = sub->subscribe(this, topic_name, dest, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to create subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to create subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
 }
 
 void RGWPSGetSubOp::execute(optional_yield y) {
@@ -136,15 +136,15 @@ void RGWPSGetSubOp::execute(optional_yield y) {
   auto sub = ps->get_sub(sub_name);
   op_ret = sub->get_conf(&result);
   if (subscription_has_endpoint_secret(result) && !rgw_transport_is_secure(s->cct, *(s->info.env))) {
-    ldout(s->cct, 1) << "subscription '" << sub_name << "' contain secret and cannot be sent over insecure transport" << dendl;
+    ldpp_dout(this, 1) << "subscription '" << sub_name << "' contain secret and cannot be sent over insecure transport" << dendl;
     op_ret = -EPERM;
     return;
   }
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully got subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully got subscription '" << sub_name << "'" << dendl;
 }
 
 void RGWPSDeleteSubOp::execute(optional_yield y) {
@@ -154,12 +154,12 @@ void RGWPSDeleteSubOp::execute(optional_yield y) {
   }
   ps.emplace(store, s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
-  op_ret = sub->unsubscribe(topic_name, y);
+  op_ret = sub->unsubscribe(this, topic_name, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to remove subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to remove subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
 }
 
 void RGWPSAckSubEventOp::execute(optional_yield y) {
@@ -169,12 +169,12 @@ void RGWPSAckSubEventOp::execute(optional_yield y) {
   }
   ps.emplace(store, s->owner.get_id().tenant);
   auto sub = ps->get_sub_with_events(sub_name);
-  op_ret = sub->remove_event(event_id);
+  op_ret = sub->remove_event(s, event_id);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
 }
 
 void RGWPSPullSubEventsOp::execute(optional_yield y) {
@@ -186,15 +186,15 @@ void RGWPSPullSubEventsOp::execute(optional_yield y) {
   sub = ps->get_sub_with_events(sub_name);
   if (!sub) {
     op_ret = -ENOENT;
-    ldout(s->cct, 1) << "failed to get subscription '" << sub_name << "' for events, ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get subscription '" << sub_name << "' for events, ret=" << op_ret << dendl;
     return;
   }
-  op_ret = sub->list_events(marker, max_entries);
+  op_ret = sub->list_events(s, marker, max_entries);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get events from subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get events from subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully got events from subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully got events from subscription '" << sub_name << "'" << dendl;
 }
 
 
@@ -209,12 +209,12 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
   ret = store->getRados()->get_bucket_info(store->svc(), id.tenant, bucket_name,
                                bucket_info, nullptr, y, nullptr);
   if (ret < 0) {
-    ldout(s->cct, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
+    ldpp_dout(this, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
     return ret;
   }
 
   if (bucket_info.owner != id) {
-    ldout(s->cct, 1) << "user doesn't own bucket, not allowed to create notification" << dendl;
+    ldpp_dout(this, 1) << "user doesn't own bucket, not allowed to create notification" << dendl;
     return -EPERM;
   }
   return 0;
@@ -233,7 +233,7 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
   }
 
   if (bucket_info.owner != s->owner.get_id()) {
-    ldout(s->cct, 1) << "user doesn't own bucket, cannot remove notification" << dendl;
+    ldpp_dout(this, 1) << "user doesn't own bucket, cannot remove notification" << dendl;
     return -EPERM;
   }
   return 0;
@@ -252,7 +252,7 @@ int RGWPSListNotifsOp::verify_permission(optional_yield y) {
   }
 
   if (bucket_info.owner != s->owner.get_id()) {
-    ldout(s->cct, 1) << "user doesn't own bucket, cannot get notification list" << dendl;
+    ldpp_dout(this, 1) << "user doesn't own bucket, cannot get notification list" << dendl;
     return -EPERM;
   }
 

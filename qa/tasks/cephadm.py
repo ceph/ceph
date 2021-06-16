@@ -46,6 +46,7 @@ def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
         **kwargs
     )
 
+
 def build_initial_config(ctx, config):
     cluster_name = config['cluster']
 
@@ -65,10 +66,13 @@ def build_initial_config(ctx, config):
 
     return conf
 
+
 def update_archive_setting(ctx, key, value):
     """
     Add logs directory to job's info log file
     """
+    if ctx.archive is None:
+        return
     with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
@@ -77,6 +81,7 @@ def update_archive_setting(ctx, key, value):
         else:
             info_yaml['archive'] = {key: value}
         yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
+
 
 @contextlib.contextmanager
 def normalize_hostnames(ctx):
@@ -96,6 +101,7 @@ def normalize_hostnames(ctx):
     finally:
         pass
 
+
 @contextlib.contextmanager
 def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
@@ -104,7 +110,20 @@ def download_cephadm(ctx, config, ref):
         ref = config.get('cephadm_branch', ref)
         git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
         log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
-        if git_url.startswith('https://github.com/'):
+        if ctx.config.get('redhat'):
+            log.info("Install cephadm using RPM")
+            # cephadm already installed from redhat.install task
+            ctx.cluster.run(
+                args=[
+                    'cp',
+                    run.Raw('$(which cephadm)'),
+                    ctx.cephadm,
+                    run.Raw('&&'),
+                    'ls', '-l',
+                    ctx.cephadm,
+                ]
+            )
+        elif git_url.startswith('https://github.com/'):
             # git archive doesn't like https:// URLs, which we use with github.
             rest = git_url.split('https://github.com/', 1)[1]
             rest = re.sub(r'\.git/?$', '', rest).strip() # no .git suffix
@@ -165,6 +184,7 @@ def download_cephadm(ctx, config, ref):
                     ctx.cephadm,
                 ],
             )
+
 
 @contextlib.contextmanager
 def ceph_log(ctx, config):
@@ -274,6 +294,7 @@ def ceph_log(ctx, config):
                 except ReadError:
                     pass
 
+
 @contextlib.contextmanager
 def ceph_crash(ctx, config):
     """
@@ -307,6 +328,7 @@ def ceph_crash(ctx, config):
                                               os.path.join(sub, 'crash'))
                 except ReadError:
                     pass
+
 
 @contextlib.contextmanager
 def ceph_bootstrap(ctx, config):
@@ -378,6 +400,15 @@ def ceph_bootstrap(ctx, config):
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             '--output-pub-ssh-key', '{}/{}.pub'.format(testdir, cluster_name),
         ]
+
+        if config.get('registry-login'):
+            registry = config['registry-login']
+            cmd += [
+                "--registry-url", registry['url'],
+                "--registry-username", registry['username'],
+                "--registry-password", registry['password'],
+            ]
+
         if not ctx.ceph[cluster_name].roleless:
             cmd += [
                 '--mon-id', first_mon,
@@ -385,6 +416,7 @@ def ceph_bootstrap(ctx, config):
                 '--orphan-initial-daemons',   # we will do it explicitly!
                 '--skip-monitoring-stack',    # we'll provision these explicitly
             ]
+
         if mons[first_mon_role].startswith('['):
             cmd += ['--mon-addrv', mons[first_mon_role]]
         else:
@@ -393,6 +425,10 @@ def ceph_bootstrap(ctx, config):
             cmd += ['--skip-dashboard']
         if config.get('skip_monitoring_stack'):
             cmd += ['--skip-monitoring-stack']
+        if config.get('single_host_defaults'):
+            cmd += ['--single-host-defaults']
+        if not config.get('avoid_pacific_features', False):
+            cmd += ['--skip-admin-label']
         # bootstrap makes the keyring root 0600, so +r it for our purposes
         cmd += [
             run.Raw('&&'),
@@ -433,10 +469,20 @@ def ceph_bootstrap(ctx, config):
             _shell(ctx, cluster_name, bootstrap_remote,
                    ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/allow_ptrace', 'true'])
 
+        if not config.get('avoid_pacific_features', False):
+            log.info('Distributing conf and client.admin keyring to all hosts + 0755')
+            _shell(ctx, cluster_name, bootstrap_remote,
+                   ['ceph', 'orch', 'client-keyring', 'set', 'client.admin',
+                    '*', '--mode', '0755'],
+                   check_status=False)
+
         # add other hosts
         for remote in ctx.cluster.remotes.keys():
             if remote == bootstrap_remote:
                 continue
+
+            # note: this may be redundant (see above), but it avoids
+            # us having to wait for cephadm to do it.
             log.info('Writing (initial) conf and keyring to %s' % remote.shortname)
             remote.write_file(
                 path='/etc/ceph/{}.conf'.format(cluster_name),
@@ -499,6 +545,7 @@ def ceph_bootstrap(ctx, config):
             '/etc/ceph/{}.conf'.format(cluster_name),
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
         ])
+
 
 @contextlib.contextmanager
 def ceph_mons(ctx, config):
@@ -615,6 +662,7 @@ def ceph_mons(ctx, config):
     finally:
         pass
 
+
 @contextlib.contextmanager
 def ceph_mgrs(ctx, config):
     """
@@ -655,6 +703,7 @@ def ceph_mgrs(ctx, config):
 
     finally:
         pass
+
 
 @contextlib.contextmanager
 def ceph_osds(ctx, config):
@@ -711,6 +760,7 @@ def ceph_osds(ctx, config):
     finally:
         pass
 
+
 @contextlib.contextmanager
 def ceph_mdss(ctx, config):
     """
@@ -747,6 +797,7 @@ def ceph_mdss(ctx, config):
 
     yield
 
+
 @contextlib.contextmanager
 def ceph_monitoring(daemon_type, ctx, config):
     """
@@ -781,6 +832,7 @@ def ceph_monitoring(daemon_type, ctx, config):
         )
 
     yield
+
 
 @contextlib.contextmanager
 def ceph_rgw(ctx, config):
@@ -872,6 +924,7 @@ def ceph_iscsi(ctx, config):
 
     yield
 
+
 @contextlib.contextmanager
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
@@ -902,12 +955,14 @@ def ceph_clients(ctx, config):
             remote.sudo_write_file(client_keyring, keyring, mode='0644')
     yield
 
+
 @contextlib.contextmanager
 def ceph_initial():
     try:
         yield
     finally:
         log.info('Teardown complete')
+
 
 ## public methods
 @contextlib.contextmanager
@@ -947,17 +1002,18 @@ def stop(ctx, config):
 
     yield
 
+
 def shell(ctx, config):
     """
     Execute (shell) commands
     """
     cluster_name = config.get('cluster', 'ceph')
 
-    env = []
-    if 'env' in config:
-        for k in config['env']:
-            env.extend(['-e', k + '=' + ctx.config.get(k, '')])
-        del config['env']
+    args = []
+    for k in config.pop('env', []):
+        args.extend(['-e', k + '=' + ctx.config.get(k, '')])
+    for k in config.pop('volumes', []):
+        args.extend(['-v', k])
 
     if 'all-roles' in config and len(config) == 1:
         a = config['all-roles']
@@ -975,12 +1031,12 @@ def shell(ctx, config):
             for c in cmd:
                 _shell(ctx, cluster_name, remote,
                        ['bash', '-c', subst_vip(ctx, c)],
-                       extra_cephadm_args=env)
+                       extra_cephadm_args=args)
         else:
             assert isinstance(cmd, str)
             _shell(ctx, cluster_name, remote,
                    ['bash', '-ex', '-c', subst_vip(ctx, cmd)],
-                   extra_cephadm_args=env)
+                   extra_cephadm_args=args)
 
 
 def apply(ctx, config):
@@ -1090,6 +1146,7 @@ def tweaked_option(ctx, config):
     for option, value in saved_options.items():
         manager.inject_args(type_, id_, option, value)
 
+
 @contextlib.contextmanager
 def restart(ctx, config):
     """
@@ -1143,6 +1200,7 @@ def restart(ctx, config):
             ctx.managers[cluster].wait_for_all_osds_up()
     yield
 
+
 @contextlib.contextmanager
 def distribute_config_and_admin_keyring(ctx, config):
     """
@@ -1168,6 +1226,7 @@ def distribute_config_and_admin_keyring(ctx, config):
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
         ])
 
+
 @contextlib.contextmanager
 def crush_setup(ctx, config):
     cluster_name = config['cluster']
@@ -1177,6 +1236,7 @@ def crush_setup(ctx, config):
     _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
         args=['ceph', 'osd', 'crush', 'tunables', profile])
     yield
+
 
 @contextlib.contextmanager
 def create_rbd_pool(ctx, config):
@@ -1200,9 +1260,11 @@ def create_rbd_pool(ctx, config):
           ])
     yield
 
+
 @contextlib.contextmanager
 def _bypass():
     yield
+
 
 @contextlib.contextmanager
 def initialize_config(ctx, config):
@@ -1287,6 +1349,7 @@ def initialize_config(ctx, config):
         ctx.ceph[cluster_name].first_mgr = first_mgr
     yield
 
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -1306,6 +1369,10 @@ def task(ctx, config):
           cephadm:
             containers:
               image: 'quay.io/ceph-ci/ceph'
+            registry-login:
+              url:  registry-url
+              username: registry-user
+              password: registry-password
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
@@ -1324,7 +1391,6 @@ def task(ctx, config):
     # set up cluster context
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
-        ctx.managers = {}
     if 'cluster' not in config:
         config['cluster'] = 'ceph'
     cluster_name = config['cluster']
@@ -1340,7 +1406,6 @@ def task(ctx, config):
 
     containers = config.get('containers', {})
     container_image_name = containers.get('image', container_image_name)
-
 
     if not hasattr(ctx.ceph[cluster_name], 'image'):
         ctx.ceph[cluster_name].image = config.get('image')
@@ -1396,6 +1461,8 @@ def task(ctx, config):
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
     ):
+        if not hasattr(ctx, 'managers'):
+            ctx.managers = {}
         ctx.managers[cluster_name] = CephManager(
             ctx.ceph[cluster_name].bootstrap_remote,
             ctx=ctx,

@@ -404,7 +404,7 @@ TEST(mempool, btree_map_test)
 
 TEST(mempool, check_shard_select)
 {
-  const size_t samples = 100;
+  const size_t samples = mempool::num_shards * 100;
   std::atomic_int shards[mempool::num_shards] = {0};
   std::vector<std::thread> workers;
   for (size_t i = 0; i < samples; i++) {
@@ -419,15 +419,16 @@ TEST(mempool, check_shard_select)
   }
   workers.clear();
 
-  double EX = (double)samples / (double)mempool::num_shards;
-  double VarX = 0;
+  size_t missed = 0;
   for (size_t i = 0; i < mempool::num_shards; i++) {
-    VarX += (EX - shards[i]) * (EX - shards[i]);
+    if (shards[i] == 0) {
+      missed++;
+    }
   }
-  //random gives VarX below 200
-  //when half slots are 0, we get ~300
-  //when all samples go into one slot, we get ~9000
-  EXPECT_LT(VarX, 200);
+
+  // If more than half of the shards did not get anything,
+  // the distribution is bad enough to deserve a failure.
+  EXPECT_LT(missed, mempool::num_shards / 2);
 }
 
 

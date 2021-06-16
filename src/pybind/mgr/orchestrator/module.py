@@ -14,7 +14,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
 
-from mgr_util import to_pretty_timedelta, format_dimless
+from mgr_util import to_pretty_timedelta, format_dimless, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
@@ -30,6 +30,12 @@ def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: s
         return to_pretty_timedelta(now - t) + suffix
     else:
         return '-'
+
+
+def nice_bytes(v: Optional[int]) -> str:
+    if not v:
+        return '-'
+    return format_bytes(v, 5)
 
 
 class Format(enum.Enum):
@@ -323,7 +329,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return cast(str, self.get_module_option("orchestrator"))
 
     @_cli_write_command('orch host add')
-    def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None, maintenance: Optional[bool] = False) -> HandleCommandResult:
+    def _add_host(self,
+                  hostname: str,
+                  addr: Optional[str] = None,
+                  labels: Optional[List[str]] = None,
+                  maintenance: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
 
@@ -632,9 +642,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table = PrettyTable(
                 ['NAME', 'HOST', 'PORTS',
                  'STATUS', 'REFRESHED', 'AGE',
+                 'MEM USE', 'MEM LIM',
                  'VERSION', 'IMAGE ID', 'CONTAINER ID'],
                 border=False)
             table.align = 'l'
+            table._align['REFRESHED'] = 'r'
+            table._align['AGE'] = 'r'
+            table._align['MEM USE'] = 'r'
+            table._align['MEM LIM'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(daemons, key=lambda s: s.name()):
@@ -657,6 +672,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     status,
                     nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
+                    nice_bytes(s.memory_usage),
+                    nice_bytes(s.memory_request),
                     ukn(s.version),
                     ukn(s.container_image_id)[0:12],
                     ukn(s.container_id)))
@@ -807,7 +824,7 @@ Usage:
 
     @_cli_write_command('orch osd rm stop')
     def _osd_rm_stop(self, svc_id: List[str]) -> HandleCommandResult:
-        """Remove OSD services"""
+        """Cancel ongoing OSD removal operation"""
         completion = self.stop_remove_osds(svc_id)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -1108,10 +1125,11 @@ Usage:
     @_cli_write_command('orch apply nfs')
     def _apply_nfs(self,
                    svc_id: str,
-                   pool: str,
-                   namespace: Optional[str] = None,
                    placement: Optional[str] = None,
                    format: Format = Format.plain,
+                   pool: Optional[str] = None,
+                   namespace: Optional[str] = None,
+                   port: Optional[int] = None,
                    dry_run: bool = False,
                    unmanaged: bool = False,
                    no_overwrite: bool = False,
@@ -1124,6 +1142,7 @@ Usage:
             service_id=svc_id,
             pool=pool,
             namespace=namespace,
+            port=port,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run
@@ -1222,9 +1241,7 @@ Usage:
     @_cli_write_command('orch cancel')
     def _cancel(self) -> HandleCommandResult:
         """
-        cancels ongoing operations
-
-        ProgressReferences might get stuck. Let's unstuck them.
+        Cancel ongoing background operations
         """
         self.cancel_completions()
         return HandleCommandResult()

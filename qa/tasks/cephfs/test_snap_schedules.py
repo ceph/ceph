@@ -165,7 +165,7 @@ class TestSnapSchedules(CephFSTestCase):
     def test_non_existent_snap_schedule_list(self):
         """Test listing snap schedules on a non-existing filesystem path failure"""
         try:
-            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'format=json')
+            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}')
         except CommandFailedError as ce:
             if ce.exitstatus != errno.ENOENT:
                 raise RuntimeError('incorrect errno when listing a non-existing snap schedule')
@@ -177,7 +177,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
 
         try:
-            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'format=json')
+            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}')
         except CommandFailedError as ce:
             if ce.exitstatus != errno.ENOENT:
                 raise RuntimeError('incorrect errno when listing a non-existing snap schedule')
@@ -195,7 +195,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.fs_snap_schedule_cmd('remove', f'path={TestSnapSchedules.TEST_DIRECTORY}')
 
         try:
-            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'format=json')
+            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}')
         except CommandFailedError as ce:
             if ce.exitstatus != errno.ENOENT:
                 raise RuntimeError('incorrect errno when listing a non-existing snap schedule')

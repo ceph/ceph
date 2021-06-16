@@ -334,8 +334,6 @@ void mClockScheduler::enable_mclock_profile_settings()
 
   // Set the mclock config parameters
   set_profile_config();
-  // Set recovery specific Ceph options
-  set_global_recovery_options();
 }
 
 void mClockScheduler::set_profile_config()
@@ -370,39 +368,6 @@ void mClockScheduler::set_profile_config()
     std::to_string(best_effort.wgt));
   cct->_conf.set_val("osd_mclock_scheduler_background_best_effort_lim",
     std::to_string(best_effort.lim));
-}
-
-void mClockScheduler::set_global_recovery_options()
-{
-  // Set high value for recovery max active and max backfill
-  int rec_max_active = 1000;
-  int max_backfills = 1000;
-  cct->_conf.set_val("osd_recovery_max_active", std::to_string(rec_max_active));
-  cct->_conf.set_val("osd_max_backfills", std::to_string(max_backfills));
-
-  // Disable recovery sleep
-  cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
-  cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
-  cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
-  cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
-
-  // Disable delete sleep
-  cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
-  cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
-  cct->_conf.set_val("osd_delete_sleep_ssd", std::to_string(0));
-  cct->_conf.set_val("osd_delete_sleep_hybrid", std::to_string(0));
-
-  // Disable snap trim sleep
-  cct->_conf.set_val("osd_snap_trim_sleep", std::to_string(0));
-  cct->_conf.set_val("osd_snap_trim_sleep_hdd", std::to_string(0));
-  cct->_conf.set_val("osd_snap_trim_sleep_ssd", std::to_string(0));
-  cct->_conf.set_val("osd_snap_trim_sleep_hybrid", std::to_string(0));
-
-  // Disable scrub sleep
-  cct->_conf.set_val("osd_scrub_sleep", std::to_string(0));
-
-  // Apply the changes
-  cct->_conf.apply_changes(nullptr);
 }
 
 int mClockScheduler::calc_scaled_cost(int item_cost)
@@ -526,7 +491,10 @@ void mClockScheduler::handle_conf_change(
       changed.count("osd_mclock_scheduler_client_lim") ||
       changed.count("osd_mclock_scheduler_background_recovery_res") ||
       changed.count("osd_mclock_scheduler_background_recovery_wgt") ||
-      changed.count("osd_mclock_scheduler_background_recovery_lim")) {
+      changed.count("osd_mclock_scheduler_background_recovery_lim") ||
+      changed.count("osd_mclock_scheduler_background_best_effort_res") ||
+      changed.count("osd_mclock_scheduler_background_best_effort_wgt") ||
+      changed.count("osd_mclock_scheduler_background_best_effort_lim")) {
     if (mclock_profile == "custom") {
       client_registry.update_from_config(conf);
     }

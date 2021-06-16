@@ -15,7 +15,6 @@
 
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw_sync
 
 RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, uint64_t _handle,
                                    const RGWSyncTraceNodeRef& _parent,
@@ -65,10 +64,10 @@ public:
   RGWSyncTraceServiceMapThread(RGWRados *_store, RGWSyncTraceManager *_manager)
     : RGWRadosThread(_store, "sync-trace"), store(_store), manager(_manager) {}
 
-  int process() override;
+  int process(const DoutPrefixProvider *dpp) override;
 };
 
-int RGWSyncTraceServiceMapThread::process()
+int RGWSyncTraceServiceMapThread::process(const DoutPrefixProvider *dpp)
 {
   map<string, string> status;
   status["current_sync"] = manager->get_active_names();

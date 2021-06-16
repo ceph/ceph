@@ -52,6 +52,7 @@ if(MINGW)
   set(CMAKE_CXX_LINK_EXECUTABLE
     "<CMAKE_CXX_COMPILER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> ${CMAKE_GNULD_IMAGE_VERSION} <LINK_LIBRARIES>")
 
+  link_directories(${MINGW_LINK_DIRECTORIES})
 endif()
 
 option(WITH_CCACHE "Build with ccache.")
@@ -716,4 +717,4 @@ add_tags(ctags
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
 
-set(VERSION 16.2.2)
+set(VERSION 16.2.4)

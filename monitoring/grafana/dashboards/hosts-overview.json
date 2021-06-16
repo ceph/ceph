@@ -131,7 +131,6 @@
         "#d44a3a"
       ],
       "datasource": "$datasource",
-      "decimals": 0,
       "description": "Average CPU busy across all hosts (OSD, RGW, MON etc) within the cluster",
       "decimals": 2,
       "format": "percentunit",
@@ -215,7 +214,6 @@
         "#d44a3a"
       ],
       "datasource": "$datasource",
-      "decimals": 0,
       "description": "Average Memory Usage across all hosts in the cluster (excludes buffer/cache usage)",
       "decimals": 2,
       "format": "percentunit",
@@ -433,7 +431,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr" : "avg (\n  label_replace((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  ) *\n  on(instance, device) label_replace(label_replace(ceph_disk_occupation{instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\")\n)",
+          "expr" : "avg (\n  label_replace((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  ) *\n  on(instance, device, ceph_daemon) label_replace(label_replace(ceph_disk_occupation{instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\")\n)",
           "format": "time_series",
           "instant": true,
           "intervalFactor": 1,

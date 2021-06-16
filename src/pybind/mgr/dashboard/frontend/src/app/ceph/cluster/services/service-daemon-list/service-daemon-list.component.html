@@ -1,12 +1,51 @@
 <cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
-<cd-table *ngIf="hasOrchestrator"
-          #daemonsTable
-          [data]="daemons"
-          [columns]="columns"
-          columnMode="flex"
-          [autoReload]="5000"
-          (fetchData)="getDaemons($event)">
-</cd-table>
+
+<div *ngIf="flag === 'hostDetails'; else serviceDetailsTpl">
+  <cd-table *ngIf="hasOrchestrator"
+            #daemonsTable
+            [data]="daemons"
+            [columns]="columns"
+            columnMode="flex"
+            (fetchData)="getDaemons($event)">
+  </cd-table>
+</div>
+
+<ng-template #serviceDetailsTpl>
+  <ng-container>
+    <ul ngbNav
+        #nav="ngbNav"
+        class="nav-tabs"
+        cdStatefulTab="service-details">
+      <li ngbNavItem="details">
+        <a ngbNavLink
+           i18n>Details</a>
+        <ng-template ngbNavContent>
+          <cd-table *ngIf="hasOrchestrator"
+                    #daemonsTable
+                    [data]="daemons"
+                    [columns]="columns"
+                    columnMode="flex"
+                    (fetchData)="getDaemons($event)">
+          </cd-table>
+        </ng-template>
+      </li>
+      <li ngbNavItem="service_events">
+        <a ngbNavLink
+           i18n>Service Events</a>
+        <ng-template ngbNavContent>
+          <cd-table *ngIf="hasOrchestrator"
+                    #serviceTable
+                    [data]="services"
+                    [columns]="serviceColumns"
+                    columnMode="flex"
+                    (fetchData)="getServices($event)">
+          </cd-table>
+        </ng-template>
+      </li>
+    </ul>
+    <div [ngbNavOutlet]="nav"></div>
+  </ng-container>
+</ng-template>
 
 <ng-template #statusTpl
              let-row="row">
@@ -14,4 +53,27 @@
         [ngClass]="row | pipeFunction:getStatusClass">
     {{ row.status_desc }}
   </span>
+</ng-template>
+
+<ng-template #listTpl
+             let-events="value">
+  <div *ngIf="events.length == 0 || events == undefined">
+    <span>No data available</span>
+  </div>
+  <div *ngIf="events.length != 0 && events != undefined"
+       class="ul-margin">
+    <ul *ngFor="let event of events; trackBy:trackByFn">
+      <li><b>{{ event.created | relativeDate }} - </b>
+      <span class="badge badge-info">{{ event.subject }}</span><br>
+      <span *ngIf="event.level == 'INFO'">
+      <i [ngClass]="[icons.infoCircle]"
+         aria-hidden="true"></i>
+      </span>
+      <span *ngIf="event.level == 'ERROR'">
+      <i [ngClass]="[icons.warning]"
+         aria-hidden="true"></i>
+      </span>
+      {{ event.message }}</li>
+    </ul>
+  </div>
 </ng-template>

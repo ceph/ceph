@@ -92,7 +92,7 @@ Administration
     Upgrading old file systems <upgrading>
     CephFS Top Utility <cephfs-top>
     Scheduled Snapshots <snap-schedule>
-
+    CephFS Snapshot Mirroring <cephfs-mirroring>
 
 .. raw:: html
 

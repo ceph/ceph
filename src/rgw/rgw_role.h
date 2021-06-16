@@ -39,12 +39,12 @@ class RGWRole
   string tenant;
   uint64_t max_session_duration;
 
-  int store_info(bool exclusive, optional_yield y);
-  int store_name(bool exclusive, optional_yield y);
-  int store_path(bool exclusive, optional_yield y);
-  int read_id(const string& role_name, const string& tenant, string& role_id, optional_yield y);
-  int read_name(optional_yield y);
-  int read_info(optional_yield y);
+  int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  int read_id(const DoutPrefixProvider *dpp, const string& role_name, const string& tenant, string& role_id, optional_yield y);
+  int read_name(const DoutPrefixProvider *dpp, optional_yield y);
+  int read_info(const DoutPrefixProvider *dpp, optional_yield y);
   bool validate_input();
   void extract_name_tenant(const std::string& str);
 
@@ -141,11 +141,11 @@ public:
 
   void set_id(const string& id) { this->id = id; }
 
-  int create(bool exclusive, optional_yield y);
-  int delete_obj(optional_yield y);
-  int get(optional_yield y);
-  int get_by_id(optional_yield y);
-  int update(optional_yield y);
+  int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
+  int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
+  int get(const DoutPrefixProvider *dpp, optional_yield y);
+  int get_by_id(const DoutPrefixProvider *dpp, optional_yield y);
+  int update(const DoutPrefixProvider *dpp, optional_yield y);
   void update_trust_policy(string& trust_policy);
   void set_perm_policy(const string& policy_name, const string& perm_policy);
   vector<string> get_role_policy_names();
@@ -157,7 +157,8 @@ public:
   static const string& get_names_oid_prefix();
   static const string& get_info_oid_prefix();
   static const string& get_path_oid_prefix();
-  static int get_roles_by_path_prefix(RGWRados *store,
+  static int get_roles_by_path_prefix(const DoutPrefixProvider *dpp, 
+                                      RGWRados *store,
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,

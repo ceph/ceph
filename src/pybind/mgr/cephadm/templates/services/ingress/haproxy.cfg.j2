@@ -19,24 +19,34 @@ global
 {% endif %}
 
 defaults
-    mode                    http
+    mode                    {{ mode }}
     log                     global
+{% if mode == 'http' %}
     option                  httplog
     option                  dontlognull
     option http-server-close
     option forwardfor       except 127.0.0.0/8
     option                  redispatch
     retries                 3
-    timeout http-request    1s
     timeout queue           20s
     timeout connect         5s
+    timeout http-request    1s
+    timeout http-keep-alive 5s
     timeout client          1s
     timeout server          1s
-    timeout http-keep-alive 5s
     timeout check           5s
+{% endif %}
+{% if mode == 'tcp' %}
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+    timeout check           10s
+{% endif %}
     maxconn                 8000
 
 frontend stats
+    mode http
     bind {{ ip }}:{{ monitor_port }}
     stats enable
     stats uri /stats
@@ -54,9 +64,19 @@ frontend frontend
     default_backend backend
 
 backend backend
+{% if mode == 'http' %}
     option forwardfor
     balance static-rr
     option httpchk HEAD / HTTP/1.0
     {% for server in servers %}
     server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100
     {% endfor %}
+{% endif %}
+{% if mode == 'tcp' %}
+    mode        tcp
+    balance     source
+    hash-type   consistent
+    {% for server in servers %}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }}
+    {% endfor %}
+{% endif %}

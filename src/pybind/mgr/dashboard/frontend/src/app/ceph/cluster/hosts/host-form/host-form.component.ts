@@ -20,6 +20,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   hostnames: string[];
+  status: string;
 
   constructor(
     private router: Router,
@@ -51,18 +52,20 @@ export class HostFormComponent extends CdForm implements OnInit {
             return this.hostnames && this.hostnames.indexOf(hostname) !== -1;
           })
         ]
-      })
+      }),
+      maintenance: new FormControl(false)
     });
   }
 
   submit() {
     const hostname = this.hostForm.get('hostname').value;
+    this.status = this.hostForm.get('maintenance').value ? 'maintenance' : '';
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('host/' + URLVerbs.CREATE, {
           hostname: hostname
         }),
-        call: this.hostService.create(hostname)
+        call: this.hostService.create(hostname, this.status)
       })
       .subscribe({
         error: () => {

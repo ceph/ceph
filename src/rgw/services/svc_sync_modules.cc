@@ -16,7 +16,7 @@ void RGWSI_SyncModules::init(RGWSI_Zone *zone_svc)
   rgw_register_sync_modules(sync_modules_manager);
 }
 
-int RGWSI_SyncModules::do_start(optional_yield)
+int RGWSI_SyncModules::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   auto& zone_public_config = svc.zone->get_zone();
 
@@ -32,7 +32,7 @@ int RGWSI_SyncModules::do_start(optional_yield)
     return ret;
   }
 
-  ldout(cct, 20) << "started sync module instance, tier type = " << zone_public_config.tier_type << dendl;
+  ldpp_dout(dpp, 20) << "started sync module instance, tier type = " << zone_public_config.tier_type << dendl;
 
   return 0;
 }

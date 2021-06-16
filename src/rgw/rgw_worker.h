@@ -24,10 +24,12 @@
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 class RGWRados;
 
 class RGWRadosThread {
-  class Worker : public Thread {
+  class Worker : public Thread, public DoutPrefixProvider {
     CephContext *cct;
     RGWRadosThread *processor;
     ceph::mutex lock = ceph::make_mutex("RGWRadosThread::Worker");
@@ -50,6 +52,11 @@ class RGWRadosThread {
       std::lock_guard l{lock};
       cond.notify_all();
     }
+
+  CephContext *get_cct() const { return cct; }
+  unsigned get_subsys() const { return dout_subsys; }
+  std::ostream& gen_prefix(std::ostream& out) const { return out << "rgw rados thread: "; }
+
   };
 
   Worker *worker;
@@ -71,8 +78,8 @@ public:
     stop();
   }
 
-  virtual int init() { return 0; }
-  virtual int process() = 0;
+  virtual int init(const DoutPrefixProvider *dpp) { return 0; }
+  virtual int process(const DoutPrefixProvider *dpp) = 0;
 
   bool going_down() { return down_flag; }
 
