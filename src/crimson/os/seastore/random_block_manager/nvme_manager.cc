@@ -69,7 +69,7 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::initialize_blk_alloc_area() {
             start,
             end,
             bitmap_op_types_t::ALL_CLEAR
-	    ).safe_then([this, b_block, start]() mutable {
+	    ).safe_then([this, b_block]() mutable {
       /*
        * Set rest of the block bitmap, which is not used, to 1
        * To do so, we only mark 1 to empty bitmap blocks
@@ -120,7 +120,7 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
   logger().debug("path {}", path);
   return _open_device(path).safe_then([this, &config]() {
     return read_rbm_header(config.start
-	).safe_then([this, &config](auto super) {
+	).safe_then([](auto super) {
 	  logger().debug(" already exists ");
 	  return mkfs_ertr::now();
 	}).handle_error(
@@ -185,7 +185,7 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
 	    addr,
 	    bp
 	    ).safe_then(
-	      [&bp, &addr, size, &allocated, &t, &alloc_extent, this]() mutable {
+	      [&bp, &addr, size, &allocated, &alloc_extent, this]() mutable {
 	      logger().debug("find_free_list: allocate {}, addr {}", allocated, addr);
 	      rbm_bitmap_block_t b_block(super.block_size);
 	      bufferlist bl_bitmap_block;
@@ -225,7 +225,7 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
 	      }
 	      return find_block_ertr::make_ready_future<bool>(false);
 	      });
-	}).safe_then([&allocated, &alloc_extent, &t, size, this] () {
+	}).safe_then([&allocated, &alloc_extent, size, this] () {
 	  logger().debug(" allocated: {} size {} ",
 			  allocated * super.block_size, size);
 	  if (allocated * super.block_size < size) {
@@ -258,7 +258,7 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
    *
    */
   return find_free_block(t, size
-      ).safe_then([this, &t, size] (auto alloc_extent) mutable
+      ).safe_then([] (auto alloc_extent) mutable
 	-> allocate_ertr::future<> {
 	logger().debug("after find_free_block: allocated {}", alloc_extent);
 	if (!alloc_extent.empty()) {
@@ -374,7 +374,7 @@ NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap_by_range(
 	return device->read(
 	    next_addr,
 	    bptr).safe_then(
-	      [bptr, bl_bitmap_block, start, end, op, addr, this]() mutable {
+	      [bptr, bl_bitmap_block, end, op, addr, this]() mutable {
 	      rbm_bitmap_block_t b_block(super.block_size);
 	      bufferlist block;
 	      block.append(bptr);
@@ -432,7 +432,7 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
 	  [&, this] (auto &alloc_blocks) mutable {
     return crimson::do_for_each(
 	alloc_blocks,
-	[this, &alloc_blocks](auto &alloc) {
+	[this](auto &alloc) {
 	  return crimson::do_for_each(
 	      alloc.alloc_blk_ids,
 	      [this, &alloc] (auto &range) -> write_ertr::future<> {
@@ -533,10 +533,7 @@ NVMeManager::open_ertr::future<> NVMeManager::_open_device(
     const std::string path)
 {
   ceph_assert(device);
-  return device->open(path, seastar::open_flags::rw
-      ).safe_then([this] {
-	return open_ertr::now();
-  });
+  return device->open(path, seastar::open_flags::rw);
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::write_rbm_header()
@@ -554,7 +551,7 @@ NVMeManager::write_ertr::future<> NVMeManager::write_rbm_header()
   iter.copy(bl.length(), bp.c_str());
 
   return device->write(super.start, bp
-      ).safe_then([this]() {
+      ).safe_then([] {
 	return write_ertr::now();
 	});
 }
