@@ -441,7 +441,7 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
       });
     }).safe_then([this, &alloc_blocks]() mutable {
       int alloc_block_count = 0;
-      for (const auto b : alloc_blocks) {
+      for (const auto& b : alloc_blocks) {
 	for (interval_set<blk_id_t>::const_iterator r = b.alloc_blk_ids.begin();
 	     r != b.alloc_blk_ids.end(); ++r) {
 	  if (b.op == rbm_alloc_delta_t::op_types_t::SET) {
