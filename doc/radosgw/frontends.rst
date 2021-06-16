@@ -85,7 +85,7 @@ Options
               ``single_dh_use`` Always create a new key when using tmp_dh parameters.
 
 :Type: String
-:Default: None
+:Default: ``no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1``
 
 ``ssl_ciphers``
 
