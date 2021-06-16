@@ -1755,15 +1755,6 @@ void MDSMonitor::check_sub(Subscription *sub)
                   << "'" << dendl;
           return;
         }
-        if (fsmap.filesystems.count(fscid) == 0) {
-          // Client asked for a non-existent namespace, send them nothing
-          // TODO: something more graceful for when a client has a filesystem
-          // mounted, and the fileysstem is deleted.  Add a "shut down you fool"
-          // flag to MMDSMap?
-          dout(1) << "Client subscribed to non-existent namespace '" <<
-                  fscid << "'" << dendl;
-          return;
-        }
       } else {
         // Unqualified request for "mdsmap": give it the one marked
         // for use by legacy clients.
@@ -1774,6 +1765,15 @@ void MDSMonitor::check_sub(Subscription *sub)
                      "none is configured" << dendl;
           return;
         }
+      }
+      if (!fsmap.filesystem_exists(fscid)) {
+        // Client asked for a non-existent namespace, send them nothing
+        // TODO: something more graceful for when a client has a filesystem
+        // mounted, and the fileysstem is deleted.  Add a "shut down you fool"
+        // flag to MMDSMap?
+        dout(1) << "Client subscribed to non-existent namespace '" <<
+                fscid << "'" << dendl;
+        return;
       }
     }
     dout(10) << __func__ << ": is_mds=" << is_mds << ", fscid= " << fscid << dendl;
