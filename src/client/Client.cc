@@ -14970,7 +14970,7 @@ void Client::ms_handle_remote_reset(Connection *con)
       mds_rank_t mds = MDS_RANK_NONE;
       MetaSession *s = NULL;
       for (auto &p : mds_sessions) {
-	if (mdsmap->get_addrs(p.first) == con->get_peer_addrs()) {
+	if (mdsmap->have_inst(p.first) && mdsmap->get_addrs(p.first) == con->get_peer_addrs()) {
 	  mds = p.first;
 	  s = &p.second;
 	}
