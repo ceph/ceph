@@ -159,7 +159,7 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
     "Invalid error open_device in NVMeManager::mkfs"
   }).finally([this] {
     if (device) {
-      return device->close().then([]() {
+      return device->close().then([] {
 	return mkfs_ertr::now();
       });
     }
