@@ -14,6 +14,10 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
+namespace seastar::alien {
+class instance;
+}
+
 namespace ceph::os {
 class Transaction;
 }
@@ -123,6 +127,7 @@ private:
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string path;
+  std::unique_ptr<seastar::alien::instance> alien;
   uint64_t used_bytes = 0;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
