@@ -68,6 +68,39 @@ void ClientRequest::may_set_prev_op()
   }
 }
 
+ClientRequest::interruptible_future<> ClientRequest::send_incremental_map(PG& pg)
+{
+  return with_blocking_future_interruptible<IOInterruptCondition>(
+    handle.enter(pp(pg).await_map)
+  ).then_interruptible([this, &pg] {
+    logger().debug("{} entered await_map", *this);
+    return with_blocking_future_interruptible<IOInterruptCondition>(
+      handle.enter(pp(pg).wait_for_active));
+  }).then_interruptible([this, &pg] {
+    return with_blocking_future_interruptible<IOInterruptCondition>(
+      handle.enter(pp(pg).recover_missing));
+  }).then_interruptible([this, &pg] {
+    logger().debug("{} entered recover_missing", *this);
+    return with_blocking_future_interruptible<IOInterruptCondition>(
+      handle.enter(pp(pg).get_obc));
+  }).then_interruptible([this, &pg] {
+    logger().debug("{}: got obc lock", *this);
+    return with_blocking_future_interruptible<IOInterruptCondition>(
+      handle.enter(pp(pg).process));
+  }).then_interruptible([this, &pg] {
+    logger().debug("{} entered process", *this);
+    return with_blocking_future_interruptible<IOInterruptCondition>(
+      handle.enter(pp(pg).wait_repop));
+  }).then_interruptible([this, &pg] {
+    logger().debug("{} entered wait_repop", *this);
+    return with_blocking_future_interruptible<IOInterruptCondition>(
+      handle.enter(pp(pg).send_reply));
+  }).then_interruptible([this, &pg] {
+    logger().debug("{} entered send_reply", *this);
+    return osd.send_incremental_map(conn, m->get_map_epoch());
+  });
+}
+
 seastar::future<> ClientRequest::start()
 {
   logger().debug("{}: start", *this);
@@ -95,7 +128,7 @@ seastar::future<> ClientRequest::start()
               [this, pgref]() mutable -> interruptible_future<> {
               PG &pg = *pgref;
               if (pg.can_discard_op(*m)) {
-                return osd.send_incremental_map(conn, m->get_map_epoch());
+                return send_incremental_map(pg);
               }
               return with_blocking_future_interruptible<IOInterruptCondition>(
                 handle.enter(pp(pg).await_map)

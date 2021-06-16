@@ -88,6 +88,7 @@ private:
 private:
   bool is_misdirected(const PG& pg) const;
   void may_set_prev_op();
+  interruptible_future<> send_incremental_map(PG& pg);
 };
 
 }
