@@ -47,12 +47,12 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
                                         librados::snap_t dst_snap_id_start,
                                         const SnapMap &snap_map,
                                         uint64_t dst_object_number,
-                                        bool flatten, Context *on_finish)
+                                        uint32_t flags, Context *on_finish)
   : m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_cct(dst_image_ctx->cct),
     m_src_snap_id_start(src_snap_id_start),
     m_dst_snap_id_start(dst_snap_id_start), m_snap_map(snap_map),
-    m_dst_object_number(dst_object_number), m_flatten(flatten),
+    m_dst_object_number(dst_object_number), m_flags(flags),
     m_on_finish(on_finish) {
   ceph_assert(src_image_ctx->data_ctx.is_valid());
   ceph_assert(dst_image_ctx->data_ctx.is_valid());
@@ -342,7 +342,9 @@ void ObjectCopyRequest<I>::send_write_object() {
   librados::ObjectWriteOperation op;
   uint64_t buffer_offset;
 
-  if (!m_dst_image_ctx->migration_info.empty()) {
+  bool migration = ((m_flags & OBJECT_COPY_REQUEST_FLAG_MIGRATION) != 0);
+  if (migration) {
+    ldout(m_cct, 20) << "assert_snapc_seq=" << dst_snap_seq << dendl;
     cls_client::assert_snapc_seq(&op, dst_snap_seq,
                                  cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ);
   }
@@ -384,7 +386,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     }
   }
 
-  if (op.size() == (m_dst_image_ctx->migration_info.empty() ? 0 : 1)) {
+  if (op.size() == (migration ? 1 : 0)) {
     handle_write_object(0);
     return;
   }
@@ -750,7 +752,8 @@ void ObjectCopyRequest<I>::compute_read_from_parent_ops(
     return;
   }
 
-  if (noent_count == m_src_object_extents.size() && !m_flatten) {
+  bool flatten = ((m_flags & OBJECT_COPY_REQUEST_FLAG_FLATTEN) != 0);
+  if (noent_count == m_src_object_extents.size() && !flatten) {
     ldout(m_cct, 20) << "reading all extents skipped when no flatten"
                      << dendl;
     return;
