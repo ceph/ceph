@@ -447,10 +447,10 @@ int RGWSI_SysObj_Cache::watch_cb(const DoutPrefixProvider *dpp,
     auto iter = bl.cbegin();
     decode(info, iter);
   } catch (buffer::end_of_buffer& err) {
-    ldout(cct, 0) << "ERROR: got bad notification" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: got bad notification" << dendl;
     return -EIO;
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: buffer::error" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: buffer::error" << dendl;
     return -EIO;
   }
 
@@ -467,7 +467,7 @@ int RGWSI_SysObj_Cache::watch_cb(const DoutPrefixProvider *dpp,
     cache.remove(dpp, name);
     break;
   default:
-    ldout(cct, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
     return -EINVAL;
   }
 

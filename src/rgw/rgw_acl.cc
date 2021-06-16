@@ -150,11 +150,12 @@ uint32_t RGWAccessControlList::get_group_perm(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
+uint32_t RGWAccessControlList::get_referer_perm(const DoutPrefixProvider *dpp,
+                                                const uint32_t current_perm,
                                                 const std::string http_referer,
                                                 const uint32_t perm_mask)
 {
-  ldout(cct, 5) << "Searching permissions for referer=" << http_referer
+  ldpp_dout(dpp, 5) << "Searching permissions for referer=" << http_referer
                 << " mask=" << perm_mask << dendl;
 
   /* This function is basically a transformation from current perm to
@@ -168,7 +169,7 @@ uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
     }
   }
 
-  ldout(cct, 5) << "Found referer permission=" << referer_perm << dendl;
+  ldpp_dout(dpp, 5) << "Found referer permission=" << referer_perm << dendl;
   return referer_perm & perm_mask;
 }
 
@@ -203,7 +204,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
 
   /* Should we continue looking up even deeper? */
   if (nullptr != http_referer && (perm & perm_mask) != perm_mask) {
-    perm = acl.get_referer_perm(perm, http_referer, perm_mask);
+    perm = acl.get_referer_perm(dpp, perm, http_referer, perm_mask);
   }
 
   ldpp_dout(dpp, 5) << "-- Getting permissions done for identity=" << auth_identity
