@@ -5795,9 +5795,9 @@ class Packager(object):
         if self.ctx.gpg_url:
             return self.ctx.gpg_url
         if self.stable or self.version:
-            return 'https://download.ceph.com/keys/release.asc', 'release'
+            return 'https://download.ceph.com/keys/release.gpg', 'release'
         else:
-            return 'https://download.ceph.com/keys/autobuild.asc', 'autobuild'
+            return 'https://download.ceph.com/keys/autobuild.gpg', 'autobuild'
 
     def enable_service(self, service):
         """
@@ -5835,8 +5835,8 @@ class Apt(Packager):
             logger.error('failed to fetch GPG repo key from %s: %s' % (
                 url, err))
             raise Error('failed to fetch GPG key')
-        key = response.read().decode('utf-8')
-        with open('/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name, 'w') as f:
+        key = response.read()
+        with open('/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name, 'wb') as f:
             f.write(key)
 
         if self.version:
@@ -5852,6 +5852,8 @@ class Apt(Packager):
         logger.info('Installing repo file at %s...' % self.repo_path())
         with open(self.repo_path(), 'w') as f:
             f.write(content)
+
+        self.update()
 
     def rm_repo(self):
         for name in ['autobuild', 'release']:
@@ -5870,11 +5872,15 @@ class Apt(Packager):
         logger.info('Installing packages %s...' % ls)
         call_throws(self.ctx, ['apt-get', 'install', '-y'] + ls)
 
+    def update(self):
+        logger.info('Updating package list...')
+        call_throws(self.ctx, ['apt-get', 'update'])
+
     def install_podman(self):
         if self.distro == 'ubuntu':
             logger.info('Setting up repo for podman...')
             self.add_kubic_repo()
-            call_throws(self.ctx, ['apt-get', 'update'])
+            self.update()
 
         logger.info('Attempting podman install...')
         try:
@@ -6020,6 +6026,13 @@ class YumDnf(Packager):
                                      self.distro_code)
 
     def add_repo(self):
+        if self.distro_code.startswith('fc'):
+            raise Error('Ceph team does not build Fedora specific packages and therefore cannot add repos for this distro')
+        if self.distro_code == 'el7':
+            if self.stable and self.stable >= 'pacific':
+                raise Error('Ceph does not support pacific or later for this version of this linux distro and therefore cannot add a repo for it')
+            if self.version and self.version.split('.')[0] >= '16':
+                raise Error('Ceph does not support 16.y.z or later for this version of this linux distro and therefore cannot add a repo for it')
         if self.stable or self.version:
             content = ''
             for n, t in {
@@ -6186,12 +6199,16 @@ def command_add_repo(ctx: CephadmContext):
             (x, y, z) = ctx.version.split('.')
         except Exception:
             raise Error('version must be in the form x.y.z (e.g., 15.2.0)')
+    if ctx.release:
+        # Pacific =/= pacific in this case, set to undercase to avoid confision
+        ctx.release = ctx.release.lower()
 
     pkg = create_packager(ctx, stable=ctx.release,
                           version=ctx.version,
                           branch=ctx.dev,
                           commit=ctx.dev_commit)
     pkg.add_repo()
+    logger.info('Completed adding repo.')
 
 
 def command_rm_repo(ctx: CephadmContext):
@@ -8221,7 +8238,7 @@ def main():
         # podman or docker?
         ctx.container_engine = find_container_engine(ctx)
         if ctx.func not in \
-                [command_check_host, command_prepare_host, command_add_repo]:
+                [command_check_host, command_prepare_host, command_add_repo, command_install]:
             check_container_engine(ctx)
         # command handler
         r = ctx.func(ctx)
