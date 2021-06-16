@@ -90,6 +90,7 @@ class MOSDPGInfo;
 class MOSDPGRemove;
 class MOSDForceRecovery;
 class MMonGetPurgedSnapsReply;
+class MOSDPGDiscoverRes;
 
 class OSD;
 
@@ -1919,6 +1920,7 @@ protected:
   void handle_pg_notify_nopg(const MNotifyRec& q);
   void handle_fast_pg_info(MOSDPGInfo *m);
   void handle_fast_pg_remove(MOSDPGRemove *m);
+  void handle_pg_discover_res(MOSDPGDiscoverRes *m);
 
 public:
   // used by OSDShard

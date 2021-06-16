@@ -94,6 +94,7 @@
 #include "messages/MOSDPGNotify2.h"
 #include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGDiscoverRes.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGInfo2.h"
@@ -7178,6 +7179,8 @@ void OSD::ms_fast_dispatch(Message *m)
   case MSG_OSD_PG_REMOVE:
     return handle_fast_pg_remove(static_cast<MOSDPGRemove*>(m));
     // these are single-pg messages that handle themselves
+  case MSG_OSD_PG_DISC_RES:
+    return handle_pg_discover_res(static_cast<MOSDPGDiscoverRes*>(m));
   case MSG_OSD_PG_LOG:
   case MSG_OSD_PG_TRIM:
   case MSG_OSD_PG_NOTIFY2:
@@ -9507,6 +9510,26 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
     con->send_message(m);
   }
 }
+
+void OSD::handle_pg_discover_res(MOSDPGDiscoverRes* m)
+{
+  assert(m->get_type() == MSG_OSD_PG_DISC_RES);
+  dout(7) << __func__ << " " << *m << " from " << m->get_source() << dendl;
+  if (!require_osd_peer(m)) {
+    m->put();
+    return;
+  }
+
+  int from = m->get_source().num();
+
+  PGRef pg = _lookup_lock_pg(m->pgid);
+  if (pg) {
+    pg->handle_discover_res(pg_shard_t(from, m->from), m->found);
+    pg->unlock();
+  }
+  return;
+}
+
 
 void OSDService::queue_check_readable(spg_t spgid,
 				      epoch_t lpr,

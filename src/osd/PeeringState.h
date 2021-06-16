@@ -278,6 +278,8 @@ public:
 
     virtual unsigned get_target_pg_log_entries() const = 0;
 
+    virtual void discover_local_objects(pg_shard_t from, map<hobject_t, eversion_t>, epoch_t query_epoch) = 0;
+
     // ============ Flush state ==================
     /**
      * try_flush_or_schedule_async()
@@ -1457,6 +1459,7 @@ public:
   std::map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
   std::set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
   std::set<pg_shard_t> peer_missing_requested; ///< missing sets requested
+  std::set<pg_shard_t> bft_discovered;
 
   /// features supported by all peers
   uint64_t peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
@@ -1921,12 +1924,22 @@ public:
   bool discover_all_missing(
     BufferedRecoveryMessages &rctx);
 
+  /// search unfound objects on remote backfill target
+  bool discover_unfound_on_backfills(
+    BufferedRecoveryMessages &rctx);
+
   /// Notify that hoid has been fully recocovered
   void object_recovered(
     const hobject_t &hoid,
     const object_stat_sum_t &stat_diff) {
     info.stats.stats.sum.add(stat_diff);
     missing_loc.recovered(hoid);
+  }
+
+  void add_object_location(
+    const hobject_t &hoid,
+    pg_shard_t location) {
+    missing_loc.add_location(hoid, location);
   }
 
   /// Update info/stats to reflect backfill progress
@@ -2345,6 +2358,11 @@ public:
   uint64_t get_num_unfound() const {
     return missing_loc.num_unfound();
   }
+
+  map<hobject_t, eversion_t> get_unfounds_need() const {
+    return missing_loc.get_unfounds_need();
+  }
+
 
   bool have_missing() const {
     return pg_log.get_missing().num_missing() > 0;

@@ -42,6 +42,7 @@
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGDiscoverRes.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MCommandReply.h"
@@ -14270,6 +14271,52 @@ void PrimaryLogPG::check_local()
     }
   }
 }
+
+void PrimaryLogPG::discover_local_objects(pg_shard_t from, map<hobject_t, eversion_t> in, epoch_t query_epoch)
+{
+  dout(10) << __func__ << dendl;
+  vector<hobject_t> res;
+
+  for (auto &p: in) {
+    ObjectContextRef obc;
+    eversion_t local_ver;
+
+    if (is_primary())
+      obc = object_contexts.lookup(p.first);
+
+    if (obc) {
+      local_ver = obc->obs.oi.version;
+      dout(20) << __func__ << "  " << p.first << " " << local_ver << dendl;
+    } else {
+      bufferlist bl;
+      int r = pgbackend->objects_get_attr(p.first, OI_ATTR, &bl);
+
+      if (r < 0)
+        continue;
+
+      object_info_t oi(bl);
+      local_ver = oi.version;
+      dout(20) << __func__ << "  " << p.first << " " << local_ver << dendl;
+    }
+
+    if (p.second == local_ver) {
+      res.push_back(p.first);
+    }
+  }
+
+  if (!res.empty()) {
+    MOSDPGDiscoverRes *m =
+      new MOSDPGDiscoverRes(
+        info.pgid,
+        from.shard, pg_whoami.shard,
+        get_osdmap()->get_epoch(),
+        res, query_epoch);
+
+    dout(10) << " sending discover result: " << res << dendl;
+    osd->send_message_osd_cluster(from.osd, m, get_osdmap_epoch());
+  }
+}
+
 
 
 

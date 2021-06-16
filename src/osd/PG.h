@@ -510,6 +510,7 @@ public:
   void handle_activate_map(PeeringCtx &rctx);
   void handle_initialize(PeeringCtx &rxcx);
   void handle_query_state(ceph::Formatter *f);
+  void handle_discover_res(pg_shard_t from, const vector<hobject_t> &in);
 
   /**
    * @param ops_begun returns how many recovery ops the function started
@@ -992,6 +993,10 @@ protected:
   uint64_t get_num_unfound() const {
     return recovery_state.get_num_unfound();
   }
+  map<hobject_t, eversion_t> get_unfounds_need() const {
+    return recovery_state.get_unfounds_need();
+  }
+
 
   virtual void check_local() = 0;
 

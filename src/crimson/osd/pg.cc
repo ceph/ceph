@@ -222,6 +222,11 @@ void PG::recheck_readable()
   }
 }
 
+void PG::discover_local_objects(pg_shard_t from, map<hobject_t, eversion_t>, epoch_t query_epoch)
+{
+
+}
+
 unsigned PG::get_target_pg_log_entries() const
 {
   const unsigned num_pgs = shard_services.get_pg_num();

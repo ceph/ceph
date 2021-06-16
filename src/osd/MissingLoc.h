@@ -187,6 +187,19 @@ class MissingLoc {
     }
     return false;
   }
+  map<hobject_t, eversion_t> get_unfounds_need() const {
+    map<hobject_t, eversion_t> ret;
+    for (map<hobject_t, pg_missing_item>::const_iterator i =
+           needs_recovery_map.begin();
+         i != needs_recovery_map.end();
+         ++i) {
+      if (is_unfound(i->first)) {
+        ret.emplace(i->first, i->second.need);
+      }
+    }
+
+    return ret;
+  }
   void clear() {
     needs_recovery_map.clear();
     missing_loc.clear();

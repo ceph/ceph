@@ -295,6 +295,8 @@ public:
 
   unsigned get_target_pg_log_entries() const final;
 
+  void discover_local_objects(pg_shard_t from, map<hobject_t, eversion_t>, epoch_t query_epoch) final;
+
   void on_pool_change() final {
     // Not needed yet
   }

@@ -882,6 +882,7 @@ void PeeringState::clear_primary_state()
   peer_missing.clear();
   peer_last_complete_ondisk.clear();
   peer_activated.clear();
+  bft_discovered.clear();
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
   might_have_unfound.clear();
@@ -2579,6 +2580,39 @@ bool PeeringState::discover_all_missing(
   return any;
 }
 
+bool PeeringState::discover_unfound_on_backfills(BufferedRecoveryMessages &rctx)
+{
+  uint64_t unfound = get_num_unfound();
+  assert(unfound > 0);
+  bool any = false;
+
+  if (backfill_targets.empty())
+    return false;
+
+  psdout(10) << __func__ << " bft: " << backfill_targets << dendl;
+
+  for (auto& bft : backfill_targets) {
+    if (bft_discovered.find(bft) != bft_discovered.end()) {
+      dout(20) << __func__ << ": osd." << bft
+               << ": in or had bft_discovered" << dendl;
+      continue;
+    }
+
+    psdout(20) << __func__ << " query " << bft << " for unfound: " << get_unfounds_need() << dendl;
+    bft_discovered.insert(bft);
+    rctx.send_query(
+      bft.osd,
+      spg_t(info.pgid.pgid, bft.shard),
+      pg_query_t(
+        pg_query_t::OBJECTS,
+        bft.shard, pg_whoami.shard,
+        get_unfounds_need(), get_osdmap_epoch()));
+    any = true;
+  }
+  return any;
+}
+
+
 /* Build the might_have_unfound set.
  *
  * This is used by the primary OSD during recovery.
@@ -3119,6 +3153,8 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
 	get_osdmap_epoch(),
 	notify_info.second,
 	past_intervals));
+  } else if (query.query.type == pg_query_t::OBJECTS) {
+    pl->discover_local_objects(query.from, query.query.needs, query.query_epoch);
   } else {
     update_history(query.query.history);
     fulfill_log(query.from, query.query, query.query_epoch);
