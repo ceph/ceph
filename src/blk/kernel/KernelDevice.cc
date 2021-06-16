@@ -1052,13 +1052,14 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	 << age
 	 << "s" << dendl;
   }
-
   if (r < 0) {
     if (ioc->allow_eio && is_expected_ioerr(r)) {
       r = -EIO;
     } else {
       r = -errno;
     }
+    derr << __func__ << " 0x" << std::hex << off << "~" << left
+         << std::dec << " error: " << cpp_strerror(r) << dendl;
     goto out;
   }
   ceph_assert((uint64_t)r == len);
