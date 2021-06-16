@@ -70,7 +70,7 @@ struct rgw_sync_group_pipe_map {
                                                                                 std::optional<rgw_bucket> b) const;
 
   template <typename CB>
-  void init(CephContext *cct,
+  void init(const DoutPrefixProvider *dpp, CephContext *cct,
             const rgw_zone_id& _zone,
             std::optional<rgw_bucket> _bucket,
             const rgw_sync_policy_group& group,
@@ -257,7 +257,7 @@ private:
    */
   void update_flow_maps(const rgw_sync_bucket_pipes& pipe);
 
-  void init(const rgw_sync_policy_info& sync_policy);
+  void init(const DoutPrefixProvider *dpp, const rgw_sync_policy_info& sync_policy);
 
 public:
 
@@ -266,7 +266,7 @@ public:
                            std::optional<rgw_bucket> _bucket,
                            const RGWBucketSyncFlowManager *_parent);
 
-  void reflect(std::optional<rgw_bucket> effective_bucket,
+  void reflect(const DoutPrefixProvider *dpp, std::optional<rgw_bucket> effective_bucket,
                pipe_set *flow_by_source,
                pipe_set *flow_by_dest,  
                bool only_enabled) const;
@@ -333,7 +333,7 @@ public:
 
   int init(const DoutPrefixProvider *dpp, optional_yield y);
 
-  void reflect(RGWBucketSyncFlowManager::pipe_set *psource_pipes,
+  void reflect(const DoutPrefixProvider *dpp, RGWBucketSyncFlowManager::pipe_set *psource_pipes,
                RGWBucketSyncFlowManager::pipe_set *ptarget_pipes,
                map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set> *psources,
                map<rgw_zone_id, RGWBucketSyncFlowManager::pipe_set> *ptargets,

@@ -400,7 +400,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
     if (!found_version ||
         (refresh_version &&
          e->info.objv_tracker.read_version.compare(&(*refresh_version)))) {
-      lderr(cct) << "WARNING: The bucket info cache is inconsistent. This is "
+      ldpp_dout(dpp, -1) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;
       binfo_cache->invalidate(cache_key);

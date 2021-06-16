@@ -344,14 +344,14 @@ void parse_mime_map(const char *buf)
   }
 }
 
-static int ext_mime_map_init(CephContext *cct, const char *ext_map)
+static int ext_mime_map_init(const DoutPrefixProvider *dpp, CephContext *cct, const char *ext_map)
 {
   int fd = open(ext_map, O_RDONLY);
   char *buf = NULL;
   int ret;
   if (fd < 0) {
     ret = -errno;
-    ldout(cct, 0) << __func__ << " failed to open file=" << ext_map
+    ldpp_dout(dpp, 0) << __func__ << " failed to open file=" << ext_map
                   << " : " << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -360,7 +360,7 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   ret = fstat(fd, &st);
   if (ret < 0) {
     ret = -errno;
-    ldout(cct, 0) << __func__ << " failed to stat file=" << ext_map
+    ldpp_dout(dpp, 0) << __func__ << " failed to stat file=" << ext_map
                   << " : " << cpp_strerror(-ret) << dendl;
     goto done;
   }
@@ -368,17 +368,17 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   buf = (char *)malloc(st.st_size + 1);
   if (!buf) {
     ret = -ENOMEM;
-    ldout(cct, 0) << __func__ << " failed to allocate buf" << dendl;
+    ldpp_dout(dpp, 0) << __func__ << " failed to allocate buf" << dendl;
     goto done;
   }
 
   ret = safe_read(fd, buf, st.st_size + 1);
   if (ret != st.st_size) {
     // huh? file size has changed?
-    ldout(cct, 0) << __func__ << " raced! will retry.." << dendl;
+    ldpp_dout(dpp, 0) << __func__ << " raced! will retry.." << dendl;
     free(buf);
     close(fd);
-    return ext_mime_map_init(cct, ext_map);
+    return ext_mime_map_init(dpp, cct, ext_map);
   }
   buf[st.st_size] = '\0';
 
@@ -506,7 +506,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   if (compression_type != "none") {
     plugin = Compressor::create(store->ctx(), compression_type);
     if (!plugin) {
-      ldout(store->ctx(), 1) << "Cannot load plugin for compression type "
+      ldpp_dout(dpp, 1) << "Cannot load plugin for compression type "
         << compression_type << dendl;
     } else {
       compressor.emplace(store->ctx(), plugin, filter);
@@ -583,10 +583,10 @@ void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
   policy.encode(aclbl.emplace());
 }
 
-int rgw_tools_init(CephContext *cct)
+int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;
-  ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
+  ext_mime_map_init(dpp, cct, cct->_conf->rgw_mime_types_file.c_str());
   // ignore errors; missing mime.types is not fatal
   return 0;
 }

@@ -55,7 +55,7 @@ public:
     RGWBucketReshardLock(_store, bucket_info.bucket.get_key(':'), _ephemeral)
   {}
 
-  int lock();
+  int lock(const DoutPrefixProvider *dpp);
   void unlock();
   int renew(const Clock::time_point&);
 
@@ -237,10 +237,10 @@ public:
   RGWReshard(rgw::sal::RadosStore* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
   int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
-  int get(cls_rgw_reshard_entry& entry);
+  int get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
   int remove(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
-  int list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
-  int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
+  int list(const DoutPrefixProvider *dpp, int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
+  int clear_bucket_resharding(const DoutPrefixProvider *dpp, const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
   int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp);
