@@ -28,6 +28,7 @@ function run() {
     CEPH_ARGS+="--osd_min_pg_log_entries=5 --osd_max_pg_log_entries=10 "
     CEPH_ARGS+="--fake_statfs_for_testing=3686400 "
     CEPH_ARGS+="--osd_max_backfills=10 "
+    CEPH_ARGS+="--osd_mclock_profile=high_recovery_ops "
     export objects=600
     export poolprefix=test
 
@@ -149,7 +150,7 @@ function TEST_backfill_test_simple() {
     done
     sleep 30
 
-    wait_for_not_backfilling 240 || return 1
+    wait_for_not_backfilling 1200 || return 1
     wait_for_not_activating 60 || return 1
 
     ERRORS=0
@@ -228,7 +229,7 @@ function TEST_backfill_test_multi() {
     done
     sleep 30
 
-    wait_for_not_backfilling 240 || return 1
+    wait_for_not_backfilling 1200 || return 1
     wait_for_not_activating 60 || return 1
 
     ERRORS=0
@@ -380,7 +381,7 @@ function TEST_backfill_test_sametarget() {
     ceph osd pool set $pool2 size 2
     sleep 30
 
-    wait_for_not_backfilling 240 || return 1
+    wait_for_not_backfilling 1200 || return 1
     wait_for_not_activating 60 || return 1
 
     ERRORS=0
@@ -512,7 +513,7 @@ function TEST_backfill_multi_partial() {
     ceph osd in osd.$fillosd
     sleep 30
 
-    wait_for_not_backfilling 240 || return 1
+    wait_for_not_backfilling 1200 || return 1
     wait_for_not_activating 60 || return 1
 
     flush_pg_stats || return 1
@@ -695,7 +696,7 @@ function TEST_ec_backfill_simple() {
 
     ceph pg dump pgs
 
-    wait_for_not_backfilling 240 || return 1
+    wait_for_not_backfilling 1200 || return 1
     wait_for_not_activating 60 || return 1
 
     ceph pg dump pgs
@@ -819,7 +820,7 @@ function TEST_ec_backfill_multi() {
 
     sleep 30
 
-    wait_for_not_backfilling 240 || return 1
+    wait_for_not_backfilling 1200 || return 1
     wait_for_not_activating 60 || return 1
 
     ceph pg dump pgs
@@ -958,7 +959,7 @@ function SKIP_TEST_ec_backfill_multi_partial() {
     sleep 30
     ceph pg dump pgs
 
-    wait_for_not_backfilling 240 || return 1
+    wait_for_not_backfilling 1200 || return 1
     wait_for_not_activating 60 || return 1
 
     ceph pg dump pgs
@@ -1066,7 +1067,7 @@ function SKIP_TEST_ec_backfill_multi_partial() {
     ceph osd in osd.$fillosd
     sleep 30
 
-    wait_for_not_backfilling 240 || return 1
+    wait_for_not_backfilling 1200 || return 1
     wait_for_not_activating 60 || return 1
 
     ERRORS=0

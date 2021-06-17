@@ -27,6 +27,9 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON --osd_max_backfills=1 --debug_reserver=20 "
     CEPH_ARGS+="--osd_min_pg_log_entries=5 --osd_max_pg_log_entries=10 "
+    # Set osd op queue = wpq for the tests. Backfill priority is not
+    # considered by mclock_scheduler leading to unexpected results.
+    CEPH_ARGS+="--osd-op-queue=wpq "
     export objects=50
     export poolprefix=test
     export FORCE_PRIO="254"     # See OSD_BACKFILL_PRIORITY_FORCED
