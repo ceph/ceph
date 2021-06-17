@@ -6380,7 +6380,7 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
     i++;
   }
   
-  if (len == 0) {
+  if (len != 0) {
     chunk_number++;
   }
 
