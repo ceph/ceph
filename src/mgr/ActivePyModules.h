@@ -221,6 +221,6 @@ public:
   void cluster_log(const std::string &channel, clog_type prio,
     const std::string &message);
 
-  void update_ttl_cache();
+  bool inject_python_on() const;
 };
 
