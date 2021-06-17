@@ -6,6 +6,7 @@ import threading
 import subprocess
 import socket
 import time
+import dateutil.parser
 import os
 import string
 import boto
@@ -1985,12 +1986,14 @@ def test_ps_s3_versioned_deletion_on_master():
     print('wait for 5sec for the messages...')
     time.sleep(5)
 
+
     # check amqp receiver
     events = receiver.get_and_reset_events()
     delete_events = 0
     delete_marker_create_events = 0
     for event_list in events:
         for event in event_list['Records']:
+            assert dateutil.parser.isoparse(event['eventTime']).timestamp() > 0
             if event['eventName'] == 'ObjectRemoved:Delete':
                 delete_events += 1
                 assert event['s3']['configurationId'] in [notification_name+'_1', notification_name+'_3']

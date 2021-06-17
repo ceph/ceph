@@ -4914,9 +4914,10 @@ void RGWDeleteObj::execute(optional_yield y)
     }
 
     const auto obj_state = obj_ctx->get_state(s->object->get_obj());
+    const auto mtime = real_clock::is_zero(obj_state->mtime) ? ceph::real_clock::now() : obj_state->mtime;
 
     // send request to notification manager
-    int ret = res->publish_commit(this, obj_state->size, obj_state->mtime, attrs[RGW_ATTR_ETAG].to_str());
+    int ret = res->publish_commit(this, obj_state->size, mtime, attrs[RGW_ATTR_ETAG].to_str());
     if (ret < 0) {
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
@@ -6837,7 +6838,8 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     const auto etag = obj_state->get_attr(RGW_ATTR_ETAG, etag_bl) ? etag_bl.to_str() : "";
 
     // send request to notification manager
-    int ret = res->publish_commit(this, obj_state->size, obj_state->mtime, etag);
+    const auto mtime = real_clock::is_zero(obj_state->mtime) ? ceph::real_clock::now() : obj_state->mtime;
+    int ret = res->publish_commit(this, obj_state->size, mtime, etag);
     if (ret < 0) {
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
