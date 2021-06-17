@@ -639,7 +639,9 @@ template <typename I>
 void ImageReplayer<I>::handle_start_replay(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (on_start_interrupted()) {
+    return;
+  } else if (r < 0) {
     ceph_assert(m_local_replay == nullptr);
     derr << "error starting external replay on local image "
 	 <<  m_local_image_id << ": " << cpp_strerror(r) << dendl;
@@ -664,10 +666,6 @@ void ImageReplayer<I>::handle_start_replay(int r) {
 
   update_mirror_image_status(true, boost::none);
   reschedule_update_status_task(30);
-
-  if (on_replay_interrupted()) {
-    return;
-  }
 
   {
     CephContext *cct = static_cast<CephContext *>(m_local->cct());
