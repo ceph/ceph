@@ -2145,20 +2145,26 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     return -EINVAL;
   }
 
+  std::string cookie;
   switch (cmd) {
     case Attach:
       if (cfg->devpath.empty()) {
         *err_msg << "rbd-nbd: must specify device to attach";
         return -EINVAL;
       }
-      /* FIXME: Should we allow attach for kernel versions that doesn't
-       * support NBD_ATTR_BACKEND_IDENTIFIER (danger!) ?
-       * 1. If we allow attach for lower kernel versions then, we should
-       *    also provide a way to skip cookie check here
-       * 2. If we do not want to allow, then add kernel version check here
-       */
-      if (cfg->cookie.empty()) {
-        *err_msg << "rbd-nbd: must specify cookie to attach";
+      // Allowing attach without --cookie option for kernel without
+      // NBD_ATTR_BACKEND_IDENTIFIER support for compatibility
+      cookie = get_cookie(cfg->devpath);
+      if (!cookie.empty()) {
+        if (cfg->cookie.empty()) {
+          *err_msg << "rbd-nbd: must specify cookie to attach";
+          return -EINVAL;
+	} else if (cookie != cfg->cookie) {
+          *err_msg << "rbd-nbd: cookie mismatch";
+          return -EINVAL;
+        }
+      } else if (!cfg->cookie.empty()) {
+        *err_msg << "rbd-nbd: kernel does not have cookie support";
         return -EINVAL;
       }
       [[fallthrough]];
