@@ -66,7 +66,7 @@ static seastar::future<> test_echo(unsigned rounds,
           logger().info("server got {}", *m);
         }
         // reply with a pong
-        std::ignore = c->send(make_message<MPing>());
+        std::ignore = c->send(crimson::make_message<MPing>());
         return {seastar::now()};
       }
 
@@ -204,7 +204,7 @@ static seastar::future<> test_echo(unsigned rounds,
                           seastar::stop_iteration::no);
                       });
                   } else {
-                    return conn->send(make_message<MPing>())
+                    return conn->send(crimson::make_message<MPing>())
                       .then([&count_ping] {
                         count_ping += 1;
                         return seastar::make_ready_future<seastar::stop_iteration>(
@@ -350,8 +350,8 @@ static seastar::future<> test_concurrent_dispatch()
     auto conn = client->msgr->connect(server->msgr->get_myaddr(),
                                       entity_name_t::TYPE_OSD);
     // send two messages
-    return conn->send(make_message<MPing>()).then([conn] {
-      return conn->send(make_message<MPing>());
+    return conn->send(crimson::make_message<MPing>()).then([conn] {
+      return conn->send(crimson::make_message<MPing>());
     });
   }).then([server] {
     return server->wait();
@@ -380,7 +380,7 @@ seastar::future<> test_preemptive_shutdown() {
 
       std::optional<seastar::future<>> ms_dispatch(
           crimson::net::ConnectionRef c, MessageRef m) override {
-        std::ignore = c->send(make_message<MPing>());
+        std::ignore = c->send(crimson::make_message<MPing>());
         return {seastar::now()};
       }
 
@@ -440,7 +440,7 @@ seastar::future<> test_preemptive_shutdown() {
         (void) seastar::do_until(
           [this] { return stop_send; },
           [conn] {
-            return conn->send(make_message<MPing>()).then([] {
+            return conn->send(crimson::make_message<MPing>()).then([] {
               return seastar::sleep(0ms);
             });
           }
@@ -944,7 +944,7 @@ class FailoverSuite : public Dispatcher {
     hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                    pgid.pool(), oloc.nspace);
     spg_t spgid(pgid);
-    return tracked_conn->send(make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0));
+    return tracked_conn->send(crimson::make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0));
   }
 
   seastar::future<> flush_pending_send() {
@@ -1237,23 +1237,23 @@ class FailoverTest : public Dispatcher {
  private:
   seastar::future<> prepare_cmd(
       cmd_t cmd,
-      std::function<void(ceph::ref_t<MCommand>)>
-        f_prepare = [] (auto m) { return; }) {
+      std::function<void(MCommand&)>
+        f_prepare = [] (auto& m) { return; }) {
     assert(!recv_cmdreply);
     recv_cmdreply  = seastar::promise<>();
     auto fut = recv_cmdreply->get_future();
-    auto m = make_message<MCommand>();
+    auto m = crimson::make_message<MCommand>();
     m->cmd.emplace_back(1, static_cast<char>(cmd));
-    f_prepare(m);
-    return cmd_conn->send(m).then([fut = std::move(fut)] () mutable {
+    f_prepare(*m);
+    return cmd_conn->send(std::move(m)).then([fut = std::move(fut)] () mutable {
       return std::move(fut);
     });
   }
 
   seastar::future<> start_peer(policy_t peer_policy) {
     return prepare_cmd(cmd_t::suite_start,
-        [peer_policy] (auto m) {
-      m->cmd.emplace_back(1, static_cast<char>(peer_policy));
+        [peer_policy] (auto& m) {
+      m.cmd.emplace_back(1, static_cast<char>(peer_policy));
     });
   }
 
@@ -1265,7 +1265,7 @@ class FailoverTest : public Dispatcher {
     assert(!recv_pong);
     recv_pong = seastar::promise<>();
     auto fut = recv_pong->get_future();
-    return cmd_conn->send(make_message<MPing>()
+    return cmd_conn->send(crimson::make_message<MPing>()
     ).then([fut = std::move(fut)] () mutable {
       return std::move(fut);
     });
@@ -1293,9 +1293,9 @@ class FailoverTest : public Dispatcher {
   seastar::future<> shutdown() {
     logger().info("CmdCli shutdown...");
     assert(!recv_cmdreply);
-    auto m = make_message<MCommand>();
+    auto m = crimson::make_message<MCommand>();
     m->cmd.emplace_back(1, static_cast<char>(cmd_t::shutdown));
-    return cmd_conn->send(m).then([] {
+    return cmd_conn->send(std::move(m)).then([] {
       return seastar::sleep(200ms);
     }).then([this] {
       cmd_msgr->stop();
@@ -1357,8 +1357,8 @@ class FailoverTest : public Dispatcher {
   seastar::future<> peer_connect_me() {
     logger().info("[Test] peer_connect_me({})", test_addr);
     return prepare_cmd(cmd_t::suite_connect_me,
-        [this] (auto m) {
-      m->cmd.emplace_back(fmt::format("{}", test_addr));
+        [this] (auto& m) {
+      m.cmd.emplace_back(fmt::format("{}", test_addr));
     });
   }
 
@@ -1450,7 +1450,7 @@ class FailoverSuitePeer : public Dispatcher {
     hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
                    pgid.pool(), oloc.nspace);
     spg_t spgid(pgid);
-    return tracked_conn->send(make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0));
+    return tracked_conn->send(crimson::make_message<MOSDOp>(0, 0, hobj, spgid, 0, 0, 0));
   }
 
   seastar::future<> flush_pending_send() {
@@ -1540,7 +1540,7 @@ class FailoverTestPeer : public Dispatcher {
     ceph_assert(cmd_conn == c);
     switch (m->get_type()) {
      case CEPH_MSG_PING:
-      std::ignore = c->send(make_message<MPing>());
+      std::ignore = c->send(crimson::make_message<MPing>());
       break;
      case MSG_COMMAND: {
       auto m_cmd = boost::static_pointer_cast<MCommand>(m);
@@ -1552,7 +1552,7 @@ class FailoverTestPeer : public Dispatcher {
         std::ignore = cmd_msgr->shutdown();
       } else {
         std::ignore = handle_cmd(cmd, m_cmd).then([c] {
-          return c->send(make_message<MCommandReply>());
+          return c->send(crimson::make_message<MCommandReply>());
         });
       }
       break;
@@ -1571,9 +1571,9 @@ class FailoverTestPeer : public Dispatcher {
  private:
   seastar::future<> notify_recv_op() {
     ceph_assert(cmd_conn);
-    auto m = make_message<MCommand>();
+    auto m = crimson::make_message<MCommand>();
     m->cmd.emplace_back(1, static_cast<char>(cmd_t::suite_recv_op));
-    return cmd_conn->send(m);
+    return cmd_conn->send(std::move(m));
   }
 
   seastar::future<> handle_cmd(cmd_t cmd, MRef<MCommand> m_cmd) {
