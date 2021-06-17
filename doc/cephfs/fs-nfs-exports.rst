@@ -210,7 +210,7 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
+    $ ceph nfs export create cephfs <fsname> <clusterid> <pseudo-path> [--readonly] [--path=/path/in/cephfs]
 
 This creates export RADOS objects containing the export block, where
 
@@ -219,8 +219,7 @@ that will serve this export.
 
 ``<clusterid>`` is the NFS Ganesha cluster ID.
 
-``<binding>`` is the pseudo root path (must be an absolute path and unique).
-It specifies the export position within the NFS v4 Pseudo Filesystem.
+``<pseudo-path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server.  It must be an absolute path and unique.
 
 ``<path>`` is the path within cephfs. Valid path should be given and default
 path is '/'. It need not be unique. Subvolume path can be fetched using:
@@ -236,13 +235,13 @@ Delete CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export rm <clusterid> <binding>
+    $ ceph nfs export rm <clusterid> <pseudo-path>
 
 This deletes an export in an NFS Ganesha cluster, where:
 
 ``<clusterid>`` is the NFS Ganesha cluster ID.
 
-``<binding>`` is the pseudo root path (must be an absolute path).
+``<pseudo-path>`` is the pseudo root path (must be an absolute path).
 
 List CephFS Exports
 ===================
@@ -262,14 +261,14 @@ Get CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export get <clusterid> <binding>
+    $ ceph nfs export get <clusterid> <pseudo-path>
 
-This displays export block for a cluster based on pseudo root name (binding),
+This displays export block for a cluster based on pseudo root name,
 where:
 
 ``<clusterid>`` is the NFS Ganesha cluster ID.
 
-``<binding>`` is the pseudo root path (must be an absolute path).
+``<pseudo-path>`` is the pseudo root path (must be an absolute path).
 
 
 Create or update CephFS Export via JSON specification
