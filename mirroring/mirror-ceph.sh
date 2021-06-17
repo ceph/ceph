@@ -13,6 +13,7 @@ declare -A SOURCES
 SOURCES[eu]="eu.ceph.com"
 SOURCES[se]="se.ceph.com"
 SOURCES[au]="au.ceph.com"
+SOURCES[ca]="ca.ceph.com"
 SOURCES[us]="download.ceph.com"
 SOURCES[fr]="fr.ceph.com"
 SOURCES[us-west]="us-west.ceph.com"
