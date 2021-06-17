@@ -252,7 +252,7 @@ vc.disconnect()
             ns_in_attr = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool_namespace")
             self.assertEqual(namespace, ns_in_attr)
 
-            objects_in_ns = set(self.fs.rados(["ls"], pool=pool_name, namespace=namespace).split("\n"))
+            objects_in_ns = set(self.fs.rados(["ls"], pool=pool_name, namespace=namespace, stdout=StringIO()).stdout.getvalue().split("\n"))
             self.assertNotEqual(objects_in_ns, set())
 
             # De-authorize the guest
@@ -1542,7 +1542,7 @@ vc.disconnect()
             obj_data = obj_data
         )))
 
-        read_data = self.fs.rados(['get', obj_name, '-'], pool=pool_name)
+        read_data = self.fs.rados(['get', obj_name, '-'], pool=pool_name, stdout=StringIO()).stdout.getvalue()
         self.assertEqual(obj_data, read_data)
 
     def test_get_object(self):
