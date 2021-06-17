@@ -272,15 +272,23 @@ where:
 ``<binding>`` is the pseudo root path (must be an absolute path).
 
 
-Update CephFS Export
-====================
+Create or update CephFS Export via JSON specification
+=====================================================
 
-.. code:: bash
+An existing export can be dumped in JSON format with:
 
-    $ ceph nfs export update -i <json_file>
+.. prompt:: bash #
 
-This updates the cephfs export specified in the json file. Export in json
-format can be fetched with above get command. For example::
+    ceph nfs export get *<pseudo-path>*
+
+An export can be created or modified by importing a JSON description in the
+same format:
+
+.. prompt:: bash #
+
+    ceph nfs export apply -i <json_file>
+
+For example,::
 
    $ ceph nfs export get vstart /cephfs > update_cephfs_export.json
    $ cat update_cephfs_export.json
@@ -306,8 +314,11 @@ format can be fetched with above get command. For example::
      },
      "clients": []
    }
-   # Here in the fetched export, pseudo and access_type is modified. Then the modified file is passed to update interface
-   $ ceph nfs export update -i update_cephfs_export.json
+
+The exported JSON can be modified and then reapplied.  Here, *pseudo*
+and *access_type* are modified::
+
+   $ ceph nfs export apply -i update_cephfs_export.json
    $ cat update_cephfs_export.json
    {
      "export_id": 1,
