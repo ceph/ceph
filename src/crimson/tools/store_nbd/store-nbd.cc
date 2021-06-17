@@ -218,7 +218,7 @@ struct RequestWriter {
 class NBDHandler {
   BlockDriver &backend;
   std::string uds_path;
-  std::optional<seastar::server_socket> socket;
+  std::optional<seastar::server_socket> server_socket;
   seastar::gate gate;
 public:
   struct config_t {
@@ -423,13 +423,13 @@ seastar::future<> handle_commands(
 seastar::future<> NBDHandler::run()
 {
   logger().debug("About to listen on {}", uds_path);
-  socket = seastar::engine().listen(
+  server_socket = seastar::engine().listen(
       seastar::socket_address{
       seastar::unix_domain_addr{uds_path}});
 
   return seastar::keep_doing([this] {
     return seastar::try_with_gate(gate, [this] {
-      return socket->accept().then([this](auto acc) {
+      return server_socket->accept().then([this](auto acc) {
         logger().debug("Accepted");
         return seastar::do_with(
           std::move(acc.connection),
@@ -461,9 +461,9 @@ seastar::future<> NBDHandler::run()
 seastar::future<> NBDHandler::stop()
 {
   seastar::future<> done = gate.close();
-  if (socket) {
-    socket->abort_accept();
-    socket.reset();
+  if (server_socket) {
+    server_socket->abort_accept();
+    server_socket.reset();
   }
   return done;
 }
