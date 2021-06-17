@@ -16,6 +16,8 @@
 #define CEPH_GLOBAL_CONTEXT_H
 
 #include <limits.h>
+#include <map>
+#include <string>
 
 #include "common/config_fwd.h"
 #include "include/common_fwd.h"
@@ -48,6 +50,8 @@ extern int note_io_error_event(
   int iotype,
   unsigned long long offset,
   unsigned long long length);
+
+extern std::map<std::string, std::string> g_crash_context;
 
 }
 using namespace TOPNSPC::global;

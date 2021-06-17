@@ -51,6 +51,9 @@ int g_eio_iotype = 0;   // 1 = read, 2 = write
 unsigned long long g_eio_offset = 0;
 unsigned long long g_eio_length = 0;
 
+// optional additiona crash context
+std::map<std::string, std::string> g_crash_context;
+
 int note_io_error_event(
   const char *devname,
   const char *path,

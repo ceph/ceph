@@ -300,6 +300,14 @@ static void handle_oneshot_fatal_signal(int signum)
 	  }
 	}
 
+	if (!g_crash_context.empty()) {
+	  jf.open_object_section("extra_context");
+	  for (auto& i : g_crash_context) {
+	    jf.dump_string(i.first, i.second);
+	  }
+	  jf.close_section();
+	}
+
 	// backtrace
 	bt.dump(&jf);
 
