@@ -29,7 +29,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self,
             fsname: str,
             cluster_id: str,
-            binding: str,
+            pseudo_path: str,
             path: Optional[str] = '/',
             readonly: Optional[bool] = False,
             addr: Optional[List[str]] = None,
@@ -37,7 +37,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     ) -> Tuple[int, str, str]:
         """Create a cephfs export"""
         return self.export_mgr.create_export(fsal_type='cephfs', fs_name=fsname,
-                                             cluster_id=cluster_id, pseudo_path=binding,
+                                             cluster_id=cluster_id, pseudo_path=pseudo_path,
                                              read_only=readonly, path=path,
                                              squash=squash, addr=addr)
 
@@ -46,7 +46,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self,
             bucket: str,
             cluster_id: str,
-            binding: str,
+            pseudo_path: str,
             readonly: Optional[bool] = False,
             addr: Optional[List[str]] = None,
             realm: Optional[str] = None,
@@ -54,19 +54,19 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Create an RGW export"""
         return self.export_mgr.create_export(fsal_type='rgw', bucket=bucket,
                                              realm=realm,
-                                             cluster_id=cluster_id, pseudo_path=binding,
+                                             cluster_id=cluster_id, pseudo_path=pseudo_path,
                                              read_only=readonly, squash='none',
                                              addr=addr)
 
     @CLICommand('nfs export rm', perm='rw')
-    def _cmd_nfs_export_rm(self, cluster_id: str, binding: str) -> Tuple[int, str, str]:
+    def _cmd_nfs_export_rm(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
         """Remove a cephfs export"""
-        return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=binding)
+        return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
     @CLICommand('nfs export delete', perm='rw')
-    def _cmd_nfs_export_delete(self, cluster_id: str, binding: str) -> Tuple[int, str, str]:
+    def _cmd_nfs_export_delete(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
         """Delete a cephfs export (DEPRECATED)"""
-        return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=binding)
+        return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
     @CLICommand('nfs export ls', perm='r')
     def _cmd_nfs_export_ls(self, cluster_id: str, detailed: bool = False) -> Tuple[int, str, str]:
@@ -74,9 +74,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.list_exports(cluster_id=cluster_id, detailed=detailed)
 
     @CLICommand('nfs export get', perm='r')
-    def _cmd_nfs_export_get(self, cluster_id: str, binding: str) -> Tuple[int, str, str]:
+    def _cmd_nfs_export_get(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
         """Fetch a export of a NFS cluster given the pseudo path/binding"""
-        return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=binding)
+        return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
     @CLICommand('nfs export apply', perm='rw')
     @CLICheckNonemptyFileInput(desc='Export JSON specification')

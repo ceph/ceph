@@ -109,7 +109,7 @@ To export a bucket,
 
   .. prompt:: bash #
 
-    ceph nfs export create rgw *<bucket-name>* *<cluster-id>* *<binding>* [--readonly] [--addr *<client-ip-or-cidr>*
+    ceph nfs export create rgw *<bucket-name>* *<cluster-id>* *<pseudo>* [--readonly] [--addr *<client-ip-or-cidr>*
 
 For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network,
 
@@ -133,7 +133,7 @@ To disable an existing export,
 
   .. prompt:: bash #
 
-    ceph nfs export rm *<cluster-id>* *<binding>*
+    ceph nfs export rm *<cluster-id>* *<pseudo>*
 
 For example, to disable an export from cluster *mynfs* on ``/my-export``,
 
