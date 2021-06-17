@@ -94,10 +94,11 @@ class TestNFS(MgrTestCase):
         :param check_in: Check specified export id
         '''
         output = self._cmd('auth', 'ls')
+        client_id = f'client.nfs.{self.cluster_id}'
         if check_in:
-            self.assertIn(f'client.nfs.{self.cluster_id}.{export_id}', output)
+            self.assertIn(f'{cient_id}.{export_id}', output)
         else:
-            self.assertNotIn(f'client.nfs.{self.cluster_id}.{export_id}', output)
+            self.assertNotIn(client_id, output)
 
     def _test_idempotency(self, cmd_func, cmd_args):
         '''
@@ -200,19 +201,19 @@ class TestNFS(MgrTestCase):
         self.sample_export['export_id'] = 2
         self.sample_export['pseudo'] = self.pseudo_path + '1'
         self.sample_export['access_type'] = 'RO'
-        self.sample_export['fsal']['user_id'] = f'nfs.{self.cluster_id}.2'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.2'
         self.assertDictEqual(self.sample_export, nfs_output[1])
         # Export-3 for subvolume with r only
         self.sample_export['export_id'] = 3
         self.sample_export['path'] = sub_vol_path
         self.sample_export['pseudo'] = self.pseudo_path + '2'
-        self.sample_export['fsal']['user_id'] = f'nfs.{self.cluster_id}.3'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.3'
         self.assertDictEqual(self.sample_export, nfs_output[2])
         # Export-4 for subvolume
         self.sample_export['export_id'] = 4
         self.sample_export['pseudo'] = self.pseudo_path + '3'
         self.sample_export['access_type'] = 'RW'
-        self.sample_export['fsal']['user_id'] = f'nfs.{self.cluster_id}.4'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.4'
         self.assertDictEqual(self.sample_export, nfs_output[3])
 
     def _get_export(self):

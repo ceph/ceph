@@ -42,7 +42,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                              squash=squash, addr=addr)
 
     @CLICommand('nfs export create rgw', perm='rw')
-    def _cmd_rgw_export_create_cephfs(
+    def _cmd_rgw_export_create_rgw(
             self,
             bucket: str,
             cluster_id: str,

@@ -266,7 +266,9 @@ class RGWFSAL(FSAL):
                  ) -> None:
         super().__init__(name)
         assert name == 'RGW'
+        # RGW user uid
         self.user_id = user_id
+        # S3 credentials
         self.access_key_id = access_key_id
         self.secret_access_key = secret_access_key
 
