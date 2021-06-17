@@ -284,9 +284,9 @@ class ExportMgr:
         try:
             fsal_type = kwargs.pop('fsal_type')
             if fsal_type == 'cephfs':
-                return FSExport(self).create_cephfs_export(**kwargs)
+                return self.create_cephfs_export(**kwargs)
             if fsal_type == 'rgw':
-                return FSExport(self).create_rgw_export(**kwargs)
+                return self.create_rgw_export(**kwargs)
             raise NotImplementedError()
         except Exception as e:
             return exception_handler(e, f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
@@ -350,17 +350,11 @@ class ExportMgr:
                 raise NFSInvalidOperation("Empty Config!!")
             new_export = json.loads(export_config)
             # check export type
-            return FSExport(self).update_export_1(cluster_id, new_export)
+            return self.update_export_1(cluster_id, new_export)
         except NotImplementedError:
             return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
         except Exception as e:
             return exception_handler(e, f'Failed to update export: {e}')
-
-
-class FSExport(ExportMgr):
-    def __init__(self, export_mgr_obj: 'ExportMgr') -> None:
-        super().__init__(export_mgr_obj.mgr,
-                         export_mgr_obj._exports)
 
     def _update_user_id(
             self,
