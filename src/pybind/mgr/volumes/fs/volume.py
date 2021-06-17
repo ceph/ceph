@@ -73,7 +73,7 @@ class VolumeClient(CephfsClient["Module"]):
         # stop purge threads
         self.purge_queue.shutdown()
         # last, delete all libcephfs handles from connection pool
-        self.connection_pool.del_all_handles()
+        self.connection_pool.del_all_connections()
 
     def cluster_log(self, msg, lvl=None):
         """
@@ -122,7 +122,7 @@ class VolumeClient(CephfsClient["Module"]):
         if not metadata_pool:
             return -errno.ENOENT, "", "volume {0} doesn't exist".format(volname)
         self.purge_queue.cancel_jobs(volname)
-        self.connection_pool.del_fs_handle(volname, wait=True)
+        self.connection_pool.del_connections(volname, wait=True)
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
