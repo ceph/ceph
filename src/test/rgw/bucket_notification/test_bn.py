@@ -1730,10 +1730,14 @@ def test_ps_s3_metadata_on_master():
 
     # create objects in the bucket using COPY
     bucket.copy_key('copy_of_foo', bucket.name, key.name)
+    
+    # create another objects in the bucket using COPY
+    # but override the metadata value
+    bucket.copy_key('another_copy_of_foo', bucket.name, key.name, metadata={meta_key: 'kaboom'})
 
     # create objects in the bucket using multi-part upload
     fp = tempfile.NamedTemporaryFile(mode='w+b')
-    object_size = 1024
+    object_size = 10*1024*1024
     content = bytearray(os.urandom(object_size))
     fp.write(content)
     fp.flush()
@@ -1747,15 +1751,8 @@ def test_ps_s3_metadata_on_master():
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver
-    event_count = 0
-    for event in receiver.get_and_reset_events():
-        s3_event = event['Records'][0]['s3']
-        assert_equal(s3_event['object']['metadata'][0]['key'], meta_prefix+meta_key)
-        assert_equal(s3_event['object']['metadata'][0]['val'], meta_value)
-        event_count +=1
+    assert_equal(len(receiver.get_and_reset_events()), 3)
 
-    # only PUT and POST has the metadata value
-    assert_equal(event_count, 2)
 
     # delete objects
     for key in bucket.list():
@@ -1763,15 +1760,7 @@ def test_ps_s3_metadata_on_master():
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver
-    event_count = 0
-    for event in receiver.get_and_reset_events():
-        s3_event = event['Records'][0]['s3']
-        assert_equal(s3_event['object']['metadata'][0]['key'], meta_prefix+meta_key)
-        assert_equal(s3_event['object']['metadata'][0]['val'], meta_value)
-        event_count +=1
-
-    # all 3 object has metadata when deleted
-    assert_equal(event_count, 3)
+    assert_equal(len(receiver.get_and_reset_events()), 3)
 
     # cleanup
     stop_amqp_receiver(receiver, task)
