@@ -243,7 +243,7 @@ EXPORT
                 mock.patch('nfs.export.ExportMgr._exec', mock_exec), \
                 mock.patch('nfs.export.check_fs', return_value=True), \
                 mock.patch('nfs.export_utils.check_fs', return_value=True), \
-                mock.patch('nfs.export.FSExport._create_user_key',
+                mock.patch('nfs.export.ExportMgr._create_user_key',
                            return_value=('client.abc', 'thekeyforclientabc')):
 
             rados.open_ioctx.return_value.__enter__.return_value = self.io_mock
