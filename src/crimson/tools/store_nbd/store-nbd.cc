@@ -449,7 +449,6 @@ void NBDHandler::run()
                                        output.close());
             }).discard_result().handle_exception([](auto e) {
               logger().error("NBDHandler::run saw exception {}", e);
-              return seastar::now();
             });
           });
       });
