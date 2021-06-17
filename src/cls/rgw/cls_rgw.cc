@@ -458,6 +458,8 @@ static int read_bucket_header(cls_method_context_t hctx,
 
 int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
+
   // maximum number of calls to get_obj_vals we'll try; compromise
   // between wanting to return the requested # of entries, but not
   // wanting to slow down this op with too many omap reads
@@ -685,6 +687,7 @@ static int check_index(cls_method_context_t hctx,
 
 int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   rgw_cls_check_index_ret ret;
 
   int rc = check_index(hctx, &ret.existing_header, &ret.calculated_header);
@@ -708,6 +711,7 @@ static int write_bucket_header(cls_method_context_t hctx, rgw_bucket_dir_header 
 
 int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   rgw_bucket_dir_header existing_header;
   rgw_bucket_dir_header calc_header;
   int rc = check_index(hctx, &existing_header, &calc_header);
@@ -719,6 +723,7 @@ int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferli
 
 int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_bucket_update_stats_op op;
   auto iter = in->cbegin();
@@ -753,6 +758,7 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
 
 int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   bufferlist header_bl;
   int rc = cls_cxx_map_read_header(hctx, &header_bl);
   if (rc < 0) {
@@ -777,6 +783,7 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
 int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_tag_timeout_op op;
   auto iter = in->cbegin();
@@ -805,6 +812,7 @@ static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
 
 int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_obj_prepare_op op;
   auto iter = in->cbegin();
@@ -947,6 +955,7 @@ static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
 
 int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_obj_complete_op op;
   auto iter = in->cbegin();
@@ -1344,7 +1353,7 @@ public:
   real_time mtime() {
     return instance_entry.meta.mtime;
   }
-};
+}; // class BIVerObjEntry
 
 
 class BIOLHEntry {
@@ -1520,6 +1529,7 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
  */
 static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   string olh_data_idx;
   string instance_idx;
 
@@ -1720,6 +1730,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   string olh_data_idx;
   string instance_idx;
 
@@ -1876,6 +1887,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
 static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_read_olh_log_op op;
   auto iter = in->cbegin();
@@ -1929,6 +1941,7 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
 
 static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_trim_olh_log_op op;
   auto iter = in->cbegin();
@@ -1980,6 +1993,7 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
 
 static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_bucket_clear_olh_op op;
   auto iter = in->cbegin();
@@ -2046,7 +2060,7 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
 int rgw_dir_suggest_changes(cls_method_context_t hctx,
 			    bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(1, "rgw_dir_suggest_changes()");
+  CLS_LOG(1, "entered %s()\n", __func__);
 
   bufferlist header_bl;
   rgw_bucket_dir_header header;
@@ -2174,6 +2188,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 
 static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_obj_remove_op op;
   auto iter = in->cbegin();
@@ -2247,6 +2262,7 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
 static int rgw_obj_store_pg_ver(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_obj_store_pg_ver_op op;
   auto iter = in->cbegin();
@@ -2271,6 +2287,7 @@ static int rgw_obj_store_pg_ver(cls_method_context_t hctx, bufferlist *in, buffe
 
 static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_obj_check_attrs_prefix op;
   auto iter = in->cbegin();
@@ -2314,6 +2331,7 @@ static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in,
 
 static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_obj_check_mtime op;
   auto iter = in->cbegin();
@@ -2377,6 +2395,7 @@ static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_bi_get_op op;
   auto iter = in->cbegin();
@@ -2425,6 +2444,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 
 static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_bi_put_op op;
   auto iter = in->cbegin();
@@ -2732,6 +2752,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 			  bufferlist *in,
 			  bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   // decode request
   rgw_cls_bi_list_op op;
   auto iter = in->cbegin();
@@ -2906,6 +2927,7 @@ static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
 
 static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_bi_log_list_op op;
@@ -2928,6 +2950,7 @@ static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_bi_log_trim_op op;
@@ -2989,6 +3012,7 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 static int rgw_bi_log_resync(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
@@ -3021,8 +3045,9 @@ static int rgw_bi_log_resync(cls_method_context_t hctx, bufferlist *in, bufferli
   return write_bucket_header(hctx, &header);
 }
 
-static int rgw_bi_log_stop(cls_method_context_t hctx, bufferlist *in, bufferlist *out) 
+static int rgw_bi_log_stop(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
@@ -3098,7 +3123,7 @@ static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
 
 int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(10, "rgw_user_usage_log_add()");
+  CLS_LOG(10, "entered %s()\n", __func__);
 
   auto in_iter = in->cbegin();
   rgw_cls_usage_log_add_op op;
@@ -3158,7 +3183,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
                             int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
                             void *param)
 {
-  CLS_LOG(10, "usage_iterate_range");
+  CLS_LOG(10, "entered %s()\n", __func__);
 
   map<string, bufferlist> keys;
   string filter_prefix;
@@ -3257,7 +3282,7 @@ static int usage_log_read_cb(cls_method_context_t hctx, const string& key, rgw_u
 
 int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(10, "rgw_user_usage_log_read()");
+  CLS_LOG(10, "entered %s()\n", __func__);
 
   auto in_iter = in->cbegin();
   rgw_cls_usage_log_read_op op;
@@ -3307,7 +3332,7 @@ static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_u
 
 int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(10, "rgw_user_usage_log_trim()");
+  CLS_LOG(10, "entered %s()\n", __func__);
 
   /* only continue if object exists! */
   int ret = cls_cxx_stat(hctx, NULL, NULL);
@@ -3340,7 +3365,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
 
 int rgw_usage_log_clear(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(10,"%s", __func__);
+  CLS_LOG(10, "entered %s()\n", __func__);
 
   int ret = cls_cxx_map_clear(hctx);
   /* if object doesn't exist all the logs are cleared anyway */
@@ -3499,6 +3524,7 @@ int gc_record_decode(bufferlist& bl, cls_rgw_gc_obj_info& e)
 
 static int rgw_cls_gc_set_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_gc_set_entry_op op;
@@ -3514,6 +3540,7 @@ static int rgw_cls_gc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
 
 static int rgw_cls_gc_defer_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_gc_defer_entry_op op;
@@ -3636,6 +3663,7 @@ static int gc_list_entries(cls_method_context_t hctx, const string& marker,
 
 static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_gc_list_op op;
@@ -3691,6 +3719,7 @@ static int gc_remove(cls_method_context_t hctx, vector<string>& tags)
 
 static int rgw_cls_gc_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_gc_remove_op op;
@@ -3706,6 +3735,7 @@ static int rgw_cls_gc_remove(cls_method_context_t hctx, bufferlist *in, bufferli
 
 static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_lc_get_entry_op op;
@@ -3729,6 +3759,7 @@ static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, buffe
 
 static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_lc_set_entry_op op;
@@ -3748,6 +3779,7 @@ static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
 
 static int rgw_cls_lc_rm_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_lc_rm_entry_op op;
@@ -3764,6 +3796,7 @@ static int rgw_cls_lc_rm_entry(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
   cls_rgw_lc_get_next_entry_ret op_ret;
   cls_rgw_lc_get_next_entry_op op;
@@ -3799,6 +3832,7 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
 static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
 				   bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   cls_rgw_lc_list_entries_op op;
   auto in_iter = in->cbegin();
   try {
@@ -3841,6 +3875,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
 
 static int rgw_cls_lc_put_head(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_lc_put_head_op op;
@@ -3859,6 +3894,7 @@ static int rgw_cls_lc_put_head(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   bufferlist bl;
   int ret = cls_cxx_map_read_header(hctx, &bl);
   if (ret < 0)
@@ -3884,6 +3920,7 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
 
 static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_reshard_add_op op;
@@ -3911,6 +3948,7 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   cls_rgw_reshard_list_op op;
   auto in_iter = in->cbegin();
   try {
@@ -3946,6 +3984,7 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
 
 static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_reshard_get_op op;
@@ -3972,6 +4011,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
 
 static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   auto in_iter = in->cbegin();
 
   cls_rgw_reshard_remove_op op;
@@ -4005,6 +4045,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
 
 static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   cls_rgw_set_bucket_resharding_op op;
 
   auto in_iter = in->cbegin();
@@ -4029,6 +4070,7 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   cls_rgw_clear_bucket_resharding_op op;
 
   auto in_iter = in->cbegin();
@@ -4052,6 +4094,7 @@ static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in
 
 static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   cls_rgw_guard_bucket_resharding_op op;
 
   auto in_iter = in->cbegin();
@@ -4079,6 +4122,7 @@ static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in
 static int rgw_get_bucket_resharding(cls_method_context_t hctx,
 				     bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(10, "entered %s()\n", __func__);
   cls_rgw_get_bucket_resharding_op op;
 
   auto in_iter = in->cbegin();
