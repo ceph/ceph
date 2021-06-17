@@ -104,6 +104,8 @@ public:
   std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
   void mark_zones_to_clean_free(const std::set<uint64_t> *zones_to_clean, 
 				KeyValueDB *kvdb);
+  void mark_zones_to_clean_in_progress(const std::set<uint64_t> *zones_to_clean,
+				       KeyValueDB *kvdb);
 };
 
 #endif
