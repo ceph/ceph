@@ -85,17 +85,25 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
              (fs_name)[_val = phoenix::construct<MDSCapMatch>(std::string(),
 							      _1)]);
 
-    // capspec = * | r[w][p][s]
+    // capspec = * | r[w][f][p][s]
     capspec = spaces >> (
         lit("*")[_val = MDSCapSpec(MDSCapSpec::ALL)]
         |
         lit("all")[_val = MDSCapSpec(MDSCapSpec::ALL)]
         |
+        (lit("rwfps"))[_val = MDSCapSpec(MDSCapSpec::RWFPS)]
+        |
         (lit("rwps"))[_val = MDSCapSpec(MDSCapSpec::RWPS)]
+        |
+        (lit("rwfp"))[_val = MDSCapSpec(MDSCapSpec::RWFP)]
+        |
+        (lit("rwfs"))[_val = MDSCapSpec(MDSCapSpec::RWFS)]
         |
         (lit("rwp"))[_val = MDSCapSpec(MDSCapSpec::RWP)]
         |
         (lit("rws"))[_val = MDSCapSpec(MDSCapSpec::RWS)]
+        |
+        (lit("rwf"))[_val = MDSCapSpec(MDSCapSpec::RWF)]
         |
         (lit("rw"))[_val = MDSCapSpec(MDSCapSpec::RW)]
         |
@@ -271,6 +279,12 @@ bool MDSAuthCaps::is_capable(std::string_view inode_path,
         }
       }
 
+      if (mask & MAY_FULL) {
+        if (!grant.spec.allow_full()) {
+          continue;
+        }
+      }
+
       // check unix permissions?
       if (grant.match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
         return true;
@@ -411,6 +425,9 @@ ostream &operator<<(ostream &out, const MDSCapSpec &spec)
     }
     if (spec.allow_write()) {
       out << "w";
+    }
+    if (spec.allow_full()) {
+      out << "f";
     }
     if (spec.allow_set_vxattr()) {
       out << "p";
