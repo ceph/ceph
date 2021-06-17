@@ -17,6 +17,8 @@ import base64
 import logging
 import errno
 
+import orchestrator
+
 from urllib.parse import urlparse
 
 from .types import RGWAMException, RGWAMCmdRunException, RGWPeriod, RGWUser, RealmToken
@@ -34,6 +36,17 @@ def bool_str(x):
 
 def rand_alphanum_lower(l):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=l))
+
+def gen_name(prefix, suffix_len):
+    return prefix + rand_alphanum_lower(suffix_len)
+
+def set_or_gen(val, gen, prefix):
+    if val:
+        return val
+    if gen:
+        return gen_name(prefix, 8)
+
+    return None
 
 def get_endpoints(endpoints, period = None):
     if endpoints:
@@ -57,18 +70,59 @@ class EnvArgs:
         self.ceph_name = ceph_name
         self.ceph_keyring = ceph_keyring
 
+class ZoneEnv:
+    def __init__(self, env : EnvArgs, realm_name = None, zg_name = None, zone_name = None):
+        self.env = env
+        self.realm_name = realm_name
+        self.zg_name = zg_name
+        self.zone_name = zone_name
+
+    def set(self, env : EnvArgs = None, realm_name = None, zg_name = None, zone_name = None):
+        if env:
+            self.env = env
+        if realm_name:
+            self.realm_name = realm_name
+        if zg_name:
+            self.zg_name = zg_name
+        if zone_name:
+            self.zone_name = zone_name
+
+        return self
+
+    def init_realm(self, realm_name, gen = False):
+        self.realm_name = set_or_gen(realm_name, gen, 'realm-')
+        return self
+
+    def init_zg(self, zg_name, gen = False):
+        self.zg_name = set_or_gen(zg_name, gen, 'zg-')
+        return self
+
+    def init_zone(self, zone_name, gen = False):
+        self.zone_name = set_or_gen(zone_name, gen, 'zone-')
+        return self
+
+def opt_arg(params, cmd, arg):
+    if arg:
+        params += [ cmd, arg ]
+
+def opt_arg_bool(params, flag, arg):
+    if arg:
+        params += [ flag ]
+
 class RGWCmdBase:
-    def __init__(self, prog, env):
+    def __init__(self, prog, zone_env : ZoneEnv):
+        env = zone_env.env
         self.cmd_prefix = [ prog ]
-        if env.ceph_conf:
-            self.cmd_prefix += [ '-c', env.ceph_conf ]
-        if env.ceph_name:
-            self.cmd_prefix += [ '-n', env.ceph_name ]
-        if env.ceph_keyring:
-            self.cmd_prefix += [ '-k', env.ceph_keyring ]
+        self.cmd_suffix = [ ]
+        opt_arg(self.cmd_prefix, '-c', env.ceph_conf )
+        opt_arg(self.cmd_prefix, '-n', env.ceph_name )
+        opt_arg(self.cmd_prefix, '-k', env.ceph_keyring )
+        opt_arg(self.cmd_suffix, '--rgw-realm', zone_env.realm_name )
+        opt_arg(self.cmd_suffix, '--rgw-zonegroup', zone_env.zg_name )
+        opt_arg(self.cmd_suffix, '--rgw-zone', zone_env.zone_name )
 
     def run(self, cmd):
-        run_cmd = self.cmd_prefix + cmd
+        run_cmd = self.cmd_prefix + cmd + self.cmd_suffix
         result = subprocess.run(run_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout = result.stdout.decode('utf-8')
@@ -86,12 +140,12 @@ class RGWCmdBase:
         return (stdout, stderr)
 
 class RGWAdminCmd(RGWCmdBase):
-    def __init__(self, env):
-        super().__init__('radosgw-admin', env)
+    def __init__(self, zone_env : ZoneEnv):
+        super().__init__('radosgw-admin', zone_env)
 
 class RGWAdminJSONCmd(RGWAdminCmd):
-    def __init__(self, env):
-        super().__init__(env)
+    def __init__(self, zone_env : ZoneEnv):
+        super().__init__(zone_env)
 
     def run(self, cmd):
         stdout, _ = RGWAdminCmd.run(self, cmd)
@@ -100,32 +154,31 @@ class RGWAdminJSONCmd(RGWAdminCmd):
 
 
 class RGWCmd(RGWCmdBase):
-    def __init__(self, env):
+    def __init__(self, zone_env : ZoneEnv):
         super().__init__('radosgw', env)
 
-class RealmOp(RGWAdminCmd):
-    def __init__(self, env):
-        super().__init__(env)
+class RealmOp:
+    def __init__(self, env : EnvArgs):
+        self.env = env
         
-    def get(self):
+    def get(self, realm = None):
+
+        ze = ZoneEnv(self.env, realm_name = realm)
+
         params = [ 'realm',
                    'get' ]
 
-        return RGWAdminJSONCmd.run(self, params)
+        return RGWAdminJSONCmd(ze).run(params)
 
-    def create(self, name = None, is_default = True):
-        self.name = name
-        if not self.name:
-            self.name = 'realm-' + rand_alphanum_lower(8)
+    def create(self, name = None):
+        ze = ZoneEnv(self.env).init_realm(realm_name = name, gen = True)
+
+        log.error('ZZZZ: ze.realm=%s' % ze.realm_name or '<undefined>')
 
         params = [ 'realm',
-                   'create',
-                   '--rgw-realm', self.name ]
+                   'create' ]
 
-        if is_default:
-            params += [ '--default' ]
-
-        return RGWAdminJSONCmd.run(self, params)
+        return RGWAdminJSONCmd(ze).run( params)
 
     def pull(self, url, access_key, secret, set_default = False):
         params = [ 'realm',
@@ -134,146 +187,111 @@ class RealmOp(RGWAdminCmd):
                    '--access-key', access_key,
                    '--secret', secret ]
 
-        if set_default:
-            params += [ '--default' ]
+        ze = ZoneEnv(self.env)
 
-        return RGWAdminJSONCmd.run(self, params)
+        return RGWAdminJSONCmd(ze).run(params)
 
-class ZonegroupOp(RGWAdminCmd):
-    def __init__(self, env):
-        super().__init__(env)
+
+class ZonegroupOp:
+    def __init__(self, env : EnvArgs):
+        self.env = env
         
-    def create(self, realm, name = None, endpoints = None, is_master = True, is_default = True):
-        self.name = name
-        if not self.name:
-            self.name = 'zg-' + rand_alphanum_lower(8)
+    def create(self, realm, name = None, endpoints = None, is_master = True):
+        ze = ZoneEnv(self.env, realm_name = realm).init_zg(name, gen = True)
 
         params = [ 'zonegroup',
-                   'create',
-                   '--rgw-realm', realm,
-                   '--rgw-zonegroup', self.name,
-                   '--endpoints', endpoints ]
+                   'create' ]
 
-        if is_master:
-            params += [ '--master' ]
+        opt_arg_bool(params, '--master', is_master)
+        opt_arg(params, '--endpoints', endpoints)
 
-        if is_default:
-            params += [ '--default' ]
+        stdout, _ = RGWAdminCmd(ze).run( params)
 
-        stdout, _ = RGWAdminCmd.run(self, params)
+        return json.loads(stdout)
 
-        self.info = json.loads(stdout)
 
-        return self.info
-
-class ZoneOp(RGWAdminCmd):
-    def __init__(self, env):
-        super().__init__(env)
+class ZoneOp:
+    def __init__(self, env : EnvArgs):
+        self.env = env
         
-    def get(self):
+    def get(self, zone_name = None, zone_id = None):
+        ze = ZoneEnv(self.env, zone_name = zone)
+
         params = [ 'zone',
                    'get' ]
 
-        return RGWAdminJSONCmd.run(self, params)
+        opt_arg(params, '--zone-id', zone_id)
 
-    def create(self, realm, zonegroup, name = None, endpoints = None, is_master = True, is_default = True,
+        return RGWAdminJSONCmd(ze).run(params)
+
+    def create(self, realm, zonegroup, name = None, endpoints = None, is_master = True,
                access_key = None, secret = None):
-        self.name = name
-        if not self.name:
-            self.name = 'z-' + rand_alphanum_lower(8)
+        ze = ZoneEnv(self.env, realm_name = realm, zg_name = zonegroup).init_zone(name, gen = True)
 
         params = [ 'zone',
-                   'create',
-                   '--rgw-realm', realm,
-                   '--rgw-zonegroup', zonegroup,
-                   '--rgw-zone', self.name,
-                   '--endpoints', endpoints ]
+                   'create' ]
 
-        if is_master:
-            params += [ '--master' ]
+        opt_arg_bool(params, '--master', is_master)
+        opt_arg(params, '--access-key', access_key)
+        opt_arg(params, '--secret', secret)
+        opt_arg(params, '--endpoints', endpoints)
 
-        if is_default:
-            params += [ '--default' ]
+        return RGWAdminJSONCmd(ze).run(params)
 
-        if access_key:
-            params += [ '--access-key', access_key ]
+    def modify(self, zone, endpoints = None, is_master = None, access_key = None, secret = None):
+        ze = ZoneEnv(self.env, zone_name = zone)
 
-        if secret:
-            params += [ '--secret', secret ]
-
-        return RGWAdminJSONCmd.run(self, params)
-
-    def modify(self, endpoints = None, is_master = None, is_default = None, access_key = None, secret = None):
         params = [ 'zone',
                    'modify' ]
 
-        if endpoints:
-            params += [ '--endpoints', endpoints ]
+        opt_arg_bool(params, '--master', is_master)
+        opt_arg(params, '--access-key', access_key)
+        opt_arg(params, '--secret', secret)
+        opt_arg(params, '--endpoints', endpoints)
 
-        if is_master is not None:
-            params += [ '--master', bool_str(is_master) ]
+        return RGWAdminJSONCmd(ze).run(params)
 
-        if is_default is not None:
-            params += [ '--default', bool_str(is_default) ]
-
-        if access_key:
-            params += [ '--access-key', access_key ]
-
-        if secret:
-            params += [ '--secret', secret ]
-
-        return RGWAdminJSONCmd.run(self, params)
-
-class PeriodOp(RGWAdminCmd):
+class PeriodOp:
     def __init__(self, env):
-        super().__init__(env)
+        self.env = env
         
     def update(self, realm, commit = True):
+        ze = ZoneEnv(self.env, realm_name = realm)
 
         params = [ 'period',
-                   'update',
-                   '--rgw-realm', realm ]
+                   'update' ]
 
-        if commit:
-            params += [ '--commit' ]
+        opt_arg_bool(params, '--commit', commit)
 
-        return RGWAdminJSONCmd.run(self, params)
+        return RGWAdminJSONCmd(ze).run(params)
 
     def get(self, realm = None):
+        ze = ZoneEnv(self.env, realm_name = realm)
         params = [ 'period',
                    'get' ]
 
-        if realm:
-            params += [ '--rgw-realm', realm ]
+        return RGWAdminJSONCmd(ze).run(params)
 
-        return RGWAdminJSONCmd.run(self, params)
-
-class UserOp(RGWAdminCmd):
+class UserOp:
     def __init__(self, env):
-        super().__init__(env)
+        self.env = env
         
-    def create(self, uid = None, uid_prefix = None, display_name = None, email = None, is_system = False):
-        self.uid = uid
-        if not self.uid:
-            prefix = uid_prefix or 'user'
-            self.uid = prefix + '-' + rand_alphanum_lower(6)
+    def create(self, zone, uid = None, uid_prefix = None, display_name = None, email = None, is_system = False):
+        ze = ZoneEnv(self.env, zone_name = zone)
 
-        self.display_name = display_name
-        if not self.display_name:
-            self.display_name = self.uid
+        u = uid or gen_name(uid_prefix or 'user-', 6)
+
+        dn = display_name or u
 
         params = [ 'user',
                    'create',
-                   '--uid', self.uid,
-                   '--display-name', self.display_name ]
+                   '--uid', u,
+                   '--display-name', dn ]
 
-        if email:
-            params += [ '--email', email ]
+        opt_arg(params, '--email', email )
+        opt_arg_bool(params, '--system', is_system)
 
-        if is_system:
-            params += [ '--system' ]
-
-        return RGWAdminJSONCmd.run(self, params)
+        return RGWAdminJSONCmd(ze).run(params)
 
 class RGWAM:
     def __init__(self, env):
@@ -307,7 +325,7 @@ class RGWAM:
         logging.info('Created realm %s (%s)' % (realm_name, realm_id))
 
         try:
-            zg_info = self.zonegroup_op().create(realm_name, zonegroup, endpoints, True, True)
+            zg_info = self.zonegroup_op().create(realm_name, zonegroup, endpoints, is_master = True)
         except RGWAMException as e:
             raise RGWAMException('failed to create zonegroup', e)
 
@@ -316,7 +334,7 @@ class RGWAM:
         logging.info('Created zonegroup %s (%s)' % (zg_name, zg_id))
 
         try:
-            zone_info = self.zone_op().create(realm_name, zg_name, zone, endpoints, True, True)
+            zone_info = self.zone_op().create(realm_name, zg_name, zone, endpoints, is_master = True)
         except RGWAMException as e:
             raise RGWAMException('failed to create zone', e)
 
@@ -325,7 +343,7 @@ class RGWAM:
         logging.info('Created zone %s (%s)' % (zone_name, zone_id))
 
         try:
-            period_info = self.period_op().update(realm_name, True)
+            period_info = self.period_op().update(realm_name, commit = True)
         except RGWAMCmdRunException as e:
             raise RGWAMException('failed to update period', e)
 
@@ -334,7 +352,7 @@ class RGWAM:
         logging.info('Period: ' + period.id)
 
         try:
-            sys_user_info = self.user_op().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
+            sys_user_info = self.user_op().create(zone_name, uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
         except RGWAMException as e:
             raise RGWAMException('failed to create system user', e)
 
@@ -350,12 +368,12 @@ class RGWAM:
             sys_secret = sys_user.keys[0].secret_key
 
         try:
-            zone_info = self.zone_op().modify(endpoints, None, None, sys_access_key, sys_secret)
+            zone_info = self.zone_op().modify(zone_name, endpoints, None, None, sys_access_key, sys_secret)
         except RGWAMException as e:
             raise RGWAMException('failed to modify zone info', e)
 
         try:
-            user_info = self.user_op().create(uid = uid, is_system = False)
+            user_info = self.user_op().create(zone_name, uid = uid, is_system = False)
         except RGWAMException as e:
             raise RGWAMException('failed to create user', e)
 
@@ -383,25 +401,25 @@ class RGWAM:
         realm_token_b = realm_token.to_json().encode('utf-8')
         return (0, 'Realm Token: %s' % base64.b64encode(realm_token_b).decode('utf-8'), '')
 
-    def realm_new_zone_creds(self, endpoints, sys_uid):
+    def realm_new_zone_creds(self, realm, endpoints, sys_uid):
         try:
-            period_info = self.period_op().get()
+            period_info = self.period_op().get(realm)
         except RGWAMException as e:
             raise RGWAMException('failed to fetch period info', e)
 
         period = RGWPeriod(period_info)
+        zone_id = period.master_zone
 
         try:
-            zone_info = self.zone_op().get()
+            zone_info = self.zone_op().get(zone_id = zone_id)
         except RGWAMException as e:
-            raise RGWAMException('failed to create zone', e)
+            raise RGWAMException('failed to access master zone', e)
 
         zone_name = zone_info['name']
         zone_id = zone_info['id']
 
         logging.info('Period: ' + period.id)
         logging.info('Master zone: ' + period.master_zone)
-        logging.info('Current zone: ' + zone_id)
 
         if period.master_zone != zone_id:
             return (-errno.EINVAL, '', 'Command needs to run on master zone')
@@ -416,7 +434,7 @@ class RGWAM:
             ep = eps[0]
 
         try:
-            sys_user_info = self.user_op().create(uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
+            sys_user_info = self.user_op().create(zone_name, uid = sys_uid, uid_prefix = 'user-sys', is_system = True)
         except RGWAMException as e:
             raise RGWAMException('failed to create system user', e)
 
@@ -460,19 +478,18 @@ class RGWAM:
         realm_id = realm_info['id']
         logging.info('Pulled realm %s (%s)' % (realm_name, realm_id))
 
-        period_info = self.period_op().get()
+        period_info = self.period_op().get(realm_name)
 
         period = RGWPeriod(period_info)
 
         logging.info('Period: ' + period.id)
-        endpoints = get_endpoints(endpoints, period)
 
         zg = period.find_zonegroup_by_name(zonegroup)
         if not zg:
             raise RGWAMException('zonegroup %s not found' % (zonegroup or '<none>'))
 
         try:
-            zone_info = self.zone_op().create(realm_name, zg.name, zone, endpoints, False, True,
+            zone_info = self.zone_op().create(realm_name, zg.name, zone, endpoints, False,
                 access_key, secret)
         except RGWAMException as e:
             raise RGWAMException('failed to create zone', e)
