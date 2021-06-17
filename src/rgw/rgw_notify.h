@@ -58,6 +58,7 @@ struct reservation_t {
   const req_state* const s;
   size_t size;
   rgw::sal::Object* const object;
+  KeyValueMap cached_metadata;
 
   reservation_t(const DoutPrefixProvider *_dpp, rgw::sal::RadosStore* _store, const req_state* _s, rgw::sal::Object* _object) :
       dpp(_dpp), store(_store), s(_s), object(_object) {}
