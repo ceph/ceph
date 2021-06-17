@@ -219,6 +219,7 @@ class NBDHandler {
   BlockDriver &backend;
   std::string uds_path;
   std::optional<seastar::server_socket> server_socket;
+  std::optional<seastar::connected_socket> connected_socket;
   seastar::gate gate;
 public:
   struct config_t {
@@ -246,7 +247,7 @@ public:
     uds_path(config.uds_path)
   {}
 
-  seastar::future<> run();
+  void run();
   seastar::future<> stop();
 };
 
@@ -325,7 +326,7 @@ int main(int argc, char** argv)
       });
 
       logger().debug("Running nbd server...");
-      (void)nbd.run();
+      nbd.run();
       auto stop_nbd = seastar::defer([&] {
         nbd.stop().get();
       });
@@ -420,50 +421,55 @@ seastar::future<> handle_commands(
     });
 }
 
-seastar::future<> NBDHandler::run()
+void NBDHandler::run()
 {
   logger().debug("About to listen on {}", uds_path);
   server_socket = seastar::engine().listen(
       seastar::socket_address{
       seastar::unix_domain_addr{uds_path}});
 
-  return seastar::keep_doing([this] {
+  // keep running in background
+  (void)seastar::keep_doing([this] {
     return seastar::try_with_gate(gate, [this] {
       return server_socket->accept().then([this](auto acc) {
         logger().debug("Accepted");
+        connected_socket = std::move(acc.connection);
         return seastar::do_with(
-          std::move(acc.connection),
-          [this](auto &conn) {
-            return seastar::do_with(
-              conn.input(),
-              RequestWriter{conn.output()},
-              [&, this](auto &input, auto &output) {
-                return send_negotiation(
-                  backend.get_size(),
-                  output.stream
-                ).then([&, this] {
-                  return handle_commands(backend, input, output);
-                }).finally([&] {
-                  return input.close();
-                }).finally([&] {
-                  return output.close();
-                }).handle_exception([](auto e) {
-                  logger().error("NBDHandler::run saw exception {}", e);
-                  return seastar::now();
-                });
-              });
+          connected_socket->input(),
+          RequestWriter{connected_socket->output()},
+          [&, this](auto &input, auto &output) {
+            return send_negotiation(
+              backend.get_size(),
+              output.stream
+            ).then([&, this] {
+              return handle_commands(backend, input, output);
+            }).finally([&] {
+              std::cout << "closing input and output" << std::endl;
+              return seastar::when_all(input.close(),
+                                       output.close());
+            }).discard_result().handle_exception([](auto e) {
+              logger().error("NBDHandler::run saw exception {}", e);
+              return seastar::now();
+            });
           });
       });
-    }).handle_exception_type([](const seastar::gate_closed_exception&) {});
-  });
+    });
+  }).handle_exception_type([](const seastar::gate_closed_exception&) {});
 }
 
 seastar::future<> NBDHandler::stop()
 {
-  seastar::future<> done = gate.close();
   if (server_socket) {
     server_socket->abort_accept();
-    server_socket.reset();
   }
-  return done;
+  if (connected_socket) {
+    connected_socket->shutdown_input();
+    connected_socket->shutdown_output();
+  }
+  return gate.close().then([this] {
+    if (!server_socket.has_value()) {
+      return seastar::now();
+    }
+    return seastar::remove_file(uds_path);
+  });
 }
