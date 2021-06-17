@@ -12,13 +12,10 @@
 
 // The interrupt condition generally works this way:
 //
-//  1. It is created by "enable_interruption" method, and is recorded in the thread
-//     local global variable "::crimson::interruptible::interrupt_cond" (each "enable_
-//     interruption" is paired with a "disable_interruption" to ensure that the global
-//     interrupt_cond won't hold unexpected interrupt conditions during the execution
-//     of unrelated continuations);
+//  1. It is created by call_with_interruption_impl method, and is recorded in the thread
+//     local global variable "::crimson::interruptible::interrupt_cond".
 //  2. Any continuation that's created within the execution of the continuation
-//     that calls the "enable_interruption" method will capture the "interrupt_cond";
+//     that calls the call_with_interruption_impl method will capture the "interrupt_cond";
 //     and when they starts to run, they will put that capture interruption condition
 //     into "::crimson::interruptible::interrupt_cond" so that further continuations
 //     created can also capture the interruption condition;
@@ -33,8 +30,8 @@
 // different continuation chains won't be able to interfere with each other.
 //
 // The global "interrupt_cond" can work as a signal about whether the continuation
-// is supposed to be interrupted, the reason that the global "interrupt_cond" and
-// "enable_interruption" are added is that there may be this scenario:
+// is supposed to be interrupted, the reason that the global "interrupt_cond"
+// exists is that there may be this scenario:
 //
 //     Say there's some method PG::func1(), in which the continuations created may
 //     or may not be supposed to be interrupted in different situations. If we don't
@@ -42,9 +39,8 @@
 //     PG::func1() to indicate whether the current run should create to-be-interrupted
 //     continuations or not.
 //
-// For users to insert an interruption condition, interruptor::with_interruption() in which
-// enable_interruption and disable_interruption would be called should be invoked. And users
-// can only handle interruption in the interruptible_future_detail::handle_interruption method.
+// interruptor::with_interruption() and helpers can be used by users to wrap a future in
+// the interruption machinery.
 
 namespace crimson::interruptible {
 
@@ -980,29 +976,11 @@ public:
 	    typename... Params>
   static inline auto with_interruption_cond(
     OpFunc&& opfunc, OnInterrupt&& efunc, InterruptCond &&cond, Params&&... params) {
-    using result_type = decltype(opfunc(std::forward<Params>(params)...));
-      // there may case like:
-      // 	with_interruption([] {
-      // 		return ...
-      // 		.then_interruptible([] {
-      // 			with_interruption(...);
-      // 		})
-      // 	});
-      // in which the inner with_interruption might errorly release
-      // ::crimson::interruptible::interrupt_cond<InterruptCond>,
-      // so we have to avoid this scenario.
-      //
-      // TODO: maybe some kind of interrupt_cond stack should be implemented?
-      bool created = enable_interruption(std::forward<InterruptCond>(cond));
-
-      auto fut = futurize<result_type>::invoke(
-	std::move(opfunc), std::forward<Params>(params)...
-      ).template handle_interruption(std::move(efunc));
-
-      if (__builtin_expect(created, true)) {
-	disable_interruption();
-      }
-      return fut;
+    return internal::call_with_interruption_impl(
+      seastar::make_lw_shared<InterruptCond>(std::move(cond)),
+      std::forward<OpFunc>(opfunc),
+      std::forward<Params>(params)...
+    ).template handle_interruption(std::move(efunc));
   }
 
   template <typename OpFunc, typename OnInterrupt,
@@ -1353,24 +1331,6 @@ public:
       seastar::thread::yield();
       interrupt_cond<InterruptCond> = interruption_condition;
     }
-  }
-private:
-  // return true if an new interrupt condition is created and false otherwise
-  template <typename... Args>
-  [[gnu::always_inline]]
-  static bool enable_interruption(Args&&... args) {
-    if (!interrupt_cond<InterruptCond>){
-      interrupt_cond<InterruptCond> = seastar::make_lw_shared<
-	InterruptCond>(std::forward<Args>(args)...);
-      return true;
-    }
-    return false;
-  }
-
-  [[gnu::always_inline]]
-  static void disable_interruption() {
-    if (interrupt_cond<InterruptCond>)
-      interrupt_cond<InterruptCond>.release();
   }
 };
 
