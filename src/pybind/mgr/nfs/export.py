@@ -308,7 +308,7 @@ class ExportMgr:
             ret, out, err = self._delete_export(cluster_id=cluster_id, pseudo_path=None,
                                                 export_obj=export)
             if ret != 0:
-                raise NFSException(-1, f"Failed to delete exports: {err} and {ret}")
+                raise NFSException(f"Failed to delete exports: {err} and {ret}")
         log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
 
     @export_cluster_checker
@@ -476,7 +476,7 @@ class ExportMgr:
                 ret, out, err = self._exec(['radosgw-admin', 'user', 'create', '--uid', uid,
                                             '--display-name', uid])
                 if ret:
-                    raise NFSException(-1, f'Failed to create user {uid}')
+                    raise NFSException(f'Failed to create user {uid}')
             j = json.loads(out)
             # FIXME: make this more tolerate of unexpected output?
             access_key = j['keys'][0]['access_key']
