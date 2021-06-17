@@ -325,5 +325,27 @@ void ZonedFreelistManager::mark_zones_to_clean_free(
     zone_state_t zone_state;
     write_zone_state_to_db(zone_num, zone_state, txn);
   }
+
+  txn->rmkey(meta_prefix, "cleaning_in_progress_zones");
+
+  kvdb->submit_transaction_sync(txn);
+}
+
+// Marks the zones currently being cleaned in the db. Should be called before
+// starting the cleaning. If we crash mid-cleaning, the recovery code will check
+// if there is a key "cleaning_in_progress_zones" in the meta_prefix namespace,
+// and if so, will read the zones and resume cleaning.
+void ZonedFreelistManager::mark_zones_to_clean_in_progress(
+    const std::set<uint64_t> *zones_to_clean, KeyValueDB *kvdb) {
+  dout(10) << __func__ << dendl;
+
+  bufferlist bl;
+  uint64_t num_zones = zones_to_clean->size();
+  encode(num_zones, bl);
+  for (auto zone_num : *zones_to_clean)
+    encode(zone_num, bl);
+  
+  KeyValueDB::Transaction txn = kvdb->get_transaction();
+  txn->set(meta_prefix, "cleaning_in_progress_zones", bl);
   kvdb->submit_transaction_sync(txn);
 }
