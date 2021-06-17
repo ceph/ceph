@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "mgr/TTLCache.h"
+#include "mgr/PyUtil.h"
 #include "gtest/gtest.h"
 #include <boost/optional.hpp>
 #include <boost/optional/optional_io.hpp>

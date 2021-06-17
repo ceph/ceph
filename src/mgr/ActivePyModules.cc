@@ -24,6 +24,7 @@
 
 #include "mgr/MgrContext.h"
 #include "mgr/TTLCache.h"
+#include "mgr/MsgpackFormatter.h"
 
 // For ::mgr_store_prefix
 #include "PyModule.h"
@@ -168,29 +169,18 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
-bool ttl_cache_on() {
-  return g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds") > 0;
-}
-
-void ActivePyModules::update_ttl_cache() {
-  ttl_cache.set_ttl(g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds"));
-}
-
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
-  update_ttl_cache();
-  if(ttl_cache_on()) {
-    boost::optional<PyObject*> cached = ttl_cache.get(what);
-    ttl_cache.set_erase_callback([](PyObject *obj) {
-	Py_DECREF(obj);
-    });
+  uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
+  if(ttl_seconds > 0) {
+    ttl_cache.set_ttl(ttl_seconds);
+    std::optional<PyObject*> cached = ttl_cache.get(what);
     if (cached) {
-      Py_INCREF(*cached);
       return *cached;
     }
   }
   PyObject *obj = _get_python(what);
-  if(ttl_cache_on()) {
+  if(ttl_seconds) {
     ttl_cache.insert(what, obj);
     Py_INCREF(obj);
   }
@@ -224,7 +214,9 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
     return cluster_state.with_osdmap([&](const OSDMap &osd_map){
       with_gil_t with_gil{no_gil};
       if (what == "osd_map") {
-        osd_map.dump(&f);
+      MsgpackFormatter mf;
+        osd_map.dump(&mf);
+	return mf.get();
       } else if (what == "osd_map_tree") {
         osd_map.print_tree(&f, nullptr);
       } else if (what == "osd_map_crush") {
