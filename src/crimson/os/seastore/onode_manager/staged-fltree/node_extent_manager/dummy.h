@@ -40,6 +40,7 @@ class DummyNodeExtent final: public NodeExtent {
   DummyNodeExtent(ceph::bufferptr &&ptr) : NodeExtent(std::move(ptr)) {
     state = extent_state_t::INITIAL_WRITE_PENDING;
   }
+  DummyNodeExtent(const DummyNodeExtent& other) = delete;
   ~DummyNodeExtent() override = default;
 
   void retire() {
