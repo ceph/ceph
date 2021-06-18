@@ -220,7 +220,7 @@ class TestNFS(MgrTestCase):
         '''
         Returns export block in json format
         '''
-        return json.loads(self._nfs_cmd('export', 'get', self.cluster_id, self.pseudo_path))
+        return json.loads(self._nfs_cmd('export', 'info', self.cluster_id, self.pseudo_path))
 
     def _test_get_export(self):
         '''
@@ -621,6 +621,6 @@ class TestNFS(MgrTestCase):
         exec_cmd_invalid('export', 'ls')
         exec_cmd_invalid('export', 'delete')
         exec_cmd_invalid('export', 'delete', 'clusterid')
-        exec_cmd_invalid('export', 'get')
-        exec_cmd_invalid('export', 'get', 'clusterid')
+        exec_cmd_invalid('export', 'info')
+        exec_cmd_invalid('export', 'info', 'clusterid')
         exec_cmd_invalid('export', 'update')

@@ -73,8 +73,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """List exports of a NFS cluster"""
         return self.export_mgr.list_exports(cluster_id=cluster_id, detailed=detailed)
 
-    @CLICommand('nfs export get', perm='r')
-    def _cmd_nfs_export_get(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
+    @CLICommand('nfs export info', perm='r')
+    def _cmd_nfs_export_info(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
         """Fetch a export of a NFS cluster given the pseudo path/binding"""
         return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
