@@ -24,6 +24,7 @@
 #include "rgw_bucket.h"
 #include "rgw_user.h"
 #include "rgw_string.h"
+#include "rgw_mdlog.h"
 #include "rgw_multi.h"
 #include "rgw_op.h"
 #include "rgw_bucket_sync.h"
@@ -37,6 +38,8 @@
 #include "services/svc_user.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog.h"
+#include "services/svc_mdlog.h"
+#include "services/svc_sys_obj_cache.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -2529,11 +2532,17 @@ public:
   }
 };
 
-RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
+RGWBucketCtl::RGWBucketCtl(RGWSI_MDLog *mdlog_svc,
+			   RGWSI_SysObj *sysobj_svc,
+			   RGWSI_SysObj_Cache *cache_svc,
+			   RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
                            RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx())
 {
+  svc.mdlog = mdlog_svc;
+  svc.sysobj = sysobj_svc;
+  svc.cache = cache_svc;
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
   svc.bucket_sync = bucket_sync_svc;
@@ -2558,6 +2567,11 @@ void RGWBucketCtl::init(RGWUserCtl *user_ctl,
     [this](const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp) {
       return bucket_exports_data(bucket, y, dpp);
     });
+
+  binfo_cache.reset(new RGWChainedCacheImpl<bucket_info_cache_entry>);
+  binfo_cache->init(svc.cache);
+
+
 }
 
 int RGWBucketCtl::call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f) {
@@ -2569,23 +2583,331 @@ int RGWBucketCtl::call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f) {
   });
 }
 
+// Package together data/functionality needed to manage an operation
+// on bucket metadata. Essentially a larger wrapper for
+// RGWSysObjectCtx.
+
+class BOpContext {
+  RGWBucketCtl& b;
+  std::optional<RGWSysObjectCtx> ctxo;
+  RGWSysObjectCtx& ctx;
+
+  int pre_modify(const DoutPrefixProvider *dpp,
+		 optional_yield y, const std::string& key,
+		 RGWMetadataLogData& log_data,
+		 RGWObjVersionTracker *objv_tracker,
+		 RGWMDLogStatus op_type) {
+    /* if write version has not been set, and there's a read version, set it so that we can
+     * log it
+     */
+    if (objv_tracker &&
+	objv_tracker->read_version.ver && !objv_tracker->write_version.ver) {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+    /* if write version has not been set, and there's a read version, set it so that we can
+     * log it
+     */
+    if (objv_tracker) {
+      log_data.read_version = objv_tracker->read_version;
+      log_data.write_version = objv_tracker->write_version;
+    }
+
+    log_data.status = op_type;
+
+    bufferlist logbl;
+    encode(log_data, logbl);
+
+    return b.svc.mdlog->add_entry(dpp, get_hash_key(key), get_section(),
+				  key, logbl);
+  }
+
+  int post_modify(const DoutPrefixProvider *dpp,
+		  optional_yield y,
+		  const std::string& key,
+		  RGWMetadataLogData& log_data,
+		  RGWObjVersionTracker *objv_tracker,
+		  int ret) {
+    if (ret >= 0)
+      log_data.status = MDLOG_STATUS_COMPLETE;
+    else
+      log_data.status = MDLOG_STATUS_ABORT;
+
+    bufferlist logbl;
+    encode(log_data, logbl);
+
+    int r = b.svc.mdlog->add_entry(dpp, get_hash_key(key),
+				   get_section(), key, logbl);
+    if (ret < 0)
+      return ret;
+
+    if (r < 0)
+      return r;
+
+    return ret;
+  }
+
+  template<typename F>
+  int do_mutate(const DoutPrefixProvider *dpp,
+		optional_yield y,
+		const string& key,
+		F&& f,
+		RGWMDLogStatus op_type,
+		RGWObjVersionTracker* objv_tracker) {
+    RGWMetadataLogData log_data;
+    auto ret = pre_modify(dpp, y, key, log_data, objv_tracker,
+			  op_type);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = std::forward<F>(f)();
+    ret = post_modify(dpp, y, key, log_data, objv_tracker, ret);
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
+public:
+  BOpContext(RGWBucketCtl* b)
+    : b(*b), ctxo(b->svc.sysobj->init_obj_ctx()), ctx(*ctxo) {}
+  BOpContext(RGWBucketCtl* b, RGWSysObjectCtx& ctx) : b(*b), ctx(ctx) {}
+  BOpContext(BOpContext&) = default;
+
+  virtual ~BOpContext() = default;
+  const rgw_pool& get_pool() const {
+    return b.svc.zone->get_zone_params().domain_root;
+  }
+  virtual std::string key_to_oid(const std::string& key) const = 0;
+  virtual const std::string& get_oid_prefix() const = 0;
+  virtual bool is_valid_oid(const std::string& oid) const = 0;
+  virtual std::string oid_to_key(const std::string& oid) const = 0;
+  virtual const std::string& get_section() const = 0;
+
+  /* key to use for hashing entries for log shard placement */
+  virtual std::string get_hash_key(const std::string& key) {
+    return fmt::format("{}:{}", get_section(), key);
+  }
+
+  int get(const DoutPrefixProvider *dpp,
+	  optional_yield y,
+	  const std::string& key,
+	  ceph::buffer::list* bl,
+	  RGWObjVersionTracker*  objv_tracker,
+	  ceph::real_time* mtime,
+	  std::map<std::string, ceph::buffer::list> *attrs,
+	  rgw_cache_entry_info* cache_info,
+	  const boost::optional<obj_version>& refresh_version) {
+    return rgw_get_system_obj(ctx, get_pool(), key_to_oid(key), *bl,
+			      objv_tracker, mtime, y, dpp, attrs, cache_info,
+			      refresh_version);
+  }
+
+  int put(const DoutPrefixProvider *dpp,
+	  optional_yield y,
+	  const string& key,
+	  ceph::buffer::list& bl,
+	  bool exclusive,
+	  RGWObjVersionTracker* objv_tracker,
+	  ceph::real_time mtime,
+	  std::map<std::string, ceph::buffer::list>* attrs) {
+    return do_mutate(dpp, y, key,
+		     [&] {
+		       return rgw_put_system_obj(dpp, ctx, get_pool(), key, bl,
+						 exclusive, objv_tracker, mtime,
+						 y, attrs);
+		     }, MDLOG_STATUS_WRITE, objv_tracker);
+  }
+
+  int remove(const DoutPrefixProvider *dpp,
+	     optional_yield y,
+	     const string& key,
+	     RGWObjVersionTracker* objv_tracker) {
+    return do_mutate(dpp, y, key,
+		     [&] {
+		       rgw_raw_obj k(get_pool(), key_to_oid(key));
+		       auto sysobj = ctx.get_obj(k);
+		       return sysobj.wop()
+			 .set_objv_tracker(objv_tracker)
+			 .remove(dpp, y);
+		     }, MDLOG_STATUS_REMOVE, objv_tracker);
+  }
+};
+
+class BucketOpContext : public BOpContext {
+public:
+  using BOpContext::BOpContext;
+
+  std::string key_to_oid(const std::string& key) const override {
+    return std::string(key);
+  }
+
+  const std::string& get_oid_prefix() const override {
+    static const std::string prefix = ""s;
+    return prefix;
+  }
+
+  bool is_valid_oid(const std::string& oid) const override {
+    return (!oid.empty() && oid[0] != '.');
+  }
+
+  std::string oid_to_key(const std::string& oid) const override {
+    /* should have been called after is_valid_oid(), so no need to
+     * check for validity */
+    return std::string(oid);
+  }
+  const std::string& get_section() const override {
+    static const string section = "bucket"s;
+    return section;
+  }
+};
+
+class BucketInstanceOpContext : public BOpContext {
+public:
+  using BOpContext::BOpContext;
+
+  const string& get_oid_prefix() const override {
+    static const std::string prefix = ".bucket.meta.";
+    return prefix;
+  }
+
+  bool is_valid_oid(const string& oid) const override {
+    const auto& prefix = get_oid_prefix();
+    return (oid.compare(0, prefix.size(), prefix) == 0);
+  }
+
+  // 'tenant/' is used in bucket instance keys for sync to avoid
+  // parsing ambiguity with the existing instance[:shard] format. once
+  // we parse the shard, the / is replaced with a : to match the
+  // [tenant:]instance format
+  std::string key_to_oid(const string& key) const override {
+    const auto& prefix = get_oid_prefix();
+    std::string oid = prefix + key;
+
+    // replace tenant/ with tenant:
+    auto c = oid.find('/', prefix.size());
+    if (c != string::npos) {
+      oid[c] = ':';
+    }
+
+    return oid;
+  }
+
+  // convert bucket instance oids back to the tenant/ format for metadata keys.
+  // it's safe to parse 'tenant:' only for oids, because they won't contain the
+  // optional :shard at the end
+  std::string oid_to_key(const std::string& oid) const override {
+    const auto& prefix = get_oid_prefix();
+
+    /* this should have been called after oid was checked for validity */
+    if (oid.size() < prefix.size()) { /* just sanity check */
+      return {};
+    }
+
+    auto key = oid.substr(prefix.size());
+
+    // find first : (could be tenant:bucket or bucket:instance)
+    auto c = key.find(':');
+    if (c != string::npos) {
+      // if we find another :, the first one was for tenant
+      if (key.find(':', c + 1) != string::npos) {
+        key[c] = '/';
+      }
+    }
+
+    return key;
+  }
+
+  /*
+   * hash entry for mdlog placement. Use the same hash key we'd have
+   * for the bucket entry point, so that the log entries end up at the
+   * same log shard, so that we process them in order
+   */
+  string get_hash_key(const string& key) override {
+    string k = "bucket:";
+    int pos = key.find(':');
+    if (pos < 0)
+      k.append(key);
+    else
+      k.append(key.substr(0, pos));
+
+    return k;
+  }
+
+  const std::string& get_section() const override {
+    static const string section = "bucket.instance"s;
+    return section;
+  }
+};
+
+int RGWBucketCtl::read_bucket_entrypoint_info(
+  BucketOpContext& ctx,
+  const std::string& key,
+  RGWBucketEntryPoint *info,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  RGWObjVersionTracker* objv_tracker,
+  ceph::real_time* mtime,
+  std::map<std::string, ceph::buffer::list>* attrs,
+  rgw_cache_entry_info* cache_info,
+  boost::optional<obj_version> refresh_version)
+{
+  ceph::buffer::list bl;
+  auto ret = ctx.get(dpp, y, key, &bl, objv_tracker, mtime, attrs, cache_info,
+		     refresh_version);
+  if (ret < 0) {
+    return ret;
+  }
+  auto iter = bl.cbegin();
+  try {
+    decode(*info, iter);
+  } catch (const ceph::buffer::error& e) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info: "
+		      << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
+}
+
 int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                               RGWBucketEntryPoint *info,
-                                              optional_yield y, const DoutPrefixProvider *dpp,
+                                              optional_yield y,
+					      const DoutPrefixProvider *dpp,
                                               const Bucket::GetParams& params)
 {
-  return bm_handler->call(params.bectx_params, [&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return svc.bucket->read_bucket_entrypoint_info(ctx,
-                                                   RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                   info,
-                                                   params.objv_tracker,
-                                                   params.mtime,
-                                                   params.attrs,
-						   y,
-                                                   dpp,
-                                                   params.cache_info,
-                                                   params.refresh_version);
-  });
+  BucketOpContext ctx(this);
+  ceph::buffer::list bl;
+  auto ret = ctx.get(dpp, y, get_entrypoint_meta_key(bucket), &bl,
+		     params.objv_tracker, params.mtime, params.attrs,
+		     params.cache_info, params.refresh_version);
+  if (ret < 0) {
+    return ret;
+  }
+  auto iter = bl.cbegin();
+  try {
+    decode(*info, iter);
+  } catch (const ceph::buffer::error& e) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info: "
+		      << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
+}
+
+int RGWBucketCtl::store_bucket_entrypoint_info(
+  BucketOpContext& ctx,
+  const std::string& key,
+  RGWBucketEntryPoint& info,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  bool exclusive,
+  RGWObjVersionTracker* objv_tracker,
+  ceph::real_time mtime,
+  std::map<std::string, ceph::buffer::list>* attrs)
+{
+  ceph::buffer::list bl;
+  encode(info, bl);
+  return ctx.put(dpp, y, key, bl, exclusive, objv_tracker, mtime, attrs);
 }
 
 int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
@@ -2594,31 +2916,31 @@ int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                const DoutPrefixProvider *dpp,
                                                const Bucket::PutParams& params)
 {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return svc.bucket->store_bucket_entrypoint_info(ctx,
-                                                    RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                    info,
-                                                    params.exclusive,
-                                                    params.mtime,
-                                                    params.attrs,
-                                                    params.objv_tracker,
-                                                    y,
-                                                    dpp);
-  });
+  BucketOpContext ctx(this);
+  ceph::buffer::list bl;
+  encode(info, bl);
+  return ctx.put(dpp, y, get_entrypoint_meta_key(bucket), bl, params.exclusive,
+		 params.objv_tracker, params.mtime, params.attrs);
 }
 
-int RGWBucketCtl::remove_bucket_entrypoint_info(const rgw_bucket& bucket,
-                                                optional_yield y,
-                                                const DoutPrefixProvider *dpp,
-                                                const Bucket::RemoveParams& params)
+int RGWBucketCtl::remove_bucket_entrypoint_info(
+  BucketOpContext& ctx,
+  const std::string& key,
+  optional_yield y,
+  const DoutPrefixProvider* dpp,
+  RGWObjVersionTracker* objv_tracker)
 {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return svc.bucket->remove_bucket_entrypoint_info(ctx,
-                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                     params.objv_tracker,
-						     y,
-                                                     dpp);
-  });
+  return ctx.remove(dpp, y, key, objv_tracker);
+}
+
+int RGWBucketCtl::remove_bucket_entrypoint_info(
+  const rgw_bucket& bucket,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  const Bucket::RemoveParams& params)
+{
+  BucketOpContext ctx(this);
+  return ctx.remove(dpp, y, get_entrypoint_meta_key(bucket), params.objv_tracker);
 }
 
 int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,

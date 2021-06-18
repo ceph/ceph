@@ -412,11 +412,20 @@ struct rgw_ep_info {
     : ep(ep), attrs(attrs) {}
 };
 
+struct rgw_cache_entry_info;
+template <class T>
+class RGWChainedCacheImpl;
+class BucketOpContext;
+class BucketInstanceOpContext;
+
 class RGWBucketCtl
 {
   CephContext *cct;
 
   struct Svc {
+    RGWSI_MDLog *mdlog{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_SysObj_Cache *cache{nullptr};
     RGWSI_Zone *zone{nullptr};
     RGWSI_Bucket *bucket{nullptr};
     RGWSI_Bucket_Sync *bucket_sync{nullptr};
@@ -435,8 +444,20 @@ class RGWBucketCtl
 
   int call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f);
 
+  struct bucket_info_cache_entry {
+    RGWBucketInfo info;
+    real_time mtime;
+    map<string, bufferlist> attrs;
+  };
+
+  using RGWChainedCacheImpl_bucket_info_cache_entry = RGWChainedCacheImpl<bucket_info_cache_entry>;
+  unique_ptr<RGWChainedCacheImpl_bucket_info_cache_entry> binfo_cache;
+
 public:
-  RGWBucketCtl(RGWSI_Zone *zone_svc,
+  RGWBucketCtl(RGWSI_MDLog *mdlog,
+	       RGWSI_SysObj *sysobj_svc,
+	       RGWSI_SysObj_Cache *cache_svc,
+	       RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
                RGWSI_Bucket_Sync *bucket_sync_svc,
                RGWSI_BucketIndex *bi_svc);
@@ -626,15 +647,43 @@ public:
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp,
                                   const Bucket::GetParams& params = {});
+  int read_bucket_entrypoint_info(
+    BucketOpContext& ctx,
+    const std::string& key,
+    RGWBucketEntryPoint *info,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
+    RGWObjVersionTracker* objv_tracker,
+    ceph::real_time* mtime,
+    std::map<std::string, ceph::buffer::list>* attrs,
+    rgw_cache_entry_info* cache_info,
+    boost::optional<obj_version> refresh_version);
+
   int store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                    RGWBucketEntryPoint& info,
                                    optional_yield y,
                                    const DoutPrefixProvider *dpp,
                                    const Bucket::PutParams& params = {});
+  int store_bucket_entrypoint_info(
+    BucketOpContext& ctx,
+    const std::string& key,
+    RGWBucketEntryPoint& info,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
+    bool exclusive,
+    RGWObjVersionTracker* objv_tracker,
+    ceph::real_time mtime,
+    std::map<std::string, ceph::buffer::list>* attrs);
+
   int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
                                     optional_yield y,
                                     const DoutPrefixProvider *dpp,
                                     const Bucket::RemoveParams& params = {});
+  int remove_bucket_entrypoint_info(BucketOpContext& ctx,
+				    const std::string& key,
+				    optional_yield y,
+				    const DoutPrefixProvider* dpp,
+				    RGWObjVersionTracker* objv_tracker);
 
   /* bucket instance */
   int read_bucket_instance_info(const rgw_bucket& bucket,
@@ -759,6 +808,22 @@ private:
 		       optional_yield y,
                        const DoutPrefixProvider *dpp);
 
+  friend class BOpContext;
+
+  static std::string get_entrypoint_meta_key(const rgw_bucket& bucket) {
+    if (bucket.bucket_id.empty()) {
+      return bucket.get_key();
+    }
+
+    rgw_bucket b(bucket);
+    b.bucket_id.clear();
+
+    return b.get_key();
+  }
+
+  static std::string get_bi_meta_key(const rgw_bucket& bucket) {
+    return bucket.get_key();
+  }
 };
 
 bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Store* store, const string& marker,

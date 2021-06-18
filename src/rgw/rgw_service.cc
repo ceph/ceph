@@ -338,7 +338,10 @@ int RGWCtlDef::init(RGWServices& svc, const DoutPrefixProvider *dpp)
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
-  bucket.reset(new RGWBucketCtl(svc.zone,
+  bucket.reset(new RGWBucketCtl(svc.mdlog,
+				svc.sysobj,
+				svc.cache,
+				svc.zone,
                                 svc.bucket,
                                 svc.bucket_sync,
                                 svc.bi));
