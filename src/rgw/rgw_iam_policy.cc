@@ -554,10 +554,11 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 	a->account = pp->tenant;
       (w->id == TokenID::Resource ? t->resource : t->notresource)
 	.emplace(std::move(*a));
-    }
-    else
-      ldout(cct, 0) << "Supplied resource is discarded: " << string(s, l)
+    } else {
+      ldout(cct, 0) << "Supplied resource is discarded because resources of someone else's tenant can not be specified: " << string(s, l)
 		    << dendl;
+      return false;
+    }
   } else if (w->kind == TokenKind::cond_key) {
     auto& t = pp->policy.statements.back();
     t.conditions.back().vals.emplace_back(s, l);
