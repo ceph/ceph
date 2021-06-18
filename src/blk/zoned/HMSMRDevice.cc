@@ -412,8 +412,8 @@ void HMSMRDevice::_detect_vdo()
   return;
 }
 
-void HMSMRDevice::reset_zones(const std::set<uint64_t> *zones) {
-  for (auto zone_num : *zones) {
+void HMSMRDevice::reset_zones(const std::set<uint64_t>& zones) {
+  for (auto zone_num : zones) {
     if (zbd_reset_zones(zbd_dev, zone_num * zone_size, zone_size) != 0) {
       derr << __func__ << " resetting zone failed for zone " << zone_num << dendl;
     }
