@@ -304,6 +304,7 @@ struct MDRequestImpl : public MutationImpl {
     bool is_ambiguous_auth = false;
     bool is_remote_frozen_authpin = false;
     bool is_inode_exporter = false;
+    bool rdonly_checks = false;
 
     map<client_t, pair<Session*, uint64_t> > imported_session_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
