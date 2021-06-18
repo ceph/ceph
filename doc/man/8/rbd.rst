@@ -270,7 +270,8 @@ Commands
   The --options argument is a comma separated list of device type
   specific options (opt1,opt2=val,...).
 
-:command:`device attach` [-t | --device-type *device-type*] --device *device-path* [--read-only] [--exclusive] [--force] [-o | --options *device-options*] *image-spec* | *snap-spec*
+:command:`device attach` [-t | --device-type *device-type*] --device *device-path* [--cookie *device-cookie] [--read-only] [--exclusive] [--force] [-o | --options *device-options*] *image-spec* | *snap-spec*
+  Attach the specified image to the specified block device (currently only
   Attach the specified image to the specified block device (currently only
   `nbd` on Linux). This operation is unsafe and should not be normally used.
   In particular, specifying the wrong image or the wrong block device may

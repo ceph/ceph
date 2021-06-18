@@ -212,6 +212,7 @@ void get_attach_arguments(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
     ("device", po::value<std::string>()->required(), "specify device path")
+    ("cookie", po::value<std::string>(), "device cookie")
     ("read-only", po::bool_switch(), "attach read-only")
     ("force", po::bool_switch(), "force attach")
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
