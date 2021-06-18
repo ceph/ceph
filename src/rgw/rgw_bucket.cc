@@ -3058,15 +3058,16 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
                                    RGWObjVersionTracker *ep_objv_tracker)
 {
   const rgw_bucket *b = &bucket;
-
+  auto ctx = svc.sysobj->init_obj_ctx();
   std::optional<RGWBucketEntryPoint> ep;
 
   if (b->bucket_id.empty()) {
+    BucketOpContext bctx(this, ctx);
     ep.emplace();
 
-    int r = read_bucket_entrypoint_info(*b, &(*ep), y, dpp, RGWBucketCtl::Bucket::GetParams()
-                                                    .set_bectx_params(params.bectx_params)
-                                                    .set_objv_tracker(ep_objv_tracker));
+    int r = read_bucket_entrypoint_info(bctx, get_entrypoint_meta_key(*b),
+					&(*ep), y, dpp, ep_objv_tracker,
+					nullptr, nullptr, nullptr, boost::none);
     if (r < 0) {
       return r;
     }
@@ -3074,16 +3075,11 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
     b = &ep->bucket;
   }
 
-  int ret = bmi_handler->call(params.bectx_params, [&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return svc.bucket->read_bucket_instance_info(ctx,
-                                                 RGWSI_Bucket::get_bi_meta_key(*b),
-                                                 info,
-                                                 params.mtime,
-                                                 params.attrs,
-						 y, dpp,
-                                                 params.cache_info,
-                                                 params.refresh_version);
-  });
+  BucketInstanceOpContext bictx(this, ctx);
+  auto ret = read_bucket_instance_info(bictx, get_bi_meta_key(*b), info, y, dpp,
+				       params.mtime, params.attrs,
+				       params.cache_info,
+				       params.refresh_version, nullptr);
 
   if (ret < 0) {
     return ret;
