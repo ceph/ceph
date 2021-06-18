@@ -47,6 +47,10 @@ class NodeExtent : public LogicalCachedExtent {
     return NodeExtentMutable(get_bptr().c_str(), get_length());
   }
 
+  std::ostream& print_detail_l(std::ostream& out) const final {
+    return out << ", fltree_header=" << get_header();
+  }
+
   /**
    * Abstracted interfaces to implement:
    * - CacheExtent::duplicate_for_write() -> CachedExtentRef

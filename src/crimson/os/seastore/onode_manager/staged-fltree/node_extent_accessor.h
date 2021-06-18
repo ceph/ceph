@@ -110,12 +110,12 @@ class DeltaRecorderT final: public DeltaRecorder {
   node_type_t node_type() const override { return NODE_TYPE; }
   field_type_t field_type() const override { return FIELD_TYPE; }
   void apply_delta(ceph::bufferlist::const_iterator& delta,
-                   NodeExtentMutable& node,
-                   laddr_t node_laddr) override {
+                   NodeExtentMutable& mut,
+                   const NodeExtent& node) override {
     LOG_PREFIX(OTree::Extent::Replay);
     assert(is_empty());
-    node_stage_t stage(reinterpret_cast<const FieldType*>(node.get_read()),
-                       node.get_length());
+    node_stage_t stage(reinterpret_cast<const FieldType*>(mut.get_read()),
+                       mut.get_length());
     node_delta_op_t op;
     try {
       ceph::decode(op, delta);
@@ -133,21 +133,21 @@ class DeltaRecorderT final: public DeltaRecorder {
               "insert_size={}B ...",
               key, value, insert_pos, insert_stage, insert_size);
         layout_t::template insert<KeyT::HOBJ>(
-          node, stage, key, value, insert_pos, insert_stage, insert_size);
+          mut, stage, key, value, insert_pos, insert_stage, insert_size);
         break;
       }
       case node_delta_op_t::SPLIT: {
         DEBUG("decoding SPLIT ...");
         auto split_at = StagedIterator::decode(
-            node.get_read(), node.get_length(), delta);
+            mut.get_read(), mut.get_length(), delta);
         DEBUG("apply split_at={} ...", split_at);
-        layout_t::split(node, stage, split_at);
+        layout_t::split(mut, stage, split_at);
         break;
       }
       case node_delta_op_t::SPLIT_INSERT: {
         DEBUG("decoding SPLIT_INSERT ...");
         auto split_at = StagedIterator::decode(
-            node.get_read(), node.get_length(), delta);
+            mut.get_read(), mut.get_length(), delta);
         auto key = key_hobj_t::decode(delta);
         auto value = decode_value(delta);
         auto insert_pos = position_t::decode(delta);
@@ -159,7 +159,7 @@ class DeltaRecorderT final: public DeltaRecorder {
               "insert_size={}B ...",
               split_at, key, value, insert_pos, insert_stage, insert_size);
         layout_t::template split_insert<KeyT::HOBJ>(
-          node, stage, split_at, key, value, insert_pos, insert_stage, insert_size);
+          mut, stage, split_at, key, value, insert_pos, insert_stage, insert_size);
         break;
       }
       case node_delta_op_t::UPDATE_CHILD_ADDR: {
@@ -169,46 +169,46 @@ class DeltaRecorderT final: public DeltaRecorder {
         node_offset_t update_offset;
         ceph::decode(update_offset, delta);
         auto p_addr = reinterpret_cast<laddr_packed_t*>(
-            node.get_write() + update_offset);
+            mut.get_write() + update_offset);
         DEBUG("apply {:#x} to offset {:#x} ...",
               new_addr, update_offset);
-        layout_t::update_child_addr(node, new_addr, p_addr);
+        layout_t::update_child_addr(mut, new_addr, p_addr);
         break;
       }
       case node_delta_op_t::ERASE: {
         DEBUG("decoding ERASE ...");
         auto erase_pos = position_t::decode(delta);
         DEBUG("apply erase_pos({}) ...", erase_pos);
-        layout_t::erase(node, stage, erase_pos);
+        layout_t::erase(mut, stage, erase_pos);
         break;
       }
       case node_delta_op_t::MAKE_TAIL: {
         DEBUG("decoded MAKE_TAIL, apply ...");
-        layout_t::make_tail(node, stage);
+        layout_t::make_tail(mut, stage);
         break;
       }
       case node_delta_op_t::SUBOP_UPDATE_VALUE: {
         DEBUG("decoding SUBOP_UPDATE_VALUE ...");
         node_offset_t value_header_offset;
         ceph::decode(value_header_offset, delta);
-        auto p_header = node.get_read() + value_header_offset;
+        auto p_header = mut.get_read() + value_header_offset;
         auto p_header_ = reinterpret_cast<const value_header_t*>(p_header);
         DEBUG("update {} at {:#x} ...", *p_header_, value_header_offset);
-        auto payload_mut = p_header_->get_payload_mutable(node);
-        auto value_addr = node_laddr + payload_mut.get_node_offset();
+        auto payload_mut = p_header_->get_payload_mutable(mut);
+        auto value_addr = node.get_laddr() + payload_mut.get_node_offset();
         get_value_replayer(p_header_->magic)->apply_value_delta(
             delta, payload_mut, value_addr);
         break;
       }
       default:
-        ERROR("got unknown op {} when replay {:#x}",
-              op, node_laddr);
-        ceph_abort();
+        ERROR("got unknown op {} when replay {}",
+              op, node);
+        ceph_abort("fatal error");
       }
     } catch (buffer::error& e) {
-      ERROR("got decode error {} when replay {:#x}",
-            e, node_laddr);
-      ceph_abort();
+      ERROR("got decode error {} when replay {}",
+            e, node);
+      ceph_abort("fatal error");
     }
   }
 
