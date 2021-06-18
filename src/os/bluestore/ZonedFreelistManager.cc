@@ -338,10 +338,7 @@ void ZonedFreelistManager::mark_zones_to_clean_in_progress(
   dout(10) << __func__ << dendl;
 
   bufferlist bl;
-  uint64_t num_zones = zones_to_clean->size();
-  encode(num_zones, bl);
-  for (auto zone_num : *zones_to_clean)
-    encode(zone_num, bl);
+  encode(zones_to_clean, bl);
   
   KeyValueDB::Transaction txn = kvdb->get_transaction();
   txn->set(meta_prefix, "cleaning_in_progress_zones", bl);
