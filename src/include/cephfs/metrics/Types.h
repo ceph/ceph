@@ -25,6 +25,8 @@ enum ClientMetricType {
   CLIENT_METRIC_TYPE_OPENED_FILES,
   CLIENT_METRIC_TYPE_PINNED_ICAPS,
   CLIENT_METRIC_TYPE_OPENED_INODES,
+  CLIENT_METRIC_TYPE_READ_IO_SIZES,
+  CLIENT_METRIC_TYPE_WRITE_IO_SIZES,
 };
 inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) {
   switch(type) {
@@ -51,6 +53,12 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     break;
   case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES:
     os << "OPENED_INODES";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_READ_IO_SIZES:
+    os << "READ_IO_SIZES";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES:
+    os << "WRITE_IO_SIZES";
     break;
   default:
     os << "(UNKNOWN:" << static_cast<std::underlying_type<ClientMetricType>::type>(type) << ")";
@@ -359,6 +367,80 @@ struct OpenedInodesPayload {
   }
 };
 
+struct ReadIoSizesPayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_READ_IO_SIZES;
+
+  uint64_t total_ops = 0;
+  uint64_t total_size = 0;
+
+  ReadIoSizesPayload() { }
+  ReadIoSizesPayload(uint64_t total_ops, uint64_t total_size)
+    : total_ops(total_ops), total_size(total_size) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(total_ops, bl);
+    encode(total_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(total_ops, iter);
+    decode(total_size, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("total_ops", total_ops);
+    f->dump_int("total_size", total_size);
+  }
+
+  void print(ostream *out) const {
+    *out << "total_ops: " << total_ops << " total_size: " << total_size;
+  }
+};
+
+struct WriteIoSizesPayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES;
+
+  uint64_t total_ops = 0;
+  uint64_t total_size = 0;
+
+  WriteIoSizesPayload() { }
+  WriteIoSizesPayload(uint64_t total_ops, uint64_t total_size)
+    : total_ops(total_ops), total_size(total_size) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(total_ops, bl);
+    encode(total_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(total_ops, iter);
+    decode(total_size, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("total_ops", total_ops);
+    f->dump_int("total_size", total_size);
+  }
+
+  void print(ostream *out) const {
+    *out << "total_ops: " << total_ops << " total_size: " << total_size;
+  }
+};
+
 struct UnknownPayload {
   static const ClientMetricType METRIC_TYPE = static_cast<ClientMetricType>(-1);
 
@@ -385,10 +467,12 @@ typedef boost::variant<CapInfoPayload,
                        ReadLatencyPayload,
                        WriteLatencyPayload,
                        MetadataLatencyPayload,
-		       DentryLeasePayload,
-		       OpenedFilesPayload,
-		       PinnedIcapsPayload,
-		       OpenedInodesPayload,
+                       DentryLeasePayload,
+                       OpenedFilesPayload,
+                       PinnedIcapsPayload,
+                       OpenedInodesPayload,
+                       ReadIoSizesPayload,
+                       WriteIoSizesPayload,
                        UnknownPayload> ClientMetricPayload;
 
 // metric update message sent by clients
@@ -496,6 +580,12 @@ public:
       break;
     case ClientMetricType::CLIENT_METRIC_TYPE_OPENED_INODES:
       payload = OpenedInodesPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_READ_IO_SIZES:
+      payload = ReadIoSizesPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES:
+      payload = WriteIoSizesPayload();
       break;
     default:
       payload = UnknownPayload();

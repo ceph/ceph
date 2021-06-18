@@ -127,6 +127,8 @@ void MetricsHandler::remove_session(Session *session) {
   metrics.opened_files_metric = { };
   metrics.pinned_icaps_metric = { };
   metrics.opened_inodes_metric = { };
+  metrics.read_io_sizes_metric = { };
+  metrics.write_io_sizes_metric = { };
   metrics.update_type = UPDATE_TYPE_REMOVE;
 }
 
@@ -275,6 +277,40 @@ void MetricsHandler::handle_payload(Session *session, const OpenedInodesPayload 
   metrics.opened_inodes_metric.updated = true;
 }
 
+void MetricsHandler::handle_payload(Session *session, const ReadIoSizesPayload &payload) {
+  dout(20) << ": type=" << static_cast<ClientMetricType>(ReadIoSizesPayload::METRIC_TYPE)
+           << ", session=" << session << ", total_ops=" << payload.total_ops
+           << ", total_size=" << payload.total_size << dendl;
+
+  auto it = client_metrics_map.find(session->info.inst);
+  if (it == client_metrics_map.end()) {
+    return;
+  }
+
+  auto &metrics = it->second.second;
+  metrics.update_type = UPDATE_TYPE_REFRESH;
+  metrics.read_io_sizes_metric.total_ops = payload.total_ops;
+  metrics.read_io_sizes_metric.total_size = payload.total_size;
+  metrics.read_io_sizes_metric.updated = true;
+}
+
+void MetricsHandler::handle_payload(Session *session, const WriteIoSizesPayload &payload) {
+  dout(20) << ": type=" << static_cast<ClientMetricType>(WriteIoSizesPayload::METRIC_TYPE)
+           << ", session=" << session << ", total_ops=" << payload.total_ops
+           << ", total_size=" << payload.total_size << dendl;
+
+  auto it = client_metrics_map.find(session->info.inst);
+  if (it == client_metrics_map.end()) {
+    return;
+  }
+
+  auto &metrics = it->second.second;
+  metrics.update_type = UPDATE_TYPE_REFRESH;
+  metrics.write_io_sizes_metric.total_ops = payload.total_ops;
+  metrics.write_io_sizes_metric.total_size = payload.total_size;
+  metrics.write_io_sizes_metric.updated = true;
+}
+
 void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payload) {
   dout(5) << ": type=Unknown, session=" << session << ", ignoring unknown payload" << dendl;
 }
@@ -349,7 +385,7 @@ void MetricsHandler::update_rank0() {
   for (auto p = client_metrics_map.begin(); p != client_metrics_map.end();) {
     // copy metrics and update local metrics map as required
     auto &metrics = p->second.second;
-    update_client_metrics_map.emplace(p->first, metrics);
+    update_client_metrics_map.emplace(p->first, std::move(metrics));
     if (metrics.update_type == UPDATE_TYPE_REFRESH) {
       metrics = {};
       ++p;
