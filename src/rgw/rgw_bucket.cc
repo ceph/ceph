@@ -2943,33 +2943,111 @@ int RGWBucketCtl::remove_bucket_entrypoint_info(
   return ctx.remove(dpp, y, get_entrypoint_meta_key(bucket), params.objv_tracker);
 }
 
-int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
-                                            RGWBucketInfo *info,
-                                            optional_yield y,
-                                            const DoutPrefixProvider *dpp,
-                                            const BucketInstance::GetParams& params)
+int RGWBucketCtl::read_bucket_instance_info(
+  BucketInstanceOpContext& ctx,
+  const std::string& key,
+  RGWBucketInfo *info,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  ceph::real_time* mtime,
+  std::map<std::string, ceph::buffer::list>* attrs,
+  rgw_cache_entry_info* cache_info,
+  boost::optional<obj_version> refresh_version,
+  RGWObjVersionTracker* objv_tracker)
 {
-  int ret = bmi_handler->call(params.bectx_params, [&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return svc.bucket->read_bucket_instance_info(ctx,
-                                                 RGWSI_Bucket::get_bi_meta_key(bucket),
-                                                 info,
-                                                 params.mtime,
-                                                 params.attrs,
-						 y,
-                                                 dpp,
-                                                 params.cache_info,
-                                                 params.refresh_version);
-  });
+  std::string cache_key("bi/");
+  cache_key.append(key);
+
+  if (auto e = binfo_cache->find(cache_key)) {
+    if (refresh_version &&
+        e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
+      ldpp_dout(dpp, 5) << "WARNING: The bucket info cache is inconsistent. "
+			<< "invalidating " << cache_key << dendl;
+      binfo_cache->invalidate(cache_key);
+    } else {
+      if (info)
+	*info = e->info;
+      if (attrs)
+	*attrs = e->attrs;
+      if (mtime)
+	*mtime = e->mtime;
+      if (objv_tracker)
+	*objv_tracker = info->objv_tracker;
+      return 0;
+    }
+  }
+
+  bucket_info_cache_entry e;
+  rgw_cache_entry_info ci;
+  bufferlist bl;
+  RGWObjVersionTracker ot;
+
+  int ret = ctx.get(dpp, y, key, &bl, &ot, &e.mtime,
+		    &e.attrs, &ci, refresh_version);
 
   if (ret < 0) {
+    if (ret != -ENOENT) {
+      ldpp_dout(dpp, -1) << "ERROR: do_read_bucket_instance_info failed: "
+			 << ret << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "do_read_bucket_instance_info, bucket instance "
+			 << "not found (key=" << key << ")" << dendl;
+    }
     return ret;
   }
 
-  if (params.objv_tracker) {
-    *params.objv_tracker = info->objv_tracker;
+  auto iter = bl.cbegin();
+  try {
+    decode(e.info, iter);
+  } catch (const ceph::buffer::error& e) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info: " << e.what()
+		      << dendl;
+    return -EIO;
+  }
+  e.info.objv_tracker = ot;
+  *info = e.info;
+
+  if (objv_tracker) {
+    *objv_tracker = info->objv_tracker;
+  }
+  if (mtime) {
+    *mtime = e.mtime;
+  }
+  if (attrs) {
+    *attrs = e.attrs;
+  }
+  if (cache_info) {
+    *cache_info = ci;
+  }
+
+  /* chain to only bucket instance and *not* bucket entrypoint */
+  if (!binfo_cache->put(dpp, svc.cache, cache_key, &e, {&ci})) {
+    ldpp_dout(dpp, 20) << "couldn't put binfo cache entry, might have raced "
+		       << "with data changes" << dendl;
+  }
+
+  if (refresh_version &&
+      refresh_version->compare(&info->objv_tracker.read_version)) {
+    ldpp_dout(dpp, 5)
+      << "WARNING: The OSD has the same version I have. An administrator may "
+      << "have forced a change; otherwise things are squirrelly." << dendl;
   }
 
   return 0;
+}
+
+int RGWBucketCtl::read_bucket_instance_info(
+  const rgw_bucket& bucket,
+  RGWBucketInfo *info,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  const BucketInstance::GetParams& params)
+{
+  BucketInstanceOpContext ctx(this);
+  return read_bucket_instance_info(ctx, get_bi_meta_key(bucket), info, y,
+				   dpp, params.mtime, params.attrs,
+				   params.cache_info, params.refresh_version,
+				   params.objv_tracker);
 }
 
 int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,

@@ -686,11 +686,22 @@ public:
 				    RGWObjVersionTracker* objv_tracker);
 
   /* bucket instance */
+  int read_bucket_instance_info(
+    BucketInstanceOpContext& ctx,
+    const std::string& key,
+    RGWBucketInfo *info,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
+    ceph::real_time* mtime,
+    std::map<std::string, ceph::buffer::list>* attrs,
+    rgw_cache_entry_info* cache_info,
+    boost::optional<obj_version> refresh_version,
+    RGWObjVersionTracker* objv_tracker);
   int read_bucket_instance_info(const rgw_bucket& bucket,
-                                  RGWBucketInfo *info,
-                                  optional_yield y,
-                                  const DoutPrefixProvider *dpp,
-                                  const BucketInstance::GetParams& params = {});
+				RGWBucketInfo *info,
+				optional_yield y,
+				const DoutPrefixProvider *dpp,
+				const BucketInstance::GetParams& params = {});
   int store_bucket_instance_info(const rgw_bucket& bucket,
                                  RGWBucketInfo& info,
                                  optional_yield y,
