@@ -30,7 +30,7 @@ class TestReplayExtent final: public NodeExtent {
     auto bl = recorder->get_delta();
     assert(bl.length());
     auto p = bl.cbegin();
-    recorder->apply_delta(p, mut, 0u);
+    recorder->apply_delta(p, mut, *this);
     assert(p == bl.end());
     auto cmp = std::memcmp(get_read(), replayed_extent->get_read(), get_length());
     ceph_assert(cmp == 0 && "replay mismatch!");

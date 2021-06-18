@@ -47,7 +47,7 @@ static DeltaRecorderURef create_replay_recorder(
 NodeExtentRef SeastoreNodeExtent::mutate(
     context_t c, DeltaRecorderURef&& _recorder)
 {
-  DEBUGT("mutate {:#x} ...", c.t, get_laddr());
+  DEBUGT("mutate {} ...", c.t, *this);
   auto p_handle = static_cast<TransactionManagerHandle*>(&c.nm);
   auto extent = p_handle->tm.get_mutable_extent(c.t, this);
   auto ret = extent->cast<SeastoreNodeExtent>();
@@ -60,7 +60,7 @@ NodeExtentRef SeastoreNodeExtent::mutate(
 
 void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
 {
-  DEBUG("replay {:#x} ...", get_laddr());
+  DEBUG("replay {} ...", *this);
   if (!recorder) {
     auto header = get_header();
     auto field_type = header.get_field_type();
@@ -77,11 +77,12 @@ void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
     assert(recorder->field_type() == *header.get_field_type());
 #endif
   }
-  auto node = do_get_mutable();
+  auto mut = do_get_mutable();
   auto p = bl.cbegin();
   while (p != bl.end()) {
-    recorder->apply_delta(p, node, get_laddr());
+    recorder->apply_delta(p, mut, *this);
   }
+  DEBUG("relay done!");
 }
 
 }
