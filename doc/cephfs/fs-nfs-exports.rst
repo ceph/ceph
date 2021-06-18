@@ -261,7 +261,7 @@ Get CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export get <clusterid> <pseudo-path>
+    $ ceph nfs export info <clusterid> <pseudo-path>
 
 This displays export block for a cluster based on pseudo root name,
 where:
@@ -278,7 +278,7 @@ An existing export can be dumped in JSON format with:
 
 .. prompt:: bash #
 
-    ceph nfs export get *<pseudo-path>*
+    ceph nfs export info *<pseudo-path>*
 
 An export can be created or modified by importing a JSON description in the
 same format:
@@ -289,12 +289,12 @@ same format:
 
 For example,::
 
-   $ ceph nfs export get vstart /cephfs > update_cephfs_export.json
+   $ ceph nfs export info mynfs /cephfs > update_cephfs_export.json
    $ cat update_cephfs_export.json
    {
      "export_id": 1,
      "path": "/",
-     "cluster_id": "vstart",
+     "cluster_id": "mynfs",
      "pseudo": "/cephfs",
      "access_type": "RW",
      "squash": "no_root_squash",
@@ -307,7 +307,7 @@ For example,::
      ],
      "fsal": {
        "name": "CEPH",
-       "user_id": "vstart1",
+       "user_id": "nfs.mynfs.1",
        "fs_name": "a",
        "sec_label_xattr": ""
      },
@@ -322,7 +322,7 @@ and *access_type* are modified::
    {
      "export_id": 1,
      "path": "/",
-     "cluster_id": "vstart",
+     "cluster_id": "mynfs",
      "pseudo": "/cephfs_testing",
      "access_type": "RO",
      "squash": "no_root_squash",
@@ -335,36 +335,13 @@ and *access_type* are modified::
      ],
      "fsal": {
        "name": "CEPH",
-       "user_id": "vstart1",
+       "user_id": "nfs.mynfs.1",
        "fs_name": "a",
        "sec_label_xattr": ""
      },
      "clients": []
    }
 
-
-Configuring NFS Ganesha to export CephFS with vstart
-====================================================
-
-1) Using ``cephadm``
-
-    .. code:: bash
-
-        $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d --cephadm
-
-    This will deploy a single NFS Ganesha daemon using ``vstart.sh``, where
-    the daemon will listen on the default NFS Ganesha port.
-
-2) Using test orchestrator
-
-    .. code:: bash
-
-       $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
-
-    Environment variable ``NFS`` is the number of NFS Ganesha daemons to be
-    deployed, each listening on a random port.
-
-    .. note:: NFS Ganesha packages must be pre-installed for this to work.
 
 Mount
 =====
