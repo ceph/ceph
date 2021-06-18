@@ -684,21 +684,40 @@ eagain_future<Ref<Node>> Node::load(
              c.t, addr, expect_is_level_tail);
       ceph_abort("fatal error");
     })
-  ).safe_then([FNAME, c, expect_is_level_tail](auto extent) {
-    auto [node_type, field_type] = extent->get_types();
+  ).safe_then([FNAME, c, addr, expect_is_level_tail](auto extent) {
+    auto header = extent->get_header();
+    auto field_type = header.get_field_type();
+    if (!field_type) {
+      ERRORT("load addr={:x}, is_level_tail={} error, "
+             "got invalid header -- {}",
+             c.t, addr, expect_is_level_tail, extent);
+      ceph_abort("fatal error");
+    }
+    if (header.get_is_level_tail() != expect_is_level_tail) {
+      ERRORT("load addr={:x}, is_level_tail={} error, "
+             "is_level_tail mismatch -- {}",
+             c.t, addr, expect_is_level_tail, extent);
+      ceph_abort("fatal error");
+    }
+
+    auto node_type = header.get_node_type();
     if (node_type == node_type_t::LEAF) {
       if (extent->get_length() != c.vb.get_leaf_node_size()) {
-        ERRORT("leaf length mismatch -- {}", c.t, extent);
+        ERRORT("load addr={:x}, is_level_tail={} error, "
+               "leaf length mismatch -- {}",
+               c.t, addr, expect_is_level_tail, extent);
         ceph_abort("fatal error");
       }
-      auto impl = LeafNodeImpl::load(extent, field_type, expect_is_level_tail);
+      auto impl = LeafNodeImpl::load(extent, *field_type);
       return Ref<Node>(new LeafNode(impl.get(), std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
       if (extent->get_length() != c.vb.get_internal_node_size()) {
-        ERRORT("internal length mismatch -- {}", c.t, extent);
+        ERRORT("load addr={:x}, is_level_tail={} error, "
+               "internal length mismatch -- {}",
+               c.t, addr, expect_is_level_tail, extent);
         ceph_abort("fatal error");
       }
-      auto impl = InternalNodeImpl::load(extent, field_type, expect_is_level_tail);
+      auto impl = InternalNodeImpl::load(extent, *field_type);
       return Ref<Node>(new InternalNode(impl.get(), std::move(impl)));
     } else {
       ceph_abort("impossible path");
@@ -1518,6 +1537,11 @@ eagain_future<Ref<Node>> InternalNode::get_or_track_child(
     ).safe_then([this, position, c, FNAME] (auto child) {
       TRACET("loaded child untracked {}",
              c.t, child->get_name());
+      if (child->level() + 1 != level()) {
+        ERRORT("loaded child {} error from parent {} at pos({}), level mismatch",
+               c.t, child->get_name(), get_name(), position);
+        ceph_abort("fatal error");
+      }
       child->as_child(position, this);
       return child;
     });

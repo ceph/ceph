@@ -62,13 +62,19 @@ void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
 {
   DEBUG("replay {:#x} ...", get_laddr());
   if (!recorder) {
-    auto [node_type, field_type] = get_types();
-    recorder = create_replay_recorder(node_type, field_type);
+    auto header = get_header();
+    auto field_type = header.get_field_type();
+    if (!field_type.has_value()) {
+      ERROR("replay got invalid node -- {}", *this);
+      ceph_abort("fatal error");
+    }
+    auto node_type = header.get_node_type();
+    recorder = create_replay_recorder(node_type, *field_type);
   } else {
 #ifndef NDEBUG
-    auto [node_type, field_type] = get_types();
-    assert(recorder->node_type() == node_type);
-    assert(recorder->field_type() == field_type);
+    auto header = get_header();
+    assert(recorder->node_type() == header.get_node_type());
+    assert(recorder->field_type() == *header.get_field_type());
 #endif
   }
   auto node = do_get_mutable();
