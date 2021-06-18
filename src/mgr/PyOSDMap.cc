@@ -191,13 +191,17 @@ BasePyOSDMap_init(BasePyOSDMap *self, PyObject *args, PyObject *kwds)
     PyObject *osdmap_capsule = nullptr;
     static const char *kwlist[] = {"osdmap_capsule", NULL};
 
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
-                                      const_cast<char**>(kwlist),
-                                      &osdmap_capsule)) {
-      ceph_abort();
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O",
+				     const_cast<char**>(kwlist),
+				     &osdmap_capsule)) {
       return -1;
     }
-    ceph_assert(PyObject_TypeCheck(osdmap_capsule, &PyCapsule_Type));
+    if (!PyObject_TypeCheck(osdmap_capsule, &PyCapsule_Type)) {
+      PyErr_Format(PyExc_TypeError,
+		   "Expected a PyCapsule_Type, not %s",
+		   Py_TYPE(osdmap_capsule)->tp_name);
+      return -1;
+    }
 
     self->osdmap = (OSDMap*)PyCapsule_GetPointer(
         osdmap_capsule, nullptr);
