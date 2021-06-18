@@ -987,7 +987,8 @@ PyObject *construct_with_capsule(
   PyObject *module = PyImport_ImportModule(module_name.c_str());
   if (!module) {
     derr << "Failed to import python module:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(module);
 
@@ -995,7 +996,8 @@ PyObject *construct_with_capsule(
       module, (const char*)clsname.c_str());
   if (!wrapper_type) {
     derr << "Failed to get python type:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(wrapper_type);
 
@@ -1008,7 +1010,8 @@ PyObject *construct_with_capsule(
   auto wrapper_instance = PyObject_CallObject(wrapper_type, pArgs);
   if (wrapper_instance == nullptr) {
     derr << "Failed to construct python OSDMap:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(wrapper_instance != nullptr);
   Py_DECREF(pArgs);
