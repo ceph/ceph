@@ -281,7 +281,7 @@ int main(int argc, char** argv)
   seastar::app_template app;
   SeastarContext sc;
   auto job = sc.with_seastar([&] {
-    auto fut = seastar::alien::submit_to(0, [addr, role, count] {
+    auto fut = seastar::alien::submit_to(app.alien(), 0, [addr, role, count] {
       return seastar_echo(addr, role, count);
     });
     fut.wait();

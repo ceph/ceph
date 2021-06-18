@@ -28,7 +28,7 @@ export class HostService {
   create(hostname: string, addr: string, labels: string[], status: string) {
     return this.http.post(
       this.baseURL,
-      { hostname: hostname, addr, labels, status: status },
+      { hostname: hostname, addr: addr, labels: labels, status: status },
       { observe: 'response', headers: { Accept: 'application/vnd.ceph.api.v0.1+json' } }
     );
   }

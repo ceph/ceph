@@ -1016,19 +1016,29 @@ def parse_json_funcsigs(s: str,
     return sigdict
 
 
-def validate_one(word, desc, partial=False):
+def validate_one(word, desc, is_kwarg, partial=False):
     """
-    validate_one(word, desc, partial=False)
+    validate_one(word, desc, is_kwarg, partial=False)
 
     validate word against the constructed instance of the type
     in desc.  May raise exception.  If it returns false (and doesn't
     raise an exception), desc.instance.val will
     contain the validated value (in the appropriate type).
     """
-    desc.instance.valid(word, partial)
+    vals = []
+    # CephString option might contain "," in it
+    allow_csv = is_kwarg or desc.t is not CephString
+    if desc.N and allow_csv:
+        for part in word.split(','):
+            desc.instance.valid(part, partial)
+            vals.append(desc.instance.val)
+    else:
+        desc.instance.valid(word, partial)
+        vals.append(desc.instance.val)
     desc.numseen += 1
     if desc.N:
         desc.n = desc.numseen + 1
+    return vals
 
 
 def matchnum(args, signature, partial=False):
@@ -1054,7 +1064,7 @@ def matchnum(args, signature, partial=False):
                 # only allow partial matching if we're on the last supplied
                 # word; avoid matching foo bar and foot bar just because
                 # partial is set
-                validate_one(word, desc, partial and (len(words) == 0))
+                validate_one(word, desc, False, partial and (len(words) == 0))
                 valid = True
             except ArgumentError:
                 # matchnum doesn't care about type of error
@@ -1073,17 +1083,19 @@ def matchnum(args, signature, partial=False):
     return matchcnt
 
 
-ValidatedArgs = Dict[str, Union[bool, int, float, str,
-                                Tuple[str, str],
-                                Sequence[str]]]
+ValidatedArg = Union[bool, int, float, str,
+                     Tuple[str, str],
+                     Sequence[str]]
+ValidatedArgs = Dict[str, ValidatedArg]
 
 
-def store_arg(desc: argdesc, d: ValidatedArgs):
+def store_arg(desc: argdesc, args: List[ValidatedArg], d: ValidatedArgs):
     '''
     Store argument described by, and held in, thanks to valid(),
     desc into the dictionary d, keyed by desc.name.  Three cases:
 
-    1) desc.N is set: value in d is a list
+    1) desc.N is set: use args for arg value in "d", desc.instance.val
+       only contains the last parsed arg in the "args" list
     2) prefix: multiple args are joined with ' ' into one d{} item
     3) single prefix or other arg: store as simple value
 
@@ -1092,9 +1104,9 @@ def store_arg(desc: argdesc, d: ValidatedArgs):
     if desc.N:
         # value should be a list
         if desc.name in d:
-            d[desc.name] += [desc.instance.val]
+            d[desc.name] += args
         else:
-            d[desc.name] = [desc.instance.val]
+            d[desc.name] = args
     elif (desc.t == CephPrefix) and (desc.name in d):
         # prefixes' values should be a space-joined concatenation
         d[desc.name] += ' ' + desc.instance.val
@@ -1191,9 +1203,9 @@ def validate(args: List[str],
                                 kwarg_desc = None
 
                 if kwarg_desc:
-                    validate_one(kwarg_v, kwarg_desc)
+                    args = validate_one(kwarg_v, kwarg_desc, True)
                     matchcnt += 1
-                    store_arg(kwarg_desc, d)
+                    store_arg(kwarg_desc, args, d)
                     continue
 
             if not desc.positional:
@@ -1250,7 +1262,7 @@ def validate(args: List[str],
 
             # Have an arg; validate it
             try:
-                validate_one(myarg, desc)
+                args = validate_one(myarg, desc, False)
             except ArgumentError as e:
                 # argument mismatch
                 if not desc.req:
@@ -1267,7 +1279,7 @@ def validate(args: List[str],
 
             # Whew, valid arg acquired.  Store in dict
             matchcnt += 1
-            store_arg(desc, d)
+            store_arg(desc, args, d)
             # Clear prior exception
             save_exception = None
 

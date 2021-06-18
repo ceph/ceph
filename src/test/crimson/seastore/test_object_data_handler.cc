@@ -134,6 +134,7 @@ struct object_data_handler_test_t:
   seastar::future<> set_up_fut() final {
     onode = new TestOnode{};
     known_contents = buffer::create(4<<20 /* 4MB */);
+    memset(known_contents.c_str(), 0, known_contents.length());
     size = 0;
     return tm_setup();
   }

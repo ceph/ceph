@@ -185,8 +185,6 @@ public:
           return get_extent_ret<T>(
             get_extent_ertr::ready_future_marker{},
             std::move(ret));
-        } else if (ret->is_retired()) {
-          ceph_abort_msg("impossible retired extent");
         } else {
           return crimson::ct_error::eagain::make();
 	}
