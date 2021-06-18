@@ -9,7 +9,6 @@ This module is runnable outside of ceph-mgr, useful for testing.
 import datetime
 import threading
 import logging
-import json
 from contextlib import contextmanager
 from time import sleep
 
@@ -114,11 +113,10 @@ class KubernetesResource(Generic[T]):
     def _fetch(self) -> str:
         """ Execute the requested api method as a one-off fetch"""
         response = self.api_func(**self.kwargs)
-        # metadata is a client.V1ListMeta object type
-        metadata = response.metadata  # type: client.V1ListMeta
-        self._items = {item.metadata.name: item for item in response.items}
+        metadata = response['metadata']
+        self._items = {item['metadata']['name']: item for item in response['items']}
         log.info('Full fetch of {}. result: {}'.format(self.api_func, len(self._items)))
-        return metadata.resource_version
+        return metadata['resourceVersion']
 
     @property
     def items(self) -> Iterable[T]:
@@ -155,7 +153,7 @@ class KubernetesResource(Generic[T]):
                 self.health = ''
                 item = event['object']
                 try:
-                    name = item.metadata.name
+                    name = item['metadata']['name']
                 except AttributeError:
                     raise AttributeError(
                         "{} doesn't contain a metadata.name. Unable to track changes".format(
@@ -199,9 +197,12 @@ class RookCluster(object):
 
         #  TODO: replace direct k8s calls with Rook API calls
         # when they're implemented
-        self.inventory_maps: KubernetesResource[client.V1ConfigMapList] = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
-                                                 namespace=self.rook_env.operator_namespace,
-                                                 label_selector="app=rook-discover")
+        
+        self.inventory_maps = KubernetesResource(self.customObjects_api.list_cluster_custom_object,
+                                                 group="local.storage.openshift.io",
+                                                 version="v1alpha1",
+                                                 plural="localvolumediscoveryresults")
+        
 
         self.rook_pods: KubernetesResource[client.V1Pod] = KubernetesResource(self.coreV1_api.list_namespaced_pod,
                                             namespace=self.rook_env.namespace,
@@ -242,9 +243,9 @@ class RookCluster(object):
         return self.rook_api_call("POST", path, **kwargs)
 
     def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, dict]:
-        def predicate(item: client.V1ConfigMapList) -> bool:
+        def predicate(item) -> bool:
             if nodenames is not None:
-                return item.metadata.labels['rook.io/node'] in nodenames
+                return item['spec']['nodeName'] in nodenames
             else:
                 return True
 
@@ -256,8 +257,8 @@ class RookCluster(object):
 
         nodename_to_devices = {}
         for i in result:
-            drives = json.loads(i.data['devices'])
-            nodename_to_devices[i.metadata.labels['rook.io/node']] = drives
+            drives = i['status']['discoveredDevices']
+            nodename_to_devices[i['spec']['nodeName']] = drives
 
         return nodename_to_devices
 
