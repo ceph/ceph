@@ -439,16 +439,16 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def remove_daemons(self, names: List[str]) -> List[str]:
         return self.rook_cluster.remove_pods(names)
-
+    """
     @handle_orch_error
     def create_osds(self, drive_group):
         # type: (DriveGroupSpec) -> str
-        """ Creates OSDs from a drive group specification.
+        # Creates OSDs from a drive group specification.
 
-        $: ceph orch osd create -i <dg.file>
+        # $: ceph orch osd create -i <dg.file>
 
-        The drivegroup file must only contain one spec at a time.
-        """
+        # The drivegroup file must only contain one spec at a time.
+        # 
 
         targets = []  # type: List[str]
         if drive_group.data_devices and drive_group.data_devices.paths:
@@ -475,7 +475,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self.rook_cluster.add_osds(drive_group, matching_hosts)
 
         # TODO: this was the code to update the progress reference:
-        """
+        
         @handle_orch_error
         def has_osds(matching_hosts: List[str]) -> bool:
 
@@ -506,8 +506,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                         osd_id, metadata['devices'] if metadata else 'DNE'
                     ))
 
-            return found is not None
-        """
+            return found is not None        
+    """
 
     @handle_orch_error
     def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> List[str]:

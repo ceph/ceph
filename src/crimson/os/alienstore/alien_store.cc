@@ -33,20 +33,22 @@ namespace {
 
 class OnCommit final: public Context
 {
-  int cpuid;
+  seastar::alien::instance& alien;
+  const int cpuid;
   Context *oncommit;
   seastar::promise<> &alien_done;
 public:
   OnCommit(
+    seastar::alien::instance& alien,
     int id,
     seastar::promise<> &done,
     Context *oncommit,
     ceph::os::Transaction& txn)
-    : cpuid(id), oncommit(oncommit),
+    : alien(alien), cpuid(id), oncommit(oncommit),
       alien_done(done) {}
 
   void finish(int) final {
-    return seastar::alien::submit_to(cpuid, [this] {
+    return seastar::alien::submit_to(alien, cpuid, [this] {
       if (oncommit) {
         oncommit->complete(0);
       }
@@ -62,7 +64,8 @@ namespace crimson::os {
 using crimson::common::get_conf;
 
 AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
-  : path{path}
+  : path{path},
+    alien{std::make_unique<seastar::alien::instance>()}
 {
   cct = std::make_unique<CephContext>(CEPH_ENTITY_TYPE_OSD);
   g_ceph_context = cct.get();
@@ -416,7 +419,9 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	  assert(tp);
 	  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
 	    [this, ch, id, crimson_wrapper, &txn, &done] {
-	    txn.register_on_commit(new OnCommit(id, done, crimson_wrapper, txn));
+	    txn.register_on_commit(new OnCommit(*alien,
+						id, done, crimson_wrapper,
+						txn));
 	    auto c = static_cast<AlienCollection*>(ch.get());
 	    return store->queue_transaction(c->collection, std::move(txn));
 	  });

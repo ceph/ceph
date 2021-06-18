@@ -7,6 +7,7 @@
 #include <iostream>
 #include <random>
 
+#include <seastar/apps/lib/stop_signal.hh>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/thread.hh>
@@ -23,7 +24,6 @@
 #include "global/pidfile.h"
 
 #include "osd.h"
-#include "stop_signal.h"
 
 using config_t = crimson::common::ConfigProxy;
 
@@ -177,7 +177,10 @@ seastar::future<> fetch_config()
 
 int main(int argc, char* argv[])
 {
-  seastar::app_template app;
+  seastar::app_template::config app_cfg;
+  app_cfg.name = "Crimson";
+  app_cfg.auto_handle_sigint_sigterm = false;
+  seastar::app_template app(std::move(app_cfg));
   app.add_options()
     ("mkkey", "generate a new secret key. "
               "This is normally used in combination with --mkfs")
@@ -209,7 +212,7 @@ int main(int argc, char* argv[])
       return seastar::async([&] {
         try {
           FatalSignal fatal_signal;
-          StopSignal should_stop;
+          seastar_apps_lib::stop_signal should_stop;
           if (config.count("debug")) {
             seastar::global_logger_registry().set_all_loggers_level(
               seastar::log_level::debug
