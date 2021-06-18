@@ -30,7 +30,7 @@ public:
   template <typename T>
   static constexpr bool is_interruption_v = std::is_same_v<T, test_interruption>;
 
-  bool is_interruption(std::exception_ptr& eptr) {
+  static bool is_interruption(std::exception_ptr& eptr) {
     if (*eptr.__cxa_exception_type() == typeid(test_interruption))
       return true;
     return false;

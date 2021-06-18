@@ -265,25 +265,6 @@ public:
   using core_type::available;
   using core_type::failed;
 
-  template <typename Func>
-  [[gnu::always_inline]]
-  auto handle_interruption(Func&& func) {
-    return core_type::then_wrapped(
-      [func=std::move(func),
-      interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable {
-      if (fut.failed()) {
-	std::exception_ptr ex = fut.get_exception();
-	if (interrupt_condition->is_interruption(ex)) {
-	  return seastar::futurize_invoke(std::move(func), std::move(ex));
-	} else {
-	  return seastar::make_exception_future<T>(std::move(ex));
-	}
-      } else {
-	return seastar::make_ready_future<T>(fut.get());
-      }
-    });
-  }
-
   template <typename Func,
 	    typename Result = interrupt_futurize_t<
 		std::invoke_result_t<Func, seastar::future<T>>>>
@@ -410,6 +391,24 @@ public:
     return core_type::finally(std::forward<Func>(func));
   }
 private:
+  template <typename Func>
+  [[gnu::always_inline]]
+  auto handle_interruption(Func&& func) {
+    return core_type::then_wrapped(
+      [func=std::move(func)](auto&& fut) mutable {
+	if (fut.failed()) {
+	  std::exception_ptr ex = fut.get_exception();
+	  if (InterruptCond::is_interruption(ex)) {
+	    return seastar::futurize_invoke(std::move(func), std::move(ex));
+	  } else {
+	    return seastar::make_exception_future<T>(std::move(ex));
+	  }
+	} else {
+	  return seastar::make_ready_future<T>(fut.get());
+	}
+      });
+  }
+
   seastar::future<T> to_future() {
     return static_cast<core_type&&>(std::move(*this));
   }
@@ -428,24 +427,7 @@ private:
 		std::move(fut));
     });
   }
-  template <typename Iterator, typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::do_for_each(
-	    Iterator, Iterator, AsyncAction&&);
-  template <typename Iterator, typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::do_for_each(
-	    Iterator, Iterator, AsyncAction&&);
-  template <typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::repeat(AsyncAction&&);
-  template <typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::repeat(AsyncAction&&);
+  friend interruptor<InterruptCond>;
   friend class interruptible_future_builder<InterruptCond>;
   template <typename U>
   friend struct ::seastar::futurize;
@@ -463,7 +445,6 @@ private:
   friend class ::crimson::maybe_handle_error_t;
   template <typename>
   friend class ::seastar::internal::extract_values_from_futures_vector;
-  friend class interruptor<InterruptCond>::parallel_for_each_state;
   template <typename, typename>
   friend class interruptible_future_detail;
   template <typename ResolvedVectorTransform, typename Future>
@@ -806,6 +787,7 @@ public:
     return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
   }
 
+private:
   template <typename Func>
   [[gnu::always_inline]]
   auto handle_interruption(Func&& func) {
@@ -823,7 +805,7 @@ public:
       -> typename futurator_t::type {
 	if (fut.failed()) {
 	  std::exception_ptr ex = fut.get_exception();
-	  if (interrupt_condition->is_interruption(ex)) {
+	  if (InterruptCond::is_interruption(ex)) {
 	    return futurator_t::invoke(std::move(func), std::move(ex));
 	  } else {
 	    return futurator_t::make_exception_future(std::move(ex));
@@ -834,30 +816,12 @@ public:
       });
   }
 
-private:
   ErroratedFuture<::crimson::errorated_future_marker<T>>
   to_future() {
     return static_cast<core_type&&>(std::move(*this));
   }
 
-  template <typename Iterator, typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::do_for_each(
-	    Iterator, Iterator, AsyncAction&&);
-  template <typename Iterator, typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::do_for_each(
-	    Iterator, Iterator, AsyncAction&&);
-  template <typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::repeat(AsyncAction&&);
-  template <typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::repeat(AsyncAction&&);
+  friend class interruptor<InterruptCond>;
   friend class interruptible_future_builder<InterruptCond>;
   template <typename U>
   friend struct ::seastar::futurize;
