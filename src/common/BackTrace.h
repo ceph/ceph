@@ -11,6 +11,9 @@
 #endif
 #include <stdlib.h>
 
+#include <list>
+#include <string>
+
 namespace ceph {
 
 class Formatter;
@@ -23,6 +26,18 @@ struct BackTrace {
   size_t size;
   char **strings;
 
+  std::list<std::string> src_strings;
+
+  explicit BackTrace(std::list<std::string>& s)
+    : skip(0),
+      size(s.size()) {
+    src_strings = s;
+    strings = (char **)malloc(sizeof(*strings) * src_strings.size());
+    unsigned i = 0;
+    for (auto& s : src_strings) {
+      strings[i++] = (char *)s.c_str();
+    }
+  }
   explicit BackTrace(int s) : skip(s) {
 #ifdef HAVE_EXECINFO_H
     size = backtrace(array, max);
