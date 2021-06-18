@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import inspect
+from typing import List
 
 
 class Scope(object):
@@ -28,14 +29,14 @@ class Scope(object):
     NFS_GANESHA = "nfs-ganesha"
 
     @classmethod
-    def all_scopes(cls):
+    def all_scopes(cls) -> List[str]:
         return [val for scope, val in
                 inspect.getmembers(cls,
                                    lambda memb: not inspect.isroutine(memb))
                 if not scope.startswith('_')]
 
     @classmethod
-    def valid_scope(cls, scope_name):
+    def valid_scope(cls, scope_name: str) -> bool:
         return scope_name in cls.all_scopes()
 
 
@@ -49,12 +50,12 @@ class Permission(object):
     DELETE = "delete"
 
     @classmethod
-    def all_permissions(cls):
+    def all_permissions(cls) -> List[str]:
         return [val for perm, val in
                 inspect.getmembers(cls,
                                    lambda memb: not inspect.isroutine(memb))
                 if not perm.startswith('_')]
 
     @classmethod
-    def valid_permission(cls, perm_name):
+    def valid_permission(cls, perm_name: str) -> bool:
         return perm_name in cls.all_permissions()
