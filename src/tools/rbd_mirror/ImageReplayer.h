@@ -113,9 +113,10 @@ public:
     return m_global_image_id;
   }
 
-  void start(Context *on_finish = nullptr, bool manual = false);
+  void start(Context *on_finish = nullptr, bool manual = false,
+             bool restart = false);
   void stop(Context *on_finish = nullptr, bool manual = false,
-	    int r = 0, const std::string& desc = "");
+            bool restart = false);
   void restart(Context *on_finish = nullptr);
   void flush();
 
@@ -197,11 +198,11 @@ protected:
    * @endverbatim
    */
 
-  virtual void on_start_fail(int r, const std::string &desc);
-  virtual bool on_start_interrupted();
-  virtual bool on_start_interrupted(Mutex& lock);
+  void on_start_fail(int r, const std::string &desc);
+  bool on_start_interrupted();
+  bool on_start_interrupted(Mutex& lock);
 
-  virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
+  void on_stop_journal_replay(int r = 0, const std::string &desc = "");
 
   bool on_replay_interrupted();
 
@@ -292,6 +293,7 @@ private:
   bool m_finished = false;
   bool m_delete_requested = false;
   bool m_resync_requested = false;
+  bool m_restart_requested = false;
 
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
