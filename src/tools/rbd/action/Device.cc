@@ -175,6 +175,7 @@ void get_map_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
+    ("show-cookie", po::bool_switch(), "show device cookie")
     ("read-only", po::bool_switch(), "map read-only")
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
     ("quiesce", po::bool_switch(), "use quiesce hooks")
@@ -212,6 +213,7 @@ void get_attach_arguments(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
     ("device", po::value<std::string>()->required(), "specify device path")
+    ("cookie", po::value<std::string>(), "specify device cookie")
     ("read-only", po::bool_switch(), "attach read-only")
     ("force", po::bool_switch(), "force attach")
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
