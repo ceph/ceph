@@ -54,7 +54,11 @@ class CrushRuleUi(CrushRule):
     @ReadPermission
     def info(self):
         '''Used for crush rule creation modal'''
+        osd_map = mgr.get_osdmap()
+        crush = osd_map.get_crush()
+        crush.dump()
         return {
             'names': [r['rule_name'] for r in mgr.get('osd_map_crush')['rules']],
-            'nodes': mgr.get('osd_map_tree')['nodes']
+            'nodes': mgr.get('osd_map_tree')['nodes'],
+            'roots': crush.find_roots()
         }
