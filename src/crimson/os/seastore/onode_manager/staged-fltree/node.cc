@@ -406,6 +406,7 @@ eagain_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_trac
   ).safe_then([c, &root_tracker, FNAME](auto&& _super) {
     auto root_addr = _super->get_root_laddr();
     assert(root_addr != L_ADDR_NULL);
+    TRACET("loading root_addr={:x} ...", c.t, root_addr);
     return Node::load(c, root_addr, true
     ).safe_then([c, _super = std::move(_super),
                  &root_tracker, FNAME](auto root) mutable {
@@ -1501,22 +1502,26 @@ eagain_future<Ref<Node>> InternalNode::get_or_track_child(
     context_t c, const search_position_t& position, laddr_t child_addr)
 {
   LOG_PREFIX(OTree::InternalNode::get_or_track_child);
-  bool level_tail = position.is_end();
-  Ref<Node> child;
-  auto found = tracked_child_nodes.find(position);
   Ref<Node> this_ref = this;
-  return (found == tracked_child_nodes.end()
-    ? (Node::load(c, child_addr, level_tail
-       ).safe_then([this, position, c, FNAME] (auto child) {
-         child->as_child(position, this);
-         TRACET("loaded child untracked {} at pos({})",
-                c.t, child->get_name(), position);
-         return child;
-       }))
-    : (TRACET("loaded child tracked {} at pos({})",
-              c.t, found->second->get_name(), position),
-       eagain_ertr::make_ready_future<Ref<Node>>(found->second))
-  ).safe_then([this_ref, this, position, child_addr] (auto child) {
+  return [this, position, child_addr, c, FNAME] {
+    auto found = tracked_child_nodes.find(position);
+    if (found != tracked_child_nodes.end()) {
+      TRACET("loaded child tracked {} at pos({}) addr={:x}",
+              c.t, found->second->get_name(), position, child_addr);
+      return eagain_ertr::make_ready_future<Ref<Node>>(found->second);
+    }
+    // the child is not loaded yet
+    TRACET("loading child at pos({}) addr={:x} ...",
+           c.t, position, child_addr);
+    bool level_tail = position.is_end();
+    return Node::load(c, child_addr, level_tail
+    ).safe_then([this, position, c, FNAME] (auto child) {
+      TRACET("loaded child untracked {}",
+             c.t, child->get_name());
+      child->as_child(position, this);
+      return child;
+    });
+  }().safe_then([this_ref, this, position, child_addr] (auto child) {
     assert(child_addr == child->impl->laddr());
     assert(position == child->parent_info().position);
     std::ignore = position;
