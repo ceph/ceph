@@ -24,6 +24,30 @@ rule stretch_rule {
         step chooseleaf firstn 2 type host
         step emit
 }
+rule stretch_rule2 {
+        id 2
+        type replicated
+        min_size 1
+        max_size 10
+        step take site1
+        step chooseleaf firstn 2 type host
+        step emit
+        step take site2
+        step chooseleaf firstn 2 type host
+        step emit
+}
+rule stretch_rule3 {
+        id 3
+        type replicated
+        min_size 1
+        max_size 10
+        step take site1
+        step chooseleaf firstn 2 type host
+        step emit
+        step take site2
+        step chooseleaf firstn 2 type host
+        step emit
+}
 EOF
 ./bin/crushtool -c crush.map.txt -o crush2.map.bin
 ./bin/ceph osd setcrushmap -i crush2.map.bin
