@@ -136,9 +136,7 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  using complete_transaction_ertr = base_ertr;
-  using complete_transaction_ret = complete_transaction_ertr::future<>;
-  virtual complete_transaction_ret complete_transaction(
+  virtual void complete_transaction(
     Transaction &t) = 0;
 
   /**

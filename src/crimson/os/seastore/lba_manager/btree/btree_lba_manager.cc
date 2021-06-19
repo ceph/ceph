@@ -234,8 +234,7 @@ static depth_t get_depth(const CachedExtent &e)
   }
 }
 
-BtreeLBAManager::complete_transaction_ret
-BtreeLBAManager::complete_transaction(
+void BtreeLBAManager::complete_transaction(
   Transaction &t)
 {
   std::vector<CachedExtentRef> to_clear;
@@ -276,7 +275,6 @@ BtreeLBAManager::complete_transaction(
     logger().debug("{}: checking {}, {}", __func__, *e, pin);
     pin_set.check_parent(pin);
   }
-  return complete_transaction_ertr::now();
 }
 
 BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
