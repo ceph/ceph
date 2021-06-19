@@ -1065,8 +1065,8 @@ private:
 template <>
 class errorator<> {
 public:
-  template <class ValueT>
-  using future = ::seastar::future<ValueT>;
+  template <class ValueT=void>
+  using future = ::seastar::futurize_t<ValueT>;
 
   template <class T>
   using futurize = ::seastar::futurize<T>;
