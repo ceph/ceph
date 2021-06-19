@@ -26,9 +26,12 @@ struct coll_info_t {
 /// Interface for maintaining set of collections
 class CollectionManager {
 public:
-  using base_ertr = TransactionManager::read_extent_ertr;
+  using base_ertr = with_trans_ertr<
+    TransactionManager::read_extent_iertr>;
+
     /// Initialize collection manager instance for an empty store
-  using mkfs_ertr = TransactionManager::alloc_extent_ertr;
+  using mkfs_ertr = with_trans_ertr<
+    TransactionManager::alloc_extent_iertr>;
   using mkfs_ret = mkfs_ertr::future<coll_root_t>;
   virtual mkfs_ret mkfs(
     Transaction &t) = 0;
@@ -76,7 +79,7 @@ using CollectionManagerRef = std::unique_ptr<CollectionManager>;
 namespace collection_manager {
 /* creat CollectionMapManager for Collection  */
 CollectionManagerRef create_coll_manager(
-  TransactionManager &trans_manager);
+  InterruptedTransactionManager trans_manager);
 
 }
 

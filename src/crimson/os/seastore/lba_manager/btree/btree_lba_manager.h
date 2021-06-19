@@ -50,40 +50,40 @@ public:
   mkfs_ret mkfs(
     Transaction &t) final;
 
-  get_mappings_ret _get_mappings(
+  get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) final;
 
-  get_mappings_ret _get_mappings(
+  get_mappings_ret get_mappings(
     Transaction &t,
     laddr_list_t &&list) final;
 
-  get_mapping_ret _get_mapping(
+  get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) final;
 
-  find_hole_ret _find_hole(
+  find_hole_ret find_hole(
     Transaction &t,
     laddr_t hint,
     extent_len_t) final;
 
-  alloc_extent_ret _alloc_extent(
+  alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
     paddr_t addr) final;
 
-  set_extent_ret _set_extent(
+  set_extent_ret set_extent(
     Transaction &t,
     laddr_t off, extent_len_t len, paddr_t addr) final;
 
-  ref_ret _decref_extent(
+  ref_ret decref_extent(
     Transaction &t,
     laddr_t addr) final {
     return update_refcount(t, addr, -1);
   }
 
-  ref_ret _incref_extent(
+  ref_ret incref_extent(
     Transaction &t,
     laddr_t addr) final {
     return update_refcount(t, addr, 1);
@@ -92,25 +92,25 @@ public:
   void complete_transaction(
     Transaction &t) final;
 
-  init_cached_extent_ret _init_cached_extent(
+  init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) final;
 
-  scan_mappings_ret _scan_mappings(
+  scan_mappings_ret scan_mappings(
     Transaction &t,
     laddr_t begin,
     laddr_t end,
     scan_mappings_func_t &&f) final;
 
-  scan_mapped_space_ret _scan_mapped_space(
+  scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) final;
 
-  rewrite_extent_ret _rewrite_extent(
+  rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) final;
 
-  get_physical_extent_if_live_ret _get_physical_extent_if_live(
+  get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
     extent_types_t type,
     paddr_t addr,

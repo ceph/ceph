@@ -23,17 +23,6 @@
 
 namespace crimson::os::seastore {
 
-#define LBA_INT_FORWARD(METHOD)						\
-  template <typename... Args>						\
-  auto METHOD(Transaction &t, Args&&... args) {				\
-    return with_trans_intr(						\
-      t,								\
-    [this](auto&&... args) {						\
-      return this->_##METHOD(args...);					\
-    },									\
-    std::forward<Args>(args)...);					\
-  }
-
 /**
  * Abstract interface for managing the logical to physical mapping
  */
@@ -54,10 +43,9 @@ public:
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
    */
-  using get_mappings_ertr = base_ertr;
   using get_mappings_iertr = trans_iertr<base_ertr>;
   using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
-  virtual get_mappings_ret _get_mappings(
+  virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
 
@@ -66,10 +54,9 @@ public:
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
    */
-  virtual get_mappings_ret _get_mappings(
+  virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_list_t &&extent_lisk) = 0;
-  LBA_INT_FORWARD(get_mappings)
 
   /**
    * Fetches the mapping for laddr_t
@@ -81,10 +68,9 @@ public:
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
   using get_mapping_ret = get_mapping_iertr::future<LBAPinRef>;
-  virtual get_mapping_ret _get_mapping(
+  virtual get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) = 0;
-  LBA_INT_FORWARD(get_mapping)
 
   /**
    * Finds unmapped laddr extent of len len
@@ -94,11 +80,10 @@ public:
   using find_hole_ret = find_hole_iertr::future<
     std::pair<laddr_t, extent_len_t>
     >;
-  virtual find_hole_ret _find_hole(
+  virtual find_hole_ret find_hole(
     Transaction &t,
     laddr_t hint,
     extent_len_t) = 0;
-  LBA_INT_FORWARD(find_hole)
 
   /**
    * Allocates a new mapping referenced by LBARef
@@ -110,12 +95,11 @@ public:
   using alloc_extent_ertr = base_ertr;
   using alloc_extent_iertr = base_iertr;
   using alloc_extent_ret = alloc_extent_iertr::future<LBAPinRef>;
-  virtual alloc_extent_ret _alloc_extent(
+  virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
     paddr_t addr) = 0;
-  LBA_INT_FORWARD(alloc_extent)
 
   /**
    * Creates a new absolute mapping.
@@ -125,11 +109,9 @@ public:
   using set_extent_iertr = base_iertr::extend<
     crimson::ct_error::invarg>;
   using set_extent_ret = set_extent_iertr::future<LBAPinRef>;
-  virtual set_extent_ret _set_extent(
+  virtual set_extent_ret set_extent(
     Transaction &t,
     laddr_t off, extent_len_t len, paddr_t addr) = 0;
-  LBA_INT_FORWARD(set_extent)
-
 
   struct ref_update_result_t {
     unsigned refcount = 0;
@@ -147,20 +129,18 @@ public:
    *
    * @return returns resulting refcount
    */
-  virtual ref_ret _decref_extent(
+  virtual ref_ret decref_extent(
     Transaction &t,
     laddr_t addr) = 0;
-  LBA_INT_FORWARD(decref_extent)
 
   /**
    * Increments ref count on extent
    *
    * @return returns resulting refcount
    */
-  virtual ref_ret _incref_extent(
+  virtual ref_ret incref_extent(
     Transaction &t,
     laddr_t addr) = 0;
-  LBA_INT_FORWARD(incref_extent)
 
   virtual void complete_transaction(
     Transaction &t) = 0;
@@ -173,10 +153,9 @@ public:
    */
   using init_cached_extent_iertr = base_iertr;
   using init_cached_extent_ret = init_cached_extent_iertr::future<>;
-  virtual init_cached_extent_ret _init_cached_extent(
+  virtual init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) = 0;
-  LBA_INT_FORWARD(init_cached_extent)
 
   /**
    * Calls f for each mapping in [begin, end)
@@ -185,12 +164,11 @@ public:
   using scan_mappings_ret = scan_mappings_iertr::future<>;
   using scan_mappings_func_t = std::function<
     void(laddr_t, paddr_t, extent_len_t)>;
-  virtual scan_mappings_ret _scan_mappings(
+  virtual scan_mappings_ret scan_mappings(
     Transaction &t,
     laddr_t begin,
     laddr_t end,
     scan_mappings_func_t &&f) = 0;
-  LBA_INT_FORWARD(scan_mappings)
 
   /**
    * Calls f for each mapped space usage in [begin, end)
@@ -200,10 +178,9 @@ public:
   using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
   using scan_mapped_space_func_t = std::function<
     void(paddr_t, extent_len_t)>;
-  virtual scan_mapped_space_ret _scan_mapped_space(
+  virtual scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) = 0;
-  LBA_INT_FORWARD(scan_mapped_space)
 
   /**
    * rewrite_extent
@@ -212,10 +189,9 @@ public:
    */
   using rewrite_extent_iertr = base_iertr;
   using rewrite_extent_ret = rewrite_extent_iertr::future<>;
-  virtual rewrite_extent_ret _rewrite_extent(
+  virtual rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) = 0;
-  LBA_INT_FORWARD(rewrite_extent)
 
   /**
    * get_physical_extent_if_live
@@ -229,13 +205,12 @@ public:
   using get_physical_extent_if_live_iertr = base_iertr;
   using get_physical_extent_if_live_ret =
     get_physical_extent_if_live_iertr::future<CachedExtentRef>;
-  virtual get_physical_extent_if_live_ret _get_physical_extent_if_live(
+  virtual get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
     extent_types_t type,
     paddr_t addr,
     laddr_t laddr,
     segment_off_t len) = 0;
-  LBA_INT_FORWARD(get_physical_extent_if_live)
 
   virtual void add_pin(LBAPin &pin) = 0;
 

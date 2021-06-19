@@ -18,7 +18,7 @@ NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync)
 }
 
 NodeExtentManagerURef NodeExtentManager::create_seastore(
-    TransactionManager& tm, laddr_t min_laddr, double p_eagain)
+    InterruptedTransactionManager tm, laddr_t min_laddr, double p_eagain)
 {
   if (p_eagain == 0.0) {
     return NodeExtentManagerURef(

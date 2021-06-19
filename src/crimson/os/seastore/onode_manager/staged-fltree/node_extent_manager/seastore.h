@@ -21,7 +21,7 @@ namespace crimson::os::seastore::onode {
 class SeastoreSuper final: public Super {
  public:
   SeastoreSuper(Transaction& t, RootNodeTracker& tracker,
-                laddr_t root_addr, TransactionManager& tm)
+                laddr_t root_addr, InterruptedTransactionManager& tm)
     : Super(t, tracker), root_addr{root_addr}, tm{tm} {}
   ~SeastoreSuper() override = default;
  protected:
@@ -36,7 +36,7 @@ class SeastoreSuper final: public Super {
   }
  private:
   laddr_t root_addr;
-  TransactionManager& tm;
+  InterruptedTransactionManager tm;
 };
 
 class SeastoreNodeExtent final: public NodeExtent {
@@ -70,15 +70,15 @@ class SeastoreNodeExtent final: public NodeExtent {
 
 class TransactionManagerHandle : public NodeExtentManager {
  public:
-  TransactionManagerHandle(TransactionManager& tm) : tm{tm} {}
-  TransactionManager& tm;
+  TransactionManagerHandle(InterruptedTransactionManager tm) : tm{tm} {}
+  InterruptedTransactionManager tm;
 };
 
 template <bool INJECT_EAGAIN=false>
 class SeastoreNodeExtentManager final: public TransactionManagerHandle {
  public:
   SeastoreNodeExtentManager(
-      TransactionManager& tm, laddr_t min, double p_eagain)
+      InterruptedTransactionManager tm, laddr_t min, double p_eagain)
       : TransactionManagerHandle(tm), addr_min{min}, p_eagain{p_eagain} {
     if constexpr (INJECT_EAGAIN) {
       assert(p_eagain > 0.0 && p_eagain < 1.0);

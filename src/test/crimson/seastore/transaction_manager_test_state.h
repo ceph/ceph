@@ -100,7 +100,7 @@ auto get_seastore(SegmentManagerRef sm) {
 
 class TMTestState : public EphemeralTestState {
 protected:
-  std::unique_ptr<TransactionManager> tm;
+  InterruptedTMRef tm;
   LBAManager *lba_manager;
   SegmentCleaner *segment_cleaner;
 

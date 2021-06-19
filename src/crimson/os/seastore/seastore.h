@@ -227,11 +227,11 @@ private:
     OMapManager::omap_list_config_t config);
 
   SegmentManagerRef segment_manager;
-  TransactionManagerRef transaction_manager;
+  InterruptedTMRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
 
-  using tm_ertr = TransactionManager::base_ertr;
+  using tm_ertr = with_trans_ertr<TransactionManager::base_iertr>;
   using tm_ret = tm_ertr::future<>;
   tm_ret _do_transaction_step(
     internal_context_t &ctx,
