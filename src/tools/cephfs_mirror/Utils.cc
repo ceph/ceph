@@ -31,7 +31,9 @@ int connect(std::string_view client_name, std::string_view cluster_name,
 
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY,
                                     CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  cct->_conf->cluster = cluster_name;
+  if (mon_host.empty()) {
+    cct->_conf->cluster = cluster_name;
+  }
 
   int r = cct->_conf.parse_config_files(nullptr, nullptr, 0);
   if (r < 0 && r != -ENOENT) {
