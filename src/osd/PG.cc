@@ -136,7 +136,7 @@ uint64_t PG::get_with_id()
   ref++;
   std::lock_guard l(_ref_id_lock);
   uint64_t id = ++_ref_id;
-  BackTrace bt(0);
+  ClibBackTrace bt(0);
   stringstream ss;
   bt.print(ss);
   lgeneric_subdout(cct, refs, 5) << "PG::get " << this << " " << info.pgid

@@ -322,7 +322,7 @@ static void handle_oneshot_fatal_signal(int signum)
   // TODO: don't use an ostringstream here. It could call malloc(), which we
   // don't want inside a signal handler.
   // Also fix the backtrace code not to allocate memory.
-  BackTrace bt(1);
+  ClibBackTrace bt(1);
   ostringstream oss;
   bt.print(oss);
   dout_emergency(oss.str());
