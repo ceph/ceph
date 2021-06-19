@@ -89,7 +89,7 @@ public:
     return update_refcount(t, addr, 1);
   }
 
-  complete_transaction_ret complete_transaction(
+  void complete_transaction(
     Transaction &t) final;
 
   init_cached_extent_ret init_cached_extent(

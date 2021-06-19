@@ -67,7 +67,7 @@ struct btree_lba_manager_test :
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);
-	return lba_manager->complete_transaction(*t);
+	lba_manager->complete_transaction(*t);
       }).handle_error(crimson::ct_error::assert_all{});
   }
 
