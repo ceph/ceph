@@ -60,7 +60,7 @@ lifetime average value.  Normally these are used to measure latencies
 for the previous interval is what is interesting.
 
 Instead of interpreting the bit fields, the ``metric type`` has a
-value of either ``guage`` or ``counter``, and the ``value type``
+value of either ``gauge`` or ``counter``, and the ``value type``
 property will be one of ``real``, ``integer``, ``real-integer-pair``
 (for a sum + real count pair), or ``integer-integer-pair`` (for a
 sum + integer count pair).
