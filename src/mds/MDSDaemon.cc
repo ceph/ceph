@@ -311,7 +311,9 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "migrate a subtree to named MDS");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump cache name=path,type=CephString,req=false",
+  r = admin_socket->register_command("dump cache "
+				     "name=path,type=CephString,req=false "
+				     "name=timeout,type=CephInt,range=0,req=false",
                                      asok_hook,
                                      "dump metadata cache (optionally to a file)");
   ceph_assert(r == 0);

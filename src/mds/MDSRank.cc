@@ -2728,11 +2728,18 @@ void MDSRankDispatcher::handle_asok_command(
     command_export_dir(f, path, (mds_rank_t)rank);
   } else if (command == "dump cache") {
     std::lock_guard l(mds_lock);
+    int64_t timeout = 0;
+    cmd_getval(cmdmap, "timeout", timeout);
+    auto mds_beacon_interval = g_conf().get_val<double>("mds_beacon_interval");
+    if (timeout <= 0)
+      timeout = mds_beacon_interval / 2;
+    else if (timeout > mds_beacon_interval)
+      timeout = mds_beacon_interval;
     string path;
     if (!cmd_getval(cmdmap, "path", path)) {
-      r = mdcache->dump_cache(f);
+      r = mdcache->dump_cache(f, timeout);
     } else {
-      r = mdcache->dump_cache(path);
+      r = mdcache->dump_cache(path, timeout);
     }
   } else if (command == "cache drop") {
     int64_t timeout = 0;
