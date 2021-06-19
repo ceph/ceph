@@ -1231,6 +1231,40 @@ These warnings can be disabled entirely with::
 
   ceph config set mgr/crash/warn_recent_interval 0
 
+RECENT_MGR_MODULE_CRASH
+_______________________
+
+One or more ceph-mgr modules has crashed recently, and the crash as
+not yet been archived (acknowledged) by the administrator.  This
+generally indicates a software bug in one of the software modules run
+inside the ceph-mgr daemon.  Although the module that experienced the
+problem maybe be disabled as a result, the function of other modules
+is normally unaffected.
+
+As with the *RECENT_CRASH* health alert, the crash can be inspected with::
+
+    ceph crash info <crash-id>
+
+This warning can be silenced by "archiving" the crash (perhaps after
+being examined by an administrator) so that it does not generate this
+warning::
+
+  ceph crash archive <crash-id>
+
+Similarly, all new crashes can be archived with::
+
+  ceph crash archive-all
+
+Archived crashes will still be visible via ``ceph crash ls`` but not
+``ceph crash ls-new``.
+
+The time period for what "recent" means is controlled by the option
+``mgr/crash/warn_recent_interval`` (default: two weeks).
+
+These warnings can be disabled entirely with::
+
+  ceph config set mgr/crash/warn_recent_interval 0
+
 TELEMETRY_CHANGED
 _________________
 
