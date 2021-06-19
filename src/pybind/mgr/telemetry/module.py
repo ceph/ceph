@@ -302,8 +302,7 @@ class Module(MgrModule):
         if errno:
             return crashlist
         for crashid in crashids.split():
-            cmd = {'id': crashid}
-            errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
+            errno, crashinfo, err = self.remote('crash', 'do_info', crashid)
             if errno:
                 continue
             c = json.loads(crashinfo)
