@@ -94,7 +94,7 @@ class NodeExtentManager {
 
   static NodeExtentManagerURef create_dummy(bool is_sync);
   static NodeExtentManagerURef create_seastore(
-      TransactionManager& tm, laddr_t min_laddr = L_ADDR_MIN, double p_eagain = 0.0);
+      InterruptedTransactionManager tm, laddr_t min_laddr = L_ADDR_MIN, double p_eagain = 0.0);
 };
 inline std::ostream& operator<<(std::ostream& os, const NodeExtentManager& nm) {
   return nm.print(os);

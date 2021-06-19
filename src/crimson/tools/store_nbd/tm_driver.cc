@@ -141,7 +141,7 @@ void TMDriver::init()
 
   journal->set_segment_provider(&*segment_cleaner);
 
-  tm = std::make_unique<TransactionManager>(
+  tm = InterruptedTMRef(
     *segment_manager,
     std::move(segment_cleaner),
     std::move(journal),

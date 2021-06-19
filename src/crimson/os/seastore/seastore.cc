@@ -250,11 +250,9 @@ SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
   auto c = static_cast<SeastoreCollection*>(ch.get());
   LOG_PREFIX(SeaStore::get_attr);
   DEBUG("{} {}", c->get_cid(), oid);
-  using get_attr_ertr = TransactionManager::base_ertr::extend<
-    crimson::ct_error::enodata>;
   return repeat_with_onode<ceph::bufferlist>(
     c, oid, [=](auto &t, auto& onode)
-    -> get_attr_ertr::future<ceph::bufferlist> {
+    -> _omap_get_value_ertr::future<ceph::bufferlist> {
     auto& layout = onode.get_layout();
     if (name == OI_ATTR && layout.oi_size) {
       ceph::bufferlist bl;

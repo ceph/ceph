@@ -7,7 +7,7 @@
 
 namespace crimson::os::seastore::collection_manager {
 
-CollectionManagerRef create_coll_manager(TransactionManager &trans_manager) {
+CollectionManagerRef create_coll_manager(InterruptedTransactionManager trans_manager) {
   return CollectionManagerRef(new FlatCollectionManager(trans_manager));
 }
 

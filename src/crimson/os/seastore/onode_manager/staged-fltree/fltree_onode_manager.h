@@ -103,7 +103,7 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
   OnodeTree tree;
 
 public:
-  FLTreeOnodeManager(TransactionManager &tm) :
+  FLTreeOnodeManager(InterruptedTransactionManager tm) :
     tree(NodeExtentManager::create_seastore(tm)) {}
 
   mkfs_ret mkfs(Transaction &t) {

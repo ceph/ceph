@@ -22,7 +22,7 @@ constexpr static segment_off_t MIN_FLAT_BLOCK_SIZE = 4<<10;
 [[maybe_unused]] constexpr static segment_off_t MAX_FLAT_BLOCK_SIZE = 4<<20;
 
 FlatCollectionManager::FlatCollectionManager(
-  TransactionManager &tm)
+  InterruptedTransactionManager tm)
   : tm(tm) {}
 
 FlatCollectionManager::mkfs_ret
