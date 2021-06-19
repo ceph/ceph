@@ -26,6 +26,7 @@ class TestMirroring(CephFSTestCase):
         self.primary_fs_name = self.fs.name
         self.primary_fs_id = self.fs.id
         self.secondary_fs_name = self.backup_fs.name
+        self.secondary_fs_id = self.backup_fs.id
         self.enable_mirroring_module()
 
     def tearDown(self):
@@ -1147,5 +1148,21 @@ class TestMirroring(CephFSTestCase):
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                "client.mirror_remote@ceph", f'/{repo_path}', 'snap_b', 2)
         self.verify_snapshot(repo_path, 'snap_b')
+
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_peer_add_primary(self):
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # try adding the primary file system as a peer to secondary file
+        # system
+        try:
+            self.peer_add(self.secondary_fs_name, self.secondary_fs_id, "client.mirror_remote@ceph", self.primary_fs_name)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EINVAL:
+                raise RuntimeError('invalid errno when adding a primary file system')
+        else:
+            raise RuntimeError('adding peer should fail')
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
