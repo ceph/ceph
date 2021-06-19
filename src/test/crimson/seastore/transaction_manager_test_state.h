@@ -144,6 +144,11 @@ protected:
       crimson::ct_error::assert_all{"Error in teardown"}
     );
   }
+
+  void submit_transaction(TransactionRef t) {
+    tm->submit_transaction(*t).unsafe_get0();
+    segment_cleaner->run_until_halt().get0();
+  }
 };
 
 class TestSegmentManagerWrapper final : public SegmentManager {

@@ -288,9 +288,9 @@ SegmentCleaner::gc_trim_journal_ret SegmentCleaner::gc_trim_journal()
 	[this](auto &tref) {
 	  return with_trans_intr(*tref, [this, &tref](auto &t) {
 	    return rewrite_dirty(t, get_dirty_tail()
-	    ).si_then([this, &tref] {
+	    ).si_then([this, &t] {
 	      return ecb->submit_transaction_direct(
-		std::move(tref));
+		t);
 	    });
 	  });
 	});
@@ -363,11 +363,11 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 		      }
 		    });
 		  }
-		).si_then([this, &tref] {
+		).si_then([this, &t] {
 		  if (scan_cursor->is_complete()) {
-		    tref->mark_segment_to_release(scan_cursor->get_offset().segment);
+		    t.mark_segment_to_release(scan_cursor->get_offset().segment);
 		  }
-		  return ecb->submit_transaction_direct(std::move(tref));
+		  return ecb->submit_transaction_direct(t);
 		});
 	      });
 	    });

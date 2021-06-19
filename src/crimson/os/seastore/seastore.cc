@@ -98,7 +98,7 @@ seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 	    *t,
 	    coll_root);
 	  return transaction_manager->submit_transaction(
-	    std::move(t));
+	    *t);
 	});
       });
   }).safe_then([this] {
@@ -637,7 +637,7 @@ seastar::future<> SeaStore::do_transaction(
         // destruction in debug mode, which need to be done before calling
         // submit_transaction().
         ctx.onodes.clear();
-	return transaction_manager->submit_transaction(std::move(ctx.transaction));
+	return transaction_manager->submit_transaction(*ctx.transaction);
       }).safe_then([&ctx]() {
 	for (auto i : {
 	    ctx.ext_transaction.get_on_applied(),
@@ -1067,7 +1067,7 @@ seastar::future<> SeaStore::write_meta(const std::string& key,
         return transaction_manager->update_root_meta(
 	  *t, key, value
 	).safe_then([this, &t] {
-	  return transaction_manager->submit_transaction(std::move(t));
+	  return transaction_manager->submit_transaction(*t);
 	});
       });
     }).handle_error(

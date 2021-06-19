@@ -337,7 +337,7 @@ public:
     using submit_transaction_direct_ret =
       submit_transaction_direct_iertr::future<>;
     virtual submit_transaction_direct_ret submit_transaction_direct(
-      TransactionRef t) = 0;
+      Transaction &t) = 0;
   };
 
 private:
