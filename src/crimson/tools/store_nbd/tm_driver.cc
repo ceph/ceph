@@ -43,7 +43,7 @@ seastar::future<> TMDriver::write(
 	  assert(ext->get_bptr().length() == ptr.length());
 	  ext->get_bptr().swap(ptr);
 	  logger().debug("submitting transaction");
-	  return tm->submit_transaction(std::move(t));
+	  return tm->submit_transaction(*t);
 	});
       });
   }).handle_error(

@@ -36,15 +36,13 @@ class PerfTree : public TMTestState {
         {
           auto t = tm->create_transaction();
           tree->bootstrap(*t).unsafe_get();
-          tm->submit_transaction(std::move(t)).unsafe_get();
-          segment_cleaner->run_until_halt().get0();
+          submit_transaction(std::move(t));
         }
         {
           auto t = tm->create_transaction();
           tree->insert(*t).unsafe_get();
           auto start_time = mono_clock::now();
-          tm->submit_transaction(std::move(t)).unsafe_get();
-          segment_cleaner->run_until_halt().get0();
+          submit_transaction(std::move(t));
           std::chrono::duration<double> duration = mono_clock::now() - start_time;
           logger().warn("submit_transaction() done! {}s", duration.count());
         }
@@ -57,8 +55,7 @@ class PerfTree : public TMTestState {
         {
           auto t = tm->create_transaction();
           tree->erase(*t, kvs.size() * erase_ratio).unsafe_get();
-          tm->submit_transaction(std::move(t)).unsafe_get();
-          segment_cleaner->run_until_halt().get0();
+          submit_transaction(std::move(t));
         }
         {
           auto t = tm->create_transaction();

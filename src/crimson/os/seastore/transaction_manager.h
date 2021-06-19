@@ -378,12 +378,12 @@ public:
    * Atomically submits transaction to persistence
    */
   using submit_transaction_iertr = base_iertr;
-  submit_transaction_iertr::future<> submit_transaction(TransactionRef);
+  submit_transaction_iertr::future<> submit_transaction(Transaction &);
 
   /// SegmentCleaner::ExtentCallbackInterface
   using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
   submit_transaction_direct_ret submit_transaction_direct(
-    TransactionRef t) final;
+    Transaction &t) final;
 
   using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
@@ -623,15 +623,7 @@ public:
   INT_FORWARD(reserve_region)
   INT_FORWARD(find_hole)
   PARAM_INT_FORWARD(alloc_extents)
-
-
-  auto submit_transaction(TransactionRef t) const {
-    return with_trans_intr(
-      *t,
-      [this, t=std::move(t)](auto &) mutable {
-	return tm.submit_transaction(std::move(t));
-      });
-  }
+  INT_FORWARD(submit_transaction)
 
   INT_FORWARD(read_root_meta)
   INT_FORWARD(update_root_meta)

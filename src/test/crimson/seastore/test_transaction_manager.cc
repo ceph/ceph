@@ -536,7 +536,7 @@ struct transaction_manager_test_t :
   bool try_submit_transaction(test_transaction_t t) {
     using ertr = with_trans_ertr<TransactionManager::submit_transaction_iertr>;
     using ret = ertr::future<bool>;
-    bool success = tm->submit_transaction(std::move(t.t)
+    bool success = tm->submit_transaction(*t.t
     ).safe_then([]() -> ret {
       return ertr::make_ready_future<bool>(true);
     }).handle_error(
