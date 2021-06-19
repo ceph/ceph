@@ -106,8 +106,7 @@ std::string handle_pyerror(
     PyObject *l = get_managed_object(formatted_list, boost::python::tag);
     if (PyList_Check(l)) {
       // skip first line, which is: "Traceback (most recent call last):\n"
-      // omit last line, which contains a runtime value that may be identifying!
-      for (unsigned i = 1; i < PyList_Size(l) - 1; ++i) {
+      for (unsigned i = 1; i < PyList_Size(l); ++i) {
 	PyObject *val = PyList_GET_ITEM(l, i);
 	std::string s = PyUnicode_AsUTF8(val);
 	s.resize(s.size() - 1);  // strip off newline character
