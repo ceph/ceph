@@ -35,8 +35,6 @@ UCXConSktImpl::~UCXConSktImpl()
 {
   ldout(cct, 20) << dendl;
   ucx_worker->remove_pending_conn(this);
-
-  std::lock_guard l{lock};
 }
 
 void UCXConSktImpl::set_connection_status(int con_status)
@@ -73,6 +71,7 @@ ssize_t UCXConSktImpl::read(char* buf, size_t len)
 
 ssize_t UCXConSktImpl::send_submit(bool more)
 {
+  std::lock_guard l{send_lock};
   if (send_pending_bl.length() == 0) {
     return 0;
   }
@@ -88,7 +87,7 @@ ssize_t UCXConSktImpl::send_submit(bool more)
   param.datatype     = 0;
 
   while (left_pbrs) {
-    iomsg_t msg{0, pb->length(), IO_WRITE};
+    iomsg_t msg{sn_send++, pb->length(), IO_WRITE};
     ucs_status_ptr_t send_req = ucp_am_send_nbx(conn_ep, 0xcafebeef, &msg,
 	                                    sizeof(msg), pb->c_str(),
 					    pb->length(), &param);
@@ -125,7 +124,10 @@ ssize_t UCXConSktImpl::send(ceph::bufferlist &bl, bool more)
   if (bytes == 0) {
     return 0;
   }
-  send_pending_bl.claim_append(bl);
+  {
+    std::lock_guard l{send_lock};
+    send_pending_bl.claim_append(bl);
+  }
   ssize_t rst = send_submit(more);
   if (rst < 0 && rst != -EAGAIN) {
     return rst;
