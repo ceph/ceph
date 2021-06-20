@@ -526,7 +526,7 @@ CREATE TABLE DeviceHealthMetrics (
                 self.set_device_wear_level(devid, -1.0)
 
     def _t2epoch(self, t: Optional[str]) -> int:
-        if t is None:
+        if not t:
             return 0
         else:
             return int(datetime.strptime(t, TIME_FORMAT).strftime("%s"))
@@ -536,20 +536,33 @@ CREATE TABLE DeviceHealthMetrics (
                             min_sample: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         res = {}
 
-        SQL = """
+        SQL_EXACT = """
         SELECT time, raw_smart
             FROM DeviceHealthMetrics
-            WHERE devid = ? AND (time = ? OR ? <= time)
+            WHERE devid = ? AND time = ?
+            ORDER BY time DESC;
+        """
+        SQL_MIN = """
+        SELECT time, raw_smart
+            FROM DeviceHealthMetrics
+            WHERE devid = ? AND ? <= time
             ORDER BY time DESC;
         """
 
-        isample = self._t2epoch(sample)
-        imin_sample = self._t2epoch(min_sample)
+        isample = None
+        imin_sample = None
+        if sample:
+            isample = self._t2epoch(sample)
+        else:
+            imin_sample = self._t2epoch(min_sample)
 
         self.log.debug(f"_get_device_metrics: {devid} {sample} {min_sample}")
 
         with self._db_lock, self.db:
-            cursor = self.db.execute(SQL, (devid, isample, imin_sample))
+            if isample:
+                cursor = self.db.execute(SQL_EXACT, (devid, isample))
+            else:
+                cursor = self.db.execute(SQL_MIN, (devid, imin_sample))
             for row in cursor:
                 t = row['time']
                 dt = datetime.utcfromtimestamp(t).strftime(TIME_FORMAT)
