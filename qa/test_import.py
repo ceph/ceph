@@ -1,11 +1,10 @@
 # try to import all .py files from a given directory
 
-import argparse
 import glob
 import os
 import importlib
 import importlib.util
-
+import pytest
 
 def _module_name(path):
     task = os.path.splitext(path)[0]
@@ -19,25 +18,21 @@ def _import_file(path):
     line = f'Importing {package}{mod_name} from {path}'
     print(f'{line:<80}', end='')
     mod_spec = importlib.util.find_spec(mod_name, package)
-    mod = mod_spec.loader.load_module()
+    mod = mod_spec.loader.load_module(f'{package}{mod_name}')
     if mod is None:
         result = 'FAIL'
     else:
         result = 'DONE'
     print(f'{result:>6}')
     mod_spec.loader.exec_module(mod)
+    return result
 
-def _parser():
-    parser = argparse.ArgumentParser(
-        description='Try to import a file',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('path', nargs='+', help='Glob to select files')
-    return parser
-
-
-if __name__ == '__main__':
-    parser = _parser()
-    args = parser.parse_args()
-    for g in args.path:
+def get_paths():
+    for g in ['tasks/**/*.py']:
         for p in glob.glob(g, recursive=True):
-            _import_file(p)
+            yield p
+
+@pytest.mark.parametrize("path", list(sorted(get_paths())))
+def test_import(path):
+    assert _import_file(path) == 'DONE'
+
