@@ -89,7 +89,7 @@ private:
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
   std::map<pg_shard_t,
-           ceph::ref_t<MOSDPGBackfillRemove>> backfill_drop_requests;
+           MURef<MOSDPGBackfillRemove>> backfill_drop_requests;
 
   template <class EventT>
   void start_backfill_recovery(

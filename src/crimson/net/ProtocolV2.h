@@ -31,7 +31,7 @@ class ProtocolV2 final : public Protocol {
   void trigger_close() override;
 
   ceph::bufferlist do_sweep_messages(
-      const std::deque<MessageRef>& msgs,
+      const std::deque<MessageURef>& msgs,
       size_t num_msgs,
       bool require_keepalive,
       std::optional<utime_t> keepalive_ack,
