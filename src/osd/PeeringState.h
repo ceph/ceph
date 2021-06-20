@@ -61,7 +61,11 @@ struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
+#if defined(WITH_SEASTAR)
+  std::map<int, std::vector<MessageURef>> message_map;
+#else
   std::map<int, std::vector<MessageRef>> message_map;
+#endif
 
   BufferedRecoveryMessages() = default;
   BufferedRecoveryMessages(PeeringCtx &ctx);
@@ -71,14 +75,15 @@ struct BufferedRecoveryMessages {
       auto &ovec = message_map[target];
       // put buffered messages in front
       ls.reserve(ls.size() + ovec.size());
-      ls.insert(ls.end(), ovec.begin(), ovec.end());
+      ls.insert(ls.end(), std::make_move_iterator(ovec.begin()), std::make_move_iterator(ovec.end()));
       ovec.clear();
       ovec.swap(ls);
     }
   }
 
-  void send_osd_message(int target, MessageRef m) {
-    message_map[target].push_back(std::move(m));
+  template <class MsgT> // MsgT = MessageRef for ceph-osd and MessageURef for crimson-osd
+  void send_osd_message(int target, MsgT&& m) {
+    message_map[target].emplace_back(std::forward<MsgT>(m));
   }
   void send_notify(int to, const pg_notify_t &n);
   void send_query(int to, spg_t spgid, const pg_query_t &q);
@@ -222,8 +227,9 @@ struct PeeringCtxWrapper {
 
   PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
-  void send_osd_message(int target, MessageRef m) {
-    msgs.send_osd_message(target, std::move(m));
+  template <class MsgT> // MsgT = MessageRef for ceph-osd and MessageURef for crimson-osd
+  void send_osd_message(int target, MsgT&& m) {
+    msgs.send_osd_message(target, std::forward<MsgT>(m));
   }
   void send_notify(int to, const pg_notify_t &n) {
     msgs.send_notify(to, n);

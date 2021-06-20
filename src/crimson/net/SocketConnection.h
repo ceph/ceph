@@ -44,9 +44,9 @@ class SocketConnection : public Connection {
   bool update_rx_seq(seq_num_t seq);
 
   // messages to be resent after connection gets reset
-  std::deque<MessageRef> out_q;
+  std::deque<MessageURef> out_q;
   // messages sent, but not yet acked by peer
-  std::deque<MessageRef> sent;
+  std::deque<MessageURef> sent;
 
   seastar::shard_id shard_id() const;
 
@@ -70,7 +70,6 @@ class SocketConnection : public Connection {
 #endif
 
   seastar::future<> send(MessageURef msg) override;
-  seastar::future<> send(MessageRef msg) override;
 
   seastar::future<> keepalive() override;
 
