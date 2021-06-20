@@ -675,7 +675,7 @@ void populate_event_from_request(const reservation_t& res,
   event.bucket_name = s->bucket_name;
   event.bucket_ownerIdentity = s->bucket_owner.get_id().id;
   event.bucket_arn = to_string(rgw::ARN(s->bucket->get_key()));
-  event.object_key = obj->get_name();
+  event.object_key = res.object_name ? *res.object_name : obj->get_name();
   event.object_size = size;
   event.object_etag = etag;
   event.object_versionId = obj->get_instance();
@@ -709,7 +709,8 @@ bool notification_match(reservation_t& res, const rgw_pubsub_topic_filter& filte
     return false;
   }
   const auto obj = res.object;
-  if (!match(filter.s3_filter.key_filter, obj->get_name())) {
+  if (!match(filter.s3_filter.key_filter, 
+        res.object_name ? *res.object_name : obj->get_name())) {
     return false;
   }
 

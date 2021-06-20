@@ -5926,14 +5926,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   mp.init(s->object->get_name(), upload_id);
 
-  // make reservation for notification if needed
-  rgw::notify::reservation_t res(this, store, s, s->object.get());
-  const auto event_type = rgw::notify::ObjectCreatedCompleteMultipartUpload;
-  op_ret = rgw::notify::publish_reserve(this, event_type, res, nullptr);
-  if (op_ret < 0) {
-    return;
-  }
-
   meta_oid = mp.get_meta();
 
   int total_parts = 0;
@@ -5979,6 +5971,14 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
   attrs = meta_obj->get_attrs();
+
+  // make reservation for notification if needed
+  rgw::notify::reservation_t res(this, store, s, meta_obj.get(), &s->object->get_name());
+  const auto event_type = rgw::notify::ObjectCreatedCompleteMultipartUpload;
+  op_ret = rgw::notify::publish_reserve(this, event_type, res, nullptr);
+  if (op_ret < 0) {
+      return;
+  }
 
   do {
     op_ret = list_multipart_parts(this, store, s, upload_id, meta_oid, max_parts,
