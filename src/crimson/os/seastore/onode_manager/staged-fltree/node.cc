@@ -683,7 +683,12 @@ eagain_future<Ref<Node>> Node::load(
              c.t, addr, expect_is_level_tail);
       ceph_abort("fatal error");
     })
-  ).safe_then([FNAME, c, expect_is_level_tail](auto extent) {
+  ).safe_then([FNAME, c, expect_is_level_tail](auto extent)
+    -> eagain_future<Ref<Node>> {
+    //XXX: this should be removed once interruptible future is involved
+    if (!extent->is_valid()) {
+      return crimson::ct_error::eagain::make();
+    }
     auto [node_type, field_type] = extent->get_types();
     if (node_type == node_type_t::LEAF) {
       if (extent->get_length() != c.vb.get_leaf_node_size()) {
@@ -691,14 +696,16 @@ eagain_future<Ref<Node>> Node::load(
         ceph_abort("fatal error");
       }
       auto impl = LeafNodeImpl::load(extent, field_type, expect_is_level_tail);
-      return Ref<Node>(new LeafNode(impl.get(), std::move(impl)));
+      return eagain_ertr::make_ready_future<Ref<Node>>(
+	  new LeafNode(impl.get(), std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
       if (extent->get_length() != c.vb.get_internal_node_size()) {
         ERRORT("internal length mismatch -- {}", c.t, extent);
         ceph_abort("fatal error");
       }
       auto impl = InternalNodeImpl::load(extent, field_type, expect_is_level_tail);
-      return Ref<Node>(new InternalNode(impl.get(), std::move(impl)));
+      return eagain_ertr::make_ready_future<Ref<Node>>(
+	  new InternalNode(impl.get(), std::move(impl)));
     } else {
       ceph_abort("impossible path");
     }

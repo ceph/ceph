@@ -30,19 +30,32 @@ public:
   enum class get_extent_ret {
     PRESENT,
     ABSENT,
-    RETIRED
+    RETIRED,
+    INVALIDATED
   };
-  get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
+  get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out, bool delete_on_invalid = false) {
     if (retired_set.count(addr)) {
       return get_extent_ret::RETIRED;
     } else if (auto iter = write_set.find_offset(addr);
 	iter != write_set.end()) {
+      if (!iter->is_valid()) {
+	if (delete_on_invalid) {
+	  write_set.erase(*iter);
+	}
+	return get_extent_ret::INVALIDATED;
+      }
       if (out)
 	*out = CachedExtentRef(&*iter);
       return get_extent_ret::PRESENT;
     } else if (
       auto iter = read_set.find(addr);
       iter != read_set.end()) {
+      if (!(*iter)->is_valid()) {
+	if (delete_on_invalid) {
+	  read_set.erase(*iter);
+	}
+	return get_extent_ret::INVALIDATED;
+      }
       if (out)
 	*out = CachedExtentRef(*iter);
       return get_extent_ret::PRESENT;
