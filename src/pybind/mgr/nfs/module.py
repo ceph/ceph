@@ -32,14 +32,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             pseudo_path: str,
             path: Optional[str] = '/',
             readonly: Optional[bool] = False,
-            addr: Optional[List[str]] = None,
+            client_addr: Optional[List[str]] = None,
             squash: str = 'none',
     ) -> Tuple[int, str, str]:
         """Create a cephfs export"""
         return self.export_mgr.create_export(fsal_type='cephfs', fs_name=fsname,
                                              cluster_id=cluster_id, pseudo_path=pseudo_path,
                                              read_only=readonly, path=path,
-                                             squash=squash, addr=addr)
+                                             squash=squash, addr=client_addr)
 
     @CLICommand('nfs export create rgw', perm='rw')
     def _cmd_rgw_export_create_rgw(
@@ -48,7 +48,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             cluster_id: str,
             pseudo_path: str,
             readonly: Optional[bool] = False,
-            addr: Optional[List[str]] = None,
+            client_addr: Optional[List[str]] = None,
             realm: Optional[str] = None,
     ) -> Tuple[int, str, str]:
         """Create an RGW export"""
@@ -56,7 +56,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                              realm=realm,
                                              cluster_id=cluster_id, pseudo_path=pseudo_path,
                                              read_only=readonly, squash='none',
-                                             addr=addr)
+                                             addr=client_addr)
 
     @CLICommand('nfs export rm', perm='rw')
     def _cmd_nfs_export_rm(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
