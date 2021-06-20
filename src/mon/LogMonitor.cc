@@ -618,7 +618,6 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     if (channel == "*") {
       list<LogEntry> full_tail;
       summary.build_ordered_tail(&full_tail);
-      derr << "full " << full_tail << dendl;
       auto rp = full_tail.rbegin();
       for (; num > 0 && rp != full_tail.rend(); ++rp) {
 	if (match(*rp)) {
