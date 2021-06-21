@@ -807,8 +807,8 @@ private:
 				  optional_yield,
                                   const DoutPrefixProvider *dpp);
 
-  int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                     const rgw_user& user,
+  int do_link_bucket(BucketOpContext& ctx,
+		     const rgw_user& user,
                      const rgw_bucket& bucket,
                      ceph::real_time creation_time,
                      bool update_entrypoint,
@@ -816,8 +816,8 @@ private:
 		     optional_yield y,
                      const DoutPrefixProvider *dpp);
 
-  int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                       const rgw_user& user_id,
+  int do_unlink_bucket(BucketOpContext& ctx,
+		       const rgw_user& user_id,
                        const rgw_bucket& bucket,
                        bool update_entrypoint,
 		       optional_yield y,

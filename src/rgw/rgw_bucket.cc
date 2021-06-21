@@ -3369,14 +3369,13 @@ int RGWBucketCtl::link_bucket(const rgw_user& user_id,
                               bool update_entrypoint,
                               rgw_ep_info *pinfo)
 {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_link_bucket(ctx, user_id, bucket, creation_time,
-                          update_entrypoint, pinfo, y, dpp);
-  });
+  BucketOpContext ctx(this);
+  return do_link_bucket(ctx, user_id, bucket, creation_time,
+			update_entrypoint, pinfo, y, dpp);
 }
 
-int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                                 const rgw_user& user_id,
+int RGWBucketCtl::do_link_bucket(BucketOpContext& ctx,
+				 const rgw_user& user_id,
                                  const rgw_bucket& bucket,
                                  ceph::real_time creation_time,
                                  bool update_entrypoint,
@@ -3392,17 +3391,16 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   map<string, bufferlist> attrs, *pattrs = nullptr;
   string meta_key;
 
+  meta_key = get_entrypoint_meta_key(bucket);
   if (update_entrypoint) {
-    meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
     if (pinfo) {
       ep = pinfo->ep;
       pattrs = &pinfo->attrs;
     } else {
-      ret = svc.bucket->read_bucket_entrypoint_info(ctx,
-                                                    meta_key,
-                                                    &ep, &rot,
-                                                    nullptr, &attrs,
-                                                    y, dpp);
+      ret = read_bucket_entrypoint_info(ctx, meta_key, &ep, y, dpp,
+					&rot, nullptr, &attrs,
+					nullptr, boost::none);
+
       if (ret < 0 && ret != -ENOENT) {
         ldpp_dout(dpp, 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
                       << cpp_strerror(-ret) << dendl;
@@ -3427,8 +3425,8 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   ep.linked = true;
   ep.owner = user_id;
   ep.bucket = bucket;
-  ret = svc.bucket->store_bucket_entrypoint_info(
-    ctx, meta_key, ep, false, real_time(), pattrs, &rot, y, dpp);
+  ret = store_bucket_entrypoint_info(ctx, meta_key, ep, y, dpp,
+				     false, &rot, {}, pattrs);
   if (ret < 0)
     goto done_err;
 
@@ -3445,13 +3443,12 @@ done_err:
 
 int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp, bool update_entrypoint)
 {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_unlink_bucket(ctx, user_id, bucket, update_entrypoint, y, dpp);
-  });
+  BucketOpContext ctx(this);
+  return do_unlink_bucket(ctx, user_id, bucket, update_entrypoint, y, dpp);
 }
 
-int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                                   const rgw_user& user_id,
+int RGWBucketCtl::do_unlink_bucket(BucketOpContext& ctx,
+				   const rgw_user& user_id,
                                    const rgw_bucket& bucket,
                                    bool update_entrypoint,
 				   optional_yield y,
@@ -3460,7 +3457,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   int ret = ctl.user->remove_bucket(dpp, user_id, bucket, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error removing bucket from directory: "
-        << cpp_strerror(-ret)<< dendl;
+		      << cpp_strerror(-ret)<< dendl;
   }
 
   if (!update_entrypoint)
@@ -3469,8 +3466,9 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
-  string meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
-  ret = svc.bucket->read_bucket_entrypoint_info(ctx, meta_key, &ep, &ot, nullptr, &attrs, y, dpp);
+  string meta_key = get_entrypoint_meta_key(bucket);
+  ret = read_bucket_entrypoint_info(ctx, meta_key, &ep, y, dpp, &ot, nullptr,
+				    &attrs, nullptr, boost::none);
   if (ret == -ENOENT)
     return 0;
   if (ret < 0)
@@ -3485,7 +3483,8 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   }
 
   ep.linked = false;
-  return svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false, real_time(), &attrs, &ot, y, dpp);
+  return store_bucket_entrypoint_info(ctx, meta_key, ep, y, dpp, false,
+				      &ot, {}, &attrs);
 }
 
 // TODO: remove RGWRados dependency for bucket listing
