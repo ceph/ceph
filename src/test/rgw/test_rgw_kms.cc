@@ -20,7 +20,7 @@ class MockTransitSecretEngine : public TransitSecretEngine {
 public:
   MockTransitSecretEngine(CephContext *cct, EngineParmMap parms) : TransitSecretEngine(cct, parms){}
 
-  MOCK_METHOD(int, send_request, (const char *method, std::string_view infix, std::string_view key_id, const std::string& postdata, bufferlist &bl), (override));
+  MOCK_METHOD(int, send_request, (const DoutPrefixProvider *dpp, const char *method, std::string_view infix, std::string_view key_id, const std::string& postdata, bufferlist &bl), (override));
 
 };
 
@@ -29,7 +29,7 @@ class MockKvSecretEngine : public KvSecretEngine {
 public:
   MockKvSecretEngine(CephContext *cct, EngineParmMap parms) : KvSecretEngine(cct, parms){}
 
-  MOCK_METHOD(int, send_request, (const char *method, std::string_view infix, std::string_view key_id, const std::string& postdata, bufferlist &bl), (override));
+  MOCK_METHOD(int, send_request, (const DoutPrefixProvider *dpp, const char *method, std::string_view infix, std::string_view key_id, const std::string& postdata, bufferlist &bl), (override));
 
 };
 
@@ -62,6 +62,7 @@ protected:
 
 TEST_F(TestSSEKMS, vault_token_file_unset)
 {
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   cct->_conf.set_val("rgw_crypt_vault_auth", "token");
   EngineParmMap old_parms, kv_parms;
   TransitSecretEngine te(cct, std::move(old_parms));
@@ -70,13 +71,14 @@ TEST_F(TestSSEKMS, vault_token_file_unset)
   std::string_view key_id("my_key");
   std::string actual_key;
 
-  ASSERT_EQ(te.get_key(key_id, actual_key), -EINVAL);
-  ASSERT_EQ(kv.get_key(key_id, actual_key), -EINVAL);
+  ASSERT_EQ(te.get_key(&no_dpp, key_id, actual_key), -EINVAL);
+  ASSERT_EQ(kv.get_key(&no_dpp, key_id, actual_key), -EINVAL);
 }
 
 
 TEST_F(TestSSEKMS, non_existent_vault_token_file)
 {
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   cct->_conf.set_val("rgw_crypt_vault_auth", "token");
   cct->_conf.set_val("rgw_crypt_vault_token_file", "/nonexistent/file");
   EngineParmMap old_parms, kv_parms;
@@ -86,8 +88,8 @@ TEST_F(TestSSEKMS, non_existent_vault_token_file)
   std::string_view key_id("my_key/1");
   std::string actual_key;
 
-  ASSERT_EQ(te.get_key(key_id, actual_key), -ENOENT);
-  ASSERT_EQ(kv.get_key(key_id, actual_key), -ENOENT);
+  ASSERT_EQ(te.get_key(&no_dpp, key_id, actual_key), -ENOENT);
+  ASSERT_EQ(kv.get_key(&no_dpp, key_id, actual_key), -ENOENT);
 }
 
 
@@ -129,8 +131,9 @@ Action<SendRequestMethod> SetPointedValue(std::string json) {
 
 
 TEST_F(TestSSEKMS, test_transit_key_version_extraction){
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   string json = R"({"data": {"keys": {"6": "8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="}}})";
-  EXPECT_CALL(*old_engine, send_request(StrEq("GET"), StrEq(""), StrEq("1/2/3/4/5/6"), StrEq(""), _)).WillOnce(SetPointedValue(json));
+  EXPECT_CALL(*old_engine, send_request(&no_dpp, StrEq("GET"), StrEq(""), StrEq("1/2/3/4/5/6"), StrEq(""), _)).WillOnce(SetPointedValue(json));
 
   std::string actual_key;
   std::string tests[11] {"/", "my_key/", "my_key", "", "my_key/a", "my_key/1a",
@@ -139,11 +142,11 @@ TEST_F(TestSSEKMS, test_transit_key_version_extraction){
 
   int res;
   for (const auto &test: tests) {
-    res = old_engine->get_key(std::string_view(test), actual_key);
+    res = old_engine->get_key(&no_dpp, std::string_view(test), actual_key);
     ASSERT_EQ(res, -EINVAL);
   }
 
-  res = old_engine->get_key(std::string_view("1/2/3/4/5/6"), actual_key);
+  res = old_engine->get_key(&no_dpp, std::string_view("1/2/3/4/5/6"), actual_key);
   ASSERT_EQ(res, 0);
   ASSERT_EQ(actual_key, from_base64("8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="));
 }
@@ -151,14 +154,15 @@ TEST_F(TestSSEKMS, test_transit_key_version_extraction){
 
 TEST_F(TestSSEKMS, test_transit_backend){
 
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("my_key/1");
   std::string actual_key;
 
   // Mocks the expected return Value from Vault Server using custom Argument Action
   string json = R"({"data": {"keys": {"1": "8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="}}})";
-  EXPECT_CALL(*old_engine, send_request(StrEq("GET"), StrEq(""), StrEq("my_key/1"), StrEq(""), _)).WillOnce(SetPointedValue(json));
+  EXPECT_CALL(*old_engine, send_request(&no_dpp, StrEq("GET"), StrEq(""), StrEq("my_key/1"), StrEq(""), _)).WillOnce(SetPointedValue(json));
 
-  int res = old_engine->get_key(my_key, actual_key);
+  int res = old_engine->get_key(&no_dpp, my_key, actual_key);
 
   ASSERT_EQ(res, 0);
   ASSERT_EQ(actual_key, from_base64("8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="));
@@ -167,19 +171,20 @@ TEST_F(TestSSEKMS, test_transit_backend){
 
 TEST_F(TestSSEKMS, test_transit_makekey){
 
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("my_key");
   std::string actual_key;
   map<string, bufferlist> attrs;
 
   // Mocks the expected return Value from Vault Server using custom Argument Action
   string post_json = R"({"data": {"ciphertext": "vault:v2:HbdxLnUztGVo+RseCIaYVn/4wEUiJNT6GQfw57KXQmhXVe7i1/kgLWegEPg1I6lexhIuXAM6Q2YvY0aZ","key_version": 1,"plaintext": "3xfTra/dsIf3TMa3mAT2IxPpM7YWm/NvUb4gDfSDX4g="}})";
-  EXPECT_CALL(*transit_engine, send_request(StrEq("POST"), StrEq("/datakey/plaintext/"), StrEq("my_key"), _, _))
+  EXPECT_CALL(*transit_engine, send_request(&no_dpp, StrEq("POST"), StrEq("/datakey/plaintext/"), StrEq("my_key"), _, _))
 		.WillOnce(SetPointedValue(post_json));
 
   set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, R"({"aws:s3:arn": "fred"})");
   set_attr(attrs, RGW_ATTR_CRYPT_KEYID, my_key);
 
-  int res = transit_engine->make_actual_key(attrs, actual_key);
+  int res = transit_engine->make_actual_key(&no_dpp, attrs, actual_key);
   std::string cipher_text { get_str_attribute(attrs,RGW_ATTR_CRYPT_DATAKEY) };
 
   ASSERT_EQ(res, 0);
@@ -189,6 +194,7 @@ TEST_F(TestSSEKMS, test_transit_makekey){
 
 TEST_F(TestSSEKMS, test_transit_reconstitutekey){
 
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("my_key");
   std::string actual_key;
   map<string, bufferlist> attrs;
@@ -196,13 +202,13 @@ TEST_F(TestSSEKMS, test_transit_reconstitutekey){
   // Mocks the expected return Value from Vault Server using custom Argument Action
   set_attr(attrs, RGW_ATTR_CRYPT_DATAKEY, "vault:v2:HbdxLnUztGVo+RseCIaYVn/4wEUiJNT6GQfw57KXQmhXVe7i1/kgLWegEPg1I6lexhIuXAM6Q2YvY0aZ");
   string post_json = R"({"data": {"key_version": 1,"plaintext": "3xfTra/dsIf3TMa3mAT2IxPpM7YWm/NvUb4gDfSDX4g="}})";
-  EXPECT_CALL(*transit_engine, send_request(StrEq("POST"), StrEq("/decrypt/"), StrEq("my_key"), _, _))
+  EXPECT_CALL(*transit_engine, send_request(&no_dpp, StrEq("POST"), StrEq("/decrypt/"), StrEq("my_key"), _, _))
 		.WillOnce(SetPointedValue(post_json));
 
   set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, R"({"aws:s3:arn": "fred"})");
   set_attr(attrs, RGW_ATTR_CRYPT_KEYID, my_key);
 
-  int res = transit_engine->reconstitute_actual_key(attrs, actual_key);
+  int res = transit_engine->reconstitute_actual_key(&no_dpp, attrs, actual_key);
 
   ASSERT_EQ(res, 0);
   ASSERT_EQ(actual_key, from_base64("3xfTra/dsIf3TMa3mAT2IxPpM7YWm/NvUb4gDfSDX4g="));
@@ -210,15 +216,16 @@ TEST_F(TestSSEKMS, test_transit_reconstitutekey){
 
 TEST_F(TestSSEKMS, test_kv_backend){
 
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("my_key");
   std::string actual_key;
 
   // Mocks the expected return value from Vault Server using custom Argument Action
   string json = R"({"data": {"data": {"key": "8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="}}})";
-  EXPECT_CALL(*kv_engine, send_request(StrEq("GET"), StrEq(""), StrEq("my_key"), StrEq(""), _))
+  EXPECT_CALL(*kv_engine, send_request(&no_dpp, StrEq("GET"), StrEq(""), StrEq("my_key"), StrEq(""), _))
 		.WillOnce(SetPointedValue(json));
 
-  int res = kv_engine->get_key(my_key, actual_key);
+  int res = kv_engine->get_key(&no_dpp, my_key, actual_key);
 
   ASSERT_EQ(res, 0);
   ASSERT_EQ(actual_key, from_base64("8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="));
@@ -268,14 +275,15 @@ TEST_F(TestSSEKMS, string_ends_maybe_slash)
 
 TEST_F(TestSSEKMS, test_transit_backend_empty_response)
 {
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("/key/nonexistent/1");
   std::string actual_key;
 
   // Mocks the expected return Value from Vault Server using custom Argument Action
   string json = R"({"errors": ["version does not exist or cannot be found"]})";
-  EXPECT_CALL(*old_engine, send_request(StrEq("GET"), StrEq(""), StrEq("/key/nonexistent/1"), StrEq(""), _)).WillOnce(SetPointedValue(json));
+  EXPECT_CALL(*old_engine, send_request(&no_dpp, StrEq("GET"), StrEq(""), StrEq("/key/nonexistent/1"), StrEq(""), _)).WillOnce(SetPointedValue(json));
 
-  int res = old_engine->get_key(my_key, actual_key);
+  int res = old_engine->get_key(&no_dpp, my_key, actual_key);
 
   ASSERT_EQ(res, -EINVAL);
   ASSERT_EQ(actual_key, from_base64(""));
