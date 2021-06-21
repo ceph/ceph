@@ -158,7 +158,7 @@ struct InodeStat {
   void decode(ceph::buffer::list::const_iterator &p, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(6, p);
+      DECODE_START(7, p);
       decode(vino.ino, p);
       decode(vino.snapid, p);
       decode(rdev, p);
@@ -215,7 +215,11 @@ struct InodeStat {
       if (struct_v >= 6) {
         bool fscrypt_flag;
 
-        decode(fscrypt_flag, p);
+        decode(fscrypt_flag, p); // ignore this
+      }
+      if (struct_v >= 7) {
+        decode(fscrypt_auth, p);
+        decode(fscrypt_file, p);
       }
       DECODE_FINISH(p);
     }
