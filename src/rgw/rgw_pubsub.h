@@ -604,7 +604,7 @@ class RGWPubSub
   }
 
   std::string bucket_meta_oid(const rgw_bucket& bucket) const {
-    return pubsub_oid_prefix + tenant + ".bucket." + bucket.name + "/" + bucket.bucket_id;
+    return pubsub_oid_prefix + tenant + ".bucket." + bucket.name + "/" + bucket.marker;
   }
 
   std::string sub_meta_oid(const string& name) const {
