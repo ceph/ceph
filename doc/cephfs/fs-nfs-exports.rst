@@ -67,10 +67,10 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <clusterid> [<placement>] [--ingress --virtual-ip <ip>]
+    $ ceph nfs cluster create <cluster_id> [<placement>] [--ingress --virtual-ip <ip>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
-``clusterid``, and a common NFS Ganesha config RADOS object.
+``cluster_id``, and a common NFS Ganesha config RADOS object.
 
 .. note:: Since this command also brings up NFS Ganesha daemons using a ceph-mgr
    orchestrator module (see :doc:`/mgr/orchestrator`) such as "mgr/cephadm", at
@@ -79,7 +79,7 @@ This creates a common recovery pool for all NFS Ganesha daemons, new user based 
    Currently, NFS Ganesha daemon deployed by cephadm listens on the standard
    port. So only one daemon will be deployed on a host.
 
-``<clusterid>`` is an arbitrary string by which this NFS Ganesha cluster will be
+``<cluster_id>`` is an arbitrary string by which this NFS Ganesha cluster will be
 known.
 
 ``<placement>`` is an optional string signifying which hosts should have NFS Ganesha
@@ -109,7 +109,7 @@ Delete NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster rm <clusterid>
+    $ ceph nfs cluster rm <cluster_id>
 
 This deletes the deployed cluster.
 
@@ -127,7 +127,7 @@ Show NFS Ganesha Cluster Information
 
 .. code:: bash
 
-    $ ceph nfs cluster info [<clusterid>]
+    $ ceph nfs cluster info [<cluster_id>]
 
 This displays ip and port of deployed cluster.
 
@@ -143,7 +143,7 @@ Set Customized NFS Ganesha Configuration
 
 .. code:: bash
 
-    $ ceph nfs cluster config set <clusterid> -i <config_file>
+    $ ceph nfs cluster config set <cluster_id> -i <config_file>
 
 With this the nfs cluster will use the specified config and it will have
 precedence over default config blocks.
@@ -193,7 +193,7 @@ Reset NFS Ganesha Configuration
 
 .. code:: bash
 
-    $ ceph nfs cluster config reset <clusterid>
+    $ ceph nfs cluster config reset <cluster_id>
 
 This removes the user defined configuration.
 
@@ -210,16 +210,16 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs <fsname> <clusterid> <pseudo-path> [--readonly] [--path=/path/in/cephfs]
+    $ ceph nfs export create cephfs <fsname> <cluster_id> <pseudo_path> [--readonly] [--path=/path/in/cephfs]
 
 This creates export RADOS objects containing the export block, where
 
 ``<fsname>`` is the name of the FS volume used by the NFS Ganesha cluster
 that will serve this export.
 
-``<clusterid>`` is the NFS Ganesha cluster ID.
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<pseudo-path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server.  It must be an absolute path and unique.
+``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server.  It must be an absolute path and unique.
 
 ``<path>`` is the path within cephfs. Valid path should be given and default
 path is '/'. It need not be unique. Subvolume path can be fetched using:
@@ -235,24 +235,24 @@ Delete CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export rm <clusterid> <pseudo-path>
+    $ ceph nfs export rm <cluster_id> <pseudo_path>
 
 This deletes an export in an NFS Ganesha cluster, where:
 
-``<clusterid>`` is the NFS Ganesha cluster ID.
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<pseudo-path>`` is the pseudo root path (must be an absolute path).
+``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
 List CephFS Exports
 ===================
 
 .. code:: bash
 
-    $ ceph nfs export ls <clusterid> [--detailed]
+    $ ceph nfs export ls <cluster_id> [--detailed]
 
 It lists exports for a cluster, where:
 
-``<clusterid>`` is the NFS Ganesha cluster ID.
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
 With the ``--detailed`` option enabled it shows entire export block.
 
@@ -261,14 +261,14 @@ Get CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export info <clusterid> <pseudo-path>
+    $ ceph nfs export info <cluster_id> <pseudo_path>
 
 This displays export block for a cluster based on pseudo root name,
 where:
 
-``<clusterid>`` is the NFS Ganesha cluster ID.
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<pseudo-path>`` is the pseudo root path (must be an absolute path).
+``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
 
 Create or update CephFS Export via JSON specification
@@ -278,7 +278,7 @@ An existing export can be dumped in JSON format with:
 
 .. prompt:: bash #
 
-    ceph nfs export info *<pseudo-path>*
+    ceph nfs export info *<pseudo_path>*
 
 An export can be created or modified by importing a JSON description in the
 same format:
@@ -351,7 +351,7 @@ grace period. The exports can be mounted by
 
 .. code:: bash
 
-    $ mount -t nfs -o port=<ganesha-port> <ganesha-host-name>:<ganesha-pseudo-path> <mount-point>
+    $ mount -t nfs -o port=<ganesha-port> <ganesha-host-name>:<ganesha-pseudo_path> <mount-point>
 
 .. note:: Only NFS v4.0+ is supported.
 
