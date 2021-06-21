@@ -1667,12 +1667,13 @@ void CInode::set_object_info(MDSCacheObjectInfo &info)
 
 void CInode::encode_lock_iauth(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(get_inode()->version, bl);
   encode(get_inode()->ctime, bl);
   encode(get_inode()->mode, bl);
   encode(get_inode()->uid, bl);
-  encode(get_inode()->gid, bl);  
+  encode(get_inode()->gid, bl);
+  encode(get_inode()->fscrypt_auth, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1680,7 +1681,7 @@ void CInode::decode_lock_iauth(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
   auto _inode = allocate_inode(*get_inode());
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode(_inode->version, p);
   utime_t tm;
   decode(tm, p);
@@ -1688,6 +1689,8 @@ void CInode::decode_lock_iauth(bufferlist::const_iterator& p)
   decode(_inode->mode, p);
   decode(_inode->uid, p);
   decode(_inode->gid, p);
+  if (struct_v >= 2)
+    decode(_inode->fscrypt_auth, p);
   DECODE_FINISH(p);
   reset_inode(std::move(_inode));
 }
@@ -1799,26 +1802,26 @@ void CInode::decode_lock_idft(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ifile(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   if (is_auth()) {
-    encode(get_inode()->version, bl); 
-    encode(get_inode()->ctime, bl); 
-    encode(get_inode()->mtime, bl); 
-    encode(get_inode()->atime, bl); 
-    encode(get_inode()->time_warp_seq, bl); 
+    encode(get_inode()->version, bl);
+    encode(get_inode()->ctime, bl);
+    encode(get_inode()->mtime, bl);
+    encode(get_inode()->atime, bl);
+    encode(get_inode()->time_warp_seq, bl);
     if (!is_dir()) {
       encode(get_inode()->layout, bl, mdcache->mds->mdsmap->get_up_features());
-      encode(get_inode()->size, bl); 
-      encode(get_inode()->truncate_seq, bl); 
-      encode(get_inode()->truncate_size, bl); 
-      encode(get_inode()->client_ranges, bl); 
-      encode(get_inode()->inline_data, bl); 
-    }    
+      encode(get_inode()->size, bl);
+      encode(get_inode()->truncate_seq, bl);
+      encode(get_inode()->truncate_size, bl);
+      encode(get_inode()->client_ranges, bl);
+      encode(get_inode()->inline_data, bl);
+    }
   } else {
     // treat flushing as dirty when rejoining cache
     bool dirty = filelock.is_dirty_or_flushing();
-    encode(dirty, bl); 
-  }    
+    encode(dirty, bl);
+  }
   dout(15) << __func__ << " inode.dirstat is " << get_inode()->dirstat << dendl;
   encode(get_inode()->dirstat, bl);  // only meaningful if i am auth.
   bufferlist tmp;
@@ -1840,6 +1843,8 @@ void CInode::encode_lock_ifile(bufferlist& bl)
   }
   encode(n, bl);
   bl.claim_append(tmp);
+  if (is_auth())
+    encode(get_inode()->fscrypt_file, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1847,7 +1852,7 @@ void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
 {
   inode_ptr _inode;
 
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   if (!is_auth()) {
     _inode = allocate_inode(*get_inode());
 
@@ -1922,6 +1927,8 @@ void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
       }
     }
   }
+  if (!is_auth() && struct_v >= 2)
+    decode(_inode->fscrypt_file, p);
   DECODE_FINISH(p);
 
   if (_inode)
