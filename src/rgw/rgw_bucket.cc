@@ -2719,17 +2719,24 @@ public:
 		     }, MDLOG_STATUS_WRITE, objv_tracker);
   }
 
+  int remove_raw(const DoutPrefixProvider *dpp,
+		 optional_yield y,
+		 const string& key,
+		 RGWObjVersionTracker* objv_tracker) {
+    rgw_raw_obj k(get_pool(), key_to_oid(key));
+    auto sysobj = ctx.get_obj(k);
+    return sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .remove(dpp, y);
+  }
+
   int remove(const DoutPrefixProvider *dpp,
 	     optional_yield y,
 	     const string& key,
 	     RGWObjVersionTracker* objv_tracker) {
     return do_mutate(dpp, y, key,
 		     [&] {
-		       rgw_raw_obj k(get_pool(), key_to_oid(key));
-		       auto sysobj = ctx.get_obj(k);
-		       return sysobj.wop()
-			 .set_objv_tracker(objv_tracker)
-			 .remove(dpp, y);
+		       return remove_raw(dpp, y, key, objv_tracker);
 		     }, MDLOG_STATUS_REMOVE, objv_tracker);
   }
 };
@@ -3210,14 +3217,26 @@ int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
     info.objv_tracker = *params.objv_tracker;
   }
 
-  return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return svc.bucket->remove_bucket_instance_info(ctx,
-                                                   RGWSI_Bucket::get_bi_meta_key(bucket),
-                                                   info,
-                                                   &info.objv_tracker,
-                                                   y,
-                                                   dpp);
-  });
+  // We don't go through mdlog here. Apparently that's done in handle
+  // bi removal?
+  BucketInstanceOpContext ctx(this);
+  auto ret = ctx.remove_raw(dpp, y, get_bi_meta_key(bucket),
+			    params.objv_tracker);
+
+  if (ret < 0 &&
+      ret != -ENOENT) {
+    return ret;
+  }
+
+  int r = svc.bucket_sync->handle_bi_removal(dpp, info, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
+    /* returning success as index is just keeping hints, so will keep extra hints,
+     * but bucket removal succeeded
+     */
+  }
+
+  return 0;
 }
 
 int RGWBucketCtl::do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
