@@ -786,12 +786,16 @@ private:
                               optional_yield y,
                               const DoutPrefixProvider *dpp);
 
-  int do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                    const rgw_bucket& bucket,
-                                    RGWBucketInfo& info,
-                                    optional_yield y,
-                                    const DoutPrefixProvider *dpp,
-                                    const BucketInstance::PutParams& params);
+  int do_store_bucket_instance_info(
+    BucketInstanceOpContext& ctx,
+    const string& key,
+    RGWBucketInfo& info,
+    std::optional<RGWBucketInfo*> orig_info,
+    bool exclusive,
+    ceph::real_time mtime,
+    std::map<std::string, ceph::buffer::list>* pattrs,
+    optional_yield y,
+    const DoutPrefixProvider *dpp);
 
   int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                                   RGWBucketInfo& info,

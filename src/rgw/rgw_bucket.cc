@@ -3092,26 +3092,90 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
   return 0;
 }
 
-int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                                const rgw_bucket& bucket,
-                                                RGWBucketInfo& info,
-                                                optional_yield y,
-                                                const DoutPrefixProvider *dpp,
-                                                const BucketInstance::PutParams& params)
+int RGWBucketCtl::do_store_bucket_instance_info(
+  BucketInstanceOpContext& ctx,
+  const string& key,
+  RGWBucketInfo& info,
+  std::optional<RGWBucketInfo*> orig_info,
+  bool exclusive,
+  ceph::real_time mtime,
+  std::map<std::string, ceph::buffer::list>* pattrs,
+  optional_yield y,
+  const DoutPrefixProvider *dpp)
 {
-  if (params.objv_tracker) {
-    info.objv_tracker = *params.objv_tracker;
+  ceph::buffer::list bl;
+  encode(info, bl);
+
+  /*
+   * we might need some special handling if overwriting
+   */
+  RGWBucketInfo shared_bucket_info;
+  if (!orig_info && !exclusive) {  /* if exclusive, we're going to
+				      fail when try to overwrite, so
+				      the whole check here is moot */
+    /*
+     * we're here because orig_info wasn't passed in
+     * we don't have info about what was there before, so need to fetch first
+     */
+    int r  = read_bucket_instance_info(ctx,
+				       key,
+                                       &shared_bucket_info,
+                                       y,
+				       dpp,
+				       nullptr,
+				       nullptr,
+                                       nullptr,
+				       boost::none,
+				       &shared_bucket_info.objv_tracker);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__
+			  << "(): read_bucket_instance_info() of key=" << key
+			  << " returned r=" << r << dendl;
+	return r;
+      }
+    } else {
+      orig_info = &shared_bucket_info;
+    }
   }
 
-  return svc.bucket->store_bucket_instance_info(ctx,
-                                                RGWSI_Bucket::get_bi_meta_key(bucket),
-                                                info,
-                                                params.orig_info,
-                                                params.exclusive,
-                                                params.mtime,
-                                                params.attrs,
-                                                y,
-                                                dpp);
+  if (orig_info && *orig_info && !exclusive) {
+    int r = svc.bi->handle_overwrite(dpp, info, *(orig_info.value()));
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): svc.bi->handle_overwrite() of key=" << key << " returned r=" << r << dendl;
+      return r;
+    }
+  }
+
+  int ret = ctx.put(dpp, y, key, bl, exclusive, &info.objv_tracker, mtime,
+		    pattrs);
+
+  if (ret >= 0) {
+    int r = svc.bucket_sync->handle_bi_update(dpp, info,
+                                              orig_info.value_or(nullptr),
+                                              y);
+    if (r < 0) {
+      return r;
+    }
+  } else if (ret == -EEXIST) {
+    /* well, if it's exclusive we shouldn't overwrite it, because we
+     * might race with another bucket operation on this specific
+     * bucket (e.g., being synced from the master), but since bucket
+     * instance meta object is unique for this specific bucket
+     * instance, we don't need to return an error.
+     * A scenario where we'd get -EEXIST here, is in a multi-zone
+     * config, we're not on the master, creating a bucket, sending
+     * bucket creation to the master, we create the bucket locally,
+     * while in the sync thread we sync the new bucket.
+     */
+    ret = 0;
+  }
+
+  if (ret < 0) {
+    return ret;
+  }
+
+  return ret;
 }
 
 int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
@@ -3120,9 +3184,20 @@ int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                             const DoutPrefixProvider *dpp,
                                             const BucketInstance::PutParams& params)
 {
-  return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return do_store_bucket_instance_info(ctx, bucket, info, y, dpp, params);
-  });
+  if (params.objv_tracker) {
+    info.objv_tracker = *params.objv_tracker;
+  }
+
+  BucketInstanceOpContext ctx(this);
+  return do_store_bucket_instance_info(ctx,
+				       get_bi_meta_key(bucket),
+				       info,
+				       params.orig_info,
+				       params.exclusive,
+				       params.mtime,
+				       params.attrs,
+				       y,
+				       dpp);
 }
 
 int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
@@ -3256,14 +3331,13 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
         }
     }
 
-    return do_store_bucket_instance_info(ctx.bi,
-                                         bucket,
-                                         bucket_info,
-                                         y,
-                                         dpp,
-                                         BucketInstance::PutParams().set_attrs(&attrs)
-                                                                    .set_objv_tracker(objv_tracker)
-                                                                    .set_orig_info(&bucket_info));
+    return store_bucket_instance_info(bucket,
+				      bucket_info,
+				      y,
+				      dpp,
+				      BucketInstance::PutParams().set_attrs(&attrs)
+				      .set_objv_tracker(objv_tracker)
+				      .set_orig_info(&bucket_info));
     });
 }
 
