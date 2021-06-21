@@ -46,32 +46,32 @@ LeafNodeImpl::allocate(
 }
 
 InternalNodeImplURef InternalNodeImpl::load(
-    NodeExtentRef extent, field_type_t type, bool expect_is_level_tail)
+    NodeExtentRef extent, field_type_t type)
 {
   if (type == field_type_t::N0) {
-    return InternalNode0::load(extent, expect_is_level_tail);
+    return InternalNode0::load(extent);
   } else if (type == field_type_t::N1) {
-    return InternalNode1::load(extent, expect_is_level_tail);
+    return InternalNode1::load(extent);
   } else if (type == field_type_t::N2) {
-    return InternalNode2::load(extent, expect_is_level_tail);
+    return InternalNode2::load(extent);
   } else if (type == field_type_t::N3) {
-    return InternalNode3::load(extent, expect_is_level_tail);
+    return InternalNode3::load(extent);
   } else {
     ceph_abort("impossible path");
   }
 }
 
 LeafNodeImplURef LeafNodeImpl::load(
-    NodeExtentRef extent, field_type_t type, bool expect_is_level_tail)
+    NodeExtentRef extent, field_type_t type)
 {
   if (type == field_type_t::N0) {
-    return LeafNode0::load(extent, expect_is_level_tail);
+    return LeafNode0::load(extent);
   } else if (type == field_type_t::N1) {
-    return LeafNode1::load(extent, expect_is_level_tail);
+    return LeafNode1::load(extent);
   } else if (type == field_type_t::N2) {
-    return LeafNode2::load(extent, expect_is_level_tail);
+    return LeafNode2::load(extent);
   } else if (type == field_type_t::N3) {
-    return LeafNode3::load(extent, expect_is_level_tail);
+    return LeafNode3::load(extent);
   } else {
     ceph_abort("impossible path");
   }

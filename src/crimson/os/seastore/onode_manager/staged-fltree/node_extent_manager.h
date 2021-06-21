@@ -8,9 +8,10 @@
 #include "crimson/os/seastore/transaction_manager.h"
 
 #include "fwd.h"
-#include "super.h"
 #include "node_extent_mutable.h"
 #include "node_types.h"
+#include "stages/node_stage_layout.h"
+#include "super.h"
 
 /**
  * node_extent_manager.h
@@ -24,7 +25,9 @@ using crimson::os::seastore::LogicalCachedExtent;
 class NodeExtent : public LogicalCachedExtent {
  public:
   virtual ~NodeExtent() = default;
-  std::pair<node_type_t, field_type_t> get_types() const;
+  const node_header_t& get_header() const {
+    return *reinterpret_cast<const node_header_t*>(get_read());
+  }
   const char* get_read() const {
     return get_bptr().c_str();
   }
@@ -42,6 +45,10 @@ class NodeExtent : public LogicalCachedExtent {
 
   NodeExtentMutable do_get_mutable() {
     return NodeExtentMutable(get_bptr().c_str(), get_length());
+  }
+
+  std::ostream& print_detail_l(std::ostream& out) const final {
+    return out << ", fltree_header=" << get_header();
   }
 
   /**

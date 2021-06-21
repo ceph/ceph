@@ -47,7 +47,7 @@ static DeltaRecorderURef create_replay_recorder(
 NodeExtentRef SeastoreNodeExtent::mutate(
     context_t c, DeltaRecorderURef&& _recorder)
 {
-  DEBUGT("mutate {:#x} ...", c.t, get_laddr());
+  DEBUGT("mutate {} ...", c.t, *this);
   auto p_handle = static_cast<TransactionManagerHandle*>(&c.nm);
   auto extent = p_handle->tm.get_mutable_extent(c.t, this);
   auto ret = extent->cast<SeastoreNodeExtent>();
@@ -60,22 +60,29 @@ NodeExtentRef SeastoreNodeExtent::mutate(
 
 void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
 {
-  DEBUG("replay {:#x} ...", get_laddr());
+  DEBUG("replay {} ...", *this);
   if (!recorder) {
-    auto [node_type, field_type] = get_types();
-    recorder = create_replay_recorder(node_type, field_type);
+    auto header = get_header();
+    auto field_type = header.get_field_type();
+    if (!field_type.has_value()) {
+      ERROR("replay got invalid node -- {}", *this);
+      ceph_abort("fatal error");
+    }
+    auto node_type = header.get_node_type();
+    recorder = create_replay_recorder(node_type, *field_type);
   } else {
 #ifndef NDEBUG
-    auto [node_type, field_type] = get_types();
-    assert(recorder->node_type() == node_type);
-    assert(recorder->field_type() == field_type);
+    auto header = get_header();
+    assert(recorder->node_type() == header.get_node_type());
+    assert(recorder->field_type() == *header.get_field_type());
 #endif
   }
-  auto node = do_get_mutable();
+  auto mut = do_get_mutable();
   auto p = bl.cbegin();
   while (p != bl.end()) {
-    recorder->apply_delta(p, node, get_laddr());
+    recorder->apply_delta(p, mut, *this);
   }
+  DEBUG("relay done!");
 }
 
 }

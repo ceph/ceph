@@ -40,6 +40,7 @@ class DummyNodeExtent final: public NodeExtent {
   DummyNodeExtent(ceph::bufferptr &&ptr) : NodeExtent(std::move(ptr)) {
     state = extent_state_t::INITIAL_WRITE_PENDING;
   }
+  DummyNodeExtent(const DummyNodeExtent& other) = delete;
   ~DummyNodeExtent() override = default;
 
   void retire() {
@@ -102,8 +103,8 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 
   retire_ertr::future<> retire_extent(
       Transaction& t, NodeExtentRef extent) override {
-    TRACET("retiring {}B at {:#x} ...",
-           t, extent->get_length(), extent->get_laddr());
+    TRACET("retiring {}B at {:#x} -- {} ...",
+           t, extent->get_length(), extent->get_laddr(), *extent);
     if constexpr (SYNC) {
       return retire_extent_sync(t, extent);
     } else {
@@ -137,7 +138,8 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     auto iter = allocate_map.find(addr);
     assert(iter != allocate_map.end());
     auto extent = iter->second;
-    TRACET("read {}B at {:#x}", t, extent->get_length(), extent->get_laddr());
+    TRACET("read {}B at {:#x} -- {}",
+           t, extent->get_length(), extent->get_laddr(), *extent);
     assert(extent->get_laddr() == addr);
     return read_ertr::make_ready_future<NodeExtentRef>(extent);
   }
@@ -152,7 +154,8 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     extent->set_laddr(addr);
     assert(allocate_map.find(extent->get_laddr()) == allocate_map.end());
     allocate_map.insert({extent->get_laddr(), extent});
-    DEBUGT("allocated {}B at {:#x}", t, extent->get_length(), extent->get_laddr());
+    DEBUGT("allocated {}B at {:#x} -- {}",
+           t, extent->get_length(), extent->get_laddr(), *extent);
     assert(extent->get_length() == len);
     return alloc_ertr::make_ready_future<NodeExtentRef>(extent);
   }
