@@ -6280,34 +6280,35 @@ void aws_response_handler::init_success_response()
 void aws_response_handler::init_continuation_response()
 {
   header_size = create_header_continuation();
-  sql_result.append(m_buff_header, header_size);
+  sql_result.append(m_buff_header.c_str(), header_size);
 }
 
 void aws_response_handler::init_progress_response()
 {
+  sql_result = "012345678901";
+  m_buff_header.clear();
   header_size = create_header_progress();
-  sql_result.append(m_buff_header, header_size);
-  sql_result.append(PAYLOAD_LINE);
+  sql_result.append(m_buff_header.c_str(), header_size);
 }
 
 void aws_response_handler::init_stats_response()
 {
   header_size = create_header_stats();
-  sql_result.append(m_buff_header, header_size);
+  sql_result.append(m_buff_header.c_str(), header_size);
   sql_result.append(PAYLOAD_LINE);
 }
 
 void aws_response_handler::init_end_response()
 {
   header_size = create_header_end();
-  sql_result.append(m_buff_header, header_size);
+  sql_result.append(m_buff_header.c_str(), header_size);
 }
 
 void aws_response_handler::init_error_response(const char *error_message)
 { //currently not in use. the headers in the case of error, are not extracted by AWS-cli.
   m_buff_header.clear();
   header_size = create_error_header_records(error_message);
-  sql_result.append(m_buff_header, header_size);
+  sql_result.append(m_buff_header.c_str(), header_size);
 }
 
 void aws_response_handler::send_success_response()
@@ -6344,20 +6345,14 @@ void aws_response_handler::send_progress_response(uint64_t bytes_scanned,
                                                 uint64_t bytes_processed,
                                                 uint64_t bytes_returned)
 {
+  std::string progress_payload="<?xml version=\"1.0\" encoding=\"UTF-8\"?><Progress><BytesScanned>" + to_string(bytes_scanned) + 
+		    "</BytesScanned><BytesProcessed>" + to_string(bytes_processed) + "</BytesProcessed>" +
+		    "<BytesReturned>" + to_string(bytes_returned) + "</BytesReturned></Progress>";
 
-  set_req_state_err(s, 0);
-  dump_errno(s);
-  end_header(s, m_rgwop, "application/xml", CHUNKED_TRANSFER_ENCODING);
-  dump_start(s);
+  sql_result.append(progress_payload);
+  int buff_len = create_message(header_size);
 
-  s->formatter->open_object_section("Progress");
-
-  s->formatter->dump_int("BytesScanned", bytes_scanned);
-  s->formatter->dump_int("BytesProcessed", bytes_processed);
-  s->formatter->dump_int("BytesReturned", bytes_returned);
-
-  s->formatter->close_section();
-
+  s->formatter->write_bin_data(sql_result.data(), buff_len);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -6427,7 +6422,7 @@ int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
 int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input, size_t input_length)
 {
   int status = 0;
-  int a1, a2;
+  uint32_t length_before_processing, length_post_processing;
   csv_object::csv_defintions csv;
   const char* s3select_syntax_error = "s3select-Syntax-Error";
   const char* s3select_resource_id = "resourcse-id";
@@ -6478,11 +6473,11 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
   {
 
     m_aws_response_handler.get()->init_success_response();
-    a1 = (m_aws_response_handler->get_sql_result()).size();
+    length_before_processing = (m_aws_response_handler->get_sql_result()).size();
 
     //query is correct(syntax), processing is starting.
     status = m_s3_csv_object->run_s3select_on_stream(m_aws_response_handler.get()->get_sql_result(), input, input_length, s->obj_size);
-    a2 = (m_aws_response_handler->get_sql_result()).size();
+    length_post_processing = (m_aws_response_handler->get_sql_result()).size();
     if (status < 0)
     { //error flow(processing-time)
       m_aws_response_handler.get()->send_error_response(s3select_processTime_error,
@@ -6509,12 +6504,14 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
 
   m_aws_response_handler.get()->send_success_response();
 
-  if (a2 -a1 == 0) {
+  /*
+  if (length_post_processing - length_before_processing == 0) {
     m_aws_response_handler.get()->init_continuation_response();
   }
+  */
 
   m_aws_response_handler.get()->init_progress_response();
-  m_aws_response_handler.get()->send_progress_response(input_length,input_length,a2);
+  m_aws_response_handler.get()->send_progress_response(input_length,input_length,length_post_processing-length_before_processing);
 
   return status;
 }
