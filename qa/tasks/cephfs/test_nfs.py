@@ -546,6 +546,20 @@ class TestNFS(MgrTestCase):
             if e.exitstatus != errno.ENOENT:
                 raise
 
+    def test_create_export_via_apply(self):
+        '''
+        Test creation of export via apply
+        '''
+        self._test_create_cluster()
+        self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'apply',
+                                   self.cluster_id, '-i', '-'],
+                             stdin=json.dumps(export_block))
+        port, ip = self._get_port_ip_info()
+        self._test_mnt(self.pseudo_path, port, ip)
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
+        self._write_to_read_only_export(new_pseudo_path, port, ip)
+        self._test_delete_cluster()
+
     def test_update_export(self):
         '''
         Test update of exports
