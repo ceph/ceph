@@ -5191,13 +5191,14 @@ void RGWCopyObj::execute(optional_yield y)
 
   encode_delete_at_attr(delete_at, attrs);
 
+  // get src object size (cached in obj_ctx from verify_permission())
+  RGWObjState* astate = nullptr;
+  op_ret = src_object->get_obj_state(this, s->obj_ctx, &astate, s->yield, true);
+  if (op_ret < 0) {
+    return;
+  }
+
   if (!s->system_request) { // no quota enforcement for system requests
-    // get src object size (cached in obj_ctx from verify_permission())
-    RGWObjState* astate = nullptr;
-    op_ret = src_object->get_obj_state(this, s->obj_ctx, &astate, s->yield, true);
-    if (op_ret < 0) {
-      return;
-    }
     // enforce quota against the destination bucket owner
     op_ret = dest_bucket->check_quota(user_quota, bucket_quota,
 				      astate->accounted_size, y);
@@ -5245,7 +5246,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   s->yield);
 
   // send request to notification manager
-  int ret = res->publish_commit(this, s->obj_size, mtime, etag);
+  int ret = res->publish_commit(this, astate->size, mtime, etag);
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
