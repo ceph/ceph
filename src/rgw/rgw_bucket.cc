@@ -3583,17 +3583,40 @@ int RGWBucketCtl::read_bucket_stats(const rgw_bucket& bucket,
                                     optional_yield y,
                                     const DoutPrefixProvider *dpp)
 {
-  return call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket->read_bucket_stats(ctx, bucket, result, y, dpp);
-  });
+  RGWBucketInfo bucket_info;
+  int ret = read_bucket_info(bucket, &bucket_info, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  result->count = 0;
+  result->size = 0;
+  result->size_rounded = 0;
+
+  std::vector<rgw_bucket_dir_header> headers;
+
+  int r = svc.bi->read_stats(dpp, bucket_info, result, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_stats returned r=" << r << dendl;
+    return r;
+  }
+
+  return 0;
 }
 
 int RGWBucketCtl::read_buckets_stats(map<string, RGWBucketEnt>& m,
                                      optional_yield y, const DoutPrefixProvider *dpp)
 {
-  return call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket->read_buckets_stats(ctx, m, y, dpp);
-  });
+  for (auto iter = m.begin(); iter != m.end(); ++iter) {
+    RGWBucketEnt& ent = iter->second;
+    int r = read_bucket_stats(ent.bucket, &ent, y, dpp);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_bucket_stats returned r=" << r << dendl;
+      return r;
+    }
+  }
+
+  return m.size();
 }
 
 int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp, 
