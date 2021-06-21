@@ -353,7 +353,7 @@ class ExportMgr:
                 raise NFSInvalidOperation("Empty Config!!")
             new_export = json.loads(export_config)
             # check export type
-            return self.update_export_1(cluster_id, new_export)
+            return self._apply_export(cluster_id, new_export)
         except NotImplementedError:
             return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
         except Exception as e:
@@ -519,7 +519,7 @@ class ExportMgr:
             return (0, json.dumps(result, indent=4), '')
         return 0, "", "Export already exists"
 
-    def update_export_1(
+    def _apply_export(
             self,
             cluster_id: str,
             new_export_dict: Dict,
