@@ -301,10 +301,15 @@ function _scrub_abort() {
     run_mgr $dir x || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd --osd_pool_default_pg_autoscale_mode=off \
-	      --osd_deep_scrub_randomize_ratio=0.0 \
-	      --osd_scrub_sleep=5.0 \
-	      --osd_scrub_interval_randomize_ratio=0  || return 1
+        # Set scheduler to "wpq" until there's a reliable way to query scrub
+        # states with "--osd-scrub-sleep" set to 0. The "mclock_scheduler"
+        # overrides the scrub sleep to 0 and as a result the checks in the
+        # test fail.
+        run_osd $dir $osd --osd_pool_default_pg_autoscale_mode=off \
+            --osd_deep_scrub_randomize_ratio=0.0 \
+            --osd_scrub_sleep=5.0 \
+            --osd_scrub_interval_randomize_ratio=0 \
+            --osd_op_queue=wpq || return 1
     done
 
     # Create a pool with a single pg
