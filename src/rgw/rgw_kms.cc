@@ -824,21 +824,22 @@ static int request_key_from_barbican(CephContext *cct,
   return res;
 }
 
-static int get_actual_key_from_barbican(CephContext *cct,
+static int get_actual_key_from_barbican(const DoutPrefixProvider *dpp,
+                                        CephContext *cct,
                                         std::string_view key_id,
                                         std::string& actual_key)
 {
   int res = 0;
   std::string token;
 
-  if (rgw::keystone::Service::get_keystone_barbican_token(cct, token) < 0) {
-    ldout(cct, 5) << "Failed to retrieve token for Barbican" << dendl;
+  if (rgw::keystone::Service::get_keystone_barbican_token(dpp, cct, token) < 0) {
+    ldpp_dout(dpp, 5) << "Failed to retrieve token for Barbican" << dendl;
     return -EINVAL;
   }
 
   res = request_key_from_barbican(cct, key_id, token, actual_key);
   if (res != 0) {
-    ldout(cct, 5) << "Failed to retrieve secret from Barbican:" << key_id << dendl;
+    ldpp_dout(dpp, 5) << "Failed to retrieve secret from Barbican:" << key_id << dendl;
   }
   return res;
 }
@@ -944,8 +945,7 @@ static int get_actual_key_from_kmip(CephContext *cct,
 }
 
 
-int reconstitute_actual_key_from_kms(const DoutPrefixProvider* dpp,
-                            CephContext *cct,
+int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
                             map<string, bufferlist>& attrs,
                             std::string& actual_key)
 {
@@ -956,7 +956,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
 
   if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
-    return get_actual_key_from_barbican(cct, key_id, actual_key);
+    return get_actual_key_from_barbican(dpp, cct, key_id, actual_key);
   }
 
   if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
@@ -976,8 +976,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider* dpp,
   return -EINVAL;
 }
 
-int make_actual_key_from_kms(const DoutPrefixProvider* dpp,
-                            CephContext *cct,
+int make_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
                             map<string, bufferlist>& attrs,
                             std::string& actual_key)
 {
