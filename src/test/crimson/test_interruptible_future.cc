@@ -167,3 +167,80 @@ TEST_F(seastar_test_suite_t, loops)
       }, [](std::exception_ptr) {}, false).get0();
   });
 }
+
+using base_intr = interruptible::interruptor<TestInterruptCondition>;
+
+using base_ertr = errorator<ct_error::enoent, ct_error::eagain>;
+using base_iertr = interruptible::interruptible_errorator<
+  TestInterruptCondition,
+  base_ertr>;
+
+using base2_ertr = base_ertr::extend<ct_error::input_output_error>;
+using base2_iertr = interruptible::interruptible_errorator<
+  TestInterruptCondition,
+  base2_ertr>;
+
+template <typename F>
+auto with_intr(F &&f) {
+  return base_intr::with_interruption_to_error<ct_error::eagain>(
+    std::forward<F>(f),
+    TestInterruptCondition(false));
+}
+
+TEST_F(seastar_test_suite_t, errorated)
+{
+  run_async([] {
+    base_ertr::future<> ret = with_intr(
+      []() {
+	return base_iertr::now();
+      }
+    );
+    ret.unsafe_get0();
+  });
+}
+
+TEST_F(seastar_test_suite_t, errorated_value)
+{
+  run_async([] {
+    base_ertr::future<int> ret = with_intr(
+      []() {
+	return base_iertr::make_ready_future<int>(
+	  1
+	);
+      });
+    EXPECT_EQ(ret.unsafe_get0(), 1);
+  });
+}
+
+TEST_F(seastar_test_suite_t, expand_errorated_value)
+{
+  run_async([] {
+    base2_ertr::future<> ret = with_intr(
+      []() {
+	return base_iertr::make_ready_future<int>(
+	  1
+	).si_then([](auto) {
+	  return base2_iertr::make_ready_future<>();
+	});
+      });
+    ret.unsafe_get0();
+  });
+}
+
+TEST_F(seastar_test_suite_t, handle_error)
+{
+  run_async([] {
+    base_ertr::future<> ret = with_intr(
+      []() {
+	return base2_iertr::make_ready_future<int>(
+	  1
+	).handle_error_interruptible(
+	  base_iertr::pass_further{},
+	  ct_error::assert_all{"crash on eio"}
+	).si_then([](auto) {
+	  return base_iertr::now();
+	});
+      });
+    ret.unsafe_get0();
+  });
+}
