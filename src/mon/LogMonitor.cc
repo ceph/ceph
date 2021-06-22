@@ -242,6 +242,9 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   version_t version = get_last_committed();
   dout(10) << __func__ << " version " << version
            << " summary v " << summary.version << dendl;
+
+  log_external_backlog();
+
   if (version == summary.version)
     return;
   ceph_assert(version >= summary.version);
@@ -281,6 +284,8 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     summary.version++;
     summary.prune(g_conf()->mon_log_max_summary);
   }
+  external_log_to = version;
+  mon.store->write_meta("external_log_to", stringify(external_log_to));
 
   check_subs();
 }
@@ -371,6 +376,54 @@ void LogMonitor::log_external_close_fds()
     }
   }
   channel_fds.clear();
+}
+
+/// catch external logs up to summary.version
+void LogMonitor::log_external_backlog()
+{
+  if (!external_log_to) {
+    std::string cur_str;
+    int r = mon.store->read_meta("external_log_to", &cur_str);
+    if (r == 0) {
+      external_log_to = std::stoull(cur_str);
+      dout(10) << __func__ << " initialized external_log_to = " << external_log_to
+	       << " (recorded log_to position)" << dendl;
+    } else {
+      // pre-quincy, we assumed that anything through summary.version was
+      // logged externally.
+      assert(r == -ENOENT);
+      external_log_to = summary.version;
+      dout(10) << __func__ << " initialized external_log_to = " << external_log_to
+	       << " (summary v " << summary.version << ")" << dendl;
+    }
+  }
+  // we may have logged ahead of summary.version, but never ahead of paxos
+  assert(external_log_to <= get_last_committed());
+  if (external_log_to >= summary.version) {
+    return;
+  }
+  if (auto first = get_first_committed(); external_log_to < first) {
+    derr << __func__ << " local logs at " << external_log_to
+	 << ", skipping to " << first << dendl;
+    external_log_to = first;
+    // FIXME: write marker in each channel log file?
+  }
+  for (; external_log_to < summary.version; ++external_log_to) {
+    bufferlist bl;
+    int err = get_version(external_log_to+1, bl);
+    ceph_assert(err == 0);
+    ceph_assert(bl.length());
+
+    auto p = bl.cbegin();
+    __u8 v;
+    decode(v, p);
+    while (!p.end()) {
+      LogEntry le;
+      le.decode(p);
+      log_external(le);
+    }
+  }
+  mon.store->write_meta("external_log_to", stringify(external_log_to));
 }
 
 void LogMonitor::create_pending()
