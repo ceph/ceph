@@ -672,6 +672,7 @@ void populate_event_from_request(const reservation_t& res,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
+        const std::string& version, 
         EventType event_type,
         rgw_pubsub_s3_event& event) {
   const auto s = res.s;
@@ -687,7 +688,7 @@ void populate_event_from_request(const reservation_t& res,
   event.object_key = res.object_name ? *res.object_name : obj->get_name();
   event.object_size = size;
   event.object_etag = etag;
-  event.object_versionId = obj->get_instance();
+  event.object_versionId = version;
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
@@ -816,6 +817,7 @@ int publish_commit(rgw::sal::Object* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
+        const std::string& version,
         EventType event_type,
         reservation_t& res,
         const DoutPrefixProvider *dpp) 
@@ -826,7 +828,7 @@ int publish_commit(rgw::sal::Object* obj,
       continue;
     }
     event_entry_t event_entry;
-    populate_event_from_request(res, obj, size, mtime, etag, event_type, event_entry.event);
+    populate_event_from_request(res, obj, size, mtime, etag, version, event_type, event_entry.event);
     event_entry.event.configurationId = topic.configurationId;
     event_entry.event.opaque_data = topic.cfg.opaque_data;
     if (topic.cfg.dest.persistent) { 

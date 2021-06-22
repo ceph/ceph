@@ -4090,7 +4090,7 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   // send request to notification manager
-  int ret = res->publish_commit(this, s->obj_size, mtime, etag);
+  int ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -4357,7 +4357,7 @@ void RGWPostObj::execute(optional_yield y)
   } while (is_next_file_to_upload());
 
   // send request to notification manager
-  int ret = res->publish_commit(this, ofs, ceph::real_clock::now(), etag);
+  int ret = res->publish_commit(this, ofs, s->object->get_mtime(), etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -4917,7 +4917,7 @@ void RGWDeleteObj::execute(optional_yield y)
     const auto obj_state = obj_ctx->get_state(s->object->get_obj());
 
     // send request to notification manager
-    int ret = res->publish_commit(this, obj_state->size, obj_state->mtime, attrs[RGW_ATTR_ETAG].to_str());
+    int ret = res->publish_commit(this, obj_state->size, obj_state->mtime, attrs[RGW_ATTR_ETAG].to_str(), version_id);
     if (ret < 0) {
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
@@ -5325,7 +5325,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   s->yield);
 
   // send request to notification manager
-  int ret = res->publish_commit(this, astate->size, mtime, etag);
+  int ret = res->publish_commit(this, astate->size, mtime, etag, dest_object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6015,7 +6015,7 @@ void RGWInitMultipart::execute(optional_yield y)
   } while (op_ret == -EEXIST);
   
   // send request to notification manager
-  int ret = res->publish_commit(this, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str());
+  int ret = res->publish_commit(this, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), "");
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6369,7 +6369,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   // send request to notification manager
-  int ret = res->publish_commit(this, ofs, ceph::real_clock::now(), final_etag_str);
+  int ret = res->publish_commit(this, ofs, target_obj->get_mtime(), final_etag_str,  target_obj->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6918,7 +6918,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     const auto etag = obj_state->get_attr(RGW_ATTR_ETAG, etag_bl) ? etag_bl.to_str() : "";
 
     // send request to notification manager
-    int ret = res->publish_commit(this, obj_state->size, obj_state->mtime, etag);
+    int ret = res->publish_commit(this, obj_state->size, obj_state->mtime, etag, version_id);
     if (ret < 0) {
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
