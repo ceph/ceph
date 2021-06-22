@@ -387,7 +387,7 @@ class ExportMgr:
             path: str,
             fs_name: str,
             fs_ro: bool
-    ) -> Tuple[str, str]:
+    ) -> str:
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
             self.rados_pool, cluster_id, fs_name)
         access_type = 'r' if fs_ro else 'rw'
@@ -402,7 +402,83 @@ class ExportMgr:
 
         json_res = json.loads(out)
         log.info("Export user created is {}".format(json_res[0]['entity']))
-        return json_res[0]['entity'], json_res[0]['key']
+        return json_res[0]['key']
+
+    def create_export_from_dict(self,
+                                cluster_id: str,
+                                ex_dict: Dict[str, Any]) -> Export:
+        pseudo_path = ex_dict.get("pseudo")
+        if not pseudo_path:
+            raise NFSInvalidOperation("export must specify pseudo path")
+        pseudo_path = self.format_path(pseudo_path)
+
+        path = ex_dict.get("path")
+        if not path:
+            raise NFSInvalidOperation("export must specify path")
+        path = self.format_path(path)
+
+        ex_id = self._gen_export_id(cluster_id)
+
+        fsal = ex_dict.get("fsal", {})
+        fsal_type = fsal.get("name")
+        if fsal_type == 'RGW':
+            if '/' in path:
+                raise NFSInvalidOperation('"/" is not allowed in path (bucket name)')
+            uid = f'nfs.{cluster_id}.{path}'
+            if "user_id" in fsal and fsal["user_id"] != uid:
+                raise NFSInvalidOperation(f"export FSAL user_id must be '{uid}'")
+            ret, out, err = self._exec(['radosgw-admin', 'user', 'info', '--uid', uid])
+            if ret:
+                ret, out, err = self._exec(['radosgw-admin', 'user', 'create', '--uid', uid,
+                                            '--display-name', uid])
+                if ret:
+                    raise NFSException(f'Failed to create user {uid}')
+            j = json.loads(out)
+            # FIXME: make this more tolerate of unexpected output?
+            access_key = j['keys'][0]['access_key']
+            secret_key = j['keys'][0]['secret_key']
+            if "access_key_id" in fsal and fsal["access_key_id"] != access_key:
+                raise NFSInvalidOperation(f"export FSAL access_key_id does not match {uid}")
+            if "access_access_key" in fsal and fsal["secret_access_key"] != secret_key:
+                raise NFSInvalidOperation(f"export FSAL secret_access_key does not match {uid}")
+            fsal["user_id"] = uid
+            fsal["access_key_id"] = access_key
+            fsal["secret_access_key"] = secret_key
+        elif fsal_type == 'CEPH':
+            fs_name = fsal.get("fs_name")
+            if not fs_name:
+                raise NFSInvalidOperation("export FSAL must specify fs_name")
+            if not check_fs(self.mgr, fs_name):
+                raise FSNotFound(fs_name)
+
+            # is top-level or any client rw?
+            rw = str(ex_dict.get('access_type')).lower() == 'rw'
+            for c in ex_dict.get('clients', []):
+                if str(c.get('access_type')).lower() == 'rw':
+                    rw = True
+
+            user_id = f"nfs.{cluster_id}.{ex_id}"
+            if "user_id" in fsal and fsal["user_id"] != user_id:
+                raise NFSInvalidOperation(f"export FSAL user_id must be '{user_id}'")
+            key = self._create_user_key(
+                cluster_id, user_id, path, fs_name, not rw
+            )
+            if "cephx_key" in fsal and fsal["cephx_key"] != key:
+                raise NFSInvalidOperation(f"export FSAL cephx_key does not match '{user_id}'")
+            fsal["user_id"] = user_id
+            fsal["cephx_key"] = key
+        else:
+            raise NFSInvalidOperation("export must specify FSAL name of 'CEPH' or 'RGW'")
+
+        ex_dict["fsal"] = fsal
+        ex_dict["cluster_id"] = cluster_id
+        export = Export.from_dict(ex_id, ex_dict)
+        export.validate(self.mgr)
+
+        if cluster_id not in self.exports:
+            self.exports[cluster_id] = []
+        self._save_export(cluster_id, export)
+        return export
 
     def create_cephfs_export(self,
                              fs_name: str,
@@ -421,37 +497,32 @@ class ExportMgr:
             self.exports[cluster_id] = []
 
         if not self._fetch_export(cluster_id, pseudo_path):
-            ex_id = self._gen_export_id(cluster_id)
-            user_id = f"nfs.{cluster_id}.{ex_id}"
-            user_out, key = self._create_user_key(
-                cluster_id, user_id, path, fs_name, read_only
-            )
             if clients:
                 access_type = "none"
             elif read_only:
                 access_type = "RO"
             else:
                 access_type = "RW"
-            ex_dict = {
-                'path': self.format_path(path),
-                'pseudo': pseudo_path,
-                'cluster_id': cluster_id,
-                'access_type': access_type,
-                'squash': squash,
-                'fsal': {"name": "CEPH", "user_id": user_id,
-                         "fs_name": fs_name, "sec_label_xattr": "",
-                         "cephx_key": key},
-                'clients': clients
-            }
-            export = Export.from_dict(ex_id, ex_dict)
-            export.validate(self.mgr)
-            self._save_export(cluster_id, export)
+            export = self.create_export_from_dict(
+                cluster_id,
+                {
+                    "pseudo": pseudo_path,
+                    "path": path,
+                    "access_type": access_type,
+                    "squash": squash,
+                    "fsal": {
+                        "name": "CEPH",
+                        "fs_name": fs_name,
+                    },
+                    "clients": clients,
+                }
+            )
             result = {
-                "bind": pseudo_path,
+                "bind": export.pseudo,
                 "fs": fs_name,
-                "path": path,
+                "path": export.path,
                 "cluster": cluster_id,
-                "mode": access_type,
+                "mode": export.access_type,
             }
             return (0, json.dumps(result, indent=4), '')
         return 0, "", "Export already exists"
@@ -468,53 +539,30 @@ class ExportMgr:
             raise NFSInvalidOperation('"/" is not allowed in bucket name')
         pseudo_path = self.format_path(pseudo_path)
 
-        if cluster_id not in self.exports:
-            self.exports[cluster_id] = []
-
         if not self._fetch_export(cluster_id, pseudo_path):
-            # generate access+secret keys
-            uid = f'nfs.{cluster_id}.{bucket}'
-            ret, out, err = self._exec(['radosgw-admin', 'user', 'info', '--uid', uid])
-            if ret:
-                ret, out, err = self._exec(['radosgw-admin', 'user', 'create', '--uid', uid,
-                                            '--display-name', uid])
-                if ret:
-                    raise NFSException(f'Failed to create user {uid}')
-            j = json.loads(out)
-            # FIXME: make this more tolerate of unexpected output?
-            access_key = j['keys'][0]['access_key']
-            secret_key = j['keys'][0]['secret_key']
-
-            ex_id = self._gen_export_id(cluster_id)
             if clients:
                 access_type = "none"
             elif read_only:
                 access_type = "RO"
             else:
                 access_type = "RW"
-            ex_dict = {
-                'path': self.format_path(bucket),
-                'pseudo': pseudo_path,
-                'cluster_id': cluster_id,
-                'access_type': access_type,
-                'squash': squash,
-                'fsal': {
-                    "name": "RGW",
-                    "user_id": uid,
-                    "access_key_id": access_key,
-                    "secret_access_key": secret_key,
-                },
-                'clients': clients
-            }
-            export = Export.from_dict(ex_id, ex_dict)
-            export.validate(self.mgr)
-            self._save_export(cluster_id, export)
+            export = self.create_export_from_dict(
+                cluster_id,
+                {
+                    "pseudo": pseudo_path,
+                    "path": bucket,
+                    "access_type": access_type,
+                    "squash": squash,
+                    "fsal": {"name": "RGW"},
+                    "clients": clients,
+                }
+            )
             result = {
-                "bind": pseudo_path,
-                "path": bucket,
+                "bind": export.pseudo,
+                "path": export.path,
                 "cluster": cluster_id,
-                "mode": access_type,
-                "squash": squash,
+                "mode": export.access_type,
+                "squash": export.squash,
             }
             return (0, json.dumps(result, indent=4), '')
         return 0, "", "Export already exists"
@@ -547,6 +595,7 @@ class ExportMgr:
             if old_export:
                 # re-fetch via old pseudo
                 old_export = self._fetch_export(cluster_id, old_export.pseudo)
+                assert old_export
                 self.mgr.log.debug(f"export {old_export.export_id} pseudo {old_export.pseudo} -> {new_export_dict['pseudo']}")
 
         new_export = Export.from_dict(
