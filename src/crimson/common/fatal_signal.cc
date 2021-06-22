@@ -68,7 +68,30 @@ static void print_backtrace(std::string_view cause) {
 
 static void print_segv_info(const siginfo_t& siginfo)
 {
-  std::cerr << "Fault at location: " << siginfo.si_addr << std::endl;
+  std::cerr \
+     << "Dump of siginfo:" << std::endl
+     << "  si_signo: " << siginfo.si_signo << std::endl
+     << "  si_errno: " << siginfo.si_errno << std::endl
+     << "  si_code: " << siginfo.si_code << std::endl
+     << "  si_pid: " << siginfo.si_pid << std::endl
+     << "  si_uid: " << siginfo.si_uid << std::endl
+     << "  si_status: " << siginfo.si_status << std::endl
+     << "  si_utime: " << siginfo.si_utime << std::endl
+     << "  si_stime: " << siginfo.si_stime << std::endl
+     << "  si_int: " << siginfo.si_int << std::endl
+     << "  si_ptr: " << siginfo.si_ptr << std::endl
+     << "  si_overrun: " << siginfo.si_overrun << std::endl
+     << "  si_timerid: " << siginfo.si_timerid << std::endl
+     << "  si_addr: " << siginfo.si_addr << std::endl
+     << "  si_band: " << siginfo.si_band << std::endl
+     << "  si_fd: " << siginfo.si_fd << std::endl
+     << "  si_addr_lsb: " << siginfo.si_addr_lsb << std::endl
+     << "  si_lower: " << siginfo.si_lower << std::endl
+     << "  si_upper: " << siginfo.si_upper << std::endl
+     << "  si_pkey: " << siginfo.si_pkey << std::endl
+     << "  si_call_addr: " << siginfo.si_call_addr << std::endl
+     << "  si_syscall: " << siginfo.si_syscall << std::endl
+     << "  si_arch: " << siginfo.si_arch << std::endl;
   std::cerr << std::flush;
 }
 
