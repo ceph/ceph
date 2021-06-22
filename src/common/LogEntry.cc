@@ -187,7 +187,7 @@ string clog_type_to_string(clog_type t)
   }
 }
 
-void LogEntry::log_to_syslog(string level, string facility)
+void LogEntry::log_to_syslog(string level, string facility) const
 {
   int min = string_to_syslog_level(level);
   int l = clog_type_to_syslog_level(prio);

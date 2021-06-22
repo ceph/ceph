@@ -99,7 +99,7 @@ struct LogEntry {
 
   LogEntryKey key() const { return LogEntryKey(rank, stamp, seq); }
 
-  void log_to_syslog(std::string level, std::string facility);
+  void log_to_syslog(std::string level, std::string facility) const;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
