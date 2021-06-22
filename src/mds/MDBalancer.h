@@ -51,6 +51,11 @@ public:
 
   void handle_export_pins(void);
 
+  // Is export pins allowed
+  bool get_bal_export_pin(void) {
+    return bal_export_pin;
+  }
+
   void subtract_export(CDir *ex);
   void add_import(CDir *im);
   void adjust_pop_for_rename(CDir *pdir, CDir *dir, bool inc);
@@ -120,6 +125,16 @@ private:
 
   bool bal_fragment_dirs;
   int64_t bal_fragment_interval;
+  int64_t bal_interval;
+  int64_t bal_max_until;
+  int64_t bal_mode;
+  bool bal_export_pin;
+  double bal_sample_interval;
+  double bal_split_rd;
+  double bal_split_wr;
+  double bal_replicate_threshold;
+  double bal_unreplicate_threshold;
+  int64_t num_bal_times;
   static const unsigned int AUTH_TREES_THRESHOLD = 5;
 
   MDSRank *mds;

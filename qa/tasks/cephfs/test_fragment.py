@@ -13,6 +13,8 @@ class TestFragmentation(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
 
+    killpoint = 0
+
     def get_splits(self):
         return self.fs.mds_asok(['perf', 'dump', 'mds'])['mds']['dir_split']
 
@@ -37,24 +39,34 @@ class TestFragmentation(CephFSTestCase):
         """
 
         for k, v in kwargs.items():
-            self.ceph_cluster.set_ceph_conf("mds", k, v.__str__())
+            self.config_set('mds', k.__str__(), v.__str__())
 
-        self.mds_cluster.mds_fail_restart()
-        self.fs.wait_for_daemons()
-
-    def test_oversize(self):
+    
+    def _test_oversize(self):
         """
         That a directory is split when it becomes too large.
         """
 
+        log.info("Here before split_size")
+        killpoint = self.fs.rank_asok(["config", "get", "mds_kill_dirfrag_at"], 0, status=self.fs.status())
+        log.info(killpoint)
+        rank = self.fs.get_rank(status=self.fs.status(), rank = 0)
+        rank_name = rank['name']
+        log.info("here is rank name ")
+        log.info(rank_name)
         split_size = 20
         merge_size = 5
+        log.info("Here after split_size")
 
         self._configure(
             mds_bal_split_size=split_size,
             mds_bal_merge_size=merge_size,
-            mds_bal_split_bits=1
+            mds_bal_split_bits=1,
         )
+
+        self.fs.set_config("mds_kill_dirfrag_at", self.killpoint, rank=0, status=self.fs.status())
+
+        log.info("Here after configure")
 
         self.assertEqual(self.get_splits(), 0)
 
@@ -84,6 +96,9 @@ class TestFragmentation(CephFSTestCase):
         )
 
         self.assertEqual(len(self.get_dir_ino("/splitdir")["dirfrags"]), 1)
+
+    def test_oversize(self):
+        self._test_oversize()
 
     def test_rapid_creation(self):
         """
@@ -314,3 +329,39 @@ class TestFragmentation(CephFSTestCase):
             lambda: _count_fragmented() > 0,
             timeout=30
         )
+
+    def _run_dir_frag(self, killpointv):
+
+        status = self.fs.status()
+
+        self.killpoint = killpointv
+
+        rank_0 = self.fs.get_rank(status=status, rank = 0)
+        rank_0_name = rank_0['name']
+
+        log.info("Here is rank name ")
+        log.info(rank_0_name)
+
+        #self.fs.set_config("mds_kill_dirfrag_at", str(killpointv), rank=0, status=status)
+
+        self._test_oversize()
+
+        status2 = self.fs.wait_for_daemons()
+
+        rank_0_new = self.fs.get_rank(status=status2, rank = 0)
+        rank_0_new_name = rank_0_new['name']
+
+        if status2.hadfailover_rank(self.fs.id, status, 0):
+            log.info(f"MDS {self.rank_name} crashed and active as MDS {rank_0_new_name} killpoint {killpointv}")
+            self.delete_mds_coredump(self.rank_0_name)
+
+def make_test_killpoints(killpointv):
+    def test_export_killpoints(self):
+        self.init = False
+        self._run_dir_frag(killpointv)
+        log.info("Test passed for killpoint %d" %killpointv)
+    return test_export_killpoints
+
+for killpointv in range(0, 11):
+    test_export_killpoints = make_test_killpoints(killpointv)
+    setattr(TestFragmentation, "test_dirfrag_killpoints_%d" % (killpointv), test_export_killpoints)
