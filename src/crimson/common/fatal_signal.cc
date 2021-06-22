@@ -11,6 +11,9 @@
 #include <boost/stacktrace.hpp>
 #include <seastar/core/reactor.hh>
 
+#include "common/safe_io.h"
+#include "include/scope_guard.h"
+
 FatalSignal::FatalSignal()
 {
   install_oneshot_signals_handler<SIGSEGV,
@@ -68,6 +71,32 @@ static void print_segv_info(const siginfo_t* siginfo)
   std::cerr << std::flush;
 }
 
+static void print_proc_maps()
+{
+  const int fd = ::open("/proc/self/maps", O_RDONLY);
+  if (fd < 0) {
+    std::cerr << "can't open /proc/self/maps. procfs not mounted?" << std::endl;
+    return;
+  }
+  const auto fd_guard = make_scope_guard([fd] {
+    ::close(fd);
+  });
+  std::cerr << "Content of /proc/self/maps:" << std::endl;
+  while (true) {
+    char chunk[4096] = {0, };
+    const ssize_t r = safe_read(fd, chunk, sizeof(chunk) - 1);
+    if (r < 0) {
+      std::cerr << "error while reading /proc/self/maps: " << r << std::endl;
+      return;
+    } else {
+      std::cerr << chunk << std::flush;
+      if (r < static_cast<ssize_t>(sizeof(chunk) - 1)) {
+        return; // eof
+      }
+    }
+  }
+}
+
 void FatalSignal::signaled(const int signum, const siginfo_t* siginfo)
 {
   switch (signum) {
@@ -82,4 +111,5 @@ void FatalSignal::signaled(const int signum, const siginfo_t* siginfo)
     print_backtrace(fmt::format("Signal {}", signum));
     break;
   }
+  print_proc_maps();
 }
