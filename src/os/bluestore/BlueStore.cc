@@ -12376,6 +12376,19 @@ void BlueStore::_kv_finalize_thread()
 void BlueStore::_zoned_cleaner_start() {
   dout(10) << __func__ << dendl;
 
+  auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+  ceph_assert(f);
+
+  auto zones_to_clean = f->get_cleaning_in_progress_zones(db);
+  if (!zones_to_clean.empty()) {
+    dout(10) << __func__ << " resuming cleaning after unclean shutdown." << dendl;
+    for (auto zone_num : zones_to_clean) {
+      _zoned_clean_zone(zone_num);
+    }
+    bdev->reset_zones(zones_to_clean);
+    f->mark_zones_to_clean_free(zones_to_clean, db);
+  }
+
   zoned_cleaner_thread.create("bstore_zcleaner");
 }
 
