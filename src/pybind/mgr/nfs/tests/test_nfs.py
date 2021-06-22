@@ -68,9 +68,9 @@ EXPORT
 
     FSAL {
         Name = RGW;
-        User_Id = "testuser";
-        Access_Key_Id ="access_key";
-        Secret_Access_Key = "secret_key";
+        User_Id = "nfs.foo.bucket";
+        Access_Key_Id ="the_access_key";
+        Secret_Access_Key = "the_secret_key";
     }
 }
 """
@@ -448,9 +448,9 @@ NFS_CORE_PARAM {
                            'cluster_id': 'foo',
                            'export_id': 2,
                            'fsal': {'name': 'RGW',
-                                    'access_key_id': 'access_key',
-                                    'secret_access_key': 'secret_key',
-                                    'user_id': 'testuser'},
+                                    'access_key_id': 'the_access_key',
+                                    'secret_access_key': 'the_secret_key',
+                                    'user_id': 'nfs.foo.bucket'},
                            'path': '/',
                            'protocols': [3, 4],
                            'pseudo': '/rgw',
@@ -522,7 +522,7 @@ NFS_CORE_PARAM {
         export = Export.from_dict(2, {
             'daemons': expected_exports[2],
             'export_id': 2,
-            'path': '/',
+            'path': 'bucket',
             'pseudo': '/rgw',
             'cluster_id': cluster_id,
             'tag': None,
@@ -534,12 +534,12 @@ NFS_CORE_PARAM {
             'clients': [],
             'fsal': {
                 'name': 'RGW',
-                'rgw_user_id': 'testuser'
+                'rgw_user_id': 'rgw.foo.bucket'
             }
         })
 
         assert export.export_id == 2
-        assert export.path == "/"
+        assert export.path == "bucket"
         assert export.pseudo == "/rgw"
         #assert export.tag is None
         assert export.access_type == "RW"
@@ -612,7 +612,6 @@ NFS_CORE_PARAM {
         conf = ExportMgr(nfs_mod)
         r = conf.apply_export(cluster_id, json.dumps({
             'export_id': 2,
-            'daemons': expected_exports[2],
             'path': 'bucket',
             'pseudo': '/rgw/bucket',
             'cluster_id': cluster_id,
@@ -629,9 +628,9 @@ NFS_CORE_PARAM {
             }],
             'fsal': {
                 'name': 'RGW',
-                'user_id': 'testuser',
-                'access_key_id': 'access_key',
-                'secret_access_key': 'secret_key',
+                'user_id': 'nfs.foo.bucket',
+                'access_key_id': 'the_access_key',
+                'secret_access_key': 'the_secret_key',
             }
         }))
         assert r[0] == 0
@@ -645,9 +644,9 @@ NFS_CORE_PARAM {
         assert export.protocols == [4, 3]
         assert export.transports == ["TCP", "UDP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "testuser"
-        assert export.fsal.access_key_id == "access_key"
-        assert export.fsal.secret_access_key == "secret_key"
+        assert export.fsal.user_id == "nfs.foo.bucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
         assert export.clients[0].squash is None
         assert export.clients[0].access_type is None
@@ -673,9 +672,9 @@ NFS_CORE_PARAM {
             }],
             'fsal': {
                 'name': 'RGW',
-                'user_id': 'testuser',
-                'access_key_id': 'access_key',
-                'secret_access_key': 'secret_key',
+                'user_id': 'nfs.foo.newbucket',
+                'access_key_id': 'the_access_key',
+                'secret_access_key': 'the_secret_key',
             }
         }))
         assert r[0] == 0
@@ -689,9 +688,9 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "testuser"
-        assert export.fsal.access_key_id == "access_key"
-        assert export.fsal.secret_access_key == "secret_key"
+        assert export.fsal.user_id == "nfs.foo.newbucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
         assert export.clients[0].squash is None
         assert export.clients[0].access_type is None
@@ -716,9 +715,9 @@ NFS_CORE_PARAM {
             }],
             'fsal': {
                 'name': 'RGW',
-                'user_id': 'testuser',
-                'access_key_id': 'access_key',
-                'secret_access_key': 'secret_key',
+                'user_id': 'nfs.foo.newestbucket',
+                'access_key_id': 'the_access_key',
+                'secret_access_key': 'the_secret_key',
             }
         }))
         assert r[0] == 0
@@ -732,9 +731,9 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "testuser"
-        assert export.fsal.access_key_id == "access_key"
-        assert export.fsal.secret_access_key == "secret_key"
+        assert export.fsal.user_id == "nfs.foo.newestbucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
         assert export.clients[0].squash is None
         assert export.clients[0].access_type is None

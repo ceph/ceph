@@ -184,6 +184,38 @@ class ExportMgr:
             self._exec(['radosgw-admin', 'user', 'rm', '--uid', uid])
             log.info(f"Deleted export RGW user {uid}")
 
+    def _create_export_user(self, export: Export) -> None:
+        if isinstance(export.fsal, CephFSFSAL):
+            fsal = cast(CephFSFSAL, export.fsal)
+            assert fsal.fs_name
+
+            # is top-level or any client rw?
+            rw = export.access_type.lower() == 'rw'
+            for c in export.clients:
+                if c.access_type.lower() == 'rw':
+                    rw = True
+
+            fsal.user_id = f"nfs.{export.cluster_id}.{export.export_id}"
+            fsal.cephx_key = self._create_user_key(
+                export.cluster_id, fsal.user_id, export.path, fsal.fs_name, not rw
+            )
+
+        elif isinstance(export.fsal, RGWFSAL):
+            rgwfsal = cast(RGWFSAL, export.fsal)
+            rgwfsal.user_id = f'nfs.{export.cluster_id}.{export.path}'
+            ret, out, err = self._exec(['radosgw-admin', 'user', 'info', '--uid',
+                                        rgwfsal.user_id])
+            if ret:
+                ret, out, err = self._exec(['radosgw-admin', 'user', 'create',
+                                            '--uid', rgwfsal.user_id,
+                                            '--display-name', rgwfsal.user_id])
+                if ret:
+                    raise NFSException(f'Failed to create user {rgwfsal.user_id}')
+            j = json.loads(out)
+            # FIXME: make this more tolerate of unexpected output?
+            rgwfsal.access_key_id = j['keys'][0]['access_key']
+            rgwfsal.secret_access_key = j['keys'][0]['secret_key']
+
     def _gen_export_id(self, cluster_id: str) -> int:
         exports = sorted([ex.export_id for ex in self.exports[cluster_id]])
         nid = 1
@@ -404,6 +436,7 @@ class ExportMgr:
 
     def create_export_from_dict(self,
                                 cluster_id: str,
+                                ex_id: int,
                                 ex_dict: Dict[str, Any]) -> Export:
         pseudo_path = ex_dict.get("pseudo")
         if not pseudo_path:
@@ -415,8 +448,6 @@ class ExportMgr:
             raise NFSInvalidOperation("export must specify path")
         path = self.format_path(path)
 
-        ex_id = self._gen_export_id(cluster_id)
-
         fsal = ex_dict.get("fsal", {})
         fsal_type = fsal.get("name")
         if fsal_type == 'RGW':
@@ -425,23 +456,6 @@ class ExportMgr:
             uid = f'nfs.{cluster_id}.{path}'
             if "user_id" in fsal and fsal["user_id"] != uid:
                 raise NFSInvalidOperation(f"export FSAL user_id must be '{uid}'")
-            ret, out, err = self._exec(['radosgw-admin', 'user', 'info', '--uid', uid])
-            if ret:
-                ret, out, err = self._exec(['radosgw-admin', 'user', 'create', '--uid', uid,
-                                            '--display-name', uid])
-                if ret:
-                    raise NFSException(f'Failed to create user {uid}')
-            j = json.loads(out)
-            # FIXME: make this more tolerate of unexpected output?
-            access_key = j['keys'][0]['access_key']
-            secret_key = j['keys'][0]['secret_key']
-            if "access_key_id" in fsal and fsal["access_key_id"] != access_key:
-                raise NFSInvalidOperation(f"export FSAL access_key_id does not match {uid}")
-            if "access_access_key" in fsal and fsal["secret_access_key"] != secret_key:
-                raise NFSInvalidOperation(f"export FSAL secret_access_key does not match {uid}")
-            fsal["user_id"] = uid
-            fsal["access_key_id"] = access_key
-            fsal["secret_access_key"] = secret_key
         elif fsal_type == 'CEPH':
             fs_name = fsal.get("fs_name")
             if not fs_name:
@@ -449,22 +463,9 @@ class ExportMgr:
             if not check_fs(self.mgr, fs_name):
                 raise FSNotFound(fs_name)
 
-            # is top-level or any client rw?
-            rw = str(ex_dict.get('access_type')).lower() == 'rw'
-            for c in ex_dict.get('clients', []):
-                if str(c.get('access_type')).lower() == 'rw':
-                    rw = True
-
             user_id = f"nfs.{cluster_id}.{ex_id}"
             if "user_id" in fsal and fsal["user_id"] != user_id:
                 raise NFSInvalidOperation(f"export FSAL user_id must be '{user_id}'")
-            key = self._create_user_key(
-                cluster_id, user_id, path, fs_name, not rw
-            )
-            if "cephx_key" in fsal and fsal["cephx_key"] != key:
-                raise NFSInvalidOperation(f"export FSAL cephx_key does not match '{user_id}'")
-            fsal["user_id"] = user_id
-            fsal["cephx_key"] = key
         else:
             raise NFSInvalidOperation("export must specify FSAL name of 'CEPH' or 'RGW'")
 
@@ -472,10 +473,6 @@ class ExportMgr:
         ex_dict["cluster_id"] = cluster_id
         export = Export.from_dict(ex_id, ex_dict)
         export.validate(self.mgr)
-
-        if cluster_id not in self.exports:
-            self.exports[cluster_id] = []
-        self._save_export(cluster_id, export)
         return export
 
     def create_cephfs_export(self,
@@ -503,6 +500,7 @@ class ExportMgr:
                 access_type = "RW"
             export = self.create_export_from_dict(
                 cluster_id,
+                self._gen_export_id(cluster_id),
                 {
                     "pseudo": pseudo_path,
                     "path": path,
@@ -515,6 +513,8 @@ class ExportMgr:
                     "clients": clients,
                 }
             )
+            self._create_export_user(export)
+            self._save_export(cluster_id, export)
             result = {
                 "bind": export.pseudo,
                 "fs": fs_name,
@@ -546,6 +546,7 @@ class ExportMgr:
                 access_type = "RW"
             export = self.create_export_from_dict(
                 cluster_id,
+                self._gen_export_id(cluster_id),
                 {
                     "pseudo": pseudo_path,
                     "path": bucket,
@@ -555,6 +556,8 @@ class ExportMgr:
                     "clients": clients,
                 }
             )
+            self._create_export_user(export)
+            self._save_export(cluster_id, export)
             result = {
                 "bind": export.pseudo,
                 "path": export.path,
@@ -596,13 +599,14 @@ class ExportMgr:
                 assert old_export
                 self.mgr.log.debug(f"export {old_export.export_id} pseudo {old_export.pseudo} -> {new_export_dict['pseudo']}")
 
-        new_export = Export.from_dict(
+        new_export = self.create_export_from_dict(
+            cluster_id,
             new_export_dict.get('export_id', self._gen_export_id(cluster_id)),
             new_export_dict
         )
-        new_export.validate(self.mgr)
 
         if not old_export:
+            self._create_export_user(new_export)
             self._save_export(cluster_id, new_export)
             return 0, f'Added export {new_export.pseudo}', ''
 
@@ -617,8 +621,9 @@ class ExportMgr:
             old_fsal = cast(CephFSFSAL, old_export.fsal)
             new_fsal = cast(CephFSFSAL, new_export.fsal)
             if old_fsal.user_id != new_fsal.user_id:
-                raise NFSInvalidOperation('user_id change is not allowed')
-            if (
+                self._delete_export_user(old_export)
+                self._create_export_user(new_export)
+            elif (
                 old_export.path != new_export.path
                 or old_fsal.fs_name != new_fsal.fs_name
             ):
@@ -629,15 +634,18 @@ class ExportMgr:
                     cast(str, new_fsal.fs_name),
                     cast(str, new_fsal.user_id)
                 )
-            new_fsal.cephx_key = old_fsal.cephx_key
+                new_fsal.cephx_key = old_fsal.cephx_key
+            else:
+                new_fsal.cephx_key = old_fsal.cephx_key
         if old_export.fsal.name == 'RGW':
             old_rgw_fsal = cast(RGWFSAL, old_export.fsal)
             new_rgw_fsal = cast(RGWFSAL, new_export.fsal)
             if old_rgw_fsal.user_id != new_rgw_fsal.user_id:
-                raise NFSInvalidOperation('user_id change is not allowed')
-            if old_rgw_fsal.access_key_id != new_rgw_fsal.access_key_id:
+                self._delete_export_user(old_export)
+                self._create_export_user(new_export)
+            elif old_rgw_fsal.access_key_id != new_rgw_fsal.access_key_id:
                 raise NFSInvalidOperation('access_key_id change is not allowed')
-            if old_rgw_fsal.secret_access_key != new_rgw_fsal.secret_access_key:
+            elif old_rgw_fsal.secret_access_key != new_rgw_fsal.secret_access_key:
                 raise NFSInvalidOperation('secret_access_key change is not allowed')
 
         self.exports[cluster_id].remove(old_export)
