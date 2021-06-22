@@ -45,7 +45,7 @@ class WebTokenEngine : public rgw::auth::Engine {
   validate_signature_using_cert(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const vector<string>& certs, const vector<string>& thumbprints, bool add_pem_str=true) const;
 
   void
-  validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& n, const string& e, const string &algorithm) const;
+  validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string &algorithm, const string& n, const string& e) const;
 
   void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const;
 

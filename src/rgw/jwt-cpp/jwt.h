@@ -240,7 +240,7 @@ namespace jwt {
 			rsa(const EVP_MD*(*md)(), const std::string& name) : md(md), alg_name(name)
 			{}
 
-			void setModulusExponentCalcPublicKey(const string& n, const string& exponent)
+			void setModulusExponentCalcPublicKey(const string& modulus, const string& exponent)
 			{
 				this->modulus = modulus;
 				this->exponent = exponent;
