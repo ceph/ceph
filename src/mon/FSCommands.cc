@@ -27,12 +27,9 @@ using std::hex;
 using std::list;
 using std::map;
 using std::make_pair;
-using std::ostream;
-using std::ostringstream;
 using std::pair;
 using std::set;
 using std::string;
-using std::stringstream;
 using std::to_string;
 using std::vector;
 
@@ -60,7 +57,7 @@ class FlagSetHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     string flag_name;
     cmd_getval(cmdmap, "flag_name", flag_name);
@@ -101,7 +98,7 @@ class FailHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream& ss) override
+      std::ostream& ss) override
   {
     if (!mon->osdmon()->is_writeable()) {
       // not allowed to write yet, so retry when we can
@@ -158,7 +155,7 @@ class FsNewHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     ceph_assert(m_paxos->is_plugged());
 
@@ -312,7 +309,7 @@ public:
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
@@ -388,11 +385,6 @@ public:
         {
           fs->mds_map.set_inline_data_enabled(true);
         });
-
-        // Update `compat`
-        CompatSet c = fsmap.get_compat();
-        c.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
-        fsmap.update_compat(c);
       } else {
 	ss << "inline data disabled";
         fsmap.modify_filesystem(
@@ -659,6 +651,111 @@ public:
   }
 };
 
+class CompatSetHandler : public FileSystemCommandHandler
+{
+  public:
+    CompatSetHandler()
+      : FileSystemCommandHandler("fs compat")
+    {
+    }
+
+    int handle(
+	Monitor *mon,
+	FSMap &fsmap,
+	MonOpRequestRef op,
+	const cmdmap_t& cmdmap,
+	std::ostream &ss) override
+    {
+      static const std::set<std::string> subops = {"rm_incompat", "rm_compat", "add_incompat", "add_compat"};
+
+      std::string fs_name;
+      if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
+	ss << "Missing filesystem name";
+	return -EINVAL;
+      }
+      auto fs = fsmap.get_filesystem(fs_name);
+      if (fs == nullptr) {
+	ss << "Not found: '" << fs_name << "'";
+	return -ENOENT;
+      }
+
+      string subop;
+      if (!cmd_getval(cmdmap, "subop", subop) || subops.count(subop) == 0) {
+	ss << "subop `" << subop << "' not recognized. Must be one of: " << subops;
+	return -EINVAL;
+      }
+
+      int64_t feature;
+      if (!cmd_getval(cmdmap, "feature", feature) || feature <= 0) {
+        ss << "Invalid feature";
+        return -EINVAL;
+      }
+
+      if (fs->mds_map.get_num_up_mds() > 0) {
+        ss << "file system must be failed or down; use `ceph fs fail` to bring down";
+        return -EBUSY;
+      }
+
+      CompatSet cs = fs->mds_map.compat;
+      if (subop == "rm_compat") {
+        if (cs.compat.contains(feature)) {
+          ss << "removed compat feature " << feature;
+          cs.compat.remove(feature);
+        } else {
+          ss << "already removed compat feature " << feature;
+        }
+      } else if (subop == "rm_incompat") {
+        if (cs.incompat.contains(feature)) {
+          ss << "removed incompat feature " << feature;
+          cs.incompat.remove(feature);
+        } else {
+          ss << "already removed incompat feature " << feature;
+        }
+      } else if (subop == "add_compat" || subop == "add_incompat") {
+        string feature_str;
+        if (!cmd_getval(cmdmap, "feature_str", feature_str) || feature_str.empty()) {
+          ss << "adding a feature requires a feature string";
+          return -EINVAL;
+        }
+        auto f = CompatSet::Feature(feature, feature_str);
+        if (subop == "add_compat") {
+          if (cs.compat.contains(feature)) {
+            auto name = cs.compat.get_name(feature);
+            if (name == feature_str) {
+              ss << "feature already exists";
+            } else {
+              ss << "feature with differing name `" << name << "' exists";
+              return -EEXIST;
+            }
+          } else {
+            cs.compat.insert(f);
+            ss << "added compat feature " << f;
+          }
+        } else if (subop == "add_incompat") {
+          if (cs.incompat.contains(feature)) {
+            auto name = cs.incompat.get_name(feature);
+            if (name == feature_str) {
+              ss << "feature already exists";
+            } else {
+              ss << "feature with differing name `" << name << "' exists";
+              return -EEXIST;
+            }
+          } else {
+            cs.incompat.insert(f);
+            ss << "added incompat feature " << f;
+          }
+        } else ceph_assert(0);
+      } else ceph_assert(0);
+
+      auto modifyf = [cs = std::move(cs)](auto&& fs) {
+        fs->mds_map.compat = cs;
+      };
+
+      fsmap.modify_filesystem(fs->fscid, std::move(modifyf));
+      return 0;
+    }
+};
+
 class RequiredClientFeaturesHandler : public FileSystemCommandHandler
 {
   public:
@@ -672,7 +769,7 @@ class RequiredClientFeaturesHandler : public FileSystemCommandHandler
 	FSMap &fsmap,
 	MonOpRequestRef op,
 	const cmdmap_t& cmdmap,
-	std::stringstream &ss) override
+	std::ostream &ss) override
     {
       std::string fs_name;
       if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
@@ -764,7 +861,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     ceph_assert(m_paxos->is_plugged());
 
@@ -838,7 +935,7 @@ class SetDefaultHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     std::string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);
@@ -865,7 +962,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     /* We may need to blocklist ranks. */
     if (!mon->osdmon()->is_writeable()) {
@@ -939,7 +1036,7 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);
@@ -984,7 +1081,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     string poolname;
     cmd_getval(cmdmap, "pool", poolname);
@@ -1059,7 +1156,7 @@ class AliasHandler : public T
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::stringstream &ss) override
+      std::ostream &ss) override
   {
     return T::handle(mon, fsmap, op, cmdmap, ss);
   }
@@ -1074,7 +1171,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::stringstream &ss) override {
+             const cmdmap_t& cmdmap, std::ostream &ss) override {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1109,7 +1206,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::stringstream &ss) override {
+             const cmdmap_t& cmdmap, std::ostream &ss) override {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1156,7 +1253,7 @@ public:
   }
 
   bool peer_add(FSMap &fsmap, Filesystem::const_ref &&fs,
-                const cmdmap_t &cmdmap, std::stringstream &ss) {
+                const cmdmap_t &cmdmap, std::ostream &ss) {
     string peer_uuid;
     string remote_spec;
     string remote_fs_name;
@@ -1191,7 +1288,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::stringstream &ss) override {
+             const cmdmap_t& cmdmap, std::ostream &ss) override {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1226,7 +1323,7 @@ public:
   {}
 
   bool peer_remove(FSMap &fsmap, Filesystem::const_ref &&fs,
-                   const cmdmap_t &cmdmap, std::stringstream &ss) {
+                   const cmdmap_t &cmdmap, std::ostream &ss) {
     string peer_uuid;
     cmd_getval(cmdmap, "uuid", peer_uuid);
 
@@ -1244,7 +1341,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::stringstream &ss) override {
+             const cmdmap_t& cmdmap, std::ostream &ss) override {
     std::string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1279,6 +1376,7 @@ FileSystemCommandHandler::load(Paxos *paxos)
   handlers.push_back(std::make_shared<SetHandler>());
   handlers.push_back(std::make_shared<FailHandler>());
   handlers.push_back(std::make_shared<FlagSetHandler>());
+  handlers.push_back(std::make_shared<CompatSetHandler>());
   handlers.push_back(std::make_shared<RequiredClientFeaturesHandler>());
   handlers.push_back(std::make_shared<AddDataPoolHandler>(paxos));
   handlers.push_back(std::make_shared<RemoveDataPoolHandler>());
@@ -1302,7 +1400,7 @@ int FileSystemCommandHandler::_check_pool(
     const int64_t pool_id,
     int type,
     bool force,
-    std::stringstream *ss) const
+    std::ostream *ss) const
 {
   ceph_assert(ss != NULL);
 
@@ -1372,7 +1470,7 @@ int FileSystemCommandHandler::_check_pool(
 
 int FileSystemCommandHandler::is_op_allowed(
     const MonOpRequestRef& op, const FSMap& fsmap, const cmdmap_t& cmdmap,
-    std::stringstream &ss) const
+    std::ostream &ss) const
 {
     string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);

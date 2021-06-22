@@ -583,6 +583,22 @@ class Filesystem(MDSCluster):
         c = ["fs", "required_client_features", self.name, *args]
         return self.mon_manager.run_cluster_cmd(args=c, **kwargs)
 
+    def compat(self, *args):
+        a = map(lambda x: str(x).lower(), args)
+        self.mon_manager.raw_cluster_cmd("fs", "compat", self.name, *a)
+
+    def add_compat(self, *args):
+        self.compat("add_compat", *args)
+
+    def add_incompat(self, *args):
+        self.compat("add_incompat", *args)
+
+    def rm_compat(self, *args):
+        self.compat("rm_compat", *args)
+
+    def rm_incompat(self, *args):
+        self.compat("rm_incompat", *args)
+
     # In Octopus+, the PG count can be omitted to use the default. We keep the
     # hard-coded value for deployments of Mimic/Nautilus.
     pgs_per_fs_pool = 8
