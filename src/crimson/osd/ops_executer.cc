@@ -181,6 +181,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
       return seastar::now();
     },
     [] (auto&& ctx, ObjectContextRef obc, Ref<PG> pg) {
+      assert(pg);
       auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
       if (emplaced) {
         const auto& [cookie, entity] = ctx.key;
