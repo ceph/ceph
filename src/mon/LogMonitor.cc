@@ -429,8 +429,8 @@ void LogMonitor::log_external_backlog()
 void LogMonitor::create_pending()
 {
   pending_log.clear();
-  pending_summary = summary;
   dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
+  pending_keys.clear();
 }
 
 void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -536,7 +536,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   for (auto p = m->entries.begin();
        p != m->entries.end();
        ++p) {
-    if (!pending_summary.contains(p->key()))
+    if (!summary.contains(p->key()))
       num_new++;
   }
   if (!num_new) {
@@ -579,12 +579,12 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
        p != m->entries.end();
        ++p) {
     dout(10) << " logging " << *p << dendl;
-    if (!pending_summary.contains(p->key())) {
-      pending_summary.add(*p);
+    if (!summary.contains(p->key()) &&
+	!pending_keys.count(p->key())) {
+      pending_keys.insert(p->key());
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
-  pending_summary.prune(g_conf()->mon_log_max_summary);
   wait_for_finished_proposal(op, new C_Log(this, op));
   return true;
 }
@@ -797,8 +797,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.prio = LogEntry::str_to_level(level_str);
     le.channel = CLOG_CHANNEL_DEFAULT;
     le.msg = str_join(logtext, " ");
-    pending_summary.add(le);
-    pending_summary.prune(g_conf()->mon_log_max_summary);
+    pending_keys.insert(le.key());
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
     wait_for_finished_proposal(op, new Monitor::C_Command(
           mon, op, 0, string(), get_last_committed() + 1));
