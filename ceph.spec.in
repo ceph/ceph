@@ -113,9 +113,10 @@
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
+
 %{!?python3_pkgversion: %global python3_pkgversion 3}
-%{!?python3_version_nodots: %global python3_version_nodots 3}
-%{!?python3_version: %global python3_version 3}
+%{!?python3_version_nodots: %global python3_version_nodots 38}
+%{!?python3_version: %global python3_version 3.8}
 
 # disable dwz which compresses the debuginfo
 %global _find_debuginfo_dwz_opts %{nil}
@@ -212,6 +213,7 @@ BuildRequires:	cryptsetup-devel
 BuildRequires:	libcurl-devel
 BuildRequires:	libcap-ng-devel
 BuildRequires:	fmt-devel >= 6.2.1
+BuildRequires:  git
 BuildRequires:	pkgconfig(libudev)
 BuildRequires:	libnl3-devel
 BuildRequires:	liboath-devel
@@ -225,10 +227,10 @@ BuildRequires:	patch
 BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:  procps
-BuildRequires:	python%{python3_pkgversion}
-BuildRequires:	python%{python3_pkgversion}-devel
-BuildRequires:	python%{python3_pkgversion}-setuptools
-BuildRequires:	python%{python3_pkgversion}-Cython
+BuildRequires:	python%{python3_version_nodots}
+BuildRequires:	python%{python3_version_nodots}-devel
+BuildRequires:	python%{python3_version_nodots}-setuptools
+BuildRequires:	python%{python3_version_nodots}-Cython
 BuildRequires:	snappy-devel
 BuildRequires:	sqlite-devel
 BuildRequires:	sudo
@@ -344,7 +346,6 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
-BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-prettytable
 BuildRequires:	python%{python3_pkgversion}-pyyaml
 BuildRequires:	python%{python3_pkgversion}-sphinx
@@ -450,7 +451,7 @@ Requires:      grep
 Requires:      logrotate
 Requires:      parted
 Requires:      psmisc
-Requires:      python%{python3_pkgversion}-setuptools
+Requires:      python%{python3_version_nodots}-setuptools
 Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
@@ -555,7 +556,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
-Requires:	    libcephsqlite = %{_epoch_prefix}%{version}-%{release}
+Requires:       libcephsqlite = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
@@ -575,6 +576,7 @@ BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
+Requires:       python%{python3_version_nodots}
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
