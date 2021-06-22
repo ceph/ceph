@@ -317,22 +317,31 @@ private:
   };
 
   // cache
-  mempool::bluefs::map<std::string, DirRef, std::less<>> dir_map;          ///< dirname -> Dir
-  mempool::bluefs::unordered_map<uint64_t, FileRef> file_map; ///< ino -> File
-
-  // map of dirty files, files of same dirty_seq are grouped into list.
-  std::map<uint64_t, dirty_file_list_t> dirty_files;
+  struct {
+    ceph::mutex lock = ceph::make_mutex("BlueFS::nodes.lock");
+    mempool::bluefs::map<std::string, DirRef, std::less<>> dir_map; ///< dirname -> Dir
+    mempool::bluefs::unordered_map<uint64_t, FileRef> file_map;     ///< ino -> File
+  } nodes;
 
   bluefs_super_t super;        ///< latest superblock (as last written)
   uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
-  uint64_t log_seq = 0;        ///< last used log seq (by current pending log_t)
-  uint64_t log_seq_stable = 0; ///< last stable/synced log seq
-  FileWriter *log_writer = 0;  ///< writer for the log
-  bluefs_transaction_t log_t;  ///< pending, unwritten log transaction
-  bool log_flushing = false;   ///< true while flushing the log
+
+  struct {
+    ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
+    uint64_t seq_live = 0; //seq that log is currently writing to
+    FileWriter *writer = 0;
+    bluefs_transaction_t t;
+  } log;
+
+  struct {
+    ceph::mutex lock = ceph::make_mutex("BlueFS::dirty.lock");
+    uint64_t seq_stable = 0; //seq that is now stable on disk
+    uint64_t seq_next = 1;   //seq that is ongoing and not yet stable
+    // map of dirty files, files of same dirty_seq are grouped into list.
+    std::map<uint64_t, dirty_file_list_t> files;
+  } dirty;
 
   ceph::condition_variable log_cond;                             ///< used for state control between log flush / log compaction
-  ceph::mutex cond_lock = ceph::make_mutex("BlueFS::cond_lock"); ///< ....
   std::atomic<bool> log_is_compacting{false};                    ///< signals that bluefs log is already ongoing compaction
   std::atomic<bool> log_forbidden_to_expand{false};              ///< used to signal that async compaction is in state
                                                                  ///  that prohibits expansion of bluefs log
