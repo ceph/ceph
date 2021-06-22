@@ -850,7 +850,7 @@ protected:
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) = 0;
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			       const ceph::real_time& mtime, const std::string& etag) = 0;
+			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) = 0;
 };
 
 class GCChain {

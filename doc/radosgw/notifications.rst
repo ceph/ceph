@@ -437,7 +437,9 @@ pushed or pulled using the pubsub sync module. For example:
 - s3.object.key: object key
 - s3.object.size: object size
 - s3.object.eTag: object etag
-- s3.object.version: object version in case of versioned bucket
+- s3.object.versionId: object version in case of versioned bucket. 
+  When doing a copy, it would include the version of the target object. 
+  When creating a delete marker, it would include the version of the delete marker.
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 - s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API)
 - s3.object.tags: any tags set on the object (an extension to the S3 notification API)
