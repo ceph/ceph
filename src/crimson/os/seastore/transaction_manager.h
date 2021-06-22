@@ -544,7 +544,7 @@ private:
 
   SegmentManager &segment_manager;
   SegmentCleanerRef segment_cleaner;
-  CacheRef cache;
+  InterruptedCacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
 

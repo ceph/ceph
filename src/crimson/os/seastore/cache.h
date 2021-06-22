@@ -86,8 +86,8 @@ namespace crimson::os::seastore {
 class Cache {
 public:
   using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::eagain>;
+    crimson::ct_error::input_output_error>;
+  using base_iertr = trans_iertr<base_ertr>;
 
   Cache(SegmentManager &segment_manager);
   ~Cache();
@@ -137,8 +137,8 @@ public:
   }
 
   /// Declare paddr retired in t
-  using retire_extent_ertr = base_ertr;
-  using retire_extent_ret = retire_extent_ertr::future<>;
+  using retire_extent_iertr = base_iertr;
+  using retire_extent_ret = base_iertr::future<>;
   retire_extent_ret retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
@@ -147,8 +147,8 @@ public:
    *
    * returns ref to current root or t.root if modified in t
    */
-  using get_root_ertr = base_ertr;
-  using get_root_ret = get_root_ertr::future<RootBlockRef>;
+  using get_root_iertr = base_iertr;
+  using get_root_ret = get_root_iertr::future<RootBlockRef>;
   get_root_ret get_root(Transaction &t);
 
   /**
@@ -181,13 +181,10 @@ public:
       auto ret = TCachedExtentRef<T>(static_cast<T*>(&*iter));
       return ret->wait_io(
       ).then([ret=std::move(ret)]() mutable -> get_extent_ret<T> {
-        if (ret->is_valid()) {
-          return get_extent_ret<T>(
-            get_extent_ertr::ready_future_marker{},
-            std::move(ret));
-        } else {
-          return crimson::ct_error::eagain::make();
-	}
+	assert(ret->is_valid());
+	return get_extent_ret<T>(
+	  get_extent_ertr::ready_future_marker{},
+	  std::move(ret));
       });
     } else {
       auto ref = CachedExtent::make_cached_extent_ref<T>(
@@ -223,7 +220,10 @@ public:
    *
    * Returns extent at offset if in cache
    */
-  seastar::future<CachedExtentRef> get_extent_if_cached(
+  using get_extent_if_cached_iertr = base_iertr;
+  using get_extent_if_cached_ret =
+    get_extent_if_cached_iertr::future<CachedExtentRef>;
+  get_extent_if_cached_ret get_extent_if_cached(
     Transaction &t,
     paddr_t offset) {
     return seastar::do_with(
@@ -234,7 +234,9 @@ public:
 	if (status == Transaction::get_extent_ret::PRESENT) {
 	  wait = ret->wait_io();
 	}
-	return wait.then([ret] { return std::move(ret); });
+	return trans_intr::make_interruptible(
+	  wait.then([ret] { return std::move(ret); })
+	);
       });
   }
 
@@ -248,27 +250,30 @@ public:
    *
    * t *must not* have retired offset
    */
+  using get_extent_iertr = base_iertr;
   template <typename T>
-  get_extent_ertr::future<TCachedExtentRef<T>> get_extent(
-    Transaction &t,       ///< [in,out] current transaction
-    paddr_t offset,       ///< [in] starting addr
-    segment_off_t length  ///< [in] length
-  ) {
+  get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
+    Transaction &t,
+    paddr_t offset,
+    segment_off_t length) {
     CachedExtentRef ret;
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
       assert(result != Transaction::get_extent_ret::RETIRED);
-      return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
+      return seastar::make_ready_future<TCachedExtentRef<T>>(
 	ret->cast<T>());
     } else {
-      return get_extent<T>(offset, length).safe_then(
+      return trans_intr::make_interruptible(
+	get_extent<T>(offset, length)
+      ).si_then(
 	[&t](auto ref) mutable {
 	  t.add_to_read_set(ref);
-	  return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
+	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	    std::move(ref));
 	});
     }
   }
+
 
   /**
    * get_extent_by_type
@@ -283,7 +288,10 @@ public:
     segment_off_t length  ///< [in] length
   );
 
-  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
+  using get_extent_by_type_iertr = get_extent_iertr;
+  using get_extent_by_type_ret = get_extent_by_type_iertr::future<
+    CachedExtentRef>;
+  get_extent_by_type_ret get_extent_by_type(
     Transaction &t,
     extent_types_t type,
     paddr_t offset,
@@ -292,12 +300,13 @@ public:
     CachedExtentRef ret;
     auto status = query_cache_for_extent(t, offset, &ret);
     if (status == Transaction::get_extent_ret::RETIRED) {
-      return get_extent_ertr::make_ready_future<CachedExtentRef>();
+      return seastar::make_ready_future<CachedExtentRef>();
     } else if (status == Transaction::get_extent_ret::PRESENT) {
-      return get_extent_ertr::make_ready_future<CachedExtentRef>(ret);
+      return seastar::make_ready_future<CachedExtentRef>(ret);
     } else {
-      return get_extent_by_type(type, offset, laddr, length
-      ).safe_then([=, &t](CachedExtentRef ret) {
+      return trans_intr::make_interruptible(
+	get_extent_by_type(type, offset, laddr, length)
+      ).si_then([=, &t](CachedExtentRef ret) {
 	t.add_to_read_set(ret);
 	return get_extent_ertr::make_ready_future<CachedExtentRef>(
 	  std::move(ret));
@@ -422,9 +431,8 @@ public:
    * after replay to allow lba_manager (or w/e) to read in any ancestor
    * blocks.
    */
-  using init_cached_extents_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using init_cached_extents_ret = replay_delta_ertr::future<>;
+  using init_cached_extents_iertr = base_iertr;
+  using init_cached_extents_ret = init_cached_extents_iertr::future<>;
   template <typename F>
   init_cached_extents_ret init_cached_extents(
     Transaction &t,
@@ -438,11 +446,11 @@ public:
       std::forward<F>(f),
       std::move(dirty),
       [&t](auto &f, auto &refs) mutable {
-	return crimson::do_for_each(
+	return trans_intr::do_for_each(
 	  refs,
 	  [&t, &f](auto &e) { return f(t, e); });
-      }).handle_error(
-	init_cached_extents_ertr::pass_further{},
+      }).handle_error_interruptible(
+	init_cached_extents_iertr::pass_further{},
 	crimson::ct_error::assert_all{
 	  "Invalid error in Cache::init_cached_extents"
 	}
@@ -587,5 +595,88 @@ private:
 
 };
 using CacheRef = std::unique_ptr<Cache>;
+
+#define FORWARD(METHOD)					\
+  template <typename... Args>				\
+  auto METHOD(Args&&... args) const {			\
+    return cache.METHOD(std::forward<Args>(args)...);	\
+  }
+
+#define PARAM_FORWARD(METHOD)					\
+  template <typename T, typename... Args>			\
+  auto METHOD(Args&&... args) const {				\
+    return cache.METHOD<T>(std::forward<Args>(args)...);	\
+  }
+
+#define INT_FORWARD(METHOD)						\
+  template <typename... Args>						\
+  auto METHOD(Transaction &t, Args&&... args) const {			\
+    return with_trans_intr(						\
+      t,								\
+      [this](auto&&... args) {						\
+	return cache.METHOD(args...);					\
+      },								\
+      std::forward<Args>(args)...);					\
+  }
+
+#define PARAM_INT_FORWARD(METHOD)					\
+  template <typename T, typename... Args>				\
+  auto METHOD(Transaction &t, Args&&... args) const {			\
+    return with_trans_intr(						\
+      t,								\
+      [this](auto&&... args) {						\
+	return cache.METHOD<T>(args...);					\
+      },								\
+      std::forward<Args>(args)...);					\
+  }
+
+/// Temporary translator to non-interruptible futures
+class InterruptedCache {
+  Cache &cache;
+public:
+  InterruptedCache(Cache &cache) : cache(cache) {}
+
+  FORWARD(init)
+  FORWARD(mkfs)
+  FORWARD(replay_delta)
+  FORWARD(init_cached_extents)
+  FORWARD(drop_from_cache)
+  FORWARD(create_transaction)
+  FORWARD(create_weak_transaction)
+  FORWARD(try_construct_record)
+  FORWARD(complete_commit)
+  FORWARD(close)
+  FORWARD(dump_contents)
+  FORWARD(get_next_dirty_extents)
+  FORWARD(update_extent_from_transaction)
+  INT_FORWARD(get_extent_if_cached)
+  FORWARD(get_oldest_dirty_from)
+  PARAM_FORWARD(alloc_new_extent)
+  FORWARD(alloc_new_extent_by_type)
+  INT_FORWARD(get_extent_by_type)
+  INT_FORWARD(retire_extent_addr)
+  FORWARD(retire_extent)
+  INT_FORWARD(get_root)
+  FORWARD(get_root_fast)
+  FORWARD(duplicate_for_write)
+  PARAM_INT_FORWARD(get_extent)
+};
+
+class InterruptedCacheRef {
+  std::unique_ptr<Cache> ref;
+  InterruptedCache icache;
+public:
+  template <typename... T>
+  InterruptedCacheRef(std::unique_ptr<Cache> cache)
+    : ref(std::move(cache)), icache(*ref) {}
+
+  auto &operator*() {
+    return icache;
+  }
+
+  auto operator->() {
+    return &icache;
+  }
+};
 
 }

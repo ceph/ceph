@@ -312,7 +312,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
   DEBUGT("type {}, addr {}, laddr {}, len {}", t, type, addr, laddr, len);
 
   return cache->get_extent_if_cached(t, addr
-  ).then([this, FNAME, &t, type, addr, laddr, len](auto extent)
+  ).safe_then([this, FNAME, &t, type, addr, laddr, len](auto extent)
 	 -> get_extent_if_live_ret {
     if (extent) {
       return get_extent_if_live_ret(
