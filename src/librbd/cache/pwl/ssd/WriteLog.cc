@@ -145,9 +145,12 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     m_cache_state->empty = true;
     /* new pool, calculate and store metadata */
 
-    /* Size of ring buffer */
-    this->m_bytes_allocated_cap =
-        this->m_log_pool_size - DATA_RING_BUFFER_OFFSET;
+    /* Keep ring buffer at least MIN_WRITE_ALLOC_SSD_SIZE bytes free.
+     * In this way, when all ring buffer spaces are allocated,
+     * m_first_free_entry and m_first_valid_entry will not be equal.
+     * Equal only means the cache is empty. */
+    this->m_bytes_allocated_cap = this->m_log_pool_size -
+        DATA_RING_BUFFER_OFFSET - MIN_WRITE_ALLOC_SSD_SIZE;
     /* Log ring empty */
     m_first_free_entry = DATA_RING_BUFFER_OFFSET;
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
@@ -234,8 +237,8 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
   this->m_first_valid_entry = pool_root.first_valid_entry;
   this->m_first_free_entry = pool_root.first_free_entry;
 
-  this->m_bytes_allocated_cap =
-      this->m_log_pool_size - DATA_RING_BUFFER_OFFSET;
+  this->m_bytes_allocated_cap = this->m_log_pool_size -
+      DATA_RING_BUFFER_OFFSET - MIN_WRITE_ALLOC_SSD_SIZE;
 
   std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
 
