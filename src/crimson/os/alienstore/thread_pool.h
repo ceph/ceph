@@ -90,10 +90,14 @@ public:
     return work_item;
   }
   void stop() {
+    std::unique_lock lock{mutex};
     stopping = true;
     cond.notify_all();
   }
   void push_back(WorkItem* work_item) {
+    // XXX: oops, we can stall the reactor!
+    // TODO: switch to boost::lockfree.
+    std::unique_lock lock{mutex};
     pending.push_back(work_item);
     cond.notify_one();
   }
