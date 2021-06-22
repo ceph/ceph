@@ -3644,11 +3644,11 @@ int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
                                           optional_yield y,
                                           const DoutPrefixProvider *dpp)
 {
-  int r = call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket_sync->get_policy_handler(ctx, zone, bucket, phandler, y, dpp);
-  });
+  int r = svc.bucket_sync->get_policy_handler(zone, bucket, phandler, y, dpp);
   if (r < 0) {
-    ldpp_dout(dpp, 20) << __func__ << "(): failed to get policy handler for bucket=" << bucket << " (r=" << r << ")" << dendl;
+    ldpp_dout(dpp, 20) << __func__
+		       << "(): failed to get policy handler for bucket="
+		       << bucket << " (r=" << r << ")" << dendl;
     return r;
   }
   return 0;

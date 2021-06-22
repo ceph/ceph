@@ -6,7 +6,7 @@
 #include "services/svc_bi.h"
 #include "services/svc_bilog.h"
 #include "services/svc_bucket_sobj.h"
-#include "services/svc_bucket_sync_sobj.h"
+#include "services/svc_bucket_sync.h"
 #include "services/svc_cls.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
@@ -49,7 +49,7 @@ int RGWServices_Def::init(CephContext *cct,
                           const DoutPrefixProvider *dpp)
 {
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
-  bucket_sync_sobj = std::make_unique<RGWSI_Bucket_Sync_SObj>(cct);
+  bucket_sync = std::make_unique<RGWSI_Bucket_Sync>(cct);
   bi = std::make_unique<RGWSI_BucketIndex>(cct);
   bilog = std::make_unique<RGWSI_BILog>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
@@ -80,11 +80,10 @@ int RGWServices_Def::init(CephContext *cct,
   bilog->init(bi.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi.get(), meta.get(), meta_be_sobj.get(),
-                    sync_modules.get(), bucket_sync_sobj.get());
-  bucket_sync_sobj->init(zone.get(),
-                         sysobj.get(),
-                         sysobj_cache.get(),
-                         bucket_sobj.get());
+                    sync_modules.get(), bucket_sync.get());
+  bucket_sync->init(zone.get(),
+		    sysobj.get(),
+		    sysobj_cache.get());
   cls->init(zone.get(), rados.get());
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
@@ -92,7 +91,7 @@ int RGWServices_Def::init(CephContext *cct,
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
   notify->init(zone.get(), rados.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
-  zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
+  zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
   sync_modules->init(zone.get());
@@ -209,7 +208,7 @@ int RGWServices_Def::init(CephContext *cct,
       return r;
     }
 
-    r = bucket_sync_sobj->start(y, dpp);
+    r = bucket_sync->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start bucket_sync service (" << cpp_strerror(-r) << dendl;
       return r;
@@ -272,8 +271,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   bilog = _svc.bilog.get();
   bucket_sobj = _svc.bucket_sobj.get();
   bucket = bucket_sobj;
-  bucket_sync_sobj = _svc.bucket_sync_sobj.get();
-  bucket_sync = bucket_sync_sobj;
+  bucket_sync = _svc.bucket_sync.get();
   cls = _svc.cls.get();
   datalog = _svc.datalog.get();
   mdlog = _svc.mdlog.get();
@@ -345,6 +343,7 @@ int RGWCtlDef::init(RGWServices& svc, const DoutPrefixProvider *dpp)
                                 svc.bucket,
                                 svc.bucket_sync,
                                 svc.bi));
+  svc.bucket_sync->set_bucketctl(bucket.get());
   otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());

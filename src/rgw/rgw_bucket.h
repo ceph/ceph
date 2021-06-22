@@ -825,6 +825,8 @@ private:
 
   friend class BOpContext;
 
+public:
+
   static std::string get_entrypoint_meta_key(const rgw_bucket& bucket) {
     if (bucket.bucket_id.empty()) {
       return bucket.get_key();

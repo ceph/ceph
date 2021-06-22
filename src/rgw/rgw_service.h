@@ -49,7 +49,6 @@ public:
 class RGWSI_Bucket;
 class RGWSI_Bucket_SObj;
 class RGWSI_Bucket_Sync;
-class RGWSI_Bucket_Sync_SObj;
 class RGWSI_BucketIndex;
 class RGWSI_BILog;
 class RGWSI_Cls;
@@ -77,7 +76,7 @@ struct RGWServices_Def
   bool has_shutdown{false};
 
   std::unique_ptr<RGWSI_Bucket_SObj> bucket_sobj;
-  std::unique_ptr<RGWSI_Bucket_Sync_SObj> bucket_sync_sobj;
+  std::unique_ptr<RGWSI_Bucket_Sync> bucket_sync;
   std::unique_ptr<RGWSI_BucketIndex> bi;
   std::unique_ptr<RGWSI_BILog> bilog;
   std::unique_ptr<RGWSI_Cls> cls;
@@ -115,7 +114,6 @@ struct RGWServices
   RGWSI_Bucket *bucket{nullptr};
   RGWSI_Bucket_SObj *bucket_sobj{nullptr};
   RGWSI_Bucket_Sync *bucket_sync{nullptr};
-  RGWSI_Bucket_Sync_SObj *bucket_sync_sobj{nullptr};
   RGWSI_BucketIndex *bi{nullptr};
   RGWSI_BILog *bilog{nullptr};
   RGWSI_Cls *cls{nullptr};
