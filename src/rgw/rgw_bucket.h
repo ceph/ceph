@@ -442,8 +442,6 @@ class RGWBucketCtl
   RGWSI_Bucket_BE_Handler bucket_be_handler; /* bucket backend handler */
   RGWSI_BucketInstance_BE_Handler bi_be_handler; /* bucket instance backend handler */
 
-  int call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f);
-
   struct bucket_info_cache_entry {
     RGWBucketInfo info;
     real_time mtime;

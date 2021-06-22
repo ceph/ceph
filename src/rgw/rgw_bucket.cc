@@ -1948,18 +1948,6 @@ public:
     /* idempotent */
     return 0;
   }
-
-  int call(std::function<int(RGWSI_Bucket_EP_Ctx& ctx)> f) {
-    return call(nullopt, f);
-  }
-
-  int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
-           std::function<int(RGWSI_Bucket_EP_Ctx& ctx)> f) {
-    return be_handler->call(bectx_params, [&](RGWSI_MetaBackend_Handler::Op *op) {
-      RGWSI_Bucket_EP_Ctx ctx(op->ctx());
-      return f(ctx);
-    });
-  }
 };
 
 class RGWMetadataHandlerPut_Bucket : public RGWMetadataHandlerPut_SObj
@@ -2344,18 +2332,6 @@ public:
 
     return svc.bucket->remove_bucket_instance_info(ctx, entry, bci.info, &bci.info.objv_tracker, y, dpp);
   }
-
-  int call(std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
-    return call(nullopt, f);
-  }
-
-  int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
-           std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
-    return be_handler->call(bectx_params, [&](RGWSI_MetaBackend_Handler::Op *op) {
-      RGWSI_Bucket_BI_Ctx ctx(op->ctx());
-      return f(ctx);
-    });
-  }
 };
 
 class RGWMetadataHandlerPut_BucketInstance : public RGWMetadataHandlerPut_SObj
@@ -2572,15 +2548,6 @@ void RGWBucketCtl::init(RGWUserCtl *user_ctl,
   binfo_cache->init(svc.cache);
 
 
-}
-
-int RGWBucketCtl::call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f) {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ep_ctx) {
-    return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& bi_ctx) {
-      RGWSI_Bucket_X_Ctx ctx{ep_ctx, bi_ctx};
-      return f(ctx);
-    });
-  });
 }
 
 // Package together data/functionality needed to manage an operation
