@@ -16,7 +16,7 @@ namespace crimson::os::seastore::lba_manager::btree {
 using base_ertr = LBAManager::base_ertr;
 
 struct op_context_t {
-  Cache &cache;
+  InterruptedCache cache;
   btree_pin_set_t &pins;
   Transaction &trans;
 };

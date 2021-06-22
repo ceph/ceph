@@ -126,7 +126,7 @@ public:
   ~BtreeLBAManager();
 private:
   SegmentManager &segment_manager;
-  Cache &cache;
+  InterruptedCache cache;
 
   btree_pin_set_t pin_set;
 
