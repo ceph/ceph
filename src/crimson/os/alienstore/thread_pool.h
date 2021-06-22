@@ -90,8 +90,10 @@ public:
     return work_item;
   }
   void stop() {
-    std::unique_lock lock{mutex};
-    stopping = true;
+    {
+      std::unique_lock lock{mutex};
+      stopping = true;
+    }
     cond.notify_all();
   }
   void push_back(WorkItem* work_item) {
