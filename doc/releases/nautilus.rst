@@ -11,6 +11,36 @@ v14.2.22 Nautilus
 This is the 22nd and likely the last backport release in the Nautilus series.
 Ultimately, we recommend all users upgrade to newer Ceph releases.
 
+Notable Changes
+---------------
+
+* This release sets ``bluefs_buffered_io`` to true by default to improve performance
+  for metadata heavy workloads. Enabling this option has been reported to
+  occasionally cause excessive kernel swapping under certain workloads.
+  Currently, the most consistent performing combination is to enable
+  bluefs_buffered_io and disable system level swap.
+
+* The default value of ``bluestore_cache_trim_max_skip_pinned`` has been
+  increased to 1000 to control memory growth due to onodes.
+
+* Several other bug fixes in BlueStore, including a fix for an unexpected
+  ENOSPC bug in Avl/Hybrid allocators.
+
+* The trimming logic in the monitor has been made dynamic, with the
+  introduction of ``paxos_service_trim_max_multiplier``, a factor by which
+  ``paxos_service_trim_max`` is multiplied to make trimming faster,
+  when required. Setting it to 0 disables the upper bound check for trimming
+  and makes the monitors trim at the maximum rate.
+
+* A ``--max <n>`` option is available with the ``osd ok-to-stop`` command to
+  provide up to N OSDs that can be stopped together without making PGs
+  unavailable.
+
+* OSD: the option ``osd_fast_shutdown_notify_mon`` has been introduced to allow
+  the OSD to notify the monitor it is shutting down even if ``osd_fast_shutdown``
+  is enabled. This helps with the monitor logs on larger clusters, that may get
+  many 'osd.X reported immediately failed by osd.Y' messages, and confuse tools.
+
 Changelog
 ---------
 
