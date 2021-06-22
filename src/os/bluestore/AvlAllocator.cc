@@ -219,16 +219,6 @@ int AvlAllocator::_allocate(
     ceph_assert(size > 0);
     force_range_size_alloc = true;
   }
-  /*
-   * Find the largest power of 2 block size that evenly divides the
-   * requested size. This is used to try to allocate blocks with similar
-   * alignment from the same area (i.e. same cursor bucket) but it does
-   * not guarantee that other allocations sizes may exist in the same
-   * region.
-   */
-  const uint64_t align = size & -size;
-  ceph_assert(align != 0);
-  uint64_t *cursor = &lbas[cbits(align) - 1];
 
   const int free_pct = num_free * 100 / num_total;
   uint64_t start = 0;
@@ -239,10 +229,11 @@ int AvlAllocator::_allocate(
   if (force_range_size_alloc ||
       max_size < range_size_alloc_threshold ||
       free_pct < range_size_alloc_free_pct) {
-    *cursor = 0;
+    uint64_t fake_cursor = 0;
     do {
-      start = _block_picker(range_size_tree, cursor, size, unit);
-      if (start != -1ULL || !force_range_size_alloc) {
+      start = _block_picker(range_size_tree, &fake_cursor, size, unit);
+      dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
+      if (start != uint64_t(-1ULL)) {
         break;
       }
       // try to collect smaller extents as we could fail to retrieve
@@ -250,7 +241,27 @@ int AvlAllocator::_allocate(
       size = p2align(size >> 1, unit);
     } while (size >= unit);
   } else {
-    start = _block_picker(range_tree, cursor, size, unit);
+    do {
+      /*
+       * Find the largest power of 2 block size that evenly divides the
+       * requested size. This is used to try to allocate blocks with similar
+       * alignment from the same area (i.e. same cursor bucket) but it does
+       * not guarantee that other allocations sizes may exist in the same
+       * region.
+       */
+      uint64_t align = size & -size;
+      ceph_assert(align != 0);
+      uint64_t* cursor = &lbas[cbits(align) - 1];
+
+      start = _block_picker(range_tree, cursor, size, unit);
+      dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
+      if (start != uint64_t(-1ULL)) {
+        break;
+      }
+      // try to collect smaller extents as we could fail to retrieve
+      // that large block due to misaligned extents
+      size = p2align(size >> 1, unit);
+    } while (size >= unit);
   }
   if (start == -1ULL) {
     return -ENOSPC;
