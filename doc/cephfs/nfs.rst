@@ -14,6 +14,10 @@ Requirements
    ganesha v2.5 stable or higher versions)
 -  NFS-Ganesha server host connected to the Ceph public network
 
+.. note::
+   Ceph packages should preferably be latest stable luminous or a higher
+   version and NFS-Ganesha packages must be v2.5 stable or higher versions.
+
 Configuring NFS-Ganesha to export CephFS
 ========================================
 
