@@ -26,8 +26,8 @@ struct Task final : WorkItem {
   using T = std::invoke_result_t<Func>;
   using future_stored_type_t =
     std::conditional_t<std::is_void_v<T>,
-		       seastar::internal::future_stored_type_t<>,
-		       seastar::internal::future_stored_type_t<T>>;
+                       seastar::internal::future_stored_type_t<>,
+                       seastar::internal::future_stored_type_t<T>>;
   using futurator_t = seastar::futurize<T>;
 public:
   explicit Task(Func&& f)
@@ -49,9 +49,9 @@ public:
   typename futurator_t::type get_future() {
     return on_done.wait().then([this](size_t) {
       if (state.failed()) {
-	return futurator_t::make_exception_future(state.get_exception());
+        return futurator_t::make_exception_future(state.get_exception());
       } else {
-	return futurator_t::from_tuple(state.get_value());
+        return futurator_t::from_tuple(state.get_value());
       }
     });
   }
@@ -77,8 +77,7 @@ public:
   WorkItem* pop_front(std::chrono::milliseconds& queue_max_wait) {
     WorkItem* work_item = nullptr;
     std::unique_lock lock{mutex};
-    cond.wait_for(lock, queue_max_wait,
-		  [this, &work_item] {
+    cond.wait_for(lock, queue_max_wait, [this, &work_item] {
       bool empty = true;
       if (!pending.empty()) {
         empty = false;
@@ -162,7 +161,7 @@ public:
           .then([packaged=std::move(packaged), shard, this] {
             auto task = new Task{std::move(packaged)};
             auto fut = task->get_future();
-	    pending_queues[shard].push_back(task);
+            pending_queues[shard].push_back(task);
             return fut.finally([task, this] {
               local_free_slots().signal();
               delete task;
@@ -173,8 +172,7 @@ public:
 
   template<typename Func>
   auto submit(Func&& func) {
-    return submit(::rand() % n_threads,
-		  std::forward<Func>(func));
+    return submit(::rand() % n_threads, std::forward<Func>(func));
   }
 };
 
