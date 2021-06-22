@@ -18,6 +18,9 @@
 #include <map>
 #include <set>
 
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 #include "include/types.h"
 #include "PaxosService.h"
 
@@ -41,6 +44,10 @@ class LogMonitor : public PaxosService,
 private:
   std::multimap<utime_t,LogEntry> pending_log;
   LogSummary pending_summary, summary;
+
+  std::map<std::string, int> channel_fds;
+
+  fmt::memory_buffer file_log_buffer;
 
   struct log_channel_info {
 
@@ -158,6 +165,9 @@ private:
 
   void check_subs();
   void check_sub(Subscription *s);
+
+  void log_external_close_fds();
+  void log_external(const LogEntry& le);
 
   /**
    * translate log sub name ('log-info') to integer id
