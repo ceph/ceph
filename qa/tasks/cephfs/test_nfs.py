@@ -437,6 +437,7 @@ class TestNFS(MgrTestCase):
         self._test_create_cluster()
         self._create_export(export_id='1', create_fs=True, extra_cmd=[self.pseudo_path, '--readonly'])
         port, ip = self._get_port_ip_info()
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
         self._write_to_read_only_export(self.pseudo_path, port, ip)
         self._test_delete_cluster()
 
@@ -553,11 +554,20 @@ class TestNFS(MgrTestCase):
         self._test_create_cluster()
         self.ctx.cluster.run(args=['sudo', 'ceph', 'nfs', 'export', 'apply',
                                    self.cluster_id, '-i', '-'],
-                             stdin=json.dumps(export_block))
+                             stdin=json.dumps({
+                                 "path": "/",
+                                 "pseudo": "/cephfs",
+                                 "squash": "none",
+                                 "access_type": "rw",
+                                 "protocols": [4],
+                                 "fsal": {
+                                     "name": "CEPH",
+                                     "fs_name": self.fs_name
+                                 }
+                             }))
         port, ip = self._get_port_ip_info()
         self._test_mnt(self.pseudo_path, port, ip)
         self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
-        self._write_to_read_only_export(new_pseudo_path, port, ip)
         self._test_delete_cluster()
 
     def test_update_export(self):
