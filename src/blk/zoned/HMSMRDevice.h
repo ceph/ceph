@@ -41,7 +41,7 @@ class HMSMRDevice final : public BlockDevice {
   string vdo_name;
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
-  int zbd_dev;
+  int zbd_fd = -1;	///< fd for the zoned block device
 
   ceph::mutex debug_lock = ceph::make_mutex("HMSMRDevice::debug_lock");
   interval_set<uint64_t> debug_inflight;
