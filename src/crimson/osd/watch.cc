@@ -182,6 +182,7 @@ void Watch::cancel_notify(const uint64_t notify_id)
 
 void Watch::do_watch_timeout(Ref<PG> pg)
 {
+  assert(pg);
   auto [op, fut] = pg->get_shard_services().start_operation<WatchTimeoutRequest>(
     shared_from_this(), pg);
   std::ignore = std::move(fut).then([op=std::move(op), this] {
