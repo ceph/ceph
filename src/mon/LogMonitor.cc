@@ -228,6 +228,7 @@ void LogMonitor::create_initial()
   e.addrs = mon.messenger->get_myaddrs();
   e.stamp = ceph_clock_now();
   e.prio = CLOG_INFO;
+  e.channel = CLOG_CHANNEL_CLUSTER;
   std::stringstream ss;
   ss << "mkfs " << mon.monmap->get_fsid();
   e.msg = ss.str();
