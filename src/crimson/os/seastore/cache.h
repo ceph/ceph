@@ -54,7 +54,7 @@ namespace crimson::os::seastore {
  *    succcessful, the user may construct a record and submit the
  *    transaction to the journal.
  * 3) completion: once the transaction is durable, the user must call
- *    Cache::complete_transaction() with the block offset to complete
+ *    Cache::complete_commit() with the block offset to complete
  *    the transaction.
  *
  * Internally, in phase 1, the fields in Transaction are filled in.
