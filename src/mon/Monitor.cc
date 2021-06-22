@@ -493,9 +493,13 @@ abort:
 
 void Monitor::handle_signal(int signum)
 {
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got Signal " << sig_str(signum) << " ***" << dendl;
-  shutdown();
+  if (signum == SIGHUP) {
+    sighup_handler(signum);
+  } else {
+    ceph_assert(signum == SIGINT || signum == SIGTERM);
+    shutdown();
+  }
 }
 
 CompatSet Monitor::get_initial_supported_features()
