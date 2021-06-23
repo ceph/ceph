@@ -16,6 +16,10 @@ Notable Changes
 
 * RADOS: Ability to dynamically adjust trimming rate in the monitor and several other bug fixes.
 
+* A long-standing bug that prevented 32-bit and 64-bit client/server
+  interoperability under msgr v2 has been fixed.  In particular, mixing armv7l
+  (armhf) and x86_64 or aarch64 servers in the same cluster now works.
+
 Changelog
 ---------
 
