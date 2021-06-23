@@ -5191,13 +5191,15 @@ void RGWCopyObj::execute(optional_yield y)
 
   encode_delete_at_attr(delete_at, attrs);
 
+  // get src object version (cached in obj_ctx from verify_permission())
+  RGWObjState* astate = nullptr;
+  op_ret = src_object->get_obj_state(this, s->obj_ctx, &astate, s->yield, true);
+  if (op_ret < 0) {
+    return;
+  }
+  src_object->set_instance(astate->obj.key.instance);
+
   if (!s->system_request) { // no quota enforcement for system requests
-    // get src object size (cached in obj_ctx from verify_permission())
-    RGWObjState* astate = nullptr;
-    op_ret = src_object->get_obj_state(this, s->obj_ctx, &astate, s->yield, true);
-    if (op_ret < 0) {
-      return;
-    }
     // enforce quota against the destination bucket owner
     op_ret = dest_bucket->check_quota(user_quota, bucket_quota,
 				      astate->accounted_size, y);
