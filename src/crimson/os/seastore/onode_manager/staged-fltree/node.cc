@@ -1272,25 +1272,26 @@ eagain_future<> InternalNode::do_get_tree_stats(
     [this, this_ref, c, &stats](auto& pos, auto& p_child_addr) {
       pos = search_position_t::begin();
       impl->get_slot(pos, nullptr, &p_child_addr);
-      return crimson::do_until(
-          [this, this_ref, c, &stats, &pos, &p_child_addr]() -> eagain_future<bool> {
+      return crimson::repeat(
+        [this, this_ref, c, &stats, &pos, &p_child_addr]()
+        -> eagain_future<seastar::stop_iteration> {
         return get_or_track_child(c, pos, p_child_addr->value
         ).safe_then([c, &stats](auto child) {
           return child->do_get_tree_stats(c, stats);
         }).safe_then([this, this_ref, &pos, &p_child_addr] {
           if (pos.is_end()) {
-            return seastar::make_ready_future<bool>(true);
+            return seastar::stop_iteration::yes;
           } else {
             impl->get_next_slot(pos, nullptr, &p_child_addr);
             if (pos.is_end()) {
               if (impl->is_level_tail()) {
                 p_child_addr = impl->get_tail_value();
-                return seastar::make_ready_future<bool>(false);
+                return seastar::stop_iteration::no;
               } else {
-                return seastar::make_ready_future<bool>(true);
+                return seastar::stop_iteration::yes;
               }
             } else {
-              return seastar::make_ready_future<bool>(false);
+              return seastar::stop_iteration::no;
             }
           }
         });
