@@ -123,6 +123,14 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
     }
   }
 
+  if (store.exists("mon_sync", "temp_newer_monmap")) {
+    dout(10) << __func__ << " found temp_newer_monmap" << dendl;
+    int err = store.get("mon_sync", "temp_newer_monmap", bl);
+    ceph_assert(err == 0);
+    ceph_assert(bl.length() > 0);
+    return 0;
+  }
+
   if (store.exists("mkfs", "monmap")) {
     dout(10) << __func__ << " found mkfs monmap" << dendl;
     int err = store.get("mkfs", "monmap", bl);
