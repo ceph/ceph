@@ -76,7 +76,7 @@ public:
     return false;
   }
   virtual bool supports_data_export() = 0;
-  virtual int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
+  virtual int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
 };
 
 typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
@@ -119,13 +119,13 @@ public:
     return module->supports_data_export();
   }
 
-  int create_instance(CephContext *cct, const string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
     RGWSyncModuleRef module;
     if (!get_module(name, &module)) {
       return -ENOENT;
     }
 
-    return module.get()->create_instance(cct, config, instance);
+    return module.get()->create_instance(dpp, cct, config, instance);
   }
 
   vector<string> get_registered_module_names() const {

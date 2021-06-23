@@ -15,7 +15,7 @@ public:
   bool supports_writes() override {
     return true;
   }
-  int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
 class RGWPSDataSyncModule;

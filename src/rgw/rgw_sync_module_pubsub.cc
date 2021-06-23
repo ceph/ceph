@@ -1393,7 +1393,7 @@ bool RGWPSSyncModuleInstance::should_full_sync() const {
    return data_handler->get_conf()->start_with_full_sync;
 }
 
-int RGWPSSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+int RGWPSSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
   instance->reset(new RGWPSSyncModuleInstance(cct, config));
   return 0;
 }
