@@ -1,0 +1,7 @@
+# To exercise lock/witness code paths more regularly, try to get all
+# directories replicated.
+overrides:
+  ceph:
+    conf:
+      mds:
+        mds_bal_replicate_threshold: 1
