@@ -687,13 +687,13 @@ struct RGWTierACLMapping {
   RGWTierACLMapping() = default;
 
   RGWTierACLMapping(ACLGranteeTypeEnum t,
-             const string& s,
-             const string& d) : type(t),
+             const std::string& s,
+             const std::string& d) : type(t),
   source_id(s),
   dest_id(d) {}
 
   void init(const JSONFormattable& config) {
-    const string& t = config["type"];
+    const std::string& t = config["type"];
 
     if (t == "email") {
       type = ACL_TYPE_EMAIL_USER;
@@ -735,11 +735,11 @@ struct RGWZoneGroupPlacementTierS3 {
   RGWAccessKey key;
   std::string region;
   HostStyle host_style{PathStyle};
-  string target_storage_class;
+  std::string target_storage_class;
 
   /* Should below be bucket/zone specific?? */
-  string target_path;
-  map<string, RGWTierACLMapping> acl_mappings;
+  std::string target_path;
+  std::map<std::string, RGWTierACLMapping> acl_mappings;
 
   uint64_t multipart_sync_threshold{DEFAULT_MULTIPART_SYNC_PART_SIZE};
   uint64_t multipart_min_part_size{DEFAULT_MULTIPART_SYNC_PART_SIZE};

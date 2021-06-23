@@ -9,7 +9,7 @@
 
 #include "rgw_coroutine.h"
 #include "rgw_rest_conn.h"
-#include "rgw_sal.h"
+
 
 struct rgw_rest_obj {
   rgw_obj_key key;
@@ -585,67 +585,6 @@ public:
                     std::shared_ptr<RGWStreamReadHTTPResourceCRF>& _in_crf,
                     std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
   ~RGWStreamSpliceCR();
-
-  int operate(const DoutPrefixProvider *dpp) override;
-};
-
-class RGWStreamReadCRF {
-public:
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op;
-  off_t ofs;
-  off_t end;
-  rgw_rest_obj rest_obj;
-  std::unique_ptr<rgw::sal::Object>* obj;
-
-  RGWStreamReadCRF(std::unique_ptr<rgw::sal::Object>* obj, RGWObjectCtx& obj_ctx);
-  virtual ~RGWStreamReadCRF();
-
-  virtual int init() {return 0; }
-  virtual int init_rest_obj() {return 0;}
-
-  int set_range(off_t _ofs, off_t _end) {
-    ofs = _ofs;
-    end = _end;
-
-    return 0;
-  }
-
-  int get_range(off_t &_ofs, off_t &_end) {
-    _ofs = ofs;
-    _end = end;
-
-    return 0;
-  }
-
-  rgw_rest_obj get_rest_obj() {
-    return rest_obj;
-  }
-
-  virtual int read(off_t ofs, off_t end, bufferlist &bl) {return 0;};
-
-};
-
-class RGWStreamWriteCR : public RGWCoroutine {
-  CephContext *cct;
-  RGWHTTPManager *http_manager;
-  string url;
-  std::shared_ptr<RGWStreamReadCRF> in_crf;
-  std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
-  bufferlist bl;
-  bool need_retry{false};
-  bool sent_attrs{false};
-  uint64_t total_read{0};
-  int ret{0};
-  off_t ofs;
-  off_t end;
-  uint64_t read_len = 0;
-  rgw_rest_obj rest_obj;
-
-public:
-  RGWStreamWriteCR(CephContext *_cct, RGWHTTPManager *_mgr,
-                    std::shared_ptr<RGWStreamReadCRF>& _in_crf,
-                    std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
-  ~RGWStreamWriteCR();
 
   int operate(const DoutPrefixProvider *dpp) override;
 };
