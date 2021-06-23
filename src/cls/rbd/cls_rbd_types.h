@@ -452,15 +452,15 @@ struct UserSnapshotNamespace {
   }
 };
 
-struct GroupSnapshotNamespace {
+struct GroupImageSnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
     SNAPSHOT_NAMESPACE_TYPE_GROUP;
 
-  GroupSnapshotNamespace() {}
+  GroupImageSnapshotNamespace() {}
 
-  GroupSnapshotNamespace(int64_t _group_pool,
-			 const std::string &_group_id,
-			 const std::string &_group_snapshot_id)
+  GroupImageSnapshotNamespace(int64_t _group_pool,
+                              const std::string &_group_id,
+                              const std::string &_group_snapshot_id)
     : group_id(_group_id), group_pool(_group_pool),
       group_snapshot_id(_group_snapshot_id) {}
 
@@ -473,17 +473,17 @@ struct GroupSnapshotNamespace {
 
   void dump(ceph::Formatter *f) const;
 
-  inline bool operator==(const GroupSnapshotNamespace& gsn) const {
+  inline bool operator==(const GroupImageSnapshotNamespace& gsn) const {
     return group_pool == gsn.group_pool &&
 	   group_id == gsn.group_id &&
 	   group_snapshot_id == gsn.group_snapshot_id;
   }
 
-  inline bool operator!=(const GroupSnapshotNamespace& gsn) const {
+  inline bool operator!=(const GroupImageSnapshotNamespace& gsn) const {
     return !operator==(gsn);
   }
 
-  inline bool operator<(const GroupSnapshotNamespace& gsn) const {
+  inline bool operator<(const GroupImageSnapshotNamespace& gsn) const {
     if (group_pool != gsn.group_pool) {
       return group_pool < gsn.group_pool;
     }
@@ -671,13 +671,13 @@ struct UnknownSnapshotNamespace {
 
 std::ostream& operator<<(std::ostream& os, const SnapshotNamespaceType& type);
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
-std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const GroupImageSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const MirrorSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
 
 typedef std::variant<UserSnapshotNamespace,
-		     GroupSnapshotNamespace,
+		     GroupImageSnapshotNamespace,
 		     TrashSnapshotNamespace,
 		     MirrorSnapshotNamespace,
 		     UnknownSnapshotNamespace> SnapshotNamespaceVariant;
