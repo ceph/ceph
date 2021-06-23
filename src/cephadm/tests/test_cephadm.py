@@ -30,6 +30,16 @@ with mock.patch('builtins.open', create=True):
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
 
+def get_ceph_conf(
+        fsid='00000000-0000-0000-0000-0000deadbeef',
+        mon_host='[v2:192.168.1.1:3300/0,v1:192.168.1.1:6789/0]'):
+    return f'''
+# minimal ceph.conf for {fsid}
+[global]
+        fsid = {fsid}
+        mon_host = {mon_host}
+'''
+
 class TestCephAdm(object):
 
     def test_docker_unit_file(self):
@@ -521,6 +531,104 @@ docker.io/ceph/daemon-base:octopus
 
         s = 'ceph/ceph:latest'
         assert cd.normalize_image_digest(s) == f'{cd.DEFAULT_REGISTRY}/{s}'
+
+    @pytest.mark.parametrize('fsid, ceph_conf, list_daemons, result, err, ',
+        [
+            (
+                None,
+                None,
+                [],
+                None,
+                None,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                [],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                None,
+                [
+                    {'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                None,
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                None,
+                r'Cannot infer an fsid',
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [
+                    {'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                None,
+                r'Cannot infer an fsid',
+            ),
+        ])
+    @mock.patch('cephadm.call')
+    def test_infer_fsid(self, _call, fsid, ceph_conf, list_daemons, result, err, cephadm_fs):
+        # build the context
+        ctx = cd.CephadmContext()
+        ctx.fsid = fsid
+
+        # mock the decorator
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        infer_fsid = cd.infer_fsid(mock_fn)
+
+        # mock the ceph.conf file content
+        if ceph_conf:
+            f = cephadm_fs.create_file('ceph.conf', contents=ceph_conf)
+            ctx.config = f.path
+
+        # test
+        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+            if err:
+                with pytest.raises(cd.Error, match=err):
+                    infer_fsid(ctx)
+            else:
+                infer_fsid(ctx)
+            assert ctx.fsid == result
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer

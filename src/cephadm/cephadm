@@ -1691,10 +1691,10 @@ def infer_config(func):
     """
     @wraps(func)
     def _infer_config(ctx: CephadmContext):
+        ctx.config = ctx.config if 'config' in ctx else None
         if ctx.config:
             logger.debug('Using specified config: %s' % ctx.config)
             return func(ctx)
-        config = None
         if ctx.fsid:
             name = ctx.name
             if not name:
@@ -1704,11 +1704,9 @@ def infer_config(func):
                         name = daemon['name']
                         break
             if name:
-                config = '/var/lib/ceph/{}/{}/config'.format(ctx.fsid,
-                                                             name)
-        if config:
-            logger.info('Inferring config %s' % config)
-            ctx.config = config
+                ctx.config = f'/var/lib/ceph/{ctx.fsid}/{name}/config'
+        if ctx.config:
+            logger.info('Inferring config %s' % ctx.config)
         elif os.path.exists(SHELL_DEFAULT_CONF):
             logger.debug('Using default config: %s' % SHELL_DEFAULT_CONF)
             ctx.config = SHELL_DEFAULT_CONF
