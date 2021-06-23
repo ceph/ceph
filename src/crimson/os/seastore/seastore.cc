@@ -351,7 +351,7 @@ SeaStore::omap_get_values(
   return repeat_with_onode<omap_values_t>(
     c,
     oid,
-    [this, &keys](auto &t, auto &onode) {
+    [this, keys](auto &t, auto &onode) {
       omap_root_t omap_root = onode.get_layout().omap_root.get();
       return _omap_get_values(
 	t,
