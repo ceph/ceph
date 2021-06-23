@@ -982,8 +982,7 @@ PG::with_existing_clone_obc(ObjectContextRef clone, with_obc_func_t&& func)
 PG::load_obc_iertr::future<crimson::osd::ObjectContextRef>
 PG::load_head_obc(ObjectContextRef obc)
 {
-  hobject_t oid = obc->get_oid();
-  return backend->load_metadata(oid).safe_then_interruptible(
+  return backend->load_metadata(obc->get_oid()).safe_then_interruptible(
     [obc=std::move(obc)](auto md)
     -> load_obc_ertr::future<crimson::osd::ObjectContextRef> {
     const hobject_t& oid = md->os.oi.soid;
