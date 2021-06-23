@@ -314,8 +314,14 @@ For example,::
      "clients": []
    }
 
-The exported JSON can be modified and then reapplied.  Here, *pseudo*
-and *access_type* are modified::
+The exported JSON can be modified and then reapplied.  Below, *pseudo*
+and *access_type* are modified.  When modifying an export, the
+provided JSON should fully describe the new state of the export (just
+as when creating a new export), with the exception of the
+authentication credentials, which will be carried over from the
+previous state of the export where possible.
+
+::
 
    $ ceph nfs export apply -i update_cephfs_export.json
    $ cat update_cephfs_export.json
