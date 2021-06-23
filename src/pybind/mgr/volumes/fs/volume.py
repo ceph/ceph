@@ -681,6 +681,21 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def subvolume_group_snapshot_subvolume_list(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        groupname = kwargs['group_name']
+        snapname  = kwargs['snap_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    subvolumes = group.list_snapshot_subvolumes(snapname)
+                    ret = 0, name_to_json(subvolumes), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     def list_subvolume_group_snapshots(self, **kwargs):
         ret       = 0, "", ""
         volname   = kwargs['vol_name']

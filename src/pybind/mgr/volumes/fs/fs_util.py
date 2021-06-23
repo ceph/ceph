@@ -102,6 +102,43 @@ def listsnaps(fs, volspec, snapdirpath, filter_inherited_snaps=False):
         raise VolumeException(-e.args[0], e.args[1])
     return snaps
 
+def is_subvolume_complete(fs, snappath, subvol):
+    """
+    Returns True if the subvolume is complete (cloned one) else False
+    """
+    snap_subvol_meta_file = os.path.join(snappath, subvol.encode('utf-8'), b".meta")
+    fd = fs.open(snap_subvol_meta_file, "r")
+    # Assumes metadata file is not more than 4 MB
+    read_bytes = fs.read(fd, 0, 4096 * 1024)
+    fs.close(fd)
+    read_str = read_bytes.decode('utf-8')
+    if read_str.find("state = complete") !=-1:
+        return True
+    return False
+
+def list_subvolgroup_snapshot_subvols(fs, volspec, snappath, filter_incomplete_subvols=True):
+    """
+    Get the subvolume names from a given subvolumegroup snapshot path
+    """
+    snapdirpath = os.path.dirname(snappath)
+    if os.path.basename(snapdirpath) != volspec.snapshot_prefix.encode('utf-8'):
+        raise VolumeException(-errno.EINVAL, "Not a snapshot path: {0}".format(snapdirpath))
+    subvols = []
+    try:
+        with fs.opendir(snappath) as dir_handle:
+            d = fs.readdir(dir_handle)
+            while d:
+                if (d.d_name not in (b".", b"..")) and d.is_dir():
+                    d_name = d.d_name.decode('utf-8')
+                    if is_subvolume_complete(fs, snappath, d_name):
+                        subvols.append(d.d_name)
+                    elif not is_subvolume_complete(fs, snappath, d_name) and not filter_incomplete_subvols:
+                        subvols.append(d.d_name)
+                d = fs.readdir(dir_handle)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+    return subvols
+
 def list_one_entry_at_a_time(fs, dirpath):
     """
     Get a directory entry (one entry a time)

@@ -8,7 +8,7 @@ import cephfs
 from .snapshot_util import mksnap, rmsnap
 from .pin_util import pin
 from .template import GroupTemplate
-from ..fs_util import listdir, listsnaps, get_ancestor_xattr
+from ..fs_util import listdir, listsnaps, get_ancestor_xattr, list_subvolgroup_snapshot_subvols
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
@@ -82,6 +82,17 @@ class Group(GroupTemplate):
             dirpath = os.path.join(self.path,
                                    self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
             return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
+        except VolumeException as ve:
+            if ve.errno == -errno.ENOENT:
+                return []
+            raise
+
+    def list_snapshot_subvolumes(self, snapname):
+        try:
+            snappath = os.path.join(self.path,
+                                    self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
+                                    snapname.encode('utf-8'))
+            return list_subvolgroup_snapshot_subvols(self.fs, self.vol_spec, snappath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []
