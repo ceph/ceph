@@ -12,6 +12,34 @@
  * 
  */
 
+
+/*
+
+  -- Storage scheme --
+
+  Pre-quincy:
+
+    - LogSummary contains last N entries for every channel
+    - LogSummary (as "full") written on every commit
+    - LogSummary contains "keys" which LogEntryKey hash_set for the
+      same set of entries (for deduping)
+
+  Quincy+:
+
+    - LogSummary contains, for each channel,
+       - start seq
+       - end seq (last written seq + 1)
+    - LogSummary contains an LRUSet for tracking dups
+    - LogSummary written every N commits
+    - each LogEntry written in a separate key
+       - "%s/%08x" % (channel, seq) -> LogEntry
+    - per-commit record includes channel -> begin (trim bounds)
+    - 'external_log_to' meta records version to which we have logged externally
+
+*/
+
+
+
 #include <boost/algorithm/string/predicate.hpp>
 
 #include <sstream>
@@ -269,21 +297,45 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     ceph_assert(bl.length());
 
     auto p = bl.cbegin();
-    __u8 v;
-    decode(v, p);
-    while (!p.end()) {
-      LogEntry le;
-      le.decode(p);
-      dout(7) << "update_from_paxos applying incremental log "
-	      << summary.version+1 <<  " " << le << dendl;
-
-      log_external(le);
-      summary.add(le);
+    __u8 struct_v;
+    decode(struct_v, p);
+    if (struct_v == 1) {
+      // legacy pre-quincy commits
+      while (!p.end()) {
+	LogEntry le;
+	le.decode(p);
+	dout(7) << "update_from_paxos applying incremental log "
+		<< summary.version+1 <<  " " << le << dendl;
+	summary.add_legacy(le);
+      }
+    } else {
+      uint32_t num;
+      decode(num, p);
+      while (num--) {
+	LogEntry le;
+	le.decode(p);
+	dout(7) << "update_from_paxos applying incremental log "
+		<< summary.version+1 <<  " " << le << dendl;
+	summary.recent_keys.insert(le.key());
+	summary.channel_info[le.channel].second++;
+	// we may have logged past the (persisted) summary in a prior quorum
+	if (version > external_log_to) {
+	  log_external(le);
+	}
+      }
+      map<string,version_t> prune_channels_to;
+      decode(prune_channels_to, p);
+      for (auto& [channel, prune_to] : prune_channels_to) {
+	dout(20) << __func__ << " channel " << channel
+		 << " pruned to " << prune_to << dendl;
+	summary.channel_info[channel].first = prune_to;
+      }
     }
 
     summary.version++;
     summary.prune(g_conf()->mon_log_max_summary);
   }
+  dout(10) << " summary.channel_info " << summary.channel_info << dendl;
   external_log_to = version;
   mon.store->write_meta("external_log_to", stringify(external_log_to));
 
@@ -413,11 +465,14 @@ void LogMonitor::log_external_backlog()
     int err = get_version(external_log_to+1, bl);
     ceph_assert(err == 0);
     ceph_assert(bl.length());
-
     auto p = bl.cbegin();
     __u8 v;
     decode(v, p);
-    while (!p.end()) {
+    int32_t num = -2;
+    if (v >= 2) {
+      decode(num, p);
+    }
+    while ((num == -2 && !p.end()) || num--) {
       LogEntry le;
       le.decode(p);
       log_external(le);
@@ -429,8 +484,20 @@ void LogMonitor::log_external_backlog()
 void LogMonitor::create_pending()
 {
   pending_log.clear();
-  dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
   pending_keys.clear();
+  dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
+}
+
+void LogMonitor::generate_logentry_key(
+  const std::string& channel,
+  version_t v,
+  std::string *out)
+{
+  out->append(channel);
+  out->append("/");
+  char vs[10];
+  snprintf(vs, sizeof(vs), "%08llx", (unsigned long long)v);
+  out->append(vs);
 }
 
 void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -438,14 +505,78 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   version_t version = get_last_committed() + 1;
   bufferlist bl;
   dout(10) << __func__ << " v" << version << dendl;
-  __u8 v = 1;
-  encode(v, bl);
-  for (auto p = pending_log.begin(); p != pending_log.end(); ++p)
-    p->second.encode(bl, mon.get_quorum_con_features());
+
+  if (mon.monmap->min_mon_release < ceph_release_t::quincy) {
+    // legacy encoding for pre-quincy quorum
+    __u8 struct_v = 1;
+    encode(struct_v, bl);
+    for (auto& p : pending_log) {
+      p.second.encode(bl, mon.get_quorum_con_features());
+    }
+    put_version(t, version, bl);
+    put_last_committed(t, version);
+    return;
+  }
+  
+  __u8 struct_v = 2;
+  encode(struct_v, bl);
+
+  // record new entries
+  auto pending_channel_info = summary.channel_info;
+  uint32_t num = pending_log.size();
+  encode(num, bl);
+  for (auto& p : pending_log) {
+    bufferlist ebl;
+    p.second.encode(ebl, mon.get_quorum_con_features());
+
+    auto& bounds = pending_channel_info[p.second.channel];
+    version_t v = bounds.second++;
+    std::string key;
+    generate_logentry_key(p.second.channel, v, &key);
+    t->put(get_service_name(), key, ebl);
+    
+    bl.claim_append(ebl);
+  }
+
+  // prune log entries?
+  map<string,version_t> prune_channels_to;
+  for (auto& [channel, info] : summary.channel_info) {
+    if (info.second - info.first > g_conf()->mon_log_max) {
+      const version_t from = info.first;
+      const version_t to = info.second - g_conf()->mon_log_max;
+      dout(10) << __func__ << " pruning channel " << channel
+	       << " " << from << " -> " << to << dendl;
+      prune_channels_to[channel] = to;
+      pending_channel_info[channel].first = to;
+      for (version_t v = from; v < to; ++v) {
+	std::string key;
+	generate_logentry_key(channel, v, &key);
+	t->erase(get_service_name(), key);
+      }
+    }
+  }
+  dout(20) << __func__ << " prune_channels_to " << prune_channels_to << dendl;
+  encode(prune_channels_to, bl);
 
   put_version(t, version, bl);
   put_last_committed(t, version);
 }
+
+bool LogMonitor::should_stash_full()
+{
+  if (mon.monmap->min_mon_release < ceph_release_t::quincy) {
+    // commit a LogSummary on every commit
+    return true;
+  }
+
+  // store periodic summary
+  auto period = std::min<uint64_t>(
+    g_conf()->mon_log_full_interval,
+    g_conf()->mon_max_log_epochs
+    );
+  return (get_last_committed() - get_version_latest_full() > period);
+}
+
 
 void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 {
@@ -669,7 +800,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     ostringstream ss;
     if (channel == "*") {
       list<LogEntry> full_tail;
-      summary.build_ordered_tail(&full_tail);
+      summary.build_ordered_tail_legacy(&full_tail);
       auto rp = full_tail.rbegin();
       for (; num > 0 && rp != full_tail.rend(); ++rp) {
 	if (match(*rp)) {
@@ -907,17 +1038,19 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
     ceph_assert(bl.length());
     auto p = bl.cbegin();
     __u8 v;
-    decode(v,p);
-    while (!p.end()) {
+    decode(v, p);
+    int32_t num = -2;
+    if (v >= 2) {
+      decode(num, p);
+    }
+    while ((num == -2 && !p.end()) || num--) {
       LogEntry le;
       le.decode(p);
-
       if (le.prio < level) {
 	dout(20) << __func__ << " requested " << level 
 		 << " entry " << le.prio << dendl;
 	continue;
       }
-
       mlog->entries.push_back(le);
     }
     mlog->version = sv++;

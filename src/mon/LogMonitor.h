@@ -44,7 +44,9 @@ class LogMonitor : public PaxosService,
 private:
   std::multimap<utime_t,LogEntry> pending_log;
   unordered_set<LogEntryKey> pending_keys;
+
   LogSummary summary;
+
   version_t external_log_to = 0;
   std::map<std::string, int> channel_fds;
 
@@ -128,6 +130,7 @@ private:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
   // propose pending update to peers
+  void generate_logentry_key(const std::string& channel, version_t v, std::string *out);
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void encode_full(MonitorDBStore::TransactionRef t) override;
   version_t get_trim_to() const override;
@@ -140,10 +143,7 @@ private:
 
   bool should_propose(double& delay) override;
 
-  bool should_stash_full() override {
-    // commit a LogSummary on every commit
-    return true;
-  }
+  bool should_stash_full() override;
 
   struct C_Log;
 
