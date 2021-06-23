@@ -5198,6 +5198,12 @@ void RGWCopyObj::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
+
+    if (astate->accounted_size > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
+      op_ret = -ERR_TOO_LARGE;
+      return;
+    }
+
     // enforce quota against the destination bucket owner
     op_ret = dest_bucket->check_quota(user_quota, bucket_quota,
 				      astate->accounted_size, y);
