@@ -1103,9 +1103,11 @@ class DummyChildPool {
     ).safe_then([this](auto initial_child) {
       // split
       splitable_nodes.insert(initial_child);
-      return crimson::do_until([this] () -> eagain_future<bool> {
+      return crimson::repeat([this] ()
+        -> eagain_future<seastar::stop_iteration> {
         if (splitable_nodes.empty()) {
-          return seastar::make_ready_future<bool>(true);
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
         }
         auto index = rd() % splitable_nodes.size();
         auto iter = splitable_nodes.begin();
@@ -1113,7 +1115,7 @@ class DummyChildPool {
         Ref<DummyChild> child = *iter;
         return child->populate_split(get_context(), splitable_nodes
         ).safe_then([] {
-          return seastar::make_ready_future<bool>(false);
+          return seastar::stop_iteration::no;
         });
       });
     }).safe_then([this] {
