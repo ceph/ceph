@@ -386,8 +386,11 @@ daemonperf {type.id | path} list|ls [stat-pats] [priority]
 
 def do_extended_help(parser, args, target, partial):
     def help_for_sigs(sigs, partial=None):
-        sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
-                         partial=partial))
+        try:
+            sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
+                             partial=partial))
+        except BrokenPipeError:
+            pass
 
     def help_for_target(target, partial=None):
         # wait for osdmap because we know this is sent after the mgrmap
