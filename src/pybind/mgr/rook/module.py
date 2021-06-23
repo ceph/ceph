@@ -188,7 +188,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                         rotational = '1' if d['property']=='Rotational' else '0',
                         size = d['size']
                     ),
-                    available = True if d['status']['state']=='Available' else False,
+                    available = d['status']['state']=='Available',
                 ))
 
             result.append(orchestrator.InventoryHost(host_name, inventory.Devices(devs)))

@@ -192,13 +192,13 @@ class RookCluster(object):
     def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', rook_env: 'RookEnv'):
         self.rook_env = rook_env  # type: RookEnv
         self.coreV1_api = coreV1_api  # client.CoreV1Api
-        self.customObjects_api =customObjects_api # type: client.CustomObjectsApi
+        self.customObjects_api = customObjects_api  # type: client.CustomObjectsApi
         self.batchV1_api = batchV1_api
 
         #  TODO: replace direct k8s calls with Rook API calls
         # when they're implemented
         
-        self.inventory_maps = KubernetesResource(self.customObjects_api.list_cluster_custom_object,
+        self.inventory_maps: KubernetesResource = KubernetesResource(self.customObjects_api.list_cluster_custom_object,
                                                  group="local.storage.openshift.io",
                                                  version="v1alpha1",
                                                  plural="localvolumediscoveryresults")
@@ -243,7 +243,7 @@ class RookCluster(object):
         return self.rook_api_call("POST", path, **kwargs)
 
     def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, dict]:
-        def predicate(item) -> bool:
+        def predicate(item: Dict[str, Any]) -> bool:
             if nodenames is not None:
                 return item['spec']['nodeName'] in nodenames
             else:
