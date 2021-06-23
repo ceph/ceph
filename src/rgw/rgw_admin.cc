@@ -22,6 +22,7 @@ extern "C" {
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/fault_injector.h"
 
 #include "include/util.h"
 
@@ -322,6 +323,10 @@ void usage()
   cout << "                               data sync status\n";
   cout << "                             required for: \n";
   cout << "                               mdlog trim\n";
+  cout << "   --gen=<gen-id>            optional for: \n";
+  cout << "                               bilog list\n";
+  cout << "                               bilog trim\n";
+  cout << "                               bilog status\n";
   cout << "   --max-entries=<entries>   max entries for listing operations\n";
   cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
   cout << "   --remote=<remote>         zone or zonegroup id of remote gateway\n";
@@ -1111,9 +1116,6 @@ static void show_reshard_status(
   for (const auto& entry : status) {
     formatter->open_object_section("entry");
     formatter->dump_string("reshard_status", to_string(entry.reshard_status));
-    formatter->dump_string("new_bucket_instance_id",
-			   entry.new_bucket_instance_id);
-    formatter->dump_int("num_shards", entry.num_shards);
     formatter->close_section();
   }
   formatter->close_section();
@@ -2272,42 +2274,46 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     return r;
   }
 
+  out << indented{width, "source bucket"} << source_bucket->get_key() << std::endl;
   pipe.source.bucket = source_bucket->get_key();
+
   pipe.dest.bucket = bucket_info.bucket;
 
-  std::vector<rgw_bucket_shard_sync_info> status;
-  r = rgw_bucket_sync_status(dpp, store, pipe, bucket_info, &source_bucket->get_info(), &status);
+  rgw_bucket_sync_status full_status;
+  r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, null_yield);
   if (r < 0) {
-    ldpp_dout(dpp, -1) << "failed to read bucket sync status: " << cpp_strerror(r) << dendl;
+    lderr(store->ctx()) << "failed to read bucket full sync status: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  out << indented{width, "source bucket"} << source_bucket << std::endl;
+  if (full_status.state == BucketSyncState::Init) {
+    out << indented{width} << "init: bucket sync has not started\n";
+    return 0;
+  }
+  if (full_status.state == BucketSyncState::Stopped) {
+    out << indented{width} << "stopped: bucket sync is disabled\n";
+    return 0;
+  }
+  if (full_status.state == BucketSyncState::Full) {
+    out << indented{width} << "full sync: " << full_status.full.count << " objects completed\n";
+    return 0;
+  }
 
-  int num_full = 0;
-  int num_inc = 0;
-  uint64_t full_complete = 0;
+  std::vector<rgw_bucket_shard_sync_info> status;
+  r = rgw_read_bucket_inc_sync_status(dpp, store, pipe, bucket_info, &source_bucket->get_info(), full_status.incremental_gen,  &status);
+  if (r < 0) {
+    lderr(store->ctx()) << "failed to read bucket incremental sync status: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   const size_t total_shards = status.size();
 
-  using BucketSyncState = rgw_bucket_shard_sync_info::SyncState;
-  for (size_t shard_id = 0; shard_id < total_shards; shard_id++) {
-    auto& m = status[shard_id];
-    if (m.state == BucketSyncState::StateFullSync) {
-      num_full++;
-      full_complete += m.full_marker.count;
-    } else if (m.state == BucketSyncState::StateIncrementalSync) {
-      num_inc++;
-    }
-  }
+  out << indented{width} << "incremental sync on " << total_shards << " shards\n";
 
-  out << indented{width} << "full sync: " << num_full << "/" << total_shards << " shards\n";
-  if (num_full > 0) {
-    out << indented{width} << "full sync: " << full_complete << " objects completed\n";
-  }
-  out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
-
+  rgw_bucket_index_marker_info remote_info;
   BucketIndexShardsManager remote_markers;
-  r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(), remote_markers, null_yield);
+  r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(),
+                                 remote_info, remote_markers, null_yield);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to read remote log: " << cpp_strerror(r) << dendl;
     return r;
@@ -2320,15 +2326,15 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     if (r.second.empty()) {
       continue; // empty bucket index shard
     }
-    auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
-    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.second) {
+    const auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
+    if (pos < r.second) {
       shards_behind.insert(shard_id);
     }
   }
   if (!shards_behind.empty()) {
     out << indented{width} << "bucket is behind on " << shards_behind.size() << " shards\n";
     out << indented{width} << "behind shards: [" << shards_behind << "]\n" ;
-  } else if (!num_full) {
+  } else {
     out << indented{width} << "bucket is caught up with source\n";
   }
   return 0;
@@ -2711,14 +2717,7 @@ int check_reshard_bucket_params(rgw::sal::RadosStore* store,
     return ret;
   }
 
-  if ((*bucket)->get_info().reshard_status != cls_rgw_reshard_status::NOT_RESHARDING) {
-    // if in_progress or done then we have an old BucketInfo
-    cerr << "ERROR: the bucket is currently undergoing resharding and "
-      "cannot be added to the reshard list at this time" << std::endl;
-    return -EBUSY;
-  }
-
-  int num_source_shards = ((*bucket)->get_info().layout.current_index.layout.normal.num_shards > 0 ? (*bucket)->get_info().layout.current_index.layout.normal.num_shards : 1);
+  int num_source_shards = rgw::current_num_shards((*bucket)->get_info().layout);
 
   if (num_shards <= num_source_shards && !yes_i_really_mean_it) {
     cerr << "num shards is less or equal to current shards count" << std::endl
@@ -3179,6 +3178,7 @@ int main(int argc, const char **argv)
   string sub_name;
   string event_id;
 
+  std::optional<uint64_t> gen;
   std::optional<std::string> str_script_ctx;
   std::optional<std::string> script_package;
   int allow_compilation = false;
@@ -3221,6 +3221,9 @@ int main(int argc, const char **argv)
   std::optional<rgw_user> opt_dest_owner;
   ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
+
+  std::optional<std::string> inject_error_at;
+  std::optional<std::string> inject_abort_at;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
   bool raw_storage_op = false;
@@ -3375,6 +3378,12 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       specified_shard_id = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--gen", (char*)NULL)) {
+      gen = strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse gen id: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
@@ -3651,6 +3660,10 @@ int main(int argc, const char **argv)
       opt_retry_delay_ms = std::chrono::milliseconds(atoi(val.c_str()));
     } else if (ceph_argparse_witharg(args, i, &val, "--timeout-sec", (char*)NULL)) {
       opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject-error-at", (char*)NULL)) {
+      inject_error_at = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject-abort-at", (char*)NULL)) {
+      inject_abort_at = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
@@ -6616,20 +6629,19 @@ next:
       max_entries = 1000;
     }
 
-    int max_shards = (bucket->get_info().layout.current_index.layout.normal.num_shards > 0 ? bucket->get_info().layout.current_index.layout.normal.num_shards : 1);
+    const auto& index = bucket->get_info().layout.current_index;
+    const int max_shards = rgw::num_shards(index);
 
     formatter->open_array_section("entries");
 
     int i = (specified_shard_id ? shard_id : 0);
     for (; i < max_shards; i++) {
       RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(store)->getRados());
-      int shard_id = (bucket->get_info().layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-
-      int ret = bs.init(bucket->get_key(), shard_id, bucket->get_info().layout.current_index, nullptr /* no RGWBucketInfo */, dpp());
+      int ret = bs.init(dpp(), bucket->get_info(), index, i);
       marker.clear();
 
       if (ret < 0) {
-        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << i << "): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
 
@@ -6682,9 +6694,26 @@ next:
       return EINVAL;
     }
 
-    ret = bucket->purge_instance(dpp());
-    if (ret < 0) {
-      return -ret;
+    const auto& index = bucket->get_info().layout.current_index;
+    if (index.layout.type == rgw::BucketIndexType::Indexless) {
+      cerr << "ERROR: indexless bucket has no index to purge" << std::endl;
+      return EINVAL;
+    }
+
+    const int max_shards = rgw::num_shards(index);
+    for (int i = 0; i < max_shards; i++) {
+      RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(store)->getRados());
+      int ret = bs.init(dpp(), bucket->get_info(), index, i);
+      if (ret < 0) {
+        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << i << "): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      ret = static_cast<rgw::sal::RadosStore*>(store)->getRados()->bi_remove(bs);
+      if (ret < 0) {
+        cerr << "ERROR: failed to remove bucket index object: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 
@@ -6850,8 +6879,9 @@ next:
       RGWRados::ent_map_t result;
       result.reserve(NUM_ENTRIES);
 
+      const auto& current_index = bucket->get_info().layout.current_index;
       int r = static_cast<rgw::sal::RadosStore*>(store)->getRados()->cls_bucket_list_ordered(
-	dpp(), bucket->get_info(), RGW_NO_SHARD,
+	dpp(), bucket->get_info(), current_index, RGW_NO_SHARD,
 	marker, empty_prefix, empty_delimiter,
 	NUM_ENTRIES, true, expansion_factor,
 	result, &is_truncated, &cls_filtered, &marker,
@@ -6931,15 +6961,22 @@ next:
       return ret;
     }
 
-    RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), bucket->get_attrs(), nullptr /* no callback */);
+    RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), nullptr /* no callback */);
 
 #define DEFAULT_RESHARD_MAX_ENTRIES 1000
     if (max_entries < 1) {
       max_entries = DEFAULT_RESHARD_MAX_ENTRIES;
     }
 
-    return br.execute(num_shards, max_entries, dpp(),
-                      verbose, &cout, formatter.get());
+    ReshardFaultInjector fault;
+    if (inject_error_at) {
+      fault.inject(*inject_error_at, InjectError{-EIO, dpp()});
+    } else if (inject_abort_at) {
+      fault.inject(*inject_abort_at, InjectAbort{});
+    }
+    ret = br.execute(num_shards, fault, max_entries, dpp(),
+                     verbose, &cout, formatter.get());
+    return -ret;
   }
 
   if (opt_cmd == OPT::RESHARD_ADD) {
@@ -6955,7 +6992,7 @@ next:
       return ret;
     }
 
-    int num_source_shards = (bucket->get_info().layout.current_index.layout.normal.num_shards > 0 ? bucket->get_info().layout.current_index.layout.normal.num_shards : 1);
+    int num_source_shards = rgw::current_num_shards(bucket->get_info().layout);
 
     RGWReshard reshard(static_cast<rgw::sal::RadosStore*>(store), dpp());
     cls_rgw_reshard_entry entry;
@@ -7024,7 +7061,7 @@ next:
       return -ret;
     }
 
-    RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), bucket->get_attrs(), nullptr /* no callback */);
+    RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), nullptr /* no callback */);
     list<cls_rgw_bucket_instance_entry> status;
     int r = br.get_status(dpp(), &status);
     if (r < 0) {
@@ -7067,8 +7104,7 @@ next:
 
     if (bucket_initable) {
       // we did not encounter an error, so let's work with the bucket
-      RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), bucket->get_attrs(),
-                          nullptr /* no callback */);
+      RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), nullptr /* no callback */);
       int ret = br.cancel(dpp());
       if (ret < 0) {
         if (ret == -EBUSY) {
@@ -8085,6 +8121,7 @@ next:
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
+
     ret = sync.read_sync_status(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
@@ -8141,9 +8178,20 @@ next:
     if (max_entries < 0)
       max_entries = 1000;
 
+    const auto& logs = bucket->get_info().layout.logs;
+    auto log_layout = std::reference_wrapper{logs.back()};
+    if (gen) {
+      auto i = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(*gen));
+      if (i == logs.end()) {
+        cerr << "ERROR: no log layout with gen=" << *gen << std::endl;
+        return ENOENT;
+      }
+      log_layout = *i;
+    }
+
     do {
       list<rgw_bi_log_entry> entries;
-      ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(dpp(), bucket->get_info(), shard_id, marker, max_entries - count, entries, &truncated);
+      ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(dpp(), bucket->get_info(), log_layout, shard_id, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -8625,7 +8673,13 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_trim(dpp(), bucket->get_info(), shard_id, start_marker, end_marker);
+
+    if (!gen) {
+      gen = 0;
+    }
+    ret = bilog_trim(dpp(), static_cast<rgw::sal::RadosStore*>(store),
+		     bucket->get_info(), *gen,
+		     shard_id, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8643,7 +8697,18 @@ next:
       return -ret;
     }
     map<int, string> markers;
-    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->get_log_status(dpp(), bucket->get_info(), shard_id,
+    const auto& logs = bucket->get_info().layout.logs;
+    auto log_layout = std::reference_wrapper{logs.back()};
+    if (gen) {
+      auto i = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(*gen));
+      if (i == logs.end()) {
+        cerr << "ERROR: no log layout with gen=" << *gen << std::endl;
+        return ENOENT;
+      }
+      log_layout = *i;
+    }
+
+    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->get_log_status(dpp(), bucket->get_info(), log_layout, shard_id,
 						    &markers, null_yield);
     if (ret < 0) {
       cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;

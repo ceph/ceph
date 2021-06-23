@@ -799,6 +799,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   if (!empty_sync_policy()) {
     encode_json("sync_policy", *sync_policy, f);
   }
+  encode_json("layout", layout, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -842,6 +843,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   if (!sp.empty()) {
     set_sync_policy(std::move(sp));
   }
+  JSONDecoder::decode_json("layout", layout, obj);
 }
 
 void rgw_sync_directional_rule::dump(Formatter *f) const
@@ -1795,7 +1797,6 @@ void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
   } else {
     state = StateInit;
   }
-  JSONDecoder::decode_json("full_marker", full_marker, obj);
   JSONDecoder::decode_json("inc_marker", inc_marker, obj);
 }
 
@@ -1820,8 +1821,81 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
     break;
   }
   encode_json("status", s, f);
-  encode_json("full_marker", full_marker, f);
   encode_json("inc_marker", inc_marker, f);
+}
+
+void rgw_bucket_full_sync_status::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("position", position, obj);
+  JSONDecoder::decode_json("count", count, obj);
+}
+
+void rgw_bucket_full_sync_status::dump(Formatter *f) const
+{
+  encode_json("position", position, f);
+  encode_json("count", count, f);
+}
+
+void encode_json(const char *name, BucketSyncState state, Formatter *f)
+{
+  switch (state) {
+  case BucketSyncState::Init:
+    encode_json(name, "init", f);
+    break;
+  case BucketSyncState::Full:
+    encode_json(name, "full-sync", f);
+    break;
+  case BucketSyncState::Incremental:
+    encode_json(name, "incremental-sync", f);
+    break;
+  case BucketSyncState::Stopped:
+    encode_json(name, "stopped", f);
+    break;
+  default:
+    encode_json(name, "unknown", f);
+    break;
+  }
+}
+
+void decode_json_obj(BucketSyncState& state, JSONObj *obj)
+{
+  std::string s;
+  decode_json_obj(s, obj);
+  if (s == "full-sync") {
+    state = BucketSyncState::Full;
+  } else if (s == "incremental-sync") {
+    state = BucketSyncState::Incremental;
+  } else if (s == "stopped") {
+    state = BucketSyncState::Stopped;
+  } else {
+    state = BucketSyncState::Init;
+  }
+}
+
+void rgw_bucket_sync_status::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("state", state, obj);
+  JSONDecoder::decode_json("full", full, obj);
+  JSONDecoder::decode_json("incremental_gen", incremental_gen, obj);
+}
+
+void rgw_bucket_sync_status::dump(Formatter *f) const
+{
+  encode_json("state", state, f);
+  encode_json("full", full, f);
+  encode_json("incremental_gen", incremental_gen, f);
+}
+
+void bilog_status_v2::dump(Formatter *f) const
+{
+  encode_json("sync_status", sync_status, f);
+  encode_json("inc_status", inc_status, f);
+}
+
+void bilog_status_v2::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("sync_status", sync_status, obj);
+  JSONDecoder::decode_json("inc_status", inc_status, obj);
 }
 
 /* This utility function shouldn't conflict with the overload of std::to_string

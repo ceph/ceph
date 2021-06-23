@@ -30,6 +30,15 @@ class PurgeLogShardsCR : public RGWShardCollectCR {
 
   static constexpr int max_concurrent = 16;
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to remove mdlog shard: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   PurgeLogShardsCR(rgw::sal::RadosStore* store, const RGWMetadataLog* mdlog,
                    const rgw_pool& pool, int num_shards)
@@ -264,6 +273,15 @@ class MetaMasterTrimShardCollectCR : public RGWShardCollectCR {
   std::string oid;
   const rgw_meta_sync_status& sync_status;
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to trim mdlog shard: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   MetaMasterTrimShardCollectCR(MasterTrimEnv& env, RGWMetadataLog *mdlog,
                                const rgw_meta_sync_status& sync_status)
@@ -315,6 +333,17 @@ class MetaMasterStatusCollectCR : public RGWShardCollectCR {
   MasterTrimEnv& env;
   connection_map::iterator c;
   std::vector<rgw_meta_sync_status>::iterator s;
+
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to fetch metadata sync status: "
+          << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   explicit MetaMasterStatusCollectCR(MasterTrimEnv& env)
     : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),
@@ -521,6 +550,15 @@ class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
   RGWMetaSyncEnv meta_env; //< for RGWListRemoteMDLogShardCR
   int shard_id{0};
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to trim mdlog shard: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   MetaPeerTrimShardCollectCR(PeerTrimEnv& env, RGWMetadataLog *mdlog)
     : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),

@@ -62,7 +62,7 @@ protected:
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist> *rmattrs,
                 RGWObjVersionTracker *objv_tracker,
-                optional_yield y);
+                bool exclusive, optional_yield y) override;
 
   int remove(const DoutPrefixProvider *dpp, 
              RGWSysObjectCtxBase& obj_ctx,

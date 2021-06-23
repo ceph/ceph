@@ -741,24 +741,24 @@ struct cls_rgw_bucket_instance_entry {
   using RESHARD_STATUS = cls_rgw_reshard_status;
   
   cls_rgw_reshard_status reshard_status{RESHARD_STATUS::NOT_RESHARDING};
-  std::string new_bucket_instance_id;
-  int32_t num_shards{-1};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode((uint8_t)reshard_status, bl);
-    encode(new_bucket_instance_id, bl);
-    encode(num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     uint8_t s;
     decode(s, bl);
     reshard_status = (cls_rgw_reshard_status)s;
-    decode(new_bucket_instance_id, bl);
-    decode(num_shards, bl);
+    if (struct_v < 2) { // fields removed from v2
+      std::string bucket_instance_id;
+      decode(bucket_instance_id, bl);
+      int32_t num_shards{-1};
+      decode(num_shards, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -767,15 +767,10 @@ struct cls_rgw_bucket_instance_entry {
 
   void clear() {
     reshard_status = RESHARD_STATUS::NOT_RESHARDING;
-    new_bucket_instance_id.clear();
   }
 
-  void set_status(const std::string& new_instance_id,
-		  int32_t new_num_shards,
-		  cls_rgw_reshard_status s) {
+  void set_status(cls_rgw_reshard_status s) {
     reshard_status = s;
-    new_bucket_instance_id = new_instance_id;
-    num_shards = new_num_shards;
   }
 
   bool resharding() const {
@@ -1246,31 +1241,32 @@ struct cls_rgw_reshard_entry
   std::string tenant;
   std::string bucket_name;
   std::string bucket_id;
-  std::string new_instance_id;
   uint32_t old_num_shards{0};
   uint32_t new_num_shards{0};
 
   cls_rgw_reshard_entry() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(time, bl);
     encode(tenant, bl);
     encode(bucket_name, bl);
     encode(bucket_id, bl);
-    encode(new_instance_id, bl);
     encode(old_num_shards, bl);
     encode(new_num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(time, bl);
     decode(tenant, bl);
     decode(bucket_name, bl);
     decode(bucket_id, bl);
-    decode(new_instance_id, bl);
+    if (struct_v < 2) {
+      std::string new_instance_id; // removed in v2
+      decode(new_instance_id, bl);
+    }
     decode(old_num_shards, bl);
     decode(new_num_shards, bl);
     DECODE_FINISH(bl);

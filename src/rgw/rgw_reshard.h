@@ -21,12 +21,15 @@
 #include "cls/lock/cls_lock_client.h"
 
 #include "rgw_common.h"
+#include "common/fault_injector.h"
 
 
 class RGWReshard;
 namespace rgw { namespace sal {
   class RadosStore;
 } }
+
+using ReshardFaultInjector = FaultInjector<std::string_view>;
 
 class RGWBucketReshardLock {
   using Clock = ceph::coarse_mono_clock;
@@ -65,17 +68,12 @@ public:
 }; // class RGWBucketReshardLock
 
 class RGWBucketReshard {
-public:
-
-  friend class RGWReshard;
-
+ public:
   using Clock = ceph::coarse_mono_clock;
 
-private:
-
-  rgw::sal::RadosStore* store;
+ private:
+  rgw::sal::RadosStore *store;
   RGWBucketInfo bucket_info;
-  std::map<string, bufferlist> bucket_attrs;
 
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
@@ -84,12 +82,9 @@ private:
   // allocated in at once
   static const std::initializer_list<uint16_t> reshard_primes;
 
-  int create_new_bucket_instance(int new_num_shards,
-				 RGWBucketInfo& new_bucket_info,
-                                 const DoutPrefixProvider *dpp);
-  int do_reshard(int num_shards,
-		 RGWBucketInfo& new_bucket_info,
-		 int max_entries,
+  int do_reshard(const rgw::bucket_index_layout_generation& current,
+                 const rgw::bucket_index_layout_generation& target,
+                 int max_entries,
                  bool verbose,
                  ostream *os,
 		 Formatter *formatter,
@@ -100,38 +95,18 @@ public:
   // manage
   RGWBucketReshard(rgw::sal::RadosStore* _store,
 		   const RGWBucketInfo& _bucket_info,
-                   const std::map<string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
-  int execute(int num_shards, int max_op_entries,
-              const DoutPrefixProvider *dpp,
+  int execute(int num_shards, const ReshardFaultInjector& f,
+              int max_op_entries, const DoutPrefixProvider *dpp,
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
-  int cancel(const DoutPrefixProvider *dpp);
-  static int clear_resharding(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
-			      const RGWBucketInfo& bucket_info);
-  int clear_resharding(const DoutPrefixProvider *dpp) {
-    return clear_resharding(dpp, store, bucket_info);
-  }
-  static int clear_index_shard_reshard_status(const DoutPrefixProvider *dpp,
-                                              rgw::sal::RadosStore* store,
-					      const RGWBucketInfo& bucket_info);
-  int clear_index_shard_reshard_status(const DoutPrefixProvider *dpp) {
-    return clear_index_shard_reshard_status(dpp, store, bucket_info);
-  }
-  static int set_resharding_status(const DoutPrefixProvider *dpp,
-                                   rgw::sal::RadosStore* store,
-				   const RGWBucketInfo& bucket_info,
-				   const string& new_instance_id,
-				   int32_t num_shards,
-				   cls_rgw_reshard_status status);
-  int set_resharding_status(const DoutPrefixProvider *dpp, const string& new_instance_id,
-			    int32_t num_shards,
-			    cls_rgw_reshard_status status) {
-    return set_resharding_status(dpp, store, bucket_info,
-				 new_instance_id, num_shards, status);
-  }
+  int cancel(const DoutPrefixProvider* dpp);
+
+  static int clear_resharding(rgw::sal::RadosStore* store,
+			      RGWBucketInfo& bucket_info,
+                              const DoutPrefixProvider* dpp);
 
   static uint32_t get_max_prime_shards() {
     return *std::crbegin(reshard_primes);
@@ -236,13 +211,15 @@ protected:
 public:
   RGWReshard(rgw::sal::RadosStore* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
-  int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
+  int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info);
   int get(cls_rgw_reshard_entry& entry);
-  int remove(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
+  int remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry);
   int list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
   int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
+  int process_entry(const cls_rgw_reshard_entry& entry, int max_entries,
+                    const DoutPrefixProvider *dpp);
   int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp);
   int process_all_logshards(const DoutPrefixProvider *dpp);
   bool going_down();

@@ -339,7 +339,9 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
       std::string s = "missing mandatory field " + std::string(name);
       throw err(s);
     }
-    val = T();
+    if constexpr (std::is_default_constructible_v<T>) {
+      val = T();
+    }
     return false;
   }
 
@@ -512,6 +514,7 @@ static void encode_json(const char *name, const T& val, ceph::Formatter *f)
 
 class utime_t;
 
+void encode_json(const char *name, std::string_view val, ceph::Formatter *f);
 void encode_json(const char *name, const std::string& val, ceph::Formatter *f);
 void encode_json(const char *name, const char *val, ceph::Formatter *f);
 void encode_json(const char *name, bool val, ceph::Formatter *f);

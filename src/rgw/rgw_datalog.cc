@@ -15,6 +15,7 @@
 #include "cls/log/cls_log_client.h"
 
 #include "cls_fifo_legacy.h"
+#include "rgw_bucket_layout.h"
 #include "rgw_datalog.h"
 #include "rgw_log_backing.h"
 #include "rgw_tools.h"
@@ -41,6 +42,7 @@ void rgw_data_change::dump(ceph::Formatter *f) const
   encode_json("key", key, f);
   utime_t ut(timestamp);
   encode_json("timestamp", ut, f);
+  encode_json("gen", gen, f);
 }
 
 void rgw_data_change::decode_json(JSONObj *obj) {
@@ -55,6 +57,7 @@ void rgw_data_change::decode_json(JSONObj *obj) {
   utime_t ut;
   JSONDecoder::decode_json("timestamp", ut, obj);
   timestamp = ut.to_real_time();
+  JSONDecoder::decode_json("gen", gen, obj);
 }
 
 void rgw_data_change_log_entry::dump(Formatter *f) const
@@ -71,6 +74,17 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("log_timestamp", ut, obj);
   log_timestamp = ut.to_real_time();
   JSONDecoder::decode_json("entry", entry, obj);
+}
+
+void rgw_data_notify_entry::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+  encode_json("gen", gen, f);
+}
+
+void rgw_data_notify_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("gen", gen, obj);
 }
 
 class RGWDataChangesOmap final : public RGWDataChangesBE {
@@ -510,7 +524,7 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
 
   auto ut = real_clock::now();
   auto be = bes->head();
-  for (const auto& bs : entries) {
+  for (const auto& [bs, gen] : entries) {
     auto index = choose_oid(bs);
 
     rgw_data_change change;
@@ -518,6 +532,7 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bs.get_key();
     change.timestamp = ut;
+    change.gen = gen;
     encode(change, bl);
 
     m[index].first.push_back(bs);
@@ -557,10 +572,11 @@ void RGWDataChangesLog::_get_change(const rgw_bucket_shard& bs,
   }
 }
 
-void RGWDataChangesLog::register_renew(const rgw_bucket_shard& bs)
+void RGWDataChangesLog::register_renew(const rgw_bucket_shard& bs,
+				       const rgw::bucket_log_layout_generation& gen)
 {
   std::scoped_lock l{lock};
-  cur_cycle.insert(bs);
+  cur_cycle.insert({bs, gen.gen});
 }
 
 void RGWDataChangesLog::update_renewed(const rgw_bucket_shard& bs,
@@ -598,7 +614,11 @@ std::string RGWDataChangesLog::get_oid(uint64_t gen_id, int i) const {
 	  fmt::format("{}.{}", prefix, i));
 }
 
-int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id) {
+int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
+				 const RGWBucketInfo& bucket_info,
+				 const rgw::bucket_log_layout_generation& gen,
+				 int shard_id)
+{
   auto& bucket = bucket_info.bucket;
 
   if (!filter_bucket(dpp, bucket, null_yield)) {
@@ -612,7 +632,8 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketI
   rgw_bucket_shard bs(bucket, shard_id);
 
   int index = choose_oid(bs);
-  mark_modified(index, bs);
+
+  mark_modified(index, bs, gen.gen);
 
   std::unique_lock l(lock);
 
@@ -631,7 +652,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketI
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
     sl.unlock();
-    register_renew(bs);
+    register_renew(bs, gen);
     return 0;
   }
 
@@ -648,7 +669,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketI
     int ret = cond->wait();
     cond->put();
     if (!ret) {
-      register_renew(bs);
+      register_renew(bs, gen);
     }
     return ret;
   }
@@ -673,6 +694,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketI
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bs.get_key();
     change.timestamp = now;
+    change.gen = gen.gen;
     encode(change, bl);
 
     ldpp_dout(dpp, 20) << "RGWDataChangesLog::add_entry() sending update with now=" << now << " cur_expiration=" << expiration << dendl;
@@ -985,19 +1007,19 @@ void RGWDataChangesLog::renew_stop()
   renew_cond.notify_all();
 }
 
-void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
+void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen)
 {
   auto key = bs.get_key();
   {
     std::shared_lock rl{modified_lock}; // read lock to check for existence
     auto shard = modified_shards.find(shard_id);
-    if (shard != modified_shards.end() && shard->second.count(key)) {
+    if (shard != modified_shards.end() && shard->second.count({key, gen})) {
       return;
     }
   }
 
   std::unique_lock wl{modified_lock}; // write lock for insertion
-  modified_shards[shard_id].insert(key);
+  modified_shards[shard_id].insert(rgw_data_notify_entry{key, gen});
 }
 
 std::string RGWDataChangesLog::max_marker() const {

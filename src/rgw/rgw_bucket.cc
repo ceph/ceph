@@ -331,7 +331,9 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::Store* store, rgw::sal::Bucket* bucket
   if (ret < 0)
     return ret;
 
-  ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  const auto& latest_log = bucket->get_info().layout.logs.back();
+  const auto& index = log_to_index_layout(latest_log);
+  ret = bucket->get_bucket_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -734,6 +736,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
 
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
+
   while (results.is_truncated) {
     rgw::sal::Bucket::ListParams params;
 
@@ -806,15 +809,16 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
 
   int shards_num = bucket->get_info().layout.current_index.layout.normal.num_shards? bucket->get_info().layout.current_index.layout.normal.num_shards : 1;
   int shard_id = bucket->get_info().layout.current_index.layout.normal.num_shards? 0 : -1;
+  const auto& log_layout = bucket->get_info().layout.logs.back();
 
   if (!sync) {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_stop(dpp, bucket->get_info(), -1);
+    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_stop(dpp, bucket->get_info(), log_layout, -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing stop bilog:" + cpp_strerror(-r));
       return r;
     }
   } else {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_start(dpp, bucket->get_info(), -1);
+    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_start(dpp, bucket->get_info(), log_layout, -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing resync bilog:" + cpp_strerror(-r));
       return r;
@@ -822,7 +826,10 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
   }
 
   for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->add_entry(dpp, bucket->get_info(), shard_id);
+    r = static_cast<rgw::sal::RadosStore*>(store)
+      ->svc()->datalog_rados->add_entry(dpp, bucket->get_info(),
+					bucket->get_info().layout.logs.back(),
+					shard_id);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing data log:" + cpp_strerror(-r));
       return r;
@@ -1186,7 +1193,9 @@ static int bucket_stats(rgw::sal::Store* store,
 
   string bucket_ver, master_ver;
   string max_marker;
-  ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+  const auto& latest_log = bucket->get_info().layout.logs.back();
+  const auto& index = log_to_index_layout(latest_log);
+  ret = bucket->get_bucket_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
     return ret;
@@ -1293,7 +1302,9 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Store* store,
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
+	const auto& latest_log = bucket->get_info().layout.logs.back();
+	const auto& index = log_to_index_layout(latest_log);
+	ret = bucket->get_bucket_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
 
 	if (ret < 0)
 	  continue;
@@ -1460,12 +1471,24 @@ int RGWBucketAdminOp::set_quota(rgw::sal::Store* store, RGWBucketAdminOpState& o
 
 static int purge_bucket_instance(rgw::sal::Store* store, const RGWBucketInfo& bucket_info, const DoutPrefixProvider *dpp)
 {
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = store->get_bucket(nullptr, bucket_info, &bucket);
-  if (ret < 0)
-    return ret;
-
-  return bucket->purge_instance(dpp);
+  const auto& index = bucket_info.layout.current_index;
+  const int max_shards = num_shards(index);
+  for (int i = 0; i < max_shards; i++) {
+    RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(store)->getRados());
+    int ret = bs.init(dpp, bucket_info, index, i);
+    if (ret < 0) {
+      cerr << "ERROR: bs.init(bucket=" << bucket_info.bucket << ", shard=" << i
+           << "): " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+    ret = static_cast<rgw::sal::RadosStore*>(store)->getRados()->bi_remove(bs);
+    if (ret < 0) {
+      cerr << "ERROR: failed to remove bucket index object: "
+           << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+  }
+  return 0;
 }
 
 inline auto split_tenant(const std::string& bucket_name){
@@ -2417,9 +2440,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
   }
 
   if (layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
-    layout.logs.push_back(log_layout_from_index(
-			    layout.current_index.gen,
-			    layout.current_index.layout.normal));
+    layout.logs.push_back(log_layout_from_index(0, layout.current_index));
   }
 }
 
@@ -2438,12 +2459,11 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
   if (from_remote_zone) {
     // don't sync bucket layout changes
     if (!exists) {
-      auto& bci_index = bci.info.layout.current_index.layout;
-      auto index_type = bci_index.type;
-      auto num_shards = bci_index.normal.num_shards;
+      // replace peer's layout with default-constructed, then apply our defaults
+      bci.info.layout = rgw::BucketLayout{};
       init_default_bucket_layout(cct, bci.info.layout,
 				 bihandler->svc.zone->get_zone(),
-				 num_shards, index_type);
+				 std::nullopt, std::nullopt);
     } else {
       bci.info.layout = old_bci->info.layout;
     }
@@ -2511,7 +2531,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
 
   objv_tracker = bci.info.objv_tracker;
 
-  int ret = bihandler->svc.bi->init_index(dpp, bci.info);
+  int ret = bihandler->svc.bi->init_index(dpp, bci.info, bci.info.layout.current_index);
   if (ret < 0) {
     return ret;
   }

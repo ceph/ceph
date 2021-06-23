@@ -287,20 +287,23 @@ class RadosBucket : public Bucket {
     }
 
     ~RadosBucket() { }
-
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) override;
     Object* create_object(const rgw_obj_key& key /* Attributes */) override;
     virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
-    virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
+    virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int get_bucket_info(const DoutPrefixProvider* dpp, optional_yield y) override;
-    virtual int get_bucket_stats(const DoutPrefixProvider *dpp, int shard_id,
-				 std::string* bucket_ver, std::string* master_ver,
+
+    virtual int get_bucket_stats(const DoutPrefixProvider *dpp,
+				 const bucket_index_layout_generation& idx_layout,
+				 int shard_id, std::string* bucket_ver, std::string* master_ver,
 				 std::map<RGWObjCategory, RGWStorageStats>& stats,
 				 std::string* max_marker = nullptr,
 				 bool* syncstopped = nullptr) override;
-    virtual int get_bucket_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB* ctx) override;
+    virtual int get_bucket_stats_async(const DoutPrefixProvider *dpp,
+				       const bucket_index_layout_generation& idx_layout,
+				       int shard_id, RGWGetBucketStats_CB* ctx) override;
     virtual int read_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int update_container_stats(const DoutPrefixProvider* dpp) override;
@@ -428,7 +431,7 @@ class RadosStore : public Store {
 					optional_yield y) override;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
     virtual void wakeup_meta_sync_shards(set<int>& shard_ids) override { rados->wakeup_meta_sync_shards(shard_ids); }
-    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) override { rados->wakeup_data_sync_shards(source_zone, shard_ids); }
+    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >& shard_ids) override { rados->wakeup_data_sync_shards(source_zone, shard_ids); }
     virtual int clear_usage(const DoutPrefixProvider *dpp) override { return rados->clear_usage(dpp); }
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,

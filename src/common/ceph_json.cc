@@ -519,6 +519,11 @@ void decode_json_obj(ceph_dir_layout& i, JSONObj *obj){
     i.dl_unused3 = tmp;
 }
 
+void encode_json(const char *name, std::string_view val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
 void encode_json(const char *name, const string& val, Formatter *f)
 {
   f->dump_string(name, val);

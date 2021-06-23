@@ -465,7 +465,7 @@ def check_all_buckets_exist(zone_conn, buckets):
         try:
             zone_conn.get_bucket(b)
         except:
-            log.critical('zone %s does not contain bucket %s', zone.name, b)
+            log.critical('zone %s does not contain bucket %s', zone_conn.zone.name, b)
             return False
 
     return True
@@ -1099,6 +1099,7 @@ def test_set_bucket_policy():
         bucket.set_policy(policy)
         assert(bucket.get_policy().decode('ascii') == policy)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1113,6 +1114,7 @@ def test_bucket_sync_disable():
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_enable_right_after_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1147,6 +1149,7 @@ def test_bucket_sync_enable_right_after_disable():
 
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('bucket_sync_disable')
 def test_bucket_sync_disable_enable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1204,6 +1207,7 @@ def test_multipart_object_sync():
     mp.upload_part_from_file(StringIO('d' * part_size), 4)
     mp.complete_upload()
 
+    zonegroup_meta_checkpoint(zonegroup)
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_encrypted_object_sync():
@@ -1304,6 +1308,74 @@ def test_bucket_index_log_trim():
     # verify cold bucket has empty bilog
     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
     assert(len(cold_bilog) == 0)
+
+@attr('bucket_reshard')
+def test_bucket_reshard_incremental():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload some objects
+    for objname in ('a', 'b', 'c', 'd'):
+        k = new_key(zone, bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # reshard in each zone
+    for z in zonegroup_conns.rw_zones:
+        z.zone.cluster.admin(['bucket', 'reshard',
+            '--bucket', bucket.name,
+            '--num-shards', '3',
+            '--yes-i-really-mean-it'])
+
+    # upload more objects
+    for objname in ('e', 'f', 'g', 'h'):
+        k = new_key(zone, bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+@attr('bucket_reshard')
+def test_bucket_reshard_full():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # stop gateways in other zones so we can force the bucket to full sync
+    for z in zonegroup_conns.rw_zones[1:]:
+        z.zone.stop()
+
+    # use try-finally to restart gateways even if something fails
+    try:
+        # upload some objects
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string('foo')
+
+        # reshard on first zone
+        zone.zone.cluster.admin(['bucket', 'reshard',
+            '--bucket', bucket.name,
+            '--num-shards', '3',
+            '--yes-i-really-mean-it'])
+
+        # upload more objects
+        for objname in ('e', 'f', 'g', 'h'):
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string('foo')
+    finally:
+        for z in zonegroup_conns.rw_zones[1:]:
+            z.zone.start()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_bucket_creation_time():
     zonegroup = realm.master_zonegroup()
