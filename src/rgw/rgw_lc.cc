@@ -223,6 +223,7 @@ void *RGWLC::LCWorker::entry() {
 			  << r << dendl;
       }
       ldpp_dout(dpp, 2) << "life cycle: stop" << dendl;
+      cloud_targets.clear(); // clear cloud targets
     }
     if (lc->going_down())
       break;
@@ -684,18 +685,8 @@ public:
   static constexpr uint32_t FLAG_EWAIT_SYNC =  0x0001;
   static constexpr uint32_t FLAG_DWAIT_SYNC =  0x0002;
   static constexpr uint32_t FLAG_EDRAIN_SYNC = 0x0004;
-  static constexpr uint32_t FLAG_HTTP_MGR = 0x0008;
 
 private:
-  class C_WorkQTimerCtx: public Context {
-    WorkQ* wq;
-    public:
-      C_WorkQTimerCtx(WorkQ* _wq): wq(_wq) {}
-      void finish(int r) override {
-        wq->stop_http_manager();
-      }
-  };
-
   const work_f bsf = [](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {};
   RGWLC::LCWorker* wk;
   uint32_t qmax;
@@ -705,27 +696,13 @@ private:
   uint32_t flags;
   vector<WorkItem> items;
   work_f f;
-  std::unique_ptr<RGWCoroutinesManager> crs;
-  std::unique_ptr<RGWHTTPManager> http_manager;
-  bool is_http_mgr_started{false};
-  ceph::mutex timer_mtx;
-  SafeTimer timer;
-  int timer_wait_sec = 200; //seconds
-  C_WorkQTimerCtx* timer_ctx = nullptr;
 
 public:
   WorkQ(RGWLC::LCWorker* wk, uint32_t ix, uint32_t qmax)
-    : wk(wk), qmax(qmax), ix(ix), flags(FLAG_NONE), f(bsf),
-      timer_mtx(ceph::make_mutex("WorkQTimerMutex")),
-      timer((CephContext*)(wk->cct), timer_mtx)
+    : wk(wk), qmax(qmax), ix(ix), flags(FLAG_NONE), f(bsf)
     {
       create(thr_name().c_str());
-      timer.init();
     }
-
-  ~WorkQ() {
-    timer.shutdown();
-  }
 
   std::string thr_name() {
     return std::string{"wp_thrd: "}
@@ -736,61 +713,12 @@ public:
     f = _f;
   }
 
-  RGWCoroutinesManager* get_crs() { return crs.get(); }
-  RGWHTTPManager* get_http_manager() { return http_manager.get(); }
-
-  int start_http_manager(rgw::sal::Store* store) {
-    int ret = 0;
-
-    if (is_http_mgr_started)
-      return 0;
-
-    /* http_mngr */
-    if(!crs) {
-      crs.reset(new RGWCoroutinesManager(store->ctx(), store->get_cr_registry()));
-    }
-    if (!http_manager) {
-      http_manager.reset(new RGWHTTPManager(store->ctx(), crs.get()->get_completion_mgr()));
-    }      
-
-    ret = http_manager->start();
-    if (ret < 0) {
-      dout(5) << "RGWLC:: http_manager->start() failed ret = "
-	          << ret << dendl;
-      return ret;
-    }
-
-    is_http_mgr_started = true;
-    flags |= FLAG_HTTP_MGR;
-
-    return ret;
-  }
-
-  int stop_http_manager() {
-    if (!is_http_mgr_started) {
-      return 0;
-    }
-
-    http_manager.reset();
-    crs.reset();
-  
-    is_http_mgr_started = false;
-	flags &= ~FLAG_HTTP_MGR;
-    timer.cancel_all_events();
-    timer_ctx = nullptr;
-    return 0;
-  }
-
   void enqueue(WorkItem&& item) {
     unique_lock uniq(mtx);
     while ((!wk->get_lc()->going_down()) &&
 	   (items.size() > qmax)) {
       flags |= FLAG_EWAIT_SYNC;
       cv.wait_for(uniq, 200ms);
-    }
-    if (timer_ctx && (flags & FLAG_HTTP_MGR)) {
-      timer.cancel_all_events();
-      timer_ctx = nullptr;
     }
     items.push_back(item);
     if (flags & FLAG_DWAIT_SYNC) {
@@ -815,10 +743,6 @@ private:
       /* clear drain state, as we are NOT doing work and qlen==0 */
       if (flags & FLAG_EDRAIN_SYNC) {
 	flags &= ~FLAG_EDRAIN_SYNC;
-      }
-      if ((flags & FLAG_HTTP_MGR) && !timer_ctx) {
-        timer_ctx = new C_WorkQTimerCtx(this);
-        timer.add_event_after(timer_wait_sec, timer_ctx);
       }
       flags |= FLAG_DWAIT_SYNC;
       cv.wait_for(uniq, 200ms);
@@ -1329,28 +1253,26 @@ public:
   }
 
   /* find out if the the storage class is remote cloud */
-  int get_tier_target(const RGWZoneGroup &zonegroup, rgw_placement_rule& rule,
-                      string& storage_class, RGWZoneGroupPlacementTier &tier) {
+  int get_tier_target(const RGWZoneGroup &zonegroup, const rgw_placement_rule& rule,
+                      RGWZoneGroupPlacementTier &tier) {
     std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
     titer = zonegroup.placement_targets.find(rule.name);
     if (titer == zonegroup.placement_targets.end()) {
       return -ENOENT;
     }
 
-    if (storage_class.empty()) {
-      storage_class = rule.storage_class;
-    }
-
     const auto& target_rule = titer->second;
     std::map<std::string, RGWZoneGroupPlacementTier>::const_iterator ttier;
-    ttier = target_rule.tier_targets.find(storage_class);
+    ttier = target_rule.tier_targets.find(rule.storage_class);
     if (ttier != target_rule.tier_targets.end()) {
       tier = ttier->second;
+    } else { // not found
+      return -ENOENT;
     }
     return 0;
   }
 
-  int delete_tier_obj(lc_op_ctx& oc, RGWLCCloudTierCtx& tier_ctx) {
+  int delete_tier_obj(lc_op_ctx& oc) {
     int ret = 0;
 
     /* If bucket is versioned, create delete_marker for current version
@@ -1387,28 +1309,28 @@ public:
     }
 
     attrs = oc.obj->get_attrs();
-    (*tier_ctx.obj)->set_atomic(&tier_ctx.rctx);
     
-    RGWObjState *s = tier_ctx.rctx.get_state((*tier_ctx.obj)->get_obj());
-    std::unique_ptr<rgw::sal::Object::WriteOp> obj_op(oc.obj->get_write_op(&oc.rctx));
+    rgw::sal::RadosStore *rados = static_cast<rgw::sal::RadosStore*>(oc.store);
+    RGWRados::Object op_target(rados->getRados(), oc.bucket->get_info(), oc.rctx, oc.obj->get_obj());
+    RGWRados::Object::Write obj_op(&op_target);
 
-    obj_op->params.modify_tail = true;
-    obj_op->params.flags = PUT_OBJ_CREATE;
-    obj_op->params.category = RGWObjCategory::CloudTiered;
-    obj_op->params.delete_at = real_time();
+    obj_op.meta.modify_tail = true;
+    obj_op.meta.flags = PUT_OBJ_CREATE;
+    obj_op.meta.category = RGWObjCategory::CloudTiered;
+    obj_op.meta.delete_at = real_time();
     bufferlist blo;
-    blo.append("");
-    obj_op->params.data = &blo;
-    obj_op->params.if_match = NULL;
-    obj_op->params.if_nomatch = NULL;
-    obj_op->params.user_data = NULL;
-    obj_op->params.zones_trace = NULL;
-    obj_op->params.delete_at = real_time();
-    obj_op->params.olh_epoch = tier_ctx.o.versioned_epoch;
+    obj_op.meta.data = &blo;
+    obj_op.meta.if_match = NULL;
+    obj_op.meta.if_nomatch = NULL;
+    obj_op.meta.user_data = NULL;
+    obj_op.meta.zones_trace = NULL;
+    obj_op.meta.delete_at = real_time();
+    obj_op.meta.olh_epoch = tier_ctx.o.versioned_epoch;
     
     RGWObjManifest *pmanifest; 
+    RGWObjManifest manifest;
 
-    pmanifest = &(*s->manifest);
+    pmanifest = &manifest;
     RGWObjTier tier_config;
     tier_config.name = oc.tier.storage_class;
     tier_config.tier_placement = oc.tier;
@@ -1421,19 +1343,13 @@ public:
     rgw_placement_rule target_placement;
     target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
     target_placement.storage_class = oc.tier.storage_class;
-    pmanifest->set_head(target_placement, (*tier_ctx.obj)->get_obj(), 0);
+    pmanifest->set_head(target_placement, tier_ctx.obj->get_obj(), 0);
 
-    pmanifest->set_tail_placement(target_placement, (*tier_ctx.obj)->get_obj().bucket);
+    pmanifest->set_tail_placement(target_placement, tier_ctx.obj->get_obj().bucket);
 
-    /* should the obj_size also be set to '0' or is it needed
-     * to keep track of original size before transition. 
-     * But unless obj_size is set to '0', obj_iters cannot
-     * be reset I guess. For regular transitioned objects
-     * obj_size remains the same even when object is moved to other
-     * storage class. So maybe better to keep it the same way.
-     */
+    pmanifest->set_obj_size(0);
 
-    obj_op->params.manifest = pmanifest;
+    obj_op.meta.manifest = pmanifest;
 
     /* update storage class */
     bufferlist bl;
@@ -1443,15 +1359,7 @@ public:
     attrs.erase(RGW_ATTR_ID_TAG);
     attrs.erase(RGW_ATTR_TAIL_TAG);
 
-    obj_op->params.attrs = &attrs;
-
-    r = obj_op->prepare(null_yield);
-    if (r < 0) {
-      return r;
-    }
-
-
-    r = obj_op->write_meta(oc.dpp, tier_ctx.o.meta.size, 0, null_yield);
+    r = obj_op.write_meta(oc.dpp, 0, 0, attrs, null_yield);
     if (r < 0) {
       return r;
     }
@@ -1460,8 +1368,6 @@ public:
   }
 
   int transition_obj_to_cloud(lc_op_ctx& oc) {
-    std::shared_ptr<RGWRESTConn> conn;
-
     /* init */
     string id = "cloudid";
     string endpoint = oc.tier.t.s3.endpoint;
@@ -1482,65 +1388,48 @@ public:
       boost::algorithm::to_lower(bucket_name);
     }
 
-    conn.reset(new S3RESTConn(oc.cct, oc.store, id, { endpoint }, key, region, host_style));
-
-    int ret = oc.wq->start_http_manager(oc.store);
-    if (ret < 0) {
-      ldpp_dout(oc.dpp, 0) << "failed in start_http_manager() ret=" << ret << dendl;
-      return ret;
-    }
-
-    RGWCoroutinesManager* crs = oc.wq->get_crs();
-    RGWHTTPManager* http_manager = oc.wq->get_http_manager();
-
-    if (!crs || !http_manager) {
-      /* maybe race..return and retry */
-      ldpp_dout(oc.dpp, 0) << " http_manager and crs not initialized" << dendl;
-      return -1;
-    }
+    /* Create RGW REST connection */
+    S3RESTConn conn(oc.cct, oc.store, id, { endpoint }, key, region, host_style);
 
     RGWLCCloudTierCtx tier_ctx(oc.cct, oc.dpp, oc.o, oc.store, oc.bucket->get_info(),
-                        &oc.obj, oc.rctx, conn, bucket_name,
-                        oc.tier.t.s3.target_storage_class, http_manager);
+                        oc.obj.get(), oc.rctx, conn, bucket_name,
+                        oc.tier.t.s3.target_storage_class);
     tier_ctx.acl_mappings = oc.tier.t.s3.acl_mappings;
     tier_ctx.multipart_min_part_size = oc.tier.t.s3.multipart_min_part_size;
     tier_ctx.multipart_sync_threshold = oc.tier.t.s3.multipart_sync_threshold;
     tier_ctx.storage_class = oc.tier.storage_class;
 
-    bool al_tiered = false;
+    // check if target_path is already created
+    std::set<std::string>& cloud_targets = oc.env.worker->get_cloud_targets();
+    std::pair<std::set<std::string>::iterator, bool> it;
 
-    /* Since multiple zones may try to transition the same object to the cloud,
-     * verify if the object is already transitioned. And since its just a best
-     * effort, do not bail out in case of any errors.
-     */
-    ret = crs->run(oc.dpp, new RGWLCCloudCheckCR(tier_ctx, &al_tiered));
-    
-    if (ret < 0) {
-      ldpp_dout(oc.dpp, 0) << "ERROR: failed in RGWCloudCheckCR() ret=" << ret << dendl;
-    }
+    it = cloud_targets.insert(bucket_name);
+    tier_ctx.target_bucket_created = !(it.second);
 
-    if (al_tiered) {
-      ldout(tier_ctx.cct, 20) << "Object (" << oc.o.key << ") is already tiered" << dendl;
-      return 0;
-    } else {
-	  ret = crs->run(oc.dpp, new RGWLCCloudTierCR(tier_ctx));
-    }
-         
+    ldpp_dout(oc.dpp, 0) << "Transitioning object(" << oc.o.key << ") to the cloud endpoint(" << endpoint << ")" << dendl;
+
+    /* Transition object to cloud end point */
+    int ret = rgw_cloud_tier_transfer_object(tier_ctx);
+
     if (ret < 0) {
-      ldpp_dout(oc.dpp, 0) << "ERROR: failed in RGWCloudTierCR() ret=" << ret << dendl;
+      ldpp_dout(oc.dpp, 0) << "ERROR: failed to transfer object(" << oc.o.key << ") to the cloud endpoint(" << endpoint << ") ret=" << ret << dendl;
       return ret;
+
+      if (!tier_ctx.target_bucket_created) {
+        cloud_targets.erase(it.first);
+      }
     }
 
     if (delete_object) {
-      ret = delete_tier_obj(oc, tier_ctx);
+      ret = delete_tier_obj(oc);
       if (ret < 0) {
-        ldpp_dout(oc.dpp, 0) << "ERROR: Deleting tier object failed ret=" << ret << dendl;
+        ldpp_dout(oc.dpp, 0) << "ERROR: Deleting tier object(" << oc.o.key << ") failed ret=" << ret << dendl;
         return ret;
       }
     } else {
       ret = update_tier_obj(oc, tier_ctx);
       if (ret < 0) {
-        ldpp_dout(oc.dpp, 0) << "ERROR: Updating tier object failed ret=" << ret << dendl;
+        ldpp_dout(oc.dpp, 0) << "ERROR: Updating tier object(" << oc.o.key << ") failed ret=" << ret << dendl;
         return ret;
       }
     }
@@ -1551,6 +1440,13 @@ public:
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
     int r;
+
+    if (oc.o.meta.category == RGWObjCategory::CloudTiered) {
+      /* Skip objects which are already cloud tiered. */
+      ldpp_dout(oc.dpp, 30) << "Object(key:" << oc.o.key << ") is already cloud tiered to cloud-s3 tier: " << oc.o.meta.storage_class << dendl;
+      return 0;
+    }
+
     std::string tier_type = ""; 
     const RGWZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
 
@@ -1558,16 +1454,10 @@ public:
     target_placement.inherit_from(oc.bucket->get_placement_rule());
     target_placement.storage_class = transition.storage_class;
 
-    r = get_tier_target(zonegroup, target_placement, target_placement.storage_class, oc.tier);
+    r = get_tier_target(zonegroup, target_placement, oc.tier);
 
     if (!r && oc.tier.tier_type == "cloud-s3") {
-      ldpp_dout(oc.dpp, 20) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
-      if (oc.o.meta.category == RGWObjCategory::CloudTiered) {
-        /* Skip objects which are already cloud tiered. */
-        ldpp_dout(oc.dpp, 20) << "Object(key:" << oc.o.key << ") is already cloud tiered to cloud-s3 tier: " << oc.o.meta.storage_class << dendl;
-        return 0;
-      }
-
+      ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
       if (!oc.o.is_current() &&
           !pass_object_lock_check(oc.store, oc.obj.get(), oc.rctx, oc.dpp)) {
         /* Skip objects which has object lock enabled. */

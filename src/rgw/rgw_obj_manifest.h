@@ -149,7 +149,7 @@ struct RGWObjManifestRule {
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
 struct RGWObjTier {
-    string name;
+    std::string name;
     RGWZoneGroupPlacementTier tier_placement;
     bool is_multipart_upload{false};
 
@@ -193,7 +193,7 @@ protected:
 
   std::string tail_instance; /* tail object's instance */
 
-  string tier_type;
+  std::string tier_type;
   RGWObjTier tier_config;
 
   void convert_to_explicit(const DoutPrefixProvider *dpp, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
@@ -452,7 +452,7 @@ public:
       return tier_type;
   }
 
-  inline void set_tier_type(string value) {
+  inline void set_tier_type(std::string value) {
       /* Only "cloud-s3" tier-type is supported for now */
       if (value == "cloud-s3") {
         tier_type = value;

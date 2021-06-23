@@ -376,12 +376,12 @@ int RGWRESTConn::get_resource(const DoutPrefixProvider *dpp,
   return req.complete_request(y);
 }
 
-int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const string& method,
-                        const string& resource, rgw_http_param_pair *extra_params,
-		                map<string, string> *extra_headers, bufferlist& bl,
+int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string& method,
+                        const std::string& resource, rgw_http_param_pair *extra_params,
+		                std::map<std::string, std::string> *extra_headers, bufferlist& bl,
                         bufferlist *send_data, RGWHTTPManager *mgr, optional_yield y)
 {
-  string url;
+  std::string url;
   int ret = get_url(url);
   if (ret < 0)
     return ret;
@@ -398,7 +398,7 @@ int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const string& meth
 
   RGWRESTStreamSendRequest req(cct, method, url, &cb, NULL, &params, api_name, host_style);
 
-  map<string, string> headers;
+  std::map<std::string, std::string> headers;
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
   }
