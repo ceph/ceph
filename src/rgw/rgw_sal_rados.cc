@@ -86,7 +86,12 @@ RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
   return nullptr;
 }
 
-int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y)
+int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp,
+			       bool delete_children,
+			       std::string prefix,
+			       std::string delimiter,
+			       bool forward_to_master,
+			       req_info* req_info, optional_yield y)
 {
   int ret;
 
@@ -101,13 +106,12 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_chi
 
   ListResults results;
 
-  bool is_truncated = false;
   do {
     results.objs.clear();
 
-      ret = list(dpp, params, 1000, results, y);
-      if (ret < 0)
-	return ret;
+    ret = list(dpp, params, 1000, results, y);
+    if (ret < 0)
+      return ret;
 
     if (!results.objs.empty() && !delete_children) {
       ldpp_dout(dpp, -1) << "ERROR: could not remove non-empty bucket " << info.bucket.name <<
@@ -123,7 +127,7 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_chi
 	return ret;
       }
     }
-  } while(is_truncated);
+  } while(results.is_truncated);
 
   /* If there's a prefix, then we are aborting multiparts as well */
   if (!prefix.empty()) {
@@ -1018,7 +1022,7 @@ int RGWRadosStore::cluster_stat(RGWClusterStat& stats)
   return ret;
 }
 
-int RGWRadosStore::create_bucket(const DoutPrefixProvider *dpp, 
+int RGWRadosStore::create_bucket(const DoutPrefixProvider *dpp,
                                  RGWUser& u, const rgw_bucket& b,
 				 const string& zonegroup_id,
 				 rgw_placement_rule& placement_rule,
