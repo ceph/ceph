@@ -972,6 +972,100 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
   }
 };
 
+class RenameFilesystemHandler : public FileSystemCommandHandler
+{
+  public:
+  explicit RenameFilesystemHandler(Paxos *paxos)
+    : FileSystemCommandHandler("fs rename"), m_paxos(paxos)
+  {
+  }
+
+  bool batched_propose() override {
+    return true;
+  }
+
+  int handle(
+      Monitor *mon,
+      FSMap& fsmap,
+      MonOpRequestRef op,
+      const cmdmap_t& cmdmap,
+      std::stringstream &ss) override
+  {
+    ceph_assert(m_paxos->is_plugged());
+
+    string fs_name;
+    cmd_getval(cmdmap, "fs_name", fs_name);
+    auto fs = fsmap.get_filesystem(fs_name);
+
+    string new_fs_name;
+    cmd_getval(cmdmap, "new_fs_name", new_fs_name);
+    auto new_fs = fsmap.get_filesystem(new_fs_name);
+
+    if (fs == nullptr) {
+        if (new_fs) {
+          // make 'fs rename' idempotent
+	  ss << "File system may already have been renamed. Desired file system '"
+	     << new_fs_name << "' exists.";
+	  return 0;
+	} else {
+	  ss << "File system '" << fs_name << "' does not exist";
+	  return -ENOENT;
+	}
+    }
+
+    if (new_fs) {
+      ss << "Desired file system name '" << new_fs_name << "' already in use";
+      return -EINVAL;
+    }
+
+    if (fs->mirror_info.mirrored) {
+      ss << "Mirroring is enabled on file system '"<< fs_name << "'. Disable mirroring on the "
+        "file system after ensuring it's OK to do so, and then retry to rename.";
+      return -EPERM;
+    }
+
+    // Check for confirmation flag
+    bool sure = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
+      ss << "this is a potentially disruptive operation, clients' cephx credentials need reauthorized "
+        "to access the file system and its pools with the new name. "
+        "Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      return -EPERM;
+    }
+
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
+    }
+    for (const auto p : fs->mds_map.get_data_pools()) {
+      mon->osdmon()->do_application_enable(p,
+					   pg_pool_t::APPLICATION_NAME_CEPHFS,
+					   "data", new_fs_name, true);
+    }
+
+    mon->osdmon()->do_application_enable(fs->mds_map.get_metadata_pool(),
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "metadata", new_fs_name, true);
+    mon->osdmon()->propose_pending();
+
+    auto f = [new_fs_name](auto fs) {
+                    fs->mds_map.set_fs_name(new_fs_name);
+             };
+    fsmap.modify_filesystem(fs->fscid, std::move(f));
+
+    ss << "File system is renamed. cephx credentials authorized to "
+          "old file system name need to be reauthorized to new file "
+          "system name.";
+
+    return 0;
+  }
+
+private:
+  Paxos *m_paxos;
+};
+
 class RemoveDataPoolHandler : public FileSystemCommandHandler
 {
   public:
@@ -1285,6 +1379,7 @@ FileSystemCommandHandler::load(Paxos *paxos)
   handlers.push_back(std::make_shared<FsNewHandler>(paxos));
   handlers.push_back(std::make_shared<RemoveFilesystemHandler>());
   handlers.push_back(std::make_shared<ResetFilesystemHandler>());
+  handlers.push_back(std::make_shared<RenameFilesystemHandler>(paxos));
 
   handlers.push_back(std::make_shared<SetDefaultHandler>());
   handlers.push_back(std::make_shared<AliasHandler<SetDefaultHandler> >(
@@ -1383,8 +1478,9 @@ int FileSystemCommandHandler::is_op_allowed(
 
     auto fs = fsmap_copy.get_filesystem(fs_name);
     if (fs == nullptr) {
-      /* let "fs rm" handle idempotent case where file system does not exist */
-      if (!(get_prefix() == "fs rm" && fsmap.get_filesystem(fs_name) == nullptr)) {
+      auto prefix = get_prefix();
+      /* let "fs rm" and "fs rename" handle idempotent cases where file systems do not exist */
+      if (!(prefix == "fs rm" || prefix == "fs rename") && fsmap.get_filesystem(fs_name) == nullptr) {
         ss << "Filesystem not found: '" << fs_name << "'";
         return -ENOENT;
       }

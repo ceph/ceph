@@ -28,7 +28,9 @@ public:
   uuid_d fsid;
   epoch_t epoch = 0;
   ceph::buffer::list encoded;
-  std::string map_fs_name;
+  // don't really need map_fs_name. it was accidentally added in 51af2346fdf
+  // set it to empty string.
+  std::string map_fs_name = std::string();
 
   version_t get_epoch() const { return epoch; }
   const ceph::buffer::list& get_encoded() const { return encoded; }
@@ -37,10 +39,9 @@ protected:
   MMDSMap() : 
     SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION} {}
 
-  MMDSMap(const uuid_d &f, const MDSMap &mm,
-          const std::string mf = std::string()) :
+  MMDSMap(const uuid_d &f, const MDSMap &mm) :
     SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION},
-    fsid(f), map_fs_name(mf) {
+    fsid(f) {
     epoch = mm.get_epoch();
     mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
   }

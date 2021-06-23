@@ -280,6 +280,7 @@ COMMAND("versions",
  * MDS commands (MDSMonitor.cc)
  */
 
+#define FS_NAME_GOODCHARS "[A-Za-z0-9-_.]"
 COMMAND_WITH_FLAG("mds stat", "show MDS status", "mds", "r", FLAG(HIDDEN))
 COMMAND("fs dump "
 	"name=epoch,type=CephInt,req=false,range=0",
@@ -326,8 +327,8 @@ COMMAND("mds compat rm_incompat "
 	"name=feature,type=CephInt,range=0",
 	"remove incompatible feature", "mds", "rw")
 COMMAND("fs new "
-	"name=fs_name,type=CephString,goodchars=[A-Za-z0-9-_.] "
-	"name=metadata,type=CephString "
+	"name=fs_name,type=CephString,goodchars=" FS_NAME_GOODCHARS
+	" name=metadata,type=CephString "
 	"name=data,type=CephString "
 	"name=force,type=CephBool,req=false "
 	"name=allow_dangerous_metadata_overlay,type=CephBool,req=false",
@@ -412,6 +413,11 @@ COMMAND("fs mirror peer_remove "
 	"name=fs_name,type=CephString "
 	"name=uuid,type=CephString ",
 	"remove a mirror peer for a ceph filesystem", "mds", "rw")
+COMMAND("fs rename "
+	"name=fs_name,type=CephString "
+	"name=new_fs_name,type=CephString,goodchars=" FS_NAME_GOODCHARS
+	" name=yes_i_really_mean_it,type=CephBool,req=false",
+	"rename a ceph file system", "mds", "rw")
 
 /*
  * Monmap commands

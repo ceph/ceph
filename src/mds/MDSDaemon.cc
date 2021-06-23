@@ -761,7 +761,7 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRankDispatcher(whoami, m->map_fs_name, mds_lock, clog,
+      mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
           timer, beacon, mdsmap, messenger, monc, &mgrc,
           new LambdaContext([this](int r){respawn();}),
           new LambdaContext([this](int r){suicide();}),
