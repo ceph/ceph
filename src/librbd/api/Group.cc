@@ -41,12 +41,12 @@ template <typename I>
 snap_t get_group_snap_id(I* ictx,
                          const cls::rbd::SnapshotNamespace& in_snap_namespace) {
   ceph_assert(ceph_mutex_is_locked(ictx->image_lock));
-  auto it = ictx->snap_ids.lower_bound({cls::rbd::GroupSnapshotNamespace{},
+  auto it = ictx->snap_ids.lower_bound({cls::rbd::GroupImageSnapshotNamespace{},
                                         ""});
   for (; it != ictx->snap_ids.end(); ++it) {
     if (it->first.first == in_snap_namespace) {
       return it->second;
-    } else if (!std::holds_alternative<cls::rbd::GroupSnapshotNamespace>(
+    } else if (!std::holds_alternative<cls::rbd::GroupImageSnapshotNamespace>(
 		 it->first.first)) {
       break;
     }
@@ -183,8 +183,8 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
 
   std::vector<librbd::ImageCtx*> ictxs;
 
-  cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
-				      group_snap.id};
+  cls::rbd::GroupImageSnapshotNamespace ne{group_ioctx.get_id(), group_id,
+                                           group_snap.id};
 
   ldout(cct, 20) << "Removing snapshots" << dendl;
   int snap_count = group_snap.snaps.size();
@@ -289,8 +289,8 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
 
   std::vector<librbd::ImageCtx*> ictxs;
 
-  cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
-                                      group_snap.id};
+  cls::rbd::GroupImageSnapshotNamespace ne{group_ioctx.get_id(), group_id,
+                                           group_snap.id};
 
   ldout(cct, 20) << "Rolling back snapshots" << dendl;
   int snap_count = group_snap.snaps.size();
@@ -956,8 +956,8 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE;
   group_snap.snaps = image_snaps;
 
-  cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
-                                      group_snap.id};
+  cls::rbd::GroupImageSnapshotNamespace ne{group_ioctx.get_id(), group_id,
+                                           group_snap.id};
 
   r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
   if (r == -EEXIST) {
