@@ -1029,7 +1029,7 @@ public:
       );
     } else {
       return make_interruptible(
-	  ::crimson::do_until(
+	  ::crimson::repeat(
 	    [action=std::move(action),
 	    interrupt_condition=interrupt_cond<InterruptCond>] {
 	    return call_with_interruption(
@@ -1057,7 +1057,7 @@ public:
       );
     } else {
       return make_interruptible(
-	  ::crimson::do_until(
+	  ::crimson::repeat(
 	    [action=std::move(action),
 	    interrupt_condition=interrupt_cond<InterruptCond>] {
 	    return call_with_interruption(

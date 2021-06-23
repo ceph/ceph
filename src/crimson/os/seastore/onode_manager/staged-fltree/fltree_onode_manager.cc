@@ -127,17 +127,19 @@ FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
         std::move(cursor),
         list_onodes_bare_ret(),
         [this, &trans, end] (auto& to_list, auto& current_cursor, auto& ret) {
-      return crimson::do_until(
+      return crimson::repeat(
           [this, &trans, end, &to_list, &current_cursor, &ret] () mutable
-          -> eagain_future<bool> {
+          -> eagain_future<seastar::stop_iteration> {
         if (current_cursor.is_end() ||
             current_cursor.get_ghobj() >= end) {
           std::get<1>(ret) = end;
-          return seastar::make_ready_future<bool>(true);
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
         }
         if (to_list == 0) {
           std::get<1>(ret) = current_cursor.get_ghobj();
-          return seastar::make_ready_future<bool>(true);
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
         }
         std::get<0>(ret).emplace_back(current_cursor.get_ghobj());
         return tree.get_next(trans, current_cursor
@@ -146,7 +148,7 @@ FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
           // accelerate tree lookup.
           --to_list;
           current_cursor = next_cursor;
-          return seastar::make_ready_future<bool>(false);
+          return seastar::stop_iteration::no;
         });
       }).safe_then([&ret] () mutable {
         return seastar::make_ready_future<list_onodes_bare_ret>(

@@ -55,7 +55,7 @@ inline auto do_for_each(Container& c, AsyncAction action) {
 }
 
 template<typename AsyncAction>
-inline auto do_until(AsyncAction action) {
+inline auto repeat(AsyncAction action) {
   using errorator_t =
     typename ::seastar::futurize_t<std::invoke_result_t<AsyncAction>>::errorator_type;
 
@@ -71,11 +71,11 @@ inline auto do_until(AsyncAction action) {
       }
     } else {
       return std::move(f)._then(
-        [action = std::move(action)] (auto &&done) mutable {
-          if (done) {
+        [action = std::move(action)] (auto stop) mutable {
+          if (stop == seastar::stop_iteration::yes) {
             return errorator_t::template make_ready_future<>();
           }
-          return ::crimson::do_until(
+          return ::crimson::repeat(
             std::move(action));
         });
     }
@@ -704,7 +704,7 @@ private:
                                               AsyncAction action);
 
     template<typename AsyncAction>
-    friend inline auto ::crimson::do_until(AsyncAction action);
+    friend inline auto ::crimson::repeat(AsyncAction action);
 
     template <typename Result>
     friend class ::seastar::future;
