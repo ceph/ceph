@@ -1335,28 +1335,28 @@ public:
     env->init_instance(sync_env->svc->zone->get_realm(), instance_id, mgr);
   }
 
-  RGWCoroutine *start_sync(RGWDataSyncCtx *sc) override {
-    ldout(sc->cct, 5) << conf->id << ": start" << dendl;
+  RGWCoroutine *start_sync(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc) override {
+    ldpp_dout(dpp, 5) << conf->id << ": start" << dendl;
     return new RGWPSInitEnvCBCR(sc, env);
   }
 
-  RGWCoroutine *sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, 
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, 
       rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 10) << conf->id << ": sync_object: b=" << sync_pipe << 
+    ldpp_dout(dpp, 10) << conf->id << ": sync_object: b=" << sync_pipe << 
           " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     return new RGWPSHandleObjCreateCR(sc, sync_pipe, key, env, versioned_epoch);
   }
 
-  RGWCoroutine *remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, 
+  RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, 
       rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 10) << conf->id << ": rm_object: b=" << sync_pipe << 
+    ldpp_dout(dpp, 10) << conf->id << ": rm_object: b=" << sync_pipe << 
           " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return new RGWPSGenericObjEventCBCR(sc, env, sync_pipe, key, mtime, rgw::notify::ObjectRemovedDelete);
   }
 
-  RGWCoroutine *create_delete_marker(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, 
+  RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, 
       rgw_obj_key& key, real_time& mtime, rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 10) << conf->id << ": create_delete_marker: b=" << sync_pipe << 
+    ldpp_dout(dpp, 10) << conf->id << ": create_delete_marker: b=" << sync_pipe << 
           " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return new RGWPSGenericObjEventCBCR(sc, env, sync_pipe, key, mtime, rgw::notify::ObjectRemovedDeleteMarkerCreated);
   }
