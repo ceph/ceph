@@ -1500,7 +1500,7 @@ int RGWRadosList::do_incomplete_multipart(
 			       &is_listing_truncated, null_yield);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
-      ldpp_dout(dpp, 20) << "RGWRadosList::" << __func__ <<
+      ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<
 	": WARNING: call to list_objects of multipart namespace got ENOENT; "
 	"assuming bucket removal race" << dendl;
       break;
@@ -1527,22 +1527,28 @@ int RGWRadosList::do_incomplete_multipart(
       }
 
       // now process the uploads vector
-      int parts_marker = 0;
-      bool is_parts_truncated = false;
-      do {
-	map<uint32_t, RGWUploadPartInfo> parts;
+      for (const auto& upload : uploads) {
+	const RGWMPObj& mp = upload.mp;
+	int parts_marker = 0;
+	bool is_parts_truncated = false;
 
-	for (const auto& upload : uploads) {
-	  const RGWMPObj& mp = upload.mp;
+
+	do { // while (is_parts_truncated);
+	  std::map<uint32_t, RGWUploadPartInfo> parts;
 	  ret = list_multipart_parts(dpp, store, bucket_info, store->ctx(),
 				     mp.get_upload_id(), mp.get_meta(),
-				     max_parts,
-				     parts_marker, parts, NULL, &is_parts_truncated);
+				     max_parts, parts_marker,
+				     parts, &parts_marker,
+				     &is_parts_truncated);
 	  if (ret == -ENOENT) {
-	    continue;
+	    ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<
+	      ": WARNING: list_multipart_parts returned ret=-ENOENT "
+	      "for " << mp.get_upload_id() << ", moving on" << dendl;
+	    break;
 	  } else if (ret < 0) {
 	    ldpp_dout(dpp, -1) << "RGWRadosList::" << __func__ <<
-	      ": ERROR: list_multipart_parts returned ret=" << ret << dendl;
+	      ": ERROR: list_multipart_parts returned ret=" << ret <<
+	      dendl;
 	    return ret;
 	  }
 
@@ -1554,10 +1560,10 @@ int RGWRadosList::do_incomplete_multipart(
 	      const rgw_raw_obj& loc =
 		obj_it.get_location().get_raw_obj(store);
 	      std::cout << loc.oid << std::endl;
-	    }
-	  }
-	}
-      } while (is_parts_truncated);
+	    } // for (auto obj_it
+	  } // for (auto& p
+	} while (is_parts_truncated);
+      } // for (const auto& upload
     } // if objs not empty
   } while (is_listing_truncated);
 
