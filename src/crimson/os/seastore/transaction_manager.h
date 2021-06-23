@@ -37,15 +37,15 @@ auto repeat_eagain(F &&f) {
   return seastar::do_with(
     std::forward<F>(f),
     [FNAME](auto &f) {
-      return crimson::do_until(
+      return crimson::repeat(
 	[FNAME, &f] {
 	  return std::invoke(f
 	  ).safe_then([] {
-	    return true;
+	    return seastar::stop_iteration::yes;
 	  }).handle_error(
 	    [FNAME](const crimson::ct_error::eagain &e) {
 	      DEBUG("hit eagain, restarting");
-	      return seastar::make_ready_future<bool>(false);
+	      return seastar::stop_iteration::no;
 	    },
 	    crimson::ct_error::pass_further_all{}
 	  );

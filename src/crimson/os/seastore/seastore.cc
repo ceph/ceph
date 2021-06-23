@@ -618,16 +618,18 @@ seastar::future<> SeaStore::do_transaction(
 	*ctx.transaction, ctx.iter.get_objects()
       ).safe_then([this, &ctx](auto &&read_onodes) {
 	ctx.onodes = std::move(read_onodes);
-	return crimson::do_until(
-	  [this, &ctx]() -> tm_ertr::future<bool> {
+	return crimson::repeat(
+	  [this, &ctx]() -> tm_ertr::future<seastar::stop_iteration> {
 	    if (ctx.iter.have_op()) {
 	      return _do_transaction_step(
 		ctx, ctx.ch, ctx.onodes, ctx.iter
 	      ).safe_then([] {
-		return seastar::make_ready_future<bool>(false);
+		return seastar::make_ready_future<seastar::stop_iteration>(
+		  seastar::stop_iteration::no);
 	      });
 	    } else {
-	      return seastar::make_ready_future<bool>(true);
+	      return seastar::make_ready_future<seastar::stop_iteration>(
+		seastar::stop_iteration::yes);
 	    };
 	  });
       }).safe_then([this, &ctx] {
