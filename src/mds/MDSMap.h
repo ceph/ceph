@@ -205,6 +205,7 @@ public:
   void clear_flag(int f) { flags &= ~f; }
 
   std::string_view get_fs_name() const {return fs_name;}
+  void set_fs_name(std::string new_fs_name) { fs_name = std::move(new_fs_name); }
 
   void set_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_SNAPS);
