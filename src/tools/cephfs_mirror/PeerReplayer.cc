@@ -1540,5 +1540,13 @@ void PeerReplayer::peer_status(Formatter *f) {
   f->close_section(); // stats
 }
 
+void PeerReplayer::reopen_logs() {
+  std::scoped_lock locker(m_lock);
+
+  if (m_remote_cluster) {
+    reinterpret_cast<CephContext *>(m_remote_cluster->cct())->reopen_logs();
+  }
+}
+
 } // namespace mirror
 } // namespace cephfs
