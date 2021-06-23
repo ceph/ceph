@@ -330,6 +330,10 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
 		 << " pruned to " << prune_to << dendl;
 	summary.channel_info[channel].first = prune_to;
       }
+      // zero out pre-quincy fields (encode_pending needs this to reliably detect
+      // upgrade)
+      summary.tail_by_channel.clear();
+      summary.keys.clear();
     }
 
     summary.version++;
@@ -472,7 +476,7 @@ void LogMonitor::log_external_backlog()
     if (v >= 2) {
       decode(num, p);
     }
-    while ((num == -2 && !p.end()) || num--) {
+    while ((num == -2 && !p.end()) || (num >= 0 && num--)) {
       LogEntry le;
       le.decode(p);
       log_external(le);
@@ -521,10 +525,21 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   __u8 struct_v = 2;
   encode(struct_v, bl);
 
+  // first commit after upgrading to quincy?
+  if (!summary.tail_by_channel.empty()) {
+    // include past log entries
+    for (auto& p : summary.tail_by_channel) {
+      for (auto& q : p.second) {
+	pending_log.emplace(make_pair(q.second.stamp, q.second));
+      }
+    }
+  }
+
   // record new entries
   auto pending_channel_info = summary.channel_info;
   uint32_t num = pending_log.size();
   encode(num, bl);
+  dout(20) << __func__ << " writing " << num << " entries" << dendl;
   for (auto& p : pending_log) {
     bufferlist ebl;
     p.second.encode(ebl, mon.get_quorum_con_features());
@@ -1042,13 +1057,14 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
     int32_t num = -2;
     if (v >= 2) {
       decode(num, p);
+      dout(20) << __func__ << " sv " << sv << " has " << num << " entries" << dendl;
     }
-    while ((num == -2 && !p.end()) || num--) {
+    while ((num == -2 && !p.end()) || (num >= 0 && num--)) {
       LogEntry le;
       le.decode(p);
       if (le.prio < level) {
 	dout(20) << __func__ << " requested " << level 
-		 << " entry " << le.prio << dendl;
+		 << ", skipping " << le << dendl;
 	continue;
       }
       mlog->entries.push_back(le);
