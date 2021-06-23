@@ -384,10 +384,10 @@ class RGWSingletonCR : public RGWCoroutine {
 
       WaiterInfoRef waiter;
       while (get_next_waiter(&waiter)) {
-        ldout(cct, 20) << __func__ << "(): RGWSingletonCR: waking up waiter" << dendl;
+        ldpp_dout(dpp, 20) << __func__ << "(): RGWSingletonCR: waking up waiter" << dendl;
         waiter->cr->set_retcode(retcode);
         waiter->cr->set_sleeping(false);
-        return_result(waiter->result);
+        return_result(dpp, waiter->result);
         put();
       }
 
@@ -396,29 +396,29 @@ class RGWSingletonCR : public RGWCoroutine {
     return 0;
   }
 
-  virtual void return_result(T *result) {}
+  virtual void return_result(const DoutPrefixProvider *dpp, T *result) {}
 
 public:
   RGWSingletonCR(CephContext *_cct)
     : RGWCoroutine(_cct) {}
 
-  int execute(RGWCoroutine *caller, T *result = nullptr) {
+  int execute(const DoutPrefixProvider *dpp, RGWCoroutine *caller, T *result = nullptr) {
     if (!started) {
-      ldout(cct, 20) << __func__ << "(): singleton not started, starting" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): singleton not started, starting" << dendl;
       started = true;
       caller->call(this);
       return 0;
     } else if (!is_done()) {
-      ldout(cct, 20) << __func__ << "(): singleton not done yet, registering as waiter" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): singleton not done yet, registering as waiter" << dendl;
       get();
       add_waiter(caller, result);
       caller->set_sleeping(true);
       return 0;
     }
 
-    ldout(cct, 20) << __func__ << "(): singleton done, returning retcode=" << retcode << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): singleton done, returning retcode=" << retcode << dendl;
     caller->set_retcode(retcode);
-    return_result(result);
+    return_result(dpp, result);
     return retcode;
   }
 };
@@ -711,8 +711,8 @@ public:
     return sub;
   }
 
-  int call_init_cr(RGWCoroutine *caller) {
-    return init_cr->execute(caller);
+  int call_init_cr(const DoutPrefixProvider *dpp, RGWCoroutine *caller) {
+    return init_cr->execute(dpp, caller);
   }
 
   template<typename EventType>
@@ -789,7 +789,7 @@ class PSManager
           *ref = PSSubscription::get_shared(sc, mgr->env, user_sub_conf);
         }
 
-        yield (*ref)->call_init_cr(this);
+        yield (*ref)->call_init_cr(dpp, this);
         if (retcode < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to init subscription when getting subscription: " << sub_name << dendl;
           mgr->remove_get_sub(owner, sub_name);
@@ -803,8 +803,8 @@ class PSManager
       return 0;
     }
 
-    void return_result(PSSubscriptionRef *result) override {
-      ldout(cct, 20) << __func__ << "(): returning result: retcode=" << retcode << " resultp=" << (void *)result << dendl;
+    void return_result(const DoutPrefixProvider *dpp, PSSubscriptionRef *result) override {
+      ldpp_dout(dpp, 20) << __func__ << "(): returning result: retcode=" << retcode << " resultp=" << (void *)result << dendl;
       if (retcode >= 0) {
         *result = *ref;
       }
@@ -849,19 +849,19 @@ public:
     return std::shared_ptr<PSManager>(new PSManager(_sc, _env));
   }
 
-  static int call_get_subscription_cr(RGWDataSyncCtx *sc, PSManagerRef& mgr, 
+  static int call_get_subscription_cr(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, PSManagerRef& mgr, 
       RGWCoroutine *caller, const rgw_user& owner, const string& sub_name, PSSubscriptionRef *ref) {
     if (mgr->find_sub_instance(owner, sub_name, ref)) {
       /* found it! nothing to execute */
-      ldout(sc->cct, 20) << __func__ << "(): found sub instance" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): found sub instance" << dendl;
     }
     auto& gs = mgr->get_get_subs(owner, sub_name);
     if (!gs) {
-      ldout(sc->cct, 20) << __func__ << "(): first get subs" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): first get subs" << dendl;
       gs = new GetSubCR(sc, mgr, owner, sub_name, ref);
     }
-    ldout(sc->cct, 20) << __func__ << "(): executing get subs" << dendl;
-    return gs->execute(caller, ref);
+    ldpp_dout(dpp, 20) << __func__ << "(): executing get subs" << dendl;
+    return gs->execute(dpp, caller, ref);
   }
 
   friend class GetSubCR;
@@ -1061,7 +1061,7 @@ public:
           ldpp_dout(dpp, 20) << ": subscription: " << *siter << dendl;
           has_subscriptions = true;
           // try to read subscription configuration
-          yield PSManager::call_get_subscription_cr(sc, env->manager, this, owner, *siter, &sub);
+          yield PSManager::call_get_subscription_cr(dpp, sc, env->manager, this, owner, *siter, &sub);
           if (retcode < 0) {
             if (perfcounter) perfcounter->inc(l_rgw_pubsub_missing_conf);
             ldpp_dout(dpp, 1) << "ERROR: failed to find subscription config for subscription=" << *siter 
@@ -1364,13 +1364,13 @@ public:
   PSConfigRef& get_conf() { return conf; }
 };
 
-RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
+RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config)
 {
   data_handler = std::unique_ptr<RGWPSDataSyncModule>(new RGWPSDataSyncModule(cct, config));
   const std::string jconf = json_str("conf", *data_handler->get_conf());
   JSONParser p;
   if (!p.parse(jconf.c_str(), jconf.size())) {
-    ldout(cct, 1) << "ERROR: failed to parse sync module effective conf: " << jconf << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to parse sync module effective conf: " << jconf << dendl;
     effective_conf = config;
   } else {
     effective_conf.decode_json(&p);
@@ -1394,7 +1394,7 @@ bool RGWPSSyncModuleInstance::should_full_sync() const {
 }
 
 int RGWPSSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
-  instance->reset(new RGWPSSyncModuleInstance(cct, config));
+  instance->reset(new RGWPSSyncModuleInstance(dpp, cct, config));
   return 0;
 }
 
