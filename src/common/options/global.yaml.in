@@ -1258,6 +1258,13 @@ options:
   min: 1
   max: 24
   with_legacy: true
+- name: ms_async_reap_threshold
+  type: uint
+  level: dev
+  desc: number of deleted connections before we reap
+  default: 5
+  min: 1
+  with_legacy: true
 - name: ms_async_rdma_device_name
   type: str
   level: advanced
@@ -3590,7 +3597,7 @@ options:
   desc: Max size of the per-op payload for requests with the RETURNVEC flag set
   long_desc: This value caps the amount of data (per op; a request may have many ops)
     that will be sent back to the client and recorded in the PG log.
-  default: 32
+  default: 64
   with_legacy: true
 - name: osd_objectstore
   type: str

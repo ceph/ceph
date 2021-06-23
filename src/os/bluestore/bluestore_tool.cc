@@ -6,15 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-using sys_error_code = std::error_code;
-#else
-#include <boost/filesystem.hpp>
-namespace fs = boost::filesystem;
-using sys_error_code = boost::system::error_code;
-#endif
 #include <iostream>
 #include <fstream>
 #include <time.h>
@@ -31,6 +23,7 @@ using sys_error_code = boost::system::error_code;
 #include "common/admin_socket.h"
 #include "kv/RocksDBStore.h"
 
+namespace fs = std::filesystem;
 namespace po = boost::program_options;
 
 void usage(po::options_description &desc)
@@ -787,7 +780,7 @@ int main(int argc, char **argv)
       if (dev_target.empty()) {
 	return {"", false};
       }
-      sys_error_code ec;
+      std::error_code ec;
       fs::path target_path = fs::weakly_canonical(fs::path{dev_target}, ec);
       if (ec) {
 	cerr << "failed to retrieve absolute path for " << dev_target

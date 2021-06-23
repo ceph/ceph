@@ -33,7 +33,9 @@ CommonClientRequest::do_recover_missing(
   }
 }
 
-bool CommonClientRequest::should_abort_request(std::exception_ptr eptr)
+bool CommonClientRequest::should_abort_request(
+  const Operation& op,
+  std::exception_ptr eptr)
 {
   if (*eptr.__cxa_exception_type() ==
       typeid(::crimson::common::actingset_changed)) {
@@ -41,10 +43,10 @@ bool CommonClientRequest::should_abort_request(std::exception_ptr eptr)
       std::rethrow_exception(eptr);
     } catch(::crimson::common::actingset_changed& e) {
       if (e.is_primary()) {
-        logger().debug("{} operation restart, acting set changed", __func__);
+        logger().debug("{} {} operation restart, acting set changed", __func__, op);
         return false;
       } else {
-        logger().debug("{} operation abort, up primary changed", __func__);
+        logger().debug("{} {} operation abort, up primary changed", __func__, op);
         return true;
       }
     }
@@ -52,7 +54,7 @@ bool CommonClientRequest::should_abort_request(std::exception_ptr eptr)
     assert(*eptr.__cxa_exception_type() ==
       typeid(crimson::common::system_shutdown_exception));
     crimson::get_logger(ceph_subsys_osd).debug(
-        "{} operation skipped, system shutdown", __func__);
+        "{} {} operation skipped, system shutdown", __func__, op);
     return true;
   }
 }

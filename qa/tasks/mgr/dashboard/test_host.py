@@ -146,7 +146,7 @@ class HostControllerTest(DashboardTestCase):
 
 class HostControllerNoOrchestratorTest(DashboardTestCase):
     def test_host_create(self):
-        self._post('/api/host?hostname=foo')
+        self._post('/api/host?hostname=foo', {'status': ''}, version='0.1')
         self.assertStatus(503)
         self.assertError(code='orchestrator_status_unavailable',
                          component='orchestrator')

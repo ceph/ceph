@@ -63,8 +63,8 @@ class HostManger(ResourceManager):
         return hosts[0] if hosts else None
 
     @wait_api_result
-    def add(self, hostname: str, status: str):
-        return self.api.add_host(HostSpec(hostname, status=status))
+    def add(self, hostname: str, addr: str, labels: List[str]):
+        return self.api.add_host(HostSpec(hostname, addr=addr, labels=labels))
 
     @wait_api_result
     def remove(self, hostname: str):

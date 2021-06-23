@@ -12,6 +12,15 @@ options:
   - mgr
   flags:
   - no_mon_update
+- name: mgr_pool
+  type: bool
+  level: dev
+  desc: Allow use/creation of .mgr pool.
+  default: true
+  services:
+  - mgr
+  flags:
+  - startup
 - name: mgr_stats_period
   type: int
   level: basic

@@ -40,6 +40,7 @@ class DummyNodeExtent final: public NodeExtent {
   DummyNodeExtent(ceph::bufferptr &&ptr) : NodeExtent(std::move(ptr)) {
     state = extent_state_t::INITIAL_WRITE_PENDING;
   }
+  DummyNodeExtent(const DummyNodeExtent& other) = delete;
   ~DummyNodeExtent() override = default;
 
   void retire() {
@@ -75,14 +76,14 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   bool is_read_isolated() const override { return false; }
 
   read_ertr::future<NodeExtentRef> read_extent(
-      Transaction& t, laddr_t addr, extent_len_t len) override {
-    TRACET("reading {}B at {:#x} ...", t, len, addr);
+      Transaction& t, laddr_t addr) override {
+    TRACET("reading at {:#x} ...", t, addr);
     if constexpr (SYNC) {
-      return read_extent_sync(t, addr, len);
+      return read_extent_sync(t, addr);
     } else {
       using namespace std::chrono_literals;
-      return seastar::sleep(1us).then([this, &t, addr, len] {
-        return read_extent_sync(t, addr, len);
+      return seastar::sleep(1us).then([this, &t, addr] {
+        return read_extent_sync(t, addr);
       });
     }
   }
@@ -102,8 +103,8 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 
   retire_ertr::future<> retire_extent(
       Transaction& t, NodeExtentRef extent) override {
-    TRACET("retiring {}B at {:#x} ...",
-           t, extent->get_length(), extent->get_laddr());
+    TRACET("retiring {}B at {:#x} -- {} ...",
+           t, extent->get_length(), extent->get_laddr(), *extent);
     if constexpr (SYNC) {
       return retire_extent_sync(t, extent);
     } else {
@@ -133,13 +134,13 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 
  private:
   read_ertr::future<NodeExtentRef> read_extent_sync(
-      Transaction& t, laddr_t addr, extent_len_t len) {
+      Transaction& t, laddr_t addr) {
     auto iter = allocate_map.find(addr);
     assert(iter != allocate_map.end());
     auto extent = iter->second;
-    TRACET("read {}B at {:#x}", t, extent->get_length(), extent->get_laddr());
+    TRACET("read {}B at {:#x} -- {}",
+           t, extent->get_length(), extent->get_laddr(), *extent);
     assert(extent->get_laddr() == addr);
-    assert(extent->get_length() == len);
     return read_ertr::make_ready_future<NodeExtentRef>(extent);
   }
 
@@ -153,7 +154,8 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     extent->set_laddr(addr);
     assert(allocate_map.find(extent->get_laddr()) == allocate_map.end());
     allocate_map.insert({extent->get_laddr(), extent});
-    DEBUGT("allocated {}B at {:#x}", t, extent->get_length(), extent->get_laddr());
+    DEBUGT("allocated {}B at {:#x} -- {}",
+           t, extent->get_length(), extent->get_laddr(), *extent);
     assert(extent->get_length() == len);
     return alloc_ertr::make_ready_future<NodeExtentRef>(extent);
   }

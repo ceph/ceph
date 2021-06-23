@@ -10,7 +10,19 @@
 namespace crimson::os::seastore::onode {
 
 struct FLTreeOnode final : Onode, Value {
-  static constexpr value_magic_t HEADER_MAGIC = value_magic_t::ONODE;
+  static constexpr tree_conf_t TREE_CONF = {
+    value_magic_t::ONODE,
+    256,        // max_ns_size
+                //   same to option osd_max_object_namespace_len
+    2048,       // max_oid_size
+                //   same to option osd_max_object_name_len
+    1200,       // max_value_payload_size
+                //   see crimson::os::seastore::onode_layout_t
+    8192,       // internal_node_size
+                //   see the formula in validate_tree_config
+    16384       // leaf_node_size
+                //   see the formula in validate_tree_config
+  };
 
   enum class status_t {
     STABLE,
@@ -27,13 +39,11 @@ struct FLTreeOnode final : Onode, Value {
   template <typename... T>
   FLTreeOnode(T&&... args) : Value(std::forward<T>(args)...) {}
 
-
-
   struct Recorder : public ValueDeltaRecorder {
     Recorder(bufferlist &bl) : ValueDeltaRecorder(bl) {}
 
     value_magic_t get_header_magic() const final {
-      return value_magic_t::ONODE;
+      return TREE_CONF.value_magic;
     }
 
     void apply_value_delta(

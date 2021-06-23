@@ -56,6 +56,17 @@ struct node_header_t {
     is_level_tail = static_cast<uint8_t>(value);
   }
 } __attribute__((packed));
+inline std::ostream& operator<<(std::ostream& os, const node_header_t& header) {
+  auto field_type = header.get_field_type();
+  if (field_type.has_value()) {
+    os << "header" << header.get_node_type() << *field_type
+       << "(is_level_tail=" << header.get_is_level_tail()
+       << ", level=" << (unsigned)header.level << ")";
+  } else {
+    os << "header(INVALID)";
+  }
+  return os;
+}
 
 template <typename FixedKeyType, field_type_t _FIELD_TYPE>
 struct _slot_t {
@@ -71,8 +82,8 @@ using slot_1_t = _slot_t<crush_t, field_type_t::N1>;
 using slot_3_t = _slot_t<snap_gen_t, field_type_t::N3>;
 
 struct node_range_t {
-  node_offset_t start;
-  node_offset_t end;
+  extent_len_t start;
+  extent_len_t end;
 };
 
 template <typename FieldType>
@@ -82,19 +93,17 @@ const char* fields_start(const FieldType& node) {
 
 template <node_type_t NODE_TYPE, typename FieldType>
 node_range_t fields_free_range_before(
-    const FieldType& node, index_t index) {
+    const FieldType& node, index_t index, extent_len_t node_size) {
   assert(index <= node.num_keys);
-  node_offset_t offset_start = node.get_key_start_offset(index);
-  node_offset_t offset_end =
-    (index == 0 ? FieldType::SIZE
-                   : node.get_item_start_offset(index - 1));
+  extent_len_t offset_start = node.get_key_start_offset(index, node_size);
+  extent_len_t offset_end = node.get_item_end_offset(index, node_size);
   if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
     if (node.is_level_tail() && index == node.num_keys) {
       offset_end -= sizeof(laddr_t);
     }
   }
   assert(offset_start <= offset_end);
-  assert(offset_end - offset_start < FieldType::SIZE);
+  assert(offset_end - offset_start < node_size);
   return {offset_start, offset_end};
 }
 
@@ -123,46 +132,52 @@ node_range_t fields_free_range_before(
  */
 template <typename SlotType>
 struct _node_fields_013_t {
-  // TODO: decide by NODE_BLOCK_SIZE, sizeof(SlotType), sizeof(laddr_t)
-  // and the minimal size of variable_key.
-  using num_keys_t = uint8_t;
+  // should be enough to index all keys under 64 KiB node
+  using num_keys_t = uint16_t;
   using key_t = typename SlotType::key_t;
   using key_get_type = const key_t&;
   using me_t = _node_fields_013_t<SlotType>;
   static constexpr field_type_t FIELD_TYPE = SlotType::FIELD_TYPE;
-  static constexpr node_offset_t SIZE = NODE_BLOCK_SIZE;
   static constexpr node_offset_t HEADER_SIZE =
     sizeof(node_header_t) + sizeof(num_keys_t);
   static constexpr node_offset_t ITEM_OVERHEAD = SlotType::OVERHEAD;
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  node_offset_t total_size() const { return SIZE; }
-  key_get_type get_key(index_t index) const {
+  extent_len_t total_size(extent_len_t node_size) const {
+    return node_size;
+  }
+  key_get_type get_key(
+      index_t index, extent_len_t node_size) const {
     assert(index < num_keys);
     return slots[index].key;
   }
-  node_offset_t get_key_start_offset(index_t index) const {
+  node_offset_t get_key_start_offset(
+      index_t index, extent_len_t node_size) const {
     assert(index <= num_keys);
     auto offset = HEADER_SIZE + sizeof(SlotType) * index;
-    assert(offset < SIZE);
+    assert(offset < node_size);
     return offset;
   }
-  node_offset_t get_item_start_offset(index_t index) const {
+  node_offset_t get_item_start_offset(
+      index_t index, extent_len_t node_size) const {
     assert(index < num_keys);
     auto offset = slots[index].right_offset;
-    assert(offset <= SIZE);
+    assert(offset < node_size);
     return offset;
   }
   const void* p_offset(index_t index) const {
     assert(index < num_keys);
     return &slots[index].right_offset;
   }
-  node_offset_t get_item_end_offset(index_t index) const {
-    return index == 0 ? SIZE : get_item_start_offset(index - 1);
+  extent_len_t get_item_end_offset(
+      index_t index, extent_len_t node_size) const {
+    return index == 0 ? node_size
+                      : get_item_start_offset(index - 1, node_size);
   }
   template <node_type_t NODE_TYPE>
-  node_offset_t free_size_before(index_t index) const {
-    auto range = fields_free_range_before<NODE_TYPE>(*this, index);
+  node_offset_t free_size_before(
+      index_t index, extent_len_t node_size) const {
+    auto range = fields_free_range_before<NODE_TYPE>(*this, index, node_size);
     return range.end - range.start;
   }
 
@@ -212,49 +227,53 @@ using node_fields_1_t = _node_fields_013_t<slot_1_t>;
  *                     +-----------------------------------------------+
  */
 struct node_fields_2_t {
-  // TODO: decide by NODE_BLOCK_SIZE, sizeof(node_off_t), sizeof(laddr_t)
-  // and the minimal size of variable_key.
-  using num_keys_t = uint8_t;
+  // should be enough to index all keys under 64 KiB node
+  using num_keys_t = uint16_t;
   using key_t = ns_oid_view_t;
   using key_get_type = key_t;
   static constexpr field_type_t FIELD_TYPE = field_type_t::N2;
-  static constexpr node_offset_t SIZE = NODE_BLOCK_SIZE;
   static constexpr node_offset_t HEADER_SIZE =
     sizeof(node_header_t) + sizeof(num_keys_t);
   static constexpr node_offset_t ITEM_OVERHEAD = sizeof(node_offset_t);
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  node_offset_t total_size() const { return SIZE; }
-  key_get_type get_key(index_t index) const {
+  extent_len_t total_size(extent_len_t node_size) const {
+    return node_size;
+  }
+  key_get_type get_key(
+      index_t index, extent_len_t node_size) const {
     assert(index < num_keys);
-    node_offset_t item_end_offset =
-      (index == 0 ? SIZE : offsets[index - 1]);
-    assert(item_end_offset <= SIZE);
+    auto item_end_offset = get_item_end_offset(index, node_size);
     const char* p_start = fields_start(*this);
     return key_t(p_start + item_end_offset);
   }
-  node_offset_t get_key_start_offset(index_t index) const {
+  node_offset_t get_key_start_offset(
+      index_t index, extent_len_t node_size) const {
     assert(index <= num_keys);
     auto offset = HEADER_SIZE + sizeof(node_offset_t) * num_keys;
-    assert(offset <= SIZE);
+    assert(offset < node_size);
     return offset;
   }
-  node_offset_t get_item_start_offset(index_t index) const {
+  node_offset_t get_item_start_offset(
+      index_t index, extent_len_t node_size) const {
     assert(index < num_keys);
     auto offset = offsets[index];
-    assert(offset <= SIZE);
+    assert(offset < node_size);
     return offset;
   }
   const void* p_offset(index_t index) const {
     assert(index < num_keys);
     return &offsets[index];
   }
-  node_offset_t get_item_end_offset(index_t index) const {
-    return index == 0 ? SIZE : get_item_start_offset(index - 1);
+  extent_len_t get_item_end_offset(
+      index_t index, extent_len_t node_size) const {
+    return index == 0 ? node_size
+                      : get_item_start_offset(index - 1, node_size);
   }
   template <node_type_t NODE_TYPE>
-  node_offset_t free_size_before(index_t index) const {
-    auto range = fields_free_range_before<NODE_TYPE>(*this, index);
+  node_offset_t free_size_before(
+      index_t index, extent_len_t node_size) const {
+    auto range = fields_free_range_before<NODE_TYPE>(*this, index, node_size);
     return range.end - range.start;
   }
 
@@ -300,67 +319,87 @@ struct node_fields_2_t {
  * #        | num_ # key | key |   # laddr | laddr | laddr |   #
  * # header | keys # 0   | 1   |...# 0     | 1     | 2     |...#
  */
-// TODO: decide by NODE_BLOCK_SIZE, sizeof(snap_gen_t), sizeof(laddr_t)
-static constexpr unsigned MAX_NUM_KEYS_I3 = 170u;
-template <unsigned MAX_NUM_KEYS>
-struct _internal_fields_3_t {
+struct internal_fields_3_t {
   using key_get_type = const snap_gen_t&;
-  using me_t = _internal_fields_3_t<MAX_NUM_KEYS>;
-  // TODO: decide by NODE_BLOCK_SIZE, sizeof(snap_gen_t), sizeof(laddr_t)
-  using num_keys_t = uint8_t;
+  // should be enough to index all keys under 64 KiB node
+  using num_keys_t = uint16_t;
   static constexpr field_type_t FIELD_TYPE = field_type_t::N3;
-  static constexpr node_offset_t SIZE = sizeof(me_t);
   static constexpr node_offset_t HEADER_SIZE =
     sizeof(node_header_t) + sizeof(num_keys_t);
+  static constexpr node_offset_t ITEM_SIZE =
+    sizeof(snap_gen_t) + sizeof(laddr_t);
   static constexpr node_offset_t ITEM_OVERHEAD = 0u;
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
-  node_offset_t total_size() const {
+  extent_len_t total_size(extent_len_t node_size) const {
     if (is_level_tail()) {
-      return SIZE - sizeof(snap_gen_t);
+      return node_size - sizeof(snap_gen_t);
     } else {
-      return SIZE;
+      return node_size;
     }
   }
-  key_get_type get_key(index_t index) const {
+  key_get_type get_key(
+      index_t index, extent_len_t node_size) const {
     assert(index < num_keys);
     return keys[index];
   }
   template <node_type_t NODE_TYPE>
   std::enable_if_t<NODE_TYPE == node_type_t::INTERNAL, node_offset_t>
-  free_size_before(index_t index) const {
+  free_size_before(index_t index, extent_len_t node_size) const {
     assert(index <= num_keys);
-    assert(num_keys <= (is_level_tail() ? MAX_NUM_KEYS - 1 : MAX_NUM_KEYS));
-    auto free = (MAX_NUM_KEYS - index) * (sizeof(snap_gen_t) + sizeof(laddr_t));
+    assert(num_keys <= get_max_num_keys(node_size));
+    extent_len_t free = total_size(node_size) - HEADER_SIZE -
+                        index * ITEM_SIZE;
     if (is_level_tail() && index == num_keys) {
-      free -= (sizeof(snap_gen_t) + sizeof(laddr_t));
+      free -= sizeof(laddr_t);
     }
-    assert(free < SIZE);
     return free;
   }
 
-  static node_offset_t estimate_insert_one() {
-    return sizeof(snap_gen_t) + sizeof(laddr_t);
+  const laddr_packed_t* get_p_child_addr(
+      index_t index, extent_len_t node_size) const {
+#ifndef NDEBUG
+    if (is_level_tail()) {
+      assert(index <= num_keys);
+    } else {
+      assert(index < num_keys);
+    }
+#endif
+    auto p_addrs = reinterpret_cast<const laddr_packed_t*>(
+        &keys[get_num_keys_limit(node_size)]);
+    auto ret = p_addrs + index;
+    assert((const char*)ret < fields_start(*this) + node_size);
+    return ret;
   }
+
+  static node_offset_t estimate_insert_one() { return ITEM_SIZE; }
+
   template <KeyT KT>
   static void insert_at(
       NodeExtentMutable& mut, const full_key_t<KT>& key,
-      const me_t& node, index_t index, node_offset_t size_right) {
+      const internal_fields_3_t& node,
+      index_t index, node_offset_t size_right) {
     ceph_abort("not implemented");
   }
   static void update_size_at(
-      NodeExtentMutable& mut, const me_t& node, index_t index, int change) {
+      NodeExtentMutable& mut, const internal_fields_3_t& node,
+      index_t index, int change) {
     ceph_abort("not implemented");
   }
 
   node_header_t header;
   num_keys_t num_keys = 0u;
-  snap_gen_t keys[MAX_NUM_KEYS];
-  laddr_packed_t child_addrs[MAX_NUM_KEYS];
+  snap_gen_t keys[];
+
+ private:
+  num_keys_t get_max_num_keys(extent_len_t node_size) const {
+    auto num_limit = get_num_keys_limit(node_size);
+    return (is_level_tail() ? num_limit - 1 : num_limit);
+  }
+  static num_keys_t get_num_keys_limit(extent_len_t node_size) {
+    return (node_size - HEADER_SIZE) / ITEM_SIZE;
+  }
 } __attribute__((packed));
-static_assert(_internal_fields_3_t<MAX_NUM_KEYS_I3>::SIZE <= NODE_BLOCK_SIZE &&
-              _internal_fields_3_t<MAX_NUM_KEYS_I3 + 1>::SIZE > NODE_BLOCK_SIZE);
-using internal_fields_3_t = _internal_fields_3_t<MAX_NUM_KEYS_I3>;
 
 using leaf_fields_3_t = _node_fields_013_t<slot_3_t>;
 

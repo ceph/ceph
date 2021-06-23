@@ -127,7 +127,7 @@ class CephArgtype(object):
         set any per-instance validation parameters here
         from kwargs (fixed string sets, integer ranges, etc)
         """
-        pass
+        self.typeargs = None
 
     def valid(self, s, partial=False):
         """
@@ -148,7 +148,7 @@ class CephArgtype(object):
         'name/type' description for use in command format help messages.
         """
         a = ''
-        if hasattr(self, 'typeargs'):
+        if self.typeargs is not None:
             a = self.typeargs
         return '{0}(\'{1}\')'.format(self.__class__.__name__, a)
 
@@ -256,8 +256,7 @@ class CephInt(CephArgtype):
         if range == '':
             self.range = list()
         else:
-            self.range = list(range.split('|'))
-            self.range = [int(x) for x in self.range]
+            self.range = [int(x) for x in range.split('|')]
 
     def valid(self, s, partial=False):
         try:
@@ -283,7 +282,7 @@ class CephInt(CephArgtype):
 
     def argdesc(self, attrs):
         if self.range:
-            attrs['range'] = '|'.join(self.range)
+            attrs['range'] = '|'.join(str(v) for v in self.range)
         return super().argdesc(attrs)
 
 
@@ -296,8 +295,7 @@ class CephFloat(CephArgtype):
         if range == '':
             self.range = list()
         else:
-            self.range = list(range.split('|'))
-            self.range = [float(x) for x in self.range]
+            self.range = [float(x) for x in range.split('|')]
 
     def valid(self, s, partial=False):
         try:
@@ -322,7 +320,7 @@ class CephFloat(CephArgtype):
 
     def argdesc(self, attrs):
         if self.range:
-            attrs['range'] = '|'.join(self.range)
+            attrs['range'] = '|'.join(str(v) for v in self.range)
         return super().argdesc(attrs)
 
 
@@ -388,6 +386,7 @@ class CephIPAddr(CephArgtype):
     def valid(self, s, partial=False):
         # parse off port, use socket to validate addr
         type = 6
+        p: Optional[str] = None
         if s.startswith('['):
             type = 6
         elif s.find('.') != -1:
@@ -414,7 +413,7 @@ class CephIPAddr(CephArgtype):
                     raise ArgumentFormat('{0} missing terminating ]'.format(s))
                 if s[end + 1] == ':':
                     try:
-                        p = int(s[end + 2])
+                        p = s[end + 2]
                     except ValueError:
                         raise ArgumentValid('{0}: bad port number'.format(s))
                 a = s[1:end]
@@ -487,15 +486,15 @@ class CephPgid(CephArgtype):
     def valid(self, s, partial=False):
         if s.find('.') == -1:
             raise ArgumentFormat('pgid has no .')
-        poolid, pgnum = s.split('.', 1)
+        poolid_s, pgnum_s = s.split('.', 1)
         try:
-            poolid = int(poolid)
+            poolid = int(poolid_s)
         except ValueError:
             raise ArgumentFormat('pool {0} not integer'.format(poolid))
         if poolid < 0:
             raise ArgumentFormat('pool {0} < 0'.format(poolid))
         try:
-            pgnum = int(pgnum, 16)
+            pgnum = int(pgnum_s, 16)
         except ValueError:
             raise ArgumentFormat('pgnum {0} not hex integer'.format(pgnum))
         self.val = s
@@ -512,9 +511,9 @@ class CephName(CephArgtype):
 
     Also accept '*'
     """
-    def __init__(self):
-        self.nametype = None
-        self.nameid = None
+    def __init__(self) -> None:
+        self.nametype: Optional[str] = None
+        self.nameid: Optional[str] = None
 
     def valid(self, s, partial=False):
         if s == '*':
@@ -537,9 +536,9 @@ class CephName(CephArgtype):
             if t == 'osd':
                 if i != '*':
                     try:
-                        i = int(i)
+                        int(i)
                     except ValueError:
-                        raise ArgumentFormat('osd id ' + i + ' not integer')
+                        raise ArgumentFormat(f'osd id {i} not integer')
             self.nametype = t
         self.val = s
         self.nameid = i
@@ -555,8 +554,8 @@ class CephOsdName(CephArgtype):
     osd.<id>, or <id>, or *, where id is a base10 int
     """
     def __init__(self):
-        self.nametype = None
-        self.nameid = None
+        self.nametype: Optional[str] = None
+        self.nameid: Optional[int] = None
 
     def valid(self, s, partial=False):
         if s == '*':
@@ -570,14 +569,14 @@ class CephOsdName(CephArgtype):
             t = 'osd'
             i = s
         try:
-            i = int(i)
+            v = int(i)
         except ValueError:
-            raise ArgumentFormat('osd id ' + i + ' not integer')
-        if i < 0:
-            raise ArgumentFormat('osd id {0} is less than 0'.format(i))
+            raise ArgumentFormat(f'osd id {i} not integer')
+        if v < 0:
+            raise ArgumentFormat(f'osd id {v} is less than 0')
         self.nametype = t
-        self.nameid = i
-        self.val = i
+        self.nameid = v
+        self.val = v
 
     def __str__(self):
         return '<osdname (id|osd.id)>'
@@ -912,13 +911,6 @@ def descsort_key(sh):
     return concise_sig(sh['sig'])
 
 
-def descsort(sh1, sh2):
-    """
-    Deprecated; use (key=descsort_key) instead of (cmp=descsort)
-    """
-    return cmp(descsort_key(sh1), descsort_key(sh2))
-
-
 def parse_funcsig(sig: Sequence[Union[str, Dict[str, str]]]) -> List[argdesc]:
     """
     parse a single descriptor (array of strings or dicts) into a
@@ -1016,19 +1008,29 @@ def parse_json_funcsigs(s: str,
     return sigdict
 
 
-def validate_one(word, desc, partial=False):
+def validate_one(word, desc, is_kwarg, partial=False):
     """
-    validate_one(word, desc, partial=False)
+    validate_one(word, desc, is_kwarg, partial=False)
 
     validate word against the constructed instance of the type
     in desc.  May raise exception.  If it returns false (and doesn't
     raise an exception), desc.instance.val will
     contain the validated value (in the appropriate type).
     """
-    desc.instance.valid(word, partial)
+    vals = []
+    # CephString option might contain "," in it
+    allow_csv = is_kwarg or desc.t is not CephString
+    if desc.N and allow_csv:
+        for part in word.split(','):
+            desc.instance.valid(part, partial)
+            vals.append(desc.instance.val)
+    else:
+        desc.instance.valid(word, partial)
+        vals.append(desc.instance.val)
     desc.numseen += 1
     if desc.N:
         desc.n = desc.numseen + 1
+    return vals
 
 
 def matchnum(args, signature, partial=False):
@@ -1054,7 +1056,7 @@ def matchnum(args, signature, partial=False):
                 # only allow partial matching if we're on the last supplied
                 # word; avoid matching foo bar and foot bar just because
                 # partial is set
-                validate_one(word, desc, partial and (len(words) == 0))
+                validate_one(word, desc, False, partial and (len(words) == 0))
                 valid = True
             except ArgumentError:
                 # matchnum doesn't care about type of error
@@ -1073,17 +1075,19 @@ def matchnum(args, signature, partial=False):
     return matchcnt
 
 
-ValidatedArgs = Dict[str, Union[bool, int, float, str,
-                                Tuple[str, str],
-                                Sequence[str]]]
+ValidatedArg = Union[bool, int, float, str,
+                     Tuple[str, str],
+                     Sequence[str]]
+ValidatedArgs = Dict[str, ValidatedArg]
 
 
-def store_arg(desc: argdesc, d: ValidatedArgs):
+def store_arg(desc: argdesc, args: List[ValidatedArg], d: ValidatedArgs):
     '''
     Store argument described by, and held in, thanks to valid(),
     desc into the dictionary d, keyed by desc.name.  Three cases:
 
-    1) desc.N is set: value in d is a list
+    1) desc.N is set: use args for arg value in "d", desc.instance.val
+       only contains the last parsed arg in the "args" list
     2) prefix: multiple args are joined with ' ' into one d{} item
     3) single prefix or other arg: store as simple value
 
@@ -1092,9 +1096,9 @@ def store_arg(desc: argdesc, d: ValidatedArgs):
     if desc.N:
         # value should be a list
         if desc.name in d:
-            d[desc.name] += [desc.instance.val]
+            d[desc.name] += args
         else:
-            d[desc.name] = [desc.instance.val]
+            d[desc.name] = args
     elif (desc.t == CephPrefix) and (desc.name in d):
         # prefixes' values should be a space-joined concatenation
         d[desc.name] += ' ' + desc.instance.val
@@ -1191,9 +1195,9 @@ def validate(args: List[str],
                                 kwarg_desc = None
 
                 if kwarg_desc:
-                    validate_one(kwarg_v, kwarg_desc)
+                    args = validate_one(kwarg_v, kwarg_desc, True)
                     matchcnt += 1
-                    store_arg(kwarg_desc, d)
+                    store_arg(kwarg_desc, args, d)
                     continue
 
             if not desc.positional:
@@ -1250,7 +1254,7 @@ def validate(args: List[str],
 
             # Have an arg; validate it
             try:
-                validate_one(myarg, desc)
+                args = validate_one(myarg, desc, False)
             except ArgumentError as e:
                 # argument mismatch
                 if not desc.req:
@@ -1267,7 +1271,7 @@ def validate(args: List[str],
 
             # Whew, valid arg acquired.  Store in dict
             matchcnt += 1
-            store_arg(desc, d)
+            store_arg(desc, args, d)
             # Clear prior exception
             save_exception = None
 
@@ -1558,7 +1562,7 @@ def send_command(cluster,
                 print('submit {0} to osd.{1}'.format(cmd, osdid),
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
-                cluster.osd_command, osdid, cmd, inbuf, timeout=timeout)
+                cluster.osd_command, int(osdid), cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mgr':
             name = ''     # non-None empty string means "current active mgr"

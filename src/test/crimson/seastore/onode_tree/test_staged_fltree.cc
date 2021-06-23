@@ -26,6 +26,8 @@ namespace {
   constexpr bool IS_DUMMY_SYNC = false;
   using DummyManager = DummyNodeExtentManager<IS_DUMMY_SYNC>;
 
+  using UnboundedBtree = Btree<UnboundedValue>;
+
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
   }
@@ -140,7 +142,7 @@ TEST_F(a_basic_test_t, 2_node_sizes)
   run_async([this] {
     auto nm = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
     auto t = make_test_transaction();
-    ValueBuilderImpl<TestValue> vb;
+    ValueBuilderImpl<UnboundedValue> vb;
     context_t c{*nm, vb, *t};
     std::array<std::pair<NodeImplURef, NodeExtentMutable>, 16> nodes = {
       InternalNode0::allocate(c, false, 1u).unsafe_get0().make_pair(),
@@ -171,15 +173,13 @@ TEST_F(a_basic_test_t, 2_node_sizes)
   });
 }
 
-using TestBtree = Btree<TestValue>;
-
 struct b_dummy_tree_test_t : public seastar_test_suite_t {
   NodeExtentManagerURef moved_nm;
   TransactionRef ref_t;
   Transaction& t;
-  ValueBuilderImpl<TestValue> vb;
+  ValueBuilderImpl<UnboundedValue> vb;
   context_t c;
-  TestBtree tree;
+  UnboundedBtree tree;
 
   b_dummy_tree_test_t()
     : moved_nm{NodeExtentManager::create_dummy(IS_DUMMY_SYNC)},
@@ -209,7 +209,7 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
     ASSERT_TRUE(tree.last(t).unsafe_get0().is_end());
 
     std::map<ghobject_t,
-             std::tuple<test_item_t, TestBtree::Cursor>> insert_history;
+             std::tuple<test_item_t, UnboundedBtree::Cursor>> insert_history;
 
     auto f_validate_insert_new = [this, &insert_history] (
         const ghobject_t& key, const test_item_t& value) {
@@ -496,7 +496,7 @@ class TestTree {
       // clone
       auto ref_dummy = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
       auto p_dummy = static_cast<DummyManager*>(ref_dummy.get());
-      TestBtree tree_clone(std::move(ref_dummy));
+      UnboundedBtree tree_clone(std::move(ref_dummy));
       auto ref_t_clone = make_test_transaction();
       Transaction& t_clone = *ref_t_clone;
       tree_clone.test_clone_from(t_clone, t, tree).unsafe_get0();
@@ -577,12 +577,12 @@ class TestTree {
   NodeExtentManagerURef moved_nm;
   TransactionRef ref_t;
   Transaction& t;
-  ValueBuilderImpl<TestValue> vb;
+  ValueBuilderImpl<UnboundedValue> vb;
   context_t c;
-  TestBtree tree;
+  UnboundedBtree tree;
   Values<test_item_t> values;
   std::map<ghobject_t,
-           std::tuple<test_item_t, TestBtree::Cursor>> insert_history;
+           std::tuple<test_item_t, UnboundedBtree::Cursor>> insert_history;
 };
 
 struct c_dummy_test_t : public seastar_test_suite_t {};
@@ -846,6 +846,8 @@ class DummyChildPool {
     field_type_t field_type() const override { return field_type_t::N0; }
     const char* read() const override {
       ceph_abort("impossible path"); }
+    extent_len_t get_node_size() const override {
+      ceph_abort("impossible path"); }
     nextent_state_t get_extent_state() const override {
       ceph_abort("impossible path"); }
     level_t level() const override { return 0u; }
@@ -855,11 +857,11 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     bool is_keys_empty() const override {
       ceph_abort("impossible path"); }
-    bool is_keys_one() const override {
+    bool has_single_value() const override {
       ceph_abort("impossible path"); }
     node_offset_t free_size() const override {
       ceph_abort("impossible path"); }
-    node_offset_t total_size() const override {
+    extent_len_t total_size() const override {
       ceph_abort("impossible path"); }
     bool is_size_underflow() const override {
       ceph_abort("impossible path"); }
@@ -867,7 +869,7 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     std::tuple<match_stage_t, std::size_t> evaluate_merge(NodeImpl&) override {
       ceph_abort("impossible path"); }
-    search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, node_offset_t) override {
+    search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, extent_len_t) override {
       ceph_abort("impossible path"); }
     eagain_future<NodeExtentMutable> rebuild_extent(context_t) override {
       ceph_abort("impossible path"); }
@@ -1180,7 +1182,7 @@ class DummyChildPool {
 
       // fix back
       logger().info("\n\nFIX pos({}) from {} back to {}:",
-                    pos, node_to_fix->get_name(), old_key);
+                    pos, node_to_fix->get_name(), key_hobj_t(old_key));
       node_to_fix->fix_key(pool_clone.get_context(), old_key).unsafe_get0();
       EXPECT_EQ(pool_clone.p_btree->height(pool_clone.t()).unsafe_get0(), 2);
       EXPECT_EQ(pool_clone.p_dummy->size(), 1);
@@ -1239,9 +1241,9 @@ class DummyChildPool {
   Transaction& t() const { return *ref_t; }
 
   std::set<Ref<DummyChild>> tracked_children;
-  std::optional<TestBtree> p_btree;
+  std::optional<UnboundedBtree> p_btree;
   DummyManager* p_dummy = nullptr;
-  ValueBuilderImpl<TestValue> vb;
+  ValueBuilderImpl<UnboundedValue> vb;
   TransactionRef ref_t = make_test_transaction();
 
   std::random_device rd;
@@ -1271,7 +1273,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
-      auto padding_e = std::string(248, '_');
+      auto padding_e = std::string(247, '_');
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 2, 2));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 3, 3));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 4, 4));
@@ -1386,7 +1388,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (3):\n");
-      auto padding = std::string(420, '_');
+      auto padding = std::string(419, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding, true);
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 2, 2));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 3, 3));
@@ -1411,7 +1413,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 2, 2));
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 3, 3));
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 4, 4));
-      auto padding_s = std::string(387, '_');
+      auto padding_s = std::string(386, '_');
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
@@ -1459,7 +1461,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
                     "\nbefore internal node insert (6):\n");
       auto padding = std::string(328, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding);
-      keys.insert(make_ghobj(5, 5, 5, "ns3", "oid3" + std::string(271, '_'), 3, 3));
+      keys.insert(make_ghobj(5, 5, 5, "ns3", "oid3" + std::string(270, '_'), 3, 3));
       keys.insert(make_ghobj(9, 9, 9, "ns~last", "oid~last", 9, 9));
       pool.build_tree(keys).unsafe_get0();
 
@@ -1520,13 +1522,14 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     constexpr bool TEST_SEASTORE = true;
     constexpr bool TRACK_CURSORS = true;
     auto kvs = KVPool<test_item_t>::create_raw_range(
-        {8, 11, 64, 256, 301, 320},
+        {8, 11,  64, 256, 301, 320},
+        {8, 11,  64, 256, 301, 320},
         {8, 16, 128, 512, 576, 640},
         {0, 16}, {0, 10}, {0, 4});
     auto moved_nm = (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
                                    : NodeExtentManager::create_dummy(IS_DUMMY_SYNC));
     auto p_nm = moved_nm.get();
-    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, test_item_t>>(
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, BoundedValue>>(
         kvs, std::move(moved_nm));
     {
       auto t = tm->create_transaction();
@@ -1617,13 +1620,14 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
     constexpr double EAGAIN_PROBABILITY = 0.1;
     constexpr bool TRACK_CURSORS = false;
     auto kvs = KVPool<test_item_t>::create_raw_range(
-        {8, 11, 64, 256, 301, 320},
-        {8, 16, 128, 512, 576, 640},
+        {8, 11,  64, 128,  255,  256},
+        {8, 13,  64, 512, 2035, 2048},
+        {8, 16, 128, 576,  992, 1200},
         {0, 8}, {0, 10}, {0, 4});
     auto moved_nm = NodeExtentManager::create_seastore(
         *tm, L_ADDR_MIN, EAGAIN_PROBABILITY);
     auto p_nm = static_cast<SeastoreNodeExtentManager<true>*>(moved_nm.get());
-    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, test_item_t>>(
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, ExtendedValue>>(
         kvs, std::move(moved_nm));
     unsigned num_ops = 0;
     unsigned num_ops_eagain = 0;

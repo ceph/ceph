@@ -164,10 +164,12 @@ your metadata throughput with no other administrative intervention.
 
 Presently, there are two types of ephemeral pinning:
 
-**Distributed Ephemeral Pins**: This policy indicates that **all** of a
-directory's immediate children should be ephemerally pinned. The canonical
-example would be the ``/home`` directory: we want every user's home directory
-to be spread across the entire MDS cluster. This can be set via:
+**Distributed Ephemeral Pins**: This policy causes a directory to fragment
+(even well below the normal fragmentation thresholds) and distribute its
+fragments as ephemerally pinned subtrees. This has the effect of distributing
+immediate children across a range of MDS ranks.  The canonical example use-case
+would be the ``/home`` directory: we want every user's home directory to be
+spread across the entire MDS cluster. This can be set via:
 
 ::
 
@@ -221,18 +223,3 @@ For the reverse situation:
 
 The ``home/patrick`` directory and its children will be pinned to rank 2
 because its export pin overrides the policy on ``home``.
-
-If a directory has an export pin and an ephemeral pin policy, the export pin
-applies to the directory itself and the policy to its children. So:
-
-::
-
-    mkdir -p home/{patrick,john}
-    setfattr -n ceph.dir.pin -v 0 home
-    setfattr -n ceph.dir.pin.distributed -v 1 home
-
-The home directory inode (and all of its directory fragments) will always be
-located on rank 0. All children including ``home/patrick`` and ``home/john``
-will be ephemerally pinned according to the distributed policy. This may only
-matter for some obscure performance advantages. All the same, it's mentioned
-here so the override policy is clear.

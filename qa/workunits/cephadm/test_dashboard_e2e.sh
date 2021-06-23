@@ -68,12 +68,6 @@ npm ci --unsafe-perm
 npx cypress verify
 npx cypress info
 
-# Remove device_health_metrics pool
-# Low pg count causes OSD removal failure.
-ceph device monitoring off
-ceph tell mon.\* injectargs '--mon-allow-pool-delete=true'
-ceph osd pool rm device_health_metrics device_health_metrics --yes-i-really-really-mean-it
-
 # Take `orch device ls` and `orch ps` as ground truth.
 ceph orch device ls --refresh
 ceph orch ps --refresh

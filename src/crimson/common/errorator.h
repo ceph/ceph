@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #pragma once
 
@@ -320,6 +320,9 @@ static constexpr auto composer(FuncHead&& head, FuncTail&&... tail) {
 
 template <class ValueT>
 struct errorated_future_marker{};
+
+template <class... AllowedErrors>
+class parallel_for_each_state;
 
 template <class T>
 static inline constexpr bool is_error_v = std::is_base_of_v<error_t<T>, T>;
@@ -713,6 +716,7 @@ private:
     friend inline auto ::seastar::internal::do_with_impl(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more);
     template<typename, typename>
     friend class ::crimson::interruptible::interruptible_future_detail;
+    friend class ::crimson::parallel_for_each_state<AllowedErrors...>;
   };
 
   class Enabler {};
@@ -857,6 +861,44 @@ public:
 
   static auto now() {
     return make_ready_future<>();
+  }
+
+  template <typename Iterator, typename Func>
+  static inline errorator<AllowedErrors...>::future<>
+  parallel_for_each(Iterator first, Iterator last, Func&& func) noexcept {
+    parallel_for_each_state<AllowedErrors...>* s = nullptr;
+    // Process all elements, giving each future the following treatment:
+    //   - available, not failed: do nothing
+    //   - available, failed: collect exception in ex
+    //   - not available: collect in s (allocating it if needed)
+    for (;first != last; ++first) {
+      auto f = seastar::futurize_invoke(std::forward<Func>(func), *first);
+      if (!f.available() || f.failed()) {
+        if (!s) {
+          using itraits = std::iterator_traits<Iterator>;
+          auto n = (seastar::internal::iterator_range_estimate_vector_capacity(
+                first, last, typename itraits::iterator_category()) + 1);
+          s = new parallel_for_each_state<AllowedErrors...>(n);
+        }
+        s->add_future(std::move(f));
+      }
+    }
+    // If any futures were not available, hand off to parallel_for_each_state::start().
+    // Otherwise we can return a result immediately.
+    if (s) {
+      // s->get_future() takes ownership of s (and chains it to one of the futures it contains)
+      // so this isn't a leak
+      return s->get_future();
+    }
+    return seastar::make_ready_future<>();
+  }
+
+  template <typename Container, typename Func>
+  static inline auto parallel_for_each(Container&& container, Func&& func) noexcept {
+    return parallel_for_each(
+        std::begin(container),
+        std::end(container),
+        std::forward<Func>(func));
   }
 
 private:
@@ -1023,8 +1065,8 @@ private:
 template <>
 class errorator<> {
 public:
-  template <class ValueT>
-  using future = ::seastar::future<ValueT>;
+  template <class ValueT=void>
+  using future = ::seastar::futurize_t<ValueT>;
 
   template <class T>
   using futurize = ::seastar::futurize<T>;

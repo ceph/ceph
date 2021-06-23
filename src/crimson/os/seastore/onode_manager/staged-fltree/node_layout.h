@@ -60,25 +60,27 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   NodeLayoutT& operator=(NodeLayoutT&&) = delete;
   ~NodeLayoutT() override = default;
 
-  static URef load(NodeExtentRef extent, bool expect_is_level_tail) {
+  static URef load(NodeExtentRef extent) {
     std::unique_ptr<NodeLayoutT> ret(new NodeLayoutT(extent));
-    assert(ret->is_level_tail() == expect_is_level_tail);
     return ret;
   }
 
   static eagain_future<typename parent_t::fresh_impl_t> allocate(
       context_t c, bool is_level_tail, level_t level) {
     LOG_PREFIX(OTree::Layout::allocate);
-    // NOTE: Currently, all the node types have the same size for simplicity.
-    // But depending on the requirement, we may need to make node size
-    // configurable by field_type_t and node_type_t, or totally flexible.
-    return c.nm.alloc_extent(c.t, node_stage_t::EXTENT_SIZE
+    extent_len_t extent_size;
+    if constexpr (NODE_TYPE == node_type_t::LEAF) {
+      extent_size = c.vb.get_leaf_node_size();
+    } else {
+      extent_size = c.vb.get_internal_node_size();
+    }
+    return c.nm.alloc_extent(c.t, extent_size
     ).handle_error(
       eagain_ertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
-          [FNAME, c, is_level_tail, level] {
-        ERRORT("EIO -- node_size={}, is_level_tail={}, level={}",
-               c.t, node_stage_t::EXTENT_SIZE, is_level_tail, level);
+          [FNAME, c, extent_size, is_level_tail, level] {
+        ERRORT("EIO -- extent_size={}, is_level_tail={}, level={}",
+               c.t, extent_size, is_level_tail, level);
         ceph_abort("fatal error");
       })
     ).safe_then([is_level_tail, level](auto extent) {
@@ -99,6 +101,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   field_type_t field_type() const override { return FIELD_TYPE; }
   laddr_t laddr() const override { return extent.get_laddr(); }
   const char* read() const override { return extent.read().p_start(); }
+  extent_len_t get_node_size() const override { return extent.get_length(); }
   nextent_state_t get_extent_state() const override { return extent.get_state(); }
   void prepare_mutate(context_t c) override { return extent.prepare_mutate(c); }
   bool is_level_tail() const override { return extent.read().is_level_tail(); }
@@ -111,15 +114,22 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     }
     assert(!is_keys_empty());
   }
+
   bool is_keys_empty() const override { return extent.read().keys() == 0; }
-  bool is_keys_one() const override {
-    assert(!is_keys_empty());
-    return STAGE_T::is_keys_one(extent.read());
+
+  bool has_single_value() const override {
+    validate_non_empty();
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      return ((is_level_tail() && is_keys_empty()) ||
+              (!is_level_tail() && STAGE_T::is_keys_one(extent.read())));
+    } else {
+      return STAGE_T::is_keys_one(extent.read());
+    }
   }
 
   level_t level() const override { return extent.read().level(); }
   node_offset_t free_size() const override { return extent.read().free_size(); }
-  node_offset_t total_size() const override { return extent.read().total_size(); }
+  extent_len_t total_size() const override { return extent.read().total_size(); }
   bool is_extent_retired() const override { return extent.is_retired(); }
 
   std::optional<key_view_t> get_pivot_index() const override {
@@ -193,19 +203,32 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
   std::tuple<match_stage_t, std::size_t> evaluate_merge(
       NodeImpl& _right_node) override {
-    assert(NODE_TYPE == _right_node.node_type());
-    assert(FIELD_TYPE == _right_node.field_type());
     auto& left_node_stage = extent.read();
     auto& right_node = dynamic_cast<NodeLayoutT&>(_right_node);
     auto& right_node_stage = right_node.extent.read();
+
+    assert(NODE_TYPE == _right_node.node_type());
+    assert(FIELD_TYPE == _right_node.field_type());
     assert(!is_level_tail());
     assert(!is_keys_empty());
-    assert(!right_node.is_keys_empty());
-    key_view_t left_pivot_index;
-    STAGE_T::template get_largest_slot<false, true, false>(
-        left_node_stage, nullptr, &left_pivot_index, nullptr);
-    auto [merge_stage, size_comp] = STAGE_T::evaluate_merge(
-        left_pivot_index, right_node_stage);
+
+    match_stage_t merge_stage;
+    node_offset_t size_comp;
+    if (right_node.is_keys_empty()) {
+      if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+        assert(right_node.is_level_tail());
+        merge_stage = STAGE;
+        size_comp = right_node_stage.header_size();
+      } else {
+        ceph_abort("impossible path");
+      }
+    } else {
+      key_view_t left_pivot_index;
+      STAGE_T::template get_largest_slot<false, true, false>(
+          left_node_stage, nullptr, &left_pivot_index, nullptr);
+      std::tie(merge_stage, size_comp) = STAGE_T::evaluate_merge(
+          left_pivot_index, right_node_stage);
+    }
     auto size_left = filled_size();
     auto size_right = right_node.filled_size();
     assert(size_right > size_comp);
@@ -213,12 +236,16 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return {merge_stage, merge_size};
   }
 
-  search_position_t merge(NodeExtentMutable& mut, NodeImpl& _right_node,
-                          match_stage_t merge_stage, node_offset_t merge_size) override {
+  search_position_t merge(
+      NodeExtentMutable& mut,
+      NodeImpl& _right_node,
+      match_stage_t merge_stage,
+      extent_len_t merge_size) override {
     LOG_PREFIX(OTree::Layout::merge);
-    assert(NODE_TYPE == _right_node.node_type());
-    assert(FIELD_TYPE == _right_node.field_type());
+
+    auto& left_node_stage = extent.read();
     auto& right_node = dynamic_cast<NodeLayoutT&>(_right_node);
+    auto& right_node_stage = right_node.extent.read();
     if (unlikely(LOGGER.is_enabled(seastar::log_level::debug))) {
       {
         std::ostringstream sos;
@@ -232,30 +259,40 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       }
     }
 
+    assert(NODE_TYPE == _right_node.node_type());
+    assert(FIELD_TYPE == _right_node.field_type());
     assert(!is_level_tail());
     assert(!is_keys_empty());
-    auto& left_node_stage = extent.read();
-    position_t left_last_pos;
-    STAGE_T::template get_largest_slot<true, false, false>(
-        left_node_stage, &left_last_pos, nullptr, nullptr);
-
-    typename STAGE_T::template StagedAppender<KeyT::VIEW> left_appender;
-    left_appender.init_tail(&mut, left_node_stage, merge_stage);
-
-    assert(!right_node.is_keys_empty());
-    auto& right_node_stage = right_node.extent.read();
-    typename STAGE_T::StagedIterator right_append_at;
-    right_append_at.set(right_node_stage);
-
-    auto pos_end = position_t::end();
-    STAGE_T::template append_until<KeyT::VIEW>(
-        right_append_at, left_appender, pos_end, STAGE);
-    assert(right_append_at.is_end());
-    left_appender.wrap();
 
     if (right_node.is_level_tail()) {
       node_stage_t::update_is_level_tail(mut, left_node_stage, true);
       build_name();
+    }
+    position_t left_last_pos;
+    STAGE_T::template get_largest_slot<true, false, false>(
+        left_node_stage, &left_last_pos, nullptr, nullptr);
+
+    if (right_node.is_keys_empty()) {
+      if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+        assert(right_node.is_level_tail());
+        laddr_t tail_value = right_node_stage.get_end_p_laddr()->value;
+        auto p_write = left_node_stage.get_end_p_laddr();
+        mut.copy_in_absolute((void*)p_write, tail_value);
+      } else {
+        ceph_abort("impossible path");
+      }
+    } else {
+      typename STAGE_T::template StagedAppender<KeyT::VIEW> left_appender;
+      left_appender.init_tail(&mut, left_node_stage, merge_stage);
+
+      typename STAGE_T::StagedIterator right_append_at;
+      right_append_at.set(right_node_stage);
+
+      auto pos_end = position_t::end();
+      STAGE_T::template append_until<KeyT::VIEW>(
+          right_append_at, left_appender, pos_end, STAGE);
+      assert(right_append_at.is_end());
+      left_appender.wrap();
     }
 
     if (unlikely(LOGGER.is_enabled(seastar::log_level::debug))) {
@@ -294,7 +331,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     if (!is_keys_empty()) {
       STAGE_T::get_stats(node_stage, stats, index_key);
     }
-    stats.size_persistent = node_stage_t::EXTENT_SIZE;
+    stats.size_persistent = extent.get_length();
     stats.size_filled = filled_size();
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       if (is_level_tail()) {
@@ -384,6 +421,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       ceph_abort("impossible path");
     }
+#ifndef NDEBUG
+    if (pp_value) {
+      assert((const char*)(*pp_value) - extent.read().p_start() <
+             extent.get_length());
+    }
+#endif
   }
 
   void get_prev_slot(search_position_t& pos,
@@ -618,24 +661,27 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        * - I > 2
        * This means the largest possible insert_size must be smaller than 1/2 of
        * the node_block_size, which is better than strategy A.
-
+       *
        * In order to avoid "double split", there is another side-effect we need
        * to take into consideration: if split happens with snap-gen indexes, the
        * according ns-oid string needs to be copied to the right node. That is
        * to say: right_node_size + string_size < node_block_size.
        *
        * Say that the largest allowed string size is 1/S of the largest allowed
-       * insert_size N/I KiB. If we go with stragety B, the equation should be
-       * changed to:
-       * - right_node_size ~= (I+2)/2I + 1/(I*S) < 1
-       * - I > 2 + 2/S (S > 1)
+       * insert_size N/I KiB. If we go with stragety B, and when split happens
+       * with snap-gen indexes and split just overflow the target_split_size:
+       * - left_node_size  ~= target_split_size - 1/2 * (1/I - 1/IS)
+       *                   ~= 1/2 + 1/2IS
+       * - right_node_size ~= 1 + 1/I - left_node_size + 1/IS
+       *                   ~= 1/2 + 1/I + 1/2IS < 1
+       * - I > 2 + 1/S (S > 1)
        *
        * Now back to NODE_BLOCK_SIZE calculation, if we have limits of at most
        * X KiB ns-oid string and Y KiB of value to store in this BTree, then:
        * - largest_insert_size ~= X+Y KiB
        * - 1/S == X/(X+Y)
-       * - I > (4X+2Y)/(X+Y)
-       * - node_block_size(N) == I * insert_size > 4X+2Y KiB
+       * - I > (3X+2Y)/(X+Y)
+       * - node_block_size(N) == I * insert_size > 3X+2Y KiB
        *
        * In conclusion,
        * (TODO) the current node block size (4 KiB) is too small to
@@ -752,7 +798,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       STAGE_T::template get_largest_slot<true, false, false>(
           extent.read(), &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
     } else {
-      node_stage_t right_stage{reinterpret_cast<FieldType*>(right_mut.get_write())};
+      node_stage_t right_stage{reinterpret_cast<FieldType*>(right_mut.get_write()),
+                               right_mut.get_length()};
       STAGE_T::template get_largest_slot<true, false, false>(
           right_stage, &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
     }
@@ -851,7 +898,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     build_name();
   }
 
-  node_offset_t filled_size() const {
+  extent_len_t filled_size() const {
     auto& node_stage = extent.read();
     auto ret = node_stage.size_before(node_stage.keys());
     assert(ret == node_stage.total_size() - node_stage.free_size());
@@ -864,7 +911,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     std::ostringstream sos;
     sos << "Node" << NODE_TYPE << FIELD_TYPE
         << "@0x" << std::hex << extent.get_laddr()
-        << "+" << node_stage_t::EXTENT_SIZE << std::dec
+        << "+" << extent.get_length() << std::dec
         << "Lv" << (unsigned)level()
         << (is_level_tail() ? "$" : "");
     name = sos.str();

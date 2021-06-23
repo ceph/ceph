@@ -912,7 +912,7 @@ if (WITH_MGR)
 endif()
 
 add_custom_target(vstart DEPENDS vstart-base)
-if(WITH_RBD)
+if(WITH_RBD AND NOT WIN32)
   add_dependencies(vstart cython_rbd)
 endif()
 if (WITH_CEPHFS)

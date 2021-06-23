@@ -191,7 +191,8 @@ void tree_cursor_t::Cache::update_all(const node_version_t& current_version,
   key_view = _key_view;
   p_value_header = _p_value_header;
   assert((const char*)p_value_header > p_node_base);
-  assert((const char*)p_value_header - p_node_base < NODE_BLOCK_SIZE);
+  assert((const char*)p_value_header - p_node_base <
+         (int)ref_leaf_node->get_node_size());
 
   value_payload_mut.reset();
   p_value_recorder = nullptr;
@@ -211,10 +212,12 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
 
     auto current_p_node_base = ref_leaf_node->read();
     assert(current_p_node_base != p_node_base);
+    auto node_size = ref_leaf_node->get_node_size();
 
     version.state = current_version.state;
-    reset_ptr(p_value_header, p_node_base, current_p_node_base);
-    key_view->reset_to(p_node_base, current_p_node_base);
+    reset_ptr(p_value_header, p_node_base,
+              current_p_node_base, node_size);
+    key_view->reset_to(p_node_base, current_p_node_base, node_size);
     value_payload_mut.reset();
     p_value_recorder = nullptr;
 
@@ -403,6 +406,7 @@ eagain_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_trac
   ).safe_then([c, &root_tracker, FNAME](auto&& _super) {
     auto root_addr = _super->get_root_laddr();
     assert(root_addr != L_ADDR_NULL);
+    TRACET("loading root_addr={:x} ...", c.t, root_addr);
     return Node::load(c, root_addr, true
     ).safe_then([c, _super = std::move(_super),
                  &root_tracker, FNAME](auto root) mutable {
@@ -517,7 +521,9 @@ Node::try_merge_adjacent(
   impl->validate_non_empty();
   assert(!is_root());
   if constexpr (!FORCE_MERGE) {
-    if (!impl->is_size_underflow()) {
+    if (!impl->is_size_underflow() &&
+        !impl->has_single_value()) {
+      // skip merge
       if (update_parent_index) {
         return fix_parent_index(c, std::move(this_ref), false);
       } else {
@@ -651,11 +657,7 @@ eagain_future<Ref<Node>> Node::load(
     context_t c, laddr_t addr, bool expect_is_level_tail)
 {
   LOG_PREFIX(OTree::Node::load);
-  // NOTE:
-  // *option1: all types of node have the same length;
-  // option2: length is defined by node/field types;
-  // option3: length is totally flexible;
-  return c.nm.read_extent(c.t, addr, NODE_BLOCK_SIZE
+  return c.nm.read_extent(c.t, addr
   ).handle_error(
     eagain_ertr::pass_further{},
     crimson::ct_error::input_output_error::handle(
@@ -682,13 +684,40 @@ eagain_future<Ref<Node>> Node::load(
              c.t, addr, expect_is_level_tail);
       ceph_abort("fatal error");
     })
-  ).safe_then([expect_is_level_tail](auto extent) {
-    auto [node_type, field_type] = extent->get_types();
+  ).safe_then([FNAME, c, addr, expect_is_level_tail](auto extent) {
+    auto header = extent->get_header();
+    auto field_type = header.get_field_type();
+    if (!field_type) {
+      ERRORT("load addr={:x}, is_level_tail={} error, "
+             "got invalid header -- {}",
+             c.t, addr, expect_is_level_tail, extent);
+      ceph_abort("fatal error");
+    }
+    if (header.get_is_level_tail() != expect_is_level_tail) {
+      ERRORT("load addr={:x}, is_level_tail={} error, "
+             "is_level_tail mismatch -- {}",
+             c.t, addr, expect_is_level_tail, extent);
+      ceph_abort("fatal error");
+    }
+
+    auto node_type = header.get_node_type();
     if (node_type == node_type_t::LEAF) {
-      auto impl = LeafNodeImpl::load(extent, field_type, expect_is_level_tail);
+      if (extent->get_length() != c.vb.get_leaf_node_size()) {
+        ERRORT("load addr={:x}, is_level_tail={} error, "
+               "leaf length mismatch -- {}",
+               c.t, addr, expect_is_level_tail, extent);
+        ceph_abort("fatal error");
+      }
+      auto impl = LeafNodeImpl::load(extent, *field_type);
       return Ref<Node>(new LeafNode(impl.get(), std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
-      auto impl = InternalNodeImpl::load(extent, field_type, expect_is_level_tail);
+      if (extent->get_length() != c.vb.get_internal_node_size()) {
+        ERRORT("load addr={:x}, is_level_tail={} error, "
+               "internal length mismatch -- {}",
+               c.t, addr, expect_is_level_tail, extent);
+        ceph_abort("fatal error");
+      }
+      auto impl = InternalNodeImpl::load(extent, *field_type);
       return Ref<Node>(new InternalNode(impl.get(), std::move(impl)));
     } else {
       ceph_abort("impossible path");
@@ -878,9 +907,7 @@ eagain_future<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
     return child_ref->retire(c, std::move(child_ref)
     ).safe_then([c, this, child_pos, FNAME,
                  this_ref = std::move(this_ref)] () mutable {
-      if ((impl->is_level_tail() && impl->is_keys_empty()) ||
-          (!impl->is_level_tail() && impl->is_keys_one())) {
-        // there is only one value left
+      if (impl->has_single_value()) {
         // fast path without mutating the extent
         DEBUGT("{} has one value left, erase ...", c.t, get_name());
 #ifndef NDEBUG
@@ -1172,6 +1199,8 @@ eagain_future<Ref<InternalNode>> InternalNode::allocate_root(
     context_t c, level_t old_root_level,
     laddr_t old_root_addr, Super::URef&& super)
 {
+  // support tree height up to 256
+  ceph_assert(old_root_level < MAX_LEVEL);
   return InternalNode::allocate(c, field_type_t::N0, true, old_root_level + 1
   ).safe_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
@@ -1492,22 +1521,31 @@ eagain_future<Ref<Node>> InternalNode::get_or_track_child(
     context_t c, const search_position_t& position, laddr_t child_addr)
 {
   LOG_PREFIX(OTree::InternalNode::get_or_track_child);
-  bool level_tail = position.is_end();
-  Ref<Node> child;
-  auto found = tracked_child_nodes.find(position);
   Ref<Node> this_ref = this;
-  return (found == tracked_child_nodes.end()
-    ? (Node::load(c, child_addr, level_tail
-       ).safe_then([this, position, c, FNAME] (auto child) {
-         child->as_child(position, this);
-         TRACET("loaded child untracked {} at pos({})",
-                c.t, child->get_name(), position);
-         return child;
-       }))
-    : (TRACET("loaded child tracked {} at pos({})",
-              c.t, found->second->get_name(), position),
-       eagain_ertr::make_ready_future<Ref<Node>>(found->second))
-  ).safe_then([this_ref, this, position, child_addr] (auto child) {
+  return [this, position, child_addr, c, FNAME] {
+    auto found = tracked_child_nodes.find(position);
+    if (found != tracked_child_nodes.end()) {
+      TRACET("loaded child tracked {} at pos({}) addr={:x}",
+              c.t, found->second->get_name(), position, child_addr);
+      return eagain_ertr::make_ready_future<Ref<Node>>(found->second);
+    }
+    // the child is not loaded yet
+    TRACET("loading child at pos({}) addr={:x} ...",
+           c.t, position, child_addr);
+    bool level_tail = position.is_end();
+    return Node::load(c, child_addr, level_tail
+    ).safe_then([this, position, c, FNAME] (auto child) {
+      TRACET("loaded child untracked {}",
+             c.t, child->get_name());
+      if (child->level() + 1 != level()) {
+        ERRORT("loaded child {} error from parent {} at pos({}), level mismatch",
+               c.t, child->get_name(), get_name(), position);
+        ceph_abort("fatal error");
+      }
+      child->as_child(position, this);
+      return child;
+    });
+  }().safe_then([this_ref, this, position, child_addr] (auto child) {
     assert(child_addr == child->impl->laddr());
     assert(position == child->parent_info().position);
     std::ignore = position;
@@ -1709,6 +1747,11 @@ const char* LeafNode::read() const
   return impl->read();
 }
 
+extent_len_t LeafNode::get_node_size() const
+{
+  return impl->get_node_size();
+}
+
 std::tuple<key_view_t, const value_header_t*>
 LeafNode::get_kv(const search_position_t& pos) const
 {
@@ -1767,11 +1810,11 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
         [c, &pos, this_ref = std::move(this_ref), this, FNAME] () mutable {
 #ifndef NDEBUG
       assert(!impl->is_keys_empty());
-      if (impl->is_keys_one()) {
+      if (impl->has_single_value()) {
         assert(pos == search_position_t::begin());
       }
 #endif
-      if (!is_root() && impl->is_keys_one()) {
+      if (!is_root() && impl->has_single_value()) {
         // we need to keep the root as an empty leaf node
         // fast path without mutating the extent
         // track_erase

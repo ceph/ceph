@@ -179,14 +179,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(ceph_rgw_get_b{ceph_daemon=~\"[[rgw_servers]]\"}[30s])",
+          "expr": "rate(ceph_rgw_get_b{ceph_daemon=~\"$rgw_servers\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "GETs {{ceph_daemon}}",
           "refId": "B"
         },
         {
-          "expr": "rate(ceph_rgw_put_b{ceph_daemon=~\"[[rgw_servers]]\"}[30s])",
+          "expr": "rate(ceph_rgw_put_b{ceph_daemon=~\"$rgw_servers\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "PUTs {{ceph_daemon}}",
@@ -275,28 +275,28 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(ceph_rgw_failed_req{ceph_daemon=~\"[[rgw_servers]]\"}[30s])",
+          "expr": "rate(ceph_rgw_failed_req{ceph_daemon=~\"$rgw_servers\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Requests Failed {{ceph_daemon}}",
           "refId": "B"
         },
         {
-          "expr": "rate(ceph_rgw_get{ceph_daemon=~\"[[rgw_servers]]\"}[30s])",
+          "expr": "rate(ceph_rgw_get{ceph_daemon=~\"$rgw_servers\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "GETs {{ceph_daemon}}",
           "refId": "C"
         },
         {
-          "expr": "rate(ceph_rgw_put{ceph_daemon=~\"[[rgw_servers]]\"}[30s])",
+          "expr": "rate(ceph_rgw_put{ceph_daemon=~\"$rgw_servers\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "PUTs {{ceph_daemon}}",
           "refId": "D"
         },
         {
-          "expr": "rate(ceph_rgw_req{ceph_daemon=~\"[[rgw_servers]]\"}[30s]) -\n  (rate(ceph_rgw_get{ceph_daemon=~\"[[rgw_servers]]\"}[30s]) +\n   rate(ceph_rgw_put{ceph_daemon=~\"[[rgw_servers]]\"}[30s]))",
+          "expr": "rate(ceph_rgw_req{ceph_daemon=~\"$rgw_servers\"}[30s]) -\n  (rate(ceph_rgw_get{ceph_daemon=~\"$rgw_servers\"}[30s]) +\n   rate(ceph_rgw_put{ceph_daemon=~\"$rgw_servers\"}[30s]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Other {{ceph_daemon}}",
@@ -376,28 +376,28 @@
       "strokeWidth": 1,
       "targets": [
         {
-          "expr": "rate(ceph_rgw_failed_req{ceph_daemon=~\"[[rgw_servers]]\"}[30s])",
+          "expr": "rate(ceph_rgw_failed_req{ceph_daemon=~\"$rgw_servers\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Failures {{ceph_daemon}}",
           "refId": "A"
         },
         {
-          "expr": "rate(ceph_rgw_get{ceph_daemon=~\"[[rgw_servers]]\"}[30s])",
+          "expr": "rate(ceph_rgw_get{ceph_daemon=~\"$rgw_servers\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "GETs {{ceph_daemon}}",
           "refId": "B"
         },
         {
-          "expr": "rate(ceph_rgw_put{ceph_daemon=~\"[[rgw_servers]]\"}[30s])",
+          "expr": "rate(ceph_rgw_put{ceph_daemon=~\"$rgw_servers\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "PUTs {{ceph_daemon}}",
           "refId": "C"
         },
         {
-          "expr": "rate(ceph_rgw_req{ceph_daemon=~\"[[rgw_servers]]\"}[30s]) -\n  (rate(ceph_rgw_get{ceph_daemon=~\"[[rgw_servers]]\"}[30s]) +\n   rate(ceph_rgw_put{ceph_daemon=~\"[[rgw_servers]]\"}[30s]))",
+          "expr": "rate(ceph_rgw_req{ceph_daemon=~\"$rgw_servers\"}[30s]) -\n  (rate(ceph_rgw_get{ceph_daemon=~\"$rgw_servers\"}[30s]) +\n   rate(ceph_rgw_put{ceph_daemon=~\"$rgw_servers\"}[30s]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Other (DELETE,LIST) {{ceph_daemon}}",

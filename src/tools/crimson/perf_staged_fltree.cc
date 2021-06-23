@@ -30,7 +30,7 @@ class PerfTree : public TMTestState {
   seastar::future<> run(KVPool<test_item_t>& kvs, double erase_ratio) {
     return tm_setup().then([this, &kvs, erase_ratio] {
       return seastar::async([this, &kvs, erase_ratio] {
-        auto tree = std::make_unique<TreeBuilder<TRACK, test_item_t>>(kvs,
+        auto tree = std::make_unique<TreeBuilder<TRACK, ExtendedValue>>(kvs,
             (is_dummy ? NodeExtentManager::create_dummy(true)
                       : NodeExtentManager::create_seastore(*tm)));
         {
@@ -88,7 +88,8 @@ seastar::future<> run(const bpo::variables_map& config) {
     } else {
       ceph_abort(false && "invalid backend");
     }
-    auto str_sizes = config["str-sizes"].as<std::vector<size_t>>();
+    auto ns_sizes = config["ns-sizes"].as<std::vector<size_t>>();
+    auto oid_sizes = config["oid-sizes"].as<std::vector<size_t>>();
     auto onode_sizes = config["onode-sizes"].as<std::vector<size_t>>();
     auto range2 = config["range2"].as<std::vector<int>>();
     ceph_assert(range2.size() == 2);
@@ -113,7 +114,7 @@ seastar::future<> run(const bpo::variables_map& config) {
     });
 
     auto kvs = KVPool<test_item_t>::create_raw_range(
-        str_sizes, onode_sizes,
+        ns_sizes, oid_sizes, onode_sizes,
         {range2[0], range2[1]},
         {range1[0], range1[1]},
         {range0[0], range0[1]});
@@ -131,11 +132,14 @@ int main(int argc, char** argv)
      "tree backend: dummy, seastore")
     ("tracked", bpo::value<bool>()->default_value(false),
      "track inserted cursors")
-    ("str-sizes", bpo::value<std::vector<size_t>>()->default_value(
-        {8, 11, 64, 256, 301, 320}),
-     "sizes of ns/oid strings")
+    ("ns-sizes", bpo::value<std::vector<size_t>>()->default_value(
+        {8, 11, 64, 128, 255, 256}),
+     "sizes of ns strings")
+    ("oid-sizes", bpo::value<std::vector<size_t>>()->default_value(
+        {8, 13, 64, 512, 2035, 2048}),
+     "sizes of oid strings")
     ("onode-sizes", bpo::value<std::vector<size_t>>()->default_value(
-        {8, 16, 128, 512, 576, 640}),
+        {8, 16, 128, 576, 992, 1200}),
      "sizes of onode")
     ("range2", bpo::value<std::vector<int>>()->default_value(
         {0, 128}),

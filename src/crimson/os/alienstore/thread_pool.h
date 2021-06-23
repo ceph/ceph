@@ -26,8 +26,8 @@ struct Task final : WorkItem {
   using T = std::invoke_result_t<Func>;
   using future_stored_type_t =
     std::conditional_t<std::is_void_v<T>,
-		       seastar::internal::future_stored_type_t<>,
-		       seastar::internal::future_stored_type_t<T>>;
+                       seastar::internal::future_stored_type_t<>,
+                       seastar::internal::future_stored_type_t<T>>;
   using futurator_t = seastar::futurize<T>;
 public:
   explicit Task(Func&& f)
@@ -49,9 +49,9 @@ public:
   typename futurator_t::type get_future() {
     return on_done.wait().then([this](size_t) {
       if (state.failed()) {
-	return futurator_t::make_exception_future(state.get_exception());
+        return futurator_t::make_exception_future(state.get_exception());
       } else {
-	return futurator_t::from_tuple(state.get_value());
+        return futurator_t::from_tuple(state.get_value());
       }
     });
   }
@@ -77,8 +77,7 @@ public:
   WorkItem* pop_front(std::chrono::milliseconds& queue_max_wait) {
     WorkItem* work_item = nullptr;
     std::unique_lock lock{mutex};
-    cond.wait_for(lock, queue_max_wait,
-		  [this, &work_item] {
+    cond.wait_for(lock, queue_max_wait, [this, &work_item] {
       bool empty = true;
       if (!pending.empty()) {
         empty = false;
@@ -90,10 +89,16 @@ public:
     return work_item;
   }
   void stop() {
-    stopping = true;
+    {
+      std::unique_lock lock{mutex};
+      stopping = true;
+    }
     cond.notify_all();
   }
   void push_back(WorkItem* work_item) {
+    // XXX: oops, we can stall the reactor!
+    // TODO: switch to boost::lockfree.
+    std::unique_lock lock{mutex};
     pending.push_back(work_item);
     cond.notify_one();
   }
@@ -109,24 +114,6 @@ private:
 
 /// an engine for scheduling non-seastar tasks from seastar fibers
 class ThreadPool {
-  size_t n_threads;
-  std::atomic<bool> stopping = false;
-  std::vector<std::thread> threads;
-  seastar::sharded<SubmitQueue> submit_queue;
-  const size_t queue_size;
-  std::vector<ShardedWorkQueue> pending_queues;
-
-  void loop(std::chrono::milliseconds queue_max_wait, size_t shard);
-  bool is_stopping() const {
-    return stopping.load(std::memory_order_relaxed);
-  }
-  static void pin(const std::vector<uint64_t>& cpus);
-  static void block_sighup();
-  seastar::semaphore& local_free_slots() {
-    return submit_queue.local().free_slots;
-  }
-  ThreadPool(const ThreadPool&) = delete;
-  ThreadPool& operator=(const ThreadPool&) = delete;
 public:
   /**
    * @param queue_sz the depth of pending queue. before a task is scheduled,
@@ -156,7 +143,7 @@ public:
           .then([packaged=std::move(packaged), shard, this] {
             auto task = new Task{std::move(packaged)};
             auto fut = task->get_future();
-	    pending_queues[shard].push_back(task);
+            pending_queues[shard].push_back(task);
             return fut.finally([task, this] {
               local_free_slots().signal();
               delete task;
@@ -167,9 +154,29 @@ public:
 
   template<typename Func>
   auto submit(Func&& func) {
-    return submit(::rand() % n_threads,
-		  std::forward<Func>(func));
+    return submit(::rand() % n_threads, std::forward<Func>(func));
   }
+
+private:
+  void loop(std::chrono::milliseconds queue_max_wait, size_t shard);
+  bool is_stopping() const {
+    return stopping.load(std::memory_order_relaxed);
+  }
+  static void pin(const std::vector<uint64_t>& cpus);
+  static void block_sighup();
+  seastar::semaphore& local_free_slots() {
+    return submit_queue.local().free_slots;
+  }
+  ThreadPool(const ThreadPool&) = delete;
+  ThreadPool& operator=(const ThreadPool&) = delete;
+
+private:
+  size_t n_threads;
+  std::atomic<bool> stopping = false;
+  std::vector<std::thread> threads;
+  seastar::sharded<SubmitQueue> submit_queue;
+  const size_t queue_size;
+  std::vector<ShardedWorkQueue> pending_queues;
 };
 
 } // namespace crimson::os

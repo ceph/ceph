@@ -3239,9 +3239,19 @@ paths:
           application/json:
             schema:
               properties:
-                hostname:
+                addr:
+                  description: Network Address
                   type: string
+                hostname:
+                  description: Hostname
+                  type: string
+                labels:
+                  description: Host Labels
+                  items:
+                    type: string
+                  type: array
                 status:
+                  description: Host Status
                   type: string
               required:
               - hostname
@@ -3249,12 +3259,12 @@ paths:
       responses:
         '201':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v0.1+json:
               type: object
           description: Resource created.
         '202':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v0.1+json:
               type: object
           description: Operation is still executing. Please check the task queue.
         '400':
@@ -3370,14 +3380,14 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v0.1+json:
               schema:
                 properties: {}
                 type: object
           description: Resource updated.
         '202':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v0.1+json:
               type: object
           description: Operation is still executing. Please check the task queue.
         '400':

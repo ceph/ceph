@@ -504,7 +504,7 @@ class TestDataScan(CephFSTestCase):
 
         # run scrub to update and make sure rstat.rbytes info in subdir inode and dirfrag
         # are matched
-        out_json = self.fs.run_scrub(["start", "/subdir", "repair", "recursive"])
+        out_json = self.fs.run_scrub(["start", "/subdir", "repair,recursive"])
         self.assertNotEqual(out_json, None)
         self.assertEqual(out_json["return_code"], 0)
         self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
@@ -545,7 +545,7 @@ class TestDataScan(CephFSTestCase):
 
         pg_count = self.fs.pgs_per_fs_pool
         for pg_n in range(0, pg_count):
-            pg_str = "{0}.{1}".format(self.fs.get_data_pool_id(), pg_n)
+            pg_str = "{0}.{1:x}".format(self.fs.get_data_pool_id(), pg_n)
             out = self.fs.data_scan(["pg_files", "mydir", pg_str])
             lines = [l for l in out.split("\n") if l]
             log.info("{0}: {1}".format(pg_str, lines))

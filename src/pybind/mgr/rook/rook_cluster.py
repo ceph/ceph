@@ -414,6 +414,8 @@ class RookCluster(object):
                     namespace=self.rook_env.namespace,
                 ),
                 spec=cfs.Spec(
+                    None,
+                    None,
                     metadataServer=cfs.MetadataServer(
                         activeCount=spec.placement.count or 1,
                         activeStandby=True
@@ -438,7 +440,6 @@ class RookCluster(object):
             # translate . to - (fingers crossed!) instead.
             name = spec.service_id.replace('.', '-')
 
-        # FIXME: pass realm and/or zone through to the CR
 
         def _create_zone() -> cos.CephObjectStore:
             port = None
@@ -447,26 +448,35 @@ class RookCluster(object):
                 secure_port = spec.get_port()
             else:
                 port = spec.get_port()
-            return cos.CephObjectStore(
-                apiVersion=self.rook_env.api_name,
-                metadata=dict(
-                    name=name,
-                    namespace=self.rook_env.namespace
-                ),
-                spec=cos.Spec(
-                    gateway=cos.Gateway(
-                        type='s3',
-                        port=port,
-                        securePort=secure_port,
-                        instances=spec.placement.count or 1,
+            object_store = cos.CephObjectStore(
+                    apiVersion=self.rook_env.api_name,
+                    metadata=dict(
+                        name=name,
+                        namespace=self.rook_env.namespace
+                    ),
+                    spec=cos.Spec(
+                        gateway=cos.Gateway(
+                            port=port,
+                            securePort=secure_port,
+                            instances=spec.placement.count or 1,
+                        )
                     )
                 )
-            )
+            if spec.rgw_zone:
+                object_store.spec.zone=cos.Zone(
+                            name=spec.rgw_zone
+                        )
+            return object_store
+                
 
         def _update_zone(new: cos.CephObjectStore) -> cos.CephObjectStore:
-            new.spec.gateway.instances = spec.placement.count or 1
+            if new.spec.gateway:
+                new.spec.gateway.instances = spec.placement.count or 1
+            else: 
+                new.spec.gateway=cos.Gateway(
+                    instances=spec.placement.count or 1
+                )
             return new
-
         return self._create_or_patch(
             cos.CephObjectStore, 'cephobjectstores', name,
             _update_zone, _create_zone)
@@ -491,6 +501,7 @@ class RookCluster(object):
                         ),
                     spec=cnfs.Spec(
                         rados=cnfs.Rados(
+                            namespace=self.rook_env.namespace,
                             pool=spec.pool
                             ),
                         server=cnfs.Server(
@@ -540,16 +551,18 @@ class RookCluster(object):
             # type: (ccl.CephCluster, ccl.CephCluster) -> ccl.CephCluster
             if newcount is None:
                 raise orchestrator.OrchestratorError('unable to set mon count to None')
+            if not new.spec.mon:
+                raise orchestrator.OrchestratorError("mon attribute not specified in new spec")
             new.spec.mon.count = newcount
             return new
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _update_mon_count)
-
+    """
     def add_osds(self, drive_group, matching_hosts):
         # type: (DriveGroupSpec, List[str]) -> str
-        """
-        Rook currently (0.8) can only do single-drive OSDs, so we
-        treat all drive groups as just a list of individual OSDs.
-        """
+        
+        # Rook currently (0.8) can only do single-drive OSDs, so we
+        # treat all drive groups as just a list of individual OSDs.
+        
         block_devices = drive_group.data_devices.paths if drive_group.data_devices else []
         directories = drive_group.data_directories
 
@@ -561,14 +574,19 @@ class RookCluster(object):
             # FIXME: this is all not really atomic, because jsonpatch doesn't
             # let us do "test" operations that would check if items with
             # matching names were in existing lists.
+            if not new_cluster.spec.storage:
+                raise orchestrator.OrchestratorError('new_cluster missing storage attribute')
 
             if not hasattr(new_cluster.spec.storage, 'nodes'):
                 new_cluster.spec.storage.nodes = ccl.NodesList()
 
             current_nodes = getattr(current_cluster.spec.storage, 'nodes', ccl.NodesList())
             matching_host = matching_hosts[0]
-
+            
             if matching_host not in [n.name for n in current_nodes]:
+                # FIXME: ccl.Config stopped existing since rook changed
+                # their CRDs, check if config is actually necessary for this
+                
                 pd = ccl.NodesItem(
                     name=matching_host,
                     config=ccl.Config(
@@ -592,7 +610,8 @@ class RookCluster(object):
                         if block_devices:
                             if not hasattr(current_node, 'devices'):
                                 current_node.devices = ccl.DevicesList()
-                            new_devices = list(set(block_devices) - set([d.name for d in current_node.devices]))
+                            current_device_names = set(d.name for d in current_node.devices)
+                            new_devices = [bd for bd in block_devices if bd.path not in current_device_names]
                             current_node.devices.extend(
                                 ccl.DevicesItem(name=n.path) for n in new_devices
                             )
@@ -607,7 +626,7 @@ class RookCluster(object):
             return new_cluster
 
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _add_osds)
-
+    """
     def _patch(self, crd: Type, crd_name: str, cr_name: str, func: Callable[[CrdClassT, CrdClassT], CrdClassT]) -> str:
         current_json = self.rook_api_get(
             "{}/{}".format(crd_name, cr_name)

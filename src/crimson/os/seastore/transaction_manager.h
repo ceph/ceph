@@ -214,6 +214,28 @@ public:
     });
   }
 
+  /**
+   * read_extent
+   *
+   * Read extent of type T at offset
+   */
+  template <typename T>
+  read_extent_ret<T> read_extent(
+    Transaction &t,
+    laddr_t offset) {
+    LOG_PREFIX(TransactionManager::read_extent);
+    return get_pin(
+      t, offset
+    ).safe_then([this, FNAME, &t, offset] (auto pin) {
+      if (!pin->get_paddr().is_real()) {
+        ERRORT("offset {} got wrong pin {}",
+               t, offset, *pin);
+        ceph_assert(0 == "Should be impossible");
+      }
+      return this->pin_to_extent<T>(t, std::move(pin));
+    });
+  }
+
   /// Obtain mutable copy of extent
   LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
     LOG_PREFIX(TransactionManager::get_mutable_extent);

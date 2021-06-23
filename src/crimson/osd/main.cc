@@ -7,9 +7,13 @@
 #include <iostream>
 #include <random>
 
+#include <seastar/apps/lib/stop_signal.hh>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
+#include <seastar/core/prometheus.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/http/httpd.hh>
+#include <seastar/net/inet_address.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/std-compat.hh>
 
@@ -23,8 +27,8 @@
 #include "global/pidfile.h"
 
 #include "osd.h"
-#include "stop_signal.h"
 
+namespace bpo = boost::program_options;
 using config_t = crimson::common::ConfigProxy;
 
 void usage(const char* prog) {
@@ -35,7 +39,6 @@ void usage(const char* prog) {
 
 auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_end)
 {
-  namespace bpo = boost::program_options;
   // collect all options consumed by seastar::app_template
   auto parsed = bpo::command_line_parser(std::distance(argv_begin, argv_end),
                                          argv_begin)
@@ -177,13 +180,22 @@ seastar::future<> fetch_config()
 
 int main(int argc, char* argv[])
 {
-  seastar::app_template app;
+  seastar::app_template::config app_cfg;
+  app_cfg.name = "Crimson";
+  app_cfg.auto_handle_sigint_sigterm = false;
+  seastar::app_template app(std::move(app_cfg));
   app.add_options()
     ("mkkey", "generate a new secret key. "
               "This is normally used in combination with --mkfs")
     ("mkfs", "create a [new] data directory")
     ("debug", "enable debug output on all loggers")
-    ("no-mon-config", "do not retrieve configuration from monitors on boot");
+    ("no-mon-config", "do not retrieve configuration from monitors on boot")
+    ("prometheus_port", bpo::value<uint16_t>()->default_value(9180),
+     "Prometheus port. Set to zero to disable")
+    ("prometheus_address", bpo::value<string>()->default_value("0.0.0.0"),
+     "Prometheus listening address")
+    ("prometheus_prefix", bpo::value<string>()->default_value("osd"),
+     "Prometheus metrics prefix");
 
   auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
   if (ceph_argparse_need_usage(ceph_args) &&
@@ -209,7 +221,7 @@ int main(int argc, char* argv[])
       return seastar::async([&] {
         try {
           FatalSignal fatal_signal;
-          StopSignal should_stop;
+          seastar_apps_lib::stop_signal should_stop;
           if (config.count("debug")) {
             seastar::global_logger_registry().set_all_loggers_level(
               seastar::log_level::debug
@@ -236,6 +248,29 @@ int main(int argc, char* argv[])
           // just ignore SIGHUP, we don't reread settings. keep in mind signals
           // handled by S* must be blocked for alien threads (see AlienStore).
           seastar::engine().handle_signal(SIGHUP, [] {});
+
+          // start prometheus API server
+          seastar::httpd::http_server_control prom_server;
+          std::any stop_prometheus;
+          if (uint16_t prom_port = config["prometheus_port"].as<uint16_t>();
+              prom_port != 0) {
+            prom_server.start("prometheus").get();
+            stop_prometheus = seastar::make_shared(seastar::defer([&] {
+              prom_server.stop().get();
+            }));
+
+            seastar::prometheus::config prom_config;
+            prom_config.prefix = config["prometheus_prefix"].as<string>();
+            seastar::prometheus::start(prom_server, prom_config).get();
+            seastar::net::inet_address prom_addr(config["prometheus_address"].as<string>());
+            prom_server.listen(seastar::socket_address{prom_addr, prom_port})
+              .handle_exception([=] (auto ep) {
+              std::cerr << seastar::format("Could not start Prometheus API server on {}:{}: {}\n",
+                                           prom_addr, prom_port, ep);
+              return seastar::make_exception_future(ep);
+            }).get();
+          }
+
           const int whoami = std::stoi(local_conf()->name.get_id());
           const auto nonce = get_nonce();
           crimson::net::MessengerRef cluster_msgr, client_msgr;

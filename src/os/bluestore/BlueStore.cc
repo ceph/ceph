@@ -11521,34 +11521,40 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
 }
 
 #ifdef HAVE_LIBZBD
-// For every object we maintain <zone_num+oid, offset> tuple in the key-value
-// store.  When a new object written to a zone, we insert the corresponding
-// tuple to the database.  When an object is truncated, we remove the
-// corresponding tuple.  When an object is overwritten, we remove the old tuple
-// and insert a new tuple corresponding to the new location of the object.  The
-// cleaner can now identify live objects within the zone <zone_num> by
-// enumerating all the keys starting with <zone_num> prefix.
+// For every object we maintain <zone_num+oid, offset> tuple in the
+// PREFIX_ZONED_CL_INFO namespace.  When a new object written to a zone, we
+// insert the corresponding tuple to the database.  When an object is truncated,
+// we remove the corresponding tuple.  When an object is overwritten, we remove
+// the old tuple and insert a new tuple corresponding to the new location of the
+// object.  The cleaner can now identify live objects within the zone <zone_num>
+// by enumerating all the keys starting with <zone_num> prefix.
 void BlueStore::_zoned_update_cleaning_metadata(TransContext *txc) {
   for (const auto &[o, offsets] : txc->zoned_onode_to_offset_map) {
-    std::string key;
-    get_object_key(cct, o->oid, &key);
     for (auto offset : offsets) {
       if (offset > 0) {
 	bufferlist offset_bl;
 	encode(offset, offset_bl);
-        txc->t->set(_zoned_get_prefix(offset), key, offset_bl);
+        txc->t->set(PREFIX_ZONED_CL_INFO, _zoned_key(offset, &o->oid), offset_bl);
       } else {
-        txc->t->rmkey(_zoned_get_prefix(-offset), key);
+        txc->t->rmkey(PREFIX_ZONED_CL_INFO, _zoned_key(-offset, &o->oid));
       }
     }
   }
 }
 
-std::string BlueStore::_zoned_get_prefix(uint64_t offset) {
+// Given an offset and possibly an oid, returns a key of the form zone_num+oid.
+std::string BlueStore::_zoned_key(uint64_t offset, const ghobject_t *oid) {
   uint64_t zone_num = offset / bdev->get_zone_size();
   std::string zone_key;
   _key_encode_u64(zone_num, &zone_key);
-  return PREFIX_ZONED_CL_INFO + zone_key;
+
+  if (!oid)
+    return zone_key;
+
+  std::string object_key;
+  get_object_key(cct, *oid, &object_key);
+
+  return zone_key + object_key;
 }
 
 // For now, to avoid interface changes we piggyback zone_size (in MiB) and the

@@ -430,6 +430,33 @@ struct transaction_manager_test_t :
     return ext;
   }
 
+  TestBlockRef try_get_extent(
+    test_transaction_t &t,
+    laddr_t addr,
+    extent_len_t len) {
+    ceph_assert(test_mappings.contains(addr, t.mapping_delta));
+    ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
+
+    using ertr = TransactionManager::read_extent_ertr;
+    using ret = ertr::future<TestBlockRef>;
+    auto ext = tm->read_extent<TestBlock>(
+      *t.t, addr, len
+    ).safe_then([](auto ext) -> ret {
+      return ertr::make_ready_future<TestBlockRef>(ext);
+    }).handle_error(
+      [](const crimson::ct_error::eagain &e) {
+	return seastar::make_ready_future<TestBlockRef>();
+      },
+      crimson::ct_error::assert_all{
+	"get_extent got invalid error"
+      }
+    ).get0();
+    if (ext) {
+      EXPECT_EQ(addr, ext->get_laddr());
+    }
+    return ext;
+  }
+
   test_block_mutator_t mutator;
   TestBlockRef mutate_extent(
     test_transaction_t &t,
@@ -897,13 +924,17 @@ TEST_F(transaction_manager_test_t, random_writes_concurrent)
       boost::make_counting_iterator(0u),
       boost::make_counting_iterator(WRITE_STREAMS),
       [&](auto) {
-	return seastar::async([&] {
-	  while (writes < 300) {
-	    auto t = create_transaction();
-	    auto ext = get_extent(
-	      t,
-	      get_random_laddr(BSIZE, TOTAL),
-	      BSIZE);
+        return seastar::async([&] {
+          while (writes < 300) {
+            auto t = create_transaction();
+            auto ext = try_get_extent(
+              t,
+              get_random_laddr(BSIZE, TOTAL),
+              BSIZE);
+            if (!ext){
+              failures++;
+              continue;
+            }
 	    auto mut = mutate_extent(t, ext);
 	    auto success = try_submit_transaction(std::move(t));
 	    writes += success;

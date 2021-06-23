@@ -254,6 +254,18 @@ def get_inventories(hosts: Optional[List[str]] = None,
     return inventory_hosts
 
 
+@allow_empty_body
+def add_host(hostname: str, addr: Optional[str] = None,
+             labels: Optional[List[str]] = None,
+             status: Optional[str] = None):
+    orch_client = OrchClient.instance()
+    host = Host()
+    host.check_orchestrator_host_op(orch_client, hostname)
+    orch_client.hosts.add(hostname, addr, labels)
+    if status == 'maintenance':
+        orch_client.hosts.enter_maintenance(hostname)
+
+
 @ApiController('/host', Scope.HOSTS)
 @ControllerDoc("Get Host Details", "Host")
 class Host(RESTController):
@@ -273,12 +285,20 @@ class Host(RESTController):
     @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_CREATE])
     @handle_orchestrator_error('host')
     @host_task('create', {'hostname': '{hostname}'})
+    @EndpointDoc('',
+                 parameters={
+                     'hostname': (str, 'Hostname'),
+                     'addr': (str, 'Network Address'),
+                     'labels': ([str], 'Host Labels'),
+                     'status': (str, 'Host Status')
+                 },
+                 responses={200: None, 204: None})
+    @RESTController.MethodMap(version='0.1')
     def create(self, hostname: str,
+               addr: Optional[str] = None,
+               labels: Optional[List[str]] = None,
                status: Optional[str] = None):  # pragma: no cover - requires realtime env
-        orch_client = OrchClient.instance()
-        self._check_orchestrator_host_op(orch_client, hostname, True)
-        orch_client.hosts.add(hostname, status)
-    create._cp_config = {'tools.json_in.force': False}  # pylint: disable=W0212
+        add_host(hostname, addr, labels, status)
 
     @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_DELETE])
     @handle_orchestrator_error('host')
@@ -286,10 +306,10 @@ class Host(RESTController):
     @allow_empty_body
     def delete(self, hostname):  # pragma: no cover - requires realtime env
         orch_client = OrchClient.instance()
-        self._check_orchestrator_host_op(orch_client, hostname, False)
+        self.check_orchestrator_host_op(orch_client, hostname, False)
         orch_client.hosts.remove(hostname)
 
-    def _check_orchestrator_host_op(self, orch_client, hostname, add_host=True):  # pragma:no cover
+    def check_orchestrator_host_op(self, orch_client, hostname, add=True):  # pragma:no cover
         """Check if we can adding or removing a host with orchestrator
 
         :param orch_client: Orchestrator client
@@ -297,16 +317,15 @@ class Host(RESTController):
         :raise DashboardException
         """
         host = orch_client.hosts.get(hostname)
-        if add_host and host:
+        if add and host:
             raise DashboardException(
                 code='orchestrator_add_existed_host',
                 msg='{} is already in orchestrator'.format(hostname),
                 component='orchestrator')
-        if not add_host and not host:
+        if not add and not host:
             raise DashboardException(
                 code='orchestrator_remove_nonexistent_host',
-                msg='Remove a non-existent host {} from orchestrator'.format(
-                    hostname),
+                msg='Remove a non-existent host {} from orchestrator'.format(hostname),
                 component='orchestrator')
 
     @RESTController.Resource('GET')
@@ -387,6 +406,7 @@ class Host(RESTController):
                      'force': (bool, 'Force Enter Maintenance')
                  },
                  responses={200: None, 204: None})
+    @RESTController.MethodMap(version='0.1')
     def set(self, hostname: str, update_labels: bool = False,
             labels: List[str] = None, maintenance: bool = False,
             force: bool = False):

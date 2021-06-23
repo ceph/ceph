@@ -16,7 +16,7 @@ namespace crimson::osd {
 InternalClientRequest::InternalClientRequest(Ref<PG> pg)
   : pg(std::move(pg))
 {
-  assert(bool(pg));
+  assert(bool(this->pg));
 }
 
 InternalClientRequest::~InternalClientRequest()
@@ -102,8 +102,8 @@ seastar::future<> InternalClientRequest::start()
             });
           });
         });
-      }, [](std::exception_ptr eptr) {
-        if (should_abort_request(std::move(eptr))) {
+      }, [this](std::exception_ptr eptr) {
+        if (should_abort_request(*this, std::move(eptr))) {
           return seastar::stop_iteration::yes;
         } else {
           return seastar::stop_iteration::no;
