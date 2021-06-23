@@ -445,6 +445,7 @@ static size_t attr_len(const bufferlist& val)
 }
 
 struct es_obj_metadata {
+  const DoutPrefixProvider *dpp;
   CephContext *cct;
   ElasticConfigRef es_conf;
   RGWBucketInfo bucket_info;
@@ -494,7 +495,7 @@ struct es_obj_metadata {
           auto i = val.cbegin();
           decode(policy, i);
         } catch (buffer::error& err) {
-          ldout(cct, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
           continue;
         }
 
@@ -516,7 +517,7 @@ struct es_obj_metadata {
           auto tags_bl = val.cbegin();
           decode(obj_tags, tags_bl);
         } catch (buffer::error& err) {
-          ldout(cct,0) << "ERROR: failed to decode obj tags for "
+          ldpp_dout(dpp, 0) << "ERROR: failed to decode obj tags for "
                        << bucket_info.bucket << "/" << key << dendl;
           continue;
         }
@@ -526,7 +527,7 @@ struct es_obj_metadata {
           auto vals_bl = val.cbegin();
           decode(cs_info, vals_bl);
         } catch (buffer::error& err) {
-          ldout(cct,0) << "ERROR: failed to decode compression attr for "
+          ldpp_dout(dpp, 0) << "ERROR: failed to decode compression attr for "
                        << bucket_info.bucket << "/" << key << dendl;
           continue;
         }
@@ -567,7 +568,7 @@ struct es_obj_metadata {
           /* default custom meta is of type string */
           custom_str[i.first] = i.second;
         } else {
-          ldout(cct, 20) << "custom meta entry key=" << i.first << " not found in bucket mdsearch config: " << bucket_info.mdsearch_config << dendl;
+          ldpp_dout(dpp, 20) << "custom meta entry key=" << i.first << " not found in bucket mdsearch config: " << bucket_info.mdsearch_config << dendl;
         }
         continue;
       }
@@ -613,7 +614,7 @@ struct es_obj_metadata {
         real_time t;
         int r = parse_time(i.second.c_str(), &t);
         if (r < 0) {
-          ldout(cct, 20) << __func__ << "(): failed to parse time (" << i.second << "), skipping encoding of custom date attribute" << dendl;
+          ldpp_dout(dpp, 20) << __func__ << "(): failed to parse time (" << i.second << "), skipping encoding of custom date attribute" << dendl;
           continue;
         }
 
@@ -865,7 +866,7 @@ public:
 class RGWElasticDataSyncModule : public RGWDataSyncModule {
   ElasticConfigRef conf;
 public:
-  RGWElasticDataSyncModule(CephContext *cct, const JSONFormattable& config) : conf(std::make_shared<ElasticConfig>()) {
+  RGWElasticDataSyncModule(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config) : conf(std::make_shared<ElasticConfig>()) {
     conf->init(cct, config);
   }
   ~RGWElasticDataSyncModule() override {}
@@ -874,39 +875,39 @@ public:
     conf->init_instance(sc->env->svc->zone->get_realm(), instance_id);
   }
 
-  RGWCoroutine *init_sync(RGWDataSyncCtx *sc) override {
-    ldout(sc->cct, 5) << conf->id << ": init" << dendl;
+  RGWCoroutine *init_sync(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc) override {
+    ldpp_dout(dpp, 5) << conf->id << ": init" << dendl;
     return new RGWElasticInitConfigCBCR(sc, conf);
   }
 
-  RGWCoroutine *start_sync(RGWDataSyncCtx *sc) override {
-    ldout(sc->cct, 5) << conf->id << ": start_sync" << dendl;
+  RGWCoroutine *start_sync(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc) override {
+    ldpp_dout(dpp, 5) << conf->id << ": start_sync" << dendl;
     // try to get elastic search version
     return new RGWElasticGetESInfoCBCR(sc, conf);
   }
 
-  RGWCoroutine *sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 10) << conf->id << ": sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+    ldpp_dout(dpp, 10) << conf->id << ": sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     if (!conf->should_handle_operation(sync_pipe.dest_bucket_info)) {
-      ldout(sc->cct, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
+      ldpp_dout(dpp, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
       return nullptr;
     }
     return new RGWElasticHandleRemoteObjCR(sc, sync_pipe, key, conf, versioned_epoch.value_or(0));
   }
-  RGWCoroutine *remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
+  RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
     /* versioned and versioned epoch params are useless in the elasticsearch backend case */
-    ldout(sc->cct, 10) << conf->id << ": rm_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
+    ldpp_dout(dpp, 10) << conf->id << ": rm_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     if (!conf->should_handle_operation(sync_pipe.dest_bucket_info)) {
-      ldout(sc->cct, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
+      ldpp_dout(dpp, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
       return nullptr;
     }
     return new RGWElasticRemoveRemoteObjCBCR(sc, sync_pipe, key, mtime, conf);
   }
-  RGWCoroutine *create_delete_marker(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+  RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 10) << conf->id << ": create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
+    ldpp_dout(dpp, 10) << conf->id << ": create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
                             << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
-    ldout(sc->cct, 10) << conf->id << ": skipping operation (not handled)" << dendl;
+    ldpp_dout(dpp, 10) << conf->id << ": skipping operation (not handled)" << dendl;
     return NULL;
   }
   RGWRESTConn *get_rest_conn() {
@@ -922,9 +923,9 @@ public:
   }
 };
 
-RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
+RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config)
 {
-  data_handler = std::unique_ptr<RGWElasticDataSyncModule>(new RGWElasticDataSyncModule(cct, config));
+  data_handler = std::unique_ptr<RGWElasticDataSyncModule>(new RGWElasticDataSyncModule(dpp, cct, config));
 }
 
 RGWDataSyncModule *RGWElasticSyncModuleInstance::get_data_handler()
@@ -953,9 +954,9 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
   return new RGWRESTMgr_MDSearch_S3();
 }
 
-int RGWElasticSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+int RGWElasticSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
   string endpoint = config["endpoint"];
-  instance->reset(new RGWElasticSyncModuleInstance(cct, config));
+  instance->reset(new RGWElasticSyncModuleInstance(dpp, cct, config));
   return 0;
 }
 

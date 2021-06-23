@@ -422,8 +422,8 @@ protected:
 
 public:
   virtual int init(const DoutPrefixProvider *dpp) = 0;
-  virtual int read(bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
-  virtual int decode_rest_obj(std::map<std::string, std::string>& headers, bufferlist& extra_data) = 0;
+  virtual int read(const DoutPrefixProvider *dpp, bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
+  virtual int decode_rest_obj(const DoutPrefixProvider *dpp, std::map<std::string, std::string>& headers, bufferlist& extra_data) = 0;
   virtual bool has_attrs() = 0;
   virtual void get_attrs(std::map<std::string, std::string> *attrs) = 0;
   virtual ~RGWStreamReadResourceCRF() = default;
@@ -487,8 +487,8 @@ public:
   ~RGWStreamReadHTTPResourceCRF();
 
   int init(const DoutPrefixProvider *dpp) override;
-  int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
-  int decode_rest_obj(std::map<std::string, std::string>& headers, bufferlist& extra_data) override;
+  int read(const DoutPrefixProvider *dpp, bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
+  int decode_rest_obj(const DoutPrefixProvider *dpp, std::map<std::string, std::string>& headers, bufferlist& extra_data) override;
   bool has_attrs() override;
   void get_attrs(std::map<std::string, std::string> *attrs) override;
   bool is_done();

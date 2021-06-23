@@ -274,14 +274,14 @@ struct AWSSyncConfig_Connection {
   }
 };
 
-static int conf_to_uint64(CephContext *cct, const JSONFormattable& config, const string& key, uint64_t *pval)
+static int conf_to_uint64(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const string& key, uint64_t *pval)
 {
   string sval;
   if (config.find(key, &sval)) {
     string err;
     uint64_t val = strict_strtoll(sval.c_str(), 10, &err);
     if (!err.empty()) {
-      ldout(cct, 0) << "ERROR: could not parse configurable value for cloud sync module: " << key << ": " << sval << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: could not parse configurable value for cloud sync module: " << key << ": " << sval << dendl;
       return -EINVAL;
     }
     *pval = val;
@@ -293,13 +293,13 @@ struct AWSSyncConfig_S3 {
   uint64_t multipart_sync_threshold{DEFAULT_MULTIPART_SYNC_PART_SIZE};
   uint64_t multipart_min_part_size{DEFAULT_MULTIPART_SYNC_PART_SIZE};
 
-  int init(CephContext *cct, const JSONFormattable& config) {
-    int r = conf_to_uint64(cct, config, "multipart_sync_threshold", &multipart_sync_threshold);
+  int init(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config) {
+    int r = conf_to_uint64(dpp, cct, config, "multipart_sync_threshold", &multipart_sync_threshold);
     if (r < 0) {
       return r;
     }
 
-    r = conf_to_uint64(cct, config, "multipart_min_part_size", &multipart_min_part_size);
+    r = conf_to_uint64(dpp, cct, config, "multipart_min_part_size", &multipart_min_part_size);
     if (r < 0) {
       return r;
     }
@@ -404,15 +404,15 @@ struct AWSSyncConfig {
 
   AWSSyncConfig_S3 s3;
 
-  int init_profile(CephContext *cct, const JSONFormattable& profile_conf, AWSSyncConfig_Profile& profile,
+  int init_profile(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& profile_conf, AWSSyncConfig_Profile& profile,
                    bool connection_must_exist) {
     if (!profile.connection_id.empty()) {
       if (profile.conn_conf) {
-        ldout(cct, 0) << "ERROR: ambiguous profile connection configuration, connection_id=" << profile.connection_id << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: ambiguous profile connection configuration, connection_id=" << profile.connection_id << dendl;
         return -EINVAL;
       }
       if (connections.find(profile.connection_id) == connections.end()) {
-        ldout(cct, 0) << "ERROR: profile configuration reference non-existent connection_id=" << profile.connection_id << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: profile configuration reference non-existent connection_id=" << profile.connection_id << dendl;
         return -EINVAL;
       }
       profile.conn_conf = connections[profile.connection_id];
@@ -425,7 +425,7 @@ struct AWSSyncConfig {
     }
 
     if (connection_must_exist && !profile.conn_conf) {
-      ldout(cct, 0) << "ERROR: remote connection undefined for sync profile" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: remote connection undefined for sync profile" << dendl;
       return -EINVAL;
     }
 
@@ -445,7 +445,7 @@ struct AWSSyncConfig {
 
     if (!profile.acls_id.empty()) {
       if (!acl_profiles.find(profile.acls_id, &acl_mappings)) {
-        ldout(cct, 0) << "ERROR: profile configuration reference non-existent acls id=" << profile.acls_id << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: profile configuration reference non-existent acls id=" << profile.acls_id << dendl;
         return -EINVAL;
       }
       profile.acls = acl_profiles.acl_profiles[profile.acls_id];
@@ -466,12 +466,12 @@ struct AWSSyncConfig {
     return 0;
   }
 
-  int init_target(CephContext *cct, const JSONFormattable& profile_conf, std::shared_ptr<AWSSyncConfig_Profile> *ptarget) {
+  int init_target(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& profile_conf, std::shared_ptr<AWSSyncConfig_Profile> *ptarget) {
     std::shared_ptr<AWSSyncConfig_Profile> profile;
     profile.reset(new AWSSyncConfig_Profile);
     profile->init(profile_conf);
 
-    int ret = init_profile(cct, profile_conf, *profile, true);
+    int ret = init_profile(dpp, cct, profile_conf, *profile, true);
     if (ret < 0) {
       return ret;
     }
@@ -479,7 +479,7 @@ struct AWSSyncConfig {
     auto& sb = profile->source_bucket;
 
     if (explicit_profiles.find(sb) != explicit_profiles.end()) {
-      ldout(cct, 0) << "WARNING: duplicate target configuration in sync module" << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: duplicate target configuration in sync module" << dendl;
     }
 
     explicit_profiles[sb] = profile;
@@ -523,12 +523,12 @@ struct AWSSyncConfig {
 
   AWSSyncConfig() {}
 
-  int init(CephContext *cct, const JSONFormattable& config) {
+  int init(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config) {
     auto& default_conf = config["default"];
 
     if (config.exists("default")) {
       default_profile.init(default_conf);
-      init_profile(cct, default_conf, default_profile, false);
+      init_profile(dpp, cct, default_conf, default_profile, false);
     }
 
     for (auto& conn : config["connections"].array()) {
@@ -542,20 +542,20 @@ struct AWSSyncConfig {
 
     acl_profiles.init(config["acl_profiles"]);
 
-    int r = s3.init(cct, config["s3"]);
+    int r = s3.init(dpp, cct, config["s3"]);
     if (r < 0) {
       return r;
     }
 
     auto new_root_conf = config;
 
-    r = init_target(cct, new_root_conf, &root_profile); /* the root profile config */
+    r = init_target(dpp, cct, new_root_conf, &root_profile); /* the root profile config */
     if (r < 0) {
       return r;
     }
 
     for (auto target_conf : config["profiles"].array()) {
-      int r = init_target(cct, target_conf, nullptr);
+      int r = init_target(dpp, cct, target_conf, nullptr);
       if (r < 0) {
         return r;
       }
@@ -566,7 +566,7 @@ struct AWSSyncConfig {
     stringstream ss;
     jf.flush(ss);
 
-    ldout(cct, 5) << "sync module config (parsed representation):\n" << ss.str() << dendl;
+    ldpp_dout(dpp, 5) << "sync module config (parsed representation):\n" << ss.str() << dendl;
 
     return 0;
   }
@@ -583,12 +583,12 @@ struct AWSSyncConfig {
       apply_meta_param(path, "zone_id", zone.id, dest);
   }
 
-  void update_config(RGWDataSyncCtx *sc, const string& sid) {
+  void update_config(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, const string& sid) {
     expand_target(sc, sid, root_profile->target_path, &root_profile->target_path);
-    ldout(sc->cct, 20) << "updated target: (root) -> " << root_profile->target_path << dendl;
+    ldpp_dout(dpp, 20) << "updated target: (root) -> " << root_profile->target_path << dendl;
     for (auto& t : explicit_profiles) {
       expand_target(sc, sid, t.second->target_path, &t.second->target_path);
-      ldout(sc->cct, 20) << "updated target: " << t.first << " -> " << t.second->target_path << dendl;
+      ldpp_dout(dpp, 20) << "updated target: " << t.first << " -> " << t.second->target_path << dendl;
     }
   }
 
@@ -650,7 +650,7 @@ struct AWSSyncConfig {
   void init_conns(RGWDataSyncCtx *sc, const string& id) {
     auto sync_env = sc->env;
 
-    update_config(sc, id);
+    update_config(sync_env->dpp, sc, id);
 
     auto& root_conf = root_profile->conn_conf;
 
@@ -697,7 +697,7 @@ struct AWSSyncInstanceEnv {
   }
 };
 
-static int do_decode_rest_obj(CephContext *cct, map<string, bufferlist>& attrs, map<string, string>& headers, rgw_rest_obj *info)
+static int do_decode_rest_obj(const DoutPrefixProvider *dpp, CephContext *cct, map<string, bufferlist>& attrs, map<string, string>& headers, rgw_rest_obj *info)
 {
   for (auto header : headers) {
     const string& val = header.second;
@@ -716,11 +716,11 @@ static int do_decode_rest_obj(CephContext *cct, map<string, bufferlist>& attrs, 
     try {
       info->acls.decode(bliter);
     } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: failed to decode policy off attrs" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to decode policy off attrs" << dendl;
       return -EIO;
     }
   } else {
-    ldout(cct, 0) << "WARNING: acl attrs not provided" << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: acl attrs not provided" << dendl;
   }
 
   return 0;
@@ -777,21 +777,21 @@ public:
     return RGWStreamReadHTTPResourceCRF::init(dpp);
   }
 
-  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) override {
+  int decode_rest_obj(const DoutPrefixProvider *dpp, map<string, string>& headers, bufferlist& extra_data) override {
     map<string, bufferlist> src_attrs;
 
-    ldout(sc->cct, 20) << __func__ << ":" << " headers=" << headers << " extra_data.length()=" << extra_data.length() << dendl;
+    ldpp_dout(dpp, 20) << __func__ << ":" << " headers=" << headers << " extra_data.length()=" << extra_data.length() << dendl;
 
     if (extra_data.length() > 0) {
       JSONParser jp;
       if (!jp.parse(extra_data.c_str(), extra_data.length())) {
-        ldout(sc->cct, 0) << "ERROR: failed to parse response extra data. len=" << extra_data.length() << " data=" << extra_data.c_str() << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to parse response extra data. len=" << extra_data.length() << " data=" << extra_data.c_str() << dendl;
         return -EIO;
       }
 
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
     }
-    return do_decode_rest_obj(sc->cct, src_attrs, headers, &rest_obj);
+    return do_decode_rest_obj(dpp, sc->cct, src_attrs, headers, &rest_obj);
   }
 
   bool need_extra_data() override {
@@ -847,7 +847,8 @@ public:
             boost::algorithm::starts_with(h, "X_AMZ_"));
   }
 
-  static void init_send_attrs(CephContext *cct,
+  static void init_send_attrs(const DoutPrefixProvider *dpp,
+                              CephContext *cct,
                               const rgw_rest_obj& rest_obj,
                               const rgw_sync_aws_src_obj_properties& src_properties,
                               const AWSSyncConfig_Profile *target,
@@ -877,7 +878,7 @@ public:
 
         auto iter = am.find(orig_grantee);
         if (iter == am.end()) {
-          ldout(cct, 20) << "acl_mappings: Could not find " << orig_grantee << " .. ignoring" << dendl;
+          ldpp_dout(dpp, 20) << "acl_mappings: Could not find " << orig_grantee << " .. ignoring" << dendl;
           continue;
         }
 
@@ -947,7 +948,7 @@ public:
         s.append(viter);
       }
 
-      ldout(cct, 20) << "acl_mappings: set acl: " << header_str << "=" << s << dendl;
+      ldpp_dout(dpp, 20) << "acl_mappings: set acl: " << header_str << "=" << s << dendl;
 
       new_attrs[header_str] = s;
     }
@@ -974,7 +975,7 @@ public:
 
     map<string, string> new_attrs;
     if (!multipart.is_multipart) {
-      init_send_attrs(sc->cct, rest_obj, src_properties, target.get(), &new_attrs);
+      init_send_attrs(dpp, sc->cct, rest_obj, src_properties, target.get(), &new_attrs);
     }
 
     r->set_send_length(rest_obj.content_len);
@@ -1470,7 +1471,7 @@ public:
       }
 
       if (retcode == -ENOENT) {
-        RGWAWSStreamPutCRF::init_send_attrs(sc->cct, rest_obj, src_properties, target.get(), &new_attrs);
+        RGWAWSStreamPutCRF::init_send_attrs(dpp, sc->cct, rest_obj, src_properties, target.get(), &new_attrs);
 
         yield call(new RGWAWSInitMultipartCR(sc, target->conn.get(), dest_obj, status.obj_size, std::move(new_attrs), &status.upload_id));
         if (retcode < 0) {
@@ -1697,7 +1698,7 @@ public:
         } else {
           rgw_rest_obj rest_obj;
           rest_obj.init(key);
-          if (do_decode_rest_obj(sc->cct, attrs, headers, &rest_obj)) {
+          if (do_decode_rest_obj(dpp, sc->cct, attrs, headers, &rest_obj)) {
             ldpp_dout(dpp, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
             return set_cr_error(-EINVAL);
           }
@@ -1788,18 +1789,18 @@ public:
 
   ~RGWAWSDataSyncModule() {}
 
-  RGWCoroutine *sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
                             std::optional<uint64_t> versioned_epoch,
                             rgw_zone_set *zones_trace) override {
     ldout(sc->cct, 0) << instance.id << ": sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     return new RGWAWSHandleRemoteObjCR(sc, sync_pipe, key, instance, versioned_epoch.value_or(0));
   }
-  RGWCoroutine *remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch,
+  RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch,
                               rgw_zone_set *zones_trace) override {
     ldout(sc->cct, 0) <<"rm_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return new RGWAWSRemoveRemoteObjCBCR(sc, sync_pipe, key, mtime, instance);
   }
-  RGWCoroutine *create_delete_marker(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
+  RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch,
                                      rgw_zone_set *zones_trace) override {
     ldout(sc->cct, 0) <<"AWS Not implemented: create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
@@ -1817,10 +1818,10 @@ public:
   }
 };
 
-int RGWAWSSyncModule::create_instance(CephContext *cct, const JSONFormattable& config,  RGWSyncModuleInstanceRef *instance){
+int RGWAWSSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config,  RGWSyncModuleInstanceRef *instance){
   AWSSyncConfig conf;
 
-  int r = conf.init(cct, config);
+  int r = conf.init(dpp, cct, config);
   if (r < 0) {
     return r;
   }
