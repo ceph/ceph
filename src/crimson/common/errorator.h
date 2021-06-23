@@ -280,9 +280,9 @@ public:
         std::invoke(std::forward<ErrorVisitorT>(errfunc),
                     ErrorT::error_t::from_exception_ptr(std::move(ep)));
       } else {
-        static_assert(_impl::always_false<return_t>::value,
-                      "return of Error Visitor is not assignable to future");
-        // do nothing with `ep`.
+        result = FuturatorT::type::errorator_type::template make_ready_future<return_t>(
+          std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                      ErrorT::error_t::from_exception_ptr(std::move(ep))));
       }
     }
   }
