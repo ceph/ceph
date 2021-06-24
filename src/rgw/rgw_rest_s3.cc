@@ -5263,7 +5263,11 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       s->op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
       s->op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
       s->op_type == RGW_OP_GET_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_LIST_OIDC_PROVIDERS) {
+      s->op_type == RGW_OP_LIST_OIDC_PROVIDERS ||
+      s->op_type == RGW_OP_PUBSUB_TOPIC_CREATE ||
+      s->op_type == RGW_OP_PUBSUB_TOPICS_LIST ||
+      s->op_type == RGW_OP_PUBSUB_TOPIC_GET ||
+      s->op_type == RGW_OP_PUBSUB_TOPIC_DELETE) {
     is_non_s3_op = true;
   }
 
@@ -5361,6 +5365,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_LC:
         case RGW_OP_SET_REQUEST_PAYMENT:
         case RGW_OP_PUBSUB_NOTIF_CREATE:
+        case RGW_OP_PUBSUB_NOTIF_DELETE:
+        case RGW_OP_PUBSUB_NOTIF_LIST:
         case RGW_OP_PUT_BUCKET_OBJ_LOCK:
         case RGW_OP_PUT_OBJ_RETENTION:
         case RGW_OP_PUT_OBJ_LEGAL_HOLD:
