@@ -224,6 +224,12 @@ private:
     stop_acked.set_value();
   }
   seastar::future<> prepare_to_stop();
+  bool should_restart() const;
+  seastar::future<> restart();
+  seastar::future<> shutdown();
+  void update_heartbeat_peers();
+  friend class PGAdvanceMap;
+
 public:
   blocking_future<Ref<PG>> get_or_create_pg(
     spg_t pgid,
@@ -232,15 +238,7 @@ public:
   blocking_future<Ref<PG>> wait_for_pg(
     spg_t pgid);
   Ref<PG> get_pg(spg_t pgid);
-
-  bool should_restart() const;
-  seastar::future<> restart();
-  seastar::future<> shutdown();
-
   seastar::future<> send_beacon();
-  void update_heartbeat_peers();
-
-  friend class PGAdvanceMap;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const OSD& osd) {
