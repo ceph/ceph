@@ -1499,9 +1499,6 @@ rm -rf %{buildroot}
 %{_fillupdir}/sysconfig.*
 %endif
 %{_unitdir}/ceph.target
-%dir %{python3_sitelib}/ceph_volume
-%{python3_sitelib}/ceph_volume/*
-%{python3_sitelib}/ceph_volume-*
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-create-keys.8*
 %{_mandir}/man8/ceph-run.8*
@@ -2093,6 +2090,9 @@ fi
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %{_sbindir}/ceph-volume
 %{_sbindir}/ceph-volume-systemd
+%dir %{python3_sitelib}/ceph_volume
+%{python3_sitelib}/ceph_volume/*
+%{python3_sitelib}/ceph_volume-*
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-osd.8*
 %{_mandir}/man8/ceph-bluestore-tool.8*
