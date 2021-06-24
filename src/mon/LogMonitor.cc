@@ -811,78 +811,155 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       return entry.prio >= level;
     };
 
-    // Decrement operation that sets to container end when hitting rbegin
     ostringstream ss;
-    if (channel == "*") {
-      list<LogEntry> full_tail;
-      summary.build_ordered_tail_legacy(&full_tail);
-      auto rp = full_tail.rbegin();
-      for (; num > 0 && rp != full_tail.rend(); ++rp) {
-	if (match(*rp)) {
-	  num--;
-	}
-      }
-      if (rp == full_tail.rend()) {
-	--rp;
-      }
-
-      // Decrement a reverse iterator such that going past rbegin()
-      // sets it to rend().  This is for writing a for() loop that
-      // goes up to (and including) rbegin()
-      auto dec = [&rp, &full_tail] () {
-        if (rp == full_tail.rbegin()) {
-          rp = full_tail.rend();
-        } else {
-          --rp;
-        }
-      };
-
-      // Move forward to the end of the container (decrement the reverse
-      // iterator).
-      for (; rp != full_tail.rend(); dec()) {
-	if (!match(*rp)) {
-	  continue;
-	}
-	if (f) {
-	  f->dump_object("entry", *rp);
-	} else {
-	  ss << *rp << "\n";
-	}
-      }
-    } else {
-      auto p = summary.tail_by_channel.find(channel);
-      if (p != summary.tail_by_channel.end()) {
-	auto rp = p->second.rbegin();
-	for (; num > 0 && rp != p->second.rend(); ++rp) {
-	  if (match(rp->second)) {
+    if (!summary.tail_by_channel.empty()) {
+      // pre-quincy compat
+      // Decrement operation that sets to container end when hitting rbegin
+      if (channel == "*") {
+	list<LogEntry> full_tail;
+	summary.build_ordered_tail_legacy(&full_tail);
+	auto rp = full_tail.rbegin();
+	for (; num > 0 && rp != full_tail.rend(); ++rp) {
+	  if (match(*rp)) {
 	    num--;
 	  }
 	}
-	if (rp == p->second.rend()) {
+	if (rp == full_tail.rend()) {
 	  --rp;
 	}
 
-        // Decrement a reverse iterator such that going past rbegin()
-        // sets it to rend().  This is for writing a for() loop that
-        // goes up to (and including) rbegin()
-        auto dec = [&rp, &p] () {
-          if (rp == p->second.rbegin()) {
-            rp = p->second.rend();
-          } else {
-            --rp;
-          }
-        };
+	// Decrement a reverse iterator such that going past rbegin()
+	// sets it to rend().  This is for writing a for() loop that
+	// goes up to (and including) rbegin()
+	auto dec = [&rp, &full_tail] () {
+		     if (rp == full_tail.rbegin()) {
+		       rp = full_tail.rend();
+		     } else {
+		       --rp;
+		     }
+		   };
 
-        // Move forward to the end of the container (decrement the reverse
-        // iterator).
-	for (; rp != p->second.rend(); dec()) {
-	  if (!match(rp->second)) {
+	// Move forward to the end of the container (decrement the reverse
+	// iterator).
+	for (; rp != full_tail.rend(); dec()) {
+	  if (!match(*rp)) {
 	    continue;
 	  }
 	  if (f) {
-	    f->dump_object("entry", rp->second);
+	    f->dump_object("entry", *rp);
 	  } else {
-	    ss << rp->second << "\n";
+	    ss << *rp << "\n";
+	  }
+	}
+      } else {
+	auto p = summary.tail_by_channel.find(channel);
+	if (p != summary.tail_by_channel.end()) {
+	  auto rp = p->second.rbegin();
+	  for (; num > 0 && rp != p->second.rend(); ++rp) {
+	    if (match(rp->second)) {
+	      num--;
+	    }
+	  }
+	  if (rp == p->second.rend()) {
+	    --rp;
+	  }
+
+	  // Decrement a reverse iterator such that going past rbegin()
+	  // sets it to rend().  This is for writing a for() loop that
+	  // goes up to (and including) rbegin()
+	  auto dec = [&rp, &p] () {
+		       if (rp == p->second.rbegin()) {
+			 rp = p->second.rend();
+		       } else {
+			 --rp;
+		       }
+		     };
+	  
+	  // Move forward to the end of the container (decrement the reverse
+	  // iterator).
+	  for (; rp != p->second.rend(); dec()) {
+	    if (!match(rp->second)) {
+	      continue;
+	    }
+	    if (f) {
+	      f->dump_object("entry", rp->second);
+	    } else {
+	      ss << rp->second << "\n";
+	    }
+	  }
+	}
+      }
+    } else {
+      // quincy+
+      if (channel == "*") {
+	// tail all channels; we need to mix by timestamp
+	multimap<utime_t,LogEntry> entries;  // merge+sort all channels by timestamp
+	for (auto& p : summary.channel_info) {
+	  version_t from = p.second.first;
+	  version_t to = p.second.second;
+	  version_t start;
+	  if (to > (version_t)num) {
+	    start = std::max(to - num, from);
+	  } else {
+	    start = from;
+	  }
+	  dout(10) << __func__ << " channnel " << p.first
+		   << " from " << from << " to " << to << dendl;
+	  for (version_t v = start; v < to; ++v) {
+	    bufferlist ebl;
+	    string key;
+	    generate_logentry_key(p.first, v, &key);
+	    int r = mon.store->get(get_service_name(), key, ebl);
+	    if (r < 0) {
+	      derr << __func__ << " missing key " << key << dendl;
+	      continue;
+	    }
+	    LogEntry le;
+	    auto p = ebl.cbegin();
+	    decode(le, p);
+	    entries.insert(make_pair(le.stamp, le));
+	  }
+	}
+	while ((int)entries.size() > num) {
+	  entries.erase(entries.begin());
+	}
+	for (auto& p : entries) {
+	  if (f) {
+	    f->dump_object("entry", p.second);
+	  } else {
+	    ss << p.second << "\n";
+	  }
+	}
+      } else {
+	// tail one channel
+	auto p = summary.channel_info.find(channel);
+	if (p != summary.channel_info.end()) {
+	  version_t from = p->second.first;
+	  version_t to = p->second.second;
+	  version_t start;
+	  if (to > (version_t)num) {
+	    start = std::max(to - num, from);
+	  } else {
+	    start = from;
+	  }
+	  dout(10) << __func__ << " from " << from << " to " << to << dendl;
+	  for (version_t v = start; v < to; ++v) {
+	    bufferlist ebl;
+	    string key;
+	    generate_logentry_key(channel, v, &key);
+	    int r = mon.store->get(get_service_name(), key, ebl);
+	    if (r < 0) {
+	      derr << __func__ << " missing key " << key << dendl;
+	      continue;
+	    }
+	    LogEntry le;
+	    auto p = ebl.cbegin();
+	    decode(le, p);
+	    if (f) {
+	      f->dump_object("entry", le);
+	    } else {
+	      ss << le << "\n";
+	    }
 	  }
 	}
       }
