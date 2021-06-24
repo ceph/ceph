@@ -1696,7 +1696,7 @@ public:
         } else {
           rgw_rest_obj rest_obj;
           rest_obj.init(key);
-          if (do_decode_rest_obj(sc->cct, attrs, headers, &rest_obj)) {
+          if (do_decode_rest_obj(dpp, sc->cct, attrs, headers, &rest_obj)) {
             ldpp_dout(dpp, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
             return set_cr_error(-EINVAL);
           }
