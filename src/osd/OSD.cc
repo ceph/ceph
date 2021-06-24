@@ -10206,12 +10206,50 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
   // osd capacity with the value obtained from running the
   // osd bench test. This is later used to setup mclock.
   if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler") {
-    // Write 200 4MiB objects with blocksize 4KiB
+    std::string max_capacity_iops_config;
+    bool force_run_benchmark = false;
+
+    if (store_is_rotational) {
+      max_capacity_iops_config = "osd_mclock_max_capacity_iops_hdd";
+    } else {
+      max_capacity_iops_config = "osd_mclock_max_capacity_iops_ssd";
+    }
+
+    if (!force_run_benchmark) {
+      double default_iops = 0.0;
+
+      // Get the current osd iops capacity
+      double cur_iops = cct->_conf.get_val<double>(max_capacity_iops_config);
+
+      // Get the default max iops capacity
+      auto val = cct->_conf.get_val_default(max_capacity_iops_config);
+      if (!val.has_value()) {
+        derr << __func__ << " Unable to determine default value of "
+            << max_capacity_iops_config << dendl;
+        // Cannot determine default iops. Force a run of the OSD benchmark.
+        force_run_benchmark = true;
+      } else {
+        // Default iops
+        default_iops = std::stod(val.value());
+      }
+
+      // Determine if we really need to run the osd benchmark
+      if (!force_run_benchmark && (default_iops != cur_iops)) {
+        dout(1) << __func__ << std::fixed << std::setprecision(2)
+                << " default_iops: " << default_iops
+                << " cur_iops: " << cur_iops
+                << ". Skip OSD benchmark test." << dendl;
+        return;
+      }
+    }
+
+    // Run osd bench: write 100 4MiB objects with blocksize 4KiB
     int64_t count = 12288000; // Count of bytes to write
     int64_t bsize = 4096;     // Block size
     int64_t osize = 4194304;  // Object size
     int64_t onum = 100;       // Count of objects to write
     double elapsed = 0.0;     // Time taken to complete the test
+    double iops = 0.0;
     stringstream ss;
     int ret = run_osd_bench_test(count, bsize, osize, onum, &elapsed, ss);
     if (ret != 0) {
@@ -10219,30 +10257,29 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
            << " osd bench err: " << ret
            << " osd bench errstr: " << ss.str()
            << dendl;
-    } else {
-      double rate = count / elapsed;
-      double iops = rate / bsize;
-      dout(1) << __func__
-              << " osd bench result -"
-              << std::fixed << std::setprecision(3)
-              << " bandwidth (MiB/sec): " << rate / (1024 * 1024)
-              << " iops: " << iops
-              << " elapsed_sec: " << elapsed
-              << dendl;
+      return;
+    }
 
-      // Override the appropriate config option
-      if (store_is_rotational) {
-        cct->_conf.set_val(
-          "osd_mclock_max_capacity_iops_hdd", std::to_string(iops));
-      } else {
-        cct->_conf.set_val(
-          "osd_mclock_max_capacity_iops_ssd", std::to_string(iops));
-      }
+    double rate = count / elapsed;
+    iops = rate / bsize;
+    dout(1) << __func__
+            << " osd bench result -"
+            << std::fixed << std::setprecision(3)
+            << " bandwidth (MiB/sec): " << rate / (1024 * 1024)
+            << " iops: " << iops
+            << " elapsed_sec: " << elapsed
+            << dendl;
 
-      // Override the max osd capacity for all shards
-      for (auto& shard : shards) {
-        shard->update_scheduler_config();
-      }
+    // Persist iops to the MON store
+    ret = mon_cmd_set_config(max_capacity_iops_config, std::to_string(iops));
+    if (ret < 0) {
+      // Fallback to setting the config within the in-memory "values" map.
+      cct->_conf.set_val(max_capacity_iops_config, std::to_string(iops));
+    }
+
+    // Override the max osd capacity for all shards
+    for (auto& shard : shards) {
+      shard->update_scheduler_config();
     }
   }
 }
