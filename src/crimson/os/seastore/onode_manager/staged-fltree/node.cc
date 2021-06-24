@@ -1801,7 +1801,7 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
       return eagain_ertr::make_ready_future<Ref<tree_cursor_t>>();
     }
   }).safe_then([c, &pos, this_ref = std::move(this_ref),
-                this, FNAME] (Ref<tree_cursor_t> next_cursor) {
+                this, FNAME] (Ref<tree_cursor_t> next_cursor) mutable {
     if (next_cursor && next_cursor->is_end()) {
       // reset the node reference from the end cursor
       next_cursor.reset();
