@@ -8,16 +8,20 @@ pools for storing data. A pool provides you with:
 
 - **Resilience**: You can set how many OSD are allowed to fail without losing data.
   For replicated pools, it is the desired number of copies/replicas of an object.
-  A typical configuration stores an object and one additional copy
-  (i.e., ``size = 2``), but you can determine the number of copies/replicas.
+  A typical configuration stores an object and two additional copies
+  (i.e., ``size = 3``), but you can configure the number of copies/replicas at
+  pool granularity.
   For `erasure coded pools <../erasure-code>`_, it is the number of coding chunks
   (i.e. ``m=2`` in the **erasure code profile**)
 
 - **Placement Groups**: You can set the number of placement groups for the pool.
-  A typical configuration uses approximately 100 placement groups per OSD to
+  A typical configuration targets approximately 100 placement groups per OSD to
   provide optimal balancing without using up too many computing resources. When
-  setting up multiple pools, be careful to ensure you set a reasonable number of
-  placement groups for both the pool and the cluster as a whole.
+  setting up multiple pools, be careful to set a reasonable number of
+  placement groups for each pool and for the cluster as a whole.  Note that each PG
+  belongs to a specific pool, so when multiple pools use the same OSDs, you must
+  take care that the **sum** of PG replicas per OSD is in the desired PG per OSD
+  target range.
 
 - **CRUSH Rules**: When you store data in a pool, placement of the object
   and its replicas (or chunks for erasure coded pools) in your cluster is governed
@@ -62,8 +66,8 @@ For details on placement group numbers refer to `setting the number of placement
 
 For example::
 
-	osd pool default pg num = 100
-	osd pool default pgp num = 100
+	osd_pool_default_pg_num = 128
+	osd_pool_default_pgp_num = 128
 
 To create a pool, execute::
 
