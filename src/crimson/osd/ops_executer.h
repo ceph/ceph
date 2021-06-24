@@ -151,6 +151,7 @@ private:
     virtual ~effect_t() = default;
   };
 
+  Ref<PG> pg; // for the sake of object class
   ObjectContextRef obc;
   const OpInfo& op_info;
   const pg_pool_t& pool_info;  // for the sake of the ObjClass API
@@ -236,12 +237,14 @@ private:
 
 public:
   template <class MsgT>
-  OpsExecuter(ObjectContextRef obc,
+  OpsExecuter(Ref<PG> pg,
+              ObjectContextRef obc,
               const OpInfo& op_info,
               const pg_pool_t& pool_info,
               PGBackend& backend,
               const MsgT& msg)
-    : obc(std::move(obc)),
+    : pg(std::move(pg)),
+      obc(std::move(obc)),
       op_info(op_info),
       pool_info(pool_info),
       backend(backend),
@@ -262,9 +265,7 @@ public:
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
   template <typename MutFunc>
-  rep_op_fut_t flush_changes_n_do_ops_effects(
-    Ref<PG> pg,
-    MutFunc&& mut_func) &&;
+  rep_op_fut_t flush_changes_n_do_ops_effects(MutFunc&& mut_func) &&;
 
   const hobject_t &get_target() const {
     return obc->obs.oi.soid;
@@ -330,7 +331,7 @@ auto OpsExecuter::with_effect_on_obc(
 
 template <typename MutFunc>
 OpsExecuter::rep_op_fut_t
-OpsExecuter::flush_changes_n_do_ops_effects(Ref<PG> pg, MutFunc&& mut_func) &&
+OpsExecuter::flush_changes_n_do_ops_effects(MutFunc&& mut_func) &&
 {
   const bool want_mutate = !txn.empty();
   // osd_op_params are instantiated by every wr-like operation.
