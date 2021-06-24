@@ -569,6 +569,10 @@ class Object {
 	bool completeMultipart{false};
 	bool appendable{false};
 	Attrs* attrs{nullptr};
+	// In MultipartObjectProcessor::complete, we need this parameter
+	// to tell the exact placement rule since it may be different from
+	// bucket.placement_rule when Storage Class is specified explicitly
+	const rgw_placement_rule *pmeta_placement_rule{nullptr};
       } params;
 
       virtual ~WriteOp() = default;
