@@ -10207,7 +10207,8 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
   // osd bench test. This is later used to setup mclock.
   if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler") {
     std::string max_capacity_iops_config;
-    bool force_run_benchmark = false;
+    bool force_run_benchmark =
+      cct->_conf.get_val<bool>("osd_mclock_force_run_benchmark_on_init");
 
     if (store_is_rotational) {
       max_capacity_iops_config = "osd_mclock_max_capacity_iops_hdd";
