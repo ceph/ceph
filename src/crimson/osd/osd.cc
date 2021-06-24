@@ -507,9 +507,7 @@ seastar::future<> OSD::stop()
     }).then([this] {
       return when_all_succeed(
 	  public_msgr->shutdown(),
-	  cluster_msgr->shutdown());
-    }).then_unpack([] {
-      return seastar::now();
+	  cluster_msgr->shutdown()).discard_result();
     }).handle_exception([](auto ep) {
       logger().error("error while stopping osd: {}", ep);
     });
