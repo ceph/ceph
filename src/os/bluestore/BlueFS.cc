@@ -514,6 +514,8 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   log.writer = _create_writer(log_file);
 
   // initial txn
+  ceph_assert(log.seq_live == 1);
+  log.t.seq = 1;
   log.t.op_init();
   flush_and_sync_log();
 
@@ -1222,7 +1224,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                       << std::endl;
           }
 
-	  ceph_assert(next_seq >= log_seq);
+	  ceph_assert(next_seq > log_seq);
 	  log_seq = next_seq - 1; // we will increment it below
 	  uint64_t skip = offset - read_pos;
 	  if (skip) {
@@ -1250,7 +1252,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                       << ":  op_jump_seq " << next_seq << std::endl;
           }
 
-	  ceph_assert(next_seq >= log_seq);
+	  ceph_assert(next_seq > log_seq);
 	  log_seq = next_seq - 1; // we will increment it below
 	}
 	break;
@@ -1528,8 +1530,10 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   }
   if (!noop) {
     vselector->add_usage(log_file->vselector_hint, log_file->fnode);
-    log.seq_live = log_seq;
-    dirty.seq_next = log_seq + 1;
+    log.seq_live = log_seq + 1;
+    dirty.seq_live = log_seq + 1;
+    log.t.seq = log.seq_live;
+    //log.seq_stable = log_seq;
     dirty.seq_stable = log_seq;
   }
 
@@ -2270,8 +2274,13 @@ void BlueFS::rewrite_log_and_layout_sync(bool allocate_with_fallback,
 
   File *log_file = log.writer->file.get();
 
-  // clear out log (be careful who calls us!!!)
+  // log.t.seq is always set to current live seq
+  ceph_assert(log.t.seq == log.seq_live);
+  // Capturing entire state. Dump anything that has been stored there.
   log.t.clear();
+  log.t.seq = log.seq_live;
+  // From now on, no changes to log.t are permitted until we finish rewriting log.
+  // Can allow dirty to remain dirty - log.seq_live will not change.
 
   dout(20) << __func__ << " super_dev:" << super_dev
                        << " log_dev:" << log_dev
@@ -2425,9 +2434,10 @@ void BlueFS::compact_log_async()
 
   // update the log file change and log a jump to the offset where we want to
   // write the new entries
-  log.t.op_file_update(log_file->fnode); // 1.2
-  log.t.op_jump(log.seq_live, old_log_jump_to); // 1.3
-
+  log.t.op_file_update(log_file->fnode);
+  // jump to new position should mean next seq
+  log.t.op_jump(log.seq_live + 1, old_log_jump_to);
+  uint64_t seq_now = log.seq_live;
   // we need to flush all bdev because we will be streaming all dirty files to log
   // TODO - think - if _flush_and_sync_log_jump will not add dirty files nor release pending allocations
   // then flush_bdev() will not be necessary
@@ -2451,7 +2461,8 @@ void BlueFS::compact_log_async()
   // conservative estimate for final encoded size
   new_log_jump_to = round_up_to(t.op_bl.length() + super.block_size * 2,
                                 max_alloc_size);
-  t.op_jump(log.seq_live, new_log_jump_to);
+  //newly constructed log head will jump to what we had before
+  t.op_jump(seq_now, new_log_jump_to);
 
   // allocate
   //FIXME: check if we want DB here?
@@ -2596,19 +2607,31 @@ void BlueFS::_pad_bl(bufferlist& bl)
  * pending_release and log.t go with same lock
  */
 
-// Adds to log.t file modifications mentioned in `dirty.files`.
-// Note: some bluefs ops may have already been stored in log.t transaction.
-uint64_t BlueFS::_consume_dirty()
+// Returns log seq that was live before advance.
+uint64_t BlueFS::_log_advance_seq()
 {
   ceph_assert(ceph_mutex_is_locked(dirty.lock));
   ceph_assert(ceph_mutex_is_locked(log.lock));
   //acquire new seq
   // this will became seq_stable once we write
-  ++dirty.seq_next;
-  ++log.seq_live;
-  ceph_assert(dirty.seq_next == log.seq_live + 1);
-  uint64_t seq = log.t.seq = log.seq_live;
+  ceph_assert(dirty.seq_stable < dirty.seq_live);
+  ceph_assert(log.t.seq == log.seq_live);
+  uint64_t seq = log.seq_live;
   log.t.uuid = super.uuid;
+
+  ++dirty.seq_live;
+  ++log.seq_live;
+  ceph_assert(dirty.seq_live == log.seq_live);
+  return seq;
+}
+
+
+// Adds to log.t file modifications mentioned in `dirty.files`.
+// Note: some bluefs ops may have already been stored in log.t transaction.
+void BlueFS::_consume_dirty(uint64_t seq)
+{
+  ceph_assert(ceph_mutex_is_locked(dirty.lock));
+  ceph_assert(ceph_mutex_is_locked(log.lock));
 
   // log dirty files
   // we just incremented log_seq. It is now illegal to add to dirty.files[log_seq]
@@ -2620,7 +2643,6 @@ uint64_t BlueFS::_consume_dirty()
       log.t.op_file_update_inc(f.fnode);
     }
   }
-  return seq;
 }
 
 // Extends log if its free space is smaller then bluefs_min_log_runway.
@@ -2687,8 +2709,9 @@ void BlueFS::_flush_and_sync_log_core(int64_t runway)
 
   log.writer->append(bl);
 
+  // prepare log for new transactions
   log.t.clear();
-  log.t.seq = 0;  // just so debug output is less confusing
+  log.t.seq = log.seq_live;
 
   int r = _flush_special(log.writer);
   ceph_assert(r == 0);
@@ -2783,10 +2806,10 @@ int BlueFS::flush_and_sync_log(uint64_t want_seq)
       ceph_assert(available_runway >= 0);
     }
   } while (available_runway < 0);
-
-  ceph_assert(want_seq == 0 || want_seq <= log.seq_live); // illegal to request seq that was not created yet
-
-  uint64_t seq = _consume_dirty();
+  
+  ceph_assert(want_seq == 0 || want_seq <= dirty.seq_live); // illegal to request seq that was not created yet
+  uint64_t seq =_log_advance_seq();
+  _consume_dirty(seq);
   vector<interval_set<uint64_t>> to_release(pending_release.size());
   to_release.swap(pending_release);
   dirty.lock.unlock();
@@ -2813,7 +2836,8 @@ int BlueFS::_flush_and_sync_log_jump(uint64_t jump_to,
   // we synchronize writing to log, by lock to log_lock
 
   dirty.lock.lock();
-  uint64_t seq = _consume_dirty();
+  uint64_t seq =_log_advance_seq();
+  _consume_dirty(seq);
   vector<interval_set<uint64_t>> to_release(pending_release.size());
   to_release.swap(pending_release);
   dirty.lock.unlock();
@@ -2890,22 +2914,22 @@ int BlueFS::_signal_dirty_to_log(FileWriter *h)
   h->file->fnode.mtime = ceph_clock_now();
   ceph_assert(h->file->fnode.ino >= 1);
   if (h->file->dirty_seq == 0) {
-    h->file->dirty_seq = dirty.seq_next;
+    h->file->dirty_seq = dirty.seq_live;
     dirty.files[h->file->dirty_seq].push_back(*h->file);
-    dout(20) << __func__ << " dirty_seq = " << dirty.seq_next
+    dout(20) << __func__ << " dirty_seq = " << dirty.seq_live
 	     << " (was clean)" << dendl;
   } else {
-    if (h->file->dirty_seq != dirty.seq_next) {
+    if (h->file->dirty_seq != dirty.seq_live) {
       // need re-dirty, erase from list first
       ceph_assert(dirty.files.count(h->file->dirty_seq));
       auto it = dirty.files[h->file->dirty_seq].iterator_to(*h->file);
       dirty.files[h->file->dirty_seq].erase(it);
-      h->file->dirty_seq = dirty.seq_next;
+      h->file->dirty_seq = dirty.seq_live;
       dirty.files[h->file->dirty_seq].push_back(*h->file);
-      dout(20) << __func__ << " dirty_seq = " << dirty.seq_next
+      dout(20) << __func__ << " dirty_seq = " << dirty.seq_live
 	       << " (was " << h->file->dirty_seq << ")" << dendl;
     } else {
-      dout(20) << __func__ << " dirty_seq = " << dirty.seq_next
+      dout(20) << __func__ << " dirty_seq = " << dirty.seq_live
 	       << " (unchanged, do nothing) " << dendl;
     }
   }
@@ -3238,7 +3262,7 @@ int BlueFS::fsync(FileWriter *h)
     flush_and_sync_log(old_dirty_seq);
     // AK - TODO - think - how can dirty_seq change if we are under h lock?
     ceph_assert(h->file->dirty_seq == 0 ||  // cleaned
-		h->file->dirty_seq > s);    // or redirtied by someone else
+		h->file->dirty_seq >= s);    // or redirtied by someone else
   }
   maybe_compact_log();
   return 0;

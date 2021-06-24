@@ -328,7 +328,8 @@ private:
 
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
-    uint64_t seq_live = 0; //seq that log is currently writing to
+    //uint64_t seq_stable = 0; //seq that is now stable on disk    AK - consider also mirroring this
+    uint64_t seq_live = 1;   //seq that log is currently writing to; mirrors dirty.seq_live
     FileWriter *writer = 0;
     bluefs_transaction_t t;
   } log;
@@ -336,7 +337,7 @@ private:
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::dirty.lock");
     uint64_t seq_stable = 0; //seq that is now stable on disk
-    uint64_t seq_next = 1;   //seq that is ongoing and not yet stable
+    uint64_t seq_live = 1;   //seq that is ongoing and dirty files will be written to
     // map of dirty files, files of same dirty_seq are grouped into list.
     std::map<uint64_t, dirty_file_list_t> files;
   } dirty;
@@ -420,9 +421,10 @@ private:
 
   int64_t _maybe_extend_log();
   void _extend_log();
-  uint64_t _consume_dirty();
-  void _clear_dirty_set_stable(uint64_t seq_stable);
-  void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
+  uint64_t _log_advance_seq();
+  void _consume_dirty(uint64_t seq);
+  void clear_dirty_set_stable(uint64_t seq_stable);
+  void release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
 
   void _flush_and_sync_log_core(int64_t available_runway);
   int _flush_and_sync_log_jump(uint64_t jump_to,
