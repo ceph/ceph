@@ -31,13 +31,13 @@
 %endif
 %bcond_with system_pmdk
 %bcond_without rbd_ssd_cache
-%if 0%{?fedora} || 0%{?rhel}
-%bcond_without selinux
-%ifarch x86_64 ppc64le
+%ifarch x86_64
 %bcond_without rbd_rwl_cache
 %else
 %bcond_with rbd_rwl_cache
 %endif
+%if 0%{?fedora} || 0%{?rhel}
+%bcond_without selinux
 %if 0%{?rhel} >= 8
 %bcond_with cephfs_java
 %else
@@ -59,10 +59,8 @@
 %bcond_with libradosstriper
 %ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
-%bcond_without rbd_rwl_cache
 %else
 %bcond_with lttng
-%bcond_with rbd_rwl_cache
 %endif
 %bcond_with ocf
 %bcond_with selinux
