@@ -343,8 +343,10 @@ TEST_P(AllocTest, mempoolAccounting)
     PExtentVector tmp;
     alloc->allocate(alloc_size, alloc_size, 0, 0, &tmp);
     all_allocs[rand()] = tmp;
+    tmp.clear();
     alloc->allocate(alloc_size, alloc_size, 0, 0, &tmp);
     all_allocs[rand()] = tmp;
+    tmp.clear();
 
     auto it = all_allocs.upper_bound(rand());
     if (it != all_allocs.end()) {
@@ -361,4 +363,4 @@ TEST_P(AllocTest, mempoolAccounting)
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap", "avl", "hybrid"));
+  ::testing::Values("stupid", "bitmap", "avl", "btree", "hybrid"));
