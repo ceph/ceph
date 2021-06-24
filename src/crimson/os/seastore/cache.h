@@ -181,7 +181,7 @@ public:
       auto ret = TCachedExtentRef<T>(static_cast<T*>(&*iter));
       return ret->wait_io(
       ).then([ret=std::move(ret)]() mutable -> get_extent_ret<T> {
-	assert(ret->is_valid());
+	// ret may be invalid, caller must check
 	return get_extent_ret<T>(
 	  get_extent_ertr::ready_future_marker{},
 	  std::move(ret));
@@ -267,9 +267,14 @@ public:
 	get_extent<T>(offset, length)
       ).si_then(
 	[&t](auto ref) mutable {
-	  t.add_to_read_set(ref);
-	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
-	    std::move(ref));
+	  if (!ref->is_valid()) {
+	    t.conflicted = true;
+	    return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
+	  } else {
+	    t.add_to_read_set(ref);
+	    return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
+	      std::move(ref));
+	  }
 	});
     }
   }
