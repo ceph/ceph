@@ -61,6 +61,12 @@ TEST(formatable, str2) {
 
 }
 
+TEST(formatable, str3) {
+  JSONFormattable f;
+  get_jf("{ \"foo\": \"1234bar56\" }", &f);
+  ASSERT_EQ((string)f["foo"], "1234bar56");
+}
+
 TEST(formatable, int) {
   JSONFormattable f;
   get_jf("{ \"foo\": 1 }", &f);
@@ -191,6 +197,12 @@ TEST(formatable, set) {
   f.set("obj.c", "30");
 
   ASSERT_EQ((int)f["obj"]["c"], 30);
+}
+
+TEST(formatable, set2) {
+  JSONFormattable f;
+  f.set("foo", "1234bar56");
+  ASSERT_EQ((string)f["foo"], "1234bar56");
 }
 
 TEST(formatable, erase) {
