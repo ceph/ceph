@@ -1213,6 +1213,18 @@ struct futurize<Container<::crimson::errorated_future_marker<Value>>> {
 
   template<typename Func, typename... FuncArgs>
   [[gnu::always_inline]]
+  static type apply(Func&& func, std::tuple<FuncArgs...>&& args) noexcept {
+    try {
+      return std::apply(
+	std::forward<Func>(func),
+	std::forward<std::tuple<FuncArgs...>>(args));
+    } catch (...) {
+      return make_exception_future(std::current_exception());
+    }
+  }
+
+  template<typename Func, typename... FuncArgs>
+  [[gnu::always_inline]]
   static inline type invoke(Func&& func, FuncArgs&&... args) noexcept {
     try {
       return func(std::forward<FuncArgs>(args)...);

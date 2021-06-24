@@ -35,25 +35,6 @@ private:
   const bool still_primary;
 };
 
-template <typename InterruptCond, bool may_loop,
-	  typename... InterruptExceptions,
-	  typename OpFunc, typename OnInterrupt>
-inline seastar::future<> with_interruption(
-  OpFunc&& opfunc, OnInterrupt&& efunc) {
-  if constexpr (may_loop) {
-    return ::seastar::repeat(
-      [opfunc=std::move(opfunc), efunc=std::move(efunc)]() mutable {
-      return ::crimson::interruptible::interruptor<InterruptCond>::template futurize<
-	std::result_of_t<OpFunc()>>::apply(std::move(opfunc), std::make_tuple())
-	.template handle_interruption<InterruptExceptions...>(std::move(efunc));
-    });
-  } else {
-      return ::crimson::interruptible::interruptor<InterruptCond>::template futurize<
-	std::result_of_t<OpFunc()>>::apply(std::move(opfunc), std::make_tuple())
-	.template handle_interruption<InterruptExceptions...>(std::move(efunc));
-  }
-}
-
 template<typename Func, typename... Args>
 inline seastar::future<> handle_system_shutdown(Func&& func, Args&&... args)
 {

@@ -16,7 +16,7 @@
 namespace crimson::os::seastore::omap_manager{
 
 struct omap_context_t {
-  TransactionManager &tm;
+  InterruptedTransactionManager tm;
   Transaction &t;
 };
 

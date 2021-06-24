@@ -48,10 +48,10 @@ using ObjectDataBlockRef = TCachedExtentRef<ObjectDataBlock>;
 
 class ObjectDataHandler {
 public:
-  using base_ertr = TransactionManager::base_ertr;
+  using base_ertr = with_trans_ertr<TransactionManager::base_iertr>;
 
   struct context_t {
-    TransactionManager &tm;
+    InterruptedTransactionManager tm;
     Transaction &t;
     Onode &onode;
   };
