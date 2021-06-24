@@ -2094,7 +2094,6 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
  * to do the requested action */
 rgw::IAM::Effect eval_identity_or_session_policies(const vector<rgw::IAM::Policy>& user_policies,
                           const rgw::IAM::Environment& env,
-                          boost::optional<const rgw::auth::Identity&> id,
                           const uint64_t op,
                           const rgw::ARN& arn);
 bool verify_user_permission(const DoutPrefixProvider* dpp,
