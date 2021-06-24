@@ -6133,6 +6133,26 @@ std::string &aws_response_handler::get_sql_result()
   return sql_result;
 }
 
+uint64_t aws_response_handler::get_processed_size()
+{
+  return processed_size;
+}
+
+void aws_response_handler::set_processed_size(uint64_t value)
+{
+  processed_size += value;
+}
+
+uint64_t aws_response_handler::get_total_bytes_returned()
+{
+  return total_bytes_returned;
+}
+
+void aws_response_handler::set_total_bytes_returned(uint64_t value)
+{
+  total_bytes_returned += value;
+}
+
 void aws_response_handler::push_header(const char *header_name, const char *header_value)
 {
   char x;
@@ -6277,10 +6297,15 @@ void aws_response_handler::init_success_response()
   sql_result.append(PAYLOAD_LINE);
 }
 
-void aws_response_handler::init_continuation_response()
+void aws_response_handler::send_continuation_response()
 {
+  sql_result = "012345678901";
+  m_buff_header.clear();
   header_size = create_header_continuation();
   sql_result.append(m_buff_header.c_str(), header_size);
+  int buff_len = create_message(header_size);
+  s->formatter->write_bin_data(sql_result.data(), buff_len);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 void aws_response_handler::init_progress_response()
@@ -6293,15 +6318,21 @@ void aws_response_handler::init_progress_response()
 
 void aws_response_handler::init_stats_response()
 {
+  sql_result = "012345678901";
+  m_buff_header.clear();
   header_size = create_header_stats();
   sql_result.append(m_buff_header.c_str(), header_size);
-  sql_result.append(PAYLOAD_LINE);
 }
 
 void aws_response_handler::init_end_response()
 {
+  sql_result = "012345678901";
+  m_buff_header.clear();
   header_size = create_header_end();
   sql_result.append(m_buff_header.c_str(), header_size);
+  int buff_len = create_message(header_size);
+  s->formatter->write_bin_data(sql_result.data(), buff_len);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 void aws_response_handler::init_error_response(const char *error_message)
@@ -6341,13 +6372,11 @@ void aws_response_handler::send_error_response(const char *error_code,
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void aws_response_handler::send_progress_response(uint64_t bytes_scanned,
-                                                uint64_t bytes_processed,
-                                                uint64_t bytes_returned)
+void aws_response_handler::send_progress_response()
 {
-  std::string progress_payload="<?xml version=\"1.0\" encoding=\"UTF-8\"?><Progress><BytesScanned>" + to_string(bytes_scanned) + 
-		    "</BytesScanned><BytesProcessed>" + to_string(bytes_processed) + "</BytesProcessed>" +
-		    "<BytesReturned>" + to_string(bytes_returned) + "</BytesReturned></Progress>";
+  std::string progress_payload="<?xml version=\"1.0\" encoding=\"UTF-8\"?><Progress><BytesScanned>" + to_string(get_processed_size()) + 
+		    "</BytesScanned><BytesProcessed>" + to_string(get_processed_size()) + "</BytesProcessed>" +
+		    "<BytesReturned>" + to_string(get_total_bytes_returned()) + "</BytesReturned></Progress>";
 
   sql_result.append(progress_payload);
   int buff_len = create_message(header_size);
@@ -6356,24 +6385,16 @@ void aws_response_handler::send_progress_response(uint64_t bytes_scanned,
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void aws_response_handler::send_stats_response(uint64_t bytes_scanned,
-                                               uint64_t bytes_processed,
-                                               uint64_t bytes_returned)
+void aws_response_handler::send_stats_response()
 {
+  std::string stats_payload="<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>" + to_string(get_processed_size()) + 
+		    "</BytesScanned><BytesProcessed>" + to_string(get_processed_size()) + "</BytesProcessed>" +
+		    "<BytesReturned>" + to_string(get_total_bytes_returned()) + "</BytesReturned></Stats>";
 
-  set_req_state_err(s, 0);
-  dump_errno(s);
-  end_header(s, m_rgwop, "application/xml", CHUNKED_TRANSFER_ENCODING);
-  dump_start(s);
+  sql_result.append(stats_payload);
+  int buff_len = create_message(header_size);
 
-  s->formatter->open_object_section("Stats");
-
-  s->formatter->dump_int("BytesScanned", bytes_scanned);
-  s->formatter->dump_int("BytesProcessed", bytes_processed);
-  s->formatter->dump_int("BytesReturned", bytes_returned);
-
-  s->formatter->close_section();
-
+  s->formatter->write_bin_data(sql_result.data(), buff_len);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -6447,14 +6468,18 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
       csv.escape_char = *m_escape_char.c_str();
     }
 
+    if (m_enable_progress.compare("true")==0) {
+      enable_progress = true;
+    } else {
+      enable_progress = false;
+    }
+
     if(m_header_info.compare("IGNORE")==0) {
       csv.ignore_header_info=true;
     }
     else if(m_header_info.compare("USE")==0) {
       csv.use_header_info=true;
     }
-
-    m_aws_response_handler = std::make_unique<aws_response_handler>(s,this);
     m_s3_csv_object = std::unique_ptr<s3selectEngine::csv_object>(new s3selectEngine::csv_object(s3select_syntax.get(), csv));
   }
 
@@ -6478,6 +6503,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
     //query is correct(syntax), processing is starting.
     status = m_s3_csv_object->run_s3select_on_stream(m_aws_response_handler.get()->get_sql_result(), input, input_length, s->obj_size);
     length_post_processing = (m_aws_response_handler->get_sql_result()).size();
+    m_aws_response_handler.get()->set_total_bytes_returned(length_post_processing-length_before_processing);
     if (status < 0)
     { //error flow(processing-time)
       m_aws_response_handler.get()->send_error_response(s3select_processTime_error,
@@ -6501,17 +6527,17 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
     }
     chunk_number++;
   }
-
-  m_aws_response_handler.get()->send_success_response();
-
-  /*
-  if (length_post_processing - length_before_processing == 0) {
-    m_aws_response_handler.get()->init_continuation_response();
+  
+  if (length_post_processing-length_before_processing != 0) {
+    m_aws_response_handler.get()->send_success_response();
+  } else {
+    m_aws_response_handler.get()->send_continuation_response();
   }
-  */
-
-  m_aws_response_handler.get()->init_progress_response();
-  m_aws_response_handler.get()->send_progress_response(input_length,input_length,length_post_processing-length_before_processing);
+  
+  if (enable_progress == true) {
+    m_aws_response_handler.get()->init_progress_response();
+    m_aws_response_handler.get()->send_progress_response();
+  }
 
   return status;
 }
@@ -6543,6 +6569,7 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
 
   extract_by_tag("QuoteEscapeCharacter", m_escape_char);
   extract_by_tag("CompressionType", m_compression_type);
+  extract_by_tag("Enabled", m_enable_progress);
   if (m_compression_type.length()>0 && m_compression_type.compare("NONE") != 0) {
     ldpp_dout(this, 10) << "RGW supports currently only NONE option for compression type" << dendl;
     return -1;
@@ -6572,7 +6599,6 @@ int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string tag_name, std::string& 
 
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
-  uint64_t processed_size = 0;
   if (len == 0) {
     return 0;
   }
@@ -6592,18 +6618,26 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
                         <<  " obj-size " << s->obj_size << dendl;
       continue; 
     }
-    processed_size += it.length();
+    
+    if (m_aws_response_handler.get() == nullptr)
+    {
+    m_aws_response_handler = std::make_unique<aws_response_handler>(s,this);
+    }
+    m_aws_response_handler.get()->set_processed_size(it.length());
+
     status = run_s3select(m_sql_query.c_str(), &(it)[0], it.length());
     if(status<0) {
       break;
     }
     i++;
   }
-  m_aws_response_handler = std::make_unique<aws_response_handler>(s,this);
-  if (processed_size == s->obj_size) {
+
+  if (m_aws_response_handler.get()->get_processed_size() == s->obj_size) {
+    if (status >=0) {
     m_aws_response_handler.get()->init_stats_response();
-    m_aws_response_handler.get()->send_stats_response(processed_size,processed_size,m_aws_response_handler->get_sql_result().size());
+    m_aws_response_handler.get()->send_stats_response();
     m_aws_response_handler.get()->init_end_response();
+    }
   }
 
   return status;
