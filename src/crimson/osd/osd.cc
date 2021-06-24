@@ -1087,7 +1087,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
   }).then([m, this] {
     if (state.is_active()) {
       logger().info("osd.{}: now active", whoami);
-      if (!osdmap->exists(whoami)) {
+      if (!osdmap->exists(whoami) ||
+	  osdmap->is_stop(whoami)) {
         return shutdown();
       }
       if (should_restart()) {
