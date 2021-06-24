@@ -68,6 +68,7 @@ enum {
   l_mdss_req_readdir_latency,
   l_mdss_req_rename_latency,
   l_mdss_req_renamesnap_latency,
+  l_mdss_req_snapdiff_latency,
   l_mdss_req_rmdir_latency,
   l_mdss_req_rmsnap_latency,
   l_mdss_req_rmxattr_latency,
@@ -299,6 +300,7 @@ public:
   void _rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_renamesnap(MDRequestRef& mdr);
   void _renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+  void handle_client_readdir_snapdiff(MDRequestRef& mdr);
 
   // helpers
   bool _rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, std::set<mds_rank_t> &witnesse,
@@ -479,6 +481,37 @@ private:
 
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder& gather);
+
+  void _finalize_readdir(MDRequestRef& mdr,
+                         CInode *diri,
+                         CDir* dir,
+                         bool start,
+                         bool end,
+                         __u16 flags,
+                         __u32 numfiles,
+                         bufferlist& dirbl,
+                         bufferlist& dnbl);
+  void _readdir_diff(
+    utime_t now,
+    MDRequestRef& mdr,
+    CInode* diri,
+    CDir* dir,
+    SnapRealm* realm,
+    unsigned max_entries,
+    int bytes_left,
+    const std::string& offset_str,
+    uint32_t offset_hash,
+    unsigned req_flags,
+    bufferlist& dirbl);
+  bool build_snap_diff(
+    MDRequestRef& mdr,
+    CDir* dir,
+    int bytes_left,
+    dentry_key_t* skip_key,
+    snapid_t snapid_before,
+    snapid_t snapid,
+    const bufferlist& dnbl,
+    std::function<bool(CDentry*, CInode*, bool)> add_result_cb);
 
   MDSRank *mds;
   MDCache *mdcache;

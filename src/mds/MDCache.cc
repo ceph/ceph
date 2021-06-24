@@ -8674,7 +8674,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   // success.
   if (mds->logger) mds->logger->inc(l_mds_traverse_hit);
   dout(10) << "path_traverse finish on snapid " << snapid << dendl;
-  if (mdr) 
+  if (mdr)
     ceph_assert(mdr->snapid == snapid);
 
   if (flags & MDS_TRAVERSE_RDLOCK_SNAP)
