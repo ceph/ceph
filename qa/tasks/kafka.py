@@ -173,6 +173,7 @@ def task(ctx,config):
     tasks:
     - kafka:
         client.0:
+          kafka_version: 2.6.0
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \

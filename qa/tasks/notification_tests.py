@@ -12,39 +12,26 @@ import string
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
+
 @contextlib.contextmanager
 def download(ctx, config):
-    """
-    Download the bucket notification tests from the git builder.
-    Remove downloaded test file upon exit.
-    The context passed in should be identical to the context
-    passed in to the main task.
-    """
     assert isinstance(config, dict)
-    log.info('Downloading bucket-notification-tests...')
+    log.info('Downloading bucket-notifications-tests...')
     testdir = teuthology.get_testdir(ctx)
+    branch = ctx.config.get('suite_branch')
+    repo = ctx.config.get('suite_repo')
+    log.info('Using branch %s from %s for bucket notifications tests', branch, repo)
     for (client, client_config) in config.items():
-        bntests_branch = client_config.get('force-branch', None)
-        if not bntests_branch:
-            raise ValueError(
-                "Could not determine what branch to use for bn-tests. Please add 'force-branch: {bn-tests branch name}' to the .yaml config for this bucket notifications tests task.")
-
-        log.info("Using branch '%s' for bucket notifications tests", bntests_branch)
-        sha1 = client_config.get('sha1')
-        git_remote = client_config.get('git_remote', teuth_config.ceph_git_base_url)
         ctx.cluster.only(client).run(
-            args=[
-                'git', 'clone',
-                '-b', bntests_branch,
-                git_remote + 'ceph.git',
-                '{tdir}/ceph'.format(tdir=testdir),
-                ],
+            args=['git', 'clone', '-b', branch, repo, '{tdir}/ceph'.format(tdir=testdir)],
             )
+
+        sha1 = client_config.get('sha1')
+
         if sha1 is not None:
             ctx.cluster.only(client).run(
                 args=[
@@ -53,6 +40,7 @@ def download(ctx, config):
                     'git', 'reset', '--hard', sha1,
                     ],
                 )
+
     try:
         yield
     finally:
@@ -258,21 +246,30 @@ def task(ctx,config):
     """
     To run bucket notification tests under Kafka endpoint the prerequisite is to run the kafka server. Also you need to pass the
     'extra_attr' to the notification tests. Following is the way how to run kafka and finally bucket notification tests::
+
     tasks:
     - kafka:
         client.0:
+          kafka_version: 2.6.0
     - notification_tests:
         client.0:
           extra_attr: ["kafka_test"]
 
     To run bucket notification tests under AMQP endpoint the prerequisite is to run the rabbitmq server. Also you need to pass the
     'extra_attr' to the notification tests. Following is the way how to run rabbitmq and finally bucket notification tests::
+
     tasks:
     - rabbitmq:
         client.0:
     - notification_tests:
         client.0:
           extra_attr: ["amqp_test"]
+
+    If you want to run the tests against your changes pushed to your remote repo you can provide 'suite_branch' and 'suite_repo'
+    parameters in your teuthology-suite command. Example command for this is as follows::
+
+    teuthology-suite --ceph-repo https://github.com/ceph/ceph-ci.git -s rgw:notifications --ceph your_ceph_branch_name -m smithi --suite-repo https://github.com/your_name/ceph.git --suite-branch your_branch_name
+    
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
