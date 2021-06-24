@@ -450,7 +450,6 @@ Requires:      grep
 Requires:      logrotate
 Requires:      parted
 Requires:      psmisc
-Requires:      python%{python3_pkgversion}-setuptools
 Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
@@ -810,6 +809,8 @@ Requires:	lvm2
 Requires:	sudo
 Requires:	libstoragemgmt
 Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{python3_pkgversion}-setuptools
+
 %if 0%{?weak_deps}
 Recommends:	nvme-cli
 %if 0%{?suse_version}
