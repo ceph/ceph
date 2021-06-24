@@ -1499,7 +1499,6 @@ rm -rf %{buildroot}
 %{_fillupdir}/sysconfig.*
 %endif
 %{_unitdir}/ceph.target
-%{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-create-keys.8*
 %{_mandir}/man8/ceph-run.8*
 %{_mandir}/man8/crushtool.8*

@@ -14,7 +14,6 @@ usr/sbin/ceph-create-keys
 usr/share/doc/ceph/sample.ceph.conf
 usr/share/man/man8/ceph-create-keys.8
 usr/share/man/man8/ceph-debugpack.8
-usr/share/man/man8/ceph-deploy.8
 usr/share/man/man8/ceph-run.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/monmaptool.8
