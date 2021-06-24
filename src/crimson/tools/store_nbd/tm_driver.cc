@@ -43,7 +43,7 @@ seastar::future<> TMDriver::write(
 	  assert(ext->get_bptr().length() == ptr.length());
 	  ext->get_bptr().swap(ptr);
 	  logger().debug("submitting transaction");
-	  return tm->submit_transaction(std::move(t));
+	  return tm->submit_transaction(*t);
 	});
       });
   }).handle_error(
@@ -141,7 +141,7 @@ void TMDriver::init()
 
   journal->set_segment_provider(&*segment_cleaner);
 
-  tm = std::make_unique<TransactionManager>(
+  tm = InterruptedTMRef(
     *segment_manager,
     std::move(segment_cleaner),
     std::move(journal),

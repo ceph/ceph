@@ -100,7 +100,7 @@ auto get_seastore(SegmentManagerRef sm) {
 
 class TMTestState : public EphemeralTestState {
 protected:
-  std::unique_ptr<TransactionManager> tm;
+  InterruptedTMRef tm;
   LBAManager *lba_manager;
   SegmentCleaner *segment_cleaner;
 
@@ -143,6 +143,11 @@ protected:
     ).handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}
     );
+  }
+
+  void submit_transaction(TransactionRef t) {
+    tm->submit_transaction(*t).unsafe_get0();
+    segment_cleaner->run_until_halt().get0();
   }
 };
 

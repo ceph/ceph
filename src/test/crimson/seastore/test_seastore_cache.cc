@@ -69,6 +69,16 @@ struct cache_test_t : public seastar_test_suite_t {
     return cache.create_transaction();
   }
 
+  template <typename T, typename... Args>
+  auto get_extent(Transaction &t, Args&&... args) {
+    return with_trans_intr(
+      t,
+      [this](auto &&... args) {
+	return cache.get_extent<T>(args...);
+      },
+      std::forward<Args>(args)...);
+  }
+
   seastar::future<> set_up_fut() final {
     return segment_manager->init(
     ).safe_then(
@@ -116,7 +126,7 @@ TEST_F(cache_test_t, test_addr_fixup)
     }
     {
       auto t = get_transaction();
-      auto extent = cache.get_extent<TestBlockPhysical>(
+      auto extent = get_extent<TestBlockPhysical>(
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
@@ -145,7 +155,7 @@ TEST_F(cache_test_t, test_dirty_extent)
       {
 	// test that read with same transaction sees new block though
 	// uncommitted
-	auto extent = cache.get_extent<TestBlockPhysical>(
+	auto extent = get_extent<TestBlockPhysical>(
 	  *t,
 	  reladdr,
 	  TestBlockPhysical::SIZE).unsafe_get0();
@@ -162,12 +172,12 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // test that consecutive reads on the same extent get the same ref
       auto t = get_transaction();
-      auto extent = cache.get_extent<TestBlockPhysical>(
+      auto extent = get_extent<TestBlockPhysical>(
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
       auto t2 = get_transaction();
-      auto extent2 = cache.get_extent<TestBlockPhysical>(
+      auto extent2 = get_extent<TestBlockPhysical>(
 	*t2,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
@@ -176,7 +186,7 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // read back test block
       auto t = get_transaction();
-      auto extent = cache.get_extent<TestBlockPhysical>(
+      auto extent = get_extent<TestBlockPhysical>(
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
@@ -189,7 +199,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	// test that concurrent read with fresh transaction sees old
         // block
 	auto t2 = get_transaction();
-	auto extent = cache.get_extent<TestBlockPhysical>(
+	auto extent = get_extent<TestBlockPhysical>(
 	  *t2,
 	  addr,
 	  TestBlockPhysical::SIZE).unsafe_get0();
@@ -201,7 +211,7 @@ TEST_F(cache_test_t, test_dirty_extent)
       }
       {
 	// test that read with same transaction sees new block
-	auto extent = cache.get_extent<TestBlockPhysical>(
+	auto extent = get_extent<TestBlockPhysical>(
 	  *t,
 	  addr,
 	  TestBlockPhysical::SIZE).unsafe_get0();
@@ -222,7 +232,7 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // test that fresh transaction now sees newly dirty block
       auto t = get_transaction();
-      auto extent = cache.get_extent<TestBlockPhysical>(
+      auto extent = get_extent<TestBlockPhysical>(
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
