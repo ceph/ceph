@@ -35,7 +35,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
     ) -> Tuple[int, str, str]:
-        """Create a cephfs export"""
+        """Create a CephFS export"""
         return self.export_mgr.create_export(fsal_type='cephfs', fs_name=fsname,
                                              cluster_id=cluster_id, pseudo_path=pseudo_path,
                                              read_only=readonly, path=path,
