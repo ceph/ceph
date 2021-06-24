@@ -3130,6 +3130,14 @@ std::vector<Option> get_global_options() {
     .set_long_description("This option specifies the max OSD capacity in iops per OSD. Helps in QoS calculations when enabling a dmclock profile. Only considered for osd_op_queue = mclock_scheduler")
     .set_flag(Option::FLAG_RUNTIME),
 
+    Option("osd_mclock_force_run_benchmark_on_init", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Force run the OSD benchmark on OSD initialization/boot-up")
+    .set_long_description("This option specifies whether the OSD benchmark must be run during the OSD boot-up sequence even if historical data about the OSD iops capacity is available in the MON config store. Enable this to refresh the OSD iops capacity if the underlying device's performance characteristics have changed significantly. Only considered for osd_op_queue = mclock_scheduler.")
+    .set_flag(Option::FLAG_STARTUP)
+    .add_see_also("osd_mclock_max_capacity_iops_hdd")
+    .add_see_also("osd_mclock_max_capacity_iops_ssd"),
+
     Option("osd_mclock_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("high_client_ops")
     .set_enum_allowed( { "balanced", "high_recovery_ops", "high_client_ops", "custom" } )
