@@ -925,6 +925,8 @@ private:
   std::unique_ptr<boost::crc_32_type> crc32;
   RGWOp *m_rgwop;
   std::string m_buff_header;
+  uint64_t total_bytes_returned;
+  uint64_t processed_size;
 
   enum header_name_En
   {
@@ -960,13 +962,21 @@ private:
 
 public:
   //12 positions for header-crc
-  aws_response_handler(struct req_state *ps,RGWOp *rgwop) : sql_result("012345678901"), s(ps),m_rgwop(rgwop)
+  aws_response_handler(struct req_state *ps,RGWOp *rgwop) : sql_result("012345678901"), s(ps),m_rgwop(rgwop),total_bytes_returned{0},processed_size{0}
   {
     // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
     crc32 = std::unique_ptr<boost::crc_32_type>(new boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true>);
   }
 
   std::string &get_sql_result();
+
+  uint64_t get_processed_size();
+
+  void set_processed_size(uint64_t value);
+
+  uint64_t get_total_bytes_returned();
+
+  void set_total_bytes_returned(uint64_t value);
 
   int create_header_records();
 
@@ -984,7 +994,7 @@ public:
 
   void init_success_response();
 
-  void init_continuation_response();
+  void send_continuation_response();
 
   void init_progress_response();
 
@@ -996,9 +1006,9 @@ public:
 
   void send_success_response();
 
-  void send_progress_response( uint64_t bytes_scanned, uint64_t bytes_processed, uint64_t bytes_returned);
+  void send_progress_response();
 
-  void send_stats_response( uint64_t bytes_scanned, uint64_t bytes_processed, uint64_t bytes_returned);
+  void send_stats_response();
 
   void send_error_response(const char* error_code,
                           const char* error_message,
@@ -1020,7 +1030,9 @@ private:
   std::string m_escape_char;
   std::string m_header_info;
   std::string m_sql_query;
+  std::string m_enable_progress;
   std::unique_ptr<aws_response_handler> m_aws_response_handler;
+  bool enable_progress;
 
 public:
   unsigned int chunk_number;
