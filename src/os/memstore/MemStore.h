@@ -16,6 +16,7 @@
 #ifndef CEPH_MEMSTORE_H
 #define CEPH_MEMSTORE_H
 
+#include <atomic>
 #include <mutex>
 #include <boost/intrusive_ptr.hpp>
 
@@ -195,7 +196,7 @@ private:
 
   Finisher finisher;
 
-  uint64_t used_bytes;
+  std::atomic<uint64_t> used_bytes;
 
   void _do_transaction(Transaction& t);
 

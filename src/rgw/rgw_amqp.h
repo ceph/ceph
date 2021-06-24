@@ -72,8 +72,5 @@ size_t get_max_inflight();
 // maximum number of messages in the queue
 size_t get_max_queue();
 
-// disconnect from an amqp broker
-bool disconnect(connection_ptr_t& conn);
-
 }
 

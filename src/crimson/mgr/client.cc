@@ -70,7 +70,7 @@ void Client::ms_handle_connect(crimson::net::ConnectionRef c)
   gate.dispatch_in_background(__func__, *this, [this, c] {
     if (conn == c) {
       // ask for the mgrconfigure message
-      auto m = ceph::make_message<MMgrOpen>();
+      auto m = crimson::make_message<MMgrOpen>();
       m->daemon_name = local_conf()->name.get_id();
       return conn->send(std::move(m));
     } else {

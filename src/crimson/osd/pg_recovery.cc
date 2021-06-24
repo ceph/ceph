@@ -459,7 +459,7 @@ void PGRecovery::enqueue_drop(
   // allocate a pair if target is seen for the first time
   auto& req = backfill_drop_requests[target];
   if (!req) {
-    req = ceph::make_message<MOSDPGBackfillRemove>(
+    req = crimson::make_message<MOSDPGBackfillRemove>(
       spg_t(pg->get_pgid().pgid, target.shard), pg->get_osdmap_epoch());
   }
   req->ls.emplace_back(obj, v);

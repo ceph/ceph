@@ -55,7 +55,7 @@ inline auto do_for_each(Container& c, AsyncAction action) {
 }
 
 template<typename AsyncAction>
-inline auto do_until(AsyncAction action) {
+inline auto repeat(AsyncAction action) {
   using errorator_t =
     typename ::seastar::futurize_t<std::invoke_result_t<AsyncAction>>::errorator_type;
 
@@ -71,11 +71,11 @@ inline auto do_until(AsyncAction action) {
       }
     } else {
       return std::move(f)._then(
-        [action = std::move(action)] (auto &&done) mutable {
-          if (done) {
+        [action = std::move(action)] (auto stop) mutable {
+          if (stop == seastar::stop_iteration::yes) {
             return errorator_t::template make_ready_future<>();
           }
-          return ::crimson::do_until(
+          return ::crimson::repeat(
             std::move(action));
         });
     }
@@ -280,9 +280,9 @@ public:
         std::invoke(std::forward<ErrorVisitorT>(errfunc),
                     ErrorT::error_t::from_exception_ptr(std::move(ep)));
       } else {
-        static_assert(_impl::always_false<return_t>::value,
-                      "return of Error Visitor is not assignable to future");
-        // do nothing with `ep`.
+        result = FuturatorT::type::errorator_type::template make_ready_future<return_t>(
+          std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                      ErrorT::error_t::from_exception_ptr(std::move(ep))));
       }
     }
   }
@@ -320,6 +320,9 @@ static constexpr auto composer(FuncHead&& head, FuncTail&&... tail) {
 
 template <class ValueT>
 struct errorated_future_marker{};
+
+template <class... AllowedErrors>
+class parallel_for_each_state;
 
 template <class T>
 static inline constexpr bool is_error_v = std::is_base_of_v<error_t<T>, T>;
@@ -701,7 +704,7 @@ private:
                                               AsyncAction action);
 
     template<typename AsyncAction>
-    friend inline auto ::crimson::do_until(AsyncAction action);
+    friend inline auto ::crimson::repeat(AsyncAction action);
 
     template <typename Result>
     friend class ::seastar::future;
@@ -713,7 +716,7 @@ private:
     friend inline auto ::seastar::internal::do_with_impl(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more);
     template<typename, typename>
     friend class ::crimson::interruptible::interruptible_future_detail;
-    friend class errorator<AllowedErrors...>::parallel_for_each_state;
+    friend class ::crimson::parallel_for_each_state<AllowedErrors...>;
   };
 
   class Enabler {};
@@ -863,7 +866,7 @@ public:
   template <typename Iterator, typename Func>
   static inline errorator<AllowedErrors...>::future<>
   parallel_for_each(Iterator first, Iterator last, Func&& func) noexcept {
-    parallel_for_each_state* s = nullptr;
+    parallel_for_each_state<AllowedErrors...>* s = nullptr;
     // Process all elements, giving each future the following treatment:
     //   - available, not failed: do nothing
     //   - available, failed: collect exception in ex
@@ -875,7 +878,7 @@ public:
           using itraits = std::iterator_traits<Iterator>;
           auto n = (seastar::internal::iterator_range_estimate_vector_capacity(
                 first, last, typename itraits::iterator_category()) + 1);
-          s = new parallel_for_each_state(n);
+          s = new parallel_for_each_state<AllowedErrors...>(n);
         }
         s->add_future(std::move(f));
       }
@@ -1046,53 +1049,6 @@ private:
     return e.error_t<std::decay_t<ErrorT>>::to_exception_ptr();
   }
 
-  class parallel_for_each_state final : private seastar::continuation_base<> {
-    using future_t = errorator<AllowedErrors...>::future<>;
-    std::vector<future_t> _incomplete;
-    seastar::promise<> _result;
-    std::exception_ptr _ex;
-  private:
-    void wait_for_one() noexcept {
-      while (!_incomplete.empty() && _incomplete.back().available()) {
-        if (_incomplete.back().failed()) {
-          _ex = _incomplete.back().get_exception();
-        }
-        _incomplete.pop_back();
-      }
-      if (!_incomplete.empty()) {
-        seastar::internal::set_callback(_incomplete.back(), static_cast<continuation_base<>*>(this));
-        _incomplete.pop_back();
-        return;
-      }
-      if (__builtin_expect(bool(_ex), false)) {
-        _result.set_exception(std::move(_ex));
-      } else {
-        _result.set_value();
-      }
-      delete this;
-    }
-    virtual void run_and_dispose() noexcept override {
-      if (_state.failed()) {
-        _ex = std::move(_state).get_exception();
-      }
-      _state = {};
-      wait_for_one();
-    }
-    task* waiting_task() noexcept override { return _result.waiting_task(); }
-  public:
-    parallel_for_each_state(size_t n) {
-      _incomplete.reserve(n);
-    }
-    void add_future(future_t&& f) {
-      _incomplete.push_back(std::move(f));
-    }
-    future_t get_future() {
-      auto ret = _result.get_future();
-      wait_for_one();
-      return ret;
-    }
-  };
-
   // needed because of:
   //  * return_errorator_t::template futurize<...> in `safe_then()`,
   //  * conversion to `std::exception_ptr` in `future::future(ErrorT&&)`.
@@ -1109,8 +1065,8 @@ private:
 template <>
 class errorator<> {
 public:
-  template <class ValueT>
-  using future = ::seastar::future<ValueT>;
+  template <class ValueT=void>
+  using future = ::seastar::futurize_t<ValueT>;
 
   template <class T>
   using futurize = ::seastar::futurize<T>;

@@ -209,11 +209,12 @@ OMapInnerNode::list(
     [=, &start](auto &biter, auto &eiter, auto &ret) {
       auto &complete = std::get<0>(ret);
       auto &result = std::get<1>(ret);
-      return crimson::do_until(
-	[&, config, oc, this]() -> list_ertr::future<bool> {
+      return crimson::repeat(
+	[&, config, oc, this]() -> list_ertr::future<seastar::stop_iteration> {
 	  if (biter == eiter  || result.size() == config.max_result_size) {
 	    complete = biter == eiter;
-	    return list_ertr::make_ready_future<bool>(true);
+	    return list_ertr::make_ready_future<seastar::stop_iteration>(
+	      seastar::stop_iteration::yes);
 	  }
 	  auto laddr = biter->get_val();
 	  return omap_load_extent(
@@ -235,7 +236,8 @@ OMapInnerNode::list(
 	      result.merge(std::move(child_result));
 	      ++biter;
 	      assert(child_complete || result.size() == config.max_result_size);
-	      return list_ertr::make_ready_future<bool>(false);
+	      return list_ertr::make_ready_future<seastar::stop_iteration>(
+		seastar::stop_iteration::no);
 	    });
 	  });
 	}).safe_then([&ret, ref = OMapNodeRef(this)] {

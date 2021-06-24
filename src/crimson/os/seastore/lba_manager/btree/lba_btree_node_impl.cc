@@ -236,9 +236,11 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
     begin,
     L_ADDR_NULL,
     [this, c, min_addr, len, end=end](auto &i, auto &ret) {
-      return crimson::do_until([=, &i, &ret]() -> find_hole_ertr::future<bool> {
+      return crimson::repeat([=, &i, &ret]()
+        -> find_hole_ertr::future<seastar::stop_iteration> {
 	if (i == end) {
-	  return seastar::make_ready_future<bool>(true);
+	  return seastar::make_ready_future<seastar::stop_iteration>(
+	    seastar::stop_iteration::yes);
 	}
 	return get_lba_btree_extent(
 	  c,
@@ -255,10 +257,12 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
 	}).safe_then([&i, &ret](auto addr) mutable {
 	  if (addr == L_ADDR_NULL) {
 	    ++i;
-	    return false;
+	    return seastar::make_ready_future<seastar::stop_iteration>(
+	      seastar::stop_iteration::no);
 	  } else {
 	    ret = addr;
-	    return true;
+	    return seastar::make_ready_future<seastar::stop_iteration>(
+	      seastar::stop_iteration::yes);
 	  }
 	});
       }).safe_then([&ret, ref=LBANodeRef(this)] {

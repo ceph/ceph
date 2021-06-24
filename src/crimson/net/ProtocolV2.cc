@@ -1792,7 +1792,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
 // READY state
 
 ceph::bufferlist ProtocolV2::do_sweep_messages(
-    const std::deque<MessageRef>& msgs,
+    const std::deque<MessageURef>& msgs,
     size_t num_msgs,
     bool require_keepalive,
     std::optional<utime_t> _keepalive_ack,
@@ -1818,7 +1818,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
   }
 
-  std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
+  std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageURef& msg) {
     // TODO: move to common code
     // set priority
     msg->get_header().src = messenger.get_myname();
