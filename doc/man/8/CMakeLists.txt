@@ -9,7 +9,6 @@ set(client_srcs
   ceph-dencoder.rst)
 
 set(server_srcs
-  ceph-deploy.rst
   crushtool.rst
   ceph-run.rst
   mount.ceph.rst
