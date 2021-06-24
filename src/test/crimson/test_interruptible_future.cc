@@ -227,6 +227,8 @@ TEST_F(seastar_test_suite_t, expand_errorated_value)
   });
 }
 
+#if 0
+// This seems to cause a hang in the gcc-9 linker on bionic
 TEST_F(seastar_test_suite_t, handle_error)
 {
   run_async([] {
@@ -244,3 +246,4 @@ TEST_F(seastar_test_suite_t, handle_error)
     ret.unsafe_get0();
   });
 }
+#endif
