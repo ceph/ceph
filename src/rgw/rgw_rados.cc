@@ -1136,6 +1136,8 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   metadata["zonegroup_name"] = svc.zone->get_zonegroup().get_name();
   metadata["zone_name"] = svc.zone->zone_name();
   metadata["zone_id"] = svc.zone->zone_id().id;
+  metadata["realm_name"] = svc.zone->get_realm().get_name();
+  metadata["realm_id"] = svc.zone->get_realm().get_id();
   metadata["id"] = name;
   int ret = rados.service_daemon_register(
     daemon_type,
