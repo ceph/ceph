@@ -416,6 +416,7 @@ struct MDRequestImpl : public MutationImpl {
   CInode *in[2] = {};
   CDentry *straydn = nullptr;
   snapid_t snapid = CEPH_NOSNAP;
+  snapid_t snapid_diff_other = CEPH_NOSNAP;
 
   CInode *tracei = nullptr;
   CDentry *tracedn = nullptr;
