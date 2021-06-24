@@ -1332,13 +1332,9 @@ def teardown_cluster():
 
 
 def clear_old_log():
-    from os import stat
-
     try:
-        stat(logpath)
-    # would need an update when making this py3 compatible. Use FileNotFound
-    # instead.
-    except OSError:
+        os.stat(logpath)
+    except FileNotFoundError:
         return
     else:
         os.remove(logpath)
