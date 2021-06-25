@@ -8,7 +8,8 @@ import requests
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..settings import Settings
-from . import ApiController, BaseController, Controller, ControllerDoc, Endpoint, RESTController
+from . import ApiController, BaseController, Controller, ControllerDoc, \
+    Endpoint, RESTController, allow_empty_body
 
 
 @Controller('/api/prometheus_receiver', secure=False)
@@ -19,7 +20,13 @@ class PrometheusReceiver(BaseController):
     notifications = []
 
     @Endpoint('POST', path='/', version=None)
+    @allow_empty_body
     def fetch_alert(self, **notification):
+        if not notification:
+            raise DashboardException(
+                "Sending empty notification is not allowed.",
+                http_status_code=400,
+                component='prometheus')
         notification['notified'] = datetime.now().isoformat()
         notification['id'] = str(len(self.notifications))
         self.notifications.append(notification)

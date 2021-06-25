@@ -79,6 +79,13 @@ class PrometheusControllerTest(ControllerTestCase):
         self.assertEqual(notification['name'], 'foo')
         self.assertTrue(len(notification['notified']) > 20)
 
+        # test with empty body
+        self._post('/api/prometheus_receiver')
+        self.assertStatus(400)
+        self.assertJsonBody({'detail': 'Sending empty notification is not allowed.',
+                             'component': 'prometheus'})
+        self.assertEqual(len(PrometheusReceiver.notifications), 1)
+
     def test_get_empty_list_with_no_notifications(self):
         PrometheusReceiver.notifications = []
         self._get('/api/prometheus/notifications')
