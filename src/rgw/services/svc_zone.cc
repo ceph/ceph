@@ -64,6 +64,51 @@ bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& sour
          sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
 }
 
+int RGWSI_Zone::search_realm_with_zone(const DoutPrefixProvider *dpp,
+                                       const rgw_zone_id& zid,
+                                       RGWRealm *prealm,
+                                       RGWPeriod *pperiod,
+                                       RGWZoneGroup *pzonegroup,
+                                       bool *pfound,
+                                       optional_yield y)
+{
+  auto& found = *pfound;
+
+  found = false;
+
+  list<string> realms;
+  int r = list_realms(dpp, realms);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to list realms: r=" << r << dendl;
+    return r;
+  }
+
+  for (auto& realm_name : realms) {
+    string realm_id;
+    RGWRealm realm(realm_id, realm_name);
+    r = realm.init(dpp, cct, sysobj_svc, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: can't open realm " << realm_name << ": " << cpp_strerror(-r) << " ... skipping" << dendl;
+      continue;
+    }
+
+    r = realm.find_zone(dpp, zid, pperiod,
+                        pzonegroup, &found, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 20) << __func__ << "(): ERROR: realm.find_zone() returned r=" << r<< dendl;
+      return r;
+    }
+
+    if (found) {
+      *prealm = realm;
+      ldpp_dout(dpp, 20) << __func__ << "(): found realm_id=" << realm_id << " realm_name=" << realm_name << dendl;
+      return 0;
+    }
+  }
+
+  return 0;
+}
+
 int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
   int ret = sysobj_svc->start(y, dpp);
@@ -82,16 +127,118 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
-  } else if (ret != -ENOENT) {
-    ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
-    ret = current_period->init(dpp, cct, sysobj_svc, realm->get_id(), y,
-			       realm->get_name());
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
+  }
+
+  ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
+  ret = current_period->init(dpp, cct, sysobj_svc, realm->get_id(), y,
+                             realm->get_name());
+  if (ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = zone_params->init(dpp, cct, sysobj_svc, y);
+  bool found_zone = (ret == 0);
+  if (ret < 0 && ret != -ENOENT) {
+    lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  cur_zone_id = rgw_zone_id(zone_params->get_id());
+
+  bool found_period_conf = false;
+
+  /* try to find zone in period config (if we have one) */
+  if (found_zone &&
+      !current_period->get_id().empty()) {
+    found_period_conf = current_period->find_zone(dpp,
+                                    cur_zone_id,
+                                    zonegroup,
+                                    y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: current_period->find_zone() returned ret=" << ret << dendl;
       return ret;
     }
-    ldpp_dout(dpp, 20) << "current period " << current_period->get_id() << dendl;  
+    if (!found_period_conf) {
+      ldpp_dout(dpp, 0) << "period (" << current_period->get_id() << " does not have zone " << cur_zone_id << " configured" << dendl;
+    }
   }
+
+  RGWRealm search_realm;
+
+  if (found_zone &&
+      !found_period_conf) {
+    ldpp_dout(dpp, 20) << "searching for the correct realm" << dendl;
+    ret = search_realm_with_zone(dpp,
+                                 cur_zone_id,
+                                 realm,
+                                 current_period,
+                                 zonegroup,
+                                 &found_period_conf,
+                                 y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: search_realm_conf() failed: ret="<< ret << dendl;
+      return ret;
+    }
+  }
+  bool zg_initialized = found_period_conf;
+
+  if (!zg_initialized) {
+    /* couldn't find a proper period config, use local zonegroup */
+    ret = zonegroup->init(dpp, cct, sysobj_svc, y);
+    zg_initialized = (ret == 0);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "failed reading zonegroup info: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+
+  auto& zonegroup_param = cct->_conf->rgw_zonegroup;
+  bool init_from_period = found_period_conf;
+  bool explicit_zg = !zonegroup_param.empty();
+
+  if (!zg_initialized &&
+      (!explicit_zg || zonegroup_param == default_zonegroup_name)) {
+    /* we couldn't initialize any zonegroup,
+       falling back to a non-multisite config with default zonegroup */
+    ret = create_default_zg(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+    zg_initialized = true;
+  }
+
+  if (!zg_initialized) {
+    ldpp_dout(dpp, 0) << "ERROR: could not find zonegroup (" << zonegroup_param << ")" << dendl;
+    return -ENOENT;
+  }
+
+  /* we have zonegroup now */
+
+  if (explicit_zg &&
+      zonegroup->get_name() != zonegroup_param) {
+    ldpp_dout(dpp, 0) << "ERROR: incorrect zonegroup: " << zonegroup_param << " (got: " << zonegroup_param << ", expected: " << zonegroup->get_name() << ")" << dendl;
+    return -EINVAL;
+  }
+
+  auto& zone_param = cct->_conf->rgw_zone;
+  bool explicit_zone = !zone_param.empty();
+
+  if (!found_zone) {
+    if ((!explicit_zone || zone_param == default_zone_name) &&
+        zonegroup->get_name() == default_zonegroup_name) {
+      ret = init_default_zone(dpp, y);
+      if (ret < 0 && ret != -ENOENT) {
+        return ret;
+      }
+      cur_zone_id = zone_params->get_id();
+    } else {
+      ldpp_dout(dpp, 0) << "ERROR: could not find zone (" << zone_param << ")" << dendl;
+      return -ENOENT;
+    }
+  }
+
+  /* we have zone now */
 
   ret = replace_region_with_zonegroup(dpp, y);
   if (ret < 0) {
@@ -105,20 +252,37 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  bool zg_initialized = false;
+  auto zone_iter = zonegroup->zones.find(zone_params->get_id());
+  if (zone_iter == zonegroup->zones.end()) {
+    /* shouldn't happen if relying on period config */
+    if (!init_from_period) {
+      ldpp_dout(dpp, -1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
+      return -EINVAL;
+    }
+    ldpp_dout(dpp, 1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << "), switching to local zonegroup configuration" << dendl;
+    init_from_period = false;
+    zone_iter = zonegroup->zones.find(zone_params->get_id());
+  }
+  if (zone_iter == zonegroup->zones.end()) {
+    ldpp_dout(dpp, -1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
+    return -EINVAL;
+  }
+  *zone_public_config = zone_iter->second;
+  ldout(cct, 20) << "zone " << zone_params->get_name() << " found"  << dendl;
 
-  if (!current_period->get_id().empty()) {
-    ret = init_zg_from_period(dpp, &zg_initialized, y);
+  ldpp_dout(dpp, 1) << "Realm:     " << std::left << setw(20) << realm->get_name() << " (" << realm->get_id() << ")" << dendl;
+  ldpp_dout(dpp, 1) << "ZoneGroup: " << std::left << setw(20) << zonegroup->get_name() << " (" << zonegroup->get_id() << ")" << dendl;
+  ldpp_dout(dpp, 1) << "Zone:      " << std::left << setw(20) << zone_params->get_name() << " (" << zone_params->get_id() << ")" << dendl;
+
+  if (init_from_period) {
+    ldpp_dout(dpp, 1) << "using period configuration: " << current_period->get_id() << ":" << current_period->get_epoch() << dendl;
+    ret = init_zg_from_period(dpp, y);
     if (ret < 0) {
       return ret;
     }
-  }
-
-  bool creating_defaults = false;
-  bool using_local = (!zg_initialized);
-  if (using_local) {
-    ldpp_dout(dpp, 10) << " cannot find current period zonegroup using local zonegroup" << dendl;
-    ret = init_zg_from_local(dpp, &creating_defaults, y);
+  } else {
+    ldout(cct, 10) << "cannot find current period zonegroup using local zonegroup configuration" << dendl;
+    ret = init_zg_from_local(dpp, y);
     if (ret < 0) {
       return ret;
     }
@@ -126,45 +290,10 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     auto& period_config = current_period->get_config();
     ret = period_config.read(dpp, sysobj_svc, zonegroup->realm_id, y);
     if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to read period config: "
+      ldout(cct, 0) << "ERROR: failed to read period config: "
           << cpp_strerror(ret) << dendl;
       return ret;
     }
-  }
-
-  ldpp_dout(dpp, 10) << "Cannot find current period zone using local zone" << dendl;
-  if (creating_defaults && cct->_conf->rgw_zone.empty()) {
-    ldpp_dout(dpp, 10) << " Using default name "<< default_zone_name << dendl;
-    zone_params->set_name(default_zone_name);
-  }
-
-  ret = zone_params->init(dpp, cct, sysobj_svc, y);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, -1) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  cur_zone_id = rgw_zone_id(zone_params->get_id());
-
-  auto zone_iter = zonegroup->zones.find(zone_params->get_id());
-  if (zone_iter == zonegroup->zones.end()) {
-    if (using_local) {
-      ldpp_dout(dpp, -1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
-      return -EINVAL;
-    }
-    ldpp_dout(dpp, 1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << "), switching to local zonegroup configuration" << dendl;
-    ret = init_zg_from_local(dpp, &creating_defaults, y);
-    if (ret < 0) {
-      return ret;
-    }
-    zone_iter = zonegroup->zones.find(zone_params->get_id());
-  }
-  if (zone_iter != zonegroup->zones.end()) {
-    *zone_public_config = zone_iter->second;
-    ldpp_dout(dpp, 20) << "zone " << zone_params->get_name() << " found"  << dendl;
-  } else {
-    ldpp_dout(dpp, -1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
-    return -EINVAL;
   }
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
@@ -615,24 +744,9 @@ static void add_new_connection_to_map(map<string, RGWRESTConn *> &zonegroup_conn
   zonegroup_conn_map[zonegroup.get_id()] = new_connection;
 }
 
-int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, bool *initialized, optional_yield y)
+int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  *initialized = false;
-
-  if (current_period->get_id().empty()) {
-    return 0;
-  }
-
-  int ret = zonegroup->init(dpp, cct, sysobj_svc, y);
-  ldpp_dout(dpp, 20) << "period zonegroup init ret " << ret << dendl;
-  if (ret == -ENOENT) {
-    return 0;
-  }
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "failed reading zonegroup info: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  ldpp_dout(dpp, 20) << "period zonegroup name " << zonegroup->get_name() << dendl;
+  ldout(cct, 20) << "period zonegroup name " << zonegroup->get_name() << dendl;
 
   map<string, RGWZoneGroup>::const_iterator iter =
     current_period->get_map().zonegroups.find(zonegroup->get_id());
@@ -640,23 +754,10 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, bool *initial
   if (iter != current_period->get_map().zonegroups.end()) {
     ldpp_dout(dpp, 20) << "using current period zonegroup " << zonegroup->get_name() << dendl;
     *zonegroup = iter->second;
-    ret = zonegroup->init(dpp, cct, sysobj_svc, y, false);
+    int ret = zonegroup->init(dpp, cct, sysobj_svc, y, false);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "failed init zonegroup: " << " " << cpp_strerror(-ret) << dendl;
       return ret;
-    }
-    ret = zone_params->init(dpp, cct, sysobj_svc, y);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
-      return ret;
-    } if (ret ==-ENOENT && zonegroup->get_name() == default_zonegroup_name) {
-      ldpp_dout(dpp, 10) << " Using default name "<< default_zone_name << dendl;
-      zone_params->set_name(default_zone_name);
-      ret = zone_params->init(dpp, cct, sysobj_svc, y);
-      if (ret < 0 && ret != -ENOENT) {
-       ldpp_dout(dpp, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
-       return ret;
-      }
     }
   }
   for (iter = current_period->get_map().zonegroups.begin();
@@ -675,14 +776,14 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, bool *initial
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	if (zonegroup->get_id() == zg.get_id()) {
 	  zonegroup->master_zone = master->second.id;
-	  ret = zonegroup->update(dpp, y);
+	  int ret = zonegroup->update(dpp, y);
 	  if (ret < 0) {
 	    ldpp_dout(dpp, 0) << "error updating zonegroup : " << cpp_strerror(-ret) << dendl;
 	    return ret;
 	  }
 	} else {
 	  RGWZoneGroup fixed_zg(zg.get_id(),zg.get_name());
-	  ret = fixed_zg.init(dpp, cct, sysobj_svc, y);
+	  int ret = fixed_zg.init(dpp, cct, sysobj_svc, y);
 	  if (ret < 0) {
 	    ldpp_dout(dpp, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
 	    return ret;
@@ -708,33 +809,43 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, bool *initial
     }
   }
 
-  *initialized = true;
+  return 0;
+}
+
+int RGWSI_Zone::create_default_zg(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  ldout(cct, 10) << "Creating default zonegroup " << dendl;
+  int ret = zonegroup->create_default(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+      << dendl;
+    return ret;
+  }
+  ret = zonegroup->init(dpp, cct, sysobj_svc, y);
+  if (ret < 0) {
+    ldout(cct, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+      << dendl;
+    return ret;
+  }
 
   return 0;
 }
 
-int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, bool *creating_defaults, optional_yield y)
+int RGWSI_Zone::init_default_zone(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  int ret = zonegroup->init(dpp, cct, sysobj_svc, y);
-  if ( (ret < 0 && ret != -ENOENT) || (ret == -ENOENT && !cct->_conf->rgw_zonegroup.empty())) {
-    ldpp_dout(dpp, 0) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+  ldpp_dout(dpp, 10) << " Using default name "<< default_zone_name << dendl;
+  zone_params->set_name(default_zone_name);
+  int ret = zone_params->init(dpp, cct, sysobj_svc, y);
+  if (ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
     return ret;
-  } else if (ret == -ENOENT) {
-    *creating_defaults = true;
-    ldpp_dout(dpp, 10) << "Creating default zonegroup " << dendl;
-    ret = zonegroup->create_default(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
-        << dendl;
-      return ret;
-    }
-    ret = zonegroup->init(dpp, cct, sysobj_svc, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
-        << dendl;
-      return ret;
-    }
   }
+
+  return 0;
+}
+
+int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield y)
+{
   ldpp_dout(dpp, 20) << "zonegroup " << zonegroup->get_name() << dendl;
   if (zonegroup->is_master_zonegroup()) {
     // use endpoints from the zonegroup's master zone
@@ -746,7 +857,7 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, bool *creating
 	ldpp_dout(dpp, 0) << "zonegroup " << zonegroup->get_name() << " missing master_zone, setting zone " <<
 	  master->second.name << " id:" << master->second.id << " as master" << dendl;
 	zonegroup->master_zone = master->second.id;
-	ret = zonegroup->update(dpp, y);
+	int ret = zonegroup->update(dpp, y);
 	if (ret < 0) {
 	  ldpp_dout(dpp, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
 	  return ret;

@@ -880,6 +880,35 @@ int RGWRealm::notify_new_period(const DoutPrefixProvider *dpp, const RGWPeriod& 
   return notify_zone(dpp, bl, y);
 }
 
+
+int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
+                        const rgw_zone_id& zid,
+                        RGWPeriod *pperiod,
+                        RGWZoneGroup *pzonegroup,
+                        bool *pfound,
+                        optional_yield y) const
+{
+  auto& found = *pfound;
+
+  found = false;
+
+  string period_id;
+  epoch_t epoch = 0;
+
+  RGWPeriod period(period_id, epoch);
+  int r = period.init(dpp, cct, sysobj_svc, get_id(), y, get_name());
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "WARNING: period init failed: " << cpp_strerror(-r) << " ... skipping" << dendl;
+    return r;
+  }
+
+  found = period.find_zone(dpp, zid, pzonegroup, y);
+  if (found) {
+    *pperiod = period;
+  }
+  return 0;
+}
+
 std::string RGWPeriodConfig::get_oid(const std::string& realm_id)
 {
   if (realm_id.empty()) {
@@ -1003,6 +1032,22 @@ int RGWPeriod::get_zonegroup(RGWZoneGroup& zonegroup,
   }
 
   return -ENOENT;
+}
+
+bool RGWPeriod::find_zone(const DoutPrefixProvider *dpp,
+                          const rgw_zone_id& zid,
+                          RGWZoneGroup *pzonegroup,
+                          optional_yield y) const
+{
+  RGWZoneGroup zg;
+  RGWZone zone;
+
+  bool found = period_map.find_zone_by_id(zid, &zg, &zone);
+  if (found) {
+    *pzonegroup = zg;
+  }
+
+  return found;
 }
 
 const string& RGWPeriod::get_latest_epoch_oid() const
@@ -1908,6 +1953,44 @@ uint32_t RGWPeriodMap::get_zone_short_id(const string& zone_id) const
     return 0;
   }
   return i->second;
+}
+
+bool RGWPeriodMap::find_zone_by_id(const rgw_zone_id& zone_id,
+                                   RGWZoneGroup *zonegroup,
+                                   RGWZone *zone) const
+{
+  for (auto& iter : zonegroups) {
+    auto& zg = iter.second;
+
+    auto ziter = zg.zones.find(zone_id);
+    if (ziter != zg.zones.end()) {
+      *zonegroup = zg;
+      *zone = ziter->second;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool RGWPeriodMap::find_zone_by_name(const string& zone_name,
+                                     RGWZoneGroup *zonegroup,
+                                     RGWZone *zone) const
+{
+  for (auto& iter : zonegroups) {
+    auto& zg = iter.second;
+    for (auto& ziter : zg.zones) {
+      auto& z = ziter.second;
+
+      if (z.name == zone_name) {
+        *zonegroup = zg;
+        *zone = z;
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 int RGWZoneGroupMap::read(const DoutPrefixProvider *dpp, CephContext *cct, RGWSI_SysObj *sysobj_svc, optional_yield y)
