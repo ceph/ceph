@@ -87,6 +87,7 @@ struct cephsqlite_appdata {
     if (striper_logger) {
       cct->get_perfcounters_collection()->remove(striper_logger.get());
     }
+    cluster.shutdown();
   }
   int setup_perf() {
     ceph_assert(cct);
