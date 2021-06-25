@@ -1653,7 +1653,7 @@ public:
 		 const CrushTreeDumper::name_map_t& ws) const;
   static void generate_test_instances(std::list<CrushWrapper*>& o);
 
-  int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
+  int get_osd_pool_default_crush_replicated_rule(CephContext *cct);
 
   static bool is_valid_crush_name(const std::string& s);
   static bool is_valid_crush_loc(CephContext *cct,
