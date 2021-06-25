@@ -515,6 +515,12 @@ docker.io/ceph/daemon-base:octopus
         image = cd._filter_last_local_ceph_image(out)
         assert image == 'docker.io/ceph/ceph:v15.2.5'
 
+    def test_normalize_image_digest(self):
+        s = 'myhostname:5000/ceph/ceph@sha256:753886ad9049004395ae990fbb9b096923b5a518b819283141ee8716ddf55ad1'
+        assert cd.normalize_image_digest(s) == s
+
+        s = 'ceph/ceph:latest'
+        assert cd.normalize_image_digest(s) == f'{cd.DEFAULT_REGISTRY}/{s}'
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
