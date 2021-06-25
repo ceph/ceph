@@ -620,9 +620,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ssh_options = []  # type: List[str]
 
         # ssh_config
-        ssh_config_fname = self.ssh_config_file
+        self.ssh_config_fname = self.ssh_config_file
         ssh_config = self.get_store("ssh_config")
-        if ssh_config is not None or ssh_config_fname is None:
+        if ssh_config is not None or self.ssh_config_fname is None:
             if not ssh_config:
                 ssh_config = DEFAULT_SSH_CONFIG
             f = tempfile.NamedTemporaryFile(prefix='cephadm-conf-')
@@ -630,10 +630,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             f.write(ssh_config.encode('utf-8'))
             f.flush()  # make visible to other processes
             temp_files += [f]
-            ssh_config_fname = f.name
-        if ssh_config_fname:
-            self.validate_ssh_config_fname(ssh_config_fname)
-            ssh_options += ['-F', ssh_config_fname]
+            self.ssh_config_fname = f.name
+        if self.ssh_config_fname:
+            self.validate_ssh_config_fname(self.ssh_config_fname)
+            ssh_options += ['-F', self.ssh_config_fname]
         self.ssh_config = ssh_config
 
         # identity
@@ -642,16 +642,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.ssh_pub = ssh_pub
         self.ssh_key = ssh_key
         if ssh_key and ssh_pub:
-            tkey = tempfile.NamedTemporaryFile(prefix='cephadm-identity-')
-            tkey.write(ssh_key.encode('utf-8'))
-            os.fchmod(tkey.fileno(), 0o600)
-            tkey.flush()  # make visible to other processes
-            tpub = open(tkey.name + '.pub', 'w')
+            self.tkey = tempfile.NamedTemporaryFile(prefix='cephadm-identity-')
+            self.tkey.write(ssh_key.encode('utf-8'))
+            os.fchmod(self.tkey.fileno(), 0o600)
+            self.tkey.flush()  # make visible to other processes
+            tpub = open(self.tkey.name + '.pub', 'w')
             os.fchmod(tpub.fileno(), 0o600)
             tpub.write(ssh_pub)
             tpub.flush()  # make visible to other processes
-            temp_files += [tkey, tpub]
-            ssh_options += ['-i', tkey.name]
+            temp_files += [self.tkey, tpub]
+            ssh_options += ['-i', self.tkey.name]
 
         self._temp_files = temp_files
         if ssh_options:
@@ -1289,35 +1289,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._kick_serve_loop()
         return HandleCommandResult()
 
-    def _get_connection(self, host: str) -> Tuple['remoto.backends.BaseConnection',
-                                                  'remoto.backends.LegacyModuleExecute']:
-        """
-        Setup a connection for running commands on remote host.
-        """
-        conn, r = self._cons.get(host, (None, None))
-        if conn:
-            if conn.has_connection():
-                self.log.debug('Have connection to %s' % host)
-                return conn, r
-            else:
-                self._reset_con(host)
-        assert self.ssh_user
-        n = self.ssh_user + '@' + host
-        self.log.debug("Opening connection to {} with ssh options '{}'".format(
-            n, self._ssh_options))
-        child_logger = self.log.getChild(n)
-        child_logger.setLevel('WARNING')
-        conn = remoto.Connection(
-            n,
-            logger=child_logger,
-            ssh_options=self._ssh_options,
-            sudo=True if self.ssh_user != 'root' else False)
-
-        r = conn.import_module(remotes)
-        self._cons[host] = conn, r
-
-        return conn, r
-
     def _executable_path(self, conn: 'remoto.backends.BaseConnection', executable: str) -> str:
         """
         Remote validator that accepts a connection object to ensure that a certain
@@ -1415,11 +1386,8 @@ Then run the following:
             addr=addr,
             error_ok=True, no_fsid=True)
         if code:
-            # err will contain stdout and stderr, so we filter on the message text to
-            # only show the errors
-            errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
             raise OrchestratorError('Host %s (%s) failed check(s): %s' % (
-                host, addr, errors))
+                host, addr, err))
         return ip_addr
 
     def _add_host(self, spec):
