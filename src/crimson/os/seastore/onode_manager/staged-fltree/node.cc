@@ -696,7 +696,12 @@ eagain_future<Ref<Node>> Node::load(
              c.t, addr, expect_is_level_tail);
       ceph_abort("fatal error");
     })
-  ).safe_then([FNAME, c, addr, expect_is_level_tail](auto extent) {
+  ).safe_then([FNAME, c, addr, expect_is_level_tail](auto extent)
+	      -> eagain_future<Ref<Node>> {
+    if (c.t.is_conflicted()) {
+      return crimson::ct_error::eagain::make();
+    }
+    assert(extent->is_valid());
     auto header = extent->get_header();
     auto field_type = header.get_field_type();
     if (!field_type) {
@@ -721,7 +726,8 @@ eagain_future<Ref<Node>> Node::load(
         ceph_abort("fatal error");
       }
       auto impl = LeafNodeImpl::load(extent, *field_type);
-      return Ref<Node>(new LeafNode(impl.get(), std::move(impl)));
+      return eagain_ertr::make_ready_future<Ref<Node>>(
+	new LeafNode(impl.get(), std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
       if (extent->get_length() != c.vb.get_internal_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
@@ -730,7 +736,8 @@ eagain_future<Ref<Node>> Node::load(
         ceph_abort("fatal error");
       }
       auto impl = InternalNodeImpl::load(extent, *field_type);
-      return Ref<Node>(new InternalNode(impl.get(), std::move(impl)));
+      return eagain_ertr::make_ready_future<Ref<Node>>(
+	new InternalNode(impl.get(), std::move(impl)));
     } else {
       ceph_abort("impossible path");
     }

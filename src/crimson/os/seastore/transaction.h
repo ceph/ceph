@@ -117,6 +117,10 @@ public:
     return weak;
   }
 
+  bool is_conflicted() const {
+    return conflicted;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
