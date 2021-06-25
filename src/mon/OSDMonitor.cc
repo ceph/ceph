@@ -1176,39 +1176,6 @@ void OSDMonitor::create_pending()
 	      << pending_inc.new_nearfull_ratio << dendl;
     }
   }
-
-  // Rewrite CRUSH rule IDs if they are using legacy "ruleset"
-  // structure.
-  if (osdmap.crush->has_legacy_rule_ids()) {
-    CrushWrapper newcrush = _get_pending_crush();
-
-    // First, for all pools, work out which rule they really used
-    // by resolving ruleset to rule.
-    for (const auto &i : osdmap.get_pools()) {
-      const auto pool_id = i.first;
-      const auto &pool = i.second;
-      int new_rule_id = newcrush.find_rule(pool.crush_rule,
-					   pool.type, pool.size);
-
-      dout(1) << __func__ << " rewriting pool "
-	      << osdmap.get_pool_name(pool_id) << " crush ruleset "
-	      << pool.crush_rule << " -> rule id " << new_rule_id << dendl;
-      if (pending_inc.new_pools.count(pool_id) == 0) {
-	pending_inc.new_pools[pool_id] = pool;
-      }
-      pending_inc.new_pools[pool_id].crush_rule = new_rule_id;
-    }
-
-    // Now, go ahead and renumber all the rules so that their
-    // rule_id field corresponds to their position in the array
-    auto old_to_new = newcrush.renumber_rules();
-    dout(1) << __func__ << " Rewrote " << old_to_new << " crush IDs:" << dendl;
-    for (const auto &i : old_to_new) {
-      dout(1) << __func__ << " " << i.first << " -> " << i.second << dendl;
-    }
-    pending_inc.crush.clear();
-    newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
-  }
 }
 
 creating_pgs_t
@@ -9829,11 +9796,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    if (crush.has_legacy_rule_ids()) {
-      err = -EINVAL;
-      ss << "crush maps with ruleset != ruleid are no longer allowed";
-      goto reply;
-    }
     if (!validate_crush_against_features(&crush, ss)) {
       err = -EINVAL;
       goto reply;
