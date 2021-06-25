@@ -268,7 +268,7 @@ class Btree {
       [this, &t, vconf](auto& key) -> eagain_future<std::pair<Cursor, bool>> {
         ceph_assert(key.is_valid());
         return get_root(t).safe_then([this, &t, &key, vconf](auto root) {
-          return root->insert(get_context(t), key, vconf);
+          return root->insert(get_context(t), key, vconf, std::move(root));
         }).safe_then([this](auto ret) {
           auto& [cursor, success] = ret;
           return std::make_pair(Cursor(this, cursor), success);
@@ -282,7 +282,7 @@ class Btree {
       full_key_t<KeyT::HOBJ>(obj),
       [this, &t](auto& key) -> eagain_future<std::size_t> {
         return get_root(t).safe_then([this, &t, &key](auto root) {
-          return root->erase(get_context(t), key);
+          return root->erase(get_context(t), key, std::move(root));
         });
       }
     );

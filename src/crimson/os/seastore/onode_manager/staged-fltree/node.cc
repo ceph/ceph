@@ -311,12 +311,19 @@ eagain_future<Node::search_result_t> Node::lower_bound(
 }
 
 eagain_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
-    context_t c, const key_hobj_t& key, value_config_t vconf)
+    context_t c,
+    const key_hobj_t& key,
+    value_config_t vconf,
+    Ref<Node>&& this_ref)
 {
   return seastar::do_with(
-    MatchHistory(), [this, c, &key, vconf](auto& history) {
+    MatchHistory(), [this, c, &key, vconf,
+                     this_ref = std::move(this_ref)] (auto& history) mutable {
       return lower_bound_tracked(c, key, history
-      ).safe_then([c, &key, vconf, &history](auto result) {
+      ).safe_then([c, &key, vconf, &history,
+                   this_ref = std::move(this_ref)] (auto result) mutable {
+        // the cursor in the result should already hold the root node upwards
+        this_ref.reset();
         if (result.match() == MatchKindBS::EQ) {
           return eagain_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
               std::make_pair(result.p_cursor, false));
@@ -335,9 +342,14 @@ eagain_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
 }
 
 eagain_future<std::size_t> Node::erase(
-    context_t c, const key_hobj_t& key)
+    context_t c,
+    const key_hobj_t& key,
+    Ref<Node>&& this_ref)
 {
-  return lower_bound(c, key).safe_then([c] (auto result) {
+  return lower_bound(c, key
+  ).safe_then([c, this_ref = std::move(this_ref)] (auto result) mutable {
+    // the cursor in the result should already hold the root node upwards
+    this_ref.reset();
     if (result.match() != MatchKindBS::EQ) {
       return eagain_ertr::make_ready_future<std::size_t>(0);
     }
@@ -1802,7 +1814,7 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
       return eagain_ertr::make_ready_future<Ref<tree_cursor_t>>();
     }
   }).safe_then([c, &pos, this_ref = std::move(this_ref),
-                this, FNAME] (Ref<tree_cursor_t> next_cursor) {
+                this, FNAME] (Ref<tree_cursor_t> next_cursor) mutable {
     if (next_cursor && next_cursor->is_end()) {
       // reset the node reference from the end cursor
       next_cursor.reset();
