@@ -1554,7 +1554,7 @@
       "30d"
     ]
   },
-  "timezone": "browser",
+  "timezone": "",
   "title": "Ceph Pools Overview",
   "uid": "z99hzWtmk",
   "variables": {
