@@ -7362,7 +7362,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
 {
   int ruleid = osdmap.crush->get_rule_id(name);
   if (ruleid != -ENOENT) {
-    *rule = osdmap.crush->get_rule_mask_ruleset(ruleid);
+    *rule = ruleid;
     return -EEXIST;
   }
 
@@ -7370,7 +7370,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
 
   ruleid = newcrush.get_rule_id(name);
   if (ruleid != -ENOENT) {
-    *rule = newcrush.get_rule_mask_ruleset(ruleid);
+    *rule = ruleid;
     return -EALREADY;
   } else {
     ErasureCodeInterfaceRef erasure_code;
@@ -7739,7 +7739,7 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
       return -EINVAL;
     }
   } else {
-    if (!osdmap.crush->ruleset_exists(*crush_rule)) {
+    if (!osdmap.crush->rule_exists(*crush_rule)) {
       *ss << "CRUSH rule " << *crush_rule << " not found";
       return -ENOENT;
     }
@@ -11102,9 +11102,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       // make sure it is not in use.
       // FIXME: this is ok in some situations, but let's not bother with that
       // complexity now.
-      int ruleset = newcrush.get_rule_mask_ruleset(ruleno);
-      if (osdmap.crush_rule_in_use(ruleset)) {
-	ss << "crush ruleset " << name << " " << ruleset << " is in use";
+      if (osdmap.crush_rule_in_use(ruleno)) {
+	ss << "crush rule " << name << " (" << ruleno << ") is in use";
 	err = -EBUSY;
 	goto reply;
       }
