@@ -1260,7 +1260,6 @@ int main(int argc, const char **argv)
   }
 
   if (check) {
-    tester.check_overlapped_rules();
     if (max_id >= 0) {
       if (!tester.check_name_maps(max_id)) {
 	return EXIT_FAILURE;
