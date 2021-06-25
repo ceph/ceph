@@ -1326,3 +1326,89 @@ class TestBootstrap(object):
             else:
                 retval = cd.command_bootstrap(ctx)
                 assert retval == 0
+
+
+class TestShell(object):
+
+    def test_fsid(self, cephadm_fs):
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+
+        cmd = ['shell', '--fsid', fsid]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.fsid == fsid
+
+        s = get_ceph_conf(fsid=fsid)
+        f = cephadm_fs.create_file('ceph.conf', contents=s)
+
+        cmd = ['shell', '--fsid', fsid, '--config', f.path]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.fsid == fsid
+
+        cmd = ['shell', '--fsid', '10000000-0000-0000-0000-0000deadbeef', '--config', f.path]
+        with with_cephadm_ctx(cmd) as ctx:
+            err = 'fsid does not match ceph.conf'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+                assert ctx.fsid == None
+
+    def test_name(self, cephadm_fs):
+        cmd = ['shell', '--name', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+
+        cmd = ['shell', '--name', 'foo.bar']
+        with with_cephadm_ctx(cmd) as ctx:
+            err = r'must pass --fsid'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+        cmd = ['shell', '--name', 'foo.bar', '--fsid', fsid]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+
+    def test_config(self, cephadm_fs):
+        cmd = ['shell']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == None
+
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == cd.SHELL_DEFAULT_CONF
+
+        cmd = ['shell', '--config', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == 'foo'
+
+    def test_keyring(self, cephadm_fs):
+        cmd = ['shell']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == None
+
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_KEYRING)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == cd.SHELL_DEFAULT_KEYRING
+
+        cmd = ['shell', '--keyring', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == 'foo'
