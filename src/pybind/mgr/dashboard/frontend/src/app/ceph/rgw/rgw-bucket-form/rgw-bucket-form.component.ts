@@ -282,7 +282,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
             return false;
           }
           // Bucket names can contain lowercase letters, numbers, and hyphens.
-          if (!/[0-9a-z-]/.test(label)) {
+          if (!/^\S*$/.test(name) || !/[0-9a-z-]/.test(label)) {
             errorName = 'onlyLowerCaseAndNumbers';
             return false;
           }
