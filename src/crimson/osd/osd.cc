@@ -507,9 +507,7 @@ seastar::future<> OSD::stop()
     }).then([this] {
       return when_all_succeed(
 	  public_msgr->shutdown(),
-	  cluster_msgr->shutdown());
-    }).then_unpack([] {
-      return seastar::now();
+	  cluster_msgr->shutdown()).discard_result();
     }).handle_exception([](auto ep) {
       logger().error("error while stopping osd: {}", ep);
     });
@@ -1089,7 +1087,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
   }).then([m, this] {
     if (state.is_active()) {
       logger().info("osd.{}: now active", whoami);
-      if (!osdmap->exists(whoami)) {
+      if (!osdmap->exists(whoami) ||
+	  osdmap->is_stop(whoami)) {
         return shutdown();
       }
       if (should_restart()) {
