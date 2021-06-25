@@ -2999,6 +2999,132 @@ public:
   }
 };
 
+static int search_entities_by_zone(rgw_zone_id zone_id,
+                                   RGWRealm *prealm,
+                                   RGWPeriod *pperiod,
+                                   RGWZoneGroup *pzonegroup,
+                                   bool *pfound)
+{
+  *pfound = false;
+
+  auto& found = *pfound;
+
+  list<string> realms;
+  int r = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->list_realms(realms);
+  if (r < 0) {
+    cerr << "failed to list realms: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  for (auto& realm_name : realms) {
+    string realm_id;
+    string period_id;
+    RGWRealm realm(realm_id, realm_name);
+    r = realm.init(g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
+    if (r < 0) {
+      cerr << "WARNING: can't open realm " << realm_name << ": " << cpp_strerror(-r) << " ... skipping" << std::endl;
+      continue;
+    }
+    RGWPeriod period;
+    r = realm.find_zone(dpp(), zone_id, pperiod,
+                        pzonegroup, &found, null_yield);
+
+    if (found) {
+      *prealm = realm;
+      break;
+    }
+  }
+
+  return 0;
+}
+
+static int try_to_resolve_local_zone(string& zone_id, string& zone_name)
+{
+  /* try to read zone info */
+  RGWZoneParams zone(zone_id, zone_name);
+  int r = zone.init(g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
+  if (r == -ENOENT) {
+    ldpp_dout(dpp(), 20) << __func__ << "(): local zone not found (id=" << zone_id << ", name= " << zone_name << ")" << dendl;
+    return r;
+  }
+
+  if (r < 0) {
+    ldpp_dout(dpp(), 0) << __func__ << "(): unable to read zone (id=" << zone_id << ", name= " << zone_name << "): " << cpp_strerror(-r) << dendl;
+
+    return r;
+  }
+
+  zone_id = zone.get_id();
+  zone_name = zone.get_name();
+
+  return 0;
+}
+
+static void check_set_consistent(const string& resolved_param,
+                                 string& param,
+                                 const string& param_name)
+{
+  if (!param.empty() && param != resolved_param) {
+    ldpp_dout(dpp(), 5) << "WARNING: " << param_name << " resolve mismatch. (param=" << param << ", resolved=" << resolved_param << ")" << dendl;
+    return;
+  }
+
+  param = resolved_param;
+  ldpp_dout(dpp(), 20) << __func__ << "(): resolved param: " << param_name << ": " << param << dendl;
+}
+
+
+static int try_to_resolve_local_entities(string& realm_id, string& realm_name,
+                                         string& zonegroup_id, string& zonegroup_name,
+                                         string& zone_id, string& zone_name)
+{
+  /*
+   * Try to figure out realm, zonegroup, and zone entities, based on provided params and local zone.
+   *
+   * First read the local zone info (for zone id/name). Then search existing realm and period
+   *  configuration and if found, update (but don't override) passed params.
+   *
+   */
+
+  ldpp_dout(dpp(), 20) << __func__ << "(): before: realm_id=" << realm_id << " realm_name=" << realm_name << " zonegroup_id=" << zonegroup_id << " zonegroup_name=" << zonegroup_name << " zone_id=" << zone_id << " zone_name=" << zone_name << dendl;
+  int r = try_to_resolve_local_zone(zone_id, zone_name);
+  if (r == -ENOENT) {
+    /* this local zone doesn't exist, abort */
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+
+  if (zone_id.empty()) {
+    /* not sure it's possible, but let's abort */
+    return 0;
+  }
+
+  bool found;
+  RGWRealm realm;
+  RGWPeriod period;
+  RGWZoneGroup zonegroup;
+  r = search_entities_by_zone(zone_id, &realm, &period, &zonegroup, &found);
+  if (r < 0) {
+    ldpp_dout(dpp(), 0) << "ERROR: error when searching for realm id (r=" << r << "), ignoring" << dendl;
+    return r;
+  }
+
+  if (!found) {
+    return 0;
+  }
+
+  check_set_consistent(realm.get_id(), realm_id, "realm id (--realm-id)");
+  check_set_consistent(realm.get_name(), realm_name, "realm name (--rgw-realm)");
+  check_set_consistent(zonegroup.get_id(), zonegroup_id, "zonegroup id (--zonegroup-id)");
+  check_set_consistent(zonegroup.get_name(), zonegroup_name, "zonegroup name (--rgw-zonegroup)");
+
+  ldpp_dout(dpp(), 20) << __func__ << "(): after: realm_id=" << realm_id << " realm_name=" << realm_name << " zonegroup_id=" << zonegroup_id << " zonegroup_name=" << zonegroup_name << " zone_id=" << zone_id << " zone_name=" << zone_name << dendl;
+
+  return 0;
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -3942,6 +4068,11 @@ int main(int argc, const char **argv)
   StoreDestructor store_destructor(static_cast<rgw::sal::RadosStore*>(store));
 
   if (raw_storage_op) {
+    try_to_resolve_local_entities(realm_id, realm_name,
+                                  zonegroup_id, zonegroup_name,
+                                  zone_id, zone_name);
+
+
     switch (opt_cmd) {
     case OPT::PERIOD_DELETE:
       {
