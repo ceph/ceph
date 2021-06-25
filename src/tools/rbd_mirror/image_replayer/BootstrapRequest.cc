@@ -194,10 +194,10 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
     // TODO need to support multiple remote images
     if (state_builder != nullptr &&
         state_builder->remote_image_id.empty() &&
-        !state_builder->local_image_id.empty() &&
-        state_builder->is_linked()) {
-      // local image exists and is non-primary and linked to the missing
-      // remote image
+        (state_builder->local_image_id.empty() ||
+         state_builder->is_linked())) {
+      // both images doesn't exist or local image exists and is non-primary
+      // and linked to the missing remote image
       finish(-ENOLINK);
     } else {
       finish(-ENOENT);
