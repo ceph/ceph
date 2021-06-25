@@ -7699,7 +7699,7 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 	    *crush_rule = get_replicated_stretch_crush_rule();
 	  } else {
 	    // Use default rule
-	    *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(cct);
+	    *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
 	  }
 	  if (*crush_rule < 0) {
 	    // Errors may happen e.g. if no valid rule is available

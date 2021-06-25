@@ -3794,20 +3794,21 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
 }
 
 /**
- * Determine the default CRUSH ruleset ID to be used with
+ * Determine the default CRUSH rule ID to be used with
  * newly created replicated pools.
  *
- * @returns a ruleset ID (>=0) or -1 if no suitable ruleset found
+ * @returns a rule ID (>=0) or -1 if no suitable rule found
  */
-int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
+int CrushWrapper::get_osd_pool_default_crush_replicated_rule(
+  CephContext *cct)
 {
-  int crush_ruleset = cct->_conf.get_val<int64_t>("osd_pool_default_crush_rule");
-  if (crush_ruleset < 0) {
-    crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
-  } else if (!ruleset_exists(crush_ruleset)) {
-    crush_ruleset = -1; // match find_first_ruleset() retval
+  int crush_rule = cct->_conf.get_val<int64_t>("osd_pool_default_crush_rule");
+  if (crush_rule < 0) {
+    crush_rule = find_first_rule(pg_pool_t::TYPE_REPLICATED);
+  } else if (!rule_exists(crush_rule)) {
+    crush_rule = -1; // match find_first_ruleset() retval
   }
-  return crush_ruleset;
+  return crush_rule;
 }
 
 bool CrushWrapper::is_valid_crush_name(const string& s)
