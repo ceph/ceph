@@ -149,10 +149,21 @@ sc::result ActiveScrubbing::react(const FullReset&)
 /*
  * Blocked. Will be released by kick_object_context_blocked() (or upon
  * an abort)
+ *
+ * Note: we are never expected to be waiting for long for a blocked object.
+ * Unfortunately we know from experience that a bug elsewhere might result
+ * in an indefinite wait in this state, for an object that is never released.
+ * If that happens, all we can do is to issue a warning message to help
+ * with the debugging.
  */
 RangeBlocked::RangeBlocked(my_context ctx) : my_base(ctx)
 {
   dout(10) << "-- state -->> Act/RangeBlocked" << dendl;
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+
+  // arrange to have a warning message issued if we are stuck in this
+  // state for longer than some reasonable number of minutes.
+  m_timeout = scrbr->acquire_blocked_alarm();
 }
 
 // ----------------------- PendingTimer -----------------------------------

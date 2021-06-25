@@ -139,6 +139,7 @@ class MapsCollectionStatus {
   friend ostream& operator<<(ostream& out, const MapsCollectionStatus& sf);
 };
 
+
 }  // namespace Scrub
 
 
@@ -335,10 +336,18 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
     return false;
   }
 
+  int asok_debug(std::string_view cmd,
+		 std::string param,
+		 Formatter* f,
+		 stringstream& ss) override;
+  int m_debug_blockrange{0};
+
   // -------------------------------------------------------------------------------------------
   // the I/F used by the state-machine (i.e. the implementation of ScrubMachineListener)
 
   void select_range_n_notify() final;
+
+  Scrub::BlockedRangeWarning acquire_blocked_alarm() final;
 
   /// walk the log to find the latest update that affects our chunk
   eversion_t search_log_for_updates() const final;

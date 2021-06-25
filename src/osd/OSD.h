@@ -1177,6 +1177,16 @@ protected:
   // asok
   friend class OSDSocketHook;
   class OSDSocketHook *asok_hook;
+  using PGRefOrError = std::tuple<std::optional<PGRef>, int>;
+  PGRefOrError locate_asok_target(const cmdmap_t& cmdmap, stringstream& ss, bool only_primary);
+  int asok_route_to_pg(bool only_primary,
+    std::string_view prefix,
+    cmdmap_t cmdmap,
+    Formatter *f,
+    stringstream& ss,
+    const bufferlist& inbl,
+    bufferlist& outbl,
+    std::function<void(int, const std::string&, bufferlist&)> on_finish);
   void asok_command(
     std::string_view prefix,
     const cmdmap_t& cmdmap,
