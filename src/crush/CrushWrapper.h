@@ -1402,19 +1402,6 @@ public:
     crush->max_devices = m;
   }
 
-  int find_rule(int ruleset, int type, int size) const {
-    if (!crush) return -1;
-    if (have_uniform_rules &&
-	ruleset < (int)crush->max_rules &&
-	crush->rules[ruleset] &&
-	crush->rules[ruleset]->mask.type == type &&
-	crush->rules[ruleset]->mask.min_size <= size &&
-	crush->rules[ruleset]->mask.max_size >= size) {
-      return ruleset;
-    }
-    return crush_find_rule(crush, ruleset, type, size);
-  }
-
   bool ruleset_exists(const int ruleset) const {
     for (size_t i = 0; i < crush->max_rules; ++i) {
       if (rule_exists(i) && crush->rules[i]->mask.ruleset == ruleset) {
