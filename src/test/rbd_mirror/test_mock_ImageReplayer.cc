@@ -283,10 +283,11 @@ public:
   void expect_send(MockBootstrapRequest& mock_bootstrap_request,
                    MockStateBuilder& mock_state_builder,
                    librbd::MockTestImageCtx& mock_local_image_ctx,
-                   bool do_resync, int r) {
+                   bool do_resync, bool set_local_image, int r) {
     EXPECT_CALL(mock_bootstrap_request, send())
       .WillOnce(Invoke([this, &mock_bootstrap_request, &mock_state_builder,
-                        &mock_local_image_ctx, do_resync, r]() {
+                        &mock_local_image_ctx, set_local_image, do_resync,
+                        r]() {
             if (r == 0 || r == -ENOLINK) {
               mock_state_builder.local_image_id = mock_local_image_ctx.id;
               mock_state_builder.remote_image_id = m_remote_image_ctx->id;
@@ -296,8 +297,14 @@ public:
               mock_state_builder.local_image_ctx = &mock_local_image_ctx;
               *mock_bootstrap_request.do_resync = do_resync;
             }
-            if (r < 0) {
+            if (r < 0 && r != -ENOENT) {
               mock_state_builder.remote_image_id = "";
+            }
+            if (r == -ENOENT) {
+              *mock_bootstrap_request.state_builder = &mock_state_builder;
+            }
+            if (set_local_image) {
+              mock_state_builder.local_image_id = mock_local_image_ctx.id;
             }
             mock_bootstrap_request.on_finish->complete(r);
           }));
@@ -405,7 +412,7 @@ TEST_F(TestMockImageReplayer, StartStop) {
   MockBootstrapRequest mock_bootstrap_request;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, 0);
+              false, false, 0);
 
   expect_create_replayer(mock_state_builder, mock_replayer);
   expect_init(mock_replayer, 0);
@@ -447,8 +454,42 @@ TEST_F(TestMockImageReplayer, LocalImagePrimary) {
 
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, -ENOMSG);
+              false, false, -ENOMSG);
 
+  expect_mirror_image_status_exists(false);
+
+  create_image_replayer(mock_threads);
+
+  C_SaferCond start_ctx;
+  m_image_replayer->start(&start_ctx);
+  ASSERT_EQ(0, start_ctx.wait());
+}
+
+TEST_F(TestMockImageReplayer, MetadataCleanup) {
+  // START
+
+  create_local_image();
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+  expect_add_event_after_repeatedly(mock_threads);
+
+  MockImageDeleter mock_image_deleter;
+  MockBootstrapRequest mock_bootstrap_request;
+  MockReplayer mock_replayer;
+
+  expect_get_replay_status(mock_replayer);
+  expect_set_mirror_image_status_repeatedly();
+
+  InSequence seq;
+
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, true, -ENOLINK);
+
+  expect_close(mock_state_builder, 0);
+  expect_trash_move(mock_image_deleter, "global image id", false, 0);
   expect_mirror_image_status_exists(false);
 
   create_image_replayer(mock_threads);
@@ -475,7 +516,7 @@ TEST_F(TestMockImageReplayer, BootstrapRemoteDeleted) {
   MockBootstrapRequest mock_bootstrap_request;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, -ENOLINK);
+              false, false, -ENOLINK);
 
   expect_close(mock_state_builder, 0);
 
@@ -506,7 +547,7 @@ TEST_F(TestMockImageReplayer, BootstrapResyncRequested) {
   MockBootstrapRequest mock_bootstrap_request;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              true, 0);
+              true, false, 0);
 
   expect_close(mock_state_builder, 0);
 
@@ -536,7 +577,7 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
   InSequence seq;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, -EINVAL);
+              false, false, -EINVAL);
 
   expect_mirror_image_status_exists(false);
 
@@ -599,7 +640,7 @@ TEST_F(TestMockImageReplayer, StopError) {
   InSequence seq;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, 0);
+              false, false, 0);
 
   expect_create_replayer(mock_state_builder, mock_replayer);
   expect_init(mock_replayer, 0);
@@ -638,7 +679,7 @@ TEST_F(TestMockImageReplayer, ReplayerError) {
   InSequence seq;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, 0);
+              false, false, 0);
 
   expect_create_replayer(mock_state_builder, mock_replayer);
   expect_init(mock_replayer, -EINVAL);
@@ -675,7 +716,7 @@ TEST_F(TestMockImageReplayer, ReplayerResync) {
   InSequence seq;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, 0);
+              false, false, 0);
 
   expect_create_replayer(mock_state_builder, mock_replayer);
   expect_init(mock_replayer, 0);
@@ -718,7 +759,7 @@ TEST_F(TestMockImageReplayer, ReplayerInterrupted) {
   InSequence seq;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, 0);
+              false, false, 0);
 
   expect_create_replayer(mock_state_builder, mock_replayer);
   expect_init(mock_replayer, 0);
@@ -766,7 +807,7 @@ TEST_F(TestMockImageReplayer, ReplayerRenamed) {
   InSequence seq;
   MockStateBuilder mock_state_builder;
   expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
-              false, 0);
+              false, false, 0);
 
   expect_create_replayer(mock_state_builder, mock_replayer);
   expect_init(mock_replayer, 0);
