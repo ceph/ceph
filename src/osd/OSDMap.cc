@@ -4146,21 +4146,8 @@ int OSDMap::validate_crush_rules(CrushWrapper *newcrush,
 	  << " but it is not present";
       return -EINVAL;
     }
-    if (newcrush->get_rule_mask_ruleset(ruleno) != ruleno) {
-      *ss << "rule " << ruleno << " mask ruleset does not match rule id";
-      return -EINVAL;
-    }
-    if (newcrush->get_rule_mask_type(ruleno) != (int)pool.get_type()) {
+    if (newcrush->get_rule_type(ruleno) != (int)pool.get_type()) {
       *ss << "pool " << i.first << " type does not match rule " << ruleno;
-      return -EINVAL;
-    }
-    int poolsize = pool.get_size();
-    if (poolsize < newcrush->get_rule_mask_min_size(ruleno) ||
-	poolsize > newcrush->get_rule_mask_max_size(ruleno)) {
-      *ss << "pool " << i.first << " size " << poolsize << " does not"
-	  << " fall within rule " << ruleno
-	  << " min_size " << newcrush->get_rule_mask_min_size(ruleno)
-	  << " and max_size " << newcrush->get_rule_mask_max_size(ruleno);
       return -EINVAL;
     }
   }
