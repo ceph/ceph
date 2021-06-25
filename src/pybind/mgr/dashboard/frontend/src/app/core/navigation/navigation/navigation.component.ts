@@ -29,7 +29,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
   summaryData: any;
   icons = Icons;
 
-  isCollapsed = true;
+  rightSidebarOpen = false; // rightSidebar only opens when width is less than 768px
   showMenuSidebar = true;
   displayedSubMenu = '';
 
@@ -94,6 +94,10 @@ export class NavigationComponent implements OnInit, OnDestroy {
     } else {
       this.displayedSubMenu = menu;
     }
+  }
+
+  toggleRightSidebar() {
+    this.rightSidebarOpen = !this.rightSidebarOpen;
   }
 
   showTopNotification(name: string, isDisplayed: boolean) {
