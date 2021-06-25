@@ -1184,6 +1184,21 @@ void PrimaryLogPG::do_command(
     outbl.append(ss.str());
   }
 
+  else if (prefix == "block" || prefix == "unblock") {
+    string value;
+    cmd_getval(cmdmap, "value", value);
+
+    if (is_primary()) {
+      ret = m_scrubber->asok_debug(prefix, value, f.get(), ss);
+      f->open_object_section("result");
+      f->dump_bool("success", true);
+      f->close_section();
+    } else {
+      ss << "Not primary";
+      ret = -EPERM;
+    }
+    outbl.append(ss.str());
+  }
   else {
     ret = -ENOSYS;
     ss << "prefix '" << prefix << "' not implemented";

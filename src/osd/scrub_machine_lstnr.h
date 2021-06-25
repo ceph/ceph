@@ -40,6 +40,18 @@ struct preemption_t {
   virtual bool disable_and_test() = 0;
 };
 
+/// an aux used when blocking on a busy object.
+/// Issues a log warning if still blocked after 'waittime'.
+struct blocked_range_t {
+  blocked_range_t(OSDService* osds, ceph::timespan waittime, spg_t pg_id);
+  ~blocked_range_t();
+
+  OSDService* m_osds;
+  Context* m_callbk;
+};
+
+using BlockedRangeWarning = std::unique_ptr<blocked_range_t>;
+
 }  // namespace Scrub
 
 struct ScrubMachineListener {
@@ -52,6 +64,8 @@ struct ScrubMachineListener {
   virtual ~ScrubMachineListener() = default;
 
   virtual void select_range_n_notify() = 0;
+
+  virtual Scrub::BlockedRangeWarning acquire_blocked_alarm() = 0;
 
   /// walk the log to find the latest update that affects our chunk
   virtual eversion_t search_log_for_updates() const = 0;
