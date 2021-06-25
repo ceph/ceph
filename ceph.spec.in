@@ -138,6 +138,8 @@
 %global _smp_ncpus_max 1
 %else
 # 3.0 GiB mem per job
+# SUSE distros use %limit_build in the place of smp_limit_mem_per_job, please
+# be sure to update it as well when changing this number.
 %global _smp_ncpus_max %{smp_limit_mem_per_job 3000000}
 %endif
 %endif
@@ -1253,7 +1255,7 @@ done
 %endif
 
 %if 0%{?suse_version}
-%limit_build -m 2600
+%limit_build -m 3000
 %endif
 
 export CPPFLAGS="$java_inc"
