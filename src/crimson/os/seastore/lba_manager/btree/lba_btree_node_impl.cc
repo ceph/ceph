@@ -729,7 +729,15 @@ get_lba_node_ret get_lba_btree_extent(
 	  ceph_assert(meta.begin <= ret->begin()->get_key());
 	  ceph_assert(meta.end > (ret->end() - 1)->get_key());
 	}
-	assert(!(parent->has_been_invalidated() || ret->has_been_invalidated()));
+	if (parent->has_been_invalidated() || ret->has_been_invalidated()) {
+	  logger().debug(
+	    "get_lba_btree_extent: parent {} or ret {} is invalid, transaction {} is conflicted: {}",
+	    *parent,
+	    *ret,
+	    (void*)&c.trans,
+	    c.trans.is_conflicted());
+	  assert(!(parent->has_been_invalidated() || ret->has_been_invalidated()));
+	}
 	if (!ret->is_pending() && !ret->pin.is_linked()) {
 	  ret->pin.set_range(meta);
 	  c.pins.add_pin(ret->pin);
@@ -758,7 +766,15 @@ get_lba_node_ret get_lba_btree_extent(
 	  ceph_assert(meta.begin <= ret->begin()->get_key());
 	  ceph_assert(meta.end > (ret->end() - 1)->get_key());
 	}
-	assert(!(parent->has_been_invalidated() || ret->has_been_invalidated()));
+	if (parent->has_been_invalidated() || ret->has_been_invalidated()) {
+	  logger().debug(
+	    "get_lba_btree_extent: parent {} or ret {} is invalid, transaction {} is conflicted: {}",
+	    *parent,
+	    *ret,
+	    (void*)&c.trans,
+	    c.trans.is_conflicted());
+	  assert(!(parent->has_been_invalidated() || ret->has_been_invalidated()));
+	}
 	if (!ret->is_pending() && !ret->pin.is_linked()) {
 	  ret->pin.set_range(meta);
 	  c.pins.add_pin(ret->pin);
