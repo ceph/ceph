@@ -1612,9 +1612,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	pool.second.is_tier()) {
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
     }
-    int ruleid = crush->find_rule(pool.second.get_crush_rule(),
-				  pool.second.get_type(),
-				  pool.second.get_size());
+    int ruleid = pool.second.get_crush_rule();
     if (ruleid >= 0) {
       if (crush->is_v2_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_V2;
@@ -2442,7 +2440,7 @@ void OSDMap::_pg_to_raw_osds(
   unsigned size = pool.get_size();
 
   // what crush rule?
-  int ruleno = crush->find_rule(pool.get_crush_rule(), pool.get_type(), size);
+  int ruleno = pool.get_crush_rule();
   if (ruleno >= 0)
     crush->do_rule(ruleno, pps, *osds, size, osd_weight, pg.pool());
 
@@ -4599,8 +4597,7 @@ bool OSDMap::try_pg_upmap(
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return false;
-  int rule = crush->find_rule(pool->get_crush_rule(), pool->get_type(),
-			      pool->get_size());
+  int rule = pool->get_crush_rule();
   if (rule < 0)
     return false;
 
@@ -4665,9 +4662,7 @@ int OSDMap::calc_pg_upmaps(
     total_pgs += i.second.get_size() * i.second.get_pg_num();
 
     map<int,float> pmap;
-    int ruleno = tmp.crush->find_rule(i.second.get_crush_rule(),
-				      i.second.get_type(),
-				      i.second.get_size());
+    int ruleno = i.second.get_crush_rule();
     tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);
     ldout(cct,20) << __func__ << " pool " << i.first
                   << " ruleno " << ruleno
