@@ -54,17 +54,21 @@ ssize_t UCXConSktImpl::read(char* buf, size_t len)
   ldout(cct, 20) << "data_event_fd  : " << data_event_val << ", "
                  << "rst = " << rst << dendl;
 
-  if (recv_pending_bl.length() == 0 || len == 0 || buf == 0) {
-    return 0;
+  std::lock_guard l{recv_lock};
+  if (queue_bl.size() != 0) {
+    recv_pending_bl.claim_append(queue_bl.front());
+    queue_bl.pop();
   }
 
-  bufferlist::iterator bl_it(&recv_pending_bl);
   auto bl_len = recv_pending_bl.length();
   len = len > bl_len ? bl_len : len;
-  bl_it.copy(len, buf);
+  if (len == 0) {
+    return 0;
+  }
+  memcpy(buf, recv_pending_bl.c_str(), len);
   recv_pending_bl.splice(0, len);
-  if (recv_pending_bl.length()) {
-    data_notify();
+  if (recv_pending_bl.length() || queue_bl.size()) {
+      data_notify();
   }
   return len;
 }
@@ -164,7 +168,11 @@ UCXConSktImpl::handle_io_am_write_request(const iomsg_t *msg, void *data,
   } else {
     ceph_assert(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV); // todo: implment support RNDV
   }
-  recv_pending_bl.claim_append(bl);
+  while (msg->sn != sn_recv) {
+    ldout(cct, 20) << " recv sn: " << msg->sn << ", pending sn: " << sn_recv << dendl;
+  }
+  queue_bl.push(bl);
+  sn_recv++;
   data_notify();
 }
 

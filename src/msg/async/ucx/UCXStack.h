@@ -113,6 +113,7 @@ public:
 private:
   UCXWorker* ucx_worker;
   std::atomic_uint64_t sn_send{0};
+  std::atomic_uint64_t sn_recv{0};
   std::shared_ptr<UCXProEngine> ucp_worker_engine;
   int connected = -1;
   int data_event_fd = -1;
@@ -120,9 +121,11 @@ private:
   uint64_t conn_id = -1;
   ucp_ep_h conn_ep = NULL;
   bufferlist recv_pending_bl;
+  std::queue<bufferlist> queue_bl;
   bufferlist send_pending_bl;
 
   ceph::mutex send_lock = ceph::make_mutex("UCXConSktImpl::send_lock");
+  ceph::mutex recv_lock = ceph::make_mutex("UCXConSktImpl::recv_lock");
   bool is_server;
   bool active;
   bool pending;
