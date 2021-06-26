@@ -30,7 +30,7 @@ default default {
 }
 
 # rules
-rule replicated_ruleset {
+rule replicated_rule {
 	id 0
 	type replicated
 	min_size 1

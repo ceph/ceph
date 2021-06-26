@@ -19,7 +19,7 @@ host host0 {
 }
 
 rule rule-r0 {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 1
 	max_size 3
@@ -29,7 +29,7 @@ rule rule-r0 {
 }
 
 rule rule-r1 {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 1
 	max_size 1
@@ -39,7 +39,7 @@ rule rule-r1 {
 }
 
 rule rule-r2 {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 1
 	max_size 2
@@ -49,7 +49,7 @@ rule rule-r2 {
 }
 
 rule rule-r3 {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 2
 	max_size 3
@@ -59,7 +59,7 @@ rule rule-r3 {
 }
 
 rule rule-r4 {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 4
 	max_size 5
@@ -69,7 +69,7 @@ rule rule-r4 {
 }
 
 rule rule-e0 {
-	ruleset 0
+	id 0
 	type erasure
 	min_size 1
 	max_size 10
@@ -79,7 +79,7 @@ rule rule-e0 {
 }
 
 rule rule-e1 {
-	ruleset 1
+	id 1
 	type erasure
 	min_size 1
 	max_size 10
