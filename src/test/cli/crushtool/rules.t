@@ -1,4 +1,6 @@
   $ crushtool -c $TESTDIR/rules.txt --create-replicated-rule foo default host -o one > /dev/null
+  WARNING: min_size is no longer supported, ignoring
+  WARNING: max_size is no longer supported, ignoring
   $ crushtool -d one
   # begin crush map
   
@@ -53,8 +55,6 @@
   rule data {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take default (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
@@ -62,8 +62,6 @@
   rule foo {
   \tid 1 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take default (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
@@ -81,6 +79,8 @@
 
 
   $ crushtool -c $TESTDIR/rules.txt --create-replicated-rule foo-ssd default host -o two --device-class ssd > /dev/null
+  WARNING: min_size is no longer supported, ignoring
+  WARNING: max_size is no longer supported, ignoring
   $ crushtool -d two
   # begin crush map
   
@@ -135,8 +135,6 @@
   rule data {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take default (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
@@ -144,8 +142,6 @@
   rule foo-ssd {
   \tid 1 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take default class ssd (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)

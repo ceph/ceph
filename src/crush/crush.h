@@ -75,21 +75,12 @@ enum crush_opcodes {
 #define CRUSH_CHOOSE_N            0
 #define CRUSH_CHOOSE_N_MINUS(x)   (-(x))
 
-/*
- * The rule mask is used to describe what the rule is intended for.
- * Given a ruleset and size of output set, we search through the
- * rule list for a matching rule_mask.
- */
-struct crush_rule_mask {
-	__u8 ruleset;   /* always matches rule_id now */
-	__u8 type;
-	__u8 min_size;
-	__u8 max_size;
-};
-
 struct crush_rule {
 	__u32 len;
-	struct crush_rule_mask mask;
+	__u8 __unused_was_rule_mask_ruleset;
+	__u8 type;
+	__u8 deprecated_min_size;
+	__u8 deprecated_max_size;
 	struct crush_rule_step steps[0];
 };
 

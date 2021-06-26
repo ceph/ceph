@@ -421,8 +421,6 @@ default root {
 rule myrule {
 	id 0
 	type replicated
-	min_size 1
-	max_size 10
 	step take root
 	step choose firstn 2 type rack
 	step chooseleaf indep 4 type host
@@ -432,8 +430,6 @@ rule myrule {
 rule myrule1 {
 	id 1
 	type replicated
-	min_size 1
-	max_size 10
 	step take root
 	step choose firstn 2 type rack
 	step chooseleaf indep 1 type host

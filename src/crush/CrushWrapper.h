@@ -33,8 +33,6 @@ namespace CrushTreeDumper {
 typedef mempool::osdmap::map<int64_t,std::string> name_map_t;
 }
 
-WRITE_RAW_ENCODER(crush_rule_mask)   // it's all u8's
-
 inline void encode(const crush_rule_step &s, ceph::buffer::list &bl)
 {
   using ceph::encode;
@@ -1065,17 +1063,7 @@ public:
   int get_rule_type(unsigned ruleno) const {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return -1;
-    return r->mask.type;
-  }
-  int get_rule_mask_min_size(unsigned ruleno) const {
-    crush_rule *r = get_rule(ruleno);
-    if (IS_ERR(r)) return -1;
-    return r->mask.min_size;
-  }
-  int get_rule_mask_max_size(unsigned ruleno) const {
-    crush_rule *r = get_rule(ruleno);
-    if (IS_ERR(r)) return -1;
-    return r->mask.max_size;
+    return r->type;
   }
   int get_rule_op(unsigned ruleno, unsigned step) const {
     crush_rule_step *s = get_rule_step(ruleno, step);
@@ -1125,17 +1113,12 @@ public:
 
   /* modifiers */
 
-  int add_rule(int ruleno, int len, int type, int minsize, int maxsize) {
+  int add_rule(int ruleno, int len, int type) {
     if (!crush) return -ENOENT;
-    crush_rule *n = crush_make_rule(len, ruleno, type, minsize, maxsize);
+    crush_rule *n = crush_make_rule(len, type);
     ceph_assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
-  }
-  int set_rule_mask_max_size(unsigned ruleno, int max_size) {
-    crush_rule *r = get_rule(ruleno);
-    if (IS_ERR(r)) return -1;
-    return r->mask.max_size = max_size;
   }
   int set_rule_step(unsigned ruleno, unsigned step, int op, int arg1, int arg2) {
     if (!crush) return -ENOENT;
@@ -1382,7 +1365,7 @@ public:
   int find_first_rule(int type) const {
     for (size_t i = 0; i < crush->max_rules; ++i) {
       if (crush->rules[i]
-          && crush->rules[i]->mask.type == type) {
+          && crush->rules[i]->type == type) {
 	return i;
       }
     }
