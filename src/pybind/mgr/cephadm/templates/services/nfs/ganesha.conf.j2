@@ -9,14 +9,6 @@ NFS_CORE_PARAM {
 {% endif %}
 }
 
-MDCACHE {
-        Dir_Chunk = 0;
-}
-
-EXPORT_DEFAULTS {
-        Attr_Expiration_Time = 0;
-}
-
 NFSv4 {
         Delegations = false;
         RecoveryBackend = 'rados_cluster';

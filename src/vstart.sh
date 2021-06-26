@@ -595,7 +595,7 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="iostat"
+    local mgr_modules="iostat nfs"
     if $with_mgr_dashboard; then
         mgr_modules+=" dashboard"
     fi
@@ -1458,7 +1458,6 @@ fi
 # Ganesha Daemons
 if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
     pseudo_path="/cephfs"
-    ceph_adm mgr module enable nfs
     if [ "$cephadm" -gt 0 ]; then
         cluster_id="vstart"
         prun ceph_adm nfs cluster create $cluster_id

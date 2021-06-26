@@ -15,7 +15,7 @@ tasks:
     host.a:
       - ceph fs volume create foofs
       - ceph nfs cluster create foo --ingress --virtual-ip {{VIP0}}/{{VIPPREFIXLEN}}
-      - ceph nfs export create cephfs foofs foo --binding /fake
+      - ceph nfs export create cephfs foofs foo --pseudo-path /fake
 
 - cephadm.wait_for_service:
     service: nfs.foo

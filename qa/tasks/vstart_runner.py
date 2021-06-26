@@ -1011,6 +1011,12 @@ class LocalCluster(object):
     def only(self, requested):
         return self.__class__(rolename=requested)
 
+    def run(self, *args, **kwargs):
+        r = []
+        for remote in self.remotes.keys():
+            r.append(remote.run(*args, **kwargs))
+        return r
+
 
 class LocalContext(object):
     def __init__(self):
