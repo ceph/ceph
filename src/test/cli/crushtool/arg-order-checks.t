@@ -192,8 +192,6 @@
   rule replicated_rule {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take root (esc)
   \tstep chooseleaf firstn 0 type node (esc)
   \tstep emit (esc)

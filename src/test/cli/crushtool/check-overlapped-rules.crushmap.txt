@@ -21,8 +21,6 @@ host host0 {
 rule rule-r0 {
 	id 0
 	type replicated
-	min_size 1
-	max_size 3
 	step take host0
 	step choose firstn 0 type osd
 	step emit
@@ -31,8 +29,6 @@ rule rule-r0 {
 rule rule-r1 {
 	id 0
 	type replicated
-	min_size 1
-	max_size 1
 	step take host0
 	step choose firstn 0 type osd
 	step emit
@@ -41,8 +37,6 @@ rule rule-r1 {
 rule rule-r2 {
 	id 0
 	type replicated
-	min_size 1
-	max_size 2
 	step take host0
 	step choose firstn 0 type osd
 	step emit
@@ -51,8 +45,6 @@ rule rule-r2 {
 rule rule-r3 {
 	id 0
 	type replicated
-	min_size 2
-	max_size 3
 	step take host0
 	step choose indep 0 type osd
 	step emit
@@ -61,8 +53,6 @@ rule rule-r3 {
 rule rule-r4 {
 	id 0
 	type replicated
-	min_size 4
-	max_size 5
 	step take host0
 	step choose indep 0 type osd
 	step emit
@@ -71,8 +61,6 @@ rule rule-r4 {
 rule rule-e0 {
 	id 0
 	type erasure
-	min_size 1
-	max_size 10
 	step take host0
 	step choose indep 0 type osd
 	step emit
@@ -81,8 +69,6 @@ rule rule-e0 {
 rule rule-e1 {
 	id 1
 	type erasure
-	min_size 1
-	max_size 10
 	step take host0
 	step choose indep 0 type osd
 	step emit

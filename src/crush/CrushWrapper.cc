@@ -2302,9 +2302,7 @@ int CrushWrapper::add_simple_rule_at(
   int steps = 3;
   if (mode == "indep")
     steps = 5;
-  int min_rep = mode == "firstn" ? 1 : 3;
-  int max_rep = mode == "firstn" ? 10 : 20;
-  crush_rule *rule = crush_make_rule(steps, rno, rule_type, min_rep, max_rep);
+  crush_rule *rule = crush_make_rule(steps, rule_type);
   ceph_assert(rule);
   int step = 0;
   if (mode == "indep") {
@@ -3000,7 +2998,29 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
       continue;
 
     encode(crush->rules[i]->len, bl);
-    encode(crush->rules[i]->mask, bl);
+
+    /*
+     * legacy crush_rule_mask was
+     *
+     * struct crush_rule_mask {
+     * 	__u8 ruleset;
+     * 	__u8 type;
+     * 	__u8 min_size;
+     * 	__u8 max_size;
+     * };
+     *
+     * encode ruleset=ruleid, and min/max of 1/100
+     */
+    encode((__u8)i, bl);   // ruleset == ruleid
+    encode(crush->rules[i]->type, bl);
+    if (HAVE_FEATURE(features, SERVER_QUINCY)) {
+      encode((__u8)1, bl);   // min_size = 1
+      encode((__u8)100, bl); // max_size = 100
+    } else {
+      encode(crush->rules[i]->deprecated_min_size, bl);
+      encode(crush->rules[i]->deprecated_max_size, bl);
+    }
+
     for (unsigned j=0; j<crush->rules[i]->len; j++)
       encode(crush->rules[i]->steps[j], bl);
   }
@@ -3121,7 +3141,16 @@ void CrushWrapper::decode(bufferlist::const_iterator& blp)
       decode(len, blp);
       crush->rules[i] = reinterpret_cast<crush_rule*>(calloc(1, crush_rule_size(len)));
       crush->rules[i]->len = len;
-      decode(crush->rules[i]->mask, blp);
+
+      __u8 ruleset; // ignore + discard
+      decode(ruleset, blp);
+      if (ruleset != i) {
+	throw ::ceph::buffer::malformed_input("crush ruleset_id != rule_id; encoding is too old");
+      }
+      decode(crush->rules[i]->type, blp);
+      decode(crush->rules[i]->deprecated_min_size, blp);
+      decode(crush->rules[i]->deprecated_max_size, blp);
+      
       for (unsigned j=0; j<crush->rules[i]->len; j++)
 	decode(crush->rules[i]->steps[j], blp);
     }
@@ -3546,8 +3575,6 @@ void CrushWrapper::dump_rule(int rule_id, Formatter *f) const
   if (get_rule_name(rule_id))
     f->dump_string("rule_name", get_rule_name(rule_id));
   f->dump_int("type", get_rule_type(rule_id));
-  f->dump_int("min_size", get_rule_mask_min_size(rule_id));
-  f->dump_int("max_size", get_rule_mask_max_size(rule_id));
   f->open_array_section("steps");
   for (int j=0; j<get_rule_len(rule_id); j++) {
     f->open_object_section("step");

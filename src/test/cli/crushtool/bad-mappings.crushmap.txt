@@ -21,8 +21,6 @@ domain root {
 rule rule-firstn {
 	id 0
 	type replicated
-	min_size 1
-	max_size 10
 	step take root
 	step choose firstn 0 type osd
 	step emit
@@ -31,8 +29,6 @@ rule rule-firstn {
 rule rule-indep {
 	id 1
 	type erasure
-	min_size 1
-	max_size 10
 	step take root
 	step choose indep 0 type osd
 	step emit

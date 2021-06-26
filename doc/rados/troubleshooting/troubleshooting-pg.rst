@@ -523,8 +523,6 @@ the rule::
     { "rule_id": 1,
       "rule_name": "erasurepool",
       "type": 3,
-      "min_size": 3,
-      "max_size": 20,
       "steps": [
             { "op": "take",
               "item": -1,
@@ -568,8 +566,6 @@ modify the Ceph cluster and only work on a local files::
     { "rule_id": 1,
       "rule_name": "erasurepool",
       "type": 3,
-      "min_size": 3,
-      "max_size": 20,
       "steps": [
             { "op": "take",
               "item": -1,
@@ -610,8 +606,6 @@ like::
      rule erasurepool {
              id 1
              type erasure
-             min_size 3
-             max_size 20
              step set_chooseleaf_tries 5
              step set_choose_tries 100
              step take default

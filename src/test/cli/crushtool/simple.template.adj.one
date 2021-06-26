@@ -28,8 +28,6 @@ cluster cluster0 {
 rule data {
 	id 0
 	type replicated
-	min_size 1
-	max_size 10
 	step take cluster0
 	step chooseleaf firstn 0 type host
 	step emit
@@ -37,8 +35,6 @@ rule data {
 rule metadata {
 	id 1
 	type replicated
-	min_size 1
-	max_size 10
 	step take cluster0
 	step chooseleaf firstn 0 type host
 	step emit
@@ -46,8 +42,6 @@ rule metadata {
 rule rbd {
 	id 2
 	type replicated
-	min_size 1
-	max_size 10
 	step take cluster0
 	step chooseleaf firstn 0 type host
 	step emit

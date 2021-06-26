@@ -76,11 +76,8 @@ int ErasureCodeLrc::create_rule(const string &name,
   }
 
   int steps = 4 + rule_steps.size();
-  int min_rep = 3;
-  int max_rep = get_chunk_count();
   int ret;
-  ret = crush.add_rule(rno, steps, pg_pool_t::TYPE_ERASURE,
-		       min_rep, max_rep);
+  ret = crush.add_rule(rno, steps, pg_pool_t::TYPE_ERASURE);
   ceph_assert(ret == rno);
   int step = 0;
 
