@@ -4134,7 +4134,7 @@ public:
   }
 
   void finish(int r) override {
-    BackTrace *bt = new BackTrace(1);
+    BackTrace *bt = new ClibBackTrace(1);
     generic_dout(-1) << "FileStore: sync_entry timed out after "
 	   << m_commit_timeo << " seconds.\n";
     bt->print(*_dout);

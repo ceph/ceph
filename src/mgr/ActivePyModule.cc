@@ -42,7 +42,7 @@ int ActivePyModule::load(ActivePyModules *py_modules)
   Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
     derr << "Failed to construct class in '" << get_name() << "'" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, get_name(), "ActivePyModule::load") << dendl;
     return -EINVAL;
   } else {
     dout(1) << "Constructed class from module: " << get_name() << dendl;
@@ -71,7 +71,7 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
     Py_DECREF(pValue);
   } else {
     derr << get_name() << ".notify:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, get_name(), "ActivePyModule::notify") << dendl;
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
     // a hook to unload misbehaving modules when they have an
@@ -104,7 +104,7 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
     Py_DECREF(pValue);
   } else {
     derr << get_name() << ".notify_clog:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, get_name(), "ActivePyModule::notify_clog") << dendl;
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
     // a hook to unload misbehaving modules when they have an
@@ -159,7 +159,8 @@ PyObject *ActivePyModule::dispatch_remote(
     // Because the caller is in a different context, we can't let this
     // exception bubble up, need to re-raise it from the caller's
     // context later.
-    *err = handle_pyerror();
+    std::string caller = "ActivePyModule::dispatch_remote "s + method;
+    *err = handle_pyerror(true, get_name(), caller);
   } else {
     dout(20) << "Success calling '" << method << "'" << dendl;
   }
