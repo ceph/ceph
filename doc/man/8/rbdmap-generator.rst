@@ -51,6 +51,8 @@ Each line is in the form::
 #. unmap-options is passed unchanged to ``--options`` argument of ``rbd device
    unmap`` command. This field is optional.
 
+"none" or "-" may be specified as a placeholder for optional fields
+
 If successful, the generated unit maps the image to a ``/dev/rbdX`` device, at
 which point a udev rule is triggered to create a friendly device name symlink,
 ``/dev/rbd/<image-or-snap-spec>``, pointing to the mapped device.
@@ -101,14 +103,14 @@ and "bar3" in pool "foopool"::
 
     krbd bar1
     krbd foopool/bar2    id=admin,noauto
-    krbd foopool/bar3    id=admin        lock_on_read,queue_depth=1024  force
+    krbd foopool/bar3    none            lock_on_read,queue_depth=1024  force
 
 When the devices are mapped, the following ``rbd device map`` commands are
 called::
 
-    rbd device map rbd/bar1 --device-type=krbd
-    rbd device map foopool/bar2 --id=admin --device-type=krbd
-    rbd device map foopool/bar3 --id=admin --device-type=krbd --options=lock_on_read,queue_depth=1024
+    rbd device map rbd/bar1     --device-type=krbd
+    rbd device map foopool/bar2 --device-type=krbd --id=admin
+    rbd device map foopool/bar3 --device-type=krbd --options=lock_on_read,queue_depth=1024
 
 When the last one is unmapped, the following command is called::
 

@@ -122,6 +122,7 @@ def parse_rbdmap_line(line: str):
 
 SYSTEMD_KEY_PREFIX = 'x-systemd.'
 RBDMAP_TARGET = 'rbdmap.target'
+NONE_PLACEHOLDERS = ['none', '-']
 
 def parse_rbdtab_line(line: str):
     bool_options = {
@@ -132,8 +133,16 @@ def parse_rbdtab_line(line: str):
 
     device_type, rbd_spec, *cells = line.split()
     map_generic_args = []
-    if len(cells) > 0:
-        for a in cells[0].split(','):
+
+    def next_cell():
+        if len(cells) == 0:
+            return None
+        c = cells.pop(0)
+        return None if c in NONE_PLACEHOLDERS else c
+
+    c = next_cell()
+    if c is not None:
+        for a in c.split(','):
             if a in bool_options:
                 bool_options[a] = True
                 continue
@@ -169,8 +178,8 @@ def parse_rbdtab_line(line: str):
 
     return RbdMapSpec(
         rbd_spec, systemd_unit_options, device_type, map_generic_args,
-        map_options=cells[1] if len(cells) >= 2 else None,
-        unmap_options=cells[2] if len(cells) >= 3 else None,
+        map_options=next_cell(),
+        unmap_options=next_cell(),
     )
 
 def generate_one(spec: RbdMapSpec, dir_fd: int, source: str):
