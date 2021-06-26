@@ -200,7 +200,7 @@ void usage()
   cout << "   -i mapfn --test       test a range of inputs on the map\n";
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
   cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
-  cout << "      [--num-rep n]\n";
+  cout << "      [--min-rep n] [--max-rep n] [--num-rep n]\n";
   cout << "      [--pool-id n]      specifies pool id\n";
   cout << "      [--batches b]      split the CRUSH mapping into b > 1 rounds\n";
   cout << "      [--weight|-w devno weight]\n";
@@ -741,6 +741,18 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       tester.set_num_rep(x);
+    } else if (ceph_argparse_witharg(args, i, &x, err, "--min_rep", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      tester.set_min_rep(x);
+    } else if (ceph_argparse_witharg(args, i, &x, err, "--max_rep", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      tester.set_max_rep(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--max_x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
