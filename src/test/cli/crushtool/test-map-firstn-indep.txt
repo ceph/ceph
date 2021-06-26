@@ -419,7 +419,7 @@ default root {
 
 # rules
 rule myrule {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 1
 	max_size 10
@@ -430,7 +430,7 @@ rule myrule {
 }
 
 rule myrule1 {
-	ruleset 1
+	id 1
 	type replicated
 	min_size 1
 	max_size 10

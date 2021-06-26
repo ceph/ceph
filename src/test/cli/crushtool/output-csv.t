@@ -1,4 +1,4 @@
-# first test that CSV files are created for each ruleset 
+# first test that CSV files are created for each rule
 $ crushtool -i five-devices.crushmap --test --num-rep 1 --min-x 0 --max-x 9 --output-csv
 $ if [ ! -f data-absolute_weights.csv ]; then echo FAIL; fi
 $ if [ ! -f data-batch_device_expected_utilization_all.csv ]; then echo FAIL; fi 
