@@ -414,7 +414,7 @@ bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
 
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
 {
-  assert(write_hint >= WRITE_LIFE_NOT_SET && write_hint < WRITE_LIFE_MAX);
+assert(write_hint >= WRITE_LIFE_NOT_SET && write_hint < WRITE_LIFE_MAX);
   if (!enable_wrt)
     write_hint = WRITE_LIFE_NOT_SET;
   return buffered ? fd_buffereds[write_hint] : fd_directs[write_hint];
@@ -829,7 +829,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
 {
   uint64_t len = bl.length();
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
-	  << std::dec << (buffered ? " (buffered)" : " (direct)") << dendl;
+	  << std::dec << " " << buffermode(buffered) << dendl;
   if (cct->_conf->bdev_inject_crash &&
       rand() % cct->_conf->bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
@@ -896,7 +896,7 @@ int KernelDevice::write(
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-	   << (buffered ? " (buffered)" : " (direct)")
+	   << " " << buffermode(buffered) 
 	   << dendl;
   ceph_assert(is_valid_io(off, len));
   if (cct->_conf->objectstore_blackhole) {
@@ -925,7 +925,7 @@ int KernelDevice::aio_write(
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-	   << (buffered ? " (buffered)" : " (direct)")
+	   << " " << buffermode(buffered)
 	   << dendl;
   ceph_assert(is_valid_io(off, len));
   if (cct->_conf->objectstore_blackhole) {
@@ -1032,7 +1032,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      bool buffered)
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-	  << (buffered ? " (buffered)" : " (direct)")
+	  << " " << buffermode(buffered)
 	  << dendl;
   ceph_assert(is_valid_io(off, len));
 
@@ -1041,13 +1041,13 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   auto start1 = mono_clock::now();
 
   auto p = ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(len));
-  int r = ::pread(buffered ? fd_buffereds[WRITE_LIFE_NOT_SET] : fd_directs[WRITE_LIFE_NOT_SET],
+  int r = ::pread(choose_fd(buffered,  WRITE_LIFE_NOT_SET),
 		  p->c_str(), len, off);
   auto age = cct->_conf->bdev_debug_aio_log_age;
   if (mono_clock::now() - start1 >= make_timespan(age)) {
     derr << __func__ << " stalled read "
          << " 0x" << std::hex << off << "~" << len << std::dec
-         << (buffered ? " (buffered)" : " (direct)")
+         << " " << buffermode(buffered)
 	 << " since " << start1 << ", timeout is "
 	 << age
 	 << "s" << dendl;
