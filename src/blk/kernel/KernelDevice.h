@@ -27,6 +27,10 @@
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
 
+enum struct blk_access_mode_t {
+  DIRECT,
+  BUFFERED
+};
 
 class KernelDevice : public BlockDevice {
   std::vector<int> fd_directs, fd_buffereds;

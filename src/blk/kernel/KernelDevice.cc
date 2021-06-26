@@ -52,6 +52,11 @@ using ceph::make_timespan;
 using ceph::mono_clock;
 using ceph::operator <<;
 
+std::ostream& operator<<(std::ostream& os, const blk_access_mode_t buffered);
+blk_access_mode_t buffermode(bool buffered) {
+  return buffered ? blk_access_mode_t::BUFFERED : blk_access_mode_t::DIRECT;
+}
+
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
