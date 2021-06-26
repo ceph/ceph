@@ -83,7 +83,7 @@ The Ceph Dashboard offers the following monitoring and management capabilities:
   their descriptions, types, default and currently set values.  These may be edited as well.
 * **Pools**: List Ceph pools and their details (e.g. applications,
   pg-autoscaling, placement groups, replication size, EC profile, CRUSH
-  rulesets, quotas etc.)
+  rules, quotas etc.)
 * **OSDs**: List OSDs, their status and usage statistics as well as
   detailed information like attributes (OSD map), metadata, performance
   counters and usage histograms for read/write operations. Mark OSDs
