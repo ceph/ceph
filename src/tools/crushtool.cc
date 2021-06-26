@@ -1037,7 +1037,7 @@ int main(int argc, const char **argv)
       set<int> roots;
       crush.find_roots(&roots);
       if (roots.size() > 1) {
-	cerr << "The crush rulesets will use the root " << root << "\n"
+	cerr << "The crush rules will use the root " << root << "\n"
 	     << "and ignore the others.\n"
 	     << "There are " << roots.size() << " roots, they can be\n"
 	     << "grouped into a single root by appending something like:\n"

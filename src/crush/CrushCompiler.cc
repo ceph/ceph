@@ -361,11 +361,8 @@ int CrushCompiler::decompile(ostream &out)
       print_rule_name(out, i, crush);
     out << " {\n";
     out << "\tid " << i << "\n";
-    if (i != crush.get_rule_mask_ruleset(i)) {
-      out << "\t# WARNING: ruleset " << crush.get_rule_mask_ruleset(i) << " != id " << i << "; this will not recompile to the same map\n";
-    }
 
-    switch (crush.get_rule_mask_type(i)) {
+    switch (crush.get_rule_type(i)) {
     case CEPH_PG_TYPE_REPLICATED:
       out << "\ttype replicated\n";
       break;
@@ -373,7 +370,7 @@ int CrushCompiler::decompile(ostream &out)
       out << "\ttype erasure\n";
       break;
     default:
-      out << "\ttype " << crush.get_rule_mask_type(i) << "\n";
+      out << "\ttype " << crush.get_rule_type(i) << "\n";
     }
 
     out << "\tmin_size " << crush.get_rule_mask_min_size(i) << "\n";
