@@ -1809,31 +1809,30 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
   LOG_PREFIX(OTree::LeafNode::erase);
   assert(!pos.is_end());
   assert(!impl->is_keys_empty());
-  Ref<Node> this_ref = this;
   DEBUGT("erase {}'s pos({}), get_next={} ...",
          c.t, get_name(), pos, get_next);
 
   // get the next cursor
-  return seastar::now().then([c, &pos, get_next, this] {
+  return seastar::now().then([this, c, &pos, get_next] {
     if (get_next) {
       return get_next_cursor(c, pos);
     } else {
       return eagain_ertr::make_ready_future<Ref<tree_cursor_t>>();
     }
-  }).safe_then([c, &pos, this_ref = std::move(this_ref),
-                this, FNAME] (Ref<tree_cursor_t> next_cursor) mutable {
+  }).safe_then([this, c, &pos, FNAME] (Ref<tree_cursor_t> next_cursor) {
     if (next_cursor && next_cursor->is_end()) {
       // reset the node reference from the end cursor
       next_cursor.reset();
     }
     return seastar::now().then(
-        [c, &pos, this_ref = std::move(this_ref), this, FNAME] () mutable {
+        [this, c, &pos, FNAME] () {
 #ifndef NDEBUG
       assert(!impl->is_keys_empty());
       if (impl->has_single_value()) {
         assert(pos == search_position_t::begin());
       }
 #endif
+      Ref<Node> this_ref = this;
       if (!is_root() && impl->has_single_value()) {
         // we need to keep the root as an empty leaf node
         // fast path without mutating the extent
