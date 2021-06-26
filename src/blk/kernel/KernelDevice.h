@@ -27,7 +27,6 @@
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
 
-
 class KernelDevice : public BlockDevice {
   std::vector<int> fd_directs, fd_buffereds;
   bool enable_wrt = true;

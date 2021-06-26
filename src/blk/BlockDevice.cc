@@ -47,6 +47,20 @@
 
 using std::string;
 
+
+blk_access_mode_t buffermode(bool buffered) 
+{
+  return buffered ? blk_access_mode_t::BUFFERED : blk_access_mode_t::DIRECT;
+}
+
+std::ostream& operator<<(std::ostream& os, const blk_access_mode_t buffered) 
+{
+  os << (buffered == blk_access_mode_t::BUFFERED ? "(buffered)" : "(direct)");
+  return os;
+}
+
+
+
 void IOContext::aio_wait()
 {
   std::unique_lock l(lock);
