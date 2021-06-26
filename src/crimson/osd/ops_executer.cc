@@ -460,6 +460,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.get_xattrs(os, osd_op);
     });
+  case CEPH_OSD_OP_CMPXATTR:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.cmp_xattr(os, osd_op);
+    });
   case CEPH_OSD_OP_RMXATTR:
     return do_write_op(
       [&osd_op] (auto& backend, auto& os, auto& txn) {

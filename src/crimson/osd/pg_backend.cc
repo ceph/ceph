@@ -830,6 +830,107 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
     return get_attr_errorator::now();
   });
 }
+static int do_xattr_cmp_str(int op, const string& lhs, bufferlist& rhs_xattr)
+{
+  string rhs(rhs_xattr.c_str(), rhs_xattr.length());
+
+  logger().debug("do_xattr_cmp_str '{}' vs '{}' op {}", lhs, rhs, op);
+
+  switch (op) {
+  case CEPH_OSD_CMPXATTR_OP_EQ:
+    return (lhs.compare(rhs) == 0);
+  case CEPH_OSD_CMPXATTR_OP_NE:
+    return (lhs.compare(rhs) != 0);
+  case CEPH_OSD_CMPXATTR_OP_GT:
+    return (lhs.compare(rhs) > 0);
+  case CEPH_OSD_CMPXATTR_OP_GTE:
+    return (lhs.compare(rhs) >= 0);
+  case CEPH_OSD_CMPXATTR_OP_LT:
+    return (lhs.compare(rhs) < 0);
+  case CEPH_OSD_CMPXATTR_OP_LTE:
+    return (lhs.compare(rhs) <= 0);
+  default:
+    return -EINVAL;
+  }
+}
+
+static int do_xattr_cmp_u64(int op, uint64_t lhs, bufferlist& rhs_xattr)
+{
+  uint64_t rhs;
+
+  if (rhs_xattr.length() > 0) {
+    std::from_chars(rhs_xattr.c_str(), rhs_xattr.c_str() + rhs_xattr.length(), rhs);
+  } else {
+    rhs = 0;
+  }
+  logger().debug("do_xattr_cmp_u64 '{}' vs '{}' op {}", lhs, rhs, op);
+
+  switch (op) {
+  case CEPH_OSD_CMPXATTR_OP_EQ:
+    return (lhs == rhs);
+  case CEPH_OSD_CMPXATTR_OP_NE:
+    return (lhs != rhs);
+  case CEPH_OSD_CMPXATTR_OP_GT:
+    return (lhs > rhs);
+  case CEPH_OSD_CMPXATTR_OP_GTE:
+    return (lhs >= rhs);
+  case CEPH_OSD_CMPXATTR_OP_LT:
+    return (lhs < rhs);
+  case CEPH_OSD_CMPXATTR_OP_LTE:
+    return (lhs <= rhs);
+  default:
+    return -EINVAL;
+  }
+}
+PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  std::string name{"_"};
+  auto bp = osd_op.indata.cbegin();
+  bp.copy(osd_op.op.xattr.name_len, name);
+ 
+  logger().debug("cmpxattr on obj={} for attr={}", os.oi.soid, name);
+  return getxattr(os.oi.soid, name).safe_then_interruptible(
+    [&osd_op] (auto &&xattr) {
+    int result = 0;
+    auto bp = osd_op.indata.cbegin();
+    bp += osd_op.op.xattr.name_len;
+
+    switch (osd_op.op.xattr.cmp_mode) {
+    case CEPH_OSD_CMPXATTR_MODE_STRING:
+      {
+        string val;
+        bp.copy(osd_op.op.xattr.value_len, val);
+        result = do_xattr_cmp_str(osd_op.op.xattr.cmp_op, val, xattr);
+        logger().debug("cmpxattr val={}, xattr= {}", val, xattr);
+      }
+    break;
+    case CEPH_OSD_CMPXATTR_MODE_U64:
+      {
+        uint64_t val;
+        try {
+          decode(val, bp);
+	} catch (ceph::buffer::error& e) {
+          logger().info("cmp_xattr: buffer error expection");
+          result = -EINVAL;
+          break;
+	}
+        result = do_xattr_cmp_u64(osd_op.op.xattr.cmp_op, val, xattr);
+      }
+    break;
+    default:
+      logger().info("bad cmp mode {}", osd_op.op.xattr.cmp_mode);
+      result = -EINVAL;
+    }
+    if (result == 0) {
+      logger().info("cmp_xattr: comparison returned false");
+      osd_op.rval = -ECANCELED;
+    } else {
+      osd_op.rval = result;
+    }
+  });
+}
 
 PGBackend::rm_xattr_iertr::future<>
 PGBackend::rm_xattr(
