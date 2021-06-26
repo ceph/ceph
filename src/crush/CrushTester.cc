@@ -429,14 +429,6 @@ bool CrushTester::check_name_maps(unsigned max_id) const
   return true;
 }
 
-static string get_rule_name(CrushWrapper& crush, int rule)
-{
-  if (crush.get_rule_name(rule))
-    return crush.get_rule_name(rule);
-  else
-    return string("rule") + std::to_string(rule);
-}
-
 int CrushTester::test()
 {
   if (min_rule < 0 || max_rule < 0) {

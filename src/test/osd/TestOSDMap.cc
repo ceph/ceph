@@ -66,7 +66,7 @@ public:
     if (no_default_pools) // do not create any default pool(s)
       return;
 
-    // Create an EC ruleset and a pool using it
+    // Create an EC rule and a pool using it
     int r = osdmap.crush->add_simple_rule(
       "erasure", "default", "osd", "",
       "indep", pg_pool_t::TYPE_ERASURE,
@@ -824,7 +824,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     ASSERT_TRUE(!crush.rule_exists(rule_name));
     int rno;
     for (rno = 0; rno < crush.get_max_rules(); rno++) {
-      if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+      if (!crush.rule_exists(rno))
         break;
     }
     string root_name = "default";
@@ -1151,7 +1151,7 @@ TEST_F(OSDMapTest, BUG_38897) {
     ASSERT_TRUE(!crush.rule_exists(rule_name));
     int rno;
     for (rno = 0; rno < crush.get_max_rules(); rno++) {
-      if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+      if (!crush.rule_exists(rno))
         break;
     }
     int min_size = 3;
@@ -1250,7 +1250,7 @@ TEST_F(OSDMapTest, BUG_38897) {
     ASSERT_TRUE(!crush.rule_exists(rule_name));
     int rno;
     for (rno = 0; rno < crush.get_max_rules(); rno++) {
-      if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+      if (!crush.rule_exists(rno))
         break;
     }
     int min_size = 3;
@@ -1407,7 +1407,7 @@ TEST_F(OSDMapTest, BUG_42052) {
   ASSERT_TRUE(!crush.rule_exists(rule_name));
   int rno;
   for (rno = 0; rno < crush.get_max_rules(); rno++) {
-    if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+    if (!crush.rule_exists(rno))
       break;
   }
   int min_size = 3;
@@ -1529,7 +1529,7 @@ TEST_F(OSDMapTest, BUG_42485) {
     ASSERT_TRUE(!crush.rule_exists(rule_name));
     int rno;
     for (rno = 0; rno < crush.get_max_rules(); rno++) {
-      if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+      if (!crush.rule_exists(rno))
         break;
     }
     string root_name = "default";
@@ -1761,7 +1761,7 @@ TEST_F(OSDMapTest, BUG_43124) {
     ASSERT_TRUE(!crush.rule_exists(rule_name));
     int rno;
     for (rno = 0; rno < crush.get_max_rules(); rno++) {
-      if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+      if (!crush.rule_exists(rno))
         break;
     }
     int min_size = 1;

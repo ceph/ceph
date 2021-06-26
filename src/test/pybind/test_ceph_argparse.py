@@ -1060,7 +1060,7 @@ class TestOSD(TestArgparse):
                                    'replicated'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
-                                   'erasure', 'A-Za-z0-9-_.', 'ruleset^^'])
+                                   'erasure', 'A-Za-z0-9-_.', 'rule^^'])
         self.assert_valid_command(['osd', 'pool', 'create', 'poolname'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         # invalid pg_num and pgp_num, like "-1", could spill over to
@@ -1071,23 +1071,23 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '-1', '-1',
-                                                    'ruleset']))
+                                                    'rule']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', '^^^',
-                                                    'ruleset']))
+                                                    'rule']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', 'profile',
-                                                    'ruleset',
+                                                    'rule',
                                                     'toomany']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'INVALID', 'profile',
-                                                    'ruleset']))
+                                                    'rule']))
 
     def test_pool_delete(self):
         self.assert_valid_command(['osd', 'pool', 'delete',

@@ -30,31 +30,6 @@ using ceph::decode_nohead;
 using ceph::encode;
 using ceph::Formatter;
 
-bool CrushWrapper::has_legacy_rule_ids() const
-{
-  for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (r &&
-	r->mask.ruleset != i) {
-      return true;
-    }
-  }
-  return false;
-}
-
-std::map<int, int> CrushWrapper::renumber_rules()
-{
-  std::map<int, int> result;
-  for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (r && r->mask.ruleset != i) {
-      result[r->mask.ruleset] = i;
-      r->mask.ruleset = i;
-    }
-  }
-  return result;
-}
-
 bool CrushWrapper::has_non_straw2_buckets() const
 {
   for (int i=0; i<crush->max_buckets; ++i) {
@@ -2281,14 +2256,9 @@ int CrushWrapper::add_simple_rule_at(
         *err << "rule with ruleno " << rno << " exists";
       return -EEXIST;
     }
-    if (ruleset_exists(rno)) {
-      if (err)
-        *err << "ruleset " << rno << " exists";
-      return -EEXIST;
-    }
   } else {
     for (rno = 0; rno < get_max_rules(); rno++) {
-      if (!rule_exists(rno) && !ruleset_exists(rno))
+      if (!rule_exists(rno))
         break;
     }
   }
@@ -2334,7 +2304,6 @@ int CrushWrapper::add_simple_rule_at(
     steps = 5;
   int min_rep = mode == "firstn" ? 1 : 3;
   int max_rep = mode == "firstn" ? 10 : 20;
-  //set the ruleset the same as rule_id(rno)
   crush_rule *rule = crush_make_rule(steps, rno, rule_type, min_rep, max_rep);
   ceph_assert(rule);
   int step = 0;
@@ -3570,27 +3539,26 @@ void CrushWrapper::dump_rules(Formatter *f) const
   }
 }
 
-void CrushWrapper::dump_rule(int ruleset, Formatter *f) const
+void CrushWrapper::dump_rule(int rule_id, Formatter *f) const
 {
   f->open_object_section("rule");
-  f->dump_int("rule_id", ruleset);
-  if (get_rule_name(ruleset))
-    f->dump_string("rule_name", get_rule_name(ruleset));
-  f->dump_int("ruleset", get_rule_mask_ruleset(ruleset));
-  f->dump_int("type", get_rule_mask_type(ruleset));
-  f->dump_int("min_size", get_rule_mask_min_size(ruleset));
-  f->dump_int("max_size", get_rule_mask_max_size(ruleset));
+  f->dump_int("rule_id", rule_id);
+  if (get_rule_name(rule_id))
+    f->dump_string("rule_name", get_rule_name(rule_id));
+  f->dump_int("type", get_rule_type(rule_id));
+  f->dump_int("min_size", get_rule_mask_min_size(rule_id));
+  f->dump_int("max_size", get_rule_mask_max_size(rule_id));
   f->open_array_section("steps");
-  for (int j=0; j<get_rule_len(ruleset); j++) {
+  for (int j=0; j<get_rule_len(rule_id); j++) {
     f->open_object_section("step");
-    switch (get_rule_op(ruleset, j)) {
+    switch (get_rule_op(rule_id, j)) {
     case CRUSH_RULE_NOOP:
       f->dump_string("op", "noop");
       break;
     case CRUSH_RULE_TAKE:
       f->dump_string("op", "take");
       {
-        int item = get_rule_arg1(ruleset, j);
+        int item = get_rule_arg1(rule_id, j);
         f->dump_int("item", item);
 
         const char *name = get_item_name(item);
@@ -3602,36 +3570,36 @@ void CrushWrapper::dump_rule(int ruleset, Formatter *f) const
       break;
     case CRUSH_RULE_CHOOSE_FIRSTN:
       f->dump_string("op", "choose_firstn");
-      f->dump_int("num", get_rule_arg1(ruleset, j));
-      f->dump_string("type", get_type_name(get_rule_arg2(ruleset, j)));
+      f->dump_int("num", get_rule_arg1(rule_id, j));
+      f->dump_string("type", get_type_name(get_rule_arg2(rule_id, j)));
       break;
     case CRUSH_RULE_CHOOSE_INDEP:
       f->dump_string("op", "choose_indep");
-      f->dump_int("num", get_rule_arg1(ruleset, j));
-      f->dump_string("type", get_type_name(get_rule_arg2(ruleset, j)));
+      f->dump_int("num", get_rule_arg1(rule_id, j));
+      f->dump_string("type", get_type_name(get_rule_arg2(rule_id, j)));
       break;
     case CRUSH_RULE_CHOOSELEAF_FIRSTN:
       f->dump_string("op", "chooseleaf_firstn");
-      f->dump_int("num", get_rule_arg1(ruleset, j));
-      f->dump_string("type", get_type_name(get_rule_arg2(ruleset, j)));
+      f->dump_int("num", get_rule_arg1(rule_id, j));
+      f->dump_string("type", get_type_name(get_rule_arg2(rule_id, j)));
       break;
     case CRUSH_RULE_CHOOSELEAF_INDEP:
       f->dump_string("op", "chooseleaf_indep");
-      f->dump_int("num", get_rule_arg1(ruleset, j));
-      f->dump_string("type", get_type_name(get_rule_arg2(ruleset, j)));
+      f->dump_int("num", get_rule_arg1(rule_id, j));
+      f->dump_string("type", get_type_name(get_rule_arg2(rule_id, j)));
       break;
     case CRUSH_RULE_SET_CHOOSE_TRIES:
       f->dump_string("op", "set_choose_tries");
-      f->dump_int("num", get_rule_arg1(ruleset, j));
+      f->dump_int("num", get_rule_arg1(rule_id, j));
       break;
     case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
       f->dump_string("op", "set_chooseleaf_tries");
-      f->dump_int("num", get_rule_arg1(ruleset, j));
+      f->dump_int("num", get_rule_arg1(rule_id, j));
       break;
     default:
-      f->dump_int("opcode", get_rule_op(ruleset, j));
-      f->dump_int("arg1", get_rule_arg1(ruleset, j));
-      f->dump_int("arg2", get_rule_arg2(ruleset, j));
+      f->dump_int("opcode", get_rule_op(rule_id, j));
+      f->dump_int("arg1", get_rule_arg1(rule_id, j));
+      f->dump_int("arg2", get_rule_arg2(rule_id, j));
     }
     f->close_section();
   }
@@ -3806,7 +3774,7 @@ int CrushWrapper::get_osd_pool_default_crush_replicated_rule(
   if (crush_rule < 0) {
     crush_rule = find_first_rule(pg_pool_t::TYPE_REPLICATED);
   } else if (!rule_exists(crush_rule)) {
-    crush_rule = -1; // match find_first_ruleset() retval
+    crush_rule = -1; // match find_first_rule() retval
   }
   return crush_rule;
 }

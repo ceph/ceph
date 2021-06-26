@@ -32,14 +32,14 @@ function TEST_pool_create() {
 
     local rulename=testrule
     local poolname=rulepool
-    local var=`ceph osd crush rule dump|grep -w ruleset|sed -n '$p'|grep -o '[0-9]\+'`
+    local var=`ceph osd crush rule dump|grep -w rule|sed -n '$p'|grep -o '[0-9]\+'`
     var=`expr  $var + 1 `
     ceph osd getcrushmap -o "$dir/map1"
     crushtool -d "$dir/map1" -o "$dir/map1.txt"
 
     local minsize=0
     local maxsize=1
-    sed -i '/# end crush map/i\rule '$rulename' {\n ruleset \'$var'\n type replicated\n min_size \'$minsize'\n max_size \'$maxsize'\n step take default\n step choose firstn 0 type osd\n step emit\n }\n' "$dir/map1.txt"
+    sed -i '/# end crush map/i\rule '$rulename' {\n id \'$var'\n type replicated\n min_size \'$minsize'\n max_size \'$maxsize'\n step take default\n step choose firstn 0 type osd\n step emit\n }\n' "$dir/map1.txt"
     crushtool  -c "$dir/map1.txt" -o "$dir/map1.bin"
     ceph osd setcrushmap -i "$dir/map1.bin"
     ceph osd pool create $poolname 200 $rulename 2>"$dir/rev"
