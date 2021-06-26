@@ -14,7 +14,6 @@ class CrushTester {
 
   std::map<int, int> device_weight;
   int min_rule, max_rule;
-  int ruleset;
   int min_x, max_x;
   int min_rep, max_rep;
   int64_t pool_id;
@@ -169,7 +168,6 @@ public:
   CrushTester(CrushWrapper& c, std::ostream& eo)
     : crush(c), err(eo),
       min_rule(-1), max_rule(-1),
-      ruleset(-1),
       min_x(-1), max_x(-1),
       min_rep(-1), max_rep(-1),
       pool_id(-1),
@@ -339,10 +337,6 @@ public:
 
   void set_rule(int rule) {
     min_rule = max_rule = rule;
-  }
-
-  void set_ruleset(int rs) {
-    ruleset = rs;
   }
 
   /**
