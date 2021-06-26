@@ -486,10 +486,6 @@ int CrushTester::test()
         err << "rule " << r << " dne" << std::endl;
       continue;
     }
-    if (ruleset >= 0 &&
-	crush.get_rule_mask_ruleset(r) != ruleset) {
-      continue;
-    }
     int minr = min_rep, maxr = max_rep;
     if (min_rep < 0 || max_rep < 0) {
       minr = crush.get_rule_mask_min_size(r);
@@ -730,10 +726,6 @@ int CrushTester::compare(CrushWrapper& crush2)
     if (!crush.rule_exists(r)) {
       if (output_statistics)
         err << "rule " << r << " dne" << std::endl;
-      continue;
-    }
-    if (ruleset >= 0 &&
-	crush.get_rule_mask_ruleset(r) != ruleset) {
       continue;
     }
     int minr = min_rep, maxr = max_rep;
