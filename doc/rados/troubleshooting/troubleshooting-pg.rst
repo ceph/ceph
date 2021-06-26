@@ -522,7 +522,6 @@ the rule::
     $ ceph osd crush rule dump erasurepool
     { "rule_id": 1,
       "rule_name": "erasurepool",
-      "ruleset": 1,
       "type": 3,
       "min_size": 3,
       "max_size": 20,
@@ -566,8 +565,8 @@ extracting the crushmap from the cluster so your experiments do not
 modify the Ceph cluster and only work on a local files::
 
     $ ceph osd crush rule dump erasurepool
-    { "rule_name": "erasurepool",
-      "ruleset": 1,
+    { "rule_id": 1,
+      "rule_name": "erasurepool",
       "type": 3,
       "min_size": 3,
       "max_size": 20,
@@ -590,7 +589,7 @@ modify the Ceph cluster and only work on a local files::
     bad mapping rule 8 x 173 num_rep 9 result [0,4,6,8,2,1,3,7,2147483647]
 
 Where ``--num-rep`` is the number of OSDs the erasure code CRUSH
-rule needs, ``--rule`` is the value of the ``ruleset`` field
+rule needs, ``--rule`` is the value of the ``rule_id`` field
 displayed by ``ceph osd crush rule dump``.  The test will try mapping
 one million values (i.e. the range defined by ``[--min-x,--max-x]``)
 and must display at least one bad mapping. If it outputs nothing it
@@ -609,7 +608,7 @@ The relevant part of the ``crush.txt`` file should look something
 like::
 
      rule erasurepool {
-             ruleset 1
+             id 1
              type erasure
              min_size 3
              max_size 20
