@@ -25,6 +25,7 @@
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
 #include "common/Graylog.h"
+#include "common/Journald.h"
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "include/ceph_assert.h"
@@ -163,6 +164,35 @@ ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
   return graylogs[channel];
 }
 
+ceph::logging::JournaldClusterLogger &LogMonitor::log_channel_info::get_journald()
+{
+  dout(25) << __func__ << dendl;
+
+  if (!journald) {
+    journald = std::make_unique<ceph::logging::JournaldClusterLogger>();
+  }
+  return *journald;
+}
+
+void LogMonitor::log_channel_info::clear()
+{
+  log_to_syslog.clear();
+  syslog_level.clear();
+  syslog_facility.clear();
+  log_file.clear();
+  expanded_log_file.clear();
+  log_file_level.clear();
+  log_to_graylog.clear();
+  log_to_graylog_host.clear();
+  log_to_graylog_port.clear();
+  log_to_journald.clear();
+  graylogs.clear();
+  journald.reset();
+}
+
+LogMonitor::log_channel_info::log_channel_info() = default;
+LogMonitor::log_channel_info::~log_channel_info() = default;
+
 
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_last_committed())
@@ -272,6 +302,12 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
 	}
 	dout(7) << "graylog: " << channel << " " << graylog
 		<< " host:" << channels.log_to_graylog_host << dendl;
+      }
+
+      if (channels.do_log_to_journald(channel)) {
+        auto &journald = channels.get_journald();
+        journald.log_log_entry(le);
+        dout(7) << "journald: " << channel << dendl;
       }
 
       if (g_conf()->mon_cluster_log_to_file) {
@@ -543,8 +579,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
 
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "log last") {
@@ -700,7 +735,6 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
 
   if (prefix == "log") {
     vector<string> logtext;
-    string level_str;
     cmd_getval(cmdmap, "logtext", logtext);
     LogEntry le;
     le.rank = m->get_orig_source();
@@ -708,7 +742,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.name = session->entity_name;
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
-    cmd_getval(cmdmap, "level", level_str, string("info"));
+    string level_str = cmd_getval_or<string>(cmdmap, "level", "info");
     le.prio = LogEntry::str_to_level(level_str);
     le.channel = CLOG_CHANNEL_DEFAULT;
     le.msg = str_join(logtext, " ");
@@ -927,6 +961,16 @@ void LogMonitor::update_log_channels()
     return;
   }
 
+  r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_to_journald"), oss,
+    &channels.log_to_journald,
+    CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_journald'"
+         << dendl;
+    return;
+  }
+
   channels.expand_channel_meta();
 }
 
@@ -941,7 +985,8 @@ void LogMonitor::handle_conf_change(const ConfigProxy& conf,
       changed.count("mon_cluster_log_file_level") ||
       changed.count("mon_cluster_log_to_graylog") ||
       changed.count("mon_cluster_log_to_graylog_host") ||
-      changed.count("mon_cluster_log_to_graylog_port")) {
+      changed.count("mon_cluster_log_to_graylog_port") ||
+      changed.count("mon_cluster_log_to_journald")) {
     update_log_channels();
   }
 }

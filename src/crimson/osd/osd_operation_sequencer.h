@@ -4,6 +4,7 @@
 #pragma once
 
 #include <map>
+#include <fmt/format.h>
 #include <seastar/core/condition-variable.hh>
 #include "crimson/common/operation.h"
 #include "osd/osd_types.h"
@@ -26,14 +27,16 @@ namespace crimson::osd {
 // can keep an op waiting in the case explained above.
 class OpSequencer {
 public:
-  template <typename HandleT,
+  template <typename OpT,
+            typename HandleT,
             typename FuncT,
             typename Result = std::invoke_result_t<FuncT>>
   seastar::futurize_t<Result>
-  start_op(HandleT& handle,
-           uint64_t prev_op,
-           uint64_t this_op,
+  start_op(const OpT& op,
+           HandleT& handle,
            FuncT&& do_op) {
+    const uint64_t prev_op = op.get_prev_id();
+    const uint64_t this_op = op.get_id();
     auto have_green_light = seastar::make_ready_future<>();
     assert(prev_op < this_op);
     if (last_issued == prev_op) {
@@ -53,7 +56,7 @@ public:
       handle.exit();
       ::crimson::get_logger(ceph_subsys_osd).debug(
         "OpSequencer::start_op: {} waiting ({} > {})",
-        this_op, prev_op, last_unblocked);
+        op, prev_op, last_unblocked);
       have_green_light = unblocked.wait([prev_op, this] {
         // wait until the previous op is unblocked
         return last_unblocked == prev_op;
@@ -70,14 +73,20 @@ public:
   uint64_t get_last_issued() const {
     return last_issued;
   }
-  void finish_op(uint64_t op_id) {
-    assert(op_id > last_completed);
-    last_completed = op_id;
+  template <class OpT>
+  void finish_op(const OpT& op) {
+    assert(op.get_id() > last_completed);
+    last_completed = op.get_id();
   }
-  void maybe_reset(uint64_t op_id) {
+  template <class OpT>
+  void maybe_reset(const OpT& op) {
+    const auto op_id = op.get_id();
     // pg interval changes, so we need to reenqueue the previously unblocked
     // ops by rewinding the "last_unblock" pointer
     if (op_id <= last_unblocked) {
+      ::crimson::get_logger(ceph_subsys_osd).debug(
+        "OpSequencer::maybe_reset:{}  {} <= {}, resetting to {}",
+        op, op_id, last_unblocked, last_completed);
       last_unblocked = last_completed;
     }
   }
@@ -103,7 +112,10 @@ private:
   // the id of last op which is completed
   uint64_t last_completed = 0;
   seastar::condition_variable unblocked;
+
+  friend fmt::formatter<OpSequencer>;
 };
+
 
 class OpSequencers {
 public:
@@ -118,3 +130,20 @@ private:
   std::map<spg_t, OpSequencer> pg_ops;
 };
 } // namespace crimson::osd
+
+template <>
+struct fmt::formatter<crimson::osd::OpSequencer> {
+  // ignore the format string
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const crimson::osd::OpSequencer& sequencer,
+              FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(),
+                          "(last_completed={},last_unblocked={},last_issued={})",
+                          sequencer.last_completed,
+                          sequencer.last_unblocked,
+                          sequencer.last_issued);
+  }
+};

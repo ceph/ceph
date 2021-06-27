@@ -38,9 +38,11 @@ class TestSnapSchedules(CephFSTestCase):
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
 
-    def fs_snap_schedule_cmd(self, *args):
-        args = list(args)
-        args.append(f'fs={self.volname}')
+    def fs_snap_schedule_cmd(self, *args, **kwargs):
+        fs = kwargs.pop('fs', self.volname)
+        args += ('--fs', fs)
+        for name, val in kwargs.items():
+            args += (f'--{name}', str(val))
         res = self._fs_cmd('snap-schedule', *args)
         log.debug(f'res={res}')
         return res
@@ -63,6 +65,9 @@ class TestSnapSchedules(CephFSTestCase):
     def _allow_minute_granularity_snapshots(self):
         self.config_set('mgr', 'mgr/snap_schedule/allow_m_granularity', True)
 
+    def _dump_on_update(self):
+        self.config_set('mgr', 'mgr/snap_schedule/dump_on_update', True)
+
     def setUp(self):
         super(TestSnapSchedules, self).setUp()
         self.volname = None
@@ -74,6 +79,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.snapshots = set()
         self._enable_snap_schedule()
         self._allow_minute_granularity_snapshots()
+        self._dump_on_update()
 
     def tearDown(self):
         if self.vol_created:
@@ -106,15 +112,19 @@ class TestSnapSchedules(CephFSTestCase):
         self.remove_cbks.remove(cbk)
 
     def assert_if_not_verified(self):
-        self.assertTrue(len(self.create_cbks) == 0 and len(self.remove_cbks) == 0)
+        self.assertListEqual(self.create_cbks, [])
+        self.assertListEqual(self.remove_cbks, [])
 
     def verify(self, dir_path, max_trials):
         trials = 0
         snap_path = "{0}/.snap".format(dir_path)
         while (len(self.create_cbks) or len(self.remove_cbks)) and trials < max_trials:
             snapshots = set(self.mount_a.ls(path=snap_path))
+            log.info(f"snapshots: {snapshots}")
             added = snapshots - self.snapshots
+            log.info(f"added: {added}")
             removed = self.snapshots - snapshots
+            log.info(f"removed: {removed}")
             if added:
                 for cbk in list(self.create_cbks):
                     res = cbk(list(added))
@@ -144,7 +154,7 @@ class TestSnapSchedules(CephFSTestCase):
     def verify_schedule(self, dir_path, schedules, retentions=[]):
         log.debug(f'expected_schedule: {schedules}, expected_retention: {retentions}')
 
-        result = self.fs_snap_schedule_cmd('list', f'path={dir_path}', 'format=json')
+        result = self.fs_snap_schedule_cmd('list', path=dir_path, format='json')
         json_res = json.loads(result)
         log.debug(f'json_res: {json_res}')
 
@@ -165,7 +175,7 @@ class TestSnapSchedules(CephFSTestCase):
     def test_non_existent_snap_schedule_list(self):
         """Test listing snap schedules on a non-existing filesystem path failure"""
         try:
-            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'format=json')
+            self.fs_snap_schedule_cmd('list', path=TestSnapSchedules.TEST_DIRECTORY)
         except CommandFailedError as ce:
             if ce.exitstatus != errno.ENOENT:
                 raise RuntimeError('incorrect errno when listing a non-existing snap schedule')
@@ -177,7 +187,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
 
         try:
-            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'format=json')
+            self.fs_snap_schedule_cmd('list', path=TestSnapSchedules.TEST_DIRECTORY)
         except CommandFailedError as ce:
             if ce.exitstatus != errno.ENOENT:
                 raise RuntimeError('incorrect errno when listing a non-existing snap schedule')
@@ -190,12 +200,12 @@ class TestSnapSchedules(CephFSTestCase):
         """Test listing snap schedules post removal of a schedule"""
         self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
 
-        self.fs_snap_schedule_cmd('add', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'snap-schedule=1h')
+        self.fs_snap_schedule_cmd('add', path=TestSnapSchedules.TEST_DIRECTORY, snap_schedule='1h')
 
-        self.fs_snap_schedule_cmd('remove', f'path={TestSnapSchedules.TEST_DIRECTORY}')
+        self.fs_snap_schedule_cmd('remove', path=TestSnapSchedules.TEST_DIRECTORY)
 
         try:
-            self.fs_snap_schedule_cmd('list', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'format=json')
+            self.fs_snap_schedule_cmd('list', path=TestSnapSchedules.TEST_DIRECTORY)
         except CommandFailedError as ce:
             if ce.exitstatus != errno.ENOENT:
                 raise RuntimeError('incorrect errno when listing a non-existing snap schedule')
@@ -209,7 +219,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
 
         # set a schedule on the dir
-        self.fs_snap_schedule_cmd('add', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'snap-schedule=1M')
+        self.fs_snap_schedule_cmd('add', path=TestSnapSchedules.TEST_DIRECTORY, snap_schedule='1M')
         exec_time = time.time()
 
         timo, snap_sfx = self.calc_wait_time_and_snap_name(exec_time, '1M')
@@ -232,7 +242,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.assert_if_not_verified()
 
         # remove snapshot schedule
-        self.fs_snap_schedule_cmd('remove', f'path={TestSnapSchedules.TEST_DIRECTORY}')
+        self.fs_snap_schedule_cmd('remove', path=TestSnapSchedules.TEST_DIRECTORY)
 
         # remove all scheduled snapshots
         self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY)
@@ -244,8 +254,8 @@ class TestSnapSchedules(CephFSTestCase):
         self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
 
         # set schedules on the dir
-        self.fs_snap_schedule_cmd('add', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'snap-schedule=1M')
-        self.fs_snap_schedule_cmd('add', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'snap-schedule=2M')
+        self.fs_snap_schedule_cmd('add', path=TestSnapSchedules.TEST_DIRECTORY, snap_schedule='1M')
+        self.fs_snap_schedule_cmd('add', path=TestSnapSchedules.TEST_DIRECTORY, snap_schedule='2M')
         exec_time = time.time()
 
         timo_1, snap_sfx_1 = self.calc_wait_time_and_snap_name(exec_time, '1M')
@@ -279,7 +289,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.assert_if_not_verified()
 
         # remove snapshot schedule
-        self.fs_snap_schedule_cmd('remove', f'path={TestSnapSchedules.TEST_DIRECTORY}')
+        self.fs_snap_schedule_cmd('remove', path=TestSnapSchedules.TEST_DIRECTORY)
 
         # remove all scheduled snapshots
         self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY)
@@ -291,8 +301,8 @@ class TestSnapSchedules(CephFSTestCase):
         self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
 
         # set a schedule on the dir
-        self.fs_snap_schedule_cmd('add', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'snap-schedule=1M')
-        self.fs_snap_schedule_cmd('retention', 'add', f'path={TestSnapSchedules.TEST_DIRECTORY}', 'retention-spec-or-period=1M')
+        self.fs_snap_schedule_cmd('add', path=TestSnapSchedules.TEST_DIRECTORY, snap_schedule='1M')
+        self.fs_snap_schedule_cmd('retention', 'add', path=TestSnapSchedules.TEST_DIRECTORY, retention_spec_or_period='1M')
         exec_time = time.time()
 
         timo_1, snap_sfx = self.calc_wait_time_and_snap_name(exec_time, '1M')
@@ -330,7 +340,7 @@ class TestSnapSchedules(CephFSTestCase):
         self.assert_if_not_verified()
 
         # remove snapshot schedule
-        self.fs_snap_schedule_cmd('remove', f'path={TestSnapSchedules.TEST_DIRECTORY}')
+        self.fs_snap_schedule_cmd('remove', path=TestSnapSchedules.TEST_DIRECTORY)
 
         # remove all scheduled snapshots
         self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY)

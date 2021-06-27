@@ -1,0 +1,5 @@
+tasks:
+- notification-tests:
+    client.0:
+      force-branch: master
+      rgw_server: client.0

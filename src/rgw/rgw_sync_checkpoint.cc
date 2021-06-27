@@ -82,7 +82,7 @@ std::ostream& operator<<(std::ostream& out, const BucketIndexShardsManager& rhs)
 }
 
 int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
-                                  rgw::sal::RGWRadosStore *store,
+                                  rgw::sal::RadosStore* store,
                                   const RGWBucketInfo& bucket_info,
                                   const RGWBucketInfo& source_bucket_info,
                                   const rgw_sync_bucket_pipe& pipe,
@@ -126,7 +126,8 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int source_bilog_markers(RGWSI_Zone* zone_svc,
+int source_bilog_markers(const DoutPrefixProvider *dpp,
+                         RGWSI_Zone* zone_svc,
                          const rgw_sync_bucket_pipe& pipe,
                          BucketIndexShardsManager& remote_markers,
                          optional_yield y)
@@ -139,14 +140,14 @@ int source_bilog_markers(RGWSI_Zone* zone_svc,
     return -EINVAL;
   }
 
-  return rgw_read_remote_bilog_info(conn->second, *pipe.source.bucket,
+  return rgw_read_remote_bilog_info(dpp, conn->second, *pipe.source.bucket,
                                     remote_markers, y);
 }
 
 } // anonymous namespace
 
 int rgw_bucket_sync_checkpoint(const DoutPrefixProvider* dpp,
-                               rgw::sal::RGWRadosStore *store,
+                               rgw::sal::RadosStore* store,
                                const RGWBucketSyncPolicyHandler& policy,
                                const RGWBucketInfo& info,
                                std::optional<rgw_zone_id> opt_source_zone,
@@ -178,7 +179,7 @@ int rgw_bucket_sync_checkpoint(const DoutPrefixProvider* dpp,
     // fetch remote markers
     spawn::spawn(ioctx, [&] (spawn::yield_context yield) {
       auto y = optional_yield{ioctx, yield};
-      int r = source_bilog_markers(store->svc()->zone, entry.pipe,
+      int r = source_bilog_markers(dpp, store->svc()->zone, entry.pipe,
                                    entry.remote_markers, y);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "failed to fetch remote bilog markers: "

@@ -36,57 +36,78 @@ namespace mpl = ::boost::mpl;
 void on_event_creation(std::string_view nm);
 void on_event_discard(std::string_view nm);
 
-#define MEV(E)                 \
-  struct E : sc::event<E> {    \
-    inline static int actv{0}; \
-    E()                        \
-    {                          \
-      if (!actv++)             \
-	on_event_creation(#E); \
-    }                          \
-    ~E()                       \
-    {                          \
-      if (!--actv)             \
-	on_event_discard(#E);  \
-    }                          \
+#define MEV(E)                                          \
+  struct E : sc::event<E> {                             \
+    inline static int actv{0};                          \
+    E()                                                 \
+    {                                                   \
+      if (!actv++)                                      \
+	on_event_creation(#E);                          \
+    }                                                   \
+    ~E()                                                \
+    {                                                   \
+      if (!--actv)                                      \
+	on_event_discard(#E);                           \
+    }                                                   \
+    void print(std::ostream* out) const { *out << #E; } \
+    std::string_view print() const { return #E; }       \
   };
 
-MEV(RemotesReserved)	 ///< all replicas have granted our reserve request
+MEV(RemotesReserved)  ///< all replicas have granted our reserve request
+
 MEV(ReservationFailure)	 ///< a reservation request has failed
 
 MEV(StartScrub)	 ///< initiate a new scrubbing session (relevant if we are a Primary)
+
 MEV(AfterRepairScrub)  ///< initiate a new scrubbing session. Only triggered at Recovery
 		       ///< completion.
-MEV(Unblocked)	       ///< triggered when the PG unblocked an object that was marked for
+
+MEV(Unblocked)	///< triggered when the PG unblocked an object that was marked for
 		///< scrubbing. Via the PGScrubUnblocked op
+
 MEV(InternalSchedScrub)
+
 MEV(SelectedChunkFree)
+
 MEV(ChunkIsBusy)
-MEV(ActivePushesUpd)	 ///< Update to active_pushes. 'active_pushes' represents recovery
-			 ///< that is in-flight to the local ObjectStore
-MEV(UpdatesApplied)	 // external
+
+MEV(ActivePushesUpd)  ///< Update to active_pushes. 'active_pushes' represents recovery
+		      ///< that is in-flight to the local ObjectStore
+
+MEV(UpdatesApplied)  // external
+
 MEV(InternalAllUpdates)	 ///< the internal counterpart of UpdatesApplied
-MEV(GotReplicas)	 ///< got a map from a replica
+
+MEV(GotReplicas)  ///< got a map from a replica
 
 MEV(IntBmPreempted)  ///< internal - BuildMap preempted. Required, as detected within the
 		     ///< ctor
+
 MEV(InternalError)
 
 MEV(IntLocalMapDone)
 
 MEV(DigestUpdate)  ///< external. called upon success of a MODIFY op. See
 		   ///< scrub_snapshot_metadata()
+
 MEV(AllChunksDone)
 
-MEV(StartReplica)	 ///< initiating replica scrub. replica_scrub_op() -> OSD Q ->
-			 ///< replica_scrub()
+MEV(MapsCompared)  ///< (Crimson) maps_compare_n_cleanup() transactions are done
+
+MEV(StartReplica)  ///< initiating replica scrub.
+
 MEV(StartReplicaNoWait)	 ///< 'start replica' when there are no pending updates
 
 MEV(SchedReplica)
+
 MEV(ReplicaPushesUpd)  ///< Update to active_pushes. 'active_pushes' represents recovery
 		       ///< that is in-flight to the local ObjectStore
 
 MEV(FullReset)	///< guarantee that the FSM is in the quiescent state (i.e. NotActive)
+
+MEV(NextChunk)	///< finished handling this chunk. Go get the next one
+
+MEV(ScrubFinished)  ///< all chunks handled
 
 
 struct NotActive;	    ///< the quiescent state. No active scrubbing.
@@ -163,6 +184,7 @@ struct BuildMap;
 struct DrainReplMaps;  ///< a problem during BuildMap. Wait for all replicas to report,
 		       ///< then restart.
 struct WaitReplicas;   ///< wait for all replicas to report
+struct WaitDigestUpdate;
 
 struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer> {
 
@@ -184,6 +206,8 @@ struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer> 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing> {
   explicit RangeBlocked(my_context ctx);
   using reactions = mpl::list<sc::transition<Unblocked, PendingTimer>>;
+
+  Scrub::BlockedRangeWarning m_timeout;
 };
 
 struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing> {
@@ -271,15 +295,22 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing> {
   explicit WaitReplicas(my_context ctx);
 
   using reactions =
-    mpl::list<sc::custom_reaction<GotReplicas>, sc::deferral<DigestUpdate>>;
+    mpl::list<sc::custom_reaction<GotReplicas>,	 // all replicas are accounted for
+	      sc::transition<MapsCompared, WaitDigestUpdate>,
+	      sc::deferral<DigestUpdate>  // might arrive before we've reached WDU
+	      >;
 
   sc::result react(const GotReplicas&);
+
+  bool all_maps_already_called{false};	// see comment in react code
 };
 
 struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing> {
   explicit WaitDigestUpdate(my_context ctx);
 
-  using reactions = mpl::list<sc::custom_reaction<DigestUpdate>>;
+  using reactions = mpl::list<sc::custom_reaction<DigestUpdate>,
+			      sc::transition<NextChunk, PendingTimer>,
+			      sc::transition<ScrubFinished, NotActive>>;
   sc::result react(const DigestUpdate&);
 };
 
@@ -304,8 +335,9 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine> {
 
 struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine> {
   explicit ActiveReplica(my_context ctx);
-  using reactions =
-    mpl::list<sc::custom_reaction<SchedReplica>, sc::custom_reaction<FullReset>>;
+  using reactions = mpl::list<sc::custom_reaction<SchedReplica>,
+			      sc::custom_reaction<FullReset>,
+			      sc::transition<ScrubFinished, NotActive>>;
 
   sc::result react(const SchedReplica&);
   sc::result react(const FullReset&);

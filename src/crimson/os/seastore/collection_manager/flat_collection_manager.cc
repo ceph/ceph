@@ -12,7 +12,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_seastore);
   }
 }
 
@@ -22,7 +22,7 @@ constexpr static segment_off_t MIN_FLAT_BLOCK_SIZE = 4<<10;
 [[maybe_unused]] constexpr static segment_off_t MAX_FLAT_BLOCK_SIZE = 4<<20;
 
 FlatCollectionManager::FlatCollectionManager(
-  TransactionManager &tm)
+  InterruptedTransactionManager tm)
   : tm(tm) {}
 
 FlatCollectionManager::mkfs_ret
@@ -47,13 +47,11 @@ FlatCollectionManager::get_coll_root(const coll_root_t &coll_root, Transaction &
   logger().debug("FlatCollectionManager: {}", __func__);
   assert(coll_root.get_location() != L_ADDR_NULL);
   auto cc = get_coll_context(t);
-  return cc.tm.read_extents<CollectionNode>(
+  return cc.tm.read_extent<CollectionNode>(
     cc.t,
     coll_root.get_location(),
     coll_root.get_size()
-  ).safe_then([](auto&& extents) {
-    assert(extents.size() == 1);
-    [[maybe_unused]] auto [laddr, e] = extents.front();
+  ).safe_then([](auto&& e) {
     return get_root_ertr::make_ready_future<CollectionNodeRef>(std::move(e));
   });
 }

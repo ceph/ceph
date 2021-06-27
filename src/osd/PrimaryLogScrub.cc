@@ -47,10 +47,6 @@ void PrimaryLogScrub::_scrub_finish()
 	   << " info stats: " << (info.stats.stats_invalid ? "invalid" : "valid")
 	   << dendl;
 
-  bool repair = state_test(PG_STATE_REPAIR);
-  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
-  const char* mode = (repair ? "repair" : (deep_scrub ? "deep-scrub" : "scrub"));
-
   if (info.stats.stats_invalid) {
     m_pl_pg->recovery_state.update_stats([=](auto& history, auto& stats) {
       stats.stats = m_scrub_cstat;
@@ -62,7 +58,7 @@ void PrimaryLogScrub::_scrub_finish()
       m_pl_pg->agent_choose_mode();
   }
 
-  dout(10) << mode << " got " << m_scrub_cstat.sum.num_objects << "/"
+  dout(10) << m_mode_desc << " got " << m_scrub_cstat.sum.num_objects << "/"
 	   << info.stats.stats.sum.num_objects << " objects, "
 	   << m_scrub_cstat.sum.num_object_clones << "/"
 	   << info.stats.stats.sum.num_object_clones << " clones, "
@@ -100,7 +96,7 @@ void PrimaryLogScrub::_scrub_finish()
        !info.stats.manifest_stats_invalid) ||
       m_scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       m_scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
-    m_osds->clog->error() << info.pgid << " " << mode << " : stat mismatch, got "
+    m_osds->clog->error() << info.pgid << " " << m_mode_desc << " : stat mismatch, got "
 			  << m_scrub_cstat.sum.num_objects << "/"
 			  << info.stats.stats.sum.num_objects << " objects, "
 			  << m_scrub_cstat.sum.num_object_clones << "/"
@@ -125,7 +121,7 @@ void PrimaryLogScrub::_scrub_finish()
 			  << " hit_set_archive bytes.";
     ++m_shallow_errors;
 
-    if (repair) {
+    if (m_is_repair) {
       ++m_fixed_count;
       m_pl_pg->recovery_state.update_stats([this](auto& history, auto& stats) {
 	stats.stats = m_scrub_cstat;
@@ -142,7 +138,7 @@ void PrimaryLogScrub::_scrub_finish()
     }
   }
   // Clear object context cache to get repair information
-  if (repair)
+  if (m_is_repair)
     m_pl_pg->object_contexts.clear();
 }
 
@@ -157,15 +153,14 @@ void PrimaryLogScrub::log_missing(int missing,
 				  LogChannelRef clog,
 				  const spg_t& pgid,
 				  const char* func,
-				  const char* mode,
 				  bool allow_incomplete_clones)
 {
   ceph_assert(head);
   if (allow_incomplete_clones) {
-    dout(20) << func << " " << mode << " " << pgid << " " << *head << " skipped "
+    dout(20) << func << " " << m_mode_desc << " " << pgid << " " << *head << " skipped "
 	     << missing << " clone(s) in cache tier" << dendl;
   } else {
-    clog->info() << mode << " " << pgid << " " << *head << " : " << missing
+    clog->info() << m_mode_desc << " " << pgid << " " << *head << " : " << missing
 		 << " missing clone(s)";
   }
 }
@@ -174,7 +169,6 @@ int PrimaryLogScrub::process_clones_to(const std::optional<hobject_t>& head,
 				       const std::optional<SnapSet>& snapset,
 				       LogChannelRef clog,
 				       const spg_t& pgid,
-				       const char* mode,
 				       bool allow_incomplete_clones,
 				       std::optional<snapid_t> target,
 				       vector<snapid_t>::reverse_iterator* curclone,
@@ -193,7 +187,7 @@ int PrimaryLogScrub::process_clones_to(const std::optional<hobject_t>& head,
     // skip higher-numbered clones in the list.
     if (!allow_incomplete_clones) {
       next_clone.snap = **curclone;
-      clog->error() << mode << " " << pgid << " " << *head << " : expected clone "
+      clog->error() << m_mode_desc << " " << pgid << " " << *head << " : expected clone "
 		    << next_clone << " " << m_missing << " missing";
       ++m_shallow_errors;
       e.set_clone_missing(next_clone.snap);
@@ -239,10 +233,6 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
   const PGPool& pool = m_pl_pg->pool;
   bool allow_incomplete_clones = pool.info.allow_incomplete_clones();
 
-  bool repair = state_test(PG_STATE_REPAIR);
-  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
-  const char* mode = (repair ? "repair" : (deep_scrub ? "deep-scrub" : "scrub"));
-
   std::optional<snapid_t> all_clones;  // Unspecified snapid_t or std::nullopt
 
   // traverse in reverse order.
@@ -274,7 +264,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
     // basic checks.
     if (p->second.attrs.count(OI_ATTR) == 0) {
       oi = std::nullopt;
-      m_osds->clog->error() << mode << " " << info.pgid << " " << soid << " : no '"
+      m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid << " : no '"
 			    << OI_ATTR << "' attr";
       ++m_shallow_errors;
       soid_error.set_info_missing();
@@ -285,7 +275,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	oi = object_info_t(bv);
       } catch (ceph::buffer::error& e) {
 	oi = std::nullopt;
-	m_osds->clog->error() << mode << " " << info.pgid << " " << soid
+	m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid
 			      << " : can't decode '" << OI_ATTR << "' attr " << e.what();
 	++m_shallow_errors;
 	soid_error.set_info_corrupted();
@@ -295,7 +285,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 
     if (oi) {
       if (m_pl_pg->pgbackend->be_get_ondisk_size(oi->size) != p->second.size) {
-	m_osds->clog->error() << mode << " " << info.pgid << " " << soid
+	m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid
 			      << " : on disk size (" << p->second.size
 			      << ") does not match object info size (" << oi->size
 			      << ") adjusted for ondisk to ("
@@ -304,7 +294,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	++m_shallow_errors;
       }
 
-      dout(20) << mode << "  " << soid << " " << *oi << dendl;
+      dout(20) << m_mode_desc << "  " << soid << " " << *oi << dendl;
 
       // A clone num_bytes will be added later when we have snapset
       if (!soid.is_snap()) {
@@ -331,7 +321,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       // Expecting an object with snap for current head
       if (soid.has_snapset() || soid.get_head() != head->get_head()) {
 
-	dout(10) << __func__ << " " << mode << " " << info.pgid << " new object " << soid
+	dout(10) << __func__ << " " << m_mode_desc << " " << info.pgid << " new object " << soid
 		 << " while processing " << *head << dendl;
 
 	target = all_clones;
@@ -343,7 +333,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       // Log any clones we were expecting to be there up to target
       // This will set missing, but will be a no-op if snap.soid == *curclone.
       missing +=
-	process_clones_to(head, snapset, m_osds->clog, info.pgid, mode,
+	process_clones_to(head, snapset, m_osds->clog, info.pgid,
 			  allow_incomplete_clones, target, &curclone, head_error);
     }
 
@@ -363,10 +353,10 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
     if (!expected) {
       // If we couldn't read the head's snapset, just ignore clones
       if (head && !snapset) {
-	m_osds->clog->error() << mode << " " << info.pgid << " " << soid
+	m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid
 			      << " : clone ignored due to missing snapset";
       } else {
-	m_osds->clog->error() << mode << " " << info.pgid << " " << soid
+	m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid
 			      << " : is an unexpected clone";
       }
       ++m_shallow_errors;
@@ -382,7 +372,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
     if (soid.has_snapset()) {
 
       if (missing) {
-	log_missing(missing, head, m_osds->clog, info.pgid, __func__, mode,
+	log_missing(missing, head, m_osds->clog, info.pgid, __func__,
 		    pool.info.allow_incomplete_clones());
       }
 
@@ -395,10 +385,10 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       head_error = soid_error;
       soid_error_count = 0;
 
-      dout(20) << __func__ << " " << mode << " new head " << head << dendl;
+      dout(20) << __func__ << " " << m_mode_desc << " new head " << head << dendl;
 
       if (p->second.attrs.count(SS_ATTR) == 0) {
-	m_osds->clog->error() << mode << " " << info.pgid << " " << soid << " : no '"
+	m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid << " : no '"
 			      << SS_ATTR << "' attr";
 	++m_shallow_errors;
 	snapset = std::nullopt;
@@ -414,7 +404,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	} catch (ceph::buffer::error& e) {
 	  snapset = std::nullopt;
 	  m_osds->clog->error()
-	    << mode << " " << info.pgid << " " << soid << " : can't decode '" << SS_ATTR
+	    << m_mode_desc << " " << info.pgid << " " << soid << " : can't decode '" << SS_ATTR
 	    << "' attr " << e.what();
 	  ++m_shallow_errors;
 	  head_error.set_snapset_corrupted();
@@ -429,7 +419,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	  dout(20) << "  snapset " << *snapset << dendl;
 	  if (snapset->seq == 0) {
 	    m_osds->clog->error()
-	      << mode << " " << info.pgid << " " << soid << " : snaps.seq not set";
+	      << m_mode_desc << " " << info.pgid << " " << soid << " : snaps.seq not set";
 	    ++m_shallow_errors;
 	    head_error.set_snapset_error();
 	  }
@@ -441,24 +431,24 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       ceph_assert(snapset);
       ceph_assert(soid.snap == *curclone);
 
-      dout(20) << __func__ << " " << mode << " matched clone " << soid << dendl;
+      dout(20) << __func__ << " " << m_mode_desc << " matched clone " << soid << dendl;
 
       if (snapset->clone_size.count(soid.snap) == 0) {
-	m_osds->clog->error() << mode << " " << info.pgid << " " << soid
+	m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid
 			      << " : is missing in clone_size";
 	++m_shallow_errors;
 	soid_error.set_size_mismatch();
       } else {
 	if (oi && oi->size != snapset->clone_size[soid.snap]) {
 	  m_osds->clog->error()
-	    << mode << " " << info.pgid << " " << soid << " : size " << oi->size
+	    << m_mode_desc << " " << info.pgid << " " << soid << " : size " << oi->size
 	    << " != clone_size " << snapset->clone_size[*curclone];
 	  ++m_shallow_errors;
 	  soid_error.set_size_mismatch();
 	}
 
 	if (snapset->clone_overlap.count(soid.snap) == 0) {
-	  m_osds->clog->error() << mode << " " << info.pgid << " " << soid
+	  m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid
 				<< " : is missing in clone_overlap";
 	  ++m_shallow_errors;
 	  soid_error.set_size_mismatch();
@@ -481,7 +471,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 	  }
 
 	  if (bad_interval_set) {
-	    m_osds->clog->error() << mode << " " << info.pgid << " " << soid
+	    m_osds->clog->error() << m_mode_desc << " " << info.pgid << " " << soid
 				  << " : bad interval_set in clone_overlap";
 	    ++m_shallow_errors;
 	    soid_error.set_size_mismatch();
@@ -502,18 +492,18 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
   }
 
   if (doing_clones(snapset, curclone)) {
-    dout(10) << __func__ << " " << mode << " " << info.pgid
+    dout(10) << __func__ << " " << m_mode_desc << " " << info.pgid
 	     << " No more objects while processing " << *head << dendl;
 
     missing +=
-      process_clones_to(head, snapset, m_osds->clog, info.pgid, mode,
+      process_clones_to(head, snapset, m_osds->clog, info.pgid,
 			allow_incomplete_clones, all_clones, &curclone, head_error);
   }
 
   // There could be missing found by the test above or even
   // before dropping out of the loop for the last head.
   if (missing) {
-    log_missing(missing, head, m_osds->clog, info.pgid, __func__, mode,
+    log_missing(missing, head, m_osds->clog, info.pgid, __func__,
 		allow_incomplete_clones);
   }
   if (head && (head_error.errors || soid_error_count))
@@ -528,12 +518,12 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 
     ObjectContextRef obc = m_pl_pg->get_object_context(p->first, false);
     if (!obc) {
-      m_osds->clog->error() << info.pgid << " " << mode
+      m_osds->clog->error() << info.pgid << " " << m_mode_desc
 			    << " cannot get object context for object " << p->first;
       continue;
     }
     if (obc->obs.oi.soid != p->first) {
-      m_osds->clog->error() << info.pgid << " " << mode << " " << p->first
+      m_osds->clog->error() << info.pgid << " " << m_mode_desc << " " << p->first
 			    << " : object has a valid oi attr with a mismatched name, "
 			    << " obc->obs.oi.soid: " << obc->obs.oi.soid;
       continue;
@@ -564,7 +554,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
     m_pl_pg->simple_opc_submit(std::move(ctx));
   }
 
-  dout(10) << __func__ << " (" << mode << ") finish" << dendl;
+  dout(10) << __func__ << " (" << m_mode_desc << ") finish" << dendl;
 }
 
 PrimaryLogScrub::PrimaryLogScrub(PrimaryLogPG* pg) : PgScrubber{pg}, m_pl_pg{pg} {}

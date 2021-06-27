@@ -108,7 +108,7 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf);
  */
 struct ScrubPgIF {
 
-  virtual ~ScrubPgIF(){};
+  virtual ~ScrubPgIF() = default;
 
   friend ostream& operator<<(ostream& out, const ScrubPgIF& s) { return s.show(out); }
 
@@ -138,6 +138,20 @@ struct ScrubPgIF {
 
   virtual void send_sched_replica(epoch_t epoch_queued) = 0;
 
+  virtual void send_full_reset(epoch_t epoch_queued) = 0;
+
+  virtual void send_chunk_free(epoch_t epoch_queued) = 0;
+
+  virtual void send_chunk_busy(epoch_t epoch_queued) = 0;
+
+  virtual void send_local_map_done(epoch_t epoch_queued) = 0;
+
+  virtual void send_get_next_chunk(epoch_t epoch_queued) = 0;
+
+  virtual void send_scrub_is_finished(epoch_t epoch_queued) = 0;
+
+  virtual void send_maps_compared(epoch_t epoch_queued) = 0;
+
   // --------------------------------------------------
 
   [[nodiscard]] virtual bool are_callbacks_pending()
@@ -149,10 +163,6 @@ struct ScrubPgIF {
    * - for replicas: upon receiving the scrub request from the primary
    */
   [[nodiscard]] virtual bool is_scrub_active() const = 0;
-
-  [[nodiscard]] virtual bool get_reserve_failed() const = 0;
-  virtual void set_reserve_failed() = 0;
-  virtual void clear_reserve_failed() = 0;
 
   /// are we waiting for resource reservation grants form our replicas?
   [[nodiscard]] virtual bool is_reserving() const = 0;
@@ -267,4 +277,11 @@ struct ScrubPgIF {
   virtual void scrub_requested(scrub_level_t scrub_level,
 			       scrub_type_t scrub_type,
 			       requested_scrub_t& req_flags) = 0;
+
+  // --------------- debugging via the asok ------------------------------
+
+  virtual int asok_debug(std::string_view cmd,
+			 std::string param,
+			 Formatter* f,
+			 stringstream& ss) = 0;
 };

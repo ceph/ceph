@@ -1,3 +1,11 @@
+=====
+Jewel
+=====
+
+Jewel is the 10th stable release of Ceph. It is named after the jewel
+squid (Histioteuthis reversa).
+
+
 v10.2.11 Jewel
 ==============
 

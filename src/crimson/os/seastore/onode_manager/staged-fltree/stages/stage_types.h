@@ -194,6 +194,14 @@ struct staged_position_t {
     return *this;
   }
 
+  me_t& operator+=(const me_t& o) {
+    assert(is_valid_index(index));
+    assert(is_valid_index(o.index));
+    index += o.index;
+    nxt += o.nxt;
+    return *this;
+  }
+
   void encode(ceph::bufferlist& encoded) const {
     ceph::encode(index, encoded);
     nxt.encode(encoded);
@@ -266,6 +274,13 @@ struct staged_position_t<STAGE_BOTTOM> {
       assert(is_valid_index(index));
       index -= o.index;
     }
+    return *this;
+  }
+
+  me_t& operator+=(const me_t& o) {
+    assert(is_valid_index(index));
+    assert(is_valid_index(o.index));
+    index += o.index;
     return *this;
   }
 
@@ -378,6 +393,11 @@ search_position_t normalize(staged_position_t<STAGE>&& pos) {
 struct memory_range_t {
   const char* p_start;
   const char* p_end;
+};
+
+struct container_range_t {
+  memory_range_t range;
+  extent_len_t node_size;
 };
 
 enum class ContainerType { ITERATIVE, INDEXABLE };

@@ -291,7 +291,7 @@ static const char *get_acl_header(const RGWEnv *env,
   return env->get(header, NULL);
 }
 
-static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, string& grantee_str,
+static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Store* store, string& grantee_str,
         const struct s3_acl_header *perm, ACLGrant& grant)
 {
   string id_type, id_val_quoted;
@@ -305,15 +305,15 @@ static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* 
   string id_val = rgw_trim_quotes(id_val_quoted);
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
-    std::unique_ptr<rgw::sal::RGWUser> user;
+    std::unique_ptr<rgw::sal::User> user;
     ret = store->get_user_by_email(dpp, id_val, null_yield, &user);
     if (ret < 0)
       return ret;
 
     grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
-    std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(id_val));
-    ret = user->load_by_id(dpp, null_yield);
+    std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(id_val));
+    ret = user->load_user(dpp, null_yield);
     if (ret < 0)
       return ret;
 
@@ -331,7 +331,7 @@ static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* 
   return 0;
 }
 
-static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
+static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
 			    const RGWEnv *env, const struct s3_acl_header *perm,
 			    std::list<ACLGrant>& _grants)
 {
@@ -453,7 +453,7 @@ static const s3_acl_header acl_header_perms[] = {
 };
 
 int RGWAccessControlPolicy_S3::create_from_headers(const DoutPrefixProvider *dpp,
-						   rgw::sal::RGWStore* store,
+						   rgw::sal::Store* store,
 						   const RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
@@ -478,7 +478,7 @@ int RGWAccessControlPolicy_S3::create_from_headers(const DoutPrefixProvider *dpp
   can only be called on object that was parsed
  */
 int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
-				       rgw::sal::RGWStore* store, ACLOwner *owner,
+				       rgw::sal::Store* store, ACLOwner *owner,
 				       RGWAccessControlPolicy& dest, std::string &err_msg)
 {
   if (!owner)
@@ -491,9 +491,9 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
       return -EPERM;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(owner->get_id());
-  if (user->load_by_id(dpp, null_yield) < 0) {
-    ldout(cct, 10) << "owner info does not exist" << dendl;
+  std::unique_ptr<rgw::sal::User> user = store->get_user(owner->get_id());
+  if (user->load_user(dpp, null_yield) < 0) {
+    ldpp_dout(dpp, 10) << "owner info does not exist" << dendl;
     err_msg = "Invalid id";
     return -EINVAL;
   }
@@ -525,9 +525,9 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
           return -EINVAL;
         }
         email = u.id;
-        ldout(cct, 10) << "grant user email=" << email << dendl;
+        ldpp_dout(dpp, 10) << "grant user email=" << email << dendl;
 	if (store->get_user_by_email(dpp, email, null_yield, &user) < 0) {
-          ldout(cct, 10) << "grant user email not found or other error" << dendl;
+          ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
           err_msg = "The e-mail address you provided does not match any account on record.";
           return -ERR_UNRESOLVABLE_EMAIL;
         }
@@ -546,8 +546,8 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
     
         if (grant_user.user_id.empty()) {
 	  user = store->get_user(uid);
-	  if (user->load_by_id(dpp, null_yield) < 0) {
-	    ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
+	  if (user->load_user(dpp, null_yield) < 0) {
+	    ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
 	    err_msg = "Invalid id";
 	    return -EINVAL;
 	  } else {
@@ -559,7 +559,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
 	grant_ok = true;
 	rgw_user new_id;
 	new_grant.get_id(new_id);
-	ldout(cct, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
+	ldpp_dout(dpp, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
       }
       break;
     case ACL_TYPE_GROUP:

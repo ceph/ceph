@@ -251,8 +251,9 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   if (print_only_blocked) {
     f->dump_float("complaint_time", complaint_time);
     f->dump_int("num_blocked_ops", total_ops_in_flight);
-  } else
+  } else {
     f->dump_int("num_ops", total_ops_in_flight);
+  }
   f->close_section(); // overall dump
   return true;
 }

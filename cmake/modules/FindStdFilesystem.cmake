@@ -14,7 +14,7 @@ macro(try_std_filesystem_library _library _result _already_included)
     ${_std_filesystem_try_compile_arg})
   unset(_std_filesystem_try_compile_arg)
   if(_std_filesystem_compiles)
-    if(NOT _library STREQUAL "")
+    if(NOT ${_library} STREQUAL "")
       set(${_result} ${_library})
     else()
       set(${_already_included} "included by standard library")
@@ -28,7 +28,6 @@ set(_std_filesystem_already_included FALSE)
 foreach(library
     ""
     "stdc++fs"
-    "c++experimental"
     "c++fs")
   try_std_filesystem_library("${library}" StdFilesystem_LIBRARY _std_filesystem_already_included)
   if(_std_filesystem_already_included)

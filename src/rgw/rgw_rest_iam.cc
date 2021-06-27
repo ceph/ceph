@@ -19,7 +19,7 @@
 void RGWHandler_REST_IAM::rgw_iam_parse_input()
 {
   if (post_body.size() > 0) {
-    ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
+    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
       boost::char_separator<char> sep("&");
@@ -82,14 +82,14 @@ RGWOp *RGWHandler_REST_IAM::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_IAM::init(rgw::sal::RGWStore *store,
+int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
                               struct req_state *s,
                               rgw::io::BasicClient *cio)
 {
   s->dialect = "iam";
 
   if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
-    ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
+    ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
 
@@ -144,7 +144,7 @@ int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_IAM::get_handler(rgw::sal::RGWStore *store,
+RGWRESTMgr_IAM::get_handler(rgw::sal::Store* store,
 			    struct req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)

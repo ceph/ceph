@@ -39,7 +39,7 @@ public:
   StupidAllocator(CephContext* cct,
                   int64_t size,
                   int64_t block_size,
-		  const std::string& name);
+		  std::string_view name);
   ~StupidAllocator() override;
   const char* get_type() const override
   {

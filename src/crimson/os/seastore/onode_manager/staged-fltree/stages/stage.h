@@ -208,13 +208,13 @@ struct staged {
     *   CONTAINER_TYPE = ContainerType::INDEXABLE
     *   keys() const -> index_t
     *   operator[](index_t) const -> key_get_type
-    *   size_before(index_t) const -> node_offset_t
+    *   size_before(index_t) const -> extent_len_t
     *   size_overhead_at(index_t) const -> node_offset_t
     *   (IS_BOTTOM) get_p_value(index_t) const -> const value_t*
     *   (!IS_BOTTOM) size_to_nxt_at(index_t) const -> node_offset_t
     *   (!IS_BOTTOM) get_nxt_container(index_t) const
     *   encode(p_node_start, encoded)
-    *   decode(p_node_start, delta) -> container_t
+    *   decode(p_node_start, node_size, delta) -> container_t
     * static:
     *   header_size() -> node_offset_t
     *   estimate_insert(key, value) -> node_offset_t
@@ -225,6 +225,7 @@ struct staged {
     *   (!IS_BOTTOM) update_size_at(mut, src, index, size)
     *   trim_until(mut, container, index) -> trim_size
     *   (!IS_BOTTOM) trim_at(mut, container, index, trimmed) -> trim_size
+    *   erase_at(mut, container, index, p_left_bound) -> erase_size
     *
     * Appender::append(const container_t& src, from, items)
     */
@@ -335,7 +336,7 @@ struct staged {
 
     template <typename T = void>
     std::enable_if_t<!IS_BOTTOM, T>
-    update_size(NodeExtentMutable& mut, node_offset_t insert_size) {
+    update_size(NodeExtentMutable& mut, int insert_size) {
       assert(!is_end());
       container_t::update_size_at(mut, container, _index, insert_size);
     }
@@ -450,14 +451,39 @@ struct staged {
       return container_t::trim_at(mut, container, _index, trimmed);
     }
 
+    node_offset_t erase(NodeExtentMutable& mut, const char* p_left_bound) {
+      assert(!is_end());
+      return container_t::erase_at(mut, container, _index, p_left_bound);
+    }
+
+    template <KeyT KT>
+    typename container_t::template Appender<KT>
+    get_appender(NodeExtentMutable* p_mut) {
+      assert(_index + 1 == container.keys());
+      return typename container_t::template Appender<KT>(p_mut, container);
+    }
+
+    template <KeyT KT>
+    typename container_t::template Appender<KT>
+    get_appender_opened(NodeExtentMutable* p_mut) {
+      if constexpr (!IS_BOTTOM) {
+        assert(_index + 1 == container.keys());
+        return typename container_t::template Appender<KT>(p_mut, container, true);
+      } else {
+        ceph_abort("impossible path");
+      }
+    }
+
     void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
       container.encode(p_node_start, encoded);
       ceph::encode(_index, encoded);
     }
 
     static me_t decode(const char* p_node_start,
+                       extent_len_t node_size,
                        ceph::bufferlist::const_iterator& delta) {
-      auto container = container_t::decode(p_node_start, delta);
+      auto container = container_t::decode(
+          p_node_start, node_size, delta);
       auto ret = me_t(container);
       index_t index;
       ceph::decode(index, delta);
@@ -493,7 +519,7 @@ struct staged {
      *   get_nxt_container() const
      *   has_next() const -> bool
      *   encode(p_node_start, encoded)
-     *   decode(p_node_start, delta) -> container_t
+     *   decode(p_node_start, node_length, delta) -> container_t
      *   operator++()
      * static:
      *   header_size() -> node_offset_t
@@ -502,6 +528,7 @@ struct staged {
      *   update_size(mut, src, size)
      *   trim_until(mut, container) -> trim_size
      *   trim_at(mut, container, trimmed) -> trim_size
+     *   erase(mut, container, p_left_bound) -> erase_size
      */
     // currently the iterative iterator is only implemented with STAGE_STRING
     // for in-node space efficiency
@@ -627,7 +654,7 @@ struct staged {
           mut, container, key, is_end(), size, p_left_bound);
     }
 
-    void update_size(NodeExtentMutable& mut, node_offset_t insert_size) {
+    void update_size(NodeExtentMutable& mut, int insert_size) {
       assert(!is_end());
       container_t::update_size(mut, container, insert_size);
     }
@@ -764,6 +791,27 @@ struct staged {
       return container_t::trim_at(mut, container, trimmed);
     }
 
+    node_offset_t erase(NodeExtentMutable& mut, const char* p_left_bound) {
+      assert(!is_end());
+      return container_t::erase(mut, container, p_left_bound);
+    }
+
+    template <KeyT KT>
+    typename container_t::template Appender<KT>
+    get_appender(NodeExtentMutable* p_mut) {
+      return typename container_t::template Appender<KT>(p_mut, container, false);
+    }
+
+    template <KeyT KT>
+    typename container_t::template Appender<KT>
+    get_appender_opened(NodeExtentMutable* p_mut) {
+      if constexpr (!IS_BOTTOM) {
+        return typename container_t::template Appender<KT>(p_mut, container, true);
+      } else {
+        ceph_abort("impossible path");
+      }
+    }
+
     void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
       container.encode(p_node_start, encoded);
       uint8_t is_end = _is_end;
@@ -771,8 +819,10 @@ struct staged {
     }
 
     static me_t decode(const char* p_node_start,
+                       extent_len_t node_size,
                        ceph::bufferlist::const_iterator& delta) {
-      auto container = container_t::decode(p_node_start, delta);
+      auto container = container_t::decode(
+          p_node_start, node_size, delta);
       auto ret = me_t(container);
       uint8_t is_end;
       ceph::decode(is_end, delta);
@@ -809,7 +859,7 @@ struct staged {
    *   size() -> node_offset_t
    *   size_overhead() -> node_offset_t
    *   (IS_BOTTOM) get_p_value() -> const value_t*
-   *   (!IS_BOTTOM) get_nxt_container() -> nxt_stage::container_t
+   *   (!IS_BOTTOM) get_nxt_container() -> container_range_t
    *   (!IS_BOTTOM) size_to_nxt() -> node_offset_t
    * seek:
    *   operator++() -> iterator_t&
@@ -833,9 +883,14 @@ struct staged {
    *   copy_out_until(appender, to_index) (can be end)
    *   trim_until(mut) -> trim_size
    *   (!IS_BOTTOM) trim_at(mut, trimmed) -> trim_size
+   * erase:
+   *   erase(mut, p_left_bound) -> erase_size
+   * merge:
+   *   get_appender(p_mut) -> Appender
+   *   (!IS_BOTTOM)get_appender_opened(p_mut) -> Appender
    * denc:
    *   encode(p_node_start, encoded)
-   *   decode(p_node_start, delta) -> iterator_t
+   *   decode(p_node_start, node_size, delta) -> iterator_t
    * static:
    *   header_size() -> node_offset_t
    *   estimate_insert(key, value) -> node_offset_t
@@ -855,6 +910,24 @@ struct staged {
   /*
    * Lookup internals (hide?)
    */
+
+  static bool is_keys_one(
+      const container_t& container) {      // IN
+    auto iter = iterator_t(container);
+    iter.seek_last();
+    if (iter.index() == 0) {
+      if constexpr (IS_BOTTOM) {
+        // ok, there is only 1 key
+        return true;
+      } else {
+        auto nxt_container = iter.get_nxt_container();
+        return NXT_STAGE_T::is_keys_one(nxt_container);
+      }
+    } else {
+      // more than 1 keys
+      return false;
+    }
+  }
 
   template <bool GET_KEY>
   static result_t smallest_result(
@@ -1234,7 +1307,7 @@ struct staged {
     char* p_insert = const_cast<char*>(range.p_end);
     const value_t* p_value = nullptr;
     StagedAppender<KT> appender;
-    appender.init(&mut, p_insert);
+    appender.init_empty(&mut, p_insert);
     appender.append(key, value, p_value);
     [[maybe_unused]] const char* p_insert_front = appender.wrap();
     assert(p_insert_front == range.p_start);
@@ -1476,6 +1549,49 @@ struct staged {
     }
   }
 
+  template <bool GET_KEY, bool GET_VAL>
+  static void get_prev_slot(
+      const container_t& container,         // IN
+      position_t& pos,                      // IN&OUT
+      full_key_t<KeyT::VIEW>* p_index_key,  // OUT
+      const value_t** pp_value) {           // OUT
+    assert(pos != position_t::begin());
+    assert(!pos.is_end());
+    auto& index = pos.index;
+    auto iter = iterator_t(container);
+    if constexpr (!IS_BOTTOM) {
+      auto& nxt_pos = pos.nxt;
+      if (nxt_pos == NXT_STAGE_T::position_t::begin()) {
+        assert(index);
+        --index;
+        iter.seek_at(index);
+        auto nxt_container = iter.get_nxt_container();
+        NXT_STAGE_T::template get_largest_slot<true, GET_KEY, GET_VAL>(
+            nxt_container, &nxt_pos, p_index_key, pp_value);
+      } else {
+        iter.seek_at(index);
+        auto nxt_container = iter.get_nxt_container();
+        NXT_STAGE_T::template get_prev_slot<GET_KEY, GET_VAL>(
+            nxt_container, nxt_pos, p_index_key, pp_value);
+      }
+    } else {
+      assert(index);
+      --index;
+      iter.seek_at(index);
+      if constexpr (GET_VAL) {
+        assert(pp_value);
+        *pp_value = iter.get_p_value();
+      } else {
+        assert(!pp_value);
+      }
+    }
+    if constexpr (GET_KEY) {
+      p_index_key->set(iter.get_key());
+    } else {
+      assert(!p_index_key);
+    }
+  }
+
   struct _BaseEmpty {};
   class _BaseWithNxtIterator {
    protected:
@@ -1492,6 +1608,7 @@ struct staged {
     bool is_end() const { return iter->is_end(); }
     bool in_progress() const {
       assert(valid());
+      assert(!is_end());
       if constexpr (!IS_BOTTOM) {
         if (this->_nxt.valid()) {
           if (this->_nxt.index() == 0) {
@@ -1594,14 +1711,17 @@ struct staged {
       }
     }
     static StagedIterator decode(const char* p_node_start,
+                                 extent_len_t node_size,
                                  ceph::bufferlist::const_iterator& delta) {
       StagedIterator ret;
       uint8_t present;
       ceph::decode(present, delta);
       if (present) {
-        ret.iter = iterator_t::decode(p_node_start, delta);
+        ret.iter = iterator_t::decode(
+            p_node_start, node_size, delta);
         if constexpr (!IS_BOTTOM) {
-          ret._nxt = NXT_STAGE_T::StagedIterator::decode(p_node_start, delta);
+          ret._nxt = NXT_STAGE_T::StagedIterator::decode(
+              p_node_start, node_size, delta);
         }
       }
       return ret;
@@ -1851,10 +1971,35 @@ struct staged {
     }
     bool in_progress() const { return require_wrap_nxt; }
     // TODO: pass by reference
-    void init(NodeExtentMutable* p_mut, char* p_start) {
+    void init_empty(NodeExtentMutable* p_mut, char* p_start) {
       assert(!valid());
       appender = typename container_t::template Appender<KT>(p_mut, p_start);
       _index = 0;
+    }
+    void init_tail(NodeExtentMutable* p_mut,
+                   const container_t& container,
+                   match_stage_t stage) {
+      assert(!valid());
+      auto iter = iterator_t(container);
+      iter.seek_last();
+      if (stage == STAGE) {
+        appender = iter.template get_appender<KT>(p_mut);
+        _index = iter.index() + 1;
+        if constexpr (!IS_BOTTOM) {
+          assert(!this->_nxt.valid());
+        }
+      } else {
+        assert(stage < STAGE);
+        if constexpr (!IS_BOTTOM) {
+          appender = iter.template get_appender_opened<KT>(p_mut);
+          _index = iter.index();
+          require_wrap_nxt = true;
+          auto nxt_container = iter.get_nxt_container();
+          this->_nxt.init_tail(p_mut, nxt_container, stage);
+        } else {
+          ceph_abort("impossible path");
+        }
+      }
     }
     // possible to make src_iter end if to_index == INDEX_END
     void append_until(StagedIterator& src_iter, index_t& to_index) {
@@ -1901,7 +2046,7 @@ struct staged {
       if constexpr (!IS_BOTTOM) {
         require_wrap_nxt = true;
         auto [p_mut, p_append] = appender->open_nxt(paritial_key);
-        this->_nxt.init(p_mut, p_append);
+        this->_nxt.init_empty(p_mut, p_append);
         return this->_nxt;
       } else {
         ceph_abort("impossible path");
@@ -1913,7 +2058,7 @@ struct staged {
       if constexpr (!IS_BOTTOM) {
         require_wrap_nxt = true;
         auto [p_mut, p_append] = appender->open_nxt(key);
-        this->_nxt.init(p_mut, p_append);
+        this->_nxt.init_empty(p_mut, p_append);
         return this->_nxt;
       } else {
         ceph_abort("impossible path");
@@ -1965,7 +2110,7 @@ struct staged {
         // cannot append the current item as-a-whole
         index_t to_index_nxt = INDEX_END;
         NXT_STAGE_T::template _append_range<KT>(
-            src_iter.nxt(), appender.open_nxt(src_iter.get_key()), to_index_nxt);
+            src_iter.get_nxt(), appender.open_nxt(src_iter.get_key()), to_index_nxt);
         ++src_iter;
         appender.wrap_nxt();
       } else {
@@ -2109,6 +2254,118 @@ struct staged {
       assert(trim_at.valid());
       auto& iter = trim_at.get();
       iter.trim_until(mut);
+    }
+  }
+
+  static std::optional<std::tuple<match_stage_t, node_offset_t, bool>>
+  proceed_erase_recursively(
+      NodeExtentMutable& mut,
+      const container_t& container,     // IN
+      const char* p_left_bound,         // IN
+      position_t& pos) {                // IN&OUT
+    auto iter = iterator_t(container);
+    auto& index = pos.index;
+    assert(is_valid_index(index));
+    iter.seek_at(index);
+    bool is_last = iter.is_last();
+
+    if constexpr (!IS_BOTTOM) {
+      auto nxt_container = iter.get_nxt_container();
+      auto ret = NXT_STAGE_T::proceed_erase_recursively(
+          mut, nxt_container, p_left_bound, pos.nxt);
+      if (ret.has_value()) {
+        // erased at lower level
+        auto [r_stage, r_erase_size, r_done] = *ret;
+        assert(r_erase_size != 0);
+        iter.update_size(mut, -r_erase_size);
+        if (r_done) {
+          // done, the next_pos is calculated
+          return ret;
+        } else {
+          if (is_last) {
+            // need to find the next pos at upper stage
+            return ret;
+          } else {
+            // done, calculate the next pos
+            ++index;
+            pos.nxt = NXT_STAGE_T::position_t::begin();
+            return {{r_stage, r_erase_size, true}};
+          }
+        }
+      }
+      // not erased at lower level
+    }
+
+    // not erased yet
+    if (index == 0 && is_last) {
+      // need to erase from the upper stage
+      return std::nullopt;
+    } else {
+      auto erase_size = iter.erase(mut, p_left_bound);
+      assert(erase_size != 0);
+      if (is_last) {
+        // need to find the next pos at upper stage
+        return {{STAGE, erase_size, false}};
+      } else {
+        // done, calculate the next pos (should be correct already)
+        if constexpr (!IS_BOTTOM) {
+          assert(pos.nxt == NXT_STAGE_T::position_t::begin());
+        }
+        return {{STAGE, erase_size, true}};
+      }
+    }
+  }
+
+  static match_stage_t erase(
+      NodeExtentMutable& mut,
+      const container_t& node_stage,    // IN
+      position_t& erase_pos) {          // IN&OUT
+    auto p_left_bound = node_stage.p_left_bound();
+    auto ret = proceed_erase_recursively(
+        mut, node_stage, p_left_bound, erase_pos);
+    if (ret.has_value()) {
+      auto [r_stage, r_erase_size, r_done] = *ret;
+      std::ignore = r_erase_size;
+      if (r_done) {
+        assert(!erase_pos.is_end());
+        return r_stage;
+      } else {
+        // erased the last kv
+        erase_pos = position_t::end();
+        return r_stage;
+      }
+    } else {
+      assert(node_stage.keys() == 1);
+      node_stage.erase_at(mut, node_stage, 0, p_left_bound);
+      erase_pos = position_t::end();
+      return STAGE;
+    }
+  }
+
+  static std::tuple<match_stage_t, node_offset_t> evaluate_merge(
+      const full_key_t<KeyT::VIEW>& left_pivot_index,
+      const container_t& right_container) {
+    auto r_iter = iterator_t(right_container);
+    r_iter.seek_at(0);
+    node_offset_t compensate = r_iter.header_size();
+    auto cmp = compare_to<KeyT::VIEW>(left_pivot_index, r_iter.get_key());
+    if (cmp == MatchKindCMP::EQ) {
+      if constexpr (!IS_BOTTOM) {
+        // the index is equal, compensate and look at the lower stage
+        compensate += r_iter.size_to_nxt();
+        auto r_nxt_container = r_iter.get_nxt_container();
+        auto [ret_stage, ret_compensate] = NXT_STAGE_T::evaluate_merge(
+            left_pivot_index, r_nxt_container);
+        compensate += ret_compensate;
+        return {ret_stage, compensate};
+      } else {
+        ceph_abort("impossible path: left_pivot_key == right_first_key");
+      }
+    } else if (cmp == MatchKindCMP::LT) {
+      // ok, do merge here
+      return {STAGE, compensate};
+    } else {
+      ceph_abort("impossible path: left_pivot_key < right_first_key");
     }
   }
 };

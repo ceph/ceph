@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /**
@@ -110,8 +110,6 @@ sort_and_write(rapidjson::Value &d, H &writer, canonical_char_sorter<MyMember>& 
     } cmp_functor{ccs};
         if (!(r = writer.StartObject()))
             break;
-        const auto &o{d.GetObject()};
-        auto b{o.begin()},e{o.end()};
         std::vector<MyMember*> q;
         for (auto &m: d.GetObject())
             q.push_back(&m);
@@ -648,7 +646,7 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,
 RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {
 }
 
-int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
+int RGWGetObj_BlockDecrypt::read_manifest(const DoutPrefixProvider *dpp, bufferlist& manifest_bl) {
   parts_len.clear();
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
@@ -656,11 +654,11 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
     try {
       decode(manifest, miter);
     } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;
     }
     RGWObjManifest::obj_iterator mi;
-    for (mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
+    for (mi = manifest.obj_begin(dpp); mi != manifest.obj_end(dpp); ++mi) {
       if (mi.get_cur_stripe() == 0) {
         parts_len.push_back(0);
       }
@@ -668,7 +666,7 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
     }
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (size_t i = 0; i<parts_len.size(); i++) {
-        ldout(cct, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
+        ldpp_dout(dpp, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
       }
     }
   }
@@ -911,7 +909,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
     if (! req_sse_ca.empty()) {
       if (req_sse_ca != "AES256") {
-        ldout(s->cct, 5) << "ERROR: Invalid value for header "
+        ldpp_dout(s, 5) << "ERROR: Invalid value for header "
                          << "x-amz-server-side-encryption-customer-algorithm"
                          << dendl;
         s->err.message = "The requested encryption algorithm is not valid, must be AES256.";
@@ -919,7 +917,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
           !rgw_transport_is_secure(s->cct, *s->info.env)) {
-        ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
+        ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
 
@@ -928,7 +926,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         key_bin = from_base64(
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY) );
       } catch (...) {
-        ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_encrypt invalid encryption "
+        ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_encrypt invalid encryption "
                          << "key which contains character that is not base64 encoded."
                          << dendl;
         s->err.message = "Requests specifying Server Side Encryption with Customer "
@@ -937,7 +935,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
 
       if (key_bin.size() != AES_256_CBC::AES_256_KEYSIZE) {
-        ldout(s->cct, 5) << "ERROR: invalid encryption key size" << dendl;
+        ldpp_dout(s, 5) << "ERROR: invalid encryption key size" << dendl;
         s->err.message = "Requests specifying Server Side Encryption with Customer "
                          "provided keys must provide an appropriate secret key.";
         return -EINVAL;
@@ -950,7 +948,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       try {
         keymd5_bin = from_base64(keymd5);
       } catch (...) {
-        ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_encrypt invalid encryption key "
+        ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_encrypt invalid encryption key "
                          << "md5 which contains character that is not base64 encoded."
                          << dendl;
         s->err.message = "Requests specifying Server Side Encryption with Customer "
@@ -959,7 +957,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
 
       if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-        ldout(s->cct, 5) << "ERROR: Invalid key md5 size" << dendl;
+        ldpp_dout(s, 5) << "ERROR: Invalid key md5 size" << dendl;
         s->err.message = "Requests specifying Server Side Encryption with Customer "
                          "provided keys must provide an appropriate secret key md5.";
         return -EINVAL;
@@ -971,7 +969,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       key_hash.Final(key_hash_res);
 
       if (memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
-        ldout(s->cct, 5) << "ERROR: Invalid key md5 hash" << dendl;
+        ldpp_dout(s, 5) << "ERROR: Invalid key md5 hash" << dendl;
         s->err.message = "The calculated MD5 hash of the key did not match the hash that was provided.";
         return -EINVAL;
       }
@@ -992,7 +990,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       std::string_view customer_key =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY);
       if (!customer_key.empty()) {
-        ldout(s->cct, 5) << "ERROR: SSE-C encryption request is missing the header "
+        ldpp_dout(s, 5) << "ERROR: SSE-C encryption request is missing the header "
                          << "x-amz-server-side-encryption-customer-algorithm"
                          << dendl;
         s->err.message = "Requests specifying Server Side Encryption with Customer "
@@ -1003,7 +1001,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       std::string_view customer_key_md5 =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5);
       if (!customer_key_md5.empty()) {
-        ldout(s->cct, 5) << "ERROR: SSE-C encryption request is missing the header "
+        ldpp_dout(s, 5) << "ERROR: SSE-C encryption request is missing the header "
                          << "x-amz-server-side-encryption-customer-algorithm"
                          << dendl;
         s->err.message = "Requests specifying Server Side Encryption with Customer "
@@ -1019,7 +1017,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 
       if (s->cct->_conf->rgw_crypt_require_ssl &&
           !rgw_transport_is_secure(s->cct, *s->info.env)) {
-        ldout(s->cct, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
+        ldpp_dout(s, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
 
@@ -1032,7 +1030,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 	std::string_view key_id =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
 	if (key_id.empty()) {
-	  ldout(s->cct, 5) << "ERROR: not provide a valid key id" << dendl;
+	  ldpp_dout(s, 5) << "ERROR: not provide a valid key id" << dendl;
 	  s->err.message = "Server Side Encryption with KMS managed key requires "
 	    "HTTP header x-amz-server-side-encryption-aws-kms-key-id";
 	  return -ERR_INVALID_ACCESS_KEY;
@@ -1046,12 +1044,12 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 	std::string actual_key;
 	res = make_actual_key_from_kms(s->cct, attrs, actual_key);
 	if (res != 0) {
-	  ldout(s->cct, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+	  ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
 	  s->err.message = "Failed to retrieve the actual key, kms-keyid: " + std::string(key_id);
 	  return res;
 	}
 	if (actual_key.size() != AES_256_KEYSIZE) {
-	  ldout(s->cct, 5) << "ERROR: key obtained from key_id:" <<
+	  ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
             key_id << " is not 256 bit size" << dendl;
 	  s->err.message = "KMS provided an invalid key for the given kms-keyid.";
 	  return -ERR_INVALID_ACCESS_KEY;
@@ -1071,7 +1069,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       } else if (req_sse == "AES256") {
 	/* if a default encryption key was provided, we will use it for SSE-S3 */
       } else {
-        ldout(s->cct, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
+        ldpp_dout(s, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
                          << dendl;
         s->err.message = "Server Side Encryption with KMS managed key requires "
 	  "HTTP header x-amz-server-side-encryption : aws:kms or AES256";
@@ -1083,7 +1081,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 	get_crypt_attribute(s->info.env, parts,
 			    X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
       if (!key_id.empty()) {
-        ldout(s->cct, 5) << "ERROR: SSE-KMS encryption request is missing the header "
+        ldpp_dout(s, 5) << "ERROR: SSE-KMS encryption request is missing the header "
                          << "x-amz-server-side-encryption"
                          << dendl;
         s->err.message = "Server Side Encryption with KMS managed key requires "
@@ -1098,7 +1096,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       try {
         master_encryption_key = from_base64(s->cct->_conf->rgw_crypt_default_encryption_key);
       } catch (...) {
-        ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_encrypt invalid default encryption key "
+        ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_encrypt invalid default encryption key "
                          << "which contains character that is not base64 encoded."
                          << dendl;
         s->err.message = "Requests specifying Server Side Encryption with Customer "
@@ -1107,7 +1105,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
 
       if (master_encryption_key.size() != 256 / 8) {
-        ldout(s->cct, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
+        ldpp_dout(s, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
         /* not an error to return; missing encryption does not inhibit processing */
         return 0;
       }
@@ -1145,7 +1143,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
-  ldout(s->cct, 15) << "Encryption mode: " << stored_mode << dendl;
+  ldpp_dout(s, 15) << "Encryption mode: " << stored_mode << dendl;
 
   const char *req_sse = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION", NULL);
   if (nullptr != req_sse && (s->op == OP_GET || s->op == OP_HEAD)) {
@@ -1155,21 +1153,21 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   if (stored_mode == "SSE-C-AES256") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
         !rgw_transport_is_secure(s->cct, *s->info.env)) {
-      ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
+      ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
     const char *req_cust_alg =
         s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
 
     if (nullptr == req_cust_alg)  {
-      ldout(s->cct, 5) << "ERROR: Request for SSE-C encrypted object missing "
+      ldpp_dout(s, 5) << "ERROR: Request for SSE-C encrypted object missing "
                        << "x-amz-server-side-encryption-customer-algorithm"
                        << dendl;
       s->err.message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide a valid encryption algorithm.";
       return -EINVAL;
     } else if (strcmp(req_cust_alg, "AES256") != 0) {
-      ldout(s->cct, 5) << "ERROR: The requested encryption algorithm is not valid, must be AES256." << dendl;
+      ldpp_dout(s, 5) << "ERROR: The requested encryption algorithm is not valid, must be AES256." << dendl;
       s->err.message = "The requested encryption algorithm is not valid, must be AES256.";
       return -ERR_INVALID_ENCRYPTION_ALGORITHM;
     }
@@ -1178,7 +1176,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     try {
       key_bin = from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
     } catch (...) {
-      ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key "
+      ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key "
                        << "which contains character that is not base64 encoded."
                        << dendl;
       s->err.message = "Requests specifying Server Side Encryption with Customer "
@@ -1187,7 +1185,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     }
 
     if (key_bin.size() != AES_256_CBC::AES_256_KEYSIZE) {
-      ldout(s->cct, 5) << "ERROR: Invalid encryption key size" << dendl;
+      ldpp_dout(s, 5) << "ERROR: Invalid encryption key size" << dendl;
       s->err.message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide an appropriate secret key.";
       return -EINVAL;
@@ -1199,7 +1197,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     try {
       keymd5_bin = from_base64(keymd5);
     } catch (...) {
-      ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key md5 "
+      ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key md5 "
                        << "which contains character that is not base64 encoded."
                        << dendl;
       s->err.message = "Requests specifying Server Side Encryption with Customer "
@@ -1209,7 +1207,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
 
     if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-      ldout(s->cct, 5) << "ERROR: Invalid key md5 size " << dendl;
+      ldpp_dout(s, 5) << "ERROR: Invalid key md5 size " << dendl;
       s->err.message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide an appropriate secret key md5.";
       return -EINVAL;
@@ -1237,7 +1235,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   if (stored_mode == "SSE-KMS") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
         !rgw_transport_is_secure(s->cct, *s->info.env)) {
-      ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
+      ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
     /* try to retrieve actual key */
@@ -1245,12 +1243,12 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     std::string actual_key;
     res = reconstitute_actual_key_from_kms(s->cct, attrs, actual_key);
     if (res != 0) {
-      ldout(s->cct, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+      ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
       s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id;
       return res;
     }
     if (actual_key.size() != AES_256_KEYSIZE) {
-      ldout(s->cct, 0) << "ERROR: key obtained from key_id:" <<
+      ldpp_dout(s, 0) << "ERROR: key obtained from key_id:" <<
           key_id << " is not 256 bit size" << dendl;
       s->err.message = "KMS provided an invalid key for the given kms-keyid.";
       return -ERR_INVALID_ACCESS_KEY;
@@ -1271,7 +1269,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     try {
       master_encryption_key = from_base64(std::string(s->cct->_conf->rgw_crypt_default_encryption_key));
     } catch (...) {
-      ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_decrypt invalid default encryption key "
+      ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_decrypt invalid default encryption key "
                        << "which contains character that is not base64 encoded."
                        << dendl;
       s->err.message = "The default encryption key is not valid base64.";
@@ -1279,12 +1277,12 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     }
 
     if (master_encryption_key.size() != 256 / 8) {
-      ldout(s->cct, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
+      ldpp_dout(s, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
       return -EIO;
     }
     std::string attr_key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
     if (attr_key_selector.size() != AES_256_CBC::AES_256_KEYSIZE) {
-      ldout(s->cct, 0) << "ERROR: missing or invalid " RGW_ATTR_CRYPT_KEYSEL << dendl;
+      ldpp_dout(s, 0) << "ERROR: missing or invalid " RGW_ATTR_CRYPT_KEYSEL << dendl;
       return -EIO;
     }
     uint8_t actual_key[AES_256_KEYSIZE];

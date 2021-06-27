@@ -102,6 +102,14 @@ struct ceph_statx {
  */
 #define CEPH_REQ_FLAG_MASK		(AT_SYMLINK_NOFOLLOW|AT_NO_ATTR_SYNC)
 
+/* fallocate mode flags */
+#ifndef FALLOC_FL_KEEP_SIZE
+#define FALLOC_FL_KEEP_SIZE 0x01
+#endif
+#ifndef FALLOC_FL_PUNCH_HOLE
+#define FALLOC_FL_PUNCH_HOLE 0x02
+#endif
+
 /* delegation recalls */
 typedef void (*ceph_deleg_cb_t)(Fh *fh, void *priv);
 

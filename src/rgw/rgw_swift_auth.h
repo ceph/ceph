@@ -42,7 +42,7 @@ class TempURLEngine : public rgw::auth::Engine {
   using result_t = rgw::auth::Engine::result_t;
 
   CephContext* const cct;
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
@@ -60,7 +60,7 @@ class TempURLEngine : public rgw::auth::Engine {
 
 public:
   TempURLEngine(CephContext* const cct,
-                rgw::sal::RGWStore* _store ,
+                rgw::sal::Store* _store ,
                 const TempURLApplier::Factory* const apl_factory)
     : cct(cct),
       store(_store),
@@ -81,7 +81,7 @@ class SignedTokenEngine : public rgw::auth::Engine {
   using result_t = rgw::auth::Engine::result_t;
 
   CephContext* const cct;
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   const rgw::auth::TokenExtractor* const extractor;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
@@ -93,7 +93,7 @@ class SignedTokenEngine : public rgw::auth::Engine {
 
 public:
   SignedTokenEngine(CephContext* const cct,
-                    rgw::sal::RGWStore* _store,
+                    rgw::sal::Store* _store,
                     const rgw::auth::TokenExtractor* const extractor,
                     const rgw::auth::LocalApplier::Factory* const apl_factory)
     : cct(cct),
@@ -118,7 +118,7 @@ class ExternalTokenEngine : public rgw::auth::Engine {
   using result_t = rgw::auth::Engine::result_t;
 
   CephContext* const cct;
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   const rgw::auth::TokenExtractor* const extractor;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
@@ -129,7 +129,7 @@ class ExternalTokenEngine : public rgw::auth::Engine {
 
 public:
   ExternalTokenEngine(CephContext* const cct,
-                      rgw::sal::RGWStore* _store,
+                      rgw::sal::Store* _store,
                       const rgw::auth::TokenExtractor* const extractor,
                       const rgw::auth::LocalApplier::Factory* const apl_factory)
     : cct(cct),
@@ -185,7 +185,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::RemoteApplier::Factory,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::swift::TempURLApplier::Factory {
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   ImplicitTenants& implicit_tenant_context;
 
   /* The engines. */
@@ -246,7 +246,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
 public:
   DefaultStrategy(CephContext* const cct,
                   ImplicitTenants& implicit_tenant_context,
-                  rgw::sal::RGWStore* _store)
+                  rgw::sal::Store* _store)
     : store(_store),
       implicit_tenant_context(implicit_tenant_context),
       tempurl_engine(cct,
@@ -315,7 +315,7 @@ public:
   ~RGWHandler_SWIFT_Auth() override {}
   RGWOp *op_get() override;
 
-  int init(rgw::sal::RGWStore *store, struct req_state *state, rgw::io::BasicClient *cio) override;
+  int init(rgw::sal::Store* store, struct req_state *state, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield) override { return 0; }
   int read_permissions(RGWOp *op, optional_yield) override { return 0; }
@@ -335,7 +335,7 @@ public:
     return this;
   }
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
 			       struct req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {

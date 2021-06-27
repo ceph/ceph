@@ -1,4 +1,4 @@
-Sphinx == 3.2.1
+Sphinx == 3.5.4
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
 breathe >= 4.20.0
 Jinja2
@@ -8,7 +8,7 @@ pcpp
 prettytable
 sphinx-autodoc-typehints
 sphinx-prompt
-sphinx_rtd_theme
+sphinx_rtd_theme == 0.5.2
 Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-openapi

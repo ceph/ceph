@@ -4134,7 +4134,7 @@ public:
   }
 
   void finish(int r) override {
-    BackTrace *bt = new BackTrace(1);
+    BackTrace *bt = new ClibBackTrace(1);
     generic_dout(-1) << "FileStore: sync_entry timed out after "
 	   << m_commit_timeo << " seconds.\n";
     bt->print(*_dout);
@@ -4271,7 +4271,7 @@ void FileStore::sync_entry()
       dout(10) << __FUNC__ << ": commit took " << lat << ", interval was " << dur << dendl;
       utime_t max_pause_lat = logger->tget(l_filestore_sync_pause_max_lat);
       if (max_pause_lat < utime_t{dur - lat}) {
-        logger->tinc(l_filestore_sync_pause_max_lat, dur - lat);
+        logger->tset(l_filestore_sync_pause_max_lat, utime_t{dur - lat});
       }
 
       logger->inc(l_filestore_commitcycle);
@@ -4987,7 +4987,17 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
   }
 
   struct dirent *de = nullptr;
-  while ((de = ::readdir(dir))) {
+  while (true) {
+    errno = 0;
+    de = ::readdir(dir);
+    if (de == nullptr) {
+      if (errno != 0) {
+        r = -errno;
+        derr << "readdir failed " << fn << ": " << cpp_strerror(-r) << dendl;
+        if (r == -EIO && m_filestore_fail_eio) handle_eio();
+      }
+      break;
+    }
     if (de->d_type == DT_UNKNOWN) {
       // d_type not supported (non-ext[234], btrfs), must stat
       struct stat sb;

@@ -12,6 +12,7 @@
  */
 
 #include <Python.h>
+#include <boost/algorithm/string/replace.hpp>
 
 #include "common/errno.h"
 #include "common/signal.h"
@@ -75,6 +76,7 @@ const char** MgrStandby::get_tracked_conf_keys() const
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
+    "mgr_standby_modules",
     "host",
     "fsid",
     NULL
@@ -97,12 +99,25 @@ void MgrStandby::handle_conf_change(
       changed.count("fsid")) {
     _update_log_config();
   }
+  if (changed.count("mgr_standby_modules") && !active_mgr) {
+    if (g_conf().get_val<bool>("mgr_standby_modules") != py_module_registry.have_standby_modules()) {
+      dout(1) << "mgr_standby_modules now "
+	      << (int)g_conf().get_val<bool>("mgr_standby_modules")
+	      << ", standby modules are "
+	      << (py_module_registry.have_standby_modules() ? "":"not ")
+	      << "active, respawning"
+	      << dendl;
+      respawn();
+    }
+  }
 }
 
 int MgrStandby::init()
 {
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
+
+  cct->_conf.add_observer(this);
 
   std::lock_guard l(lock);
 
@@ -244,6 +259,12 @@ void MgrStandby::send_beacon()
       std::vector<MonCommand> commands = mgr_commands;
       std::vector<MonCommand> py_commands = py_module_registry.get_commands();
       commands.insert(commands.end(), py_commands.begin(), py_commands.end());
+      if (monc.monmap.min_mon_release < ceph_release_t::quincy) {
+	dout(10) << " stripping out positional=false quincy-ism" << dendl;
+	for (auto& i : commands) {
+	  boost::replace_all(i.cmdstring, ",positional=false", "");
+	}
+      }
       m->set_command_descs(commands);
       dout(4) << "going active, including " << m->get_command_descs().size()
               << " commands in beacon" << dendl;
@@ -425,7 +446,8 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
     if (map.active_gid != 0 && map.active_name != g_conf()->name.get_id()) {
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
-      if (!py_module_registry.is_standby_running()) {
+      if (!py_module_registry.is_standby_running() &&
+	  g_conf().get_val<bool>("mgr_standby_modules")) {
         py_module_registry.standby_start(monc, finisher);
       }
     }

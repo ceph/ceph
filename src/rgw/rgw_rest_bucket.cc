@@ -150,7 +150,7 @@ void RGWOp_Bucket_Link::execute(optional_yield y)
   op_state.set_new_bucket_name(new_bucket_name);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -188,7 +188,7 @@ void RGWOp_Bucket_Unlink::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
 
   bufferlist data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -214,12 +214,14 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
 {
   std::string bucket_name;
   bool delete_children;
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
 
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
 
-  op_ret = store->get_bucket(s, nullptr, string(), bucket_name, &bucket, y);
+  /* FIXME We're abusing the owner of the bucket to pass the user, so that it can be forwarded to
+   * the master.  This user is actually the OP caller, not the bucket owner. */
+  op_ret = store->get_bucket(s, s->user.get(), string(), bucket_name, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
     return;
@@ -282,7 +284,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
     }
   }
   if (use_http_params) {
-    std::unique_ptr<rgw::sal::RGWBucket> bucket;
+    std::unique_ptr<rgw::sal::Bucket> bucket;
     op_ret = store->get_bucket(s, nullptr, uid.tenant, bucket_name, &bucket, s->yield);
     if (op_ret < 0) {
       return;

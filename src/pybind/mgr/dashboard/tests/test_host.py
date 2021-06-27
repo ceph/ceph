@@ -113,6 +113,8 @@ class HostControllerTest(ControllerTestCase):
             self._get('{}/node1'.format(self.URL_HOST))
             self.assertStatus(200)
             self.assertIn('labels', self.json_body())
+            self.assertIn('status', self.json_body())
+            self.assertIn('addr', self.json_body())
 
     def test_get_3(self):
         mgr.list_servers.return_value = []
@@ -121,6 +123,21 @@ class HostControllerTest(ControllerTestCase):
             self._get('{}/node1'.format(self.URL_HOST))
             self.assertStatus(200)
             self.assertIn('labels', self.json_body())
+            self.assertIn('status', self.json_body())
+            self.assertIn('addr', self.json_body())
+
+    @mock.patch('dashboard.controllers.host.add_host')
+    def test_add_host(self, mock_add_host):
+        with patch_orch(True):
+            payload = {
+                'hostname': 'node0',
+                'addr': '192.0.2.0',
+                'labels': 'mon',
+                'status': 'maintenance'
+            }
+            self._post(self.URL_HOST, payload, version='0.1')
+            self.assertStatus(201)
+            mock_add_host.assert_called()
 
     def test_set_labels(self):
         mgr.list_servers.return_value = []
@@ -132,14 +149,16 @@ class HostControllerTest(ControllerTestCase):
             fake_client.hosts.add_label = mock.Mock()
 
             payload = {'update_labels': True, 'labels': ['bbb', 'ccc']}
-            self._put('{}/node0'.format(self.URL_HOST), payload)
+            self._put('{}/node0'.format(self.URL_HOST), payload, version='0.1')
             self.assertStatus(200)
+            self.assertHeader('Content-Type',
+                              'application/vnd.ceph.api.v0.1+json')
             fake_client.hosts.remove_label.assert_called_once_with('node0', 'aaa')
             fake_client.hosts.add_label.assert_called_once_with('node0', 'ccc')
 
             # return 400 if type other than List[str]
             self._put('{}/node0'.format(self.URL_HOST), {'update_labels': True,
-                                                         'labels': 'ddd'})
+                                                         'labels': 'ddd'}, version='0.1')
             self.assertStatus(400)
 
     def test_host_maintenance(self):
@@ -150,22 +169,25 @@ class HostControllerTest(ControllerTestCase):
         ]
         with patch_orch(True, hosts=orch_hosts):
             # enter maintenance mode
-            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True})
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True}, version='0.1')
             self.assertStatus(200)
+            self.assertHeader('Content-Type',
+                              'application/vnd.ceph.api.v0.1+json')
 
             # force enter maintenance mode
-            self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True, 'force': True})
+            self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True, 'force': True},
+                      version='0.1')
             self.assertStatus(200)
 
             # exit maintenance mode
-            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True})
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True}, version='0.1')
             self.assertStatus(200)
-            self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True})
+            self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True}, version='0.1')
             self.assertStatus(200)
 
         # maintenance without orchestrator service
         with patch_orch(False):
-            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True})
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True}, version='0.1')
             self.assertStatus(503)
 
     @mock.patch('dashboard.controllers.host.time')

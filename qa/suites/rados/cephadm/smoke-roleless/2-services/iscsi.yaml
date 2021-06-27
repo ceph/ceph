@@ -1,7 +1,0 @@
-tasks:
-- cephadm.shell:
-    host.a:
-      - ceph osd pool create foo
-      - rbd pool init foo
-      - ceph orch apply iscsi foo u p
-      - sleep 120

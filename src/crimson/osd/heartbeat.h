@@ -189,7 +189,7 @@ class Heartbeat::Connection {
   void accepted(crimson::net::ConnectionRef);
   void replaced();
   void reset();
-  seastar::future<> send(MessageRef msg);
+  seastar::future<> send(MessageURef msg);
   void validate();
   // retry connection if still pending
   void retry();

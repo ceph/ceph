@@ -14,8 +14,8 @@ Requirements
 -  NFS-Ganesha server host connected to the Ceph public network
 
 .. note::
-   Ceph packages should preferably be latest stable luminous or a higher
-   version and NFS-Ganesha packages must be v2.5 stable or higher versions.
+   It is recommended to use 3.5 or later stable version of NFS-Ganesha
+   packages with pacific (16.2.x) or later stable version of Ceph packages.
 
 Configuring NFS-Ganesha to export CephFS
 ========================================
@@ -73,12 +73,6 @@ following conventions work on Linux and some Unix platforms:
 .. code:: bash
 
     mount -t nfs -o nfsvers=4.1,proto=tcp <ganesha-host-name>:<ganesha-pseudo-path> <mount-point>
-
-Current limitations
-===================
-
-- Per running ganesha daemon, FSAL_CEPH_ can only export one Ceph file system
-  although multiple directories in a Ceph file system may be exported.
 
 
 .. _FSAL_CEPH: https://github.com/nfs-ganesha/nfs-ganesha/tree/next/src/FSAL/FSAL_CEPH

@@ -1,4 +1,74 @@
 =========================
+ Tracing Ceph With LTTng
+=========================
+
+Configuring Ceph with LTTng
+===========================
+
+Use -DWITH_LTTNG option (default: ON)::
+
+  ./do_cmake -DWITH_LTTNG=ON
+
+Config option for tracing must be set to true in ceph.conf.
+Following options are currently available::
+
+  bluestore_tracing
+  event_tracing (-DWITH_EVENTTRACE)
+  osd_function_tracing (-DWITH_OSD_INSTRUMENT_FUNCTIONS)
+  osd_objectstore_tracing (actually filestore tracing)
+  rbd_tracing
+  osd_tracing
+  rados_tracing
+  rgw_op_tracing
+  rgw_rados_tracing
+
+Testing Trace
+=============
+
+Start LTTng daemon::
+
+  lttng-sessiond --daemonize
+
+Run vstart cluster with enabling trace options::
+
+  ../src/vstart.sh -d -n -l -e -o "osd_tracing = true"
+
+List available tracepoints::
+
+  lttng list --userspace
+
+You will get something like::
+
+  UST events:
+  -------------
+  PID: 100859 - Name: /path/to/ceph-osd
+      pg:queue_op (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      osd:do_osd_op_post (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      osd:do_osd_op_pre_unknown (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      osd:do_osd_op_pre_copy_from (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      osd:do_osd_op_pre_copy_get (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      ...
+
+Create tracing session, enable tracepoints and start trace::
+
+  lttng create trace-test
+  lttng enable-event --userspace osd:*
+  lttng start
+
+Perform some ceph operatin::
+
+  rados bench -p ec 5 write
+
+Stop tracing and view result::
+
+  lttng stop
+  lttng view
+
+Destroy tracing session::
+
+  lttng destroy
+
+=========================
  Tracing Ceph With Blkin
 =========================
 
@@ -19,45 +89,19 @@ Zipkin_.
 .. _Zipkin: https://zipkin.io/
 
 
-Installing Blkin
-================
-
-You can install Markos Kogias' upstream Blkin_ by hand.::
-
-  cd blkin/
-  make && make install
-
-or build distribution packages using DistroReadyBlkin_, which also comes with
-pkgconfig support. If you choose the latter, then you must generate the
-configure and make files first.::
-
-  cd blkin
-  autoreconf -i
-
-.. _Blkin: https://github.com/marioskogias/blkin
-.. _DistroReadyBlkin: https://github.com/agshew/blkin
-
-
 Configuring Ceph with Blkin
 ===========================
 
-If you built and installed Blkin by hand, rather than building and
-installing packages, then set these variables before configuring
-Ceph.::
+Use -DWITH_BLKIN option (which requires -DWITH_LTTNG)::
 
-  export BLKIN_CFLAGS=-Iblkin/
-  export BLKIN_LIBS=-lzipkin-cpp
+  ./do_cmake -DWITH_LTTNG=ON -DWITH_BLKIN=ON
 
-Blkin support in Ceph is disabled by default, so you may
-want to configure with something like::
+Config option for blkin must be set to true in ceph.conf.
+Following options are currently available::
 
-  ./do_cmake -DWITH_BLKIN=ON
-
-Config option for blkin must be set to true in ceph.conf to get
-traces from rbd through OSDC and OSD::
-
-  rbd_blkin_trace_all = true
-
+  rbd_blkin_trace_all
+  osd_blkin_trace_all
+  osdc_blkin_trace_all
 
 Testing Blkin
 =============
@@ -67,8 +111,7 @@ Ceph already running, and you compiled Ceph with Blkin support but
 you didn't install it. Then launch Ceph with the ``vstart.sh`` script
 in Ceph's src directory so you can see the possible tracepoints.::
 
-  cd src
-  OSD=3 MON=3 RGW=1 ./vstart.sh -n
+  OSD=3 MON=3 RGW=1 ../src/vstart.sh -n -o "rbd_blkin_trace_all"
   lttng list --userspace
 
 You'll see something like the following:::
@@ -91,7 +134,7 @@ You'll see something like the following:::
 
 Next, stop Ceph so that the tracepoints can be enabled.::
 
-  ./stop.sh
+  ../src/stop.sh
 
 Start up an LTTng session and enable the tracepoints.::
 
@@ -103,21 +146,21 @@ Start up an LTTng session and enable the tracepoints.::
 
 Then start up Ceph again.::
 
-  OSD=3 MON=3 RGW=1 ./vstart.sh -n
+  OSD=3 MON=3 RGW=1 ../src/vstart.sh -n -o "rbd_blkin_trace_all"
 
 You may want to check that ceph is up.::
 
-  ./ceph status
+  ceph status
 
 Now put something in using rados, check that it made it, get it back, and remove it.::
 
-  ./ceph osd pool create test-blkin
-  ./rados put test-object-1 ./vstart.sh --pool=test-blkin
-  ./rados -p test-blkin ls
-  ./ceph osd map test-blkin test-object-1
-  ./rados get test-object-1 ./vstart-copy.sh --pool=test-blkin
+  ceph osd pool create test-blkin
+  rados put test-object-1 ../src/vstart.sh --pool=test-blkin
+  rados -p test-blkin ls
+  ceph osd map test-blkin test-object-1
+  rados get test-object-1 ./vstart-copy.sh --pool=test-blkin
   md5sum vstart*
-  ./rados rm test-object-1 --pool=test-blkin
+  rados rm test-object-1 --pool=test-blkin
 
 You could also use the example in ``examples/librados/`` or ``rados bench``.
 
@@ -146,6 +189,9 @@ Download Zipkin Package::
   wget -O zipkin.jar 'https://search.maven.org/remote_content?g=io.zipkin.java&a=zipkin-server&v=LATEST&c=exec'
   java -jar zipkin.jar
 
+Or, launch docker image::
+
+  docker run -d -p 9411:9411 openzipkin/Zipkin
 
 Show Ceph's Blkin Traces in Zipkin-web
 ======================================

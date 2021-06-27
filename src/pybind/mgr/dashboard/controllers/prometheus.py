@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import json
 from datetime import datetime
@@ -19,7 +18,7 @@ class PrometheusReceiver(BaseController):
     """
     notifications = []
 
-    @Endpoint('POST', path='/')
+    @Endpoint('POST', path='/', version=None)
     def fetch_alert(self, **notification):
         notification['notified'] = datetime.now().isoformat()
         notification['id'] = str(len(self.notifications))

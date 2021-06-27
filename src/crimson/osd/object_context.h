@@ -43,14 +43,13 @@ public:
   Ref head; // Ref defined as part of ceph::common::intrusive_lru_base
   ObjectState obs;
   std::optional<SnapSet> ss;
-  bool loaded : 1;
   // the watch / notify machinery rather stays away from the hot and
   // frequented paths. std::map is used mostly because of developer's
   // convenience.
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
-  ObjectContext(const hobject_t &hoid) : obs(hoid), loaded(false) {}
+  ObjectContext(hobject_t hoid) : obs(std::move(hoid)) {}
 
   const hobject_t &get_oid() const {
     return obs.oi.soid;
@@ -58,6 +57,14 @@ public:
 
   bool is_head() const {
     return get_oid().is_head();
+  }
+
+  Ref get_head_obc() const {
+    return head;
+  }
+
+  hobject_t get_head_oid() const {
+    return get_oid().get_head();
   }
 
   const SnapSet &get_ro_ss() const {
@@ -74,14 +81,12 @@ public:
     ceph_assert(is_head());
     obs = std::move(_obs);
     ss = std::move(_ss);
-    loaded = true;
   }
 
   void set_clone_state(ObjectState &&_obs, Ref &&_head) {
     ceph_assert(!is_head());
     obs = std::move(_obs);
     head = _head;
-    loaded = true;
   }
 
   /// pass the provided exception to any waiting consumers of this ObjectContext

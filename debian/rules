@@ -35,6 +35,10 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   extraopts += -DBOOST_J=$(NUMJOBS)
 endif
+ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
+  extraopts += -DWITH_SYSTEM_BOOST=ON
+  extraopts += -DWITH_SYSTEM_PMDK=ON
+endif
 
 %:
 	dh $@ --buildsystem=cmake --with javahelper,python3,systemd --parallel
@@ -120,7 +124,7 @@ override_dh_strip:
 	dh_strip -ppython3-cephfs --dbg-package=python3-cephfs-dbg
 
 override_dh_shlibdeps:
-	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor --exclude=ceph_crypto
 
 override_dh_python3:
 	for binding in rados cephfs rbd rgw; do \

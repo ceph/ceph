@@ -1,7 +1,7 @@
 import errno
 import json
-import re
 import logging
+import re
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
     Optional, Dict, Any, Tuple, NewType, cast
@@ -34,7 +34,9 @@ class CephadmDaemonDeploySpec:
                  extra_files: Optional[Dict[str, Any]] = None,
                  daemon_type: Optional[str] = None,
                  ip: Optional[str] = None,
-                 ports: Optional[List[int]] = None):
+                 ports: Optional[List[int]] = None,
+                 rank: Optional[int] = None,
+                 rank_generation: Optional[int] = None):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -66,6 +68,9 @@ class CephadmDaemonDeploySpec:
         self.final_config: Dict[str, Any] = {}
         self.deps: List[str] = []
 
+        self.rank: Optional[int] = rank
+        self.rank_generation: Optional[int] = rank_generation
+
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
@@ -88,17 +93,22 @@ class CephadmDaemonDeploySpec:
             service_name=dd.service_name(),
             ip=dd.ip,
             ports=dd.ports,
+            rank=dd.rank,
+            rank_generation=dd.rank_generation,
         )
 
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
         return DaemonDescription(
             daemon_type=self.daemon_type,
             daemon_id=self.daemon_id,
+            service_name=self.service_name,
             hostname=self.host,
             status=status,
             status_desc=status_desc,
             ip=self.ip,
             ports=self.ports,
+            rank=self.rank,
+            rank_generation=self.rank_generation,
         )
 
 
@@ -116,16 +126,49 @@ class CephadmService(metaclass=ABCMeta):
         self.mgr: "CephadmOrchestrator" = mgr
 
     def allow_colo(self) -> bool:
+        """
+        Return True if multiple daemons of the same type can colocate on
+        the same host.
+        """
         return False
 
+    def primary_daemon_type(self) -> str:
+        """
+        This is the type of the primary (usually only) daemon to be deployed.
+        """
+        return self.TYPE
+
+    def per_host_daemon_type(self) -> Optional[str]:
+        """
+        If defined, this type of daemon will be deployed once for each host
+        containing one or more daemons of the primary type.
+        """
+        return None
+
+    def ranked(self) -> bool:
+        """
+        If True, we will assign a stable rank (0, 1, ...) and monotonically increasing
+        generation (0, 1, ...) to each daemon we create/deploy.
+        """
+        return False
+
+    def fence_old_ranks(self,
+                        spec: ServiceSpec,
+                        rank_map: Dict[int, Dict[int, Optional[str]]],
+                        num_ranks: int) -> None:
+        assert False
+
     def make_daemon_spec(
-            self, host: str,
+            self,
+            host: str,
             daemon_id: str,
             network: str,
             spec: ServiceSpecs,
             daemon_type: Optional[str] = None,
             ports: Optional[List[int]] = None,
             ip: Optional[str] = None,
+            rank: Optional[int] = None,
+            rank_generation: Optional[int] = None,
     ) -> CephadmDaemonDeploySpec:
         return CephadmDaemonDeploySpec(
             host=host,
@@ -135,6 +178,8 @@ class CephadmService(metaclass=ABCMeta):
             daemon_type=daemon_type,
             ports=ports,
             ip=ip,
+            rank=rank,
+            rank_generation=rank_generation,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -394,7 +439,7 @@ class CephService(CephadmService):
         """
         # despite this mapping entity names to daemons, self.TYPE within
         # the CephService class refers to service types, not daemon types
-        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ha-rgw']:
+        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress']:
             return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
         elif self.TYPE == 'crash':
             if host == "":
@@ -544,6 +589,18 @@ class MonService(CephService):
 
 class MgrService(CephService):
     TYPE = 'mgr'
+
+    def allow_colo(self) -> bool:
+        if self.mgr.get_ceph_option('mgr_standby_modules'):
+            # traditional mgr mode: standby daemons' modules listen on
+            # ports and redirect to the primary.  we must not schedule
+            # multiple mgrs on the same host or else ports will
+            # conflict.
+            return False
+        else:
+            # standby daemons do nothing, and therefore port conflicts
+            # are not a concern.
+            return True
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         """
@@ -832,15 +889,15 @@ class RgwService(CephService):
             force: bool = False,
             known: Optional[List[str]] = None  # output argument
     ) -> HandleCommandResult:
-        # if load balancer (ha-rgw) is present block if only 1 daemon up otherwise ok
+        # if load balancer (ingress) is present block if only 1 daemon up otherwise ok
         # if no load balancer, warn if > 1 daemon, block if only 1 daemon
-        def ha_rgw_present() -> bool:
-            running_ha_rgw_daemons = [
-                daemon for daemon in self.mgr.cache.get_daemons_by_type('ha-rgw') if daemon.status == 1]
+        def ingress_present() -> bool:
+            running_ingress_daemons = [
+                daemon for daemon in self.mgr.cache.get_daemons_by_type('ingress') if daemon.status == 1]
             running_haproxy_daemons = [
-                daemon for daemon in running_ha_rgw_daemons if daemon.daemon_type == 'haproxy']
+                daemon for daemon in running_ingress_daemons if daemon.daemon_type == 'haproxy']
             running_keepalived_daemons = [
-                daemon for daemon in running_ha_rgw_daemons if daemon.daemon_type == 'keepalived']
+                daemon for daemon in running_ingress_daemons if daemon.daemon_type == 'keepalived']
             # check that there is at least one haproxy and keepalived daemon running
             if running_haproxy_daemons and running_keepalived_daemons:
                 return True
@@ -853,7 +910,7 @@ class RgwService(CephService):
 
         # if reached here, there is > 1 rgw daemon.
         # Say okay if load balancer present or force flag set
-        if ha_rgw_present() or force:
+        if ingress_present() or force:
             return HandleCommandResult(0, warn_message, '')
 
         # if reached here, > 1 RGW daemon, no load balancer and no force flag.
@@ -923,7 +980,7 @@ class CephfsMirrorService(CephService):
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': self.get_auth_entity(daemon_spec.daemon_id),
-            'caps': ['mon', 'allow r',
+            'caps': ['mon', 'profile cephfs-mirror',
                      'mds', 'allow r',
                      'osd', 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*',
                      'mgr', 'allow r'],

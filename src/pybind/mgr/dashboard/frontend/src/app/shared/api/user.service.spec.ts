@@ -83,19 +83,22 @@ describe('UserService', () => {
 
   it('should call validatePassword', () => {
     service.validatePassword('foo').subscribe();
-    const req = httpTesting.expectOne('api/user/validate_password?password=foo');
+    const req = httpTesting.expectOne('api/user/validate_password');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ password: 'foo', old_password: null, username: null });
   });
 
   it('should call validatePassword (incl. name)', () => {
     service.validatePassword('foo_bar', 'bar').subscribe();
-    const req = httpTesting.expectOne('api/user/validate_password?password=foo_bar&username=bar');
+    const req = httpTesting.expectOne('api/user/validate_password');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ password: 'foo_bar', username: 'bar', old_password: null });
   });
 
   it('should call validatePassword (incl. old password)', () => {
     service.validatePassword('foo', null, 'foo').subscribe();
-    const req = httpTesting.expectOne('api/user/validate_password?password=foo&old_password=foo');
+    const req = httpTesting.expectOne('api/user/validate_password');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ password: 'foo', old_password: 'foo', username: null });
   });
 });

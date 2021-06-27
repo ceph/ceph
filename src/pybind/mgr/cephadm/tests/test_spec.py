@@ -668,37 +668,24 @@ def test_custom_container_spec_config_json():
         assert key not in config_json
 
 
-def test_HA_RGW_spec():
-    yaml_str = """service_type: ha-rgw
-service_id: haproxy_for_rgw
+def test_ingress_spec():
+    yaml_str = """service_type: ingress
+service_id: rgw.foo
 placement:
   hosts:
     - host1
     - host2
     - host3
 spec:
-  virtual_ip_interface: eth0
-  virtual_ip_address: 192.168.20.1/24
+  virtual_ip: 192.168.20.1/24
+  backend_service: rgw.foo
   frontend_port: 8080
-  ha_proxy_port: 1967
-  ha_proxy_stats_enabled: true
-  ha_proxy_stats_user: admin
-  ha_proxy_stats_password: admin
-  ha_proxy_enable_prometheus_exporter: true
-  ha_proxy_monitor_uri: /haproxy_health
-  keepalived_password: admin
+  monitor_port: 8081
 """
     yaml_file = yaml.safe_load(yaml_str)
     spec = ServiceSpec.from_json(yaml_file)
-    assert spec.service_type == "ha-rgw"
-    assert spec.service_id == "haproxy_for_rgw"
-    assert spec.virtual_ip_interface == "eth0"
-    assert spec.virtual_ip_address == "192.168.20.1/24"
+    assert spec.service_type == "ingress"
+    assert spec.service_id == "rgw.foo"
+    assert spec.virtual_ip == "192.168.20.1/24"
     assert spec.frontend_port == 8080
-    assert spec.ha_proxy_port == 1967
-    assert spec.ha_proxy_stats_enabled is True
-    assert spec.ha_proxy_stats_user == "admin"
-    assert spec.ha_proxy_stats_password == "admin"
-    assert spec.ha_proxy_enable_prometheus_exporter is True
-    assert spec.ha_proxy_monitor_uri == "/haproxy_health"
-    assert spec.keepalived_password == "admin"
+    assert spec.monitor_port == 8081

@@ -3,6 +3,8 @@
 Compatibility and Stability
 ===========================
 
+.. _cephadm-compatibility-with-podman:
+
 Compatibility with Podman Versions
 ----------------------------------
 
@@ -25,6 +27,10 @@ Those versions are expected to work:
 | >= 16.2.1 | False | True  | True  | False | True  |
 +-----------+-------+-------+-------+-------+-------+
 
+.. warning:: 
+  Only podman versions that are 2.0.0 and higher work with Ceph Pacific, with the exception of podman version 2.2.1, which does not work with Ceph Pacific. kubic stable is known to work with Ceph Pacific, but it must be run with a newer kernel.
+
+
 .. _cephadm-stability:
 
 Stability
@@ -38,11 +44,11 @@ changes in the near future:
 
 - RGW
 
-Cephadm support for the following features is still under development:
+Cephadm support for the following features is still under development and may see breaking
+changes in future releases:
 
-- RGW-HA
+- Ingress
 - Cephadm exporter daemon
 - cephfs-mirror
 
 In case you encounter issues, see also :ref:`cephadm-pause`.
-

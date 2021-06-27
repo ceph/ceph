@@ -313,3 +313,17 @@ int ZonedFreelistManager::_read_cfg(cfg_reader_t cfg_reader) {
   }
   return 0;
 }
+
+void ZonedFreelistManager::mark_zones_to_clean_free(
+    const std::set<uint64_t> *zones_to_clean, KeyValueDB *kvdb) {
+  dout(10) << __func__ << dendl;
+
+  KeyValueDB::Transaction txn = kvdb->get_transaction();
+  for (auto zone_num : *zones_to_clean) {
+    ldout(cct, 10) << __func__ << " zone " << zone_num << " is now clean in DB" << dendl;
+
+    zone_state_t zone_state;
+    write_zone_state_to_db(zone_num, zone_state, txn);
+  }
+  kvdb->submit_transaction_sync(txn);
+}

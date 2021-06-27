@@ -12,14 +12,9 @@
  *
  */
 
-#include <boost/type_traits.hpp>
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
+#include <boost/type_traits.hpp>
+
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -42,6 +37,8 @@ namespace fs = std::experimental::filesystem;
 
 // set set_mon_vals()
 #define dout_subsys ceph_subsys_monc
+
+namespace fs = std::filesystem;
 
 using std::cerr;
 using std::cout;
@@ -185,7 +182,7 @@ md_config_t::md_config_t(ConfigValues& values,
 #define OPTION(name, type) \
     {STRINGIFY(name), &ConfigValues::name},
 #define SAFE_OPTION(name, type) OPTION(name, type)
-#include "common/legacy_config_opts.h"
+#include "options/legacy_config_opts.h"
 #undef OPTION
 #undef SAFE_OPTION
   };
@@ -361,7 +358,6 @@ int md_config_t::parse_config_files(ConfigValues& values,
     values.cluster = get_cluster_name(nullptr);
   }
   // open new conf
-  string conffile;
   for (auto& fn : get_conffile_paths(values, conf_files_str, warnings, flags)) {
     bufferlist bl;
     std::string error;
@@ -373,7 +369,7 @@ int md_config_t::parse_config_files(ConfigValues& values,
     int ret = parse_buffer(values, tracker, bl.c_str(), bl.length(), &oss);
     if (ret == 0) {
       parse_error.clear();
-      conffile = fn;
+      conf_path = fn;
       break;
     }
     parse_error = oss.str();
@@ -382,11 +378,11 @@ int md_config_t::parse_config_files(ConfigValues& values,
     }
   }
   // it must have been all ENOENTs, that's the only way we got here
-  if (conffile.empty()) {
+  if (conf_path.empty()) {
     return -ENOENT;
   }
   if (values.cluster.empty()) {
-    values.cluster = get_cluster_name(conffile.c_str());
+    values.cluster = get_cluster_name(conf_path.c_str());
   }
   update_legacy_vals(values);
   return 0;

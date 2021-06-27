@@ -909,9 +909,9 @@ class MDCache {
   // -- mdsmap --
   void handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap);
 
-  int dump_cache() { return dump_cache({}, nullptr); }
-  int dump_cache(std::string_view filename);
-  int dump_cache(Formatter *f);
+  int dump_cache() { return dump_cache({}, nullptr, 0); }
+  int dump_cache(std::string_view filename, double timeout);
+  int dump_cache(Formatter *f, double timeout);
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
   void cache_status(Formatter *f);
@@ -1112,7 +1112,7 @@ class MDCache {
   void handle_dentry_link(const cref_t<MDentryLink> &m);
   void handle_dentry_unlink(const cref_t<MDentryUnlink> &m);
 
-  int dump_cache(std::string_view fn, Formatter *f);
+  int dump_cache(std::string_view fn, Formatter *f, double timeout);
 
   void flush_dentry_work(MDRequestRef& mdr);
   /**
@@ -1143,7 +1143,6 @@ class MDCache {
   std::unique_ptr<PerfCounters> logger;
 
   Filer filer;
-  bool exceeded_size_limit = false;
   std::array<xlist<ClientLease*>, client_lease_pools> client_leases{};
 
   /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */
@@ -1304,6 +1303,8 @@ class MDCache {
 				LogSegment *ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
+
+  void upkeep_main(void);
 
   uint64_t cache_memory_limit;
   double cache_reservation;

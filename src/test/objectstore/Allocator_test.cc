@@ -23,7 +23,7 @@ public:
   AllocTest(): alloc(0) { }
   void init_alloc(int64_t size, uint64_t min_alloc_size) {
     std::cout << "Creating alloc type " << string(GetParam()) << " \n";
-    alloc.reset(Allocator::create(g_ceph_context, string(GetParam()), size,
+    alloc.reset(Allocator::create(g_ceph_context, GetParam(), size,
 				  min_alloc_size));
   }
 
@@ -45,6 +45,23 @@ TEST_P(AllocTest, test_alloc_init)
   blocks = 1024 * 2;
   init_alloc(blocks, 1);
   ASSERT_EQ(alloc->get_free(), (uint64_t) 0);
+}
+
+TEST_P(AllocTest, test_init_add_free)
+{
+  int64_t block_size = 1024;
+  int64_t capacity = 4 * 1024 * block_size;
+
+  {
+    init_alloc(capacity, block_size);
+
+    auto free = alloc->get_free();
+    alloc->init_add_free(block_size, 0);
+    ASSERT_EQ(free, alloc->get_free());
+
+    alloc->init_rm_free(block_size, 0);
+    ASSERT_EQ(free, alloc->get_free());
+  }
 }
 
 TEST_P(AllocTest, test_alloc_min_alloc)
@@ -498,6 +515,47 @@ TEST_P(AllocTest, test_alloc_47883)
   auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
   EXPECT_GT(got, 0);
   EXPECT_EQ(got, 0x630000);
+}
+
+TEST_P(AllocTest, test_alloc_50656_best_fit)
+{
+  uint64_t block = 0x1000;
+  uint64_t size = 0x3b9e400000;
+
+  init_alloc(size, block);
+
+  // too few free extents - causes best fit mode for avls
+  for (size_t i = 0; i < 0x10; i++) {
+    alloc->init_add_free(i * 2 * 0x100000, 0x100000);
+  }
+
+  alloc->init_add_free(0x1e1bd13000, 0x404000);
+
+  PExtentVector extents;
+  auto need = 0x400000;
+  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
+  EXPECT_GT(got, 0);
+  EXPECT_EQ(got, 0x400000);
+}
+
+TEST_P(AllocTest, test_alloc_50656_first_fit)
+{
+  uint64_t block = 0x1000;
+  uint64_t size = 0x3b9e400000;
+
+  init_alloc(size, block);
+
+  for (size_t i = 0; i < 0x10000; i += 2) {
+    alloc->init_add_free(i * 0x100000, 0x100000);
+  }
+
+  alloc->init_add_free(0x1e1bd13000, 0x404000);
+
+  PExtentVector extents;
+  auto need = 0x400000;
+  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
+  EXPECT_GT(got, 0);
+  EXPECT_EQ(got, 0x400000);
 }
 
 INSTANTIATE_TEST_SUITE_P(

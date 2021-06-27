@@ -161,7 +161,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     const std::string& etag,
                                     ceph::real_time *mtime,
                                     ceph::real_time set_mtime,
-                                    rgw::sal::RGWAttrs& attrs,
+                                    rgw::sal::Attrs& attrs,
                                     ceph::real_time delete_at,
                                     const char *if_match,
                                     const char *if_nomatch,
@@ -181,7 +181,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 
   head_obj->set_atomic(&obj_ctx);
 
-  std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
+  std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
 
   /* some object types shouldn't be versioned, e.g., multipart parts */
   obj_op->params.versioning_disabled = !bucket->versioning_enabled();
@@ -318,7 +318,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
+  std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
 
   obj_op->params.versioning_disabled = true;
   obj_op->params.set_mtime = set_mtime;
@@ -328,6 +328,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   obj_op->params.zones_trace = zones_trace;
   obj_op->params.modify_tail = true;
   obj_op->params.attrs = &attrs;
+  obj_op->params.pmeta_placement_rule = &tail_placement_rule;
   r = obj_op->prepare(y);
   if (r < 0) {
     return r;
@@ -365,11 +366,11 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   encode(info, bl);
 
-  std::unique_ptr<rgw::sal::RGWObject> meta_obj =
+  std::unique_ptr<rgw::sal::Object> meta_obj =
     bucket->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
   meta_obj->set_in_extra_data(true);
 
-  r = meta_obj->omap_set_val_by_key(p, bl, true, null_yield);
+  r = meta_obj->omap_set_val_by_key(dpp, p, bl, true, null_yield);
   if (r < 0) {
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
@@ -486,7 +487,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
 }
 
 int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, ceph::real_time *mtime,
-                                    ceph::real_time set_mtime, rgw::sal::RGWAttrs& attrs,
+                                    ceph::real_time set_mtime, rgw::sal::Attrs& attrs,
                                     ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
                                     optional_yield y)
@@ -500,11 +501,11 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     return r;
   }
   head_obj->set_atomic(&obj_ctx);
-  std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
+  std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
   //For Append obj, disable versioning
   obj_op->params.versioning_disabled = true;
   if (cur_manifest) {
-    cur_manifest->append(manifest, store->get_zone());
+    cur_manifest->append(dpp, manifest, store->get_zone());
     obj_op->params.manifest = cur_manifest;
   } else {
     obj_op->params.manifest = &manifest;

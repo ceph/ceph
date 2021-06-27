@@ -3,6 +3,7 @@ import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { HostService } from '~/app/shared/api/host.service';
+import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -20,6 +21,15 @@ export class HostFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   hostnames: string[];
+  addr: string;
+  status: string;
+  allLabels: any;
+
+  messages = new SelectMessages({
+    empty: $localize`There are no labels.`,
+    filter: $localize`Filter or add labels`,
+    add: $localize`Add label`
+  });
 
   constructor(
     private router: Router,
@@ -51,18 +61,26 @@ export class HostFormComponent extends CdForm implements OnInit {
             return this.hostnames && this.hostnames.indexOf(hostname) !== -1;
           })
         ]
-      })
+      }),
+      addr: new FormControl('', {
+        validators: [CdValidators.ip()]
+      }),
+      labels: new FormControl([]),
+      maintenance: new FormControl(false)
     });
   }
 
   submit() {
     const hostname = this.hostForm.get('hostname').value;
+    this.addr = this.hostForm.get('addr').value;
+    this.status = this.hostForm.get('maintenance').value ? 'maintenance' : '';
+    this.allLabels = this.hostForm.get('labels').value;
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('host/' + URLVerbs.CREATE, {
           hostname: hostname
         }),
-        call: this.hostService.create(hostname)
+        call: this.hostService.create(hostname, this.addr, this.allLabels, this.status)
       })
       .subscribe({
         error: () => {

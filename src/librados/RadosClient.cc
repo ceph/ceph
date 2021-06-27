@@ -773,7 +773,7 @@ int librados::RadosClient::blocklist_add(const string& client_address,
 					 uint32_t expire_seconds)
 {
   entity_addr_t addr;
-  if (!addr.parse(client_address.c_str(), 0)) {
+  if (!addr.parse(client_address)) {
     lderr(cct) << "unable to parse address " << client_address << dendl;
     return -EINVAL;
   }

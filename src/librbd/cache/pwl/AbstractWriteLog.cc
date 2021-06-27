@@ -52,7 +52,7 @@ AbstractWriteLog<I>::AbstractWriteLog(
         "tp_pwl", 4, ""),
     m_cache_state(cache_state),
     m_image_ctx(image_ctx),
-    m_log_pool_config_size(DEFAULT_POOL_SIZE),
+    m_log_pool_size(DEFAULT_POOL_SIZE),
     m_image_writeback(image_writeback),
     m_plugin_api(plugin_api),
     m_log_retire_lock(ceph::make_mutex(pwl::unique_lock_name(
@@ -310,16 +310,17 @@ void AbstractWriteLog<I>::log_perf() {
 template <typename I>
 void AbstractWriteLog<I>::periodic_stats() {
   std::lock_guard locker(m_lock);
-  ldout(m_image_ctx.cct, 1) << "STATS: "
-                            << "m_free_log_entries=" << m_free_log_entries << ", "
-                            << "m_log_entries=" << m_log_entries.size() << ", "
-                            << "m_dirty_log_entries=" << m_dirty_log_entries.size() << ", "
-                            << "m_bytes_allocated=" << m_bytes_allocated << ", "
-                            << "m_bytes_cached=" << m_bytes_cached << ", "
-                            << "m_bytes_dirty=" << m_bytes_dirty << ", "
-                            << "bytes available=" << m_bytes_allocated_cap - m_bytes_allocated << ", "
-                            << "m_current_sync_gen=" << m_current_sync_gen << ", "
-                            << "m_flushed_sync_gen=" << m_flushed_sync_gen << ", "
+  ldout(m_image_ctx.cct, 1) << "STATS: m_log_entries=" << m_log_entries.size()
+                            << ", m_dirty_log_entries=" << m_dirty_log_entries.size()
+                            << ", m_free_log_entries=" << m_free_log_entries
+                            << ", m_bytes_allocated=" << m_bytes_allocated
+                            << ", m_bytes_cached=" << m_bytes_cached
+                            << ", m_bytes_dirty=" << m_bytes_dirty
+                            << ", bytes available=" << m_bytes_allocated_cap - m_bytes_allocated
+                            << ", m_first_valid_entry=" << m_first_valid_entry
+                            << ", m_first_free_entry=" << m_first_free_entry
+                            << ", m_current_sync_gen=" << m_current_sync_gen
+                            << ", m_flushed_sync_gen=" << m_flushed_sync_gen
                             << dendl;
 }
 
@@ -509,7 +510,7 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
   ldout(cct,5) << "pwl_path: " << m_cache_state->path << dendl;
 
   m_log_pool_name = m_cache_state->path;
-  m_log_pool_config_size = max(m_cache_state->size, MIN_POOL_SIZE);
+  m_log_pool_size = max(m_cache_state->size, MIN_POOL_SIZE);
 
   if ((!m_cache_state->present) &&
       (access(m_log_pool_name.c_str(), F_OK) == 0)) {
@@ -529,7 +530,10 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
     on_finish->complete(-errno);
   }
 
-  initialize_pool(on_finish, later);
+  bool succeeded = initialize_pool(on_finish, later);
+  if (!succeeded) {
+    return ;
+  }
 
   ldout(cct,1) << "pool " << m_log_pool_name << " has " << m_total_log_entries
                << " log entries, " << m_free_log_entries << " of which are free."
@@ -1457,10 +1461,10 @@ void AbstractWriteLog<I>::alloc_and_dispatch_io_req(C_BlockIORequestT *req)
 }
 
 template <typename I>
-bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
-      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
-      uint64_t &num_lanes, uint64_t &num_log_entries,
-      uint64_t &num_unpublished_reserves, uint64_t bytes_allocated_cap){
+bool AbstractWriteLog<I>::check_allocation(
+    C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
+    uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
+    uint32_t num_unpublished_reserves) {
   bool alloc_succeeds = true;
   bool no_space = false;
   {
@@ -1484,11 +1488,11 @@ bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
       no_space = true; /* Entries must be retired */
     }
     /* Don't attempt buffer allocate if we've exceeded the "full" threshold */
-    if (m_bytes_allocated + bytes_allocated > bytes_allocated_cap) {
+    if (m_bytes_allocated + bytes_allocated > m_bytes_allocated_cap) {
       if (!req->has_io_waited_for_buffers()) {
         req->set_io_waited_for_buffers(true);
-        ldout(m_image_ctx.cct, 1) << "Waiting for allocation cap (cap="
-                                  << bytes_allocated_cap
+        ldout(m_image_ctx.cct, 5) << "Waiting for allocation cap (cap="
+                                  << m_bytes_allocated_cap
                                   << ", allocated=" << m_bytes_allocated
                                   << ") in write [" << *req << "]" << dendl;
       }

@@ -43,8 +43,13 @@ function detect_ceph_dev_pkgs() {
     fi
 
     source /etc/os-release
-    if [[ "$ID" == "ubuntu" ]] && [[ "$VERSION" =~ .*Xenial*. ]]; then 
-        cmake_opts+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=NO"
+    if [[ "$ID" == "ubuntu" ]]; then
+        case "$VERSION" in
+            *Xenial*)
+                cmake_opts+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF";;
+            *Focal*)
+                cmake_opts+=" -DWITH_SYSTEM_ZSTD=ON";;
+        esac
     fi
     echo "$cmake_opts"
 }

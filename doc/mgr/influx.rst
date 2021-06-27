@@ -2,6 +2,8 @@
 Influx Module 
 =============
 
+.. mgr_module:: influx
+
 The influx module continuously collects and sends time series data to an
 influxdb database.
 
@@ -13,14 +15,14 @@ Enabling
 
 To enable the module, use the following command:
 
-::
+.. prompt:: bash $
 
     ceph mgr module enable influx
 
 If you wish to subsequently disable the module, you can use the equivalent
 *disable* command:
 
-::
+.. prompt:: bash $
 
     ceph mgr module disable influx
 
@@ -34,29 +36,33 @@ credentials.
 
 Set configuration values using the following command:
 
-::
+.. prompt:: bash $
 
     ceph config set mgr mgr/influx/<key> <value>
 
 
-The most important settings are ``hostname``, ``username`` and ``password``.  
+The most important settings are :confval:`mgr/influx/hostname`,
+:confval:`mgr/influx/username` and :confval:`mgr/influx/password`.
 For example, a typical configuration might look like this:
 
-::
+.. prompt:: bash $
 
     ceph config set mgr mgr/influx/hostname influx.mydomain.com
     ceph config set mgr mgr/influx/username admin123
     ceph config set mgr mgr/influx/password p4ssw0rd
     
-Additional optional configuration settings are:
+Following is the list of all configuration settings:
 
-:interval: Time between reports to InfluxDB.  Default 30 seconds.
-:database: InfluxDB database name.  Default "ceph".  You will need to create this database and grant write privileges to the configured username or the username must have admin privileges to create it.  
-:port: InfluxDB server port.  Default 8086
-:ssl: Use https connection for InfluxDB server. Use "true" or "false". Default false
-:verify_ssl: Verify https cert for InfluxDB server. Use "true" or "false". Default true
-:threads: How many worker threads should be spawned for sending data to InfluxDB. Default is 5
-:batch_size: How big batches of data points should be when sending to InfluxDB. Default is 5000
+.. confval:: hostname
+.. confval:: username
+.. confval:: password
+.. confval:: interval
+.. confval:: database
+.. confval:: port
+.. confval:: ssl
+.. confval:: verify_ssl
+.. confval:: threads
+.. confval:: batch_size
 
 ---------
 Debugging 
@@ -65,9 +71,11 @@ Debugging
 By default, a few debugging statements as well as error statements have been set to print in the log files. Users can add more if necessary.
 To make use of the debugging option in the module:
 
-- Add this to the ceph.conf file.::
+- Add this to the ceph.conf file.
 
-    [mgr]
+  .. code-block:: ini
+
+     [mgr]
         debug_mgr = 20  
 
 - Use this command ``ceph influx self-test``.

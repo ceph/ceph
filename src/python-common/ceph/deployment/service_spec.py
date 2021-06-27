@@ -1,31 +1,18 @@
-import errno
 import fnmatch
 import re
 from collections import OrderedDict
 from functools import wraps
 from ipaddress import ip_network, ip_address
 from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
-    NamedTuple
+    NamedTuple, Mapping
 
 import yaml
 
-from ceph.deployment.hostspec import HostSpec
+from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
-
-
-class ServiceSpecValidationError(Exception):
-    """
-    Defining an exception here is a bit problematic, cause you cannot properly catch it,
-    if it was raised in a different mgr module.
-    """
-    def __init__(self,
-                 msg: str,
-                 errno: int = -errno.EINVAL):
-        super(ServiceSpecValidationError, self).__init__(msg)
-        self.errno = errno
 
 
 def assert_valid_host(name: str) -> None:
@@ -37,7 +24,7 @@ def assert_valid_host(name: str) -> None:
             assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
             assert p.match(part), 'name component must include only a-z, 0-9, and -'
     except AssertionError as e:
-        raise ServiceSpecValidationError(str(e))
+        raise SpecValidationError(str(e))
 
 
 def handle_type_error(method: FuncT) -> FuncT:
@@ -47,7 +34,7 @@ def handle_type_error(method: FuncT) -> FuncT:
             return method(cls, *args, **kwargs)
         except (TypeError, AttributeError) as e:
             error_msg = '{}: {}'.format(cls.__name__, e)
-            raise ServiceSpecValidationError(error_msg)
+            raise SpecValidationError(error_msg)
     return cast(FuncT, inner)
 
 
@@ -285,31 +272,31 @@ class PlacementSpec(object):
     def validate(self) -> None:
         if self.hosts and self.label:
             # TODO: a less generic Exception
-            raise ServiceSpecValidationError('Host and label are mutually exclusive')
+            raise SpecValidationError('Host and label are mutually exclusive')
         if self.count is not None and self.count <= 0:
-            raise ServiceSpecValidationError("num/count must be > 1")
+            raise SpecValidationError("num/count must be > 1")
         if self.count_per_host is not None and self.count_per_host < 1:
-            raise ServiceSpecValidationError("count-per-host must be >= 1")
+            raise SpecValidationError("count-per-host must be >= 1")
         if self.count_per_host is not None and not (
                 self.label
                 or self.hosts
                 or self.host_pattern
         ):
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 "count-per-host must be combined with label or hosts or host_pattern"
             )
         if self.count is not None and self.count_per_host is not None:
-            raise ServiceSpecValidationError("cannot combine count and count-per-host")
+            raise SpecValidationError("cannot combine count and count-per-host")
         if (
                 self.count_per_host is not None
                 and self.hosts
                 and any([hs.network or hs.name for hs in self.hosts])
         ):
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 "count-per-host cannot be combined explicit placement with names or networks"
             )
         if self.host_pattern and self.hosts:
-            raise ServiceSpecValidationError('cannot combine host patterns and hosts')
+            raise SpecValidationError('cannot combine host patterns and hosts')
         for h in self.hosts:
             h.validate()
 
@@ -362,7 +349,7 @@ tPlacementSpec(hostname='host2', network='', name='')])
             else:
                 strings = [arg]
         else:
-            raise ServiceSpecValidationError('invalid placement %s' % arg)
+            raise SpecValidationError('invalid placement %s' % arg)
 
         count = None
         count_per_host = None
@@ -397,14 +384,14 @@ tPlacementSpec(hostname='host2', network='', name='')])
 
         labels = [x for x in strings if 'label:' in x]
         if len(labels) > 1:
-            raise ServiceSpecValidationError('more than one label provided: {}'.format(labels))
+            raise SpecValidationError('more than one label provided: {}'.format(labels))
         for l in labels:
             strings.remove(l)
         label = labels[0][6:] if labels else None
 
         host_patterns = strings
         if len(host_patterns) > 1:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'more than one host pattern provided: {}'.format(host_patterns))
 
         ps = PlacementSpec(count=count,
@@ -428,8 +415,8 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container cephadm-exporter ha-rgw cephfs-mirror'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw '.split()
+                          'container cephadm-exporter ingress cephfs-mirror'.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -444,11 +431,14 @@ class ServiceSpec(object):
             'osd': DriveGroupSpec,
             'iscsi': IscsiServiceSpec,
             'alertmanager': AlertManagerSpec,
-            'ha-rgw': HA_RGWSpec,
+            'ingress': IngressSpec,
             'container': CustomContainerSpec,
+            'grafana': MonitoringSpec,
+            'node-exporter': MonitoringSpec,
+            'prometheus': MonitoringSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
-            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
+            raise SpecValidationError('Spec needs a "service_type" key.')
         return ret
 
     def __new__(cls: Type[ServiceSpecT], *args: Any, **kwargs: Any) -> ServiceSpecT:
@@ -532,8 +522,10 @@ class ServiceSpec(object):
         """
 
         if not isinstance(json_spec, dict):
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 f'Service Spec is not an (JSON or YAML) object. got "{str(json_spec)}"')
+
+        json_spec = cls.normalize_json(json_spec)
 
         c = json_spec.copy()
 
@@ -556,6 +548,18 @@ class ServiceSpec(object):
 
         return _cls._from_json_impl(c)  # type: ignore
 
+    @staticmethod
+    def normalize_json(json_spec: dict) -> dict:
+        networks = json_spec.get('networks')
+        if networks is None:
+            return json_spec
+        if isinstance(networks, list):
+            return json_spec
+        if not isinstance(networks, str):
+            raise SpecValidationError(f'Networks ({networks}) must be a string or list of strings')
+        json_spec['networks'] = [networks]
+        return json_spec
+
     @classmethod
     def _from_json_impl(cls: Type[ServiceSpecT], json_spec: dict) -> ServiceSpecT:
         args = {}  # type: Dict[str, Any]
@@ -576,9 +580,12 @@ class ServiceSpec(object):
             n += '.' + self.service_id
         return n
 
-    def get_port_start(self) -> Optional[int]:
+    def get_port_start(self) -> List[int]:
         # If defined, we will allocate and number ports starting at this
         # point.
+        return []
+
+    def get_virtual_ip(self) -> Optional[str]:
         return None
 
     def to_json(self):
@@ -608,16 +615,16 @@ class ServiceSpec(object):
 
     def validate(self) -> None:
         if not self.service_type:
-            raise ServiceSpecValidationError('Cannot add Service: type required')
+            raise SpecValidationError('Cannot add Service: type required')
 
         if self.service_type in self.REQUIRES_SERVICE_ID:
             if not self.service_id:
-                raise ServiceSpecValidationError('Cannot add Service: id required')
+                raise SpecValidationError('Cannot add Service: id required')
             if not re.match('^[a-zA-Z0-9_.-]+$', self.service_id):
-                raise ServiceSpecValidationError('Service id contains invalid characters, '
-                                                 'only [a-zA-Z0-9_.-] allowed')
+                raise SpecValidationError('Service id contains invalid characters, '
+                                          'only [a-zA-Z0-9_.-] allowed')
         elif self.service_id:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                     f'Service of type \'{self.service_type}\' should not contain a service id')
 
         if self.placement is not None:
@@ -625,14 +632,14 @@ class ServiceSpec(object):
         if self.config:
             for k, v in self.config.items():
                 if k in self.MANAGED_CONFIG_OPTIONS:
-                    raise ServiceSpecValidationError(
+                    raise SpecValidationError(
                         f'Cannot set config option {k} in spec: it is managed by cephadm'
                     )
         for network in self.networks or []:
             try:
                 ip_network(network)
             except ValueError as e:
-                raise ServiceSpecValidationError(
+                raise SpecValidationError(
                     f'Cannot parse network {network}: {e}'
                 )
 
@@ -649,23 +656,26 @@ class ServiceSpec(object):
 
     @staticmethod
     def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceSpec') -> Any:
-        return dumper.represent_dict(data.to_json().items())
+        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
 yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
+    DEFAULT_POOL = 'nfs-ganesha'
+
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
-                 pool: Optional[str] = None,
-                 namespace: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 pool: Optional[str] = None,
+                 namespace: Optional[str] = None,
+                 port: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -674,16 +684,23 @@ class NFSServiceSpec(ServiceSpec):
             config=config, networks=networks)
 
         #: RADOS pool where NFS client recovery data is stored.
-        self.pool = pool
+        self.pool = pool or self.DEFAULT_POOL
 
         #: RADOS namespace where NFS client recovery data is stored in the pool.
-        self.namespace = namespace
+        self.namespace = namespace or self.service_id
+
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        if self.port:
+            return [self.port]
+        return []
 
     def validate(self) -> None:
         super(NFSServiceSpec, self).validate()
 
         if not self.pool:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'Cannot add NFS: No Pool specified')
 
     def rados_config_name(self):
@@ -749,8 +766,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_frontend_type = rgw_frontend_type
         self.ssl = ssl
 
-    def get_port_start(self) -> Optional[int]:
-        return self.get_port()
+    def get_port_start(self) -> List[int]:
+        return [self.get_port()]
 
     def get_port(self) -> int:
         if self.rgw_frontend_port:
@@ -759,6 +776,16 @@ class RGWSpec(ServiceSpec):
             return 443
         else:
             return 80
+
+    def validate(self) -> None:
+        super(RGWSpec, self).validate()
+
+        if self.rgw_realm and not self.rgw_zone:
+            raise SpecValidationError(
+                    'Cannot add RGW: Realm specified but no zone specified')
+        if self.rgw_zone and not self.rgw_realm:
+            raise SpecValidationError(
+                    'Cannot add RGW: Zone specified but no realm specified')
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
@@ -805,7 +832,7 @@ class IscsiServiceSpec(ServiceSpec):
         super(IscsiServiceSpec, self).validate()
 
         if not self.pool:
-            raise ServiceSpecValidationError(
+            raise SpecValidationError(
                 'Cannot add ISCSI: No Pool specified')
 
         # Do not need to check for api_user and api_password as they
@@ -828,6 +855,7 @@ class AlertManagerSpec(ServiceSpec):
                  user_data: Optional[Dict[str, Any]] = None,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 port: Optional[int] = None,
                  ):
         assert service_type == 'alertmanager'
         super(AlertManagerSpec, self).__init__(
@@ -850,102 +878,99 @@ class AlertManagerSpec(ServiceSpec):
         #                        added to the default receivers'
         #                        <webhook_configs> configuration.
         self.user_data = user_data or {}
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port(), 9094]
+
+    def get_port(self) -> int:
+        if self.port:
+            return self.port
+        else:
+            return 9093
+
+    def validate(self) -> None:
+        super(AlertManagerSpec, self).validate()
+
+        if self.port == 9094:
+            raise SpecValidationError(
+                'Port 9094 is reserved for AlertManager cluster listen address')
 
 
 yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
 
 
-class HA_RGWSpec(ServiceSpec):
+class IngressSpec(ServiceSpec):
     def __init__(self,
-                 service_type: str = 'ha-rgw',
+                 service_type: str = 'ingress',
                  service_id: Optional[str] = None,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
-                 virtual_ip_interface: Optional[str] = None,
-                 virtual_ip_address: Optional[str] = None,
+                 backend_service: Optional[str] = None,
                  frontend_port: Optional[int] = None,
-                 ha_proxy_port: Optional[int] = None,
-                 ha_proxy_stats_enabled: Optional[bool] = None,
-                 ha_proxy_stats_user: Optional[str] = None,
-                 ha_proxy_stats_password: Optional[str] = None,
-                 ha_proxy_enable_prometheus_exporter: Optional[bool] = None,
-                 ha_proxy_monitor_uri: Optional[str] = None,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
+                 ssl_dh_param: Optional[str] = None,
+                 ssl_ciphers: Optional[List[str]] = None,
+                 ssl_options: Optional[List[str]] = None,
+                 monitor_port: Optional[int] = None,
+                 monitor_user: Optional[str] = None,
+                 monitor_password: Optional[str] = None,
+                 enable_stats: Optional[bool] = None,
                  keepalived_password: Optional[str] = None,
-                 ha_proxy_frontend_ssl_certificate: Optional[str] = None,
-                 ha_proxy_frontend_ssl_port: Optional[int] = None,
-                 ha_proxy_ssl_dh_param: Optional[str] = None,
-                 ha_proxy_ssl_ciphers: Optional[List[str]] = None,
-                 ha_proxy_ssl_options: Optional[List[str]] = None,
-                 haproxy_container_image: Optional[str] = None,
-                 keepalived_container_image: Optional[str] = None,
-                 definitive_host_list: Optional[List[str]] = None
+                 virtual_ip: Optional[str] = None,
+                 virtual_interface_networks: Optional[List[str]] = [],
+                 unmanaged: bool = False,
+                 ssl: bool = False
                  ):
-        assert service_type == 'ha-rgw'
-        super(HA_RGWSpec, self).__init__('ha-rgw', service_id=service_id,
-                                         placement=placement, config=config,
-                                         networks=networks)
-
-        self.virtual_ip_interface = virtual_ip_interface
-        self.virtual_ip_address = virtual_ip_address
+        assert service_type == 'ingress'
+        super(IngressSpec, self).__init__(
+            'ingress', service_id=service_id,
+            placement=placement, config=config,
+            networks=networks
+        )
+        self.backend_service = backend_service
         self.frontend_port = frontend_port
-        self.ha_proxy_port = ha_proxy_port
-        self.ha_proxy_stats_enabled = ha_proxy_stats_enabled
-        self.ha_proxy_stats_user = ha_proxy_stats_user
-        self.ha_proxy_stats_password = ha_proxy_stats_password
-        self.ha_proxy_enable_prometheus_exporter = ha_proxy_enable_prometheus_exporter
-        self.ha_proxy_monitor_uri = ha_proxy_monitor_uri
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.ssl_dh_param = ssl_dh_param
+        self.ssl_ciphers = ssl_ciphers
+        self.ssl_options = ssl_options
+        self.monitor_port = monitor_port
+        self.monitor_user = monitor_user
+        self.monitor_password = monitor_password
         self.keepalived_password = keepalived_password
-        self.ha_proxy_frontend_ssl_certificate = ha_proxy_frontend_ssl_certificate
-        self.ha_proxy_frontend_ssl_port = ha_proxy_frontend_ssl_port
-        self.ha_proxy_ssl_dh_param = ha_proxy_ssl_dh_param
-        self.ha_proxy_ssl_ciphers = ha_proxy_ssl_ciphers
-        self.ha_proxy_ssl_options = ha_proxy_ssl_options
-        self.haproxy_container_image = haproxy_container_image
-        self.keepalived_container_image = keepalived_container_image
-        # placeholder variable. Need definitive list of hosts this service will
-        # be placed on in order to generate keepalived config. Will be populated
-        # when applying spec
-        self.definitive_host_list = []  # type: List[str]
+        self.virtual_ip = virtual_ip
+        self.virtual_interface_networks = virtual_interface_networks or []
+        self.unmanaged = unmanaged
+        self.ssl = ssl
+
+    def get_port_start(self) -> List[int]:
+        return [cast(int, self.frontend_port),
+                cast(int, self.monitor_port)]
+
+    def get_virtual_ip(self) -> Optional[str]:
+        return self.virtual_ip
 
     def validate(self) -> None:
-        super(HA_RGWSpec, self).validate()
+        super(IngressSpec, self).validate()
 
-        if not self.virtual_ip_interface:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: No Virtual IP Interface specified')
-        if not self.virtual_ip_address:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: No Virtual IP Address specified')
-        if not self.frontend_port and not self.ha_proxy_frontend_ssl_certificate:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: No Frontend Port specified')
-        if not self.ha_proxy_port:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: No HA Proxy Port specified')
-        if not self.ha_proxy_stats_enabled:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: Ha Proxy Stats Enabled option not set')
-        if not self.ha_proxy_stats_user:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: No HA Proxy Stats User specified')
-        if not self.ha_proxy_stats_password:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: No HA Proxy Stats Password specified')
-        if not self.ha_proxy_enable_prometheus_exporter:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: HA Proxy Enable Prometheus Exporter option not set')
-        if not self.ha_proxy_monitor_uri:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: No HA Proxy Monitor Uri specified')
-        if not self.keepalived_password:
-            raise ServiceSpecValidationError(
-                'Cannot add ha-rgw: No Keepalived Password specified')
-        if self.ha_proxy_frontend_ssl_certificate:
-            if not self.ha_proxy_frontend_ssl_port:
-                raise ServiceSpecValidationError(
-                    'Cannot add ha-rgw: Specified Ha Proxy Frontend SSL ' +
-                    'Certificate but no SSL Port')
+        if not self.backend_service:
+            raise SpecValidationError(
+                'Cannot add ingress: No backend_service specified')
+        if not self.frontend_port:
+            raise SpecValidationError(
+                'Cannot add ingress: No frontend_port specified')
+        if not self.monitor_port:
+            raise SpecValidationError(
+                'Cannot add ingress: No monitor_port specified')
+        if not self.virtual_ip:
+            raise SpecValidationError(
+                'Cannot add ingress: No virtual_ip provided')
+
+
+yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
 
 
 class CustomContainerSpec(ServiceSpec):
@@ -1013,3 +1038,37 @@ class CustomContainerSpec(ServiceSpec):
 
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
+
+
+class MonitoringSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str,
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 port: Optional[int] = None,
+                 ):
+        assert service_type in ['grafana', 'node-exporter', 'prometheus']
+
+        super(MonitoringSpec, self).__init__(
+            service_type, service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only, config=config,
+            networks=networks)
+
+        self.service_type = service_type
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port()]
+
+    def get_port(self) -> int:
+        if self.port:
+            return self.port
+        else:
+            return {'prometheus': 9095,
+                    'node-exporter': 9100,
+                    'grafana': 3000}[self.service_type]

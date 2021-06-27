@@ -69,7 +69,6 @@ struct collection_manager_test_t :
     auto t = tm->create_transaction();
     checking_mappings(coll_root, *t);
   }
-
 };
 
 TEST_F(collection_manager_test_t, basic)
@@ -79,7 +78,7 @@ TEST_F(collection_manager_test_t, basic)
     {
       auto t = tm->create_transaction();
       coll_root = collection_manager->mkfs(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     {
       auto t = tm->create_transaction();
@@ -89,7 +88,7 @@ TEST_F(collection_manager_test_t, basic)
         test_coll_mappings.emplace(cid, coll_info_t(i));
       }
       checking_mappings(coll_root, *t);
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
       EXPECT_EQ(test_coll_mappings.size(), 20);
     }
 
@@ -101,13 +100,13 @@ TEST_F(collection_manager_test_t, basic)
         collection_manager->remove(coll_root, *t, ite.first).unsafe_get0();
         test_coll_mappings.erase(ite.first);
       }
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     replay();
     {
       auto t = tm->create_transaction();
       auto list_ret = collection_manager->list(coll_root, *t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
       EXPECT_EQ(list_ret.size(), test_coll_mappings.size());
     }
   });
@@ -120,7 +119,7 @@ TEST_F(collection_manager_test_t, overflow)
     {
       auto t = tm->create_transaction();
       coll_root = collection_manager->mkfs(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     auto old_location = coll_root.get_location();
 
@@ -130,7 +129,7 @@ TEST_F(collection_manager_test_t, overflow)
       collection_manager->create(coll_root, *t, cid, coll_info_t(i)).unsafe_get0();
       test_coll_mappings.emplace(cid, coll_info_t(i));
     }
-    tm->submit_transaction(std::move(t)).unsafe_get();
+    submit_transaction(std::move(t));
     EXPECT_NE(old_location, coll_root.get_location());
     checking_mappings(coll_root);
 
@@ -146,7 +145,7 @@ TEST_F(collection_manager_test_t, update)
     {
       auto t = tm->create_transaction();
       coll_root = collection_manager->mkfs(*t).unsafe_get0();
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     {
       auto t = tm->create_transaction();
@@ -155,7 +154,7 @@ TEST_F(collection_manager_test_t, update)
         collection_manager->create(coll_root, *t, cid, coll_info_t(i)).unsafe_get0();
         test_coll_mappings.emplace(cid, coll_info_t(i));
       }
-      tm->submit_transaction(std::move(t)).unsafe_get();
+      submit_transaction(std::move(t));
     }
     {
        auto iter1= test_coll_mappings.begin();
@@ -163,7 +162,7 @@ TEST_F(collection_manager_test_t, update)
        EXPECT_NE(iter1->second.split_bits, iter2->second.split_bits);
        auto t = tm->create_transaction();
        collection_manager->update(coll_root, *t, iter1->first, iter2->second).unsafe_get0();
-       tm->submit_transaction(std::move(t)).unsafe_get();
+       submit_transaction(std::move(t));
        iter1->second.split_bits = iter2->second.split_bits;
     }
     replay();

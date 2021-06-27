@@ -172,32 +172,46 @@ TEST_F(cls_cas, dup_get)
   bufferlist t;
   ASSERT_EQ(-ENOENT, ioctx.read(oid, t, 0, 0));
 
+  // duplicated entries are allowed by "by_object". as it tracks refs of the same
+  // hobject_t for snapshot support.
+  int n_refs = 0;
   // write
   {
     auto op = new_op();
     cls_cas_chunk_create_or_get_ref(*op, ref1, bl);
     ASSERT_EQ(0, ioctx.operate(oid, op));
+    n_refs++;
   }
   ASSERT_EQ(bl.length(), ioctx.read(oid, t, 0, 0));
 
-  // dup create_or_get_ref, get_ref will succeed but take no additional ref.
+  // dup create_or_get_ref, get_ref will succeed but take no additional ref
+  // only if the chunk_refs' type is not "by_object"
   {
     auto op = new_op();
     cls_cas_chunk_create_or_get_ref(*op, ref1, bl);
     ASSERT_EQ(0, ioctx.operate(oid, op));
+    n_refs++;
   }
   {
     auto op = new_op();
     cls_cas_chunk_get_ref(*op, ref1);
     ASSERT_EQ(0, ioctx.operate(oid, op));
+    n_refs++;
   }
 
-  {
+  for (int i = 0; i < n_refs; i++) {
     auto op = new_op();
     cls_cas_chunk_put_ref(*op, ref1);
     ASSERT_EQ(0, ioctx.operate(oid, op));
+    if (i < n_refs - 1) {
+      // should not referenced anymore, but by_object is an exception
+      // and by_object is used by default.
+      ASSERT_EQ(bl.length(), ioctx.read(oid, t, 0, 0));
+    } else {
+      // the last reference was removed
+      ASSERT_EQ(-ENOENT, ioctx.read(oid, t, 0, 0));
+    }
   }
-  ASSERT_EQ(-ENOENT, ioctx.read(oid, t, 0, 0));
 }
 
 TEST_F(cls_cas, dup_put)

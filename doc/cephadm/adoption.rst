@@ -126,8 +126,8 @@ Adoption process
 
    This will perform a ``cephadm check-host`` on each host before adding it;
    this check ensures that the host is functioning properly. The IP address
-   argument is required only if DNS does not allow you to connect to each host
-   by its short name.
+   argument is recommended; if not provided, then the host name will be resolved
+   via DNS.
 
 #. Verify that the adopted monitor and manager daemons are visible:
 
@@ -189,7 +189,7 @@ Adoption process
 
    .. prompt:: bash #
 
-      ceph orch apply rgw <svc_id> [--rgw-realm=<realm>] [--rgw-zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>]
+      ceph orch apply rgw <svc_id> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>]
 
    where *<placement>* can be a simple daemon count, or a list of
    specific hosts (see :ref:`orchestrator-cli-placement-spec`), and the

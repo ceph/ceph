@@ -1,5 +1,6 @@
 tasks:
 - install:
+    branch: pacific
 - ceph: {cluster: c1}
 - ceph: {cluster: c2}
 - parallel:

@@ -679,6 +679,9 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     size_t len;
     struct fuse_bufvec *bufv;
 
+    if (bl.get_num_buffers() > IOV_MAX)
+      bl.rebuild();
+
     bl.prepare_iov(&iov);
     len = sizeof(struct fuse_bufvec) + sizeof(struct fuse_buf) * (iov.size() - 1);
     bufv = (struct fuse_bufvec *)calloc(1, len);
@@ -1319,6 +1322,26 @@ int CephFuse::Handle::init(int argc, const char *argv[])
 
   ceph_assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
   free(newargv);
+
+  struct ceph_client_callback_args cb_args = {
+    handle: this,
+    ino_cb: client->cct->_conf.get_val<bool>("fuse_use_invalidate_cb") ?
+      ino_invalidate_cb : NULL,
+    dentry_cb: dentry_invalidate_cb,
+    switch_intr_cb: switch_interrupt_cb,
+#if defined(__linux__)
+    remount_cb: remount_cb,
+#endif
+#if !defined(__APPLE__)
+    umask_cb: umask_cb,
+#endif
+  };
+  r = client->ll_register_callbacks2(&cb_args);
+  if (r) {
+    derr << "registering callbacks failed: " << r << dendl;
+    return r;
+  }
+
   return 0;
 }
 
@@ -1359,22 +1382,6 @@ int CephFuse::Handle::start()
 #else
   fuse_session_add_chan(se, ch);
 #endif
-
-
-  struct ceph_client_callback_args args = {
-    handle: this,
-    ino_cb: client->cct->_conf.get_val<bool>("fuse_use_invalidate_cb") ?
-      ino_invalidate_cb : NULL,
-    dentry_cb: dentry_invalidate_cb,
-    switch_intr_cb: switch_interrupt_cb,
-#if defined(__linux__)
-    remount_cb: remount_cb,
-#endif
-#if !defined(__APPLE__)
-    umask_cb: umask_cb,
-#endif
-  };
-  client->ll_register_callbacks(&args);
 
   return 0;
 }

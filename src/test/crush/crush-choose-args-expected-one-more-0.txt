@@ -29,18 +29,18 @@ type 11 root
 # buckets
 host HOST {
 	id -2		# do not change unnecessarily
-	# weight 6.000
+	# weight 6.00000
 	alg straw2
 	hash 0	# rjenkins1
-	item osd.0 weight 3.000
-	item osd.1 weight 3.000
+	item osd.0 weight 3.00000
+	item osd.1 weight 3.00000
 }
 root default {
 	id -1		# do not change unnecessarily
-	# weight 6.000
+	# weight 6.00000
 	alg straw2
 	hash 0	# rjenkins1
-	item HOST weight 6.000
+	item HOST weight 6.00000
 }
 
 # rules
@@ -59,16 +59,16 @@ choose_args 0 {
   {
     bucket_id -1
     weight_set [
-      [ 2.000 ]
-      [ 1.000 ]
+      [ 2.00000 ]
+      [ 1.00000 ]
     ]
     ids [ -10 ]
   }
   {
     bucket_id -2
     weight_set [
-      [ 2.000 0.000 ]
-      [ 1.000 0.000 ]
+      [ 2.00000 0.00000 ]
+      [ 1.00000 0.00000 ]
     ]
     ids [ -20 1 ]
   }

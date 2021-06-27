@@ -1,10 +1,12 @@
 import fileinput
+import glob
 import logging
 import os
 import shutil
 import sys
 import yaml
 import sphinx.util
+
 
 top_level = \
     os.path.dirname(
@@ -118,6 +120,7 @@ extensions = [
     'breathe',
     'ceph_commands',
     'ceph_releases',
+    'ceph_confval',
     'sphinxcontrib.openapi'
     ]
 
@@ -224,6 +227,12 @@ for c in pybinds:
 openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30')
 openapi_logger.setLevel(logging.WARNING)
 
+# ceph_confval
+ceph_confval_imports = glob.glob(os.path.join(top_level,
+                                              'src/common/options',
+                                              '*.yaml.in'))
+ceph_confval_mgr_module_path = 'src/pybind/mgr'
+ceph_confval_mgr_python_path = 'src/pybind'
 
 # handles edit-on-github and old version warning display
 def setup(app):

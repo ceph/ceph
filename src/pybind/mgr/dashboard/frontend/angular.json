@@ -56,6 +56,7 @@
               }
             ],
             "styles": [
+              "node_modules/swagger-ui/dist/swagger-ui.css",
               "node_modules/ngx-toastr/toastr.css",
               "src/styles.scss"
             ],

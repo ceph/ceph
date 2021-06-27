@@ -593,7 +593,7 @@ class JLeaf(namedtuple('JLeaf', ['typ', 'none'])):
 
 JList = namedtuple('JList', ['elem_typ'])
 
-JTuple = namedtuple('JList', ['elem_typs'])
+JTuple = namedtuple('JTuple', ['elem_typs'])
 
 JUnion = namedtuple('JUnion', ['elem_typs'])
 

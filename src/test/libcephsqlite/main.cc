@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 
+#include <stdlib.h>
 #include <string.h>
 
 #include <sqlite3.h>
@@ -1029,6 +1030,32 @@ out:
   sqlite3_finalize(stmt);
   ASSERT_EQ(0, rc);
 }
+
+TEST_F(CephSQLiteTest, CurrentTime) {
+  static const char SQL[] =
+    "SELECT strftime('%s', 'now');"
+    ;
+
+  int rc;
+  const char *current = SQL;
+  sqlite3_stmt *stmt = NULL;
+
+  std::cout << SQL << std::endl;
+  sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
+  sqlcatchcode(sqlite3_step(stmt), SQLITE_ROW);
+  {
+    time_t now = time(0);
+    auto t = sqlite3_column_int64(stmt, 0);
+    ASSERT_LT(abs(now-t), 5);
+  }
+  sqlcatch(sqlite3_finalize(stmt); stmt = NULL);
+
+  rc = 0;
+out:
+  sqlite3_finalize(stmt);
+  ASSERT_EQ(0, rc);
+}
+
 
 TEST_F(CephSQLiteTest, StatusFields) {
   static const char SQL[] =

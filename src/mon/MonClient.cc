@@ -174,8 +174,11 @@ int MonClient::get_monmap_and_config()
       }
       while ((!bootstrap_config || monmap.get_epoch() == 0) && r == 0) {
 	ldout(cct,20) << __func__ << " waiting for monmap|config" << dendl;
-	map_cond.wait_for(l, ceph::make_timespan(
-          cct->_conf->mon_client_hunt_interval));
+	auto status = map_cond.wait_for(l, ceph::make_timespan(
+	    cct->_conf->mon_client_hunt_interval));
+	if (status == std::cv_status::timeout) {
+	  r = -ETIMEDOUT;
+	}
       }
 
       if (bootstrap_config) {
@@ -539,7 +542,11 @@ void MonClient::shutdown()
 
   active_con.reset();
   pending_cons.clear();
+
   auth.reset();
+  global_id = 0;
+  authenticate_err = 0;
+  authenticated = false;
 
   monc_lock.unlock();
 
@@ -569,7 +576,6 @@ int MonClient::authenticate(double timeout)
   until += ceph::make_timespan(timeout);
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
-  authenticate_err = 1;  // == in progress
   while (!active_con && authenticate_err >= 0) {
     if (timeout > 0.0) {
       auto r = auth_cond.wait_until(lock, until);
@@ -670,18 +676,6 @@ void MonClient::_finish_auth(int auth_err)
     _check_auth_tickets();
   }
   auth_cond.notify_all();
-
-  if (!auth_err) {
-    Context *cb = nullptr;
-    if (session_established_context) {
-      cb = session_established_context.release();
-    }
-    if (cb) {
-      monc_lock.unlock();
-      cb->complete(0);
-      monc_lock.lock();
-    }
-  }
 }
 
 // ---------
@@ -714,12 +708,14 @@ void MonClient::_reopen_session(int rank)
   active_con.reset();
   pending_cons.clear();
 
+  authenticate_err = 1;  // == in progress
+
   _start_hunting();
 
   if (rank >= 0) {
-    _add_conn(rank, global_id);
+    _add_conn(rank);
   } else {
-    _add_conns(global_id);
+    _add_conns();
   }
 
   // throw out old queued messages
@@ -741,11 +737,14 @@ void MonClient::_reopen_session(int rank)
   }
 }
 
-void MonClient::_add_conn(unsigned rank, uint64_t global_id)
+void MonClient::_add_conn(unsigned rank)
 {
   auto peer = monmap.get_addrs(rank);
   auto conn = messenger->connect_to_mon(peer);
   MonConnection mc(cct, conn, global_id, &auth_registry);
+  if (auth) {
+    mc.get_auth().reset(auth->clone());
+  }
   pending_cons.insert(std::make_pair(peer, std::move(mc)));
   ldout(cct, 10) << "picked mon." << monmap.get_name(rank)
                  << " con " << conn
@@ -753,7 +752,7 @@ void MonClient::_add_conn(unsigned rank, uint64_t global_id)
                  << dendl;
 }
 
-void MonClient::_add_conns(uint64_t global_id)
+void MonClient::_add_conns()
 {
   // collect the next batch of candidates who are listed right next to the ones
   // already tried
@@ -806,7 +805,7 @@ void MonClient::_add_conns(uint64_t global_id)
     n = ranks.size();
   }
   for (unsigned i = 0; i < n; i++) {
-    _add_conn(ranks[i], global_id);
+    _add_conn(ranks[i]);
     tried.insert(ranks[i]);
   }
 }
@@ -906,7 +905,7 @@ void MonClient::_finish_hunting(int auth_err)
     _resend_mon_commands();
     send_log(true);
     if (active_con) {
-      std::swap(auth, active_con->get_auth());
+      auth = std::move(active_con->get_auth());
       if (global_id && global_id != active_con->get_global_id()) {
 	lderr(cct) << __func__ << " global_id changed from " << global_id
 		   << " to " << active_con->get_global_id() << dendl;
@@ -1103,10 +1102,11 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
 
   ldout(cct, 10) << __func__ << " waiting for " << timeout << dendl;
-  utime_t now = ceph_clock_now();
-  if (auth_cond.wait_for(l, ceph::make_timespan(timeout), [now, this] {
+  utime_t cutoff = ceph_clock_now();
+  cutoff -= std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  if (auth_cond.wait_for(l, ceph::make_timespan(timeout), [this, cutoff] {
     return (!auth_principal_needs_rotating_keys(entity_name) ||
-	    !rotating_secrets->need_new_secrets(now));
+	    !rotating_secrets->need_new_secrets(cutoff));
   })) {
     ldout(cct, 10) << __func__ << " done" << dendl;
     return 0;
@@ -1710,9 +1710,6 @@ int MonConnection::get_auth_request(
     return -EACCES;
   }
 
-  if (auth) {
-    auth.reset();
-  }
   int r = _init_auth(*method, entity_name, want_keys, keyring, true);
   ceph_assert(r == 0);
 
@@ -1833,12 +1830,6 @@ int MonConnection::_negotiate(MAuthReply *m,
 			      uint32_t want_keys,
 			      RotatingKeyRing* keyring)
 {
-  if (auth && (int)m->protocol == auth->get_protocol()) {
-    // good, negotiation completed
-    auth->reset();
-    return 0;
-  }
-
   int r = _init_auth(m->protocol, entity_name, want_keys, keyring, false);
   if (r == -ENOTSUP) {
     if (m->result == -ENOTSUP) {
@@ -1857,9 +1848,15 @@ int MonConnection::_init_auth(
   RotatingKeyRing* keyring,
   bool msgr2)
 {
-  ldout(cct,10) << __func__ << " method " << method << dendl;
-  auth.reset(
-    AuthClientHandler::create(cct, method, keyring));
+  ldout(cct, 10) << __func__ << " method " << method << dendl;
+  if (auth && auth->get_protocol() == (int)method) {
+    ldout(cct, 10) << __func__ << " already have auth, reseting" << dendl;
+    auth->reset();
+    return 0;
+  }
+
+  ldout(cct, 10) << __func__ << " creating new auth" << dendl;
+  auth.reset(AuthClientHandler::create(cct, method, keyring));
   if (!auth) {
     ldout(cct, 10) << " no handler for protocol " << method << dendl;
     return -ENOTSUP;

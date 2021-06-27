@@ -31,6 +31,12 @@ List all file systems by name.
 
 ::
 
+    fs lsflags <file system name>
+
+List all the flags set on a file system.
+
+::
+
     fs dump [epoch]
 
 This dumps the FSMap at the given epoch (default: current) which includes all
@@ -75,6 +81,16 @@ This command removes the specified pool from the list of data pools for the
 file system.  If any files have layouts for the removed data pool, the file
 data will become unavailable. The default data pool (when creating the file
 system) cannot be removed.
+
+::
+
+    fs rename <file system name> <new file system name> [--yes-i-really-mean-it]
+
+Rename a Ceph file system. This also changes the application tags on the data
+pools and metadata pool of the file system to the new file system name.
+The CephX IDs authorized to the old file system name need to be reauthorized
+to the new name. Any on-going operations of the clients using these IDs may be
+disrupted. Mirroring is expected to be disabled on the file system.
 
 
 Settings
@@ -216,30 +232,15 @@ does not change a MDS; it manipulates the file system rank which has been
 marked damaged.
 
 
-Minimum Client Version
-----------------------
+Required Client Features
+------------------------
 
-It is sometimes desirable to set the minimum version of Ceph that a client must be
-running to connect to a CephFS cluster. Older clients may sometimes still be
-running with bugs that can cause locking issues between clients (due to
-capability release). CephFS provides a mechanism to set the minimum
-client version:
+It is sometimes desirable to set features that clients must support to talk to
+CephFS. Clients without those features may disrupt other clients or behave in
+surprising ways. Or, you may want to require newer features to prevent older
+and possibly buggy clients from connecting.
 
-::
-
-    fs set <fs name> min_compat_client <release>
-
-For example, to only allow Nautilus clients, use:
-
-::
-
-    fs set cephfs min_compat_client nautilus
-
-Clients running an older version will be automatically evicted.
-
-Enforcing minimum version of CephFS client is achieved by setting required
-client features. Commands to manipulate required client features of a file
-system:
+Commands to manipulate required client features of a file system:
 
 ::
 
@@ -252,8 +253,9 @@ To list all CephFS features
 
     fs feature ls
 
+Clients that are missing newly added features will be evicted automatically.
 
-CephFS features and first release they came out.
+Here are the current CephFS features and first release they came out:
 
 +------------------+--------------+-----------------+
 | Feature          | Ceph release | Upstream Kernel |
@@ -277,6 +279,8 @@ CephFS features and first release they came out.
 | deleg_ino        | octopus      | 5.6             |
 +------------------+--------------+-----------------+
 | metric_collect   | pacific      | N/A             |
++------------------+--------------+-----------------+
+| alternate_name   | pacific      | PLANNED         |
 +------------------+--------------+-----------------+
 
 CephFS Feature Descriptions
@@ -327,6 +331,13 @@ delegated inode numbers is a prerequisite for client to do async file creation.
     metric_collect
 
 Clients can send performance metric to MDS if MDS support this feature.
+
+::
+
+    alternate_name
+
+Clients can set and understand "alternate names" for directory entries. This is
+to be used for encrypted file name support.
 
 
 Global settings

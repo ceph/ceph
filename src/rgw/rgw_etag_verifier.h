@@ -75,7 +75,8 @@ constexpr auto max_etag_verifier_size = std::max(
   );
 using etag_verifier_ptr = ceph::static_ptr<ETagVerifier, max_etag_verifier_size>;
 
-int create_etag_verifier(CephContext* cct, DataProcessor* next,
+int create_etag_verifier(const DoutPrefixProvider *dpp, 
+                         CephContext* cct, DataProcessor* next,
                          const bufferlist& manifest_bl,
                          const std::optional<RGWCompressionInfo>& compression,
                          etag_verifier_ptr& verifier);

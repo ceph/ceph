@@ -27,9 +27,7 @@ Members
 Premier
 -------
 
-* `Amihan <https://amihan.net>`_
 * `Bloomberg <https://bloomberg.com>`_
-* `Canonical <https://www.canonical.com/>`_
 * `China Mobile <https://www.chinamobileltd.com/>`_
 * `DigitalOcean <https://www.digitalocean.com/>`_
 * `Intel <http://www.intel.com/>`_
@@ -46,7 +44,7 @@ General
 -------
 
 * `ARM <http://www.arm.com/>`_
-* `Catalyst Cloud <https://catalystcloud.nz/>`_
+* `Canonical <https://www.canonical.com/>`_
 * `Cloudbase Solutions <https://cloudbase.it/>`_
 * `Clyso <https://www.clyso.com/en/>`_
 * `croit <http://www.croit.io/>`_
@@ -112,7 +110,6 @@ Members
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
 * Sage Weil (Red Hat) - Ceph project leader
-* Winston Damarillio (Amihan)
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
 

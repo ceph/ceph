@@ -18,26 +18,26 @@ host foo {
      id -3
      alg straw2
      hash 0
-     item osd.0 weight 1.0
-     item osd.1 weight 1.0
-     item osd.2 weight 1.0
+     item osd.0 weight 1.00000
+     item osd.1 weight 1.00000
+     item osd.2 weight 1.00000
 }
 
 host bar {
      id -2
      alg straw2
      hash 0
-     item osd.3 weight 1.0
-     item osd.4 weight 1.0
-     item osd.5 weight 1.0
+     item osd.3 weight 1.00000
+     item osd.4 weight 1.00000
+     item osd.5 weight 1.00000
 }
 
 root default {
      id -1
      alg straw2
      hash 0
-     item foo weight 3.0
-     item bar weight 3.0
+     item foo weight 3.00000
+     item bar weight 3.00000
 }
 
 # rules

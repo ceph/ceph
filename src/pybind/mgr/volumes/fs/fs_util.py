@@ -40,7 +40,7 @@ def create_mds(mgr, fs_name, placement):
                                     service_id=fs_name,
                                     placement=PlacementSpec.from_string(placement))
     try:
-        completion = mgr.apply_mds(spec)
+        completion = mgr.apply([spec], no_overwrite=True)
         orchestrator.raise_if_exception(completion)
     except (ImportError, orchestrator.OrchestratorError):
         return 0, "", "Volume created successfully (no MDS daemons created)"
@@ -122,7 +122,7 @@ def copy_file(fs, src, dst, mode, cancel_check=None):
     """
     src_fd = dst_fd = None
     try:
-        src_fd = fs.open(src, os.O_RDONLY);
+        src_fd = fs.open(src, os.O_RDONLY)
         dst_fd = fs.open(dst, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, mode)
     except cephfs.Error as e:
         if src_fd is not None:

@@ -285,11 +285,11 @@ function auto_repair_erasure_coded() {
             --osd-scrub-min-interval=5 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
-	if [ "$allow_overwrites" = "true" ]; then
+        if [ "$allow_overwrites" = "true" ]; then
             run_osd $dir $id $ceph_osd_args || return 1
-	else
+        else
             run_osd_filestore $dir $id $ceph_osd_args || return 1
-	fi
+        fi
     done
     create_rbd_pool || return 1
     wait_for_clean || return 1
@@ -329,6 +329,127 @@ function TEST_auto_repair_erasure_coded_overwrites() {
     fi
 }
 
+# initiate a scrub, then check for the (expected) 'scrubbing' and the
+# (not expected until an error was identified) 'repair'
+# Arguments: osd#, pg, sleep time
+function initiate_and_fetch_state() {
+    local the_osd="osd.$1"
+    local pgid=$2
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+
+    set_config "osd" "$1" "osd_scrub_sleep"  "$3"
+    set_config "osd" "$1" "osd_scrub_auto_repair" "true"
+
+    flush_pg_stats
+    date  --rfc-3339=ns
+
+    # note: must initiate a "regular" (periodic) deep scrub - not an operator-initiated one
+    env CEPH_ARGS= ceph --format json daemon $(get_asok_path $the_osd) deep_scrub "$pgid"
+    env CEPH_ARGS= ceph --format json daemon $(get_asok_path $the_osd) scrub "$pgid"
+
+    # wait for 'scrubbing' to appear
+    for ((i=0; i < 40; i++)); do
+
+        st=`ceph pg $pgid query --format json | jq '.state' `
+        echo $i ") state now: " $st
+
+        case "$st" in
+            *scrubbing*repair* ) echo "found scrub+repair"; return 1;; # PR #41258 should have prevented this
+            *scrubbing* ) echo "found scrub"; return 0;;
+            *inconsistent* ) echo "Got here too late. Scrub has already finished"; return 1;;
+            * ) echo $st;;
+        esac
+
+        if [ $((i % 5)) == 4 ] ; then
+            echo "loop --------> " $i
+            flush_pg_stats
+	else
+            sleep 0.3
+        fi
+    done
+
+    echo "Timeout waiting for deep-scrub of " $pgid " on " $the_osd " to start"
+    return 1
+}
+
+function wait_end_of_scrub() { # osd# pg
+    local the_osd="osd.$1"
+    local pgid=$2
+
+    for ((i=0; i < 40; i++)); do
+        st=`ceph pg $pgid query --format json | jq '.state' `
+        echo "wait-scrub-end state now: " $st
+        [[ $st =~ (.*scrubbing.*) ]] || break
+        if [ $((i % 5)) == 4 ] ; then
+            flush_pg_stats
+	fi
+        sleep 0.3
+    done
+
+    if [[ $st =~ (.*scrubbing.*) ]]
+    then
+        # a timeout
+        return 1
+    fi
+    return 0
+}
+
+
+function TEST_auto_repair_bluestore_tag() {
+    local dir=$1
+    local poolname=testpool
+
+    # Launch a cluster with 3 seconds scrub interval
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-auto-repair=true \
+            --osd_deep_scrub_randomize_ratio=0 \
+            --osd-scrub-interval-randomize-ratio=0"
+    for id in $(seq 0 2) ; do
+        run_osd $dir $id $ceph_osd_args || return 1
+    done
+
+    create_pool $poolname 1 1 || return 1
+    ceph osd pool set $poolname size 2
+    wait_for_clean || return 1
+
+    # Put an object
+    local payload=ABCDEF
+    echo $payload > $dir/ORIGINAL
+    rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
+
+    # Remove the object from one shard physically
+    # Restarted osd get $ceph_osd_args passed
+    objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING remove || return 1
+
+    local pgid=$(get_pg $poolname SOMETHING)
+    local primary=$(get_primary $poolname SOMETHING)
+    echo "Affected PG " $pgid " w/ primary " $primary
+    local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
+    initiate_and_fetch_state $primary $pgid "3.0"
+    r=$?
+    echo "initiate_and_fetch_state ret: " $r
+    set_config "osd"  "$1"  "osd_scrub_sleep"  "0"
+    if [ $r -ne 0 ]; then
+        return 1
+    fi
+
+    wait_end_of_scrub "$primary" "$pgid" || return 1
+    ceph pg dump pgs
+
+    # Verify - the file should be back
+    # Restarted osd get $ceph_osd_args passed
+    objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING list-attrs || return 1
+    objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING get-bytes $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+    grep scrub_finish $dir/osd.${primary}.log
+
+    # Tear down
+    teardown $dir || return 1
+}
+
+
 function TEST_auto_repair_bluestore_basic() {
     local dir=$1
     local poolname=testpool
@@ -338,7 +459,7 @@ function TEST_auto_repair_bluestore_basic() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-auto-repair=true \
-	    --osd_deep_scrub_randomize_ratio=0 \
+            --osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
         run_osd $dir $id $ceph_osd_args || return 1
@@ -387,7 +508,7 @@ function TEST_auto_repair_bluestore_scrub() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-auto-repair=true \
-	    --osd_deep_scrub_randomize_ratio=0 \
+            --osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
         run_osd $dir $id $ceph_osd_args || return 1
@@ -442,7 +563,7 @@ function TEST_auto_repair_bluestore_failed() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-auto-repair=true \
-	    --osd_deep_scrub_randomize_ratio=0 \
+            --osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
         run_osd $dir $id $ceph_osd_args || return 1
@@ -512,7 +633,7 @@ function TEST_auto_repair_bluestore_failed_norecov() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-auto-repair=true \
-	    --osd_deep_scrub_randomize_ratio=0 \
+            --osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
         run_osd $dir $id $ceph_osd_args || return 1

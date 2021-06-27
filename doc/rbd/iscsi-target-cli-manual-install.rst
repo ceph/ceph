@@ -49,15 +49,15 @@ on each machine that will be a iSCSI gateway:
 In order to install all the packages needed to run iSCSI with Ceph, you need to download them directly from their repository by using Git.
 On CentOS/RHEL execute:
 
-::
+.. prompt:: bash >
 
-   > sudo yum install git
+   sudo yum install git
 
 On Debian/Ubuntu execute:
 
-::
+.. prompt:: bash >
 
-   > sudo apt install git
+   sudo apt install git
    
 To know more about Git and how it works, please, visit https://git-scm.com
 
@@ -76,7 +76,7 @@ documentation for specific instructions on how to build this kernel. The only
 Ceph iSCSI specific requirements are that the following build options must be
 enabled:
 
-    ::
+    .. code-block:: ini
     
        CONFIG_TARGET_CORE=m
        CONFIG_TCM_USER2=m
@@ -94,32 +94,32 @@ tcmu-runner
 
    Installation:
 
-   ::
+   .. prompt:: bash >
 
-       > git clone https://github.com/open-iscsi/tcmu-runner
-       > cd tcmu-runner
+      git clone https://github.com/open-iscsi/tcmu-runner
+      cd tcmu-runner
 
    Run the following command to install all the needed dependencies:
 
-   ::
+   .. prompt:: bash >
 
-       > ./extra/install_dep.sh   
+      ./extra/install_dep.sh
    
    Now you can build the tcmu-runner.
    To do so, use the following build command:
 
-   ::
+   .. prompt:: bash >
 
-       > cmake -Dwith-glfs=false -Dwith-qcow=false -DSUPPORT_SYSTEMD=ON -DCMAKE_INSTALL_PREFIX=/usr
-       > make install
+      cmake -Dwith-glfs=false -Dwith-qcow=false -DSUPPORT_SYSTEMD=ON -DCMAKE_INSTALL_PREFIX=/usr
+      make install
 
    Enable and start the daemon:
 
-   ::
+   .. prompt:: bash >
 
-       > systemctl daemon-reload
-       > systemctl enable tcmu-runner
-       > systemctl start tcmu-runner
+      systemctl daemon-reload
+      systemctl enable tcmu-runner
+      systemctl start tcmu-runner
 
 
 rtslib-fb
@@ -127,35 +127,35 @@ rtslib-fb
 
    Installation:
 
-   ::
+   .. prompt:: bash >
 
-       > git clone https://github.com/open-iscsi/rtslib-fb.git
-       > cd rtslib-fb
-       > python setup.py install
+      git clone https://github.com/open-iscsi/rtslib-fb.git
+      cd rtslib-fb
+      python setup.py install
 
 configshell-fb
 --------------
 
    Installation:
 
-   ::
+   .. prompt:: bash >
 
-       > git clone https://github.com/open-iscsi/configshell-fb.git
-       > cd configshell-fb
-       > python setup.py install
+      git clone https://github.com/open-iscsi/configshell-fb.git
+      cd configshell-fb
+      python setup.py install
 
 targetcli-fb
 ------------
 
    Installation:
 
-   ::
+   .. prompt:: bash >
 
-       > git clone https://github.com/open-iscsi/targetcli-fb.git
-       > cd targetcli-fb
-       > python setup.py install
-       > mkdir /etc/target
-       > mkdir /var/target
+      git clone https://github.com/open-iscsi/targetcli-fb.git
+      cd targetcli-fb
+      python setup.py install
+      mkdir /etc/target
+      mkdir /var/target
 
    .. warning:: The ceph-iscsi tools assume they are managing all targets
       on the system. If targets have been setup and are being managed by
@@ -166,23 +166,23 @@ ceph-iscsi
 
    Installation:
 
-   ::
+   .. prompt:: bash >
 
-       > git clone https://github.com/ceph/ceph-iscsi.git
-       > cd ceph-iscsi
-       > python setup.py install --install-scripts=/usr/bin
-       > cp usr/lib/systemd/system/rbd-target-gw.service /lib/systemd/system
-       > cp usr/lib/systemd/system/rbd-target-api.service /lib/systemd/system
+      git clone https://github.com/ceph/ceph-iscsi.git
+      cd ceph-iscsi
+      python setup.py install --install-scripts=/usr/bin
+      cp usr/lib/systemd/system/rbd-target-gw.service /lib/systemd/system
+      cp usr/lib/systemd/system/rbd-target-api.service /lib/systemd/system
 
    Enable and start the daemon:
 
-   ::
+   .. prompt:: bash >
 
-       > systemctl daemon-reload
-       > systemctl enable rbd-target-gw
-       > systemctl start rbd-target-gw
-       > systemctl enable rbd-target-api
-       > systemctl start rbd-target-api
+      systemctl daemon-reload
+      systemctl enable rbd-target-gw
+      systemctl start rbd-target-gw
+      systemctl enable rbd-target-api
+      systemctl start rbd-target-api
 
 Installation is complete. Proceed to the setup section in the
 `main ceph-iscsi CLI page`_.

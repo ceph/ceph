@@ -1,7 +1,3 @@
-# ubuntu for py2 until we move to py3
-os_type: ubuntu
-
-# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
 tasks:
 - install:
 - ceph:

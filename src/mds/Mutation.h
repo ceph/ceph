@@ -116,7 +116,7 @@ public:
   using lock_iterator = lock_set::iterator;
 
   // keep our default values synced with MDRequestParam's
-  MutationImpl() : TrackedOp(nullptr, utime_t()) {}
+  MutationImpl() : TrackedOp(nullptr, ceph_clock_now()) {}
   MutationImpl(OpTracker *tracker, utime_t initiated,
 	       const metareqid_t &ri, __u32 att=0, mds_rank_t peer_to=MDS_RANK_NONE)
     : TrackedOp(tracker, initiated),
@@ -308,6 +308,7 @@ struct MDRequestImpl : public MutationImpl {
     bool is_ambiguous_auth = false;
     bool is_remote_frozen_authpin = false;
     bool is_inode_exporter = false;
+    bool rdonly_checks = false;
 
     std::map<client_t, std::pair<Session*, uint64_t> > imported_session_map;
     std::map<CInode*, std::map<client_t,Capability::Export> > cap_imports;

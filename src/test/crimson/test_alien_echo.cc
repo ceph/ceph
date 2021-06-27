@@ -49,7 +49,7 @@ struct Server {
     {
       std::cout << "server got ping " << *m << std::endl;
       // reply with a pong
-      return c->send(make_message<MPing>()).then([this] {
+      return c->send(crimson::make_message<MPing>()).then([this] {
         ++count;
         on_reply.signal();
         return seastar::now();
@@ -214,7 +214,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
         return seastar::do_until(
           [&disp,count] { return disp.count >= count; },
           [&disp,conn] {
-            return conn->send(make_message<MPing>()).then([&] {
+            return conn->send(crimson::make_message<MPing>()).then([&] {
               return disp.on_reply.wait();
             });
           }
@@ -281,7 +281,7 @@ int main(int argc, char** argv)
   seastar::app_template app;
   SeastarContext sc;
   auto job = sc.with_seastar([&] {
-    auto fut = seastar::alien::submit_to(0, [addr, role, count] {
+    auto fut = seastar::alien::submit_to(app.alien(), 0, [addr, role, count] {
       return seastar_echo(addr, role, count);
     });
     fut.wait();

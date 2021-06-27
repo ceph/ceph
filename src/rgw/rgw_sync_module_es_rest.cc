@@ -218,7 +218,7 @@ void RGWMetadataSearchOp::execute(optional_yield y)
 
   bool valid = es_query.compile(&err);
   if (!valid) {
-    ldout(s->cct, 10) << "invalid query, failed generating request json" << dendl;
+    ldpp_dout(this, 10) << "invalid query, failed generating request json" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -245,20 +245,20 @@ void RGWMetadataSearchOp::execute(optional_yield y)
   if (marker > 0) {
     params.push_back(param_pair_t("from", marker_str.c_str()));
   }
-  ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
+  ldpp_dout(this, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
   auto& extra_headers = es_module->get_request_headers();
-  op_ret = conn->get_resource(resource, &params, &extra_headers,
+  op_ret = conn->get_resource(s, resource, &params, &extra_headers,
                               out, &in, nullptr, y);
   if (op_ret < 0) {
-    ldout(s->cct, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
     return;
   }
 
-  ldout(s->cct, 20) << "response: " << string(out.c_str(), out.length()) << dendl;
+  ldpp_dout(this, 20) << "response: " << string(out.c_str(), out.length()) << dendl;
 
   JSONParser jparser;
   if (!jparser.parse(out.c_str(), out.length())) {
-    ldout(s->cct, 0) << "ERROR: failed to parse elasticsearch response" << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to parse elasticsearch response" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -266,7 +266,7 @@ void RGWMetadataSearchOp::execute(optional_yield y)
   try {
     decode_json_obj(response, &jparser);
   } catch (const JSONDecoder::err& e) {
-    ldout(s->cct, 0) << "ERROR: failed to decode JSON input: " << e.what() << dendl;
+    ldpp_dout(this, 0) << "ERROR: failed to decode JSON input: " << e.what() << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -401,7 +401,7 @@ public:
 };
 
 
-RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::RGWStore *store,
+RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Store* store,
 						     struct req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix)
@@ -419,7 +419,7 @@ RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::RGWStore *store,
 
   RGWHandler_REST *handler = new RGWHandler_REST_MDSearch_S3(auth_registry);
 
-  ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
+  ldpp_dout(s, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;
   return handler;
 }

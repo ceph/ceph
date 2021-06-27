@@ -302,12 +302,14 @@ class Module(MgrModule):
         if errno:
             return crashlist
         for crashid in crashids.split():
-            cmd = {'id': crashid}
-            errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
+            errno, crashinfo, err = self.remote('crash', 'do_info', crashid)
             if errno:
                 continue
             c = json.loads(crashinfo)
+
+            # redact hostname
             del c['utsname_hostname']
+
             # entity_name might have more than one '.', beware
             (etype, eid) = c.get('entity_name', '').split('.', 1)
             m = hashlib.sha1()
@@ -316,6 +318,12 @@ class Module(MgrModule):
             m.update(eid.encode('utf-8'))
             m.update(self.salt.encode('utf-8'))
             c['entity_name'] = etype + '.' + m.hexdigest()
+
+            # redact final line of python tracebacks, as the exception
+            # payload may contain identifying information
+            if 'mgr_module' in c:
+                c['backtrace'][-1] = '<redacted>'
+
             crashlist.append(c)
         return crashlist
 
@@ -401,7 +409,7 @@ class Module(MgrModule):
         if not channels:
             channels = self.get_active_channels()
         report = {
-            'leaderboard': False,
+            'leaderboard': self.leaderboard,
             'report_version': 1,
             'report_timestamp': datetime.utcnow().isoformat(),
             'report_id': self.report_id,
@@ -411,8 +419,6 @@ class Module(MgrModule):
         }
 
         if 'ident' in channels:
-            if self.leaderboard:
-                report['leaderboard'] = True
             for option in ['description', 'contact', 'organization']:
                 report[option] = getattr(self, option)
 

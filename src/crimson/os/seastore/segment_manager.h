@@ -24,8 +24,7 @@ public:
   enum class segment_state_t : uint8_t {
     EMPTY = 0,
     OPEN = 1,
-    CLOSED = 2,
-    RELEASING = 3
+    CLOSED = 2
   };
 
   /**
@@ -80,6 +79,19 @@ constexpr size_t PADDR_SIZE = sizeof(paddr_t);
 
 class SegmentManager {
 public:
+  using access_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::permission_denied,
+    crimson::ct_error::enoent>;
+
+  using mount_ertr = access_ertr;
+  using mount_ret = access_ertr::future<>;
+  virtual mount_ret mount() = 0;
+
+  using mkfs_ertr = access_ertr;
+  using mkfs_ret = mkfs_ertr::future<>;
+  virtual mkfs_ret mkfs(seastore_meta_t meta) = 0;
+
   using open_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,

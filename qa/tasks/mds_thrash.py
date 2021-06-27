@@ -272,7 +272,7 @@ class MDSThrasher(Thrasher, Greenlet):
                 weight = 1.0
                 if 'thrash_weights' in self.config:
                     weight = self.config['thrash_weights'].get(label, '0.0')
-                skip = random.randrange(0.0, 1.0)
+                skip = random.random()
                 if weight <= skip:
                     self.log('skipping thrash iteration with skip ({skip}) > weight ({weight})'.format(skip=skip, weight=weight))
                     continue

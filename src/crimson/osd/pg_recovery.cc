@@ -403,7 +403,7 @@ void PGRecovery::request_replica_scan(
   const hobject_t& end)
 {
   logger().debug("{}: target.osd={}", __func__, target.osd);
-  auto msg = make_message<MOSDPGScan>(
+  auto msg = crimson::make_message<MOSDPGScan>(
     MOSDPGScan::OP_SCAN_GET_DIGEST,
     pg->get_pg_whoami(),
     pg->get_osdmap_epoch(),
@@ -459,7 +459,7 @@ void PGRecovery::enqueue_drop(
   // allocate a pair if target is seen for the first time
   auto& req = backfill_drop_requests[target];
   if (!req) {
-    req = ceph::make_message<MOSDPGBackfillRemove>(
+    req = crimson::make_message<MOSDPGBackfillRemove>(
       spg_t(pg->get_pgid().pgid, target.shard), pg->get_osdmap_epoch());
   }
   req->ls.emplace_back(obj, v);
@@ -488,7 +488,7 @@ void PGRecovery::update_peers_last_backfill(
     if (const pg_info_t& pinfo = pg->get_peering_state().get_peer_info(bt);
         new_last_backfill > pinfo.last_backfill) {
       pg->get_peering_state().update_peer_last_backfill(bt, new_last_backfill);
-      auto m = make_message<MOSDPGBackfill>(
+      auto m = crimson::make_message<MOSDPGBackfill>(
         pinfo.last_backfill.is_max() ? MOSDPGBackfill::OP_BACKFILL_FINISH
                                      : MOSDPGBackfill::OP_BACKFILL_PROGRESS,
         pg->get_osdmap_epoch(),

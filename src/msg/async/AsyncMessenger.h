@@ -209,8 +209,6 @@ private:
   entity_addrvec_t _filter_addrs(const entity_addrvec_t& addrs);
 
  private:
-  static const uint64_t ReapDeadConnectionThreshold = 5;
-
   NetworkStack *stack;
   std::vector<Processor*> processors;
   friend class Processor;
@@ -311,6 +309,7 @@ private:
     if (p->second->is_unregistered()) {
       std::lock_guard l{deleted_lock};
       if (deleted_conns.erase(p->second)) {
+	p->second->get_perf_counter()->dec(l_msgr_active_connections);
 	conns.erase(p);
 	return nullref;
       }
@@ -399,12 +398,10 @@ public:
    */
   void unregister_conn(const AsyncConnectionRef& conn) {
     std::lock_guard l{deleted_lock};
-    if (!accepting_conns.count(conn) || anon_conns.count(conn))
-      conn->get_perf_counter()->dec(l_msgr_active_connections);
     deleted_conns.emplace(std::move(conn));
     conn->unregister();
 
-    if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
+    if (deleted_conns.size() >= cct->_conf->ms_async_reap_threshold) {
       local_worker->center.dispatch_event_external(reap_handler);
     }
   }

@@ -20,7 +20,7 @@ export class NavigationPageHelper extends PageHelper {
       menu: 'Cluster',
       submenus: [
         { menu: 'Hosts', component: 'cd-hosts' },
-        { menu: 'Inventory', component: 'cd-error' },
+        { menu: 'Physical Disks', component: 'cd-error' },
         { menu: 'Monitors', component: 'cd-monitor' },
         { menu: 'Services', component: 'cd-error' },
         { menu: 'OSDs', component: 'cd-osd-list' },
@@ -40,7 +40,7 @@ export class NavigationPageHelper extends PageHelper {
         { menu: 'iSCSI', component: 'cd-iscsi' }
       ]
     },
-    { menu: 'Filesystem', component: 'cd-cephfs-list' }
+    { menu: 'File Systems', component: 'cd-cephfs-list' }
   ];
 
   getVerticalMenu() {

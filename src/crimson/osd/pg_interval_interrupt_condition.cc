@@ -11,11 +11,16 @@ namespace crimson::osd {
 IOInterruptCondition::IOInterruptCondition(Ref<PG>& pg)
   : pg(pg), e(pg->get_osdmap_epoch()) {}
 
+IOInterruptCondition::~IOInterruptCondition() {
+  // for the sake of forward declaring PG (which is a detivate of
+  // intrusive_ref_counter<...>)
+}
+
 bool IOInterruptCondition::new_interval_created() {
   bool ret = e < pg->get_interval_start_epoch();
   if (ret)
     ::crimson::get_logger(ceph_subsys_osd).debug(
-      "{} new interval, should interrupt, e{}", *pg);
+      "{} new interval, should interrupt, e{}", *pg, e);
   return ret;
 }
 

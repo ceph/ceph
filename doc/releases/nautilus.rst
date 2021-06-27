@@ -1,3 +1,74 @@
+========
+Nautilus
+========
+
+Nautilus is the 14th stable release of Ceph.  It is named after the
+nautilus, a family of cephalopods characterized by a whorled shell.
+
+v14.2.21 Nautilus
+=================
+
+This is a hotfix release addressing a number of security issues and regressions. We recommend all users update to this release.
+
+Changelog
+---------
+
+* mgr/dashboard: fix base-href: revert it to previous approach (`issue#50684 <https://tracker.ceph.com/issues/50684>`_, Avan Thakkar)
+* mgr/dashboard: fix cookie injection issue (:ref:`CVE-2021-3509`, Ernesto Puerta)
+* rgw: RGWSwiftWebsiteHandler::is_web_dir checks empty subdir_name (:ref:`CVE-2021-3531`, Felix Huettner)
+* rgw: sanitize \r in s3 CORSConfiguration's ExposeHeader (:ref:`CVE-2021-3524`, Sergey Bobrov, Casey Bodley)
+
+
+v14.2.20 Nautilus
+=================
+
+This is the 20th bugfix release in the Nautilus stable series.  It addresses a
+security vulnerability in the Ceph authentication framework.
+
+We recommend all Nautilus users upgrade.
+
+Security fixes
+--------------
+
+* This release includes a security fix that ensures the global_id
+  value (a numeric value that should be unique for every authenticated
+  client or daemon in the cluster) is reclaimed after a network
+  disconnect or ticket renewal in a secure fashion.  Two new health
+  alerts may appear during the upgrade indicating that there are
+  clients or daemons that are not yet patched with the appropriate
+  fix.
+
+  It is possible to disable the health alerts around insecure clients::
+
+    ceph config set mon mon_warn_on_insecure_global_id_reclaim false
+    ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
+
+  However, if you disable these alerts, we strongly recommend that you
+  follow up by removing these settings after clients have been
+  upgraded or after upgrading to Octopus.  (Starting in Octopus, these
+  health alerts can be muted for a specific period of time.)
+
+  For more information, see :ref:`CVE-2021-20288`.
+
+
+v14.2.19 Nautilus
+=================
+
+This is the 19th update to the Ceph Nautilus release series. This is a hotfix
+release to prevent daemons from binding to loopback network interfaces. All
+nautilus users are advised to upgrade to this release.
+
+Notable Changes
+---------------
+
+* This release fixes a regression introduced in v14.2.17 whereby in certain environments, OSDs will bind to 127.0.0.1.  See `issue#49938 <https://tracker.ceph.com/issues/49938>`_.
+
+Changelog
+---------
+
+* common/ipaddr: also skip just `lo` (`pr#40423 <https://github.com/ceph/ceph/pull/40423>`_, Dan van der Ster)
+
+
 v14.2.18 Nautilus
 =================
 

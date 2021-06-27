@@ -2974,7 +2974,7 @@ int namespace_list(librados::IoCtx *ioctx,
   return namespace_list_finish(&iter, entries);
 }
 
-void sparsify(librados::ObjectWriteOperation *op, size_t sparse_size,
+void sparsify(librados::ObjectWriteOperation *op, uint64_t sparse_size,
               bool remove_empty)
 {
   bufferlist bl;
@@ -2983,7 +2983,7 @@ void sparsify(librados::ObjectWriteOperation *op, size_t sparse_size,
   op->exec("rbd", "sparsify", bl);
 }
 
-int sparsify(librados::IoCtx *ioctx, const std::string &oid, size_t sparse_size,
+int sparsify(librados::IoCtx *ioctx, const std::string &oid, uint64_t sparse_size,
              bool remove_empty)
 {
   librados::ObjectWriteOperation op;

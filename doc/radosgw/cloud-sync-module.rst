@@ -94,7 +94,7 @@ Non Trivial Configuration:
 
 * ``connection`` (container)
 
-Represents a connection to the remote cloud service. Contains ``conection_id`, ``access_key``,
+Represents a connection to the remote cloud service. Contains ``connection_id``, ``access_key``,
 ``secret``, ``endpoint``, and ``host_style``.
 
 * ``access_key`` (string)

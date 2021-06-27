@@ -3,6 +3,7 @@
 
 #include <limits.h>
 
+#include "acconfig.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
@@ -42,7 +43,7 @@
 #define tracepoint(...)
 #endif
 
-#ifndef _WIN32
+#ifdef HAVE_ASM_SYMVER
 #define LIBRADOS_C_API_BASE(fn)               \
   asm(".symver _" #fn "_base, " #fn "@")
 #define LIBRADOS_C_API_BASE_DEFAULT(fn)       \
@@ -53,9 +54,6 @@
 #define LIBRADOS_C_API_BASE_F(fn) _ ## fn ## _base
 #define LIBRADOS_C_API_DEFAULT_F(fn) _ ## fn
 #else
-// symver cannot be used on Windows. We'll only be able
-// to support one version, unless we use a different
-// versioning approach.
 #define LIBRADOS_C_API_BASE(fn)
 #define LIBRADOS_C_API_BASE_DEFAULT(fn)
 #define LIBRADOS_C_API_DEFAULT(fn, ver)

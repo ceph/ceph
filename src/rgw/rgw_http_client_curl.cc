@@ -82,7 +82,7 @@ void init_ssl() {
 bool fe_inits_ssl(boost::optional <const fe_map_t&> m, long& curl_global_flags){
   if (m) {
     for (const auto& kv: *m){
-      if (kv.first == "civetweb" || kv.first == "beast"){
+      if (kv.first == "beast"){
         std::string cert;
         kv.second->get_val("ssl_certificate","", &cert);
         if (!cert.empty()){

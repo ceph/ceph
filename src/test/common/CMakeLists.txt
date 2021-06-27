@@ -20,7 +20,7 @@ if(HAVE_BLKID AND LINUX)
   # unittest_blkdev
   add_executable(unittest_blkdev
     test_blkdev.cc)
-  add_ceph_unittest(unittest_blkdev ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_blkdev)
+  add_ceph_unittest(unittest_blkdev)
   target_link_libraries(unittest_blkdev global ${BLKID_LIBRARIES})
 endif()
 
@@ -154,7 +154,7 @@ add_executable(unittest_throttle
   Throttle.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_throttle parallel)
+add_ceph_unittest(unittest_throttle PARALLEL)
 target_link_libraries(unittest_throttle global) 
 
 # unittest_lru
@@ -360,3 +360,9 @@ target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
 
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)
+
+if(WITH_SYSTEMD)
+  add_executable(unittest_journald_logger test_journald_logger.cc)
+  target_link_libraries(unittest_journald_logger ceph-common)
+  add_ceph_unittest(unittest_journald_logger)
+endif()

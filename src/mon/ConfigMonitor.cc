@@ -168,17 +168,6 @@ bool ConfigMonitor::preprocess_query(MonOpRequestRef op)
   return false;
 }
 
-static string indent_who(const string& who)
-{
-  if (who == "global") {
-    return who;
-  }
-  if (who.find('.') == string::npos) {
-    return "  " + who;
-  }
-  return "    " + who;
-}
-
 bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonCommand>();
@@ -191,8 +180,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
@@ -278,7 +266,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     for (auto s : sections) {
       for (auto& i : s.second->options) {
 	if (!f) {
-	  tbl << indent_who(s.first);
+	  tbl << s.first;
 	  tbl << i.second.mask.to_str();
 	  tbl << Option::level_to_str(i.second.opt->level);
           tbl << i.first;

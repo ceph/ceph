@@ -1,5 +1,4 @@
 # type: ignore
-from __future__ import absolute_import
 
 import json
 import logging
@@ -176,14 +175,15 @@ if 'UNITTEST' in os.environ:
                 self._store = {}
 
 
-            if self.__class__.__name__ not in M_classes:
+            if self.__class__ not in M_classes:
                 # call those only once.
                 self._register_commands('')
                 self._register_options('')
-                M_classes.add(self.__class__.__name__)
+                M_classes.add(self.__class__)
 
             super(M, self).__init__()
             self._ceph_get_version = mock.Mock()
+            self._ceph_get_ceph_conf_path = mock.MagicMock()
             self._ceph_get_option = mock.MagicMock()
             self._ceph_get_context = mock.MagicMock()
             self._ceph_register_client = mock.MagicMock()

@@ -13,8 +13,6 @@
 
 #include <Python.h>
 
-#include <sqlite3.h>
-
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/errno.h"
@@ -24,6 +22,7 @@
 #include "global/signal_handler.h"
 
 #ifdef WITH_LIBCEPHSQLITE
+#  include <sqlite3.h>
 #  include "include/libcephsqlite.h"
 #endif
 

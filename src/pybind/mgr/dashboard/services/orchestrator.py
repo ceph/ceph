@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import logging
 from functools import wraps
@@ -64,8 +63,8 @@ class HostManger(ResourceManager):
         return hosts[0] if hosts else None
 
     @wait_api_result
-    def add(self, hostname: str):
-        return self.api.add_host(HostSpec(hostname))
+    def add(self, hostname: str, addr: str, labels: List[str]):
+        return self.api.add_host(HostSpec(hostname, addr=addr, labels=labels))
 
     @wait_api_result
     def remove(self, hostname: str):

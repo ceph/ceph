@@ -3,7 +3,6 @@ import time
 import requests
 import errno
 import logging
-import sys
 
 from teuthology.exceptions import CommandFailedError
 
@@ -52,10 +51,13 @@ class TestModuleSelftest(MgrTestCase):
         self._selftest_plugin("influx")
 
     def test_diskprediction_local(self):
-        if sys.version_info >= (3, 8):
+        self._load_module("selftest")
+        python_version = self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "self-test", "python-version")
+        if tuple(int(v) for v in python_version.split('.')) >= (3, 8):
             # https://tracker.ceph.com/issues/45147
-            python_version = f'python {sys.version_info.major}.{sys.version_info.minor}'
-            self.skipTest(f'{python_version} not compatible with diskprediction_local')
+            self.skipTest(f'python {python_version} not compatible with '
+                          'diskprediction_local')
         self._selftest_plugin("diskprediction_local")
 
     def test_telegraf(self):
@@ -66,12 +68,6 @@ class TestModuleSelftest(MgrTestCase):
 
     def test_devicehealth(self):
         self._selftest_plugin("devicehealth")
-        # Clean up the pool that the module creates, because otherwise
-        # it's low PG count causes test failures.
-        pool_name = "device_health_metrics"
-        self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                "osd", "pool", "delete", pool_name, pool_name,
-                "--yes-i-really-really-mean-it")
 
     def test_selftest_run(self):
         self._load_module("selftest")

@@ -84,10 +84,14 @@ function main {
 
     T=$(mktemp -d)
     pushd "$T"
-    repo_url="https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/flavors/${FLAVOR}/repo"
+    distro="${env/://}"
+    api_url="https://shaman.ceph.com/api/search/?status=ready&project=ceph&flavor=${FLAVOR}&distros=${distro}/$(arch)&ref=${branch}&sha1=${sha}"
+    repo_url="$(wget -O - "$api_url" | jq -r '.[0].chacra_url')repo"
+    # validate url:
+    wget -O /dev/null "$repo_url"
     if grep ubuntu <<<"$env" > /dev/null 2>&1; then
         # Docker makes it impossible to access anything outside the CWD : /
-        cp -- /ceph/shaman/cephdev.asc .
+        wget -O cephdev.asc 'https://download.ceph.com/keys/autobuild.asc'
         cat > Dockerfile <<EOF
 FROM ${env}
 
@@ -106,10 +110,12 @@ EOF
             centos:7)
                 python_bindings="python36-rados python36-cephfs"
                 ceph_debuginfo="ceph-debuginfo"
+                debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
                 ;;
             centos:8)
                 python_bindings="python3-rados python3-cephfs"
                 ceph_debuginfo="ceph-base-debuginfo"
+                debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
                 ;;
         esac
         if [ "${FLAVOR}" = "crimson" ]; then
@@ -119,12 +125,13 @@ EOF
 FROM ${env}
 
 WORKDIR /root
-RUN yum update -y && \
+RUN sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
+    yum update -y && \
     yum install -y tmux epel-release wget psmisc ca-certificates gdb
 RUN wget -O /etc/yum.repos.d/ceph-dev.repo $repo_url && \
     yum clean all && \
     yum upgrade -y && \
-    yum install -y ceph ${ceph_debuginfo} ceph-fuse ${python_bindings}
+    yum install -y ceph ${ceph_debuginfo} ${python_bindings}
 EOF
         time run docker build $CACHE --tag "$tag" .
     fi
@@ -133,7 +140,7 @@ EOF
 
     printf "built image %s\n" "$tag"
 
-    run docker run -ti -v /ceph:/ceph:ro "$tag"
+    run docker run -ti -v /ceph:/ceph:ro -v /cephfs:/cephfs:ro -v /teuthology:/teuthology:ro "$tag"
     return 0
 }
 

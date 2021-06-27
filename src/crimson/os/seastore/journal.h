@@ -13,6 +13,7 @@
 #include "include/buffer.h"
 #include "include/denc.h"
 
+#include "crimson/common/log.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
@@ -91,6 +92,7 @@ struct extent_info_t {
     DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
 
 /**
  * Callback interface for managing available segments
@@ -157,7 +159,21 @@ public:
    */
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  close_ertr::future<> close() { return close_ertr::now(); }
+  close_ertr::future<> close() {
+    return (
+      current_journal_segment ?
+      current_journal_segment->close() :
+      Segment::close_ertr::now()
+    ).handle_error(
+      close_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Error during Journal::close()"
+      }
+    ).finally([this] {
+      current_journal_segment.reset();
+      reset_soft_state();
+    });
+  }
 
   /**
    * submit_record
@@ -178,7 +194,13 @@ public:
     assert(write_pipeline);
     auto rsize = get_encoded_record_length(record);
     auto total = rsize.mdlength + rsize.dlength;
-    if (total > max_record_length) {
+    if (total > max_record_length()) {
+      auto &logger = crimson::get_logger(ceph_subsys_seastore);
+      logger.error(
+	"Journal::submit_record: record size {} exceeds max {}",
+	total,
+	max_record_length()
+      );
       return crimson::ct_error::erange::make();
     }
     auto roll = needs_roll(total)
@@ -236,9 +258,6 @@ public:
   }
 
 private:
-  const extent_len_t block_size;
-  const extent_len_t max_record_length;
-
   JournalSegmentProvider *segment_provider = nullptr;
   SegmentManager &segment_manager;
 
@@ -250,6 +269,13 @@ private:
   segment_off_t committed_to = 0;
 
   WritePipeline *write_pipeline = nullptr;
+
+  void reset_soft_state() {
+    next_journal_segment_seq = 0;
+    current_segment_nonce = 0;
+    written_to = 0;
+    committed_to = 0;
+  }
 
   /// prepare segment for writes, writes out segment header
   using initialize_segment_ertr = crimson::errorator<
@@ -407,6 +433,7 @@ private:
     delta_handler_t &delta_handler   ///< [in] processes deltas in order
   );
 
+  extent_len_t max_record_length() const;
 };
 using JournalRef = std::unique_ptr<Journal>;
 
@@ -414,3 +441,13 @@ using JournalRef = std::unique_ptr<Journal>;
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
+
+namespace crimson::os::seastore {
+
+inline extent_len_t Journal::max_record_length() const {
+  return segment_manager.get_segment_size() -
+    p2align(ceph::encoded_sizeof_bounded<segment_header_t>(),
+	    size_t(segment_manager.get_block_size()));
+}
+
+}

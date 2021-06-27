@@ -99,3 +99,16 @@ TEST(blkdev, _decode_model_enc)
     ASSERT_EQ(std::string(foo[i][1]), d);
   }
 }
+
+TEST(blkdev, get_device_id)
+{
+  // this doesn't really test anything; it's just a way to exercise the
+  // get_device_id() code.
+  for (char c = 'a'; c < 'z'; ++c) {
+    char devname[4] = {'s', 'd', c, 0};
+    std::string err;
+    auto i = get_device_id(devname, &err);
+    cout << "devname " << devname << " -> '" << i
+	 << "' (" << err << ")" << std::endl;
+  }
+}

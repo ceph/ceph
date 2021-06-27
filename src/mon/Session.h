@@ -65,6 +65,8 @@ struct MonSession : public RefCountedObject {
 
   AuthServiceHandler *auth_handler = nullptr;
   EntityName entity_name;
+  uint64_t global_id = 0;
+  global_id_status_t global_id_status = global_id_status_t::NONE;
 
   ConnectionRef proxy_con;
   uint64_t proxy_tid = 0;
@@ -132,6 +134,8 @@ struct MonSession : public RefCountedObject {
     f->dump_bool("open", !closed);
     f->dump_object("caps", caps);
     f->dump_bool("authenticated", authenticated);
+    f->dump_unsigned("global_id", global_id);
+    f->dump_stream("global_id_status") << global_id_status;
     f->dump_unsigned("osd_epoch", osd_epoch);
     f->dump_string("remote_host", remote_host);
   }

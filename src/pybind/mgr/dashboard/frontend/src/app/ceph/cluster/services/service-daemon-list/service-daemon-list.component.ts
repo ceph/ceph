@@ -19,9 +19,11 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { Daemon } from '~/app/shared/models/daemon.interface';
+import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 
 @Component({
@@ -33,6 +35,9 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   @ViewChild('statusTpl', { static: true })
   statusTpl: TemplateRef<any>;
 
+  @ViewChild('listTpl', { static: true })
+  listTpl: TemplateRef<any>;
+
   @ViewChildren('daemonsTable')
   daemonsTableTpls: QueryList<TemplateRef<TableComponent>>;
 
@@ -42,14 +47,22 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   @Input()
   hostname?: string;
 
+  @Input()
+  flag?: string;
+
+  icons = Icons;
+
   daemons: Daemon[] = [];
+  services: Array<CephServiceSpec> = [];
   columns: CdTableColumn[] = [];
+  serviceColumns: CdTableColumn[] = [];
 
   hasOrchestrator = false;
   showDocPanel = false;
 
   private daemonsTable: TableComponent;
   private daemonsTableTplsSub: Subscription;
+  private serviceSub: Subscription;
 
   constructor(
     private hostService: HostService,
@@ -63,7 +76,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
       {
         name: $localize`Hostname`,
         prop: 'hostname',
-        flexGrow: 1,
+        flexGrow: 2,
         filterable: true
       },
       {
@@ -81,7 +94,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
       {
         name: $localize`Container ID`,
         prop: 'container_id',
-        flexGrow: 3,
+        flexGrow: 2,
         filterable: true,
         cellTransformation: CellTemplate.truncate,
         customTemplateConfig: {
@@ -97,7 +110,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
       {
         name: $localize`Container Image ID`,
         prop: 'container_image_id',
-        flexGrow: 3,
+        flexGrow: 2,
         filterable: true,
         cellTransformation: CellTemplate.truncate,
         customTemplateConfig: {
@@ -121,7 +134,34 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         name: $localize`Last Refreshed`,
         prop: 'last_refresh',
         pipe: this.relativeDatePipe,
-        flexGrow: 2
+        flexGrow: 1
+      },
+      {
+        name: $localize`Daemon Events`,
+        prop: 'events',
+        flexGrow: 5,
+        cellTemplate: this.listTpl
+      }
+    ];
+
+    this.serviceColumns = [
+      {
+        name: $localize`Service Name`,
+        prop: 'service_name',
+        flexGrow: 2,
+        filterable: true
+      },
+      {
+        name: $localize`Service Type`,
+        prop: 'service_type',
+        flexGrow: 1,
+        filterable: true
+      },
+      {
+        name: $localize`Service Events`,
+        prop: 'events',
+        flexGrow: 5,
+        cellTemplate: this.listTpl
       }
     ];
 
@@ -148,6 +188,9 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   ngOnDestroy() {
     if (this.daemonsTableTplsSub) {
       this.daemonsTableTplsSub.unsubscribe();
+    }
+    if (this.serviceSub) {
+      this.serviceSub.unsubscribe();
     }
   }
 
@@ -182,5 +225,21 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         context.error();
       }
     );
+  }
+
+  getServices(context: CdTableFetchDataContext) {
+    this.serviceSub = this.cephServiceService.list(this.serviceName).subscribe(
+      (services: CephServiceSpec[]) => {
+        this.services = services;
+      },
+      () => {
+        this.services = [];
+        context.error();
+      }
+    );
+  }
+
+  trackByFn(_index: any, item: any) {
+    return item.created;
   }
 }

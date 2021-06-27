@@ -77,8 +77,7 @@ PGBackend::load_metadata(const hobject_t& oid)
       [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
 	loaded_object_md_t::ref ret(new loaded_object_md_t());
 	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
-	  bufferlist bl;
-	  bl.push_back(std::move(oiiter->second));
+	  bufferlist bl = std::move(oiiter->second);
 	  ret->os = ObjectState(
 	    object_info_t(bl),
 	    true);
@@ -91,8 +90,7 @@ PGBackend::load_metadata(const hobject_t& oid)
 	
 	if (oid.is_head()) {
 	  if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
-	    bufferlist bl;
-	    bl.push_back(std::move(ssiter->second));
+	    bufferlist bl = std::move(ssiter->second);
 	    ret->ss = SnapSet(bl);
 	  } else {
 	    /* TODO: add support for writing out snapsets
@@ -121,7 +119,7 @@ PGBackend::load_metadata(const hobject_t& oid)
       }));
 }
 
-PGBackend::interruptible_future<crimson::osd::acked_peers_t>
+PGBackend::rep_op_fut_t
 PGBackend::mutate_object(
   std::set<pg_shard_t> pg_shards,
   crimson::osd::ObjectContextRef &&obc,
@@ -138,13 +136,12 @@ PGBackend::mutate_object(
     obc->obs.oi.prior_version = ctx->obs->oi.version;
 #endif
 
-    auto& m = osd_op_p.req;
     obc->obs.oi.prior_version = obc->obs.oi.version;
     obc->obs.oi.version = osd_op_p.at_version;
     if (osd_op_p.user_at_version > obc->obs.oi.user_version)
       obc->obs.oi.user_version = osd_op_p.user_at_version;
-    obc->obs.oi.last_reqid = m->get_reqid();
-    obc->obs.oi.mtime = m->get_mtime();
+    obc->obs.oi.last_reqid = osd_op_p.req_id;
+    obc->obs.oi.mtime = osd_op_p.mtime;
     obc->obs.oi.local_mtime = ceph_clock_now();
 
     // object_info_t
@@ -793,17 +790,14 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   }
   logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
   return getxattr(os.oi.soid, name).safe_then_interruptible(
-    [&osd_op] (ceph::bufferptr val) {
-    osd_op.outdata.clear();
-    osd_op.outdata.push_back(std::move(val));
+    [&osd_op] (ceph::bufferlist&& val) {
+    osd_op.outdata = std::move(val);
     osd_op.op.xattr.value_len = osd_op.outdata.length();
     return get_attr_errorator::now();
-    //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   });
-  //ctx->delta_stats.num_rd++;
 }
 
-PGBackend::get_attr_ierrorator::future<ceph::bufferptr>
+PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
 PGBackend::getxattr(
   const hobject_t& soid,
   std::string_view key) const

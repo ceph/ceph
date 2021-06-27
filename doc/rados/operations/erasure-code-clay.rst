@@ -60,6 +60,7 @@ To create a new clay code profile::
              [scalar_mds={plugin-name}] \
              [technique={technique-name}] \
              [crush-failure-domain={bucket-type}] \
+             [crush-device-class={device-class}] \
              [directory={directory}] \
              [--force]
 

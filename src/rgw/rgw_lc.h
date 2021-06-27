@@ -461,7 +461,7 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
-  rgw::sal::RGWStore *store;
+  rgw::sal::Store* store;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
   int max_objs{0};
   string *obj_names{nullptr};
@@ -508,7 +508,7 @@ public:
   RGWLC() : cct(nullptr), store(nullptr) {}
   ~RGWLC();
 
-  void initialize(CephContext *_cct, rgw::sal::RGWStore *_store);
+  void initialize(CephContext *_cct, rgw::sal::Store* _store);
   void finalize();
 
   int process(LCWorker* worker, bool once);
@@ -526,29 +526,30 @@ public:
   bool going_down();
   void start_processor();
   void stop_processor();
-  int set_bucket_config(rgw::sal::RGWBucket* bucket,
-                        const rgw::sal::RGWAttrs& bucket_attrs,
+  int set_bucket_config(rgw::sal::Bucket* bucket,
+                        const rgw::sal::Attrs& bucket_attrs,
                         RGWLifecycleConfiguration *config);
-  int remove_bucket_config(rgw::sal::RGWBucket* bucket,
-                           const rgw::sal::RGWAttrs& bucket_attrs);
+  int remove_bucket_config(rgw::sal::Bucket* bucket,
+                           const rgw::sal::Attrs& bucket_attrs);
 
   CephContext *get_cct() const override { return cct; }
-  rgw::sal::Lifecycle *get_lc() const { return sal_lc.get(); }
+  rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 
   private:
 
-  int handle_multipart_expiration(rgw::sal::RGWBucket* target,
+  int handle_multipart_expiration(rgw::sal::Bucket* target,
 				  const multimap<string, lc_op>& prefix_map,
 				  LCWorker* worker, time_t stop_at, bool once);
 };
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(rgw::sal::RGWStore *store,
+int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
+                       rgw::sal::Store* store,
 		       rgw::sal::Lifecycle* sal_lc,
-		       rgw::sal::RGWBucket* bucket);
+		       rgw::sal::Bucket* bucket);
 
 std::string s3_expiration_header(
   DoutPrefixProvider* dpp,

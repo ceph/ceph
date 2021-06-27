@@ -8,4 +8,3 @@ rstcheck==3.3.1
 autopep8
 pyfakefs
 isort==5.5.3
-pytest

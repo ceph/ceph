@@ -5,7 +5,7 @@
 #define CEPH_RGW_OTP_H
 
 namespace rgw { namespace sal {
-class RGWStore;
+class Store;
 } }
 
 #include "cls/otp/cls_otp_types.h"
@@ -105,9 +105,11 @@ public:
   int read_all(const rgw_user& uid, RGWOTPInfo *info, optional_yield y,
                const DoutPrefixProvider *dpp,
                const GetParams& params = {});
-  int store_all(const RGWOTPInfo& info, optional_yield y,
+  int store_all(const DoutPrefixProvider *dpp, 
+                const RGWOTPInfo& info, optional_yield y,
                 const PutParams& params = {});
-  int remove_all(const rgw_user& user, optional_yield y,
+  int remove_all(const DoutPrefixProvider *dpp, 
+                 const rgw_user& user, optional_yield y,
                  const RemoveParams& params = {});
 };
 

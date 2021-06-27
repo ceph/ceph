@@ -57,15 +57,15 @@ Build instructions:
 	cd build
 	ninja
 
-(Note: do_cmake.sh now defaults to creating a debug build of ceph that can
+(do_cmake.sh now defaults to creating a debug build of ceph that can
 be up to 5x slower with some workloads. Please pass 
 "-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug
-release.)
+release.
 
-(Note: the number of jobs used by `ninja` is derived from the the number of
-CPU cores of the building host if unspecified. Use the `-j` option to limit
-the job number if the build jobs are running out of memory. On average, each
-job takes around 2.5GiB memory.
+The number of jobs used by `ninja` is derived from the number of CPU cores of
+the building host if unspecified. Use the `-j` option to limit the job number
+if the build jobs are running out of memory. On average, each job takes around
+2.5GiB memory.)
 
 This assumes you make your build dir a subdirectory of the ceph.git
 checkout. If you put it elsewhere, just point `CEPH_GIT_DIR` to the correct

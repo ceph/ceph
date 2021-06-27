@@ -242,7 +242,7 @@ public:
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
-  void _get_pending_crush(CrushWrapper& newcrush);
+  CrushWrapper _get_pending_crush();
 
   enum FastReadType {
     FAST_READ_OFF,
@@ -828,9 +828,21 @@ public:
   void trigger_degraded_stretch_mode(const set<int>& dead_buckets,
 				     const set<string>& live_zones);
   /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_degraded_stretch_mode();
+  /**
    * Set recovery stretch mode in the OSDMap, resetting pool size back to normal
    */
   void trigger_recovery_stretch_mode();
+  /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_recovery_stretch_mode();
+  /**
+   * This is just to maintain stretch_recovery_triggered; below
+   */
+  void set_healthy_stretch_mode();
   /**
    * Tells the OSD there's a new pg digest, in case it's interested.
    * (It's interested when in recovering stretch mode.)
@@ -846,6 +858,13 @@ public:
    * Sets the osdmap and pg_pool_t values back to healthy stretch mode status.
    */
   void trigger_healthy_stretch_mode();
+  /**
+   * Obtain the crush rule being used for stretch pools.
+   * Note that right now this is heuristic and simply selects the
+   * most-used rule on replicated stretch pools.
+   * @return the crush rule ID, or a negative errno
+   */
+  int get_replicated_stretch_crush_rule();
 private:
   utime_t stretch_recovery_triggered; // what time we committed a switch to recovery mode
 };

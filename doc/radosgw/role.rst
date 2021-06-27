@@ -4,7 +4,7 @@
 
 A role is similar to a user and has permission policies attached to it, that determine what a role can or can not do. A role can be assumed by any identity that needs it. If a user assumes a role, a set of dynamically created temporary credentials are returned to the user. A role can be used to delegate access to users, applications, services that do not have permissions to access some s3 resources.
 
-The following radosgw-admin commands can be used to create/ delete/ update a role and permissions asscociated with a role.
+The following radosgw-admin commands can be used to create/ delete/ update a role and permissions associated with a role.
 
 Create a Role
 -------------

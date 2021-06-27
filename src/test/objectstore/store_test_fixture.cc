@@ -40,10 +40,10 @@ void StoreTestFixture::SetUp()
   }
   ASSERT_EQ(0, r);
 
-  store.reset(ObjectStore::create(g_ceph_context,
-                                  type,
-                                  data_dir,
-                                  string("store_test_temp_journal")));
+  store = ObjectStore::create(g_ceph_context,
+                              type,
+                              data_dir,
+                              "store_test_temp_journal");
   if (!store) {
     cerr << __func__ << ": objectstore type " << type << " doesn't exist yet!" << std::endl;
   }
@@ -113,10 +113,10 @@ void StoreTestFixture::CloseAndReopen() {
   EXPECT_EQ(0, r);
   ch.reset(nullptr);
   store.reset(nullptr);
-  store.reset(ObjectStore::create(g_ceph_context,
-                                  type,
-                                  data_dir,
-                                  string("store_test_temp_journal")));
+  store = ObjectStore::create(g_ceph_context,
+                              type,
+                              data_dir,
+                              "store_test_temp_journal");
   if (!store) {
     cerr << __func__ << ": objectstore type " << type << " failed to reopen!" << std::endl;
   }

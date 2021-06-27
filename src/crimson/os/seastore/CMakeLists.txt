@@ -27,15 +27,17 @@ add_library(crimson-seastore STATIC
   onode_manager/staged-fltree/super.cc
   onode_manager/staged-fltree/value.cc
   onode_manager/staged-fltree/fltree_onode_manager.cc
-  extentmap_manager.cc
-  extentmap_manager/btree/extentmap_btree_node_impl.cc
-  extentmap_manager/btree/btree_extentmap_manager.cc
   collection_manager.cc
   collection_manager/flat_collection_manager.cc
   collection_manager/collection_flat_node.cc
+  object_data_handler.cc
   seastore.cc
+  random_block_manager/nvme_manager.cc
+  random_block_manager/nvmedevice.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
 target_link_libraries(crimson-seastore
   crimson)
+set_target_properties(crimson-seastore PROPERTIES
+  JOB_POOL_COMPILE heavy_compile_job_pool)

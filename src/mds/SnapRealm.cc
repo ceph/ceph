@@ -55,7 +55,7 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
 SnapRealm::SnapRealm(MDCache *c, CInode *in) :
     mdcache(c), inode(in), inodes_with_caps(member_offset(CInode, item_caps))
 {
-  global = (inode->ino() == MDS_INO_GLOBAL_SNAPREALM);
+  global = (inode->ino() == CEPH_INO_GLOBAL_SNAPREALM);
 }
 
 /*

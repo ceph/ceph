@@ -430,7 +430,7 @@ public:
       byte_throttler->put(data.length());
     bl = std::move(data);
   }
-  off_t get_data_len() const { return data.length(); }
+  uint32_t get_data_len() const { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   const utime_t& get_recv_stamp() const { return recv_stamp; }
@@ -553,4 +553,10 @@ ceph::ref_t<T> make_message(Args&&... args) {
 }
 }
 
+namespace crimson {
+template<class T, typename... Args>
+MURef<T> make_message(Args&&... args) {
+  return {new T(std::forward<Args>(args)...), TOPNSPC::common::UniquePtrDeleter{}};
+}
+}
 #endif

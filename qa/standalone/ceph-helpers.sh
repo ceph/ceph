@@ -481,6 +481,7 @@ function run_mon() {
 	--mon-allow-pool-size-one \
 	--osd-pool-default-pg-autoscale-mode off \
 	--mon-osd-backfillfull-ratio .99 \
+	--mon-warn-on-insecure-global-id-reclaim-allowed=false \
         "$@" || return 1
 
     cat > $dir/ceph.conf <<EOF
@@ -555,7 +556,7 @@ function run_mgr() {
     shift
     local data=$dir/$id
 
-    ceph config set mgr mgr/devicehealth/enable_monitoring off --force
+    ceph config set mgr mgr_pool false --force
     ceph-mgr \
         --id $id \
         $EXTRA_OPTS \
@@ -641,6 +642,7 @@ function run_osd() {
     ceph_args+=" --osd-scrub-load-threshold=2000"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --osd-journal=${osd_data}/journal"
+    ceph_args+=" --osd-op-queue=wpq"
     ceph_args+=" --chdir="
     ceph_args+=$EXTRA_OPTS
     ceph_args+=" --run-dir=$dir"
@@ -696,6 +698,7 @@ function run_osd_filestore() {
     ceph_args+=" --osd-scrub-load-threshold=2000"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --osd-journal=${osd_data}/journal"
+    ceph_args+=" --osd-op-queue=wpq"
     ceph_args+=" --chdir="
     ceph_args+=$EXTRA_OPTS
     ceph_args+=" --run-dir=$dir"
@@ -853,6 +856,7 @@ function activate_osd() {
     ceph_args+=" --osd-scrub-load-threshold=2000"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --osd-journal=${osd_data}/journal"
+    ceph_args+=" --osd-op-queue=wpq"
     ceph_args+=" --chdir="
     ceph_args+=$EXTRA_OPTS
     ceph_args+=" --run-dir=$dir"

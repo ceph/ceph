@@ -3,7 +3,7 @@ add_executable(unittest-transaction-manager
   test_transaction_manager.cc
   ../gtest_seastar.cc)
 add_ceph_unittest(unittest-transaction-manager
-  unittest-seastar-socket --memory 256M --smp 1)
+  --memory 256M --smp 1)
 target_link_libraries(
   unittest-transaction-manager
   ${CMAKE_DL_LIBS}
@@ -13,7 +13,7 @@ add_executable(unittest-btree-lba-manager
   test_btree_lba_manager.cc
   ../gtest_seastar.cc)
 add_ceph_unittest(unittest-btree-lba-manager
-  unittest-btree-lba-manager --memory 256M --smp 1)
+  --memory 256M --smp 1)
 target_link_libraries(
   unittest-btree-lba-manager
   ${CMAKE_DL_LIBS}
@@ -38,13 +38,13 @@ target_link_libraries(
   crimson::gtest
   crimson-seastore)
 
-add_executable(unittest-extmap-manager
-  test_extmap_manager.cc
+add_executable(unittest-object-data-handler
+  test_object_data_handler.cc
   ../gtest_seastar.cc)
-add_ceph_unittest(unittest-extmap-manager
-  unittest-extmap-manager --memory 256M --smp 1)
+add_ceph_unittest(unittest-object-data-handler
+  --memory 256M --smp 1)
 target_link_libraries(
-  unittest-extmap-manager
+  unittest-object-data-handler
   crimson::gtest
   crimson-seastore
   crimson-os
@@ -53,7 +53,7 @@ target_link_libraries(
 add_executable(unittest-collection-manager
   test_collection_manager.cc
   ../gtest_seastar.cc)
-add_ceph_unittest(unittest-collection-manager
+add_ceph_test(unittest-collection-manager
   unittest-collection-manager --memory 256M --smp 1)
 target_link_libraries(
   unittest-collection-manager
@@ -66,7 +66,7 @@ add_executable(unittest-omap-manager
   test_omap_manager.cc
   ../gtest_seastar.cc)
 add_ceph_unittest(unittest-omap-manager
-  unittest-omap-manager --memory 256M --smp 1)
+  --memory 256M --smp 1)
 target_link_libraries(
   unittest-omap-manager
   ${CMAKE_DL_LIBS}
@@ -76,11 +76,31 @@ add_executable(unittest-seastore
   test_seastore.cc
   ../gtest_seastar.cc)
 add_ceph_unittest(unittest-seastore
-  unittest-seastore --memory 256M --smp 1)
+  --memory 256M --smp 1)
 target_link_libraries(
   unittest-seastore
   ${CMAKE_DL_LIBS}
   crimson-seastore
   crimson-common)
+
+add_executable(unittest-seastore-randomblock-manager
+  test_randomblock_manager.cc)
+add_ceph_test(unittest-seastore-randomblock-manager
+  unittest-seastore-randomblock-manager --memory 256M --smp 1)
+target_link_libraries(
+  unittest-seastore-randomblock-manager
+  crimson::gtest
+  ${CMAKE_DL_LIBS}
+  crimson-seastore)
+
+add_executable(unittest-seastore-nvmedevice
+  nvmedevice/test_nvmedevice.cc)
+add_ceph_test(unittest-seastore-nvmedevice
+  unittest-seastore-nvmedevice --memory 256M --smp 1)
+target_link_libraries(
+  unittest-seastore-nvmedevice
+  crimson::gtest
+  crimson-seastore
+  aio)
 
 add_subdirectory(onode_tree)

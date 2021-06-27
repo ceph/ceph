@@ -63,7 +63,8 @@ struct SeastarRunner {
 
   template <typename Func>
   void run(Func &&func) {
-    auto fut = seastar::alien::submit_to(0, std::forward<Func>(func));
+    auto fut = seastar::alien::submit_to(app.alien(), 0,
+					 std::forward<Func>(func));
     fut.get();
   }
 };

@@ -14,7 +14,7 @@ class TestProgress(MgrTestCase):
 
     # How long we expect to wait at most between taking an OSD out
     # and seeing the progress event pop up.
-    EVENT_CREATION_PERIOD = 5
+    EVENT_CREATION_PERIOD = 15
 
     WRITE_PERIOD = 30
 
@@ -243,6 +243,13 @@ class TestProgress(MgrTestCase):
             assert ev_id in live_ids
             return False
 
+    def _is_inprogress_or_complete(self, ev_id):
+        for ev in self._events_in_progress():
+            if ev['id'] == ev_id:
+                return ev['progress'] > 0
+        # check if the event completed
+        return self._is_complete(ev_id)
+
     def tearDown(self):
         if self.POOL in self.mgr_cluster.mon_manager.pools:
             self.mgr_cluster.mon_manager.remove_pool(self.POOL)
@@ -396,5 +403,6 @@ class TestProgress(MgrTestCase):
         log.info(json.dumps(ev1, indent=1))
 
         self.wait_until_true(lambda: self._is_complete(ev1['id']),
+                             check_fn=lambda: self._is_inprogress_or_complete(ev1['id']),
                              timeout=self.RECOVERY_PERIOD)
         self.assertTrue(self._is_quiet())

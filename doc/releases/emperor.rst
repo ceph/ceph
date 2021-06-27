@@ -1,3 +1,10 @@
+=======
+Emperor
+=======
+
+Emperor is the 5th stable release of Ceph.  It is named after the emperor squid.
+
+
 v0.72.3 Emperor (pending release)
 =================================
 

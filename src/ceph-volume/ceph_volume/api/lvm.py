@@ -376,8 +376,12 @@ class PVolume(object):
             self.set_tag(k, v)
         # after setting all the tags, refresh them for the current object, use the
         # pv_* identifiers to filter because those shouldn't change
-        pv_object = self.get_first_pv(filter={'pv_name': self.pv_name,
-                                              'pv_uuid': self.pv_uuid})
+        pv_object = self.get_single_pv(filter={'pv_name': self.pv_name,
+                                               'pv_uuid': self.pv_uuid})
+
+        if not pv_object:
+            raise RuntimeError('No PV was found.')
+
         self.tags = pv_object.tags
 
     def set_tag(self, key, value):
@@ -471,15 +475,21 @@ def get_pvs(fields=PV_FIELDS, filters='', tags=None):
     return [PVolume(**pv_report) for pv_report in pvs_report]
 
 
-def get_first_pv(fields=PV_FIELDS, filters=None, tags=None):
+def get_single_pv(fields=PV_FIELDS, filters=None, tags=None):
     """
-    Wrapper of get_pv meant to be a convenience method to avoid the phrase::
+    Wrapper of get_pvs() meant to be a convenience method to avoid the phrase::
         pvs = get_pvs()
         if len(pvs) >= 1:
             pv = pvs[0]
     """
     pvs = get_pvs(fields=fields, filters=filters, tags=tags)
-    return pvs[0] if len(pvs) > 0 else []
+
+    if len(pvs) == 0:
+        return None
+    if len(pvs) > 1:
+        raise RuntimeError('Filters {} matched more than 1 PV present on this host.'.format(str(filters)))
+
+    return pvs[0]
 
 
 ################################
@@ -650,7 +660,7 @@ def create_vg(devices, name=None, name_prefix=None):
         name] + devices
     )
 
-    return get_first_vg(filters={'vg_name': name})
+    return get_single_vg(filters={'vg_name': name})
 
 
 def extend_vg(vg, devices):
@@ -674,7 +684,7 @@ def extend_vg(vg, devices):
         vg.name] + devices
     )
 
-    return get_first_vg(filters={'vg_name': vg.name})
+    return get_single_vg(filters={'vg_name': vg.name})
 
 
 def reduce_vg(vg, devices):
@@ -696,7 +706,7 @@ def reduce_vg(vg, devices):
         vg.name] + devices
     )
 
-    return get_first_vg(filter={'vg_name': vg.name})
+    return get_single_vg(filter={'vg_name': vg.name})
 
 
 def remove_vg(vg_name):
@@ -742,15 +752,21 @@ def get_vgs(fields=VG_FIELDS, filters='', tags=None):
     return [VolumeGroup(**vg_report) for vg_report in vgs_report]
 
 
-def get_first_vg(fields=VG_FIELDS, filters=None, tags=None):
+def get_single_vg(fields=VG_FIELDS, filters=None, tags=None):
     """
-    Wrapper of get_vg meant to be a convenience method to avoid the phrase::
+    Wrapper of get_vgs() meant to be a convenience method to avoid the phrase::
         vgs = get_vgs()
         if len(vgs) >= 1:
             vg = vgs[0]
     """
     vgs = get_vgs(fields=fields, filters=filters, tags=tags)
-    return vgs[0] if len(vgs) > 0 else []
+
+    if len(vgs) == 0:
+        return None
+    if len(vgs) > 1:
+        raise RuntimeError('Filters {} matched more than 1 VG present on this host.'.format(str(filters)))
+
+    return vgs[0]
 
 
 def get_device_vgs(device, name_prefix=''):
@@ -970,7 +986,7 @@ def create_lv(name_prefix,
         ]
     process.run(command)
 
-    lv = get_first_lv(filters={'lv_name': name, 'vg_name': vg.vg_name})
+    lv = get_single_lv(filters={'lv_name': name, 'vg_name': vg.vg_name})
 
     if tags is None:
         tags = {
@@ -1095,15 +1111,29 @@ def get_lvs(fields=LV_FIELDS, filters='', tags=None):
     return [Volume(**lv_report) for lv_report in lvs_report]
 
 
-def get_first_lv(fields=LV_FIELDS, filters=None, tags=None):
+def get_single_lv(fields=LV_FIELDS, filters=None, tags=None):
     """
-    Wrapper of get_lv meant to be a convenience method to avoid the phrase::
+    Wrapper of get_lvs() meant to be a convenience method to avoid the phrase::
         lvs = get_lvs()
         if len(lvs) >= 1:
             lv = lvs[0]
     """
     lvs = get_lvs(fields=fields, filters=filters, tags=tags)
-    return lvs[0] if len(lvs) > 0 else []
+
+    if len(lvs) == 0:
+        return None
+    if len(lvs) > 1:
+        raise RuntimeError('Filters {} matched more than 1 LV present on this host.'.format(str(filters)))
+
+    return lvs[0]
+
+
+def get_lvs_from_osd_id(osd_id):
+    return get_lvs(tags={'ceph.osd_id': osd_id})
+
+
+def get_single_lv_from_osd_id(osd_id):
+    return get_single_lv(tags={'ceph.osd_id': osd_id})
 
 
 def get_lv_by_name(name):
@@ -1134,3 +1164,26 @@ def get_device_lvs(device, name_prefix=''):
     lvs = _output_parser(stdout, LV_FIELDS)
     return [Volume(**lv) for lv in lvs if lv['lv_name'] and
             lv['lv_name'].startswith(name_prefix)]
+
+def get_lvs_from_path(devpath):
+    lvs = []
+    if os.path.isabs(devpath):
+        # we have a block device
+        lvs = get_device_lvs(devpath)
+        if not lvs:
+            # maybe this was a LV path /dev/vg_name/lv_name or /dev/mapper/
+            lvs = get_lvs(filters={'path': devpath})
+
+    return lvs
+
+def get_lv_by_fullname(full_name):
+    """
+    returns LV by the specified LV's full name (formatted as vg_name/lv_name)
+    """
+    try:
+        vg_name, lv_name = full_name.split('/')
+        res_lv = get_single_lv(filters={'lv_name': lv_name,
+                                        'vg_name': vg_name})
+    except ValueError:
+        res_lv = None
+    return res_lv

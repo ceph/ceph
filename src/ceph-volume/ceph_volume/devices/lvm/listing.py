@@ -2,7 +2,6 @@ from __future__ import print_function
 import argparse
 import json
 import logging
-import os.path
 from textwrap import dedent
 from ceph_volume import decorators
 from ceph_volume.api import lvm as api
@@ -140,32 +139,28 @@ class List(object):
         """
         return self.create_report(api.get_lvs())
 
-    def single_report(self, device):
+    def single_report(self, arg):
         """
         Generate a report for a single device. This can be either a logical
-        volume in the form of vg/lv or a device with an absolute path like
-        /dev/sda1 or /dev/sda. Returns '{}' to denote failure.
-        """
-        lvs = []
-        if os.path.isabs(device):
-            # we have a block device
-            lvs = api.get_device_lvs(device)
-            if not lvs:
-                # maybe this was a LV path /dev/vg_name/lv_name or /dev/mapper/
-                lvs = api.get_lvs(filters={'path': device})
-        else:
-            # vg_name/lv_name was passed
-            vg_name, lv_name = device.split('/')
-            lvs = api.get_lvs(filters={'lv_name': lv_name,
-                                       'vg_name': vg_name})
+        volume in the form of vg/lv, a device with an absolute path like
+        /dev/sda1 or /dev/sda, or a list of devices under same OSD ID.
 
-        report = self.create_report(lvs)
+        Return value '{}' denotes failure.
+        """
+        if isinstance(arg, int) or arg.isdigit():
+            lv = api.get_lvs_from_osd_id(arg)
+        elif arg[0] == '/':
+            lv = api.get_lvs_from_path(arg)
+        else:
+            lv = [api.get_single_lv(filters={'lv_name': arg.split('/')[1]})]
+
+        report = self.create_report(lv)
 
         if not report:
             # check if device is a non-lvm journals or wal/db
             for dev_type in ['journal', 'wal', 'db']:
                 lvs = api.get_lvs(tags={
-                    'ceph.{}_device'.format(dev_type): device})
+                    'ceph.{}_device'.format(dev_type): arg})
                 if lvs:
                     # just taking the first lv here should work
                     lv = lvs[0]
@@ -189,6 +184,10 @@ class List(object):
         Full listing of all system devices associated with a cluster::
 
             ceph-volume lvm list
+
+        List devices under same OSD ID::
+
+            ceph-volume lvm list <OSD-ID>
 
         List a particular device, reporting all metadata about it::
 

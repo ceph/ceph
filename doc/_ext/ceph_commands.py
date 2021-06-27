@@ -82,7 +82,7 @@ class CmdParam(object):
 
     def __init__(self, type, name,
                  who=None, n=None, req=True, range=None, strings=None,
-                 goodchars=None):
+                 goodchars=None, positional=True):
         self.type = type
         self.name = name
         self.who = who
@@ -91,6 +91,7 @@ class CmdParam(object):
         self.range = range.split('|') if range else []
         self.strings = strings.split('|') if strings else []
         self.goodchars = goodchars
+        self.positional = positional != 'false'
 
         assert who == None
 
@@ -200,7 +201,7 @@ TEMPLATE = '''
 
 {%- if command.params %}
 :Parameters:{% for param in command.params -%}
-{{" -" | indent(12, not loop.first) }} **{{param.name}}**: {{ param.help() }}
+{{" -" | indent(12, not loop.first) }} **{% if param.positional %}{{param.name}}{% else %}--{{param.name}}{% endif %}**: {{ param.help() }}
 {% endfor %}
 {% endif %}
 :Ceph Module: {{ command.module }}

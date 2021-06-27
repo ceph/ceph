@@ -68,16 +68,12 @@ npm ci --unsafe-perm
 npx cypress verify
 npx cypress info
 
-# Remove device_health_metrics pool
-# Low pg count causes OSD removal failure.
-ceph device monitoring off
-ceph tell mon.\* injectargs '--mon-allow-pool-delete=true'
-ceph osd pool rm device_health_metrics device_health_metrics --yes-i-really-really-mean-it
-
-# Take `orch device ls` as ground truth.
+# Take `orch device ls` and `orch ps` as ground truth.
 ceph orch device ls --refresh
+ceph orch ps --refresh
 sleep 10  # the previous call is asynchronous
 ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
+ceph orch ps --format=json | tee cypress/fixtures/orchestrator/services.json
 
 DASHBOARD_ADMIN_SECRET_FILE="/tmp/dashboard-admin-secret.txt"
 printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"
@@ -91,10 +87,23 @@ find cypress # List all specs
 
 cypress_run "orchestrator/01-hosts.e2e-spec.ts"
 
-# Hosts are removed and added in the previous step. Do a refresh again.
+ceph orch apply rgw foo --placement=3
+sleep 15
 ceph orch device ls --refresh
+ceph orch ps --refresh
+sleep 10  # the previous call is asynchronous
+ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
+ceph orch ps --format=json | tee cypress/fixtures/orchestrator/services.json
+
+cypress_run "orchestrator/01-hosts-force-maintenance.e2e-spec.ts"
+
+# Hosts are removed and added in the previous step. Do a refresh again.
+ceph orch rm rgw.foo
+ceph orch device ls --refresh
+ceph orch ps --refresh
 sleep 10
 ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
+ceph orch ps --format=json | tee cypress/fixtures/orchestrator/services.json
 
 cypress_run "orchestrator/02-hosts-inventory.e2e-spec.ts"
 cypress_run "orchestrator/03-inventory.e2e-spec.ts"

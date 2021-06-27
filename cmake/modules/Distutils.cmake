@@ -49,13 +49,17 @@ function(distutils_add_cython_module target name src)
   string(STRIP "${CMAKE_CXX_COMPILER_ARG1}" cxx_compiler_arg1)
   # Note: no quotes, otherwise distutils will execute "/usr/bin/ccache gcc"
   # CMake's implicit conversion between strings and lists is wonderful, isn't it?
-  set(cflags ${COMPILE_OPTIONS})
-  list(APPEND cflags -iquote${CMAKE_SOURCE_DIR}/src/include -w)
+  set(PY_CFLAGS ${COMPILE_OPTIONS})
+  cmake_parse_arguments(DU "DISABLE_VTA" "" "" ${ARGN})
+  if(DU_DISABLE_VTA AND HAS_VTA)
+    list(APPEND PY_CFLAGS -fno-var-tracking-assignments)
+  endif()
+  list(APPEND PY_CPPFLAGS -iquote${CMAKE_SOURCE_DIR}/src/include -w)
   # This little bit of magic wipes out __Pyx_check_single_interpreter()
   # Note: this is reproduced in distutils_install_cython_module
-  list(APPEND cflags -D'void0=dead_function\(void\)')
-  list(APPEND cflags -D'__Pyx_check_single_interpreter\(ARG\)=ARG \#\# 0')
-  set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} ${cflags})
+  list(APPEND PY_CPPFLAGS -D'void0=dead_function\(void\)')
+  list(APPEND PY_CPPFLAGS -D'__Pyx_check_single_interpreter\(ARG\)=ARG \#\# 0')
+  set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1})
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
 
@@ -76,6 +80,8 @@ function(distutils_add_cython_module target name src)
     COMMAND
     env
     CC="${PY_CC}"
+    CFLAGS="${PY_CFLAGS}"
+    CPPFLAGS="${PY_CPPFLAGS}"
     CXX="${PY_CXX}"
     LDSHARED="${PY_LDSHARED}"
     OPT=\"-DNDEBUG -g -fwrapv -O2 -w\"
@@ -97,12 +103,17 @@ function(distutils_install_cython_module name)
   get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
   set(PY_CC "${compiler_launcher} ${CMAKE_C_COMPILER}")
   set(PY_LDSHARED "${link_launcher} ${CMAKE_C_COMPILER} -shared")
+  cmake_parse_arguments(DU "DISABLE_VTA" "" "" ${ARGN})
+  if(DU_DISABLE_VTA AND HAS_VTA)
+    set(CFLAG_DISABLE_VTA -fno-var-tracking-assignments)
+  endif()
   install(CODE "
     set(ENV{CC} \"${PY_CC}\")
     set(ENV{LDSHARED} \"${PY_LDSHARED}\")
     set(ENV{CPPFLAGS} \"-iquote${CMAKE_SOURCE_DIR}/src/include
                         -D'void0=dead_function\(void\)' \
-                        -D'__Pyx_check_single_interpreter\(ARG\)=ARG \#\# 0'\")
+                        -D'__Pyx_check_single_interpreter\(ARG\)=ARG \#\# 0' \
+                        ${CFLAG_DISABLE_VTA}\")
     set(ENV{LDFLAGS} \"-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")
     set(ENV{CYTHON_BUILD_DIR} \"${CMAKE_CURRENT_BINARY_DIR}\")
     set(ENV{CEPH_LIBDIR} \"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")

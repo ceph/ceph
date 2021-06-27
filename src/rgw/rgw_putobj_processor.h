@@ -79,12 +79,12 @@ class HeadObjectProcessor : public ObjectProcessor {
 class ManifestObjectProcessor : public HeadObjectProcessor,
                                 public StripeGenerator {
  protected:
-  rgw::sal::RGWStore *const store;
-  rgw::sal::RGWBucket* bucket;
+  rgw::sal::Store* const store;
+  rgw::sal::Bucket* bucket;
   rgw_placement_rule tail_placement_rule;
   rgw_user owner;
   RGWObjectCtx& obj_ctx;
-  std::unique_ptr<rgw::sal::RGWObject> head_obj;
+  std::unique_ptr<rgw::sal::Object> head_obj;
 
   std::unique_ptr<rgw::sal::Writer> writer;
   RGWObjManifest manifest;
@@ -97,11 +97,11 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   int next(uint64_t offset, uint64_t *stripe_size) override;
 
  public:
-  ManifestObjectProcessor(Aio *aio, rgw::sal::RGWStore *store,
-			  rgw::sal::RGWBucket* bucket,
+  ManifestObjectProcessor(Aio *aio, rgw::sal::Store* store,
+			  rgw::sal::Bucket* bucket,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
-                          std::unique_ptr<rgw::sal::RGWObject> _head_obj,
+                          std::unique_ptr<rgw::sal::Object> _head_obj,
                           const DoutPrefixProvider* dpp, optional_yield y)
     : HeadObjectProcessor(0),
       store(store), bucket(bucket),
@@ -139,12 +139,12 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
  public:
-  AtomicObjectProcessor(Aio *aio, rgw::sal::RGWStore *store,
-			rgw::sal::RGWBucket* bucket,
+  AtomicObjectProcessor(Aio *aio, rgw::sal::Store* store,
+			rgw::sal::Bucket* bucket,
                         const rgw_placement_rule *ptail_placement_rule,
                         const rgw_user& owner,
                         RGWObjectCtx& obj_ctx,
-			std::unique_ptr<rgw::sal::RGWObject> _head_obj,
+			std::unique_ptr<rgw::sal::Object> _head_obj,
                         std::optional<uint64_t> olh_epoch,
                         const std::string& unique_tag,
                         const DoutPrefixProvider *dpp, optional_yield y)
@@ -172,7 +172,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 // part's head is written with an exclusive create to detect racing uploads of
 // the same part/upload id, which are restarted with a random oid prefix
 class MultipartObjectProcessor : public ManifestObjectProcessor {
-  std::unique_ptr<rgw::sal::RGWObject> target_obj; // target multipart object
+  std::unique_ptr<rgw::sal::Object> target_obj; // target multipart object
   const std::string upload_id;
   const int part_num;
   const std::string part_num_str;
@@ -184,11 +184,11 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   // prepare the head stripe and manifest
   int prepare_head();
  public:
-  MultipartObjectProcessor(Aio *aio, rgw::sal::RGWStore *store,
-			   rgw::sal::RGWBucket* bucket,
+  MultipartObjectProcessor(Aio *aio, rgw::sal::Store* store,
+			   rgw::sal::Bucket* bucket,
                            const rgw_placement_rule *ptail_placement_rule,
                            const rgw_user& owner, RGWObjectCtx& obj_ctx,
-                           std::unique_ptr<rgw::sal::RGWObject> _head_obj,
+                           std::unique_ptr<rgw::sal::Object> _head_obj,
                            const std::string& upload_id, uint64_t part_num,
                            const std::string& part_num_str,
                            const DoutPrefixProvider *dpp, optional_yield y)
@@ -227,11 +227,11 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
 
   public:
-    AppendObjectProcessor(Aio *aio, rgw::sal::RGWStore *store,
-			  rgw::sal::RGWBucket* bucket,
+    AppendObjectProcessor(Aio *aio, rgw::sal::Store* store,
+			  rgw::sal::Bucket* bucket,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
-			  std::unique_ptr<rgw::sal::RGWObject> _head_obj,
+			  std::unique_ptr<rgw::sal::Object> _head_obj,
                           const std::string& unique_tag, uint64_t position,
                           uint64_t *cur_accounted_size,
                           const DoutPrefixProvider *dpp, optional_yield y)

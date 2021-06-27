@@ -169,9 +169,6 @@ public:
   // Set mclock config parameter based on allocations
   void set_profile_config();
 
-  // Set recovery specific Ceph settings for profiles
-  void set_global_recovery_options();
-
   // Calculate scale cost per item
   int calc_scaled_cost(int cost);
 
@@ -195,6 +192,9 @@ public:
   void print(std::ostream &ostream) const final {
     ostream << "mClockScheduler";
   }
+
+  // Update data associated with the modified mclock config key(s)
+  void update_configuration() final;
 
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const ConfigProxy& conf,

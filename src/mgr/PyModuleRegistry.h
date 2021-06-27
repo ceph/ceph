@@ -58,7 +58,7 @@ private:
   /**
    * Discover python modules from local disk
    */
-  std::set<std::string> probe_modules(const std::string &path) const;
+  std::vector<std::string> probe_modules(const std::string &path) const;
 
   PyModuleConfig module_config;
 
@@ -97,6 +97,10 @@ public:
    * @return true if the mgrmap has changed such that the service needs restart
    */
   bool handle_mgr_map(const MgrMap &mgr_map_);
+
+  bool have_standby_modules() const {
+    return !!standby_modules;
+  }
 
   void init();
 

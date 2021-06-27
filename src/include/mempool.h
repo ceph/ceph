@@ -201,7 +201,16 @@ enum {
   num_shards = 1 << num_shard_bits
 };
 
-// align shard to a cacheline
+//
+// Align shard to a cacheline.
+//
+// It would be possible to retrieve the value at runtime (for instance
+// with getconf LEVEL1_DCACHE_LINESIZE or grep -m1 cache_alignment
+// /proc/cpuinfo). It is easier to hard code the largest cache
+// linesize for all known processors (128 bytes). If the actual cache
+// linesize is smaller on a given processor, it will just waste a few
+// bytes.
+//
 struct shard_t {
   ceph::atomic<size_t> bytes = {0};
   ceph::atomic<size_t> items = {0};
@@ -259,7 +268,7 @@ public:
     // Dirt cheap, see:
     //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
     size_t me = (size_t)pthread_self();
-    size_t i = (me >> 12) & ((1 << num_shard_bits) - 1);
+    size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
     return i;
   }
 

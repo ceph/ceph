@@ -1,6 +1,7 @@
 #include "futurized_store.h"
 #include "cyanstore/cyan_store.h"
 #include "alienstore/alien_store.h"
+#include "seastore/seastore.h"
 
 namespace crimson::os {
 
@@ -13,6 +14,8 @@ FuturizedStore::create(const std::string& type,
     return std::make_unique<crimson::os::CyanStore>(data);
   } else if (type == "bluestore") {
     return std::make_unique<crimson::os::AlienStore>(data, values);
+  } else if (type == "seastore") {
+    return crimson::os::seastore::make_seastore(data, values);
   } else {
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
     return {};

@@ -15,7 +15,8 @@ RGWSI_MetaBackend::PutParams::~PutParams() {} // ...
 RGWSI_MetaBackend::GetParams::~GetParams() {} // ...
 RGWSI_MetaBackend::RemoveParams::~RemoveParams() {} // ...
 
-int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
+int RGWSI_MetaBackend::pre_modify(const DoutPrefixProvider *dpp, 
+                                  RGWSI_MetaBackend::Context *ctx,
                                   const string& key,
                                   RGWMetadataLogData& log_data,
                                   RGWObjVersionTracker *objv_tracker,
@@ -34,7 +35,8 @@ int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
   return 0;
 }
 
-int RGWSI_MetaBackend::post_modify(RGWSI_MetaBackend::Context *ctx,
+int RGWSI_MetaBackend::post_modify(const DoutPrefixProvider *dpp, 
+                                   RGWSI_MetaBackend::Context *ctx,
                                    const string& key,
                                    RGWMetadataLogData& log_data,
                                    RGWObjVersionTracker *objv_tracker, int ret,
@@ -91,7 +93,7 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
   }
 
   RGWMetadataLogData log_data;
-  ret = pre_modify(ctx, key, log_data, objv_tracker, op_type, y);
+  ret = pre_modify(dpp, ctx, key, log_data, objv_tracker, op_type, y);
   if (ret < 0) {
     return ret;
   }
@@ -100,7 +102,7 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
 
   /* cascading ret into post_modify() */
 
-  ret = post_modify(ctx, key, log_data, objv_tracker, ret, y);
+  ret = post_modify(dpp, ctx, key, log_data, objv_tracker, ret, y);
   if (ret < 0)
     return ret;
 
@@ -125,7 +127,7 @@ int RGWSI_MetaBackend::put(Context *ctx,
                            const DoutPrefixProvider *dpp)
 {
   std::function<int()> f = [&]() {
-    return put_entry(ctx, key, params, objv_tracker, y);
+    return put_entry(dpp, ctx, key, params, objv_tracker, y);
   };
 
   return do_mutate(ctx, key, params.mtime, objv_tracker,
@@ -144,7 +146,7 @@ int RGWSI_MetaBackend::remove(Context *ctx,
                               const DoutPrefixProvider *dpp)
 {
   std::function<int()> f = [&]() {
-    return remove_entry(ctx, key, params, objv_tracker, y);
+    return remove_entry(dpp, ctx, key, params, objv_tracker, y);
   };
 
   return do_mutate(ctx, key, params.mtime, objv_tracker,

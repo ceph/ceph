@@ -448,7 +448,8 @@ namespace StoreRandomizer {
   FakeStore mutate(const FakeStore& source_store) {
     FakeStore mutated_store;
     source_store.list(hobject_t{}, [&] (const auto& kv) {
-      const auto& [ oid, version ] = kv;
+      const auto &oid = kv.first;
+      const auto &version = kv.second;
       execute_random(
         []  { /* just drop the entry */ },
         [&] { mutated_store.push(oid, version); },

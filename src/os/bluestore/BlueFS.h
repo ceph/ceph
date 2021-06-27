@@ -114,6 +114,7 @@ public:
     uint64_t dirty_seq;
     bool locked;
     bool deleted;
+    bool is_dirty;
     boost::intrusive::list_member_hook<> dirty_item;
 
     std::atomic_int num_readers, num_writers;
@@ -129,6 +130,7 @@ public:
 	dirty_seq(0),
 	locked(false),
 	deleted(false),
+	is_dirty(false),
 	num_readers(0),
 	num_writers(0),
 	num_reading(0),
@@ -384,6 +386,8 @@ private:
   int _allocate_without_fallback(uint8_t id, uint64_t len,
 				 PExtentVector* extents);
 
+  /* signal replay log to include h->file in nearest log flush */
+  int _signal_dirty_to_log(FileWriter *h);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l);
   int _flush(FileWriter *h, bool force, bool *flushed = nullptr);
@@ -640,6 +644,8 @@ public:
   const PerfCounters* get_perf_counters() const {
     return logger;
   }
+  uint64_t debug_get_dirty_seq(FileWriter *h);
+  bool debug_get_is_dev_dirty(FileWriter *h, uint8_t dev);
 
 private:
   // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)

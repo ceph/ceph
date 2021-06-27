@@ -7,6 +7,8 @@
 #include <boost/range/algorithm_ext/insert.hpp>
 
 #include "crimson/osd/watch.h"
+#include "crimson/osd/osd_operations/internal_client_request.h"
+
 #include "messages/MWatchNotify.h"
 
 
@@ -18,12 +20,71 @@ namespace {
 
 namespace crimson::osd {
 
+// a watcher can remove itself if it has not seen a notification after a period of time.
+// in the case, we need to drop it also from the persisted `ObjectState` instance.
+// this operation resembles a bit the `_UNWATCH` subop.
+class WatchTimeoutRequest final : public InternalClientRequest {
+public:
+  WatchTimeoutRequest(WatchRef watch, Ref<PG> pg)
+    : InternalClientRequest(std::move(pg)),
+      watch(std::move(watch)) {
+  }
+
+  const hobject_t& get_target_oid() const final;
+  PG::do_osd_ops_params_t get_do_osd_ops_params() const final;
+  std::vector<OSDOp> create_osd_ops() final;
+
+private:
+  WatchRef watch;
+};
+
+const hobject_t& WatchTimeoutRequest::get_target_oid() const
+{
+  assert(watch->obc);
+  return watch->obc->get_oid();
+}
+
+PG::do_osd_ops_params_t
+WatchTimeoutRequest::get_do_osd_ops_params() const
+{
+  PG::do_osd_ops_params_t params;
+  params.conn = watch->conn;
+  params.reqid.name = watch->entity_name;
+  // as in the classical's simple_opc_create()
+  params.mtime = ceph_clock_now();
+  params.map_epoch = get_pg().get_osdmap_epoch();
+  params.orig_source_inst = { watch->entity_name, watch->winfo.addr };
+  //entity_inst_t orig_source_inst;
+  params.features = 0;
+  logger().debug("{}: params.reqid={}", __func__, params.reqid);
+  return params;
+}
+
+std::vector<OSDOp> WatchTimeoutRequest::create_osd_ops()
+{
+  logger().debug("{}", __func__);
+  assert(watch);
+  OSDOp osd_op;
+  osd_op.op.op = CEPH_OSD_OP_WATCH;
+  osd_op.op.flags = 0;
+  osd_op.op.watch.op = CEPH_OSD_WATCH_OP_UNWATCH;
+  osd_op.op.watch.cookie = watch->winfo.cookie;
+  return std::vector{std::move(osd_op)};
+}
+
+Watch::~Watch()
+{
+  logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
+}
+
 seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
 {
   if (this->conn == conn) {
     logger().debug("conn={} already connected", conn);
+    timeout_timer.cancel();
   }
 
+  timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
   this->conn = std::move(conn);
   return seastar::now();
 }
@@ -31,7 +92,7 @@ seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
 seastar::future<> Watch::send_notify_msg(NotifyRef notify)
 {
   logger().info("{} for notify(id={})", __func__, notify->ninfo.notify_id);
-  return conn->send(make_message<MWatchNotify>(
+  return conn->send(crimson::make_message<MWatchNotify>(
     winfo.cookie,
     notify->user_version,
     notify->ninfo.notify_id,
@@ -70,7 +131,7 @@ seastar::future<> Watch::send_disconnect_msg()
     return seastar::now();
   }
   ceph::bufferlist empty;
-  return conn->send(make_message<MWatchNotify>(
+  return conn->send(crimson::make_message<MWatchNotify>(
     winfo.cookie,
     0,
     0,
@@ -82,21 +143,32 @@ void Watch::discard_state()
 {
   ceph_assert(obc);
   in_progress_notifies.clear();
+  timeout_timer.cancel();
 }
 
-seastar::future<> Watch::remove(const bool send_disconnect)
+void Watch::got_ping(utime_t)
+{
+  if (is_connected()) {
+    // using cancel() + arm() as rearm() has no overload for time delta.
+    timeout_timer.cancel();
+    timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
+  }
+}
+
+seastar::future<> Watch::remove()
 {
   logger().info("{}", __func__);
-  auto disconnected = send_disconnect ? send_disconnect_msg()
-                                      : seastar::now();
-  return std::move(disconnected).then([this] {
-    return seastar::do_for_each(in_progress_notifies,
-      [this_shared=shared_from_this()] (auto notify) {
-        return notify->remove_watcher(this_shared);
-      }).then([this] {
-        discard_state();
-        return seastar::now();
-      });
+  // in contrast to ceph-osd crimson sends CEPH_WATCH_EVENT_DISCONNECT directly
+  // from the timeout handler and _after_ CEPH_WATCH_EVENT_NOTIFY_COMPLETE.
+  // this simplifies the Watch::remove() interface as callers aren't obliged
+  // anymore to decide whether EVENT_DISCONNECT needs to be send or not -- it
+  // becomes an implementation detail of Watch.
+  return seastar::do_for_each(in_progress_notifies,
+    [this_shared=shared_from_this()] (auto notify) {
+      return notify->remove_watcher(this_shared);
+    }).then([this] {
+      discard_state();
+      return seastar::now();
     });
 }
 
@@ -106,6 +178,16 @@ void Watch::cancel_notify(const uint64_t notify_id)
   const auto it = in_progress_notifies.find(notify_id);
   assert(it != std::end(in_progress_notifies));
   in_progress_notifies.erase(it);
+}
+
+void Watch::do_watch_timeout(Ref<PG> pg)
+{
+  assert(pg);
+  auto [op, fut] = pg->get_shard_services().start_operation<WatchTimeoutRequest>(
+    shared_from_this(), pg);
+  std::ignore = std::move(fut).then([op=std::move(op), this] {
+    return send_disconnect_msg();
+  });
 }
 
 bool notify_reply_t::operator<(const notify_reply_t& rhs) const
@@ -173,12 +255,12 @@ seastar::future<> Notify::complete_watcher(
 seastar::future<> Notify::send_completion(
   std::set<WatchRef> timedout_watchers)
 {
-  logger().info("{} -- {} in progress watchers, {} timedout watchers {}",
+  logger().info("{} -- {} in progress watchers, timedout watchers {}",
                 __func__, watchers.size(), timedout_watchers.size());
   logger().debug("{} sending notify replies: {}", __func__, notify_replies);
 
   ceph::bufferlist empty;
-  auto reply = make_message<MWatchNotify>(
+  auto reply = crimson::make_message<MWatchNotify>(
     ninfo.cookie,
     user_version,
     ninfo.notify_id,
@@ -204,13 +286,21 @@ seastar::future<> Notify::send_completion(
   return conn->send(std::move(reply));
 }
 
-void Notify::do_timeout()
+void Notify::do_notify_timeout()
 {
   logger().debug("{} complete={}", __func__, complete);
   if (complete) {
     return;
   }
+  // it might be that `this` is kept alive only because of the reference
+  // a watcher stores and which is being removed by `cancel_notify()`.
+  // to avoid use-after-free we bump up the ref counter with `guard_ptr`.
+  [[maybe_unused]] auto guard_ptr = shared_from_this();
   for (auto& watcher : watchers) {
+    logger().debug("canceling watcher cookie={} gid={} use_count={}",
+      watcher->get_cookie(),
+      watcher->get_watcher_gid(),
+      watcher->use_count());
     watcher->cancel_notify(ninfo.notify_id);
   }
   std::ignore = send_completion(std::move(watchers));

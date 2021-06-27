@@ -86,13 +86,13 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   string bucket_tenant;
   if (!s->account_name.empty()) {
     bool found = false;
-    std::unique_ptr<rgw::sal::RGWUser> user;
+    std::unique_ptr<rgw::sal::User> user;
 
     rgw_user uid(s->account_name);
     if (uid.tenant.empty()) {
       rgw_user tenanted_uid(uid.id, uid.id);
       user = store->get_user(tenanted_uid);
-      if (user->load_by_id(dpp, s->yield) >= 0) {
+      if (user->load_user(dpp, s->yield) >= 0) {
 	/* Succeeded */
 	found = true;
       }
@@ -100,7 +100,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
 
     if (!found) {
       user = store->get_user(uid);
-      if (user->load_by_id(dpp, s->yield) < 0) {
+      if (user->load_user(dpp, s->yield) < 0) {
 	throw -EPERM;
       }
     }
@@ -111,7 +111,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   rgw_bucket b;
   b.tenant = std::move(bucket_tenant);
   b.name = std::move(bucket_name);
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = store->get_bucket(dpp, nullptr, b, &bucket, s->yield);
   if (ret < 0) {
     throw ret;
@@ -120,9 +120,9 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   ldpp_dout(dpp, 20) << "temp url user (bucket owner): " << bucket->get_info().owner
                  << dendl;
 
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
   user = store->get_user(bucket->get_info().owner);
-  if (user->load_by_id(dpp, s->yield) < 0) {
+  if (user->load_user(dpp, s->yield) < 0) {
     throw -EPERM;
   }
 
@@ -451,7 +451,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 10) << "swift user=" << swift_user << dendl;
 
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
   ret = store->get_user_by_swift(dpp, swift_user, s->yield, &user);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user" << dendl;
@@ -572,7 +572,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::deny(-EPERM);
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
   ret = store->get_user_by_swift(dpp, swift_user, s->yield, &user);
   if (ret < 0) {
     throw ret;
@@ -633,7 +633,7 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
   s->prot_flags |= RGW_REST_SWIFT;
 
   string user_str;
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
   bufferlist bl;
   RGWAccessKey *swift_key;
   map<string, RGWAccessKey>::iterator siter;
@@ -744,7 +744,7 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(rgw::sal::RGWStore *store, struct req_state *state,
+int RGWHandler_SWIFT_Auth::init(rgw::sal::Store* store, struct req_state *state,
 				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";

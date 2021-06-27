@@ -35,6 +35,7 @@ using ceph::bufferlist;
 using ceph::fixed_u_to_string;
 
 using TOPNSPC::common::cmd_getval;
+using TOPNSPC::common::cmd_getval_or;
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMapDigest, pgmap_digest, pgmap);
 MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap, pgmap, pgmap);
@@ -3244,7 +3245,9 @@ void PGMap::get_health_checks(
       } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
 	summary += " have dangerous mismatch between BlueStore block device and free list sizes";
       } else if (asum.first == "BLUESTORE_NO_PER_PG_OMAP") {
-	summary += " reporting legacy (not per-pg) BlueStore omap usage stats";
+	summary += " reporting legacy (not per-pg) BlueStore omap";
+      } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
+	summary += " reporting legacy (not per-pool) BlueStore omap usage stats";
       } else if (asum.first == "BLUESTORE_SPURIOUS_READ_ERRORS") {
         summary += " have spurious read errors";
       }
@@ -3655,9 +3658,9 @@ int process_pg_map_command(
     cmd_getval(cmdmap, "stuckops", stuckop_vec);
     if (stuckop_vec.empty())
       stuckop_vec.push_back("unclean");
-    int64_t threshold;
-    cmd_getval(cmdmap, "threshold", threshold,
-               g_conf().get_val<int64_t>("mon_pg_stuck_threshold"));
+    const int64_t threshold = cmd_getval_or<int64_t>(
+      cmdmap, "threshold",
+      g_conf().get_val<int64_t>("mon_pg_stuck_threshold"));
 
     if (pg_map.dump_stuck_pg_stats(ds, f, (int)threshold, stuckop_vec) < 0) {
       *ss << "failed";
@@ -3669,9 +3672,9 @@ int process_pg_map_command(
   }
 
   if (prefix == "pg debug") {
-    string debugop;
-    cmd_getval(cmdmap, "debugop", debugop,
-	       string("unfound_objects_exist"));
+    const string debugop = cmd_getval_or<string>(
+      cmdmap, "debugop",
+      "unfound_objects_exist");
     if (debugop == "unfound_objects_exist") {
       bool unfound_objects_exist = false;
       for (const auto& p : pg_map.pg_stat) {

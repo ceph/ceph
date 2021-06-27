@@ -15,7 +15,7 @@ Placing a host into maintenance, adopts the following workflow;
 #. confirm that the removal of the host does not impact data availability (the following
    steps will assume it is safe to proceed)
 
-   * orch host ok-to-stop <host> would be used here
+   * ``orch host ok-to-stop <host>`` would be used here
 
 #. if the host has osd daemons, apply noout to the host subtree to prevent data migration
    from triggering during the planned maintenance slot.

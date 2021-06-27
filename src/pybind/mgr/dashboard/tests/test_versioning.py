@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import unittest
 
@@ -11,6 +10,7 @@ from . import ControllerTestCase  # pylint: disable=no-name-in-module
 class VTest(RESTController):
     RESOURCE_ID = "vid"
 
+    @RESTController.MethodMap(version="0.1")
     def list(self):
         return {'version': ""}
 
@@ -30,6 +30,15 @@ class RESTVersioningTest(ControllerTestCase, unittest.TestCase):
     @classmethod
     def setup_server(cls):
         cls.setup_controllers([VTest], "/test")
+
+    def test_list(self):
+        for (version, expected_status) in [
+                ("0.1", 200),
+                ("2.0", 415)
+        ]:
+            with self.subTest(version=version):
+                self._get('/test/api/vtest', version=version)
+                self.assertStatus(expected_status)
 
     def test_v1(self):
         for (version, expected_status) in [

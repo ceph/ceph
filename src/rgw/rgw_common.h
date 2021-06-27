@@ -45,10 +45,10 @@ namespace ceph {
 }
 
 namespace rgw::sal {
-  class RGWUser;
-  class RGWBucket;
-  class RGWObject;
-  using RGWAttrs = std::map<std::string, ceph::buffer::list>;
+  class User;
+  class Bucket;
+  class Object;
+  using Attrs = std::map<std::string, ceph::buffer::list>;
 }
 
 using ceph::crypto::MD5;
@@ -1529,11 +1529,11 @@ struct req_state : DoutPrefixProvider {
   string bucket_tenant;
   string bucket_name;
 
-  std::unique_ptr<rgw::sal::RGWBucket> bucket;
-  std::unique_ptr<rgw::sal::RGWObject> object;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  std::unique_ptr<rgw::sal::Object> object;
   string src_tenant_name;
   string src_bucket_name;
-  std::unique_ptr<rgw::sal::RGWObject> src_object;
+  std::unique_ptr<rgw::sal::Object> src_object;
   ACLOwner bucket_owner;
   ACLOwner owner;
 
@@ -1552,7 +1552,7 @@ struct req_state : DoutPrefixProvider {
 
   bool has_bad_meta{false};
 
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
 
   struct {
     /* TODO(rzarzynski): switch out to the static_ptr for both members. */
@@ -1637,11 +1637,13 @@ struct req_state : DoutPrefixProvider {
   //token claims from STS token for ops log (can be used for Keystone token also)
   std::vector<string> token_claims;
 
+  vector<rgw::IAM::Policy> session_policies;
+
   req_state(CephContext* _cct, RGWEnv* e, uint64_t id);
   ~req_state();
 
 
-  void set_user(std::unique_ptr<rgw::sal::RGWUser>& u) { user.swap(u); }
+  void set_user(std::unique_ptr<rgw::sal::User>& u) { user.swap(u); }
   bool is_err() const { return err.is_err(); }
 
   // implements DoutPrefixProvider
@@ -2102,7 +2104,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
-rgw::IAM::Effect eval_user_policies(const vector<rgw::IAM::Policy>& user_policies,
+rgw::IAM::Effect eval_identity_or_session_policies(const vector<rgw::IAM::Policy>& user_policies,
                           const rgw::IAM::Environment& env,
                           boost::optional<const rgw::auth::Identity&> id,
                           const uint64_t op,
@@ -2131,7 +2133,8 @@ bool verify_bucket_permission(
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
-  const vector<rgw::IAM::Policy>& user_policies,
+  const vector<rgw::IAM::Policy>& identity_policies,
+  const vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
 bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * const s, const uint64_t op);
 bool verify_bucket_permission_no_policy(
@@ -2153,7 +2156,8 @@ extern bool verify_object_permission(
   RGWAccessControlPolicy * const bucket_acl,
   RGWAccessControlPolicy * const object_acl,
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
-  const vector<rgw::IAM::Policy>& user_policies,
+  const vector<rgw::IAM::Policy>& identity_policies,
+  const vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
 extern bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s, uint64_t op);
 extern bool verify_object_permission_no_policy(
@@ -2167,7 +2171,7 @@ extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, st
 					       int perm);
 extern int verify_object_lock(
   const DoutPrefixProvider* dpp,
-  const rgw::sal::RGWAttrs& attrs,
+  const rgw::sal::Attrs& attrs,
   const bool bypass_perm,
   const bool bypass_governance_mode);
 

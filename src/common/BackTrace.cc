@@ -11,7 +11,7 @@
 
 namespace ceph {
 
-void BackTrace::print(std::ostream& out) const
+void ClibBackTrace::print(std::ostream& out) const
 {
   out << " " << pretty_version_to_str() << std::endl;
   for (size_t i = skip; i < size; i++) {
@@ -19,7 +19,7 @@ void BackTrace::print(std::ostream& out) const
   }
 }
 
-void BackTrace::dump(Formatter *f) const
+void ClibBackTrace::dump(Formatter *f) const
 {
   f->open_array_section("backtrace");
   for (size_t i = skip; i < size; i++) {
@@ -29,7 +29,7 @@ void BackTrace::dump(Formatter *f) const
   f->close_section();
 }
 
-std::string BackTrace::demangle(const char* name)
+std::string ClibBackTrace::demangle(const char* name)
 {
   // find the parentheses and address offset surrounding the mangled name
 #ifdef __FreeBSD__
@@ -68,6 +68,22 @@ std::string BackTrace::demangle(const char* name)
   } else {
     // didn't find the mangled name, just print the whole line
     return name;
+  }
+}
+
+void PyBackTrace::dump(Formatter *f) const
+{
+  f->open_array_section("backtrace");
+  for (auto& i : strings) {
+    f->dump_string("frame", i);
+  }
+  f->close_section();
+}
+
+void PyBackTrace::print(std::ostream& out) const
+{
+  for (auto& i : strings) {
+    out << i << std::endl;
   }
 }
 

@@ -114,7 +114,7 @@ int StandbyPyModule::load()
   Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
     derr << "Failed to construct class in '" << get_name() << "'" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, get_name(), "StandbyPyModule::load") << dendl;
     return -EINVAL;
   } else {
     dout(1) << "Constructed class from module: " << get_name() << dendl;

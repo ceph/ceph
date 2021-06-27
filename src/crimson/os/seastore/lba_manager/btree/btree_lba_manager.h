@@ -50,13 +50,22 @@ public:
   mkfs_ret mkfs(
     Transaction &t) final;
 
-  get_mapping_ret get_mapping(
+  get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) final;
 
   get_mappings_ret get_mappings(
     Transaction &t,
     laddr_list_t &&list) final;
+
+  get_mapping_ret get_mapping(
+    Transaction &t,
+    laddr_t offset) final;
+
+  find_hole_ret find_hole(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t) final;
 
   alloc_extent_ret alloc_extent(
     Transaction &t,
@@ -80,7 +89,7 @@ public:
     return update_refcount(t, addr, 1);
   }
 
-  complete_transaction_ret complete_transaction(
+  void complete_transaction(
     Transaction &t) final;
 
   init_cached_extent_ret init_cached_extent(
@@ -99,7 +108,7 @@ public:
 
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
-    CachedExtentRef extent);
+    CachedExtentRef extent) final;
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
@@ -114,6 +123,7 @@ public:
     bpin->parent = nullptr;
   }
 
+  ~BtreeLBAManager();
 private:
   SegmentManager &segment_manager;
   Cache &cache;
@@ -132,8 +142,8 @@ private:
    *
    * Get a reference to the root LBANode.
    */
-  using get_root_ertr = base_ertr;
-  using get_root_ret = get_root_ertr::future<LBANodeRef>;
+  using get_root_iertr = base_iertr;
+  using get_root_ret = get_root_iertr::future<LBANodeRef>;
   get_root_ret get_root(Transaction &);
 
   /**
@@ -141,8 +151,8 @@ private:
    *
    * Insert a lba mapping into the tree
    */
-  using insert_mapping_ertr = base_ertr;
-  using insert_mapping_ret = insert_mapping_ertr::future<LBAPinRef>;
+  using insert_mapping_iertr = base_iertr;
+  using insert_mapping_ret = insert_mapping_iertr::future<LBAPinRef>;
   insert_mapping_ret insert_mapping(
     Transaction &t,   ///< [in,out] transaction
     LBANodeRef root,  ///< [in] root node
@@ -166,15 +176,15 @@ private:
    *
    * Updates mapping, removes if f returns nullopt
    */
-  using update_mapping_ertr = ref_ertr;
-  using update_mapping_ret = ref_ertr::future<lba_map_val_t>;
+  using update_mapping_iertr = ref_iertr;
+  using update_mapping_ret = ref_iertr::future<lba_map_val_t>;
   using update_func_t = LBANode::mutate_func_t;
   update_mapping_ret update_mapping(
     Transaction &t,
     laddr_t addr,
     update_func_t &&f);
 
-  using update_internal_mapping_ertr = LBANode::mutate_internal_address_ertr;
+  using update_internal_mapping_iertr = LBANode::mutate_internal_address_iertr;
   using update_internal_mapping_ret = LBANode::mutate_internal_address_ret;
   update_internal_mapping_ret update_internal_mapping(
     Transaction &t,

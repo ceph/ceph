@@ -1,3 +1,10 @@
+=======
+Bobtail
+=======
+
+Bobtail is the second stable release of Ceph.  It is named after the
+bobtail squid (order Sepiolida), a group of cephalopods closely related to cuttlefish.
+
 v0.56.7 "bobtail"
 =================
 

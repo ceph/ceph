@@ -148,6 +148,8 @@ public:
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
+  template<class T, typename... Args>
+  friend MURef<T> crimson::make_message(Args&&... args);
 };
 
 inline std::ostream& operator<<(std::ostream& out, const MMDSResolve::peer_request&) {

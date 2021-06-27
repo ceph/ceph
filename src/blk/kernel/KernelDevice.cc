@@ -94,8 +94,8 @@ int KernelDevice::_lock()
   int fd = fd_directs[WRITE_LIFE_NOT_SET];
   uint64_t nr_tries = 0;
   for (;;) {
-    struct flock fl = { F_WRLCK,
-                        SEEK_SET };
+    struct flock fl = { .l_type = F_WRLCK,
+                        .l_whence = SEEK_SET };
     int r = ::fcntl(fd, F_OFD_SETLK, &fl);
     if (r < 0) {
       if (errno == EINVAL) {
@@ -1052,13 +1052,14 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	 << age
 	 << "s" << dendl;
   }
-
   if (r < 0) {
     if (ioc->allow_eio && is_expected_ioerr(r)) {
       r = -EIO;
     } else {
       r = -errno;
     }
+    derr << __func__ << " 0x" << std::hex << off << "~" << left
+         << std::dec << " error: " << cpp_strerror(r) << dendl;
     goto out;
   }
   ceph_assert((uint64_t)r == len);

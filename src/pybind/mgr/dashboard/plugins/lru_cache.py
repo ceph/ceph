@@ -4,7 +4,6 @@ This is a minimal implementation of lru_cache function.
 
 Based on Python 3 functools and backports.functools_lru_cache.
 """
-from __future__ import absolute_import
 
 from collections import OrderedDict
 from functools import wraps

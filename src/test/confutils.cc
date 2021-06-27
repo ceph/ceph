@@ -17,21 +17,17 @@
 #include "gtest/gtest.h"
 #include "include/buffer.h"
 
-#if __has_include(<filesystem>)
-#include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
-
 #include <errno.h>
+#include <filesystem>
 #include <iostream>
-#include <stdlib.h>
 #include <sstream>
+
+#include <stdlib.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+namespace fs = std::filesystem;
 
 using ceph::bufferlist;
 using std::cerr;

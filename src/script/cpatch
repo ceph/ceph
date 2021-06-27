@@ -4,7 +4,7 @@ SCRIPT=$(readlink -f "$0")
 SCRIPTPATH=$(dirname "$SCRIPT")
 BUILDPATH=$(pwd)
 
-if [ ! -e Makefile ] || [ ! -e ../do_cmake.sh ]; then
+if [ ! -e Makefile ] && [ ! -e build.ninja ] || [ ! -e ../do_cmake.sh ]; then
     echo "must run from cmake build dir"
     exit 1
 fi
@@ -137,7 +137,7 @@ if [ $py -eq 1 ] || [ $all -eq 1 ]; then
     dockerfile+=$'ADD python_common.tar /usr/lib/python3.8/site-packages\n'
 
     pushd lib/cython_modules/lib.3
-    CYTHONLIBS="*.cpython-38*.so"
+    CYTHONLIBS="*.cpython-3*.so"
     mkdir -p $TMP/cythonlib
     for f in $CYTHONLIBS; do cp $f $TMP/cythonlib ; done
     [ $strip -eq 1 ] && strip $TMP/cythonlib/*

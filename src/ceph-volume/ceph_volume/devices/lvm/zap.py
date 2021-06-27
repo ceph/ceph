@@ -166,8 +166,8 @@ class Zap(object):
         Device examples: vg-name/lv-name, /dev/vg-name/lv-name
         Requirements: Must be a logical volume (LV)
         """
-        lv = api.get_first_lv(filters={'lv_name': device.lv_name, 'vg_name':
-                                       device.vg_name})
+        lv = api.get_single_lv(filters={'lv_name': device.lv_name, 'vg_name':
+                                        device.vg_name})
         self.unmount_lv(lv)
 
         wipefs(device.abspath)
@@ -231,7 +231,7 @@ class Zap(object):
                 mlogger.info('Zapping lvm member {}. lv_path is {}'.format(device.abspath, lv.lv_path))
                 self.zap_lv(Device(lv.lv_path))
             else:
-                vg = api.get_first_vg(filters={'vg_name': lv.vg_name})
+                vg = api.get_single_vg(filters={'vg_name': lv.vg_name})
                 if vg:
                     mlogger.info('Found empty VG {}, removing'.format(vg.vg_name))
                     api.remove_vg(vg.vg_name)

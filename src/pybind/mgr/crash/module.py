@@ -100,25 +100,55 @@ class Module(MgrModule):
             if (self.time_from_string(cast(str, crash['timestamp'])) > cutoff
                 and 'archived' not in crash)
         }
-        num = len(recent)
-        health_checks: Dict[str, Dict[str, Union[int, str, List[str]]]] = {}
-        if recent:
-            detail = [
-                '%s crashed on host %s at %s' % (
-                    crash.get('entity_name', 'unidentified daemon'),
-                    crash.get('utsname_hostname', '(unknown)'),
-                    crash.get('timestamp', 'unknown time'))
-                for crash in recent.values()]
+
+        def prune_detail(ls: List[str]) -> int:
+            num = len(ls)
             if num > 30:
-                detail = detail[0:30]
-                detail.append('and %d more' % (num - 30))
-            self.log.debug('detail %s' % detail)
+                ls = ls[0:30]
+                ls.append('and %d more' % (num - 30))
+            return num
+
+        daemon_crashes = []
+        module_crashes = []
+        for c in recent.values():
+            if 'mgr_module' in c:
+                module_crashes.append(c)
+            else:
+                daemon_crashes.append(c)
+        daemon_detail = [
+            '%s crashed on host %s at %s' % (
+                crash.get('entity_name', 'unidentified daemon'),
+                crash.get('utsname_hostname', '(unknown)'),
+                crash.get('timestamp', 'unknown time'))
+            for crash in daemon_crashes]
+        module_detail = [
+            'mgr module %s crashed in daemon %s on host %s at %s' % (
+                crash.get('mgr_module', 'unidentified module'),
+                crash.get('entity_name', 'unidentified daemon'),
+                crash.get('utsname_hostname', '(unknown)'),
+                crash.get('timestamp', 'unknown time'))
+            for crash in module_crashes]
+        daemon_num = prune_detail(daemon_detail)
+        module_num = prune_detail(module_detail)
+
+        health_checks: Dict[str, Dict[str, Union[int, str, List[str]]]] = {}
+        if daemon_detail:
+            self.log.debug('daemon detail %s' % daemon_detail)
             health_checks['RECENT_CRASH'] = {
                 'severity': 'warning',
-                'summary': '%d daemons have recently crashed' % (num),
-                'count': num,
-                'detail': detail,
+                'summary': '%d daemons have recently crashed' % (daemon_num),
+                'count': daemon_num,
+                'detail': daemon_detail,
             }
+        if module_detail:
+            self.log.debug('module detail %s' % module_detail)
+            health_checks['RECENT_MGR_MODULE_CRASH'] = {
+                'severity': 'warning',
+                'summary': '%d mgr modules have recently crashed' % (module_num),
+                'count': module_num,
+                'detail': module_detail,
+            }
+
         self.set_health_checks(health_checks)
 
     def time_from_string(self, timestr: str) -> datetime.datetime:

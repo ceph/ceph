@@ -164,7 +164,6 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
-	std::string fs_name_,
         ceph::mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
@@ -178,8 +177,10 @@ class MDSRank {
 	boost::asio::io_context& ioc);
 
     mds_rank_t get_nodeid() const { return whoami; }
-    std::string_view get_fs_name() const { return fs_name; }
-    int64_t get_metadata_pool();
+    int64_t get_metadata_pool() const
+    {
+        return metadata_pool;
+    }
 
     mono_time get_starttime() const {
       return starttime;
@@ -219,7 +220,7 @@ class MDSRank {
     bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
 
     bool is_cache_trimmable() const {
-      return is_clientreplay() || is_active() || is_stopping();
+      return is_standby_replay() || is_clientreplay() || is_active() || is_stopping();
     }
 
     void handle_write_error(int err);
@@ -440,7 +441,6 @@ class MDSRank {
     friend class C_MDS_MonCommand;
 
     const mds_rank_t whoami;
-    std::string fs_name;
 
     ~MDSRank();
 
@@ -601,6 +601,10 @@ class MDSRank {
 private:
     bool send_status = true;
 
+    // The metadata pool won't change in the whole life time of the fs,
+    // with this we can get rid of the mds_lock in many places too.
+    int64_t metadata_pool = -1;
+
     // "task" string that gets displayed in ceph status
     inline static const std::string SCRUB_STATUS_KEY = "scrub status";
 
@@ -653,7 +657,6 @@ class MDSRankDispatcher : public MDSRank, public md_config_obs_t
 public:
   MDSRankDispatcher(
       mds_rank_t whoami_,
-      std::string fs_name,
       ceph::mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,

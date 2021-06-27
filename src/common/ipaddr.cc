@@ -5,7 +5,6 @@
 #include <ifaddrs.h>
 #include <stdlib.h>
 #include <string.h>
-#include <boost/algorithm/string/predicate.hpp>
 #if defined(__FreeBSD__)
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -33,53 +32,22 @@ void netmask_ipv4(const struct in_addr *addr,
   out->s_addr = addr->s_addr & mask;
 }
 
-
-static bool match_numa_node(const string& if_name, int numa_node)
+bool matches_ipv4_in_subnet(const struct ifaddrs& addrs,
+			  const struct sockaddr_in* net,
+			  unsigned int prefix_len)
 {
-#if defined(WITH_SEASTAR) || defined(_WIN32)
-  return true;
-#else
-  int if_node = -1;
-  int r = get_iface_numa_node(if_name, &if_node);
-  if (r < 0) {
+  if (addrs.ifa_addr == nullptr)
     return false;
-  }
-  return if_node == numa_node;
-#endif
-}
 
-const struct ifaddrs *find_ipv4_in_subnet(const struct ifaddrs *addrs,
-					  const struct sockaddr_in *net,
-					  unsigned int prefix_len,
-					  int numa_node) {
-  struct in_addr want, temp;
-
+  if (addrs.ifa_addr->sa_family != net->sin_family)
+      return false;
+  struct in_addr want;
   netmask_ipv4(&net->sin_addr, prefix_len, &want);
-  for (; addrs != NULL; addrs = addrs->ifa_next) {
-
-    if (addrs->ifa_addr == NULL)
-      continue;
-
-    if (boost::starts_with(addrs->ifa_name, "lo:"))
-      continue;
-
-    if (numa_node >= 0 && !match_numa_node(addrs->ifa_name, numa_node))
-      continue;
-
-    if (addrs->ifa_addr->sa_family != net->sin_family)
-      continue;
-
-    struct in_addr *cur = &((struct sockaddr_in*)addrs->ifa_addr)->sin_addr;
-    netmask_ipv4(cur, prefix_len, &temp);
-
-    if (temp.s_addr == want.s_addr) {
-      return addrs;
-    }
-  }
-
-  return NULL;
+  struct in_addr *cur = &((struct sockaddr_in*)addrs.ifa_addr)->sin_addr;
+  struct in_addr temp;
+  netmask_ipv4(cur, prefix_len, &temp);
+  return temp.s_addr == want.s_addr;
 }
-
 
 void netmask_ipv6(const struct in6_addr *addr,
 		  unsigned int prefix_len,
@@ -94,58 +62,24 @@ void netmask_ipv6(const struct in6_addr *addr,
     memset(out->s6_addr+prefix_len/8+1, 0, 16-prefix_len/8-1);
 }
 
+bool matches_ipv6_in_subnet(const struct ifaddrs& addrs,
+			    const struct sockaddr_in6* net,
+			    unsigned int prefix_len)
+{
+  if (addrs.ifa_addr == nullptr)
+    return false;
 
-const struct ifaddrs *find_ipv6_in_subnet(const struct ifaddrs *addrs,
-					  const struct sockaddr_in6 *net,
-					  unsigned int prefix_len,
-					  int numa_node) {
-  struct in6_addr want, temp;
-
+  if (addrs.ifa_addr->sa_family != net->sin6_family)
+    return false;
+  struct in6_addr want;
   netmask_ipv6(&net->sin6_addr, prefix_len, &want);
-  for (; addrs != NULL; addrs = addrs->ifa_next) {
-
-    if (addrs->ifa_addr == NULL)
-      continue;
-
-    if (boost::starts_with(addrs->ifa_name, "lo:"))
-      continue;
-
-    if (numa_node >= 0 && !match_numa_node(addrs->ifa_name, numa_node))
-      continue;
-
-    if (addrs->ifa_addr->sa_family != net->sin6_family)
-      continue;
-
-    struct in6_addr *cur = &((struct sockaddr_in6*)addrs->ifa_addr)->sin6_addr;
-    if (IN6_IS_ADDR_LINKLOCAL(cur))
-      continue;
-    netmask_ipv6(cur, prefix_len, &temp);
-
-    if (IN6_ARE_ADDR_EQUAL(&temp, &want))
-      return addrs;
-  }
-
-  return NULL;
+  struct in6_addr temp;
+  struct in6_addr *cur = &((struct sockaddr_in6*)addrs.ifa_addr)->sin6_addr;
+  if (IN6_IS_ADDR_LINKLOCAL(cur))
+    return false;
+  netmask_ipv6(cur, prefix_len, &temp);
+  return IN6_ARE_ADDR_EQUAL(&temp, &want);
 }
-
-
-const struct ifaddrs *find_ip_in_subnet(const struct ifaddrs *addrs,
-					const struct sockaddr *net,
-					unsigned int prefix_len,
-					int numa_node) {
-  switch (net->sa_family) {
-    case AF_INET:
-      return find_ipv4_in_subnet(addrs, (struct sockaddr_in*)net, prefix_len,
-				 numa_node);
-
-    case AF_INET6:
-      return find_ipv6_in_subnet(addrs, (struct sockaddr_in6*)net, prefix_len,
-				 numa_node);
-    }
-
-  return NULL;
-}
-
 
 bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int *prefix_len) {
   char *slash = strchr((char*)s, '/');

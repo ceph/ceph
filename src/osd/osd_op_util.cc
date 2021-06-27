@@ -73,8 +73,6 @@ int OpInfo::set_from_op(
   const MOSDOp *m,
   const OSDMap &osdmap)
 {
-  vector<OSDOp>::const_iterator iter;
-
   // client flags have no bearing on whether an op is a read, write, etc.
   clear();
 
@@ -84,9 +82,18 @@ int OpInfo::set_from_op(
   if (m->has_flag(CEPH_OSD_FLAG_RETURNVEC)) {
     set_returnvec();
   }
+  return set_from_op(m->ops, m->get_pg(), osdmap);
+}
+
+int OpInfo::set_from_op(
+  const std::vector<OSDOp>& ops,
+  const pg_t& pg,
+  const OSDMap &osdmap)
+{
+  vector<OSDOp>::const_iterator iter;
 
   // set bits based on op codes, called methods.
-  for (iter = m->ops.begin(); iter != m->ops.end(); ++iter) {
+  for (iter = ops.begin(); iter != ops.end(); ++iter) {
     if ((iter->op.op == CEPH_OSD_OP_WATCH &&
 	 iter->op.watch.op == CEPH_OSD_WATCH_OP_PING)) {
       /* This a bit odd.  PING isn't actually a write.  It can't
@@ -116,7 +123,7 @@ int OpInfo::set_from_op(
       set_cache();
 
     // check for ec base pool
-    int64_t poolid = m->get_pg().pool();
+    int64_t poolid = pg.pool();
     const pg_pool_t *pool = osdmap.get_pg_pool(poolid);
     if (pool && pool->is_tier()) {
       const pg_pool_t *base_pool = osdmap.get_pg_pool(pool->tier_of);
@@ -207,12 +214,12 @@ int OpInfo::set_from_op(
       // if we get a delete with FAILOK we can skip handle cache. without
       // FAILOK we still need to promote (or do something smarter) to
       // determine whether to return ENOENT or 0.
-      if (iter == m->ops.begin() &&
+      if (iter == ops.begin() &&
 	  iter->op.flags == CEPH_OSD_OP_FLAG_FAILOK) {
 	set_skip_handle_cache();
       }
       // skip promotion when proxying a delete op
-      if (m->ops.size() == 1) {
+      if (ops.size() == 1) {
 	set_skip_promote();
       }
       break;
@@ -221,7 +228,7 @@ int OpInfo::set_from_op(
     case CEPH_OSD_OP_CACHE_FLUSH:
     case CEPH_OSD_OP_CACHE_EVICT:
       // If try_flush/flush/evict is the only op, can skip handle cache.
-      if (m->ops.size() == 1) {
+      if (ops.size() == 1) {
 	set_skip_handle_cache();
       }
       break;
@@ -231,7 +238,7 @@ int OpInfo::set_from_op(
     case CEPH_OSD_OP_SPARSE_READ:
     case CEPH_OSD_OP_CHECKSUM:
     case CEPH_OSD_OP_WRITEFULL:
-      if (m->ops.size() == 1 &&
+      if (ops.size() == 1 &&
           (iter->op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE ||
            iter->op.flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)) {
         set_skip_promote();

@@ -44,10 +44,10 @@
   # buckets
   root root {
   \tid -1\t\t# do not change unnecessarily (esc)
-  \t# weight 1.000 (esc)
+  \t# weight 1.00000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.0 weight 1.000 (esc)
+  \titem osd.0 weight 1.00000 (esc)
   }
   
   # rules

@@ -13,52 +13,47 @@
 
 #include "rgw/rgw_rados.h"
 
-namespace rgw { namespace sal { class RGWStore; } }
+namespace rgw { namespace sal {
 
 class RGWRole
 {
-  using string = std::string;
-  static const string role_name_oid_prefix;
-  static const string role_oid_prefix;
-  static const string role_path_oid_prefix;
-  static const string role_arn_prefix;
+public:
+  static const std::string role_name_oid_prefix;
+  static const std::string role_oid_prefix;
+  static const std::string role_path_oid_prefix;
+  static const std::string role_arn_prefix;
   static constexpr int MAX_ROLE_NAME_LEN = 64;
   static constexpr int MAX_PATH_NAME_LEN = 512;
   static constexpr uint64_t SESSION_DURATION_MIN = 3600; // in seconds
   static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
+protected:
 
-  CephContext *cct;
-  rgw::sal::RGWStore* store;
-  string id;
-  string name;
-  string path;
-  string arn;
-  string creation_date;
-  string trust_policy;
-  map<string, string> perm_policy_map;
-  string tenant;
+  std::string id;
+  std::string name;
+  std::string path;
+  std::string arn;
+  std::string creation_date;
+  std::string trust_policy;
+  map<std::string, std::string> perm_policy_map;
+  std::string tenant;
   uint64_t max_session_duration;
 
-  int store_info(bool exclusive, optional_yield y);
-  int store_name(bool exclusive, optional_yield y);
-  int store_path(bool exclusive, optional_yield y);
-  int read_id(const DoutPrefixProvider *dpp, const string& role_name, const string& tenant, string& role_id, optional_yield y);
-  int read_name(const DoutPrefixProvider *dpp, optional_yield y);
-  int read_info(const DoutPrefixProvider *dpp, optional_yield y);
-  bool validate_input();
+public:
+  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y) = 0;
+  virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  bool validate_input(const DoutPrefixProvider* dpp);
   void extract_name_tenant(const std::string& str);
 
-public:
-  RGWRole(CephContext *cct,
-          rgw::sal::RGWStore* store,
-          string name,
-          string path,
-          string trust_policy,
-          string tenant,
-          string max_session_duration_str="")
-  : cct(cct),
-    store(store),
-    name(std::move(name)),
+  RGWRole(std::string name,
+          std::string tenant,
+          std::string path="",
+          std::string trust_policy="",
+          std::string max_session_duration_str="")
+  : name(std::move(name)),
     path(std::move(path)),
     trust_policy(std::move(trust_policy)),
     tenant(std::move(tenant)) {
@@ -72,32 +67,9 @@ public:
     }
   }
 
-  RGWRole(CephContext *cct,
-          rgw::sal::RGWStore* store,
-          string name,
-          string tenant)
-  : cct(cct),
-    store(store),
-    name(std::move(name)),
-    tenant(std::move(tenant)) {
-    extract_name_tenant(this->name);
-  }
+  RGWRole(std::string id) : id(std::move(id)) {}
 
-  RGWRole(CephContext *cct,
-          rgw::sal::RGWStore* store,
-          string id)
-  : cct(cct),
-    store(store),
-    id(std::move(id)) {}
-
-  RGWRole(CephContext *cct,
-          rgw::sal::RGWStore* store)
-  : cct(cct),
-    store(store) {}
-
-  RGWRole() {}
-
-  ~RGWRole() = default;
+  virtual ~RGWRole() = default;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
@@ -131,39 +103,33 @@ public:
     DECODE_FINISH(bl);
   }
 
-  const string& get_id() const { return id; }
-  const string& get_name() const { return name; }
-  const string& get_tenant() const { return tenant; }
-  const string& get_path() const { return path; }
-  const string& get_create_date() const { return creation_date; }
-  const string& get_assume_role_policy() const { return trust_policy;}
+  const std::string& get_id() const { return id; }
+  const std::string& get_name() const { return name; }
+  const std::string& get_tenant() const { return tenant; }
+  const std::string& get_path() const { return path; }
+  const std::string& get_create_date() const { return creation_date; }
+  const std::string& get_assume_role_policy() const { return trust_policy;}
   const uint64_t& get_max_session_duration() const { return max_session_duration; }
 
-  void set_id(const string& id) { this->id = id; }
+  void set_id(const std::string& id) { this->id = id; }
 
-  int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
+  virtual int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   int get(const DoutPrefixProvider *dpp, optional_yield y);
   int get_by_id(const DoutPrefixProvider *dpp, optional_yield y);
-  int update(optional_yield y);
-  void update_trust_policy(string& trust_policy);
-  void set_perm_policy(const string& policy_name, const string& perm_policy);
-  vector<string> get_role_policy_names();
-  int get_role_policy(const string& policy_name, string& perm_policy);
-  int delete_policy(const string& policy_name);
+  int update(const DoutPrefixProvider *dpp, optional_yield y);
+  void update_trust_policy(std::string& trust_policy);
+  void set_perm_policy(const std::string& policy_name, const std::string& perm_policy);
+  vector<std::string> get_role_policy_names();
+  int get_role_policy(const DoutPrefixProvider* dpp, const std::string& policy_name, std::string& perm_policy);
+  int delete_policy(const DoutPrefixProvider* dpp, const std::string& policy_name);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  static const string& get_names_oid_prefix();
-  static const string& get_info_oid_prefix();
-  static const string& get_path_oid_prefix();
-  static int get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
-				      rgw::sal::RGWStore *store,
-                                      CephContext *cct,
-                                      const string& path_prefix,
-                                      const string& tenant,
-                                      vector<RGWRole>& roles,
-				      optional_yield y);
+  static const std::string& get_names_oid_prefix();
+  static const std::string& get_info_oid_prefix();
+  static const std::string& get_path_oid_prefix();
 };
 WRITE_CLASS_ENCODER(RGWRole)
+} } // namespace rgw::sal
 #endif /* CEPH_RGW_ROLE_H */

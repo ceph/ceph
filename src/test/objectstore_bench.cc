@@ -207,11 +207,11 @@ int main(int argc, const char *argv[])
   dout(0) << "repeats " << cfg.repeats << dendl;
   dout(0) << "threads " << cfg.threads << dendl;
 
-  auto os = std::unique_ptr<ObjectStore>(
+  auto os =
       ObjectStore::create(g_ceph_context,
                           g_conf()->osd_objectstore,
                           g_conf()->osd_data,
-                          g_conf()->osd_journal));
+                          g_conf()->osd_journal);
 
   //Checking data folder: create if needed or error if it's not empty
   DIR *dir = ::opendir(g_conf()->osd_data.c_str());

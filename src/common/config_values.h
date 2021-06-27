@@ -56,7 +56,7 @@ public:
 #define SAFE_OPTION(name, ty)       \
   protected:                        \
     OPTION_##ty(name)               
-#include "common/legacy_config_opts.h"
+#include "common/options/legacy_config_opts.h"
 #undef OPTION_OPT_INT
 #undef OPTION_OPT_LONGLONG
 #undef OPTION_OPT_STR

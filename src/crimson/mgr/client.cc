@@ -70,7 +70,7 @@ void Client::ms_handle_connect(crimson::net::ConnectionRef c)
   gate.dispatch_in_background(__func__, *this, [this, c] {
     if (conn == c) {
       // ask for the mgrconfigure message
-      auto m = ceph::make_message<MMgrOpen>();
+      auto m = crimson::make_message<MMgrOpen>();
       m->daemon_name = local_conf()->name.get_id();
       return conn->send(std::move(m));
     } else {
@@ -152,7 +152,10 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::ConnectionRef,
 void Client::report()
 {
   gate.dispatch_in_background(__func__, *this, [this] {
-    assert(conn);
+    if (!conn) {
+      logger().warn("report: no conn available; raport skipped");
+      return seastar::now();
+    }
     auto pg_stats = with_stats.get_stats();
     return conn->send(std::move(pg_stats));
   });

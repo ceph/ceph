@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=2 sw=2 smarttab
 
-#include "pg_scrubber.h"
+#include "./pg_scrubber.h"  // the '.' notation used to affect clang-format order
 
 #include <iostream>
 #include <vector>
@@ -279,6 +279,16 @@ void PgScrubber::digest_update_notification(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
+void PgScrubber::send_local_map_done(epoch_t epoch_queued)
+{
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+  if (is_message_relevant(epoch_queued)) {
+    m_fsm->my_states();
+    m_fsm->process_event(Scrub::IntLocalMapDone{});
+  }
+  dout(10) << "scrubber event --<< " << __func__ << dendl;
+}
+
 void PgScrubber::send_replica_maps_ready(epoch_t epoch_queued)
 {
   dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
@@ -320,6 +330,70 @@ void PgScrubber::send_reservation_failure(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
+void PgScrubber::send_full_reset(epoch_t epoch_queued)
+{
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+
+  m_fsm->my_states();
+  m_fsm->process_event(Scrub::FullReset{});
+
+  dout(10) << "scrubber event --<< " << __func__ << dendl;
+}
+
+void PgScrubber::send_chunk_free(epoch_t epoch_queued)
+{
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+  if (check_interval(epoch_queued)) {
+    m_fsm->my_states();
+    m_fsm->process_event(Scrub::SelectedChunkFree{});
+  }
+  dout(10) << "scrubber event --<< " << __func__ << dendl;
+}
+
+void PgScrubber::send_chunk_busy(epoch_t epoch_queued)
+{
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+  if (check_interval(epoch_queued)) {
+    m_fsm->my_states();
+    m_fsm->process_event(Scrub::ChunkIsBusy{});
+  }
+  dout(10) << "scrubber event --<< " << __func__ << dendl;
+}
+
+void PgScrubber::send_get_next_chunk(epoch_t epoch_queued)
+{
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+  if (is_message_relevant(epoch_queued)) {
+    m_fsm->my_states();
+    m_fsm->process_event(Scrub::NextChunk{});
+  }
+  dout(10) << "scrubber event --<< " << __func__ << dendl;
+}
+
+void PgScrubber::send_scrub_is_finished(epoch_t epoch_queued)
+{
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+
+  // can't check for "active"
+
+  m_fsm->my_states();
+  m_fsm->process_event(Scrub::ScrubFinished{});
+
+  dout(10) << "scrubber event --<< " << __func__ << dendl;
+}
+
+void PgScrubber::send_maps_compared(epoch_t epoch_queued)
+{
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+
+  m_fsm->my_states();
+  m_fsm->process_event(Scrub::MapsCompared{});
+
+  dout(10) << "scrubber event --<< " << __func__ << dendl;
+}
+
+// -----------------
+
 bool PgScrubber::is_reserving() const
 {
   return m_fsm->is_reserving();
@@ -333,6 +407,7 @@ void PgScrubber::reset_epoch(epoch_t epoch_queued)
   m_epoch_start = epoch_queued;
   m_needs_sleep = true;
   m_is_deep = state_test(PG_STATE_DEEP_SCRUB);
+  update_op_mode_text();
 }
 
 unsigned int PgScrubber::scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const
@@ -341,7 +416,7 @@ unsigned int PgScrubber::scrub_requeue_priority(Scrub::scrub_prio_t with_priorit
 
   if (with_priority == Scrub::scrub_prio_t::high_priority) {
     qu_priority =
-      std::max(qu_priority, (unsigned int)m_pg->cct->_conf->osd_client_op_priority);
+      std::max(qu_priority, (unsigned int)m_pg->get_cct()->_conf->osd_client_op_priority);
   }
   return qu_priority;
 }
@@ -484,17 +559,12 @@ void PgScrubber::set_subset_last_update(eversion_t e)
 }
 
 /*
+ * The selected range is set directly into 'm_start' and 'm_end'
  * setting:
  * - m_subset_last_update
  * - m_max_end
  * - end
  * - start
- * By:
- * - setting tentative range based on conf and divisor
- * - requesting a partial list of elements from the backend;
- * - handling some head/clones issues
- *
- * The selected range is set directly into 'm_start' and 'm_end'
  */
 bool PgScrubber::select_range()
 {
@@ -572,7 +642,27 @@ bool PgScrubber::select_range()
 
   dout(15) << __func__ << " range selected: " << m_start << " //// " << m_end << " //// "
 	   << m_max_end << dendl;
+
+  // debug: be 'blocked' if told so by the 'pg scrub_debug block' asok command
+  if (m_debug_blockrange > 0) {
+    m_debug_blockrange--;
+    return false;
+  }
   return true;
+}
+
+void PgScrubber::select_range_n_notify()
+{
+  if (select_range()) {
+    // the next chunk to handle is not blocked
+    dout(20) << __func__ << ": selection OK" << dendl;
+    m_osds->queue_scrub_chunk_free(m_pg, Scrub::scrub_prio_t::low_priority);
+
+  } else {
+    // we will wait for the objects range to become available for scrubbing
+    dout(10) << __func__ << ": selected chunk is busy" << dendl;
+    m_osds->queue_scrub_chunk_busy(m_pg, Scrub::scrub_prio_t::low_priority);
+  }
 }
 
 bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
@@ -611,6 +701,11 @@ bool PgScrubber::range_intersects_scrub(const hobject_t& start, const hobject_t&
   return (start < m_max_end && end >= m_start);
 }
 
+Scrub::BlockedRangeWarning PgScrubber::acquire_blocked_alarm()
+{
+  return std::make_unique<blocked_range_t>(m_osds, ceph::timespan{300s}, m_pg_id);
+}
+
 /**
  *  if we are required to sleep:
  *	arrange a callback sometimes later.
@@ -620,7 +715,7 @@ bool PgScrubber::range_intersects_scrub(const hobject_t& start, const hobject_t&
  */
 void PgScrubber::add_delayed_scheduling()
 {
-  m_end = m_start; // not blocking any range now
+  m_end = m_start;  // not blocking any range now
 
   milliseconds sleep_time{0ms};
   if (m_needs_sleep) {
@@ -693,14 +788,12 @@ eversion_t PgScrubber::search_log_for_updates() const
     return p->version;
 }
 
-bool PgScrubber::get_replicas_maps(bool replica_can_preempt)
+void PgScrubber::get_replicas_maps(bool replica_can_preempt)
 {
   dout(10) << __func__ << " started in epoch/interval: " << m_epoch_start << "/"
 	   << m_interval_start
 	   << " pg same_interval_since: " << m_pg->info.history.same_interval_since
 	   << dendl;
-
-  bool do_have_replicas = false;
 
   m_primary_scrubmap_pos.reset();
 
@@ -710,14 +803,12 @@ bool PgScrubber::get_replicas_maps(bool replica_can_preempt)
     if (i == m_pg_whoami)
       continue;
 
-    do_have_replicas = true;
     m_maps_status.mark_replica_map_request(i);
     _request_scrub_map(i, m_subset_last_update, m_start, m_end, m_is_deep,
 		       replica_can_preempt);
   }
 
   dout(10) << __func__ << " awaiting" << m_maps_status << dendl;
-  return do_have_replicas;
 }
 
 bool PgScrubber::was_epoch_changed() const
@@ -742,6 +833,16 @@ bool PgScrubber::are_all_maps_available() const
 std::string PgScrubber::dump_awaited_maps() const
 {
   return m_maps_status.dump();
+}
+
+void PgScrubber::update_op_mode_text()
+{
+  auto visible_repair = state_test(PG_STATE_REPAIR);
+  m_mode_desc = (visible_repair ? "repair"sv : (m_is_deep ? "deep-scrub"sv : "scrub"sv));
+
+  dout(10) << __func__ << ": repair: visible: " << (visible_repair ? "true" : "false")
+	   << ", internal: " << (m_is_repair ? "true" : "false")
+	   << ". Displayed: " << m_mode_desc << dendl;
 }
 
 void PgScrubber::_request_scrub_map(pg_shard_t replica,
@@ -911,12 +1012,16 @@ void PgScrubber::_scan_snaps(ScrubMap& smap)
 
 int PgScrubber::build_primary_map_chunk()
 {
+  epoch_t map_building_since = m_pg->get_osdmap_epoch();
+  dout(20) << __func__ << ": initiated at epoch " << map_building_since << dendl;
+
   auto ret = build_scrub_map_chunk(m_primary_scrubmap, m_primary_scrubmap_pos, m_start,
 				   m_end, m_is_deep);
 
-  if (ret == -EINPROGRESS)
+  if (ret == -EINPROGRESS) {
+    // reschedule another round of asking the backend to collect the scrub data
     m_osds->queue_for_scrub_resched(m_pg, Scrub::scrub_prio_t::low_priority);
-
+  }
   return ret;
 }
 
@@ -928,21 +1033,46 @@ int PgScrubber::build_replica_map_chunk()
   auto ret = build_scrub_map_chunk(replica_scrubmap, replica_scrubmap_pos, m_start, m_end,
 				   m_is_deep);
 
-  if (ret == 0) {
+  switch (ret) {
 
-    // finished!
-    // In case we restarted smaller chunk, clear old data
+    case -EINPROGRESS:
+      // must wait for the backend to finish. No external event source.
+      // (note: previous version used low priority here. Now switched to using the
+      // priority of the original message)
+      m_osds->queue_for_rep_scrub_resched(m_pg, m_replica_request_priority,
+					  m_flags.priority);
+      break;
 
-    m_cleaned_meta_map.clear_from(m_start);
-    m_cleaned_meta_map.insert(replica_scrubmap);
-    auto for_meta_scrub = clean_meta_map();
-    _scan_snaps(for_meta_scrub);
-  }
+    case 0: {
+      // finished!
+      m_cleaned_meta_map.clear_from(m_start);
+      m_cleaned_meta_map.insert(replica_scrubmap);
+      auto for_meta_scrub = clean_meta_map();
+      _scan_snaps(for_meta_scrub);
 
-  // previous version used low priority here. Now switched to using the priority
-  // of the original message
-  if (ret == -EINPROGRESS)
-    requeue_replica(m_replica_request_priority);
+      // the local map has been created. Send it to the primary.
+      // Note: once the message reaches the Primary, it may ask us for another
+      // chunk - and we better be done with the current scrub. Thus - the preparation of
+      // the reply message is separate, and we clear the scrub state before actually
+      // sending it.
+
+      auto reply = prep_replica_map_msg(PreemptionNoted::no_preemption);
+      replica_handling_done();
+      dout(15) << __func__ << " chunk map sent " << dendl;
+      send_replica_map(reply);
+    } break;
+
+    default:
+      // negative retval: build_scrub_map_chunk() signalled an error
+      // Pre-Pacific code ignored this option, treating it as a success.
+      // \todo Add an error flag in the returning message.
+      dout(1) << "Error! Aborting. ActiveReplica::react(SchedReplica) Ret: " << ret
+	      << dendl;
+      replica_handling_done();
+      // only in debug mode for now:
+      assert(false && "backend error");
+      break;
+  };
 
   return ret;
 }
@@ -979,8 +1109,8 @@ int PgScrubber::build_scrub_map_chunk(
 
   // scan objects
   while (!pos.done()) {
+
     int r = m_pg->get_pgbackend()->be_scan_list(map, pos);
-    dout(10) << __func__ << " be r " << r << dendl;
     if (r == -EINPROGRESS) {
       dout(20) << __func__ << " in progress" << dendl;
       return r;
@@ -1048,17 +1178,12 @@ void PgScrubber::maps_compare_n_cleanup()
   m_start = m_end;
   run_callbacks();
   requeue_waiting();
+  m_osds->queue_scrub_maps_compared(m_pg, Scrub::scrub_prio_t::low_priority);
 }
 
 Scrub::preemption_t& PgScrubber::get_preemptor()
 {
   return preemption_data;
-}
-
-void PgScrubber::requeue_replica(Scrub::scrub_prio_t is_high_priority)
-{
-  dout(10) << __func__ << dendl;
-  m_osds->queue_for_rep_scrub_resched(m_pg, is_high_priority, m_flags.priority);
 }
 
 /*
@@ -1068,6 +1193,7 @@ void PgScrubber::requeue_replica(Scrub::scrub_prio_t is_high_priority)
  */
 void PgScrubber::replica_scrub_op(OpRequestRef op)
 {
+  op->mark_started();
   auto msg = op->get_req<MOSDRepScrub>();
   dout(10) << __func__ << " pg:" << m_pg->pg_id << " Msg: map_epoch:" << msg->map_epoch
 	   << " min_epoch:" << msg->min_epoch << " deep?" << msg->deep << dendl;
@@ -1133,8 +1259,15 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
     state_set(PG_STATE_DEEP_SCRUB);
   }
 
-  if (request.must_repair || m_flags.auto_repair) {
+  // m_is_repair is set for either 'must_repair' or 'repair-on-the-go' (i.e.
+  // deep-scrub with the auto_repair configuration flag set). m_is_repair value
+  // determines the scrubber behavior.
+  // PG_STATE_REPAIR, on the other hand, is only used for status reports (inc. the
+  // PG status as appearing in the logs).
+  m_is_repair = request.must_repair || m_flags.auto_repair;
+  if (request.must_repair) {
     state_set(PG_STATE_REPAIR);
+    // not calling update_op_mode_text() yet, as m_is_deep not set yet
   }
 
   // the publishing here seems to be required for tests synchronization
@@ -1184,17 +1317,16 @@ void PgScrubber::scrub_compare_maps()
     // Map from object with errors to good peer
     map<hobject_t, list<pg_shard_t>> authoritative;
 
-    dout(2) << __func__ << m_pg->get_primary() << " has "
+    dout(2) << __func__ << ": primary (" << m_pg->get_primary() << ") has "
 	    << m_primary_scrubmap.objects.size() << " items" << dendl;
 
     ss.str("");
     ss.clear();
 
     m_pg->get_pgbackend()->be_compare_scrubmaps(
-      maps, master_set, state_test(PG_STATE_REPAIR), m_missing, m_inconsistent,
+      maps, master_set, m_is_repair, m_missing, m_inconsistent,
       authoritative, missing_digest, m_shallow_errors, m_deep_errors, m_store.get(),
       m_pg->info.pgid, m_pg->recovery_state.get_acting(), ss);
-    dout(2) << ss.str() << dendl;
 
     if (!ss.str().empty()) {
       m_osds->clog->error(ss);
@@ -1228,7 +1360,7 @@ void PgScrubber::scrub_compare_maps()
 
   if (!m_store->empty()) {
 
-    if (state_test(PG_STATE_REPAIR)) {
+    if (m_is_repair) {
       dout(10) << __func__ << ": discarding scrub results" << dendl;
       m_store->flush(nullptr);
     } else {
@@ -1240,21 +1372,36 @@ void PgScrubber::scrub_compare_maps()
   }
 }
 
-/**
- * Send the requested map back to the primary (or - if we
- * were preempted - let the primary know).
- */
-void PgScrubber::send_replica_map(PreemptionNoted was_preempted)
+ScrubMachineListener::MsgAndEpoch PgScrubber::prep_replica_map_msg(
+  PreemptionNoted was_preempted)
 {
   dout(10) << __func__ << " min epoch:" << m_replica_min_epoch << dendl;
 
-  auto reply = new MOSDRepScrubMap(spg_t(m_pg->info.pgid.pgid, m_pg->get_primary().shard),
-				   m_replica_min_epoch, m_pg_whoami);
+  auto reply =
+    make_message<MOSDRepScrubMap>(spg_t(m_pg->info.pgid.pgid, m_pg->get_primary().shard),
+				  m_replica_min_epoch, m_pg_whoami);
 
   reply->preempted = (was_preempted == PreemptionNoted::preempted);
   ::encode(replica_scrubmap, reply->get_data());
 
-  m_osds->send_message_osd_cluster(m_pg->get_primary().osd, reply, m_replica_min_epoch);
+  return ScrubMachineListener::MsgAndEpoch{reply, m_replica_min_epoch};
+}
+
+void PgScrubber::send_replica_map(const MsgAndEpoch& preprepared)
+{
+  m_pg->send_cluster_message(m_pg->get_primary().osd, preprepared.m_msg,
+			     preprepared.m_epoch, false);
+}
+
+void PgScrubber::send_preempted_replica()
+{
+  auto reply =
+    make_message<MOSDRepScrubMap>(spg_t{m_pg->info.pgid.pgid, m_pg->get_primary().shard},
+				  m_replica_min_epoch, m_pg_whoami);
+
+  reply->preempted = true;
+  ::encode(replica_scrubmap, reply->get_data()); // must not skip this
+  m_pg->send_cluster_message(m_pg->get_primary().osd, reply, m_replica_min_epoch, false);
 }
 
 /*
@@ -1439,25 +1586,25 @@ void PgScrubber::unreserve_replicas()
 
 [[nodiscard]] bool PgScrubber::scrub_process_inconsistent()
 {
-  dout(10) << __func__ << ": checking authoritative" << dendl;
-
-  bool repair = state_test(PG_STATE_REPAIR);
-  const bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
-  const char* mode = (repair ? "repair" : (deep_scrub ? "deep-scrub" : "scrub"));
-  dout(20) << __func__ << " deep_scrub: " << deep_scrub << " m_is_deep: " << m_is_deep
-	   << " repair: " << repair << dendl;
+  dout(10) << __func__ << ": checking authoritative (mode="
+	   << m_mode_desc << ", auth remaining #: " << m_authoritative.size()
+	   << ")" << dendl;
 
   // authoritative only store objects which are missing or inconsistent.
   if (!m_authoritative.empty()) {
 
     stringstream ss;
-    ss << m_pg->info.pgid << " " << mode << " " << m_missing.size() << " missing, "
+    ss << m_pg->info.pgid << " " << m_mode_desc << " " << m_missing.size() << " missing, "
        << m_inconsistent.size() << " inconsistent objects";
     dout(2) << ss.str() << dendl;
     m_osds->clog->error(ss);
 
-    if (repair) {
+    if (m_is_repair) {
       state_clear(PG_STATE_CLEAN);
+      // we know we have a problem, so it's OK to set the user-visible flag
+      // even if we only reached here via auto-repair
+      state_set(PG_STATE_REPAIR);
+      update_op_mode_text();
 
       for (const auto& [hobj, shrd_list] : m_authoritative) {
 
@@ -1475,7 +1622,7 @@ void PgScrubber::unreserve_replicas()
       }
     }
   }
-  return (!m_authoritative.empty() && repair);
+  return (!m_authoritative.empty() && m_is_repair);
 }
 
 /*
@@ -1484,7 +1631,8 @@ void PgScrubber::unreserve_replicas()
 void PgScrubber::scrub_finish()
 {
   dout(10) << __func__ << " before flags: " << m_flags
-	   << " deep_scrub_on_error: " << m_flags.deep_scrub_on_error << dendl;
+	   << ". repair state: " << (state_test(PG_STATE_REPAIR) ? "repair" : "no-repair")
+	   << ". deep_scrub_on_error: " << m_flags.deep_scrub_on_error << dendl;
 
   ceph_assert(m_pg->is_locked());
 
@@ -1492,24 +1640,21 @@ void PgScrubber::scrub_finish()
 
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
-
-  bool repair = state_test(PG_STATE_REPAIR);
-  if (repair && m_flags.auto_repair &&
+  if (m_is_repair && m_flags.auto_repair &&
       m_authoritative.size() > m_pg->cct->_conf->osd_scrub_auto_repair_num_errors) {
 
     dout(10) << __func__ << " undoing the repair" << dendl;
-    state_clear(PG_STATE_REPAIR);
-    repair = false;
+    state_clear(PG_STATE_REPAIR); // not expected to be set, anyway
+    m_is_repair = false;
+    update_op_mode_text();
   }
 
-  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
-  const char* mode = (repair ? "repair" : (deep_scrub ? "deep-scrub" : "scrub"));
   bool do_auto_scrub = false;
 
   // if a regular scrub had errors within the limit, do a deep scrub to auto repair
-  if (m_flags.deep_scrub_on_error && m_authoritative.size() &&
+  if (m_flags.deep_scrub_on_error && !m_authoritative.empty() &&
       m_authoritative.size() <= m_pg->cct->_conf->osd_scrub_auto_repair_num_errors) {
-    ceph_assert(!deep_scrub);
+    ceph_assert(!m_is_deep);
     do_auto_scrub = true;
     dout(15) << __func__ << " Try to auto repair after scrub errors" << dendl;
   }
@@ -1523,16 +1668,16 @@ void PgScrubber::scrub_finish()
 
   {
     stringstream oss;
-    oss << m_pg->info.pgid.pgid << " " << mode << " ";
+    oss << m_pg->info.pgid.pgid << " " << m_mode_desc << " ";
     int total_errors = m_shallow_errors + m_deep_errors;
     if (total_errors)
       oss << total_errors << " errors";
     else
       oss << "ok";
-    if (!deep_scrub && m_pg->info.stats.stats.sum.num_deep_scrub_errors)
+    if (!m_is_deep && m_pg->info.stats.stats.sum.num_deep_scrub_errors)
       oss << " ( " << m_pg->info.stats.stats.sum.num_deep_scrub_errors
 	  << " remaining deep scrub error details lost)";
-    if (repair)
+    if (m_is_repair)
       oss << ", " << m_fixed_count << " fixed";
     if (total_errors)
       m_osds->clog->error(oss);
@@ -1542,10 +1687,10 @@ void PgScrubber::scrub_finish()
 
   // Since we don't know which errors were fixed, we can only clear them
   // when every one has been fixed.
-  if (repair) {
+  if (m_is_repair) {
     if (m_fixed_count == m_shallow_errors + m_deep_errors) {
 
-      ceph_assert(deep_scrub);
+      ceph_assert(m_is_deep);
       m_shallow_errors = 0;
       m_deep_errors = 0;
       dout(20) << __func__ << " All may be fixed" << dendl;
@@ -1574,7 +1719,7 @@ void PgScrubber::scrub_finish()
     // finish up
     ObjectStore::Transaction t;
     m_pg->recovery_state.update_stats(
-      [this, deep_scrub](auto& history, auto& stats) {
+      [this](auto& history, auto& stats) {
 	dout(10) << "m_pg->recovery_state.update_stats()" << dendl;
 	utime_t now = ceph_clock_now();
 	history.last_scrub = m_pg->recovery_state.get_info().last_update;
@@ -1584,7 +1729,7 @@ void PgScrubber::scrub_finish()
 	  history.last_deep_scrub_stamp = now;
 	}
 
-	if (deep_scrub) {
+	if (m_is_deep) {
 	  if ((m_shallow_errors == 0) && (m_deep_errors == 0))
 	    history.last_clean_scrub_stamp = now;
 	  stats.stats.sum.num_shallow_scrub_errors = m_shallow_errors;
@@ -1628,7 +1773,9 @@ void PgScrubber::scrub_finish()
     m_pg->queue_peering_event(PGPeeringEventRef(std::make_shared<PGPeeringEvent>(
       get_osdmap_epoch(), get_osdmap_epoch(), PeeringState::DoRecovery())));
   } else {
+    m_is_repair = false;
     state_clear(PG_STATE_REPAIR);
+    update_op_mode_text();
   }
 
   cleanup_on_finish();
@@ -1641,27 +1788,30 @@ void PgScrubber::scrub_finish()
   }
 }
 
-Scrub::FsmNext PgScrubber::on_digest_updates()
+void PgScrubber::on_digest_updates()
 {
   dout(10) << __func__ << " #pending: " << num_digest_updates_pending << " pending? "
 	   << num_digest_updates_pending
 	   << (m_end.is_max() ? " <last chunk> " : " <mid chunk> ") << dendl;
 
-  if (num_digest_updates_pending == 0) {
+  if (num_digest_updates_pending > 0) {
+    // do nothing for now. We will be called again when new updates arrive
+    return;
+  }
 
-    // got all updates, and finished with this chunk. Any more?
-    if (m_end.is_max()) {
-      scrub_finish();
-      return Scrub::FsmNext::goto_notactive;
-    } else {
-      // go get a new chunk (via "requeue")
-      preemption_data.reset();
-      return Scrub::FsmNext::next_chunk;
-    }
+  // got all updates, and finished with this chunk. Any more?
+  if (m_end.is_max()) {
+
+    scrub_finish();
+    m_osds->queue_scrub_is_finished(m_pg);
+
   } else {
-    return Scrub::FsmNext::do_discard;
+    // go get a new chunk (via "requeue")
+    preemption_data.reset();
+    m_osds->queue_scrub_next_chunk(m_pg, m_pg->is_scrub_blocking_ops());
   }
 }
+
 
 /*
  * note that the flags-set fetched from the PG (m_pg->m_planned_scrub)
@@ -1739,7 +1889,6 @@ PgScrubber::PgScrubber(PG* pg)
     , m_pg_whoami{pg->pg_whoami}
     , preemption_data{pg}
 {
-  dout(20) << " creating PgScrubber for " << pg->pg_id << " / " << m_pg_whoami << dendl;
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
   m_fsm->initiate();
 }
@@ -1870,6 +2019,23 @@ ostream& PgScrubber::show(ostream& out) const
   return out << " [ " << m_pg_id << ": " << m_flags << " ] ";
 }
 
+int PgScrubber::asok_debug(std::string_view cmd,
+			   std::string param,
+			   Formatter* f,
+			   stringstream& ss)
+{
+  dout(10) << __func__ << " cmd: " << cmd << " param: " << param << dendl;
+
+  if (cmd == "block") {
+    // set a flag that will cause the next 'select_range' to report a blocked object
+    m_debug_blockrange = 1;
+  } else if (cmd == "unblock") {
+    // send an 'unblock' event, as if a blocked range was freed
+    m_debug_blockrange = 0;
+    m_fsm->process_event(Unblocked{});
+  }
+  return 0;
+}
 // ///////////////////// preemption_data_t //////////////////////////////////
 
 PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg}
@@ -2130,6 +2296,33 @@ ostream& operator<<(ostream& out, const MapsCollectionStatus& sf)
     out << " local ";
   }
   return out << " ] ";
+}
+
+// ///////////////////// blocked_range_t ///////////////////////////////
+
+blocked_range_t::blocked_range_t(OSDService* osds, ceph::timespan waittime, spg_t pg_id)
+    : m_osds{osds}
+{
+  auto now_is = std::chrono::system_clock::now();
+  m_callbk = new LambdaContext([now_is, pg_id, osds]([[maybe_unused]] int r) {
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now_is);
+    char buf[50];
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&now_c));
+    lgeneric_subdout(g_ceph_context, osd, 10)
+      << "PgScrubber: " << pg_id << " blocked on an object for too long (since " << buf
+      << ")" << dendl;
+    osds->clog->warn() << "osd." << osds->whoami << " PgScrubber: " << pg_id << " blocked on an object for too long (since " << buf << ")";
+    return;
+  });
+
+  std::lock_guard l(m_osds->sleep_lock);
+  m_osds->sleep_timer.add_event_after(waittime, m_callbk);
+}
+
+blocked_range_t::~blocked_range_t()
+{
+  std::lock_guard l(m_osds->sleep_lock);
+  m_osds->sleep_timer.cancel_event(m_callbk);
 }
 
 }  // namespace Scrub

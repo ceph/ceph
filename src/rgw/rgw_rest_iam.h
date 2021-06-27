@@ -22,7 +22,7 @@ public:
       post_body(post_body) {}
   ~RGWHandler_REST_IAM() override = default;
 
-  int init(rgw::sal::RGWStore *store,
+  int init(rgw::sal::Store* store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -40,7 +40,7 @@ public:
     return this;
   }
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
 			       struct req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;

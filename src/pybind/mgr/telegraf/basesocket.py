@@ -1,4 +1,6 @@
 import socket
+from urllib.parse import ParseResult
+from typing import Any, Dict, Optional, Tuple, Union
 
 
 class BaseSocket(object):
@@ -11,7 +13,7 @@ class BaseSocket(object):
         'udp6': (socket.AF_INET6, socket.SOCK_DGRAM),
     }
 
-    def __init__(self, url):
+    def __init__(self, url: ParseResult) -> None:
         self.url = url
 
         try:
@@ -21,25 +23,27 @@ class BaseSocket(object):
 
         self.sock = socket.socket(family=socket_family, type=socket_type)
         if self.sock.family == socket.AF_UNIX:
-            self.address = self.url.path
+            self.address: Union[str, Tuple[str, int]] = self.url.path
         else:
+            assert self.url.hostname
+            assert self.url.port
             self.address = (self.url.hostname, self.url.port)
 
-    def connect(self):
+    def connect(self) -> None:
         return self.sock.connect(self.address)
 
-    def close(self):
+    def close(self) -> None:
         self.sock.close()
 
-    def send(self, data, flags=0):
+    def send(self, data: str, flags: int = 0) -> int:
         return self.sock.send(data.encode('utf-8') + b'\n', flags)
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.sock.close()
 
-    def __enter__(self):
+    def __enter__(self) -> 'BaseSocket':
         self.connect()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()

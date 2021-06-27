@@ -56,7 +56,7 @@ struct btree_lba_manager_test :
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t committed) final {}
 
-  auto submit_transaction(TransactionRef t)
+  seastar::future<> submit_transaction(TransactionRef t)
   {
     auto record = cache.try_construct_record(*t);
     if (!record) {
@@ -68,8 +68,7 @@ struct btree_lba_manager_test :
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);
 	lba_manager->complete_transaction(*t);
-      },
-      crimson::ct_error::assert_all{});
+      }).handle_error(crimson::ct_error::assert_all{});
   }
 
   seastar::future<> set_up_fut() final {
@@ -78,7 +77,7 @@ struct btree_lba_manager_test :
       return journal.open_for_write();
     }).safe_then([this](auto addr) {
       return seastar::do_with(
-	make_transaction(),
+	cache.create_transaction(),
 	[this](auto &transaction) {
 	  cache.init();
 	  return cache.mkfs(*transaction
@@ -121,7 +120,7 @@ struct btree_lba_manager_test :
 
   auto create_transaction() {
     auto t = test_transaction_t{
-      make_transaction(),
+      cache.create_transaction(),
       test_lba_mappings
     };
     cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
@@ -130,14 +129,14 @@ struct btree_lba_manager_test :
 
   auto create_weak_transaction() {
     auto t = test_transaction_t{
-      make_weak_transaction(),
+      cache.create_weak_transaction(),
       test_lba_mappings
     };
     return t;
   }
 
   void submit_test_transaction(test_transaction_t t) {
-    submit_transaction(std::move(t.t)).get0();
+    submit_transaction(std::move(t.t)).get();
     test_lba_mappings.swap(t.mappings);
   }
 
@@ -167,7 +166,11 @@ struct btree_lba_manager_test :
     laddr_t hint,
     size_t len,
     paddr_t paddr) {
-    auto ret = lba_manager->alloc_extent(*t.t, hint, len, paddr).unsafe_get0();
+    auto ret = with_trans_intr(
+      *t.t,
+      [=](auto &t) {
+	return lba_manager->alloc_extent(t, hint, len, paddr);
+      }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
     auto [b, e] = get_overlap(t, ret->get_laddr(), len);
@@ -192,7 +195,11 @@ struct btree_lba_manager_test :
     auto [b, e] = get_overlap(t, addr, len);
     EXPECT_EQ(b, e);
 
-    auto ret = lba_manager->set_extent(*t.t, addr, len, paddr).unsafe_get0();
+    auto ret = with_trans_intr(
+      *t.t,
+      [=](auto &t) {
+	return lba_manager->set_extent(t, addr, len, paddr);
+      }).unsafe_get0();
     EXPECT_EQ(addr, ret->get_laddr());
     EXPECT_EQ(len, ret->get_length());
     EXPECT_EQ(paddr, ret->get_paddr());
@@ -221,9 +228,13 @@ struct btree_lba_manager_test :
     ceph_assert(target->second.refcount > 0);
     target->second.refcount--;
 
-    auto refcnt = lba_manager->decref_extent(
+    auto refcnt = with_trans_intr(
       *t.t,
-      target->first).unsafe_get0().refcount;
+      [=](auto &t) {
+	return lba_manager->decref_extent(
+	  t,
+	  target->first);
+      }).unsafe_get0().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
@@ -241,9 +252,13 @@ struct btree_lba_manager_test :
     test_lba_mapping_t::iterator target) {
     ceph_assert(target->second.refcount > 0);
     target->second.refcount++;
-    auto refcnt = lba_manager->incref_extent(
+    auto refcnt = with_trans_intr(
       *t.t,
-      target->first).unsafe_get0().refcount;
+      [=](auto &t) {
+	return lba_manager->incref_extent(
+	  t,
+	  target->first);
+      }).unsafe_get0().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
   }
 
@@ -272,25 +287,45 @@ struct btree_lba_manager_test :
 
   void check_mappings(test_transaction_t &t) {
     for (auto &&i: t.mappings) {
-      auto ret_list = lba_manager->get_mapping(
-	*t.t, i.first, i.second.len
-      ).unsafe_get0();
+      auto laddr = i.first;
+      auto len = i.second.len;
+
+      auto ret_list = with_trans_intr(
+	*t.t,
+	[=](auto &t) {
+	  return lba_manager->get_mappings(
+	    t, laddr, len);
+	}).unsafe_get0();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
       EXPECT_EQ(i.second.addr, ret->get_paddr());
-      EXPECT_EQ(i.first, ret->get_laddr());
-      EXPECT_EQ(i.second.len, ret->get_length());
+      EXPECT_EQ(laddr, ret->get_laddr());
+      EXPECT_EQ(len, ret->get_length());
+
+      auto ret_pin = with_trans_intr(
+	*t.t,
+	[=](auto &t) {
+	  return lba_manager->get_mapping(
+	    t, laddr);
+	}).unsafe_get0();
+      EXPECT_EQ(i.second.addr, ret_pin->get_paddr());
+      EXPECT_EQ(laddr, ret_pin->get_laddr());
+      EXPECT_EQ(len, ret_pin->get_length());
     }
-    lba_manager->scan_mappings(
+    with_trans_intr(
       *t.t,
-      0,
-      L_ADDR_MAX,
-      [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
-	EXPECT_NE(iter, t.mappings.end());
-	EXPECT_EQ(l, iter->first);
-	EXPECT_EQ(p, iter->second.addr);
-	EXPECT_EQ(len, iter->second.len);
-	++iter;
+      [=, &t](auto &) {
+	return lba_manager->scan_mappings(
+	  *t.t,
+	  0,
+	  L_ADDR_MAX,
+	  [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
+	    EXPECT_NE(iter, t.mappings.end());
+	    EXPECT_EQ(l, iter->first);
+	    EXPECT_EQ(p, iter->second.addr);
+	    EXPECT_EQ(len, iter->second.len);
+	    ++iter;
+	  });
       }).unsafe_get();
   }
 };

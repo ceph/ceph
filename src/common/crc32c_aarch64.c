@@ -147,7 +147,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 			"mov    x16,            #0x8014         \n\t"
 			"movk   x16,            #0x8f15, lsl 16 \n\t"
 			"mov    v0.2d[0],       x16             \n\t"
-			:::"x16");
+			:::"x16","v0","v1");
 
 		while ((length -= 1024) >= 0) {
 			PREF1KL2(1024*3);
@@ -178,7 +178,8 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 				"crc32cx        %w[c0],         wzr,    %x[c0]  \n\t"
 				"eor            %w[c],          %w[c],  %w[c0]  \n\t"
 				:[c1]"+r"(crc1), [c0]"+r"(crc0), [c2]"+r"(crc2), [c]"+r"(crc)
-				:[v]"r"(*((const uint64_t *)buffer)));
+				:[v]"r"(*((const uint64_t *)buffer))
+				:"v0","v1","v2","v3");
 			buffer += sizeof(uint64_t);
 		}
 #endif /* HAVE_ARMV8_CRC_CRYPTO_INTRINSICS */
@@ -229,7 +230,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 		__asm__("mov    x16,            #0xf38a         \n\t"
 			"movk   x16,            #0xe417, lsl 16 \n\t"
 			"mov    v1.2d[0],       x16             \n\t"
-			:::"x16");
+			:::"x16","v1");
 
 		while ((length -= 1024) >= 0) {
 			__asm__("crc32cx %w[c0], %w[c], xzr\n\t"
@@ -247,7 +248,8 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 				"mov            %x[c0],         v3.2d[0]        \n\t"
 				"crc32cx        %w[c],          wzr,    %x[c0]  \n\t"
 				:[c]"=r"(crc)
-				:[c0]"r"(crc0));
+				:[c0]"r"(crc0)
+				:"v1","v3");
 		}
 #endif /* HAVE_ARMV8_CRC_CRYPTO_INTRINSICS */
 

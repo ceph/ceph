@@ -16,6 +16,9 @@ overrides:
         debug ms: 1
       mon:
         mon warn on pool no app: false
+      osd:
+        osd class load list: "*"
+        osd class default list: "*"
 tasks:
 - workunit:
     clients:

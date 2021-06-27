@@ -32,7 +32,8 @@ function run() {
     MON=3 MGR=2 OSD=3 MDS=3 RGW=1 ../src/vstart.sh -n -x
 
     local old_path="$PATH"
-    export PATH="bin:$PATH"
+    export PATH="$PWD/bin:$PATH"
+    export CEPH_CONF="$PWD/ceph.conf"
     ceph osd pool create mypool
     rados -p mypool bench 10 write -b 123
     ceph osd out 0

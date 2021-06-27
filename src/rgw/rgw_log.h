@@ -9,7 +9,7 @@
 #include "common/OutputDataSocket.h"
 
 namespace rgw { namespace sal {
-  class RGWStore;
+  class Store;
 } }
 
 struct rgw_log_entry {
@@ -38,9 +38,10 @@ struct rgw_log_entry {
   headers_map x_headers;
   string trans_id;
   std::vector<string> token_claims;
+  uint32_t identity_type;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(11, 5, bl);
+    ENCODE_START(12, 5, bl);
     encode(object_owner.id, bl);
     encode(bucket_owner.id, bl);
     encode(bucket, bl);
@@ -65,10 +66,11 @@ struct rgw_log_entry {
     encode(x_headers, bl);
     encode(trans_id, bl);
     encode(token_claims, bl);
+    encode(identity_type,bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(12, 5, 5, p);
     decode(object_owner.id, p);
     if (struct_v > 3)
       decode(bucket_owner.id, p);
@@ -120,6 +122,9 @@ struct rgw_log_entry {
     if (struct_v >= 11) {
       decode(token_claims, p);
     }
+    if (struct_v >= 12) {
+      decode(identity_type, p);
+    }
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
@@ -145,9 +150,9 @@ public:
 
 class RGWREST;
 
-int rgw_log_op(rgw::sal::RGWStore* store, RGWREST* const rest, struct req_state* s,
+int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state* s,
 	       const string& op_name, OpsLogSocket* olog);
-void rgw_log_usage_init(CephContext* cct, rgw::sal::RGWStore* store);
+void rgw_log_usage_init(CephContext* cct, rgw::sal::Store* store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,
 			      ceph::Formatter *formatter);

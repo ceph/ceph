@@ -1149,7 +1149,7 @@ void CInode::store(MDSContext *fin)
   m.write_full(bl);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->mds->get_metadata_pool());
 
   Context *newfin =
     new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
@@ -1224,7 +1224,7 @@ void CInode::fetch(MDSContext *fin)
   C_GatherBuilder gather(g_ceph_context, new C_OnFinisher(c, mdcache->mds->finisher));
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->mds->get_metadata_pool());
 
   // Old on-disk format: inode stored in xattr of a dirfrag
   ObjectOperation rd;
@@ -4685,8 +4685,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         results->backtrace.error_str << "failed to read off disk; see retval";
         // we probably have a new unwritten file!
         // so skip the backtrace scrub for this entry and say that all's well
-        if (in->is_dirty_parent())
+        if (in->is_dirty_parent()) {
+          dout(20) << "forcing backtrace as passed since inode is dirty parent" << dendl;
           results->backtrace.passed = true;
+        }
         goto next;
       }
 
@@ -4707,8 +4709,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
                                      << bl.length() << " bytes)!";
         // we probably have a new unwritten file!
         // so skip the backtrace scrub for this entry and say that all's well
-        if (in->is_dirty_parent())
+        if (in->is_dirty_parent()) {
+          dout(20) << "decode failed; forcing backtrace as passed since "
+                      "inode is dirty parent" << dendl;
           results->backtrace.passed = true;
+        }
 
 	goto next;
       }
@@ -4719,10 +4724,16 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       if (divergent || memory_newer < 0) {
         // we're divergent, or on-disk version is newer
         results->backtrace.error_str << "On-disk backtrace is divergent or newer";
-        // we probably have a new unwritten file!
-        // so skip the backtrace scrub for this entry and say that all's well
-        if (divergent && in->is_dirty_parent())
+        /* if the backtraces are divergent and the link count is 0, then
+         * most likely its a stray entry that's being purged and things are
+         * well and there's no reason for alarm
+         */
+        if (divergent && (in->is_dirty_parent() || in->get_inode()->nlink == 0)) {
           results->backtrace.passed = true;
+          dout(20) << "divergent backtraces are acceptable when dn "
+                      "is being purged or has been renamed or moved to a "
+                      "different directory " << *in << dendl;
+        }
       } else {
         results->backtrace.passed = true;
       }
@@ -4879,10 +4890,24 @@ next:
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones";
 	}
+        if (in->is_dirty()) {
+          MDCache *mdcache = in->mdcache; // for dout()
+          auto ino = [this]() { return in->ino(); }; // for dout()
+          dout(20) << "raw stats most likely wont match since inode is dirty; "
+                      "please rerun scrub when system is stable; "
+                      "assuming passed for now;" << dendl;
+          results->raw_stats.passed = true;
+        }
 	goto next;
       }
 
       results->raw_stats.passed = true;
+      {
+        MDCache *mdcache = in->mdcache; // for dout()
+        auto ino = [this]() { return in->ino(); }; // for dout()
+        dout(20) << "raw stats check passed on " << *in << dendl;
+      }
+
 next:
       return true;
     }
@@ -4937,7 +4962,7 @@ void CInode::validated_data::dump(Formatter *f) const
       f->dump_int("read_ret_val", raw_stats.ondisk_read_retval);
       f->dump_stream("ondisk_value.dirstat") << raw_stats.ondisk_value.dirstat;
       f->dump_stream("ondisk_value.rstat") << raw_stats.ondisk_value.rstat;
-      f->dump_stream("memory_value.dirrstat") << raw_stats.memory_value.dirstat;
+      f->dump_stream("memory_value.dirstat") << raw_stats.memory_value.dirstat;
       f->dump_stream("memory_value.rstat") << raw_stats.memory_value.rstat;
       f->dump_string("error_str", raw_stats.error_str.str());
     }
@@ -5163,7 +5188,7 @@ void CInode::scrub_finished() {
 int64_t CInode::get_backtrace_pool() const
 {
   if (is_dir()) {
-    return mdcache->mds->mdsmap->get_metadata_pool();
+    return mdcache->mds->get_metadata_pool();
   } else {
     // Files are required to have an explicit layout that specifies
     // a pool

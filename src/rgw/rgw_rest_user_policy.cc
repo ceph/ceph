@@ -62,13 +62,13 @@ int RGWRestUserPolicy::verify_permission(optional_yield y)
 bool RGWRestUserPolicy::validate_input()
 {
   if (policy_name.length() > MAX_POLICY_NAME_LEN) {
-    ldout(s->cct, 0) << "ERROR: Invalid policy name length " << dendl;
+    ldpp_dout(this, 0) << "ERROR: Invalid policy name length " << dendl;
     return false;
   }
 
   std::regex regex_policy_name("[A-Za-z0-9:=,.@-]+");
   if (! std::regex_match(policy_name, regex_policy_name)) {
-    ldout(s->cct, 0) << "ERROR: Invalid chars in policy name " << dendl;
+    ldpp_dout(this, 0) << "ERROR: Invalid chars in policy name " << dendl;
     return false;
   }
 
@@ -97,7 +97,7 @@ int RGWPutUserPolicy::get_params()
   policy = url_decode(s->info.args.get("PolicyDocument"), true);
 
   if (policy_name.empty() || user_name.empty() || policy.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of policy name, user name or policy document is empty"
+    ldpp_dout(this, 20) << "ERROR: one of policy name, user name or policy document is empty"
     << dendl;
     return -EINVAL;
   }
@@ -118,23 +118,22 @@ void RGWPutUserPolicy::execute(optional_yield y)
 
   bufferlist bl = bufferlist::static_from_string(policy);
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(user_name));
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
 
-  op_ret = user->load_by_id(s, s->yield);
+  op_ret = user->load_user(s, s->yield);
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
 
-  rgw::sal::RGWAttrs uattrs;
-  op_ret = user->read_attrs(s, s->yield, &uattrs);
+  op_ret = user->read_attrs(s, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -143,25 +142,21 @@ void RGWPutUserPolicy::execute(optional_yield y)
   try {
     const Policy p(s->cct, s->user->get_tenant(), bl);
     map<string, string> policies;
-    if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
-      bufferlist out_bl = uattrs[RGW_ATTR_USER_POLICY];
+    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
+      bufferlist out_bl = it->second;
       decode(policies, out_bl);
     }
     bufferlist in_bl;
     policies[policy_name] = policy;
     encode(policies, in_bl);
-    uattrs[RGW_ATTR_USER_POLICY] = in_bl;
+    user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
 
-    RGWObjVersionTracker objv_tracker;
-    op_ret = user->store_info(s, s->yield,
-			      RGWUserCtl::PutParams()
-			      .set_objv_tracker(&objv_tracker)
-			      .set_attrs(&uattrs));
+    op_ret = user->store_user(s, s->yield, false);
     if (op_ret < 0) {
       op_ret = -ERR_INTERNAL_ERROR;
     }
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -ERR_MALFORMED_DOC;
   }
 
@@ -185,7 +180,7 @@ int RGWGetUserPolicy::get_params()
   user_name = s->info.args.get("UserName");
 
   if (policy_name.empty() || user_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of policy name or user name is empty"
+    ldpp_dout(this, 20) << "ERROR: one of policy name or user name is empty"
     << dendl;
     return -EINVAL;
   }
@@ -200,9 +195,8 @@ void RGWGetUserPolicy::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(user_name));
-  rgw::sal::RGWAttrs uattrs;
-  op_ret = user->read_attrs(s, s->yield, &uattrs);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  op_ret = user->read_attrs(s, s->yield);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -216,8 +210,8 @@ void RGWGetUserPolicy::execute(optional_yield y)
     s->formatter->close_section();
     s->formatter->open_object_section("GetUserPolicyResult");
     map<string, string> policies;
-    if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
-      bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
+    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
+      bufferlist bl = it->second;
       decode(policies, bl);
       if (auto it = policies.find(policy_name); it != policies.end()) {
         policy = policies[policy_name];
@@ -250,7 +244,7 @@ int RGWListUserPolicies::get_params()
   user_name = s->info.args.get("UserName");
 
   if (user_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: user name is empty" << dendl;
+    ldpp_dout(this, 20) << "ERROR: user name is empty" << dendl;
     return -EINVAL;
   }
 
@@ -264,9 +258,8 @@ void RGWListUserPolicies::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(user_name));
-  rgw::sal::RGWAttrs uattrs;
-  op_ret = user->read_attrs(s, s->yield, &uattrs);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  op_ret = user->read_attrs(s, s->yield);
   if (op_ret == -ENOENT) {
     ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -275,13 +268,13 @@ void RGWListUserPolicies::execute(optional_yield y)
 
   if (op_ret == 0) {
     map<string, string> policies;
-    if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
+    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       s->formatter->open_object_section("ListUserPoliciesResponse");
       s->formatter->open_object_section("ResponseMetadata");
       s->formatter->dump_string("RequestId", s->trans_id);
       s->formatter->close_section();
       s->formatter->open_object_section("ListUserPoliciesResult");
-      bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
+      bufferlist bl = it->second;
       decode(policies, bl);
       for (const auto& p : policies) {
         s->formatter->open_object_section("PolicyNames");
@@ -312,7 +305,7 @@ int RGWDeleteUserPolicy::get_params()
   user_name = s->info.args.get("UserName");
 
   if (policy_name.empty() || user_name.empty()) {
-    ldout(s->cct, 20) << "ERROR: One of policy name or user name is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: One of policy name or user name is empty"<< dendl;
     return -EINVAL;
   }
 
@@ -326,22 +319,21 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
     return;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(user_name));
-  op_ret = user->load_by_id(s, s->yield);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  op_ret = user->load_user(s, s->yield);
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
 
-  rgw::sal::RGWAttrs uattrs;
-  op_ret = user->read_attrs(this, s->yield, &uattrs);
+  op_ret = user->read_attrs(this, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     // a policy might've been uploaded to this site when there was no sync
     // req. in earlier releases, proceed deletion
@@ -353,22 +345,17 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   }
 
   map<string, string> policies;
-  if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
-    bufferlist out_bl = uattrs[RGW_ATTR_USER_POLICY];
+  if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
+    bufferlist out_bl = it->second;
     decode(policies, out_bl);
 
     if (auto p = policies.find(policy_name); p != policies.end()) {
       bufferlist in_bl;
       policies.erase(p);
       encode(policies, in_bl);
-      uattrs[RGW_ATTR_USER_POLICY] = in_bl;
+      user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
 
-      RGWObjVersionTracker objv_tracker;
-      op_ret = user->store_info(s, s->yield,
-				RGWUserCtl::PutParams()
-				.set_old_info(&user->get_info())
-				.set_objv_tracker(&objv_tracker)
-				.set_attrs(&uattrs));
+      op_ret = user->store_user(s, s->yield, false);
       if (op_ret < 0) {
         op_ret = -ERR_INTERNAL_ERROR;
       }

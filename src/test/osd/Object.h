@@ -316,10 +316,10 @@ class ObjectDesc {
 public:
   ObjectDesc()
     : exists(false), dirty(false),
-      version(0) {}
+      version(0), flushed(false) {}
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen)
     : exists(false), dirty(false),
-      version(0) {
+      version(0), flushed(false) {
     layers.push_front(std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>(std::shared_ptr<ContentsGenerator>(cont_gen), init));
   }
 
@@ -532,6 +532,7 @@ public:
   uint64_t version;
   std::string redirect_target;
   std::map<uint64_t, ChunkDesc> chunk_info;
+  bool flushed;
 private:
   std::list<std::pair<std::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };

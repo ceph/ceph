@@ -24,8 +24,8 @@ curlSrcDir="${depsSrcDir}/curl"
 curlDir="${depsToolsetDir}/curl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://dl.bintray.com/boostorg/release/1.73.0/source/boost_1_73_0.tar.gz"
-boostSrcDir="${depsSrcDir}/boost_1_73_0"
+boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.tar.gz"
+boostSrcDir="${depsSrcDir}/boost_1_75_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
@@ -65,17 +65,20 @@ mkdir -p $DEPS_DIR
 mkdir -p $depsToolsetDir
 mkdir -p $depsSrcDir
 
+echo "Installing required packages."
 case "$OS" in
     ubuntu)
         sudo apt-get update
-        sudo apt-get -y install mingw-w64 cmake pkg-config python3-dev python3-pip \
+        sudo apt-get -y install mingw-w64 cmake pkg-config \
+            python3-dev python3-pip python3-yaml \
                 autoconf libtool ninja-build zip
         sudo python3 -m pip install cython
         ;;
     suse)
         for PKG in mingw64-cross-gcc-c++ mingw64-libgcc_s_seh1 mingw64-libstdc++6 \
                 cmake pkgconf python3-devel autoconf libtool ninja zip \
-                python3-Cython gcc patch wget git; do
+                python3-Cython python3-PyYAML \
+                gcc patch wget git; do
             rpm -q $PKG >/dev/null || zypper -n install $PKG
         done
         ;;
@@ -84,6 +87,7 @@ esac
 MINGW_CMAKE_FILE="$DEPS_DIR/mingw.cmake"
 source "$SCRIPT_DIR/mingw_conf.sh"
 
+echo "Building zlib."
 cd $depsSrcDir
 if [[ ! -d $zlibSrcDir ]]; then
     git clone https://github.com/madler/zlib
@@ -98,6 +102,7 @@ _make BINARY_PATH=$zlibDir \
      SHARED_MODE=1 \
      -f win32/Makefile.gcc install
 
+echo "Building lz4."
 cd $depsToolsetDir
 if [[ ! -d $lz4Dir ]]; then
     git clone https://github.com/lz4/lz4
@@ -109,6 +114,7 @@ _make BUILD_STATIC=no CC=${MINGW_CC%-posix*} \
       WINDRES=${MINGW_WINDRES} \
       TARGET_OS=Windows_NT
 
+echo "Building OpenSSL."
 cd $depsSrcDir
 if [[ ! -d $sslSrcDir ]]; then
     git clone https://github.com/openssl/openssl
@@ -122,6 +128,7 @@ _make depend
 _make
 _make install
 
+echo "Building libcurl."
 cd $depsSrcDir
 if [[ ! -d $curlSrcDir ]]; then
     git clone https://github.com/curl/curl
@@ -135,8 +142,10 @@ _make
 _make install
 
 
+echo "Building boost."
 cd $depsSrcDir
 if [[ ! -d $boostSrcDir ]]; then
+    echo "Downloading boost."
     wget -qO- $boostUrl | tar xz
 fi
 
@@ -155,6 +164,7 @@ sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.jam
 export PTW32_INCLUDE=${PTW32Include}
 export PTW32_LIB=${PTW32Lib}
 
+echo "Patching boost."
 # Fix getting Windows page size
 # TODO: send this upstream and maybe use a fork until it merges.
 # Meanwhile, we might consider moving those to ceph/cmake/modules/BuildBoost.cmake.
@@ -186,122 +196,6 @@ patch -N boost/thread/pthread/thread_data.hpp <<EOL
  #endif
 EOL
 
-# Use pthread if requested
-patch -N boost/asio/detail/thread.hpp <<EOL
---- boost/asio/detail/thread.hpp        2019-10-11 16:26:11.191094656 +0300
-+++ boost/asio/detail/thread.hpp.new    2019-10-11 16:26:03.310542438 +0300
-@@ -19,6 +19,8 @@
-
- #if !defined(BOOST_ASIO_HAS_THREADS)
- # include <boost/asio/detail/null_thread.hpp>
-+#elif defined(BOOST_ASIO_HAS_PTHREADS)
-+# include <boost/asio/detail/posix_thread.hpp>
- #elif defined(BOOST_ASIO_WINDOWS)
- # if defined(UNDER_CE)
- #  include <boost/asio/detail/wince_thread.hpp>
-@@ -27,8 +29,6 @@
- # else
- #  include <boost/asio/detail/win_thread.hpp>
- # endif
--#elif defined(BOOST_ASIO_HAS_PTHREADS)
--# include <boost/asio/detail/posix_thread.hpp>
- #elif defined(BOOST_ASIO_HAS_STD_THREAD)
- # include <boost/asio/detail/std_thread.hpp>
- #else
-@@ -41,6 +41,8 @@
-
- #if !defined(BOOST_ASIO_HAS_THREADS)
- typedef null_thread thread;
-+#elif defined(BOOST_ASIO_HAS_PTHREADS)
-+typedef posix_thread thread;
- #elif defined(BOOST_ASIO_WINDOWS)
- # if defined(UNDER_CE)
- typedef wince_thread thread;
-@@ -49,8 +51,6 @@
- # else
- typedef win_thread thread;
- # endif
--#elif defined(BOOST_ASIO_HAS_PTHREADS)
--typedef posix_thread thread;
- #elif defined(BOOST_ASIO_HAS_STD_THREAD)
- typedef std_thread thread;
- #endif
-EOL
-
-# Unix socket support for Windows is currently disabled by Boost.
-# https://github.com/huangqinjin/asio/commit/d27a8ad1870
-patch -N boost/asio/detail/socket_types.hpp <<EOL
---- boost/asio/detail/socket_types.hpp       2019-11-29 16:50:58.647125797 +0000
-+++ boost/asio/detail/socket_types.hpp.new   2020-01-13 11:45:05.015104678 +0000
-@@ -200,6 +200,8 @@
- typedef ipv6_mreq in6_mreq_type;
- typedef sockaddr_in6 sockaddr_in6_type;
- typedef sockaddr_storage sockaddr_storage_type;
-+struct sockaddr_un_type { u_short sun_family;
-+  char sun_path[108]; }; /* copy from afunix.h */
- typedef addrinfo addrinfo_type;
- # endif
- typedef ::linger linger_type;
-EOL
-patch -N boost/asio/detail/config.hpp <<EOL
---- boost/asio/detail/config.hpp       2019-11-29 16:50:58.691126211 +0000
-+++ boost/asio/detail/config.hpp.new   2020-01-13 13:09:17.966771750 +0000
-@@ -1142,13 +1142,9 @@
- // UNIX domain sockets.
- #if !defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
- # if !defined(BOOST_ASIO_DISABLE_LOCAL_SOCKETS)
--#  if !defined(BOOST_ASIO_WINDOWS) \\
--  && !defined(BOOST_ASIO_WINDOWS_RUNTIME) \\
--  && !defined(__CYGWIN__)
-+#  if !defined(BOOST_ASIO_WINDOWS_RUNTIME)
- #   define BOOST_ASIO_HAS_LOCAL_SOCKETS 1
--#  endif // !defined(BOOST_ASIO_WINDOWS)
--         //   && !defined(BOOST_ASIO_WINDOWS_RUNTIME)
--         //   && !defined(__CYGWIN__)
-+#  endif // !defined(BOOST_ASIO_WINDOWS_RUNTIME)
- # endif // !defined(BOOST_ASIO_DISABLE_LOCAL_SOCKETS)
- #endif // !defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
-EOL
-
-# TODO: drop this when switching to Boost>=1.75, it's unreleased as of 1.74.
-patch -N boost/process/detail/windows/handle_workaround.hpp <<EOL
---- boost/process/detail/windows/handle_workaround.hpp
-+++ boost/process/detail/windows/handle_workaround.hpp.new
-@@ -198,20 +198,20 @@ typedef struct _OBJECT_TYPE_INFORMATION_ {
- 
- 
- /*
--__kernel_entry NTSTATUS NtQuerySystemInformation(
-+NTSTATUS NtQuerySystemInformation(
-   IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
-   OUT PVOID                   SystemInformation,
-   IN ULONG                    SystemInformationLength,
-   OUT PULONG                  ReturnLength
- );
-  */
--typedef ::boost::winapi::NTSTATUS_ (__kernel_entry *nt_system_query_information_p )(
-+typedef ::boost::winapi::NTSTATUS_ (*nt_system_query_information_p )(
-         SYSTEM_INFORMATION_CLASS_,
-         void *,
-         ::boost::winapi::ULONG_,
-         ::boost::winapi::PULONG_);
- /*
--__kernel_entry NTSYSCALLAPI NTSTATUS NtQueryObject(
-+NTSYSCALLAPI NTSTATUS NtQueryObject(
-   HANDLE                   Handle,
-   OBJECT_INFORMATION_CLASS ObjectInformationClass,
-   PVOID                    ObjectInformation,
-@@ -220,7 +220,7 @@ __kernel_entry NTSYSCALLAPI NTSTATUS NtQueryObject(
- );
-  */
- 
--typedef ::boost::winapi::NTSTATUS_ (__kernel_entry *nt_query_object_p )(
-+typedef ::boost::winapi::NTSTATUS_ (*nt_query_object_p )(
-         ::boost::winapi::HANDLE_,
-         OBJECT_INFORMATION_CLASS_,
-         void *,
-EOL
-
 ./bootstrap.sh
 
 ./b2 install --user-config=user-config.jam toolset=gcc-mingw32 \
@@ -313,6 +207,7 @@ EOL
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \
     --without-python --without-mpi --without-log --without-wave
 
+echo "Building libbacktrace."
 cd $depsSrcDir
 if [[ ! -d $backtraceSrcDir ]]; then
     git clone https://github.com/ianlancetaylor/libbacktrace
@@ -325,6 +220,7 @@ cd $backtraceSrcDir/build
 _make LDFLAGS="-no-undefined"
 _make install
 
+echo "Building snappy."
 cd $depsSrcDir
 if [[ ! -d $snappySrcDir ]]; then
     git clone https://github.com/google/snappy
@@ -351,6 +247,7 @@ cmake -DCMAKE_INSTALL_PREFIX=$snappyDir \
 _make
 _make install
 
+echo "Generating mswsock.lib."
 # mswsock.lib is not provided by mingw, so we'll have to generate
 # it.
 mkdir -p $winLibDir
@@ -386,6 +283,7 @@ EOF
 $MINGW_DLLTOOL -d $winLibDir/mswsock.def \
                -l $winLibDir/libmswsock.a
 
+echo "Fetching libwnbd."
 cd $depsSrcDir
 if [[ ! -d $wnbdSrcDir ]]; then
     git clone $wnbdUrl
@@ -397,6 +295,7 @@ $MINGW_DLLTOOL -d $wnbdSrcDir/libwnbd/libwnbd.def \
                -D libwnbd.dll \
                -l $wnbdLibDir/libwnbd.a
 
+echo "Fetching dokany."
 cd $depsSrcDir
 if [[ ! -d $dokanSrcDir ]]; then
     git clone $dokanUrl
@@ -413,4 +312,5 @@ $MINGW_DLLTOOL -d $dokanSrcDir/dokan/dokan.def \
 # sys/public.h without the "sys" prefix.
 cp $dokanSrcDir/sys/public.h $dokanSrcDir/dokan
 
+echo "Finished building Ceph dependencies."
 touch $depsToolsetDir/completed

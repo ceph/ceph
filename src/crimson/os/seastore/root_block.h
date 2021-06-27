@@ -83,6 +83,7 @@ struct RootBlock : CachedExtent {
   }
 
   root_t &get_root() { return root; }
+
 };
 using RootBlockRef = RootBlock::Ref;
 

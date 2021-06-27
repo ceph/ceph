@@ -67,16 +67,16 @@ For rpm based instructions execute the following commands:
 #. As ``root``, on all iSCSI gateway nodes, install the
    ``ceph-iscsi`` package:
 
-   ::
+   .. prompt:: bash #
 
-       # yum install ceph-iscsi
+      yum install ceph-iscsi
 
 #. As ``root``, on all iSCSI gateway nodes, install the ``tcmu-runner``
    package:
 
-   ::
+   .. prompt:: bash #
 
-       # yum install tcmu-runner
+      yum install tcmu-runner
 
 **Setup:**
 
@@ -84,9 +84,9 @@ For rpm based instructions execute the following commands:
    like the iSCSI configuration. To check if this pool has been created
    run:
 
-   ::
+   .. prompt:: bash #
 
-       # ceph osd lspools
+      ceph osd lspools
 
    If it does not exist instructions for creating pools can be found on the
    `RADOS pool operations page
@@ -95,13 +95,13 @@ For rpm based instructions execute the following commands:
 #. As ``root``, on a iSCSI gateway node, create a file named
    ``iscsi-gateway.cfg`` in the ``/etc/ceph/`` directory:
 
-   ::
+   .. prompt:: bash #
 
-       # touch /etc/ceph/iscsi-gateway.cfg
+      touch /etc/ceph/iscsi-gateway.cfg
 
    #. Edit the ``iscsi-gateway.cfg`` file and add the following lines:
 
-      ::
+      .. code-block:: ini
 
           [config]
           # Name of the Ceph storage cluster. A suitable Ceph configuration file allowing
@@ -148,15 +148,15 @@ For rpm based instructions execute the following commands:
 #. As ``root``, on all iSCSI gateway nodes, enable and start the API
    service:
 
-   ::
+   .. prompt:: bash #
 
-       # systemctl daemon-reload
+      systemctl daemon-reload
        
-       # systemctl enable rbd-target-gw
-       # systemctl start rbd-target-gw
+      systemctl enable rbd-target-gw
+      systemctl start rbd-target-gw
 
-       # systemctl enable rbd-target-api
-       # systemctl start rbd-target-api
+      systemctl enable rbd-target-api
+      systemctl start rbd-target-api
 
 
 **Configuring:**
@@ -170,14 +170,14 @@ to create a iSCSI target and export a RBD image as LUN 0.
 #. As ``root``, on a iSCSI gateway node, start the iSCSI gateway
    command-line interface:
 
-   ::
+   .. prompt:: bash #
 
-       # gwcli
+      gwcli
 
 #. Go to iscsi-targets and create a target with the name
    iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw:
 
-   ::
+   .. code-block:: console
 
        > /> cd /iscsi-target
        > /iscsi-target>  create iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw
@@ -187,7 +187,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
    same IPs used for management operations listed in trusted_ip_list,
    but it is recommended that different IPs are used.
 
-   ::
+   .. code-block:: console
 
        > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways
        > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21
@@ -197,7 +197,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
    the skipchecks=true argument must be used. This will avoid the Red Hat kernel
    and rpm checks:
 
-   ::
+   .. code-block:: console
 
        > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways
        > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21 skipchecks=true
@@ -205,14 +205,14 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
 #. Add a RBD image with the name disk_1 in the pool rbd:
 
-   ::
+   .. code-block:: console
 
        > /iscsi-target...-igw/gateways> cd /disks
        > /disks> create pool=rbd image=disk_1 size=90G
 
 #. Create a client with the initiator name iqn.1994-05.com.redhat:rh7-client:
 
-   ::
+   .. code-block:: console
 
        > /disks> cd /iscsi-target/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts
        > /iscsi-target...eph-igw/hosts>  create iqn.1994-05.com.redhat:rh7-client
@@ -220,7 +220,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
 #. Set the client's CHAP username to myiscsiusername and password to
    myiscsipassword:
 
-   ::
+   .. code-block:: console
 
        > /iscsi-target...at:rh7-client>  auth username=myiscsiusername password=myiscsipassword
 
@@ -230,7 +230,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
 #. Add the disk to the client:
 
-   ::
+   .. code-block:: console
 
        > /iscsi-target...at:rh7-client> disk add rbd/disk_1
 

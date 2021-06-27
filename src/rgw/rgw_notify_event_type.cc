@@ -49,6 +49,10 @@ namespace rgw::notify {
     return "UNKNOWN_EVENT";
   }
 
+  std::string to_event_string(EventType t) {
+    return to_string(t).substr(3);
+  }
+
   EventType from_string(const std::string& s) {
     if (s == "s3:ObjectCreated:*" || s == "OBJECT_CREATE")
         return ObjectCreated;

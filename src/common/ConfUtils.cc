@@ -16,21 +16,12 @@
 #include <algorithm>
 #include <cctype>
 #include <experimental/iterator>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <map>
 #include <sstream>
-
-#if __has_include(<filesystem>)
-#include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#else
-#error std::filesystem not available!
-#endif
 
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/trim_all.hpp>
@@ -42,6 +33,8 @@ namespace fs = std::experimental::filesystem;
 #include "common/errno.h"
 #include "common/utf8.h"
 #include "common/ConfUtils.h"
+
+namespace fs = std::filesystem;
 
 using std::ostringstream;
 using std::string;

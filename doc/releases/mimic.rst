@@ -1,3 +1,10 @@
+=====
+Mimic
+=====
+
+Mimic is the 13th stable release of Ceph.  It is named after the mimic
+octopus (thaumoctopus mimicus).
+
 v13.2.10 Mimic
 ==============
 

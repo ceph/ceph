@@ -838,3 +838,56 @@ _____________________________________
                 |                   |
 
 
+.. graphviz::
+   :caption: client side state machine
+
+   digraph lossy_client {
+     node [shape = doublecircle]; "start_connect" "closed";
+     node [shape = oval];
+     start_connect -> banner_connecting [label = "<connected>"];
+     subgraph hello_banner {
+       banner_connecting -> hello_connecting [label = "banner exchange"];
+       hello_connecting -> banner_connecting [label = "hello exchange"];
+       label = "hello banner exchange";
+       color = blue;
+     }
+     banner_connecting -> auth_connecting [label = "<exchange done>"];
+     auth_connecting -> auth_connecting [label = "auth reply more"];
+     auth_connecting -> auth_connecting [label = "auth bad method"];
+     auth_connecting -> auth_connecting_sign [label = "auth done"];
+     auth_connecting_sign -> session_connecting [label = "auth signature"];
+     session_connecting -> wait [label = "wait"];
+     wait -> start_connect [label = "<backoff>"];
+     session_connecting -> closed [label = "ident missing features"];
+     session_connecting -> ready [label = "server ident", tooltip = "set peer_name, peer_addr and connection features"];
+     ready -> ready [label = "keep alive"];
+   }
+
+.. graphviz::
+   :caption: server side state machine
+
+   digraph lossy_server {
+     node [shape = doublecircle]; "start_accept" "closed";
+     node [shape = oval];
+     start_accept -> banner_accepting [label = "<accepted>"];
+     subgraph hello_banner {
+       banner_accepting -> hello_accepting [label = "banner exchange"];
+       hello_accepting -> banner_accepting [label = "hello exchange"];
+       label = "hello banner exchange";
+       color = blue;
+     };
+     banner_accepting -> auth_accepting [label = "<exchange done>"];
+     auth_accepting -> auth_accepting_more [label = "auth_request => 0"];
+     auth_accepting -> auth_accepting_sign [label = "auth_request => 1"];
+     auth_accepting_more -> auth_accepting_more [label = "auth_request => 0"];
+     auth_accepting_more -> auth_accepting_sign [label = "auth_request => 1"];
+     auth_accepting_more -> standby [label = "auth_request => EBUSY"];
+     auth_accepting_more -> auth_accepting_more [label = "auth_request => *"];
+     auth_accepting -> standby [label = "auth_request => EBUSY"];
+     auth_accepting -> auth_accepting [label = "send <auth bad method>"];
+     auth_accepting_sign -> session_accepting [label = "auth signature"];
+     session_accepting -> session_accepting [label = "reconnect"];
+     session_accepting -> closed [label = "ident missing features"];
+     session_accepting -> ready [label = "client ident", tooltip = "set connection features"];
+     ready -> ready [label = "keep alive"];
+   }

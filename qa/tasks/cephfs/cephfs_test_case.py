@@ -4,12 +4,10 @@ import os
 import re
 
 from shlex import split as shlex_split
-from io import StringIO
 
 from tasks.ceph_test_case import CephTestCase
 
 from teuthology import contextutil
-from teuthology.misc import sudo_write_file
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 
@@ -195,7 +193,6 @@ class CephFSTestCase(CephTestCase):
             self.recovery_fs.set_data_pool_name(self.fs.get_data_pool_name())
             self.recovery_fs.create()
             self.recovery_fs.getinfo(refresh=True)
-            self.recovery_fs.mds_restart()
             self.recovery_fs.wait_for_daemons()
 
         # Load an config settings of interest
@@ -444,13 +441,3 @@ class CephFSTestCase(CephTestCase):
 
         self.run_cluster_cmd(cmd)
         return self.run_cluster_cmd(f'auth get {self.client_name}')
-
-    def create_keyring_file(self, remote, keyring):
-        keyring_path = remote.run(args=['mktemp'], stdout=StringIO()).\
-            stdout.getvalue().strip()
-        sudo_write_file(remote, keyring_path, keyring)
-
-        # required when triggered using vstart_runner.py.
-        remote.run(args=['chmod', '644', keyring_path])
-
-        return keyring_path

@@ -162,7 +162,7 @@ int write_part_header(cls_method_context_t hctx,
 
 int read_header(cls_method_context_t hctx,
 		std::optional<objv> objv,
-		info* info)
+		info* info, bool get_info = false)
 {
   std::uint64_t size;
 
@@ -180,7 +180,11 @@ int read_header(cls_method_context_t hctx,
   }
 
   if (r == 0) {
-    CLS_ERR("ERROR: %s: Zero length object, returning ENODATA", __PRETTY_FUNCTION__);
+    if (get_info) {
+      CLS_LOG(5, "%s: Zero length object, likely probe, returning ENODATA", __PRETTY_FUNCTION__);
+    } else {
+      CLS_ERR("ERROR: %s: Zero length object, returning ENODATA", __PRETTY_FUNCTION__);
+    }
     return -ENODATA;
   }
 
@@ -213,7 +217,8 @@ int create_meta(cls_method_context_t hctx,
     auto iter = in->cbegin();
     decode(op, iter);
   } catch (const ceph::buffer::error& err) {
-    CLS_ERR("ERROR: %s: failed to decode request", __PRETTY_FUNCTION__);
+    CLS_ERR("ERROR: %s: failed to decode request: %s", __PRETTY_FUNCTION__,
+	    err.what());
     return -EINVAL;
   }
 
@@ -233,19 +238,24 @@ int create_meta(cls_method_context_t hctx,
 
   int r = cls_cxx_stat2(hctx, &size, nullptr);
   if (r < 0 && r != -ENOENT) {
-    CLS_ERR("ERROR: %s: cls_cxx_stat2() on obj returned %d", __PRETTY_FUNCTION__, r);
+    CLS_ERR("ERROR: %s: cls_cxx_stat2() on obj returned %d",
+	    __PRETTY_FUNCTION__, r);
     return r;
   }
   if (op.exclusive && r == 0) {
-    CLS_ERR("%s: exclusive create but queue already exists", __PRETTY_FUNCTION__);
+    CLS_ERR("%s: exclusive create but queue already exists",
+	    __PRETTY_FUNCTION__);
     return -EEXIST;
   }
 
   if (r == 0) {
+    CLS_LOG(5, "%s: FIFO already exists, reading from disk and comparing.",
+	    __PRETTY_FUNCTION__);
     ceph::buffer::list bl;
     r = cls_cxx_read2(hctx, 0, size, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
-      CLS_ERR("ERROR: %s: cls_cxx_read2() on obj returned %d", __PRETTY_FUNCTION__, r);
+      CLS_ERR("ERROR: %s: cls_cxx_read2() on obj returned %d",
+	      __PRETTY_FUNCTION__, r);
       return r;
     }
 
@@ -254,7 +264,8 @@ int create_meta(cls_method_context_t hctx,
       auto iter = bl.cbegin();
       decode(header, iter);
     } catch (const ceph::buffer::error& err) {
-      CLS_ERR("ERROR: %s: failed decoding header", __PRETTY_FUNCTION__);
+      CLS_ERR("ERROR: %s: failed decoding header: %s",
+	      __PRETTY_FUNCTION__, err.what());
       return -EIO;
     }
 
@@ -366,7 +377,7 @@ int get_meta(cls_method_context_t hctx, ceph::buffer::list* in,
   }
 
   op::get_meta_reply reply;
-  int r = read_header(hctx, op.version, &reply.info);
+  int r = read_header(hctx, op.version, &reply.info, true);
   if (r < 0) {
     return r;
   }

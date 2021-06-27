@@ -177,8 +177,8 @@ int execute_prepare(const po::variables_map &vm,
 
   std::string source_spec;
   if (vm.count("source-spec") && vm.count("source-spec-path")) {
-    std::cerr << "rbd: cannot specify both source-image-spec and "
-              << "source-spec/source-spec-file" << std::endl;
+    std::cerr << "rbd: cannot specify both source-spec and source-spec-path"
+              << std::endl;
     return -EINVAL;
   } else if (vm.count("source-spec-path")) {
     std::string source_spec_path = vm["source-spec-path"].as<std::string>();

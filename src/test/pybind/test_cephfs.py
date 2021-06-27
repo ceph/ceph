@@ -888,3 +888,19 @@ def test_snapshot_info():
 
     # remove directory
     cephfs.rmdir("/dir-1")
+
+@with_setup(setup_test)
+def test_set_mount_timeout_post_mount():
+    assert_raises(libcephfs.LibCephFSStateError, cephfs.set_mount_timeout, 5)
+
+@with_setup(setup_test)
+def test_set_mount_timeout():
+    cephfs.unmount()
+    cephfs.set_mount_timeout(5)
+    cephfs.mount()
+
+@with_setup(setup_test)
+def test_set_mount_timeout_lt0():
+    cephfs.unmount()
+    assert_raises(libcephfs.InvalidValue, cephfs.set_mount_timeout, -5)
+    cephfs.mount()

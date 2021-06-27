@@ -975,6 +975,7 @@ scopes are:
 - **iscsi**: includes all features related to iSCSI management.
 - **rgw**: includes all features related to RADOS Gateway (RGW) management.
 - **cephfs**: includes all features related to CephFS management.
+- **nfs-ganesha**: includes all features related to NFS Ganesha management.
 - **manager**: include all features related to Ceph Manager
   management.
 - **log**: include all features related to Ceph logs management.
@@ -1211,7 +1212,26 @@ A log entry may look like this::
 NFS-Ganesha Management
 ----------------------
 
-The Ceph Dashboard can manage `NFS Ganesha <http://nfs-ganesha.github.io/>`_ exports that use
+Support for NFS-Ganesha Clusters Deployed by the Orchestrator
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Ceph Dashboard can be used to manage NFS-Ganesha clusters deployed by the
+Orchestrator and will detect them automatically. For more details
+on deploying NFS-Ganesha clusters with the Orchestrator, please see:
+
+- Cephadm backend: :ref:`orchestrator-cli-stateless-services`. Or particularly, see
+  :ref:`deploy-cephadm-nfs-ganesha`.
+- Rook backend: `Ceph NFS Gateway CRD <https://rook.github.io/docs/rook/master/ceph-nfs-crd.html>`_.
+
+Support for NFS-Ganesha Clusters Defined by the User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+
+    This configuration only applies for user-defined clusters,
+    NOT for Orchestrator-deployed clusters.
+
+The Ceph Dashboard can manage `NFS Ganesha <https://nfs-ganesha.github.io/>`_ exports that use
 CephFS or RGW as their backstore.
 
 To enable this feature in Ceph Dashboard there are some assumptions that need
@@ -1282,16 +1302,6 @@ NFS-Ganesha cluster.
 
 When configuring the Ceph Dashboard with multiple NFS-Ganesha clusters, the
 Web UI will allow you to choose to which cluster an export belongs.
-
-
-Support for NFS-Ganesha Clusters Deployed by the Orchestrator
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The Ceph Dashboard can be used to manage NFS-Ganesha clusters deployed by the
-Orchestrator and will detect them automatically. For more details
-on deploying NFS-Ganesha clusters with the Orchestrator, please see :ref:`orchestrator-cli-stateless-services`.
-Or particularly, see :ref:`deploy-cephadm-nfs-ganesha` for how to deploy
-NFS-Ganesha clusters with the Cephadm backend.
 
 
 Plug-ins

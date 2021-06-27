@@ -13,15 +13,7 @@
 
 #include "PyModuleRegistry.h"
 
-#if __has_include(<filesystem>)
 #include <filesystem>
-namespace fs = std::filesystem;
-#elif __has_include(<experimental/filesystem>)
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#else
-#error std::filesystem not available!
-#endif
 
 #include "include/stringify.h"
 #include "common/errno.h"
@@ -41,6 +33,8 @@ namespace fs = std::experimental::filesystem;
 
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
+
+namespace fs = std::filesystem;
 
 std::set<std::string> obsolete_modules = {
   "orchestrator_cli",
@@ -75,7 +69,7 @@ void PyModuleRegistry::init()
   std::list<std::string> failed_modules;
 
   const std::string module_path = g_conf().get_val<std::string>("mgr_module_path");
-  std::set<std::string> module_names = probe_modules(module_path);
+  auto module_names = probe_modules(module_path);
   // Load python code
   for (const auto& module_name : module_names) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
@@ -270,12 +264,12 @@ void PyModuleRegistry::shutdown()
   Py_Finalize();
 }
 
-std::set<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
+std::vector<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
 {
   const auto opt = g_conf().get_val<std::string>("mgr_disabled_modules");
   const auto disabled_modules = ceph::split(opt);
 
-  std::set<std::string> modules;
+  std::vector<std::string> modules;
   for (const auto& entry: fs::directory_iterator(path)) {
     if (!fs::is_directory(entry)) {
       continue;
@@ -287,7 +281,7 @@ std::set<std::string> PyModuleRegistry::probe_modules(const std::string &path) c
     }
     auto module_path = entry.path() / "module.py";
     if (fs::exists(module_path)) {
-      modules.emplace(name);
+      modules.push_back(name);
     }
   }
   return modules;

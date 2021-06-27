@@ -48,6 +48,10 @@ public:
     reset();
   }
 
+  CephxClientHandler* clone() const override {
+    return new CephxClientHandler(*this);
+  }
+
   void reset() override;
   void prepare_build_request() override;
   int build_request(ceph::buffer::list& bl) const override;

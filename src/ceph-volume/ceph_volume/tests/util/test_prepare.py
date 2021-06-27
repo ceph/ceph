@@ -145,16 +145,9 @@ class TestOsdMkfsFilestore(object):
 
     @pytest.mark.parametrize('flag', mkfs_filestore_flags)
     def test_keyring_is_used(self, fake_call, monkeypatch, flag):
-        monkeypatch.setattr(prepare, '__release__', 'mimic')
         monkeypatch.setattr(system, 'chown', lambda path: True)
         prepare.osd_mkfs_filestore(1, 'asdf', keyring='secret')
         assert flag in fake_call.calls[0]['args'][0]
-
-    def test_keyring_is_used_luminous(self, fake_call, monkeypatch):
-        monkeypatch.setattr(prepare, '__release__', 'luminous')
-        monkeypatch.setattr(system, 'chown', lambda path: True)
-        prepare.osd_mkfs_filestore(1, 'asdf', keyring='secret')
-        assert '--keyfile' not in fake_call.calls[0]['args'][0]
 
 
 class TestOsdMkfsBluestore(object):
@@ -167,12 +160,6 @@ class TestOsdMkfsBluestore(object):
     def test_keyring_is_not_added(self, fake_call, monkeypatch):
         monkeypatch.setattr(system, 'chown', lambda path: True)
         prepare.osd_mkfs_bluestore(1, 'asdf')
-        assert '--keyfile' not in fake_call.calls[0]['args'][0]
-
-    def test_keyring_is_not_added_luminous(self, fake_call, monkeypatch):
-        monkeypatch.setattr(system, 'chown', lambda path: True)
-        prepare.osd_mkfs_bluestore(1, 'asdf')
-        monkeypatch.setattr(prepare, '__release__', 'luminous')
         assert '--keyfile' not in fake_call.calls[0]['args'][0]
 
     def test_wal_is_added(self, fake_call, monkeypatch):

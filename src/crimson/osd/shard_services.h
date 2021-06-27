@@ -59,6 +59,7 @@ class ShardServices : public md_config_obs_t {
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) final;
+
 public:
   ShardServices(
     OSDMapService &osdmap_service,
@@ -71,7 +72,7 @@ public:
 
   seastar::future<> send_to_osd(
     int peer,
-    MessageRef m,
+    MessageURef m,
     epoch_t from_epoch);
 
   crimson::os::FuturizedStore &get_store() {

@@ -15,7 +15,7 @@ namespace rgw::auth::sts {
 
 class WebTokenEngine : public rgw::auth::Engine {
   CephContext* const cct;
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
 
   using result_t = rgw::auth::Engine::result_t;
   using token_t = rgw::web_idp::WebTokenClaims;
@@ -29,9 +29,11 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_cert_valid(const vector<string>& thumbprints, const string& cert) const;
 
-  boost::optional<RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const;
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const;
 
   std::string get_role_tenant(const string& role_arn) const;
+
+  std::string get_cert_url(const string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
 
   boost::optional<WebTokenEngine::token_t>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
@@ -44,7 +46,7 @@ class WebTokenEngine : public rgw::auth::Engine {
 
 public:
   WebTokenEngine(CephContext* const cct,
-                    rgw::sal::RGWStore* store,
+                    rgw::sal::Store* store,
                     const rgw::auth::TokenExtractor* const extractor,
                     const rgw::auth::WebIdentityApplier::Factory* const apl_factory)
     : cct(cct),
@@ -65,7 +67,7 @@ public:
 class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::WebIdentityApplier::Factory {
-  rgw::sal::RGWStore* store;
+  rgw::sal::Store* store;
   ImplicitTenants& implicit_tenant_context;
 
   /* The engine. */
@@ -91,7 +93,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
 public:
   DefaultStrategy(CephContext* const cct,
                   ImplicitTenants& implicit_tenant_context,
-                  rgw::sal::RGWStore* store)
+                  rgw::sal::Store* store)
     : store(store),
       implicit_tenant_context(implicit_tenant_context),
       web_token_engine(cct, store,
@@ -171,7 +173,7 @@ public:
 class RGW_Auth_STS {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
-                       rgw::sal::RGWStore *store,
+                       rgw::sal::Store* store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s, optional_yield y);
 };
@@ -191,7 +193,7 @@ public:
       post_body(post_body) {}
   ~RGWHandler_REST_STS() override = default;
 
-  int init(rgw::sal::RGWStore *store,
+  int init(rgw::sal::Store* store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -209,7 +211,7 @@ public:
     return this;
   }
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
 			       struct req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;

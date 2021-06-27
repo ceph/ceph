@@ -205,6 +205,7 @@ public:
   void clear_flag(int f) { flags &= ~f; }
 
   std::string_view get_fs_name() const {return fs_name;}
+  void set_fs_name(std::string new_fs_name) { fs_name = std::move(new_fs_name); }
 
   void set_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_SNAPS);
@@ -231,6 +232,7 @@ public:
   }
   void clear_multimds_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS); }
   bool allows_multimds_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS); }
+  bool joinable() const { return !test_flag(CEPH_MDSMAP_NOT_JOINABLE); }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -560,8 +562,10 @@ public:
 
   void print(std::ostream& out) const;
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
+  void print_flags(std::ostream& out) const;
 
   void dump(ceph::Formatter *f) const;
+  void dump_flags_state(Formatter *f) const;
   static void generate_test_instances(std::list<MDSMap*>& ls);
 
   static bool state_transition_valid(DaemonState prev, DaemonState next);
@@ -620,7 +624,13 @@ protected:
   bool inline_data_enabled = false;
 
   uint64_t cached_up_features = 0;
-
+private:
+  inline static const std::map<int, std::string> flag_display = {
+    {CEPH_MDSMAP_NOT_JOINABLE, "joinable"}, //inverse for user display
+    {CEPH_MDSMAP_ALLOW_SNAPS, "allow_snaps"},
+    {CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS, "allow_multimds_snaps"},
+    {CEPH_MDSMAP_ALLOW_STANDBY_REPLAY, "allow_standby_replay"}
+  };
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)

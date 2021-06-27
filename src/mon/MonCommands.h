@@ -77,7 +77,9 @@
  *
  * COMMAND("auth add "
  *   	   "name=entity,type=CephString "
- *   	   "name=caps,type=CephString,n=N,req=false",
+ *   	   "name=caps,type=CephString,n=N,req=false "
+ *         "-- "
+ *         "name=some_option,type=CephString,req=false",
  *   	   "add auth info for <name> from input file, or random key "
  *   	   "if no input given, and/or any caps specified in the command")
  *
@@ -88,6 +90,12 @@
  * enters auth add client.admin 'mon rwx' 'osd *'.  The result will be a
  * JSON object like {"prefix":"auth add", "entity":"client.admin",
  * "caps":["mon rwx", "osd *"]}.
+ *
+ * The -- separates positional from non-positional (and, by implication,
+ * optional) arguments.  Note that CephBool is assumed to be non-positional
+ * and will also implicitly mark that any following arguments are
+ * non-positional.
+ *
  * Note that
  * 	- string literals are accumulated into 'prefix'
  * 	- n=1 descriptors are given normal string or int object values
@@ -192,9 +200,6 @@ COMMAND("auth rm "
 COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb storage",
 	     "mon", "rw",
              FLAG(TELL))
-COMMAND_WITH_FLAG("scrub", "scrub the monitor stores",
-             "mon", "rw",
-             FLAG(OBSOLETE))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r")
 COMMAND("log name=logtext,type=CephString,n=N",
 	"log supplied text to the monitor log", "mon", "rw")
@@ -275,17 +280,11 @@ COMMAND("versions",
  * MDS commands (MDSMonitor.cc)
  */
 
+#define FS_NAME_GOODCHARS "[A-Za-z0-9-_.]"
 COMMAND_WITH_FLAG("mds stat", "show MDS status", "mds", "r", FLAG(HIDDEN))
-COMMAND_WITH_FLAG("mds dump "
-	"name=epoch,type=CephInt,req=false,range=0",
-	"dump legacy MDS cluster info, optionally from epoch",
-        "mds", "r", FLAG(OBSOLETE))
 COMMAND("fs dump "
 	"name=epoch,type=CephInt,req=false,range=0",
 	"dump all CephFS status, optionally from epoch", "mds", "r")
-COMMAND_WITH_FLAG("mds getmap "
-	"name=epoch,type=CephInt,req=false,range=0",
-	"get MDS map, optionally from epoch", "mds", "r", FLAG(OBSOLETE))
 COMMAND("mds metadata name=who,type=CephString,req=false",
 	"fetch metadata for mds <role>",
 	"mds", "r")
@@ -295,29 +294,11 @@ COMMAND("mds count-metadata name=property,type=CephString",
 COMMAND("mds versions",
 	"check running versions of MDSs",
 	"mds", "r")
-COMMAND_WITH_FLAG("mds tell "
-	"name=who,type=CephString "
-	"name=args,type=CephString,n=N",
-	"send command to particular mds", "mds", "rw", FLAG(OBSOLETE))
 COMMAND("mds compat show", "show mds compatibility settings",
 	"mds", "r")
-COMMAND_WITH_FLAG("mds stop name=role,type=CephString", "stop mds",
-	"mds", "rw", FLAG(OBSOLETE))
-COMMAND_WITH_FLAG("mds deactivate name=role,type=CephString",
-        "clean up specified MDS rank (use with `set max_mds` to shrink cluster)",
-	"mds", "rw", FLAG(OBSOLETE))
 COMMAND("mds ok-to-stop name=ids,type=CephString,n=N",
 	"check whether stopping the specified MDS would reduce immediate availability",
 	"mds", "r")
-COMMAND_WITH_FLAG("mds set_max_mds "
-	"name=maxmds,type=CephInt,range=0",
-	"set max MDS index", "mds", "rw", FLAG(OBSOLETE))
-COMMAND_WITH_FLAG("mds set "
-	"name=var,type=CephChoices,strings=max_mds|max_file_size|inline_data|"
-	"allow_new_snaps|allow_multimds|allow_multimds_snaps|allow_dirfrags "
-	"name=val,type=CephString "
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
-	"set mds parameter <var> to <val>", "mds", "rw", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds freeze name=role_or_gid,type=CephString"
 	" name=val,type=CephString",
 	"freeze MDS yes/no", "mds", "rw", FLAG(HIDDEN))
@@ -339,32 +320,15 @@ COMMAND("mds rm "
 COMMAND_WITH_FLAG("mds rmfailed name=role,type=CephString "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"remove failed rank", "mds", "rw", FLAG(HIDDEN))
-COMMAND_WITH_FLAG("mds cluster_down", "take MDS cluster down", "mds", "rw", FLAG(OBSOLETE))
-COMMAND_WITH_FLAG("mds cluster_up", "bring MDS cluster up", "mds", "rw", FLAG(OBSOLETE))
 COMMAND("mds compat rm_compat "
 	"name=feature,type=CephInt,range=0",
 	"remove compatible feature", "mds", "rw")
 COMMAND("mds compat rm_incompat "
 	"name=feature,type=CephInt,range=0",
 	"remove incompatible feature", "mds", "rw")
-COMMAND_WITH_FLAG("mds add_data_pool "
-	"name=pool,type=CephString",
-	"add data pool <pool>", "mds", "rw", FLAG(OBSOLETE))
-COMMAND_WITH_FLAG("mds rm_data_pool "
-	"name=pool,type=CephString",
-	"remove data pool <pool>", "mds", "rw", FLAG(OBSOLETE))
-COMMAND_WITH_FLAG("mds remove_data_pool "
-	"name=pool,type=CephString",
-	"remove data pool <pool>", "mds", "rw", FLAG(OBSOLETE))
-COMMAND_WITH_FLAG("mds newfs "
-	"name=metadata,type=CephInt,range=0 "
-	"name=data,type=CephInt,range=0 "
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
-	"make new filesystem using pools <metadata> and <data>",
-	"mds", "rw", FLAG(OBSOLETE))
 COMMAND("fs new "
-	"name=fs_name,type=CephString,goodchars=[A-Za-z0-9-_.] "
-	"name=metadata,type=CephString "
+	"name=fs_name,type=CephString,goodchars=" FS_NAME_GOODCHARS
+	" name=metadata,type=CephString "
 	"name=data,type=CephString "
 	"name=force,type=CephBool,req=false "
 	"name=allow_dangerous_metadata_overlay,type=CephBool,req=false",
@@ -410,6 +374,10 @@ COMMAND("fs feature ls",
         "list available cephfs features to be set/unset",
 	"mds", "r")
 
+COMMAND("fs lsflags name=fs_name,type=CephString",
+	"list the flags set on a ceph filesystem",
+	"fs", "r")
+
 COMMAND("fs required_client_features "
         "name=fs_name,type=CephString "
         "name=subop,type=CephChoices,strings=add|rm "
@@ -445,6 +413,11 @@ COMMAND("fs mirror peer_remove "
 	"name=fs_name,type=CephString "
 	"name=uuid,type=CephString ",
 	"remove a mirror peer for a ceph filesystem", "mds", "rw")
+COMMAND("fs rename "
+	"name=fs_name,type=CephString "
+	"name=new_fs_name,type=CephString,goodchars=" FS_NAME_GOODCHARS
+	" name=yes_i_really_mean_it,type=CephBool,req=false",
+	"rename a ceph file system", "mds", "rw")
 
 /*
  * Monmap commands
@@ -470,7 +443,7 @@ COMMAND_WITH_FLAG("mon remove "
 	"remove monitor named <name>", "mon", "rw",
     FLAG(DEPRECATED))
 COMMAND("mon feature ls "
-        "name=with_value,type=CephChoices,strings=--with-value,req=false",
+        "name=with_value,type=CephBool,req=false",
         "list available mon map features to be set/unset",
         "mon", "r")
 COMMAND("mon feature set "
@@ -746,7 +719,7 @@ COMMAND("osd crush rule rename "
         "rename crush rule <srcname> to <dstname>",
         "osd", "rw")
 COMMAND("osd crush tree "
-        "name=shadow,type=CephChoices,strings=--show-shadow,req=false",
+        "name=show_shadow,type=CephBool,req=false",
 	"dump crush buckets and items in a tree view",
 	"osd", "r")
 COMMAND("osd crush ls name=node,type=CephString,goodchars=[A-Za-z0-9-_.]",
@@ -1162,7 +1135,7 @@ COMMAND("osd force_recovery_stretch_mode " \
 COMMAND("osd tier add "
 	"name=pool,type=CephPoolname "
 	"name=tierpool,type=CephPoolname "
-	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
+	"name=force_nonempty,type=CephBool,req=false",
 	"add the tier <tierpool> (the second one) to base pool <pool> (the first one)",
 	"osd", "rw")
 COMMAND("osd tier rm "
@@ -1252,7 +1225,7 @@ COMMAND("mgr services",
         "mgr", "r")
 COMMAND("mgr module enable "
 	"name=module,type=CephString "
-	"name=force,type=CephChoices,strings=--force,req=false",
+	"name=force,type=CephBool,req=false",
 	"enable mgr module", "mgr", "rw")
 COMMAND("mgr module disable "
 	"name=module,type=CephString",
@@ -1282,7 +1255,7 @@ COMMAND("config rm"
 	"config", "rw")
 COMMAND("config get "
 	"name=who,type=CephString "
-	"name=key,type=CephString,req=False",
+	"name=key,type=CephString,req=false",
 	"Show configuration option(s) for an entity",
 	"config", "r")
 COMMAND("config dump",
@@ -1298,7 +1271,7 @@ COMMAND("config ls",
 COMMAND("config assimilate-conf",
 	"Assimilate options from a conf, and return a new, minimal conf file",
 	"config", "rw")
-COMMAND("config log name=num,type=CephInt,req=False",
+COMMAND("config log name=num,type=CephInt,req=false",
 	"Show recent history of config changes",
 	"config", "r")
 COMMAND("config reset "
@@ -1348,7 +1321,7 @@ COMMAND_WITH_FLAG("connection scores reset",
 		  "mon", "rwx",
 		  FLAG(TELL))
 COMMAND_WITH_FLAG("sync_force "
-            "name=validate,type=CephChoices,strings=--yes-i-really-mean-it,req=false",
+            "name=yes_i_really_mean_it,type=CephBool,req=false",
             "force sync of and clear monitor store",
             "mon", "rw",
             FLAG(TELL))

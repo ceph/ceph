@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
 
 import json
 import logging
 import re
 from functools import partial
+from typing import no_type_check
 
 import cherrypy
 import rbd
@@ -18,12 +18,6 @@ from ..tools import ViewCache
 from . import ApiController, BaseController, ControllerDoc, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
     allow_empty_body
-
-try:
-    from typing import no_type_check
-except ImportError:
-    no_type_check = object()  # Just for type checking
-
 
 logger = logging.getLogger('controllers.rbd_mirror')
 
@@ -45,146 +39,160 @@ def RbdMirroringTask(name, metadata, wait_for):  # noqa: N802
     return composed_decorator
 
 
-@ViewCache()
-def get_daemons_and_pools():  # pylint: disable=R0915
-    def get_daemons():
-        daemons = []
-        for hostname, server in CephService.get_service_map('rbd-mirror').items():
-            for service in server['services']:
-                id = service['id']  # pylint: disable=W0622
-                metadata = service['metadata']
-                status = service['status'] or {}
+def get_daemons():
+    daemons = []
+    for hostname, server in CephService.get_service_map('rbd-mirror').items():
+        for service in server['services']:
+            id = service['id']  # pylint: disable=W0622
+            metadata = service['metadata']
+            status = service['status'] or {}
 
-                try:
-                    status = json.loads(status['json'])
-                except (ValueError, KeyError):
-                    status = {}
+            try:
+                status = json.loads(status['json'])
+            except (ValueError, KeyError):
+                status = {}
 
-                instance_id = metadata['instance_id']
-                if id == instance_id:
-                    # new version that supports per-cluster leader elections
-                    id = metadata['id']
+            instance_id = metadata['instance_id']
+            if id == instance_id:
+                # new version that supports per-cluster leader elections
+                id = metadata['id']
 
-                # extract per-daemon service data and health
-                daemon = {
-                    'id': id,
-                    'instance_id': instance_id,
-                    'version': metadata['ceph_version'],
-                    'server_hostname': hostname,
-                    'service': service,
-                    'server': server,
-                    'metadata': metadata,
-                    'status': status
-                }
-                daemon = dict(daemon, **get_daemon_health(daemon))
-                daemons.append(daemon)
+            # extract per-daemon service data and health
+            daemon = {
+                'id': id,
+                'instance_id': instance_id,
+                'version': metadata['ceph_version'],
+                'server_hostname': hostname,
+                'service': service,
+                'server': server,
+                'metadata': metadata,
+                'status': status
+            }
+            daemon = dict(daemon, **get_daemon_health(daemon))
+            daemons.append(daemon)
 
-        return sorted(daemons, key=lambda k: k['instance_id'])
+    return sorted(daemons, key=lambda k: k['instance_id'])
 
-    def get_daemon_health(daemon):
-        health = {
-            'health_color': 'info',
-            'health': 'Unknown'
-        }
+
+def get_daemon_health(daemon):
+    health = {
+        'health_color': 'info',
+        'health': 'Unknown'
+    }
+    for _, pool_data in daemon['status'].items():
+        if (health['health'] != 'error'
+                and [k for k, v in pool_data.get('callouts', {}).items()
+                     if v['level'] == 'error']):
+            health = {
+                'health_color': 'error',
+                'health': 'Error'
+            }
+        elif (health['health'] != 'error'
+                and [k for k, v in pool_data.get('callouts', {}).items()
+                     if v['level'] == 'warning']):
+            health = {
+                'health_color': 'warning',
+                'health': 'Warning'
+            }
+        elif health['health_color'] == 'info':
+            health = {
+                'health_color': 'success',
+                'health': 'OK'
+            }
+    return health
+
+
+def get_pools(daemons):  # pylint: disable=R0912, R0915
+    pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')
+                  if pool.get('type', 1) == 1]
+    pool_stats = _get_pool_stats(pool_names)
+    _update_pool_stats(daemons, pool_stats)
+    return pool_stats
+
+
+def _update_pool_stats(daemons, pool_stats):
+    _update_pool_stats_with_daemons(daemons, pool_stats)
+    for _, stats in pool_stats.items():
+        if stats['mirror_mode'] == 'disabled':
+            continue
+        if stats.get('health', None) is None:
+            # daemon doesn't know about pool
+            stats['health_color'] = 'error'
+            stats['health'] = 'Error'
+        elif stats.get('leader_id', None) is None:
+            # no daemons are managing the pool as leader instance
+            stats['health_color'] = 'warning'
+            stats['health'] = 'Warning'
+
+
+def _update_pool_stats_with_daemons(daemons, pool_stats):
+    for daemon in daemons:
         for _, pool_data in daemon['status'].items():
-            if (health['health'] != 'error'
-                    and [k for k, v in pool_data.get('callouts', {}).items()
-                         if v['level'] == 'error']):
-                health = {
-                    'health_color': 'error',
-                    'health': 'Error'
-                }
-            elif (health['health'] != 'error'
-                  and [k for k, v in pool_data.get('callouts', {}).items()
-                       if v['level'] == 'warning']):
-                health = {
-                    'health_color': 'warning',
-                    'health': 'Warning'
-                }
-            elif health['health_color'] == 'info':
-                health = {
-                    'health_color': 'success',
-                    'health': 'OK'
-                }
-        return health
-
-    def get_pools(daemons):  # pylint: disable=R0912, R0915
-        pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')
-                      if pool.get('type', 1) == 1]
-        pool_stats = {}
-        rbdctx = rbd.RBD()
-        for pool_name in pool_names:
-            logger.debug("Constructing IOCtx %s", pool_name)
-            try:
-                ioctx = mgr.rados.open_ioctx(pool_name)
-            except TypeError:
-                logger.exception("Failed to open pool %s", pool_name)
+            stats = pool_stats.get(pool_data['name'], None)  # type: ignore
+            if stats is None:
                 continue
 
-            try:
-                mirror_mode = rbdctx.mirror_mode_get(ioctx)
-                peer_uuids = [x['uuid'] for x in rbdctx.mirror_peer_list(ioctx)]
-            except:  # noqa pylint: disable=W0702
-                logger.exception("Failed to query mirror settings %s", pool_name)
-                mirror_mode = None
-                peer_uuids = []
+            if pool_data.get('leader', False):
+                # leader instance stores image counts
+                stats['leader_id'] = daemon['metadata']['instance_id']
+                stats['image_local_count'] = pool_data.get('image_local_count', 0)
+                stats['image_remote_count'] = pool_data.get('image_remote_count', 0)
 
-            stats = {}
-            if mirror_mode == rbd.RBD_MIRROR_MODE_DISABLED:
-                mirror_mode = "disabled"
-                stats['health_color'] = "info"
-                stats['health'] = "Disabled"
-            elif mirror_mode == rbd.RBD_MIRROR_MODE_IMAGE:
-                mirror_mode = "image"
-            elif mirror_mode == rbd.RBD_MIRROR_MODE_POOL:
-                mirror_mode = "pool"
-            else:
-                mirror_mode = "unknown"
-                stats['health_color'] = "warning"
-                stats['health'] = "Warning"
-
-            pool_stats[pool_name] = dict(stats, **{
-                'mirror_mode': mirror_mode,
-                'peer_uuids': peer_uuids
-            })
-
-        for daemon in daemons:
-            for _, pool_data in daemon['status'].items():
-                stats = pool_stats.get(pool_data['name'], None)  # type: ignore
-                if stats is None:
-                    continue
-
-                if pool_data.get('leader', False):
-                    # leader instance stores image counts
-                    stats['leader_id'] = daemon['metadata']['instance_id']
-                    stats['image_local_count'] = pool_data.get('image_local_count', 0)
-                    stats['image_remote_count'] = pool_data.get('image_remote_count', 0)
-
-                if (stats.get('health_color', '') != 'error'
-                        and pool_data.get('image_error_count', 0) > 0):
-                    stats['health_color'] = 'error'
-                    stats['health'] = 'Error'
-                elif (stats.get('health_color', '') != 'error'
-                      and pool_data.get('image_warning_count', 0) > 0):
-                    stats['health_color'] = 'warning'
-                    stats['health'] = 'Warning'
-                elif stats.get('health', None) is None:
-                    stats['health_color'] = 'success'
-                    stats['health'] = 'OK'
-
-        for _, stats in pool_stats.items():
-            if stats['mirror_mode'] == 'disabled':
-                continue
-            if stats.get('health', None) is None:
-                # daemon doesn't know about pool
+            if (stats.get('health_color', '') != 'error'
+                    and pool_data.get('image_error_count', 0) > 0):
                 stats['health_color'] = 'error'
                 stats['health'] = 'Error'
-            elif stats.get('leader_id', None) is None:
-                # no daemons are managing the pool as leader instance
+            elif (stats.get('health_color', '') != 'error'
+                    and pool_data.get('image_warning_count', 0) > 0):
                 stats['health_color'] = 'warning'
                 stats['health'] = 'Warning'
-        return pool_stats
+            elif stats.get('health', None) is None:
+                stats['health_color'] = 'success'
+                stats['health'] = 'OK'
 
+
+def _get_pool_stats(pool_names):
+    pool_stats = {}
+    rbdctx = rbd.RBD()
+    for pool_name in pool_names:
+        logger.debug("Constructing IOCtx %s", pool_name)
+        try:
+            ioctx = mgr.rados.open_ioctx(pool_name)
+        except TypeError:
+            logger.exception("Failed to open pool %s", pool_name)
+            continue
+
+        try:
+            mirror_mode = rbdctx.mirror_mode_get(ioctx)
+            peer_uuids = [x['uuid'] for x in rbdctx.mirror_peer_list(ioctx)]
+        except:  # noqa pylint: disable=W0702
+            logger.exception("Failed to query mirror settings %s", pool_name)
+            mirror_mode = None
+            peer_uuids = []
+
+        stats = {}
+        if mirror_mode == rbd.RBD_MIRROR_MODE_DISABLED:
+            mirror_mode = "disabled"
+            stats['health_color'] = "info"
+            stats['health'] = "Disabled"
+        elif mirror_mode == rbd.RBD_MIRROR_MODE_IMAGE:
+            mirror_mode = "image"
+        elif mirror_mode == rbd.RBD_MIRROR_MODE_POOL:
+            mirror_mode = "pool"
+        else:
+            mirror_mode = "unknown"
+            stats['health_color'] = "warning"
+            stats['health'] = "Warning"
+
+        pool_stats[pool_name] = dict(stats, **{
+            'mirror_mode': mirror_mode,
+            'peer_uuids': peer_uuids
+        })
+    return pool_stats
+
+
+@ViewCache()
+def get_daemons_and_pools():  # pylint: disable=R0915
     daemons = get_daemons()
     return {
         'daemons': daemons,

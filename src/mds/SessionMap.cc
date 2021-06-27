@@ -237,7 +237,7 @@ void SessionMap::_load_finish(
     dout(10) << __func__ << ": continue omap load from '"
              << last_key << "'" << dendl;
     object_t oid = get_object_name();
-    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    object_locator_t oloc(mds->get_metadata_pool());
     C_IO_SM_Load *c = new C_IO_SM_Load(this, false);
     ObjectOperation op;
     op.omap_get_vals(last_key, "", g_conf()->mds_sessionmap_keys_per_op,
@@ -279,7 +279,7 @@ void SessionMap::load(MDSContext *onload)
   
   C_IO_SM_Load *c = new C_IO_SM_Load(this, true);
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
 
   ObjectOperation op;
   op.omap_get_header(&c->header_bl, &c->header_r);
@@ -316,7 +316,7 @@ void SessionMap::load_legacy()
 
   C_IO_SM_LoadLegacy *c = new C_IO_SM_LoadLegacy(this);
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
 
   mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0,
 			   new C_OnFinisher(c, mds->finisher));
@@ -388,7 +388,7 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
   committing = version;
   SnapContext snapc;
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
 
   ObjectOperation op;
 
@@ -589,7 +589,8 @@ void Session::dump(Formatter *f, bool cap_dump) const
   }
   f->dump_float("uptime", get_session_uptime());
   f->dump_unsigned("requests_in_flight", get_request_count());
-  f->dump_unsigned("completed_requests", get_num_completed_requests());
+  f->dump_unsigned("num_completed_requests", get_num_completed_requests());
+  f->dump_unsigned("num_completed_flushes", get_num_completed_flushes());
   f->dump_bool("reconnecting", reconnecting);
   f->dump_object("recall_caps", recall_caps);
   f->dump_object("release_caps", release_caps);
@@ -884,7 +885,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 
       SnapContext snapc;
       object_t oid = get_object_name();
-      object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+      object_locator_t oloc(mds->get_metadata_pool());
       MDSContext *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc,
 			    ceph::real_clock::now(), 0,

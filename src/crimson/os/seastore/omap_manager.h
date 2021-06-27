@@ -27,7 +27,7 @@ class OMapManager {
   * until these functions future resolved.
   */
 public:
-  using base_ertr = TransactionManager::base_ertr;
+  using base_ertr = with_trans_ertr<TransactionManager::base_iertr>;
 
   /**
    * allocate omap tree root node
@@ -70,6 +70,13 @@ public:
     Transaction &t,
     const std::string &key,
     const ceph::bufferlist &value) = 0;
+
+  using omap_set_keys_ertr = base_ertr;
+  using omap_set_keys_ret = omap_set_keys_ertr::future<>;
+  virtual omap_set_keys_ret omap_set_keys(
+    omap_root_t &omap_root,
+    Transaction &t,
+    std::map<std::string, ceph::bufferlist>&& keys) = 0;
 
   /**
    * remove key value mapping in omap tree
@@ -136,7 +143,7 @@ public:
     }
   };
   using omap_list_ertr = base_ertr;
-  using omap_list_bare_ret = std::pair<
+  using omap_list_bare_ret = std::tuple<
     bool,
     std::map<std::string, bufferlist, std::less<>>>;
   using omap_list_ret = omap_list_ertr::future<omap_list_bare_ret>;
@@ -163,7 +170,7 @@ using OMapManagerRef = std::unique_ptr<OMapManager>;
 namespace omap_manager {
 
 OMapManagerRef create_omap_manager (
-  TransactionManager &trans_manager);
+  InterruptedTransactionManager trans_manager);
 }
 
 }

@@ -913,7 +913,7 @@ ln dir_1/original dir_2/linkto
 
         self.mds_cluster.mds_stop()
         self.mds_cluster.mds_fail()
-        self.fs.rados(["rm", "500.00000000"])
+        self.fs.radosm(["rm", "500.00000000"])
         self.mds_cluster.mds_restart()
         self.fs.wait_for_daemons()
 

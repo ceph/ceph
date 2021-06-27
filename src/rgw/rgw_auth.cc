@@ -368,7 +368,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
                                               const string& display_name,
                                               RGWUserInfo& user_info) const      /* out */
 {
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(acct_user);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(acct_user);
   user->get_info().display_name = display_name;
   user->get_info().type = TYPE_WEB;
   user->get_info().max_buckets =
@@ -376,8 +376,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
   rgw_apply_default_bucket_quota(user->get_info().bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
 
-  int ret = user->store_info(dpp, null_yield,
-			     RGWUserCtl::PutParams().set_exclusive(true));
+  int ret = user->store_user(dpp, null_yield, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user << " ret=" << ret << dendl;
@@ -392,10 +391,10 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(federated_user);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(federated_user);
 
   //Check in oidc namespace
-  if (user->load_by_id(dpp, null_yield) >= 0) {
+  if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
     user_info = user->get_info();
     return;
@@ -403,7 +402,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
 
   user->clear_ns();
   //Check for old users which wouldn't have been created in oidc namespace
-  if (user->load_by_id(dpp, null_yield) >= 0) {
+  if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
     user_info = user->get_info();
     return;
@@ -411,7 +410,7 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
 
   //Check if user_id.buckets already exists, may have been from the time, when shadow users didnt exist
   RGWStorageStats stats;
-  int ret = user->read_stats(null_yield, &stats);
+  int ret = user->read_stats(dpp, null_yield, &stats);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "ERROR: reading stats for the user returned error " << ret << dendl;
     return;
@@ -591,7 +590,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
     new_acct_user.tenant = new_acct_user.id;
   }
 
-  std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(new_acct_user);
+  std::unique_ptr<rgw::sal::User> user = store->get_user(new_acct_user);
   user->get_info().display_name = info.acct_name;
   if (info.acct_type) {
     //ldap/keystone for s3 users
@@ -603,8 +602,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   rgw_apply_default_user_quota(user->get_info().user_quota, cct->_conf);
   user_info = user->get_info();
 
-  int ret = user->store_info(dpp, null_yield,
-			     RGWUserCtl::PutParams().set_exclusive(true));
+  int ret = user->store_user(dpp, null_yield, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user << " ret=" << ret << dendl;
@@ -622,7 +620,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   auto implicit_value = implicit_tenant_context.get_value();
   bool implicit_tenant = implicit_value.implicit_tenants_for_(implicit_tenant_bit);
   bool split_mode = implicit_value.is_split_mode();
-  std::unique_ptr<rgw::sal::RGWUser> user;
+  std::unique_ptr<rgw::sal::User> user;
 
   /* Normally, empty "tenant" field of acct_user means the authenticated
    * identity has the legacy, global tenant. However, due to inclusion
@@ -647,7 +645,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
     user = store->get_user(tenanted_uid);
 
-    if (user->load_by_id(dpp, null_yield) >= 0) {
+    if (user->load_user(dpp, null_yield) >= 0) {
       /* Succeeded. */
       user_info = user->get_info();
       return;
@@ -658,7 +656,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
-  else if (user->load_by_id(dpp, null_yield) >= 0) {
+  else if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
     user_info = user->get_info();
     return;
@@ -813,15 +811,17 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
     }
   }
 
-  try {
-    string policy = this->token_policy;
-    bufferlist bl = bufferlist::static_from_string(policy);
-    const rgw::IAM::Policy p(s->cct, role.tenant, bl);
-    s->iam_user_policies.push_back(std::move(p));
-  } catch (rgw::IAM::PolicyParseException& e) {
-    //Control shouldn't reach here as the policy has already been
-    //verified earlier
-    ldpp_dout(dpp, 20) << "failed to parse token policy: " << e.what() << dendl;
+  if (!this->token_policy.empty()) {
+    try {
+      string policy = this->token_policy;
+      bufferlist bl = bufferlist::static_from_string(policy);
+      const rgw::IAM::Policy p(s->cct, role.tenant, bl);
+      s->session_policies.push_back(std::move(p));
+    } catch (rgw::IAM::PolicyParseException& e) {
+      //Control shouldn't reach here as the policy has already been
+      //verified earlier
+      ldpp_dout(dpp, 20) << "failed to parse token policy: " << e.what() << dendl;
+    }
   }
 
   string condition = "aws:userid";
@@ -831,6 +831,8 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   s->env.emplace("aws:TokenIssueTime", token_issued_at);
 
   s->token_claims.emplace_back("sts");
+  s->token_claims.emplace_back("role_name:" + role.tenant + "$" + role.name);
+  s->token_claims.emplace_back("role_session:" + role_session_name);
   for (auto& it : token_claims) {
     s->token_claims.emplace_back(it);
   }

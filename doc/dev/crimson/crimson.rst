@@ -5,7 +5,7 @@ crimson
 Crimson is the code name of crimson-osd, which is the next generation ceph-osd.
 It targets fast networking devices, fast storage devices by leveraging state of
 the art technologies like DPDK and SPDK, for better performance. And it will
-keep the support of HDDs and low-end SSDs via BlueStore. Crismon will try to
+keep the support of HDDs and low-end SSDs via BlueStore. Crimson will try to
 be backward compatible with classic OSD.
 
 .. highlight:: console
@@ -13,7 +13,7 @@ be backward compatible with classic OSD.
 Building Crimson
 ================
 
-Crismon is not enabled by default. To enable it::
+Crimson is not enabled by default. To enable it::
 
   $ WITH_SEASTAR=true ./install-deps.sh
   $ mkdir build && cd build
@@ -204,7 +204,7 @@ Debugging with GDB
 
 The `tips`_ for debugging Scylla also apply to Crimson.
 
-.. _tips: https://github.com/scylladb/scylla/blob/master/docs/debugging.md#tips-and-tricks
+.. _tips: https://github.com/scylladb/scylla/blob/master/docs/guides/debugging.md#tips-and-tricks
 
 Human-readable backtraces with addr2line
 ----------------------------------------

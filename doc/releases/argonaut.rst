@@ -1,3 +1,11 @@
+========
+Argonaut
+========
+
+Argonaut is the first stable release of Ceph.  It is named after a
+genus of octopuses, sometimes also referred to as paper nautiluses.
+
+
 v0.48.3 "argonaut"
 ==================
 

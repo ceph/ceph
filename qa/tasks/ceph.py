@@ -1899,6 +1899,9 @@ def task(ctx, config):
             ctx.managers[config['cluster']].stop_pg_num_changes()
 
             if config.get('wait-for-scrub', True):
+                # wait for pgs to become active+clean in case any
+                # recoveries were triggered since the last health check
+                ctx.managers[config['cluster']].wait_for_clean()
                 osd_scrub_pgs(ctx, config)
 
             # stop logging health to clog during shutdown, or else we generate

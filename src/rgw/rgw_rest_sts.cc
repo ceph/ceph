@@ -60,7 +60,7 @@ WebTokenEngine::get_role_tenant(const string& role_arn) const
   return tenant;
 }
 
-boost::optional<RGWOIDCProvider>
+std::unique_ptr<rgw::sal::RGWOIDCProvider>
 WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const
 {
   string tenant = get_role_tenant(role_arn);
@@ -82,10 +82,12 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   }
   auto provider_arn = rgw::ARN(idp_url, "oidc-provider", tenant);
   string p_arn = provider_arn.to_string();
-  RGWOIDCProvider provider(cct, store, p_arn, tenant);
-  auto ret = provider.get(dpp);
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = store->get_oidc_provider();
+  provider->set_arn(p_arn);
+  provider->set_tenant(tenant);
+  auto ret = provider->get(dpp);
   if (ret < 0) {
-    return boost::none;
+    return nullptr;
   }
   return provider;
 }
@@ -196,12 +198,50 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
   return t;
 }
 
+std::string
+WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, optional_yield y) const
+{
+  string cert_url;
+  string openidc_wellknown_url = iss + "/.well-known/openid-configuration";
+  bufferlist openidc_resp;
+  RGWHTTPTransceiver openidc_req(cct, "GET", openidc_wellknown_url, &openidc_resp);
+
+  //Headers
+  openidc_req.append_header("Content-Type", "application/x-www-form-urlencoded");
+
+  int res = openidc_req.process(y);
+  if (res < 0) {
+    ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
+    throw -EINVAL;
+  }
+
+  //Debug only
+  ldpp_dout(dpp, 20) << "HTTP status: " << openidc_req.get_http_status() << dendl;
+  ldpp_dout(dpp, 20) << "JSON Response is: " << openidc_resp.c_str() << dendl;
+
+  JSONParser parser;
+  if (parser.parse(openidc_resp.c_str(), openidc_resp.length())) {
+    JSONObj::data_val val;
+    if (parser.get_data("jwks_uri", &val)) {
+      cert_url = val.str.c_str();
+      ldpp_dout(dpp, 20) << "Cert URL is: " << cert_url.c_str() << dendl;
+    } else {
+      ldpp_dout(dpp, 0) << "Malformed json returned while fetching openidc url" << dendl;
+    }
+  }
+  return cert_url;
+}
+
 void
 WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
+    string cert_url = get_cert_url(iss, dpp, y);
+    if (cert_url.empty()) {
+      throw -EINVAL;
+    }
+
     // Get certificate
-    string cert_url = iss + "/protocol/openid-connect/certs";
     bufferlist cert_resp;
     RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
     //Headers
@@ -344,7 +384,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   if (t) {
     string role_session = s->info.args.get("RoleSessionName");
     if (role_session.empty()) {
-      ldout(s->cct, 0) << "Role Session Name is empty " << dendl;
+      ldpp_dout(dpp, 0) << "Role Session Name is empty " << dendl;
       return result_t::deny(-EACCES);
     }
     string role_arn = s->info.args.get("RoleArn");
@@ -368,7 +408,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
     ldpp_dout(this, 0) << "failed to get role info using role arn: " << rArn << dendl;
     return ret;
   }
-  string policy = role.get_assume_role_policy();
+  string policy = role->get_assume_role_policy();
   buffer::list bl = buffer::list::static_from_string(policy);
 
   //Parse the policy
@@ -379,16 +419,16 @@ int RGWREST_STS::verify_permission(optional_yield y)
     // If yes, then return 0, else -EPERM
     auto p_res = p.eval_principal(s->env, *s->auth.identity);
     if (p_res == rgw::IAM::Effect::Deny) {
-      ldout(s->cct, 0) << "evaluating principal returned deny" << dendl;
+      ldpp_dout(this, 0) << "evaluating principal returned deny" << dendl;
       return -EPERM;
     }
     auto c_res = p.eval_conditions(s->env);
     if (c_res == rgw::IAM::Effect::Deny) {
-      ldout(s->cct, 0) << "evaluating condition returned deny" << dendl;
+      ldpp_dout(this, 0) << "evaluating condition returned deny" << dendl;
       return -EPERM;
     }
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldout(s->cct, 0) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 0) << "failed to parse policy: " << e.what() << dendl;
     return -EPERM;
   }
 
@@ -412,7 +452,7 @@ int RGWSTSGetSessionToken::verify_permission(optional_yield y)
                               s,
                               rgw::ARN(partition, service, "", s->user->get_tenant(), ""),
                               rgw::IAM::stsGetSessionToken)) {
-    ldout(s->cct, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
+    ldpp_dout(this, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
     return -EACCES;
   }
 
@@ -429,13 +469,13 @@ int RGWSTSGetSessionToken::get_params()
     string err;
     uint64_t duration_in_secs = strict_strtoll(duration.c_str(), 10, &err);
     if (!err.empty()) {
-      ldout(s->cct, 0) << "Invalid value of input duration: " << duration << dendl;
+      ldpp_dout(this, 0) << "Invalid value of input duration: " << duration << dendl;
       return -EINVAL;
     }
 
     if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
             duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration) {
-      ldout(s->cct, 0) << "Invalid duration in secs: " << duration_in_secs << dendl;
+      ldpp_dout(this, 0) << "Invalid duration in secs: " << duration_in_secs << dendl;
       return -EINVAL;
     }
   }
@@ -478,7 +518,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   aud = s->info.args.get("aud");
 
   if (roleArn.empty() || roleSessionName.empty() || sub.empty() || aud.empty()) {
-    ldout(s->cct, 0) << "ERROR: one of role arn or role session name or token is empty" << dendl;
+    ldpp_dout(this, 0) << "ERROR: one of role arn or role session name or token is empty" << dendl;
     return -EINVAL;
   }
 
@@ -488,7 +528,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
       const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
     }
     catch (rgw::IAM::PolicyParseException& e) {
-      ldout(s->cct, 20) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
       return -ERR_MALFORMED_DOC;
     }
   }
@@ -537,7 +577,7 @@ int RGWSTSAssumeRole::get_params()
   tokenCode = s->info.args.get("TokenCode");
 
   if (roleArn.empty() || roleSessionName.empty()) {
-    ldout(s->cct, 0) << "ERROR: one of role arn or role session name is empty" << dendl;
+    ldpp_dout(this, 0) << "ERROR: one of role arn or role session name is empty" << dendl;
     return -EINVAL;
   }
 
@@ -547,7 +587,7 @@ int RGWSTSAssumeRole::get_params()
       const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
     }
     catch (rgw::IAM::PolicyParseException& e) {
-      ldout(s->cct, 0) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      ldpp_dout(this, 0) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
       return -ERR_MALFORMED_DOC;
     }
   }
@@ -582,7 +622,7 @@ void RGWSTSAssumeRole::execute(optional_yield y)
 }
 
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
-                            rgw::sal::RGWStore *store,
+                            rgw::sal::Store* store,
                             const rgw::auth::StrategyRegistry& auth_registry,
                             struct req_state *s, optional_yield y)
 {
@@ -592,7 +632,7 @@ int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
 void RGWHandler_REST_STS::rgw_sts_parse_input()
 {
   if (post_body.size() > 0) {
-    ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
+    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
       boost::char_separator<char> sep("&");
@@ -628,14 +668,14 @@ RGWOp *RGWHandler_REST_STS::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_STS::init(rgw::sal::RGWStore *store,
+int RGWHandler_REST_STS::init(rgw::sal::Store* store,
                               struct req_state *s,
                               rgw::io::BasicClient *cio)
 {
   s->dialect = "sts";
 
   if (int ret = RGWHandler_REST_STS::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
-    ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
+    ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
 
@@ -693,7 +733,7 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_STS::get_handler(rgw::sal::RGWStore *store,
+RGWRESTMgr_STS::get_handler(rgw::sal::Store* store,
 			    struct req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)

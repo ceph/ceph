@@ -18,6 +18,9 @@ tasks:
     conf:
       mon:
         mon warn on pool no app: false
+      osd:
+        osd class load list: "*"
+        osd class default list: "*"
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgnum_shrink: 2

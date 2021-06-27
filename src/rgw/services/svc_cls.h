@@ -48,8 +48,8 @@ class RGWSI_Cls : public RGWServiceInstance
 
 public:
   class MFA : public ClsSubService {
-    int get_mfa_obj(const rgw_user& user, std::optional<RGWSI_RADOS::Obj> *obj);
-    int get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref);
+    int get_mfa_obj(const DoutPrefixProvider *dpp, const rgw_user& user, std::optional<RGWSI_RADOS::Obj> *obj);
+    int get_mfa_ref(const DoutPrefixProvider *dpp, const rgw_user& user, rgw_rados_ref *ref);
 
     void prepare_mfa_write(librados::ObjectWriteOperation *op,
 			   RGWObjVersionTracker *objv_tracker,
@@ -62,25 +62,26 @@ public:
       return string("user:") + user.to_str();
     }
 
-    int check_mfa(const rgw_user& user, const string& otp_id, const string& pin, optional_yield y);
-    int create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
+    int check_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, const string& otp_id, const string& pin, optional_yield y);
+    int create_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, const rados::cls::otp::otp_info_t& config,
 		   RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime, optional_yield y);
-    int remove_mfa(const rgw_user& user, const string& id,
+    int remove_mfa(const DoutPrefixProvider *dpp, 
+                   const rgw_user& user, const string& id,
 		   RGWObjVersionTracker *objv_tracker,
 		   const ceph::real_time& mtime,
 		   optional_yield y);
-    int get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result, optional_yield y);
-    int list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result, optional_yield y);
-    int otp_get_current_time(const rgw_user& user, ceph::real_time *result, optional_yield y);
-    int set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
+    int get_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result, optional_yield y);
+    int list_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, list<rados::cls::otp::otp_info_t> *result, optional_yield y);
+    int otp_get_current_time(const DoutPrefixProvider *dpp, const rgw_user& user, ceph::real_time *result, optional_yield y);
+    int set_mfa(const DoutPrefixProvider *dpp, const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
 		bool reset_obj, RGWObjVersionTracker *objv_tracker,
 		const real_time& mtime, optional_yield y);
-    int list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result,
+    int list_mfa(const DoutPrefixProvider *dpp, const string& oid, list<rados::cls::otp::otp_info_t> *result,
 		 RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime, optional_yield y);
   } mfa;
 
   class TimeLog : public ClsSubService {
-    int init_obj(const string& oid, RGWSI_RADOS::Obj& obj);
+    int init_obj(const DoutPrefixProvider *dpp, const string& oid, RGWSI_RADOS::Obj& obj);
   public:
     TimeLog(CephContext *cct): ClsSubService(cct) {}
 
@@ -89,18 +90,21 @@ public:
                        const string& section,
                        const string& key,
                        bufferlist& bl);
-    int add(const string& oid,
+    int add(const DoutPrefixProvider *dpp, 
+            const string& oid,
             const real_time& ut,
             const string& section,
             const string& key,
             bufferlist& bl,
             optional_yield y);
-    int add(const string& oid,
+    int add(const DoutPrefixProvider *dpp, 
+            const string& oid,
             std::list<cls_log_entry>& entries,
             librados::AioCompletion *completion,
             bool monotonic_inc,
             optional_yield y);
-    int list(const string& oid,
+    int list(const DoutPrefixProvider *dpp, 
+             const string& oid,
              const real_time& start_time,
              const real_time& end_time,
              int max_entries, list<cls_log_entry>& entries,
@@ -108,14 +112,17 @@ public:
              string *out_marker,
              bool *truncated,
              optional_yield y);
-    int info(const string& oid,
+    int info(const DoutPrefixProvider *dpp, 
+             const string& oid,
              cls_log_header *header,
              optional_yield y);
-    int info_async(RGWSI_RADOS::Obj& obj,
+    int info_async(const DoutPrefixProvider *dpp,
+                   RGWSI_RADOS::Obj& obj,
                    const string& oid,
                    cls_log_header *header,
                    librados::AioCompletion *completion);
-    int trim(const string& oid,
+    int trim(const DoutPrefixProvider *dpp, 
+             const string& oid,
              const real_time& start_time,
              const real_time& end_time,
              const string& from_marker,
@@ -128,13 +135,15 @@ public:
     int init_obj(const string& oid, RGWSI_RADOS::Obj& obj);
     public:
     Lock(CephContext *cct): ClsSubService(cct) {}
-    int lock_exclusive(const rgw_pool& pool,
+    int lock_exclusive(const DoutPrefixProvider *dpp,
+                       const rgw_pool& pool,
                        const string& oid,
                        timespan& duration,
                        string& zone_id,
                        string& owner_id,
                        std::optional<string> lock_name = std::nullopt);
-    int unlock(const rgw_pool& pool,
+    int unlock(const DoutPrefixProvider *dpp,
+               const rgw_pool& pool,
                const string& oid,
                string& zone_id,
                string& owner_id,

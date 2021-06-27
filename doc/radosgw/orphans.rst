@@ -22,10 +22,11 @@ The `radosgw-admin` tool has/had three subcommands to help manage
 orphans, however these subcommands are (or will soon be)
 deprecated. These subcommands are:
 
-::
-   # radosgw-admin orphans find ...
-   # radosgw-admin orphans finish ...
-   # radosgw-admin orphans list-jobs ...
+.. prompt:: bash #
+
+   radosgw-admin orphans find ...
+   radosgw-admin orphans finish ...
+   radosgw-admin orphans list-jobs ...
 
 There are two key problems with these subcommands, however. First,
 these subcommands have not been actively maintained and therefore have
@@ -88,8 +89,9 @@ One of the sub-steps in computing a list of orphans is to map each RGW
 object into its corresponding set of RADOS objects. This is done using
 a subcommand of 'radosgw-admin'.
 
-::
-   # radosgw-admin bucket radoslist [--bucket={bucket-name}]
+.. prompt:: bash #
+
+   radosgw-admin bucket radoslist [--bucket={bucket-name}]
 
 The subcommand will produce a list of RADOS objects that support all
 of the RGW objects. If a bucket is specified then the subcommand will

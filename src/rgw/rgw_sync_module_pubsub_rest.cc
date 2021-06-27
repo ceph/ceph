@@ -167,7 +167,7 @@ public:
     bool exists;
     topic_name = s->info.args.get("topic", &exists);
     if (!exists) {
-      ldout(s->cct, 1) << "missing required param 'topic'" << dendl;
+      ldpp_dout(this, 1) << "missing required param 'topic'" << dendl;
       return -EINVAL;
     }
 
@@ -232,7 +232,7 @@ public:
 
     event_id = s->info.args.get("event-id", &exists);
     if (!exists) {
-      ldout(s->cct, 1) << "missing required param 'event-id'" << dendl;
+      ldpp_dout(this, 1) << "missing required param 'event-id'" << dendl;
       return -EINVAL;
     }
     return 0;
@@ -248,7 +248,7 @@ public:
     const int ret = s->info.args.get_int("max-entries", &max_entries, 
         RGWPubSub::Sub::DEFAULT_MAX_EVENTS);
     if (ret < 0) {
-      ldout(s->cct, 1) << "failed to parse 'max-entries' param" << dendl;
+      ldpp_dout(this, 1) << "failed to parse 'max-entries' param" << dendl;
       return -EINVAL;
     }
     return 0;
@@ -350,7 +350,7 @@ private:
     bool exists;
     topic_name = s->info.args.get("topic", &exists);
     if (!exists) {
-      ldout(s->cct, 1) << "missing required param 'topic'" << dendl;
+      ldpp_dout(this, 1) << "missing required param 'topic'" << dendl;
       return -EINVAL;
     }
 
@@ -361,7 +361,7 @@ private:
     }
     rgw::notify::from_string_list(events_str, events);
     if (std::find(events.begin(), events.end(), rgw::notify::UnknownEvent) != events.end()) {
-      ldout(s->cct, 1) << "invalid event type in list: " << events_str << dendl;
+      ldpp_dout(this, 1) << "invalid event type in list: " << events_str << dendl;
       return -EINVAL;
     }
     return notif_bucket_path(s->object->get_name(), bucket_name);
@@ -374,15 +374,15 @@ public:
 
 void RGWPSCreateNotif_ObjStore::execute(optional_yield y)
 {
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
 
   auto b = ps->get_bucket(bucket_info.bucket);
-  op_ret = b->create_notification(topic_name, events, y);
+  op_ret = b->create_notification(this, topic_name, events, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to create notification for topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to create notification for topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully created notification for topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully created notification for topic '" << topic_name << "'" << dendl;
 }
 
 // command: DELETE /notifications/bucket/<bucket>?topic=<topic-name>
@@ -394,7 +394,7 @@ private:
     bool exists;
     topic_name = s->info.args.get("topic", &exists);
     if (!exists) {
-      ldout(s->cct, 1) << "missing required param 'topic'" << dendl;
+      ldpp_dout(this, 1) << "missing required param 'topic'" << dendl;
       return -EINVAL;
     }
     return notif_bucket_path(s->object->get_name(), bucket_name);
@@ -411,14 +411,14 @@ void RGWPSDeleteNotif_ObjStore::execute(optional_yield y) {
     return;
   }
 
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
-  op_ret = b->remove_notification(topic_name, y);
+  op_ret = b->remove_notification(this, topic_name, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to remove notification from topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(s, 1) << "failed to remove notification from topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully removed notification from topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully removed notification from topic '" << topic_name << "'" << dendl;
 }
 
 // command: GET /notifications/bucket/<bucket>
@@ -450,11 +450,11 @@ public:
 
 void RGWPSListNotifs_ObjStore::execute(optional_yield y)
 {
-  ps.emplace(static_cast<rgw::sal::RGWRadosStore*>(store), s->owner.get_id().tenant);
+  ps.emplace(static_cast<rgw::sal::RadosStore*>(store), s->owner.get_id().tenant);
   auto b = ps->get_bucket(bucket_info.bucket);
   op_ret = b->get_topics(&result);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get topics, ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get topics, ret=" << op_ret << dendl;
     return;
   }
 }
@@ -496,7 +496,7 @@ public:
 };
 
 // factory for ceph specific PubSub REST handlers 
-RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::RGWStore *store,
+RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::Store* store,
 						struct req_state* const s,
 						const rgw::auth::StrategyRegistry& auth_registry,
 						const std::string& frontend_prefix)
@@ -522,7 +522,7 @@ RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(rgw::sal::RGWStore *store,
     }
   }
   
-  ldout(s->cct, 20) << __func__ << " handler=" << (handler ? typeid(*handler).name() : "<null>") << dendl;
+  ldpp_dout(s, 20) << __func__ << " handler=" << (handler ? typeid(*handler).name() : "<null>") << dendl;
 
   return handler;
 }

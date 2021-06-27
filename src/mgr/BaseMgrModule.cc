@@ -600,6 +600,12 @@ ceph_get_version(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject *
+ceph_get_ceph_conf_path(BaseMgrModule *self, PyObject *args)
+{
+  return PyUnicode_FromString(g_conf().get_conf_path().c_str());
+}
+
+static PyObject *
 ceph_get_release_name(BaseMgrModule *self, PyObject *args)
 {
   return PyUnicode_FromString(ceph_release_to_str());
@@ -1407,6 +1413,9 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_mgr_id", (PyCFunction)ceph_get_mgr_id, METH_NOARGS,
    "Get the name of the Mgr daemon where we are running"},
 
+  {"_ceph_get_ceph_conf_path", (PyCFunction)ceph_get_ceph_conf_path, METH_NOARGS,
+   "Get path to ceph.conf"},
+
   {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
    "Get a native configuration option value"},
 
@@ -1488,13 +1497,13 @@ PyMethodDef BaseMgrModule_methods[] = {
     METH_VARARGS, "Get osd perf counters"},
 
   {"_ceph_add_mds_perf_query", (PyCFunction)ceph_add_mds_perf_query,
-    METH_VARARGS, "Add an osd perf query"},
+    METH_VARARGS, "Add an mds perf query"},
 
   {"_ceph_remove_mds_perf_query", (PyCFunction)ceph_remove_mds_perf_query,
-    METH_VARARGS, "Remove an osd perf query"},
+    METH_VARARGS, "Remove an mds perf query"},
 
   {"_ceph_get_mds_perf_counters", (PyCFunction)ceph_get_mds_perf_counters,
-    METH_VARARGS, "Get osd perf counters"},
+    METH_VARARGS, "Get mds perf counters"},
 
   {"_ceph_is_authorized", (PyCFunction)ceph_is_authorized,
     METH_VARARGS, "Verify the current session caps are valid"},

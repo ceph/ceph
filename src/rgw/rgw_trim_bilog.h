@@ -31,7 +31,7 @@ class RGWHTTPManager;
 namespace rgw {
 
 namespace sal {
-  class RGWRadosStore;
+  class RadosStore;
 }
 
 /// Interface to inform the trim process about which buckets are most active
@@ -74,7 +74,7 @@ class BucketTrimManager : public BucketChangeObserver, public DoutPrefixProvider
   class Impl;
   std::unique_ptr<Impl> impl;
  public:
-  BucketTrimManager(sal::RGWRadosStore *store, const BucketTrimConfig& config);
+  BucketTrimManager(sal::RadosStore *store, const BucketTrimConfig& config);
   ~BucketTrimManager();
 
   int init();

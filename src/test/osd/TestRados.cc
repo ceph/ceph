@@ -15,7 +15,6 @@
 
 #include "test/osd/RadosModel.h"
 
-
 using namespace std;
 
 class WeightedTestGenerator : public TestOpGenerator
@@ -224,29 +223,9 @@ public:
 	  oid2 << " " << string(300, 'm');
 	}
 
-	/* make a chunk (random offset, random length --> 
-	 * target object's random offset)
-	 */
-	ObjectDesc contents, contents2;
-	context.find_object(oid.str(), &contents);
-	uint32_t max_len = contents.most_recent_gen()->get_length(contents.most_recent());
-	uint32_t rand_offset = rand() % max_len;
-	uint32_t rand_length = rand() % max_len;
-	rand_offset = rand_offset - (rand_offset % 512);
-	rand_length = rand_length - (rand_length % 512);
-
-	while (rand_offset + rand_length > max_len || rand_length == 0) {
-	  rand_offset = rand() % max_len;
-	  rand_length = rand() % max_len;
-	  rand_offset = rand_offset - (rand_offset % 512);
-	  rand_length = rand_length - (rand_length % 512);
-	}
-	uint32_t rand_tgt_offset = rand_offset;
-	cout << m_op << ": " << "set_chunk oid " << oid.str() << " offset: " << rand_offset 
-	     << " length: " << rand_length <<  " target oid " << oid2.str() 
-	     << " tgt_offset: " << rand_tgt_offset << std::endl;
-	op = new SetChunkOp(m_op, &context, oid.str(), rand_offset, rand_length, oid2.str(), 
-			      context.low_tier_pool_name, rand_tgt_offset, m_stats);
+	cout << m_op << ": " << "set_chunk oid " << oid.str() 
+	     <<  " target oid " << oid2.str()  << std::endl;
+	op = new SetChunkOp(m_op, &context, oid.str(), oid2.str(), m_stats);
 	return true;
       }
     } else if (m_op == make_manifest_end + 1) {
@@ -440,6 +419,20 @@ private:
       cout << m_op << ": " << "unset_redirect oid " << oid << std::endl;
       return new UnsetRedirectOp(m_op, &context, oid, m_stats);
 
+    case TEST_OP_SET_CHUNK:
+      {
+	ceph_assert(m_enable_dedup);
+	oid = *(rand_choose(context.oid_not_in_use));
+	cout << m_op << ": " << "set_chunk oid " << oid 
+	     <<  " target oid " << std::endl;
+	return new SetChunkOp(m_op, &context, oid, "", m_stats);
+      }
+
+    case TEST_OP_TIER_EVICT:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "tier_evict oid " << oid << std::endl;
+      return new TierEvictOp(m_op, &context, oid, m_stats);
+
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
       ceph_abort();
@@ -505,7 +498,16 @@ int main(int argc, char **argv)
     { TEST_OP_CHUNK_READ, "chunk_read", true },
     { TEST_OP_TIER_PROMOTE, "tier_promote", true },
     { TEST_OP_TIER_FLUSH, "tier_flush", true },
+    { TEST_OP_SET_CHUNK, "set_chunk", true },
+    { TEST_OP_TIER_EVICT, "tier_evict", true },
     { TEST_OP_READ /* grr */, NULL },
+  };
+
+  struct {
+    const char *name;
+  } chunk_algo_types[] = {
+    { "fastcdc" },
+    { "fixcdc" },
   };
 
   map<TestOpType, unsigned int> op_weights;
@@ -519,6 +521,9 @@ int main(int argc, char **argv)
   bool set_redirect = false;
   bool set_chunk = false;
   bool enable_dedup = false;
+  string chunk_algo = "";
+  string chunk_size = "";
+
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -603,6 +608,25 @@ int main(int argc, char **argv)
       low_tier_pool_name = argv[++i];
     } else if (strcmp(argv[i], "--enable_dedup") == 0) {
       enable_dedup = true;
+    } else if (strcmp(argv[i], "--dedup_chunk_algo") == 0) {
+      i++;
+      if (i == argc) {
+        cerr << "Missing chunking algorithm after --dedup_chunk_algo" << std::endl;
+        return 1;
+      }
+      int j;
+      for (j = 0; chunk_algo_types[j].name; ++j) {
+	if (strcmp(chunk_algo_types[j].name, argv[i]) == 0) {
+	  break;
+	}
+      }
+      if (!chunk_algo_types[j].name) {
+	cerr << "unknown op " << argv[i] << std::endl;
+	exit(1);
+      }
+      chunk_algo = chunk_algo_types[j].name;
+    } else if (strcmp(argv[i], "--dedup_chunk_size") == 0) {
+      chunk_size = argv[++i];
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
       exit(1);
@@ -612,6 +636,14 @@ int main(int argc, char **argv)
   if (set_redirect || set_chunk) {
     if (low_tier_pool_name == "") {
       cerr << "low_tier_pool is needed" << std::endl;
+      exit(1);
+    }
+  }
+
+  if (enable_dedup) {
+    if (chunk_algo == "" || chunk_size == "") {
+      cerr << "Missing chunking algorithm: " << chunk_algo 
+	   << " or chunking size: " << chunk_size << std::endl;
       exit(1);
     }
   }
@@ -666,6 +698,8 @@ int main(int argc, char **argv)
     write_fadvise_dontneed,
     low_tier_pool_name,
     enable_dedup,
+    chunk_algo,
+    chunk_size,
     id);
 
   TestOpStat stats;
@@ -681,6 +715,12 @@ int main(int argc, char **argv)
     exit(1);
   }
   context.loop(&gen);
+  if (enable_dedup) {
+    if (!context.check_chunks_refcount(context.low_tier_io_ctx, context.io_ctx)) {
+      cerr << " Invalid refcount " << std::endl;
+      exit(1);
+    }
+  }
 
   context.shutdown();
   cerr << context.errors << " errors." << std::endl;

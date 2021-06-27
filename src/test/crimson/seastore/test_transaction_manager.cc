@@ -60,7 +60,6 @@ struct transaction_manager_test_t :
 
   transaction_manager_test_t()
     : gen(rd()) {
-    init();
   }
 
   laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
@@ -389,13 +388,17 @@ struct transaction_manager_test_t :
   bool check_usage() {
     auto t = create_weak_transaction();
     SpaceTrackerIRef tracker(segment_cleaner->get_empty_space_tracker());
-    lba_manager->scan_mapped_space(
+    with_trans_intr(
       *t.t,
-      [&tracker](auto offset, auto len) {
-	tracker->allocate(
-	  offset.segment,
-	  offset.offset,
-	  len);
+      [this, &tracker](auto &t) {
+	return lba_manager->scan_mapped_space(
+	  t,
+	  [&tracker](auto offset, auto len) {
+	    tracker->allocate(
+	      offset.segment,
+	      offset.offset,
+	      len);
+	  });
       }).unsafe_get0();
     return segment_cleaner->debug_check_space(*tracker);
   }
@@ -424,14 +427,37 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
     ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
 
-    auto ret_list = tm->read_extents<TestBlock>(
+    auto ext = tm->read_extent<TestBlock>(
       *t.t, addr, len
     ).unsafe_get0();
-    EXPECT_EQ(ret_list.size(), 1);
-    auto &ext = ret_list.begin()->second;
-    auto &laddr = ret_list.begin()->first;
-    EXPECT_EQ(addr, laddr);
     EXPECT_EQ(addr, ext->get_laddr());
+    return ext;
+  }
+
+  TestBlockRef try_get_extent(
+    test_transaction_t &t,
+    laddr_t addr,
+    extent_len_t len) {
+    ceph_assert(test_mappings.contains(addr, t.mapping_delta));
+    ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
+
+    using ertr = with_trans_ertr<TransactionManager::read_extent_iertr>;
+    using ret = ertr::future<TestBlockRef>;
+    auto ext = tm->read_extent<TestBlock>(
+      *t.t, addr, len
+    ).safe_then([](auto ext) -> ret {
+      return ertr::make_ready_future<TestBlockRef>(ext);
+    }).handle_error(
+      [](const crimson::ct_error::eagain &e) {
+	return seastar::make_ready_future<TestBlockRef>();
+      },
+      crimson::ct_error::assert_all{
+	"get_extent got invalid error"
+      }
+    ).get0();
+    if (ext) {
+      EXPECT_EQ(addr, ext->get_laddr());
+    }
     return ext;
   }
 
@@ -489,35 +515,44 @@ struct transaction_manager_test_t :
       auto ext = get_extent(t, i.first, i.second.desc.len);
       EXPECT_EQ(i.second, ext->get_desc());
     }
-    lba_manager->scan_mappings(
+    with_trans_intr(
       *t.t,
-      0,
-      L_ADDR_MAX,
-      [iter=overlay.begin(), &overlay](auto l, auto p, auto len) mutable {
-	EXPECT_NE(iter, overlay.end());
-	logger().debug(
-	  "check_mappings: scan {}",
-	  l);
-	EXPECT_EQ(l, iter->first);
-	++iter;
+      [this, &overlay](auto &t) {
+	return lba_manager->scan_mappings(
+	  t,
+	  0,
+	  L_ADDR_MAX,
+	  [iter=overlay.begin(), &overlay](auto l, auto p, auto len) mutable {
+	    EXPECT_NE(iter, overlay.end());
+	    logger().debug(
+	      "check_mappings: scan {}",
+	      l);
+	    EXPECT_EQ(l, iter->first);
+	    ++iter;
+	  });
       }).unsafe_get0();
   }
 
   bool try_submit_transaction(test_transaction_t t) {
-    using ertr = TransactionManager::submit_transaction_ertr;
+    using ertr = with_trans_ertr<TransactionManager::submit_transaction_iertr>;
     using ret = ertr::future<bool>;
-    bool success = tm->submit_transaction(std::move(t.t)
+    bool success = tm->submit_transaction(*t.t
     ).safe_then([]() -> ret {
       return ertr::make_ready_future<bool>(true);
     }).handle_error(
       [](const crimson::ct_error::eagain &e) {
 	return seastar::make_ready_future<bool>(false);
       },
-      crimson::ct_error::pass_further_all{}
-    ).unsafe_get0();
+      crimson::ct_error::assert_all{
+	"try_submit_transaction hit invalid error"
+      }
+    ).then([this](auto ret) {
+      return segment_cleaner->run_until_halt().then([ret] { return ret; });
+    }).get0();
 
-    if (success)
+    if (success) {
       test_mappings.consume(t.mapping_delta);
+    }
 
     return success;
   }
@@ -897,13 +932,17 @@ TEST_F(transaction_manager_test_t, random_writes_concurrent)
       boost::make_counting_iterator(0u),
       boost::make_counting_iterator(WRITE_STREAMS),
       [&](auto) {
-	return seastar::async([&] {
-	  while (writes < 300) {
-	    auto t = create_transaction();
-	    auto ext = get_extent(
-	      t,
-	      get_random_laddr(BSIZE, TOTAL),
-	      BSIZE);
+        return seastar::async([&] {
+          while (writes < 300) {
+            auto t = create_transaction();
+            auto ext = try_get_extent(
+              t,
+              get_random_laddr(BSIZE, TOTAL),
+              BSIZE);
+            if (!ext){
+              failures++;
+              continue;
+            }
 	    auto mut = mutate_extent(t, ext);
 	    auto success = try_submit_transaction(std::move(t));
 	    writes += success;

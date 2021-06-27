@@ -47,6 +47,9 @@ void KVMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   pending.clear();
+  bufferlist bl;
+  bl.append("scale-down");
+  pending["config/mgr/mgr/pg_autoscaler/autoscale_profile"] = bl;
 }
 
 void KVMonitor::update_from_paxos(bool *need_bootstrap)
@@ -143,8 +146,7 @@ bool KVMonitor::preprocess_command(MonOpRequestRef op)
     mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
-  string format;
-  cmd_getval(cmdmap, "format", format, string("plain"));
+  string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;

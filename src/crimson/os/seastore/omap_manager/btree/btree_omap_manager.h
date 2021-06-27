@@ -23,7 +23,7 @@ namespace crimson::os::seastore::omap_manager {
  */
 
 class BtreeOMapManager : public OMapManager {
-  TransactionManager &tm;
+  InterruptedTransactionManager tm;
 
   omap_context_t get_omap_context(
     Transaction &t) {
@@ -63,6 +63,7 @@ class BtreeOMapManager : public OMapManager {
     OMapNode:: mutation_result_t mresult);
 
 public:
+  explicit BtreeOMapManager(InterruptedTransactionManager tm);
   explicit BtreeOMapManager(TransactionManager &tm);
 
   initialize_omap_ret initialize_omap(Transaction &t) final;
@@ -76,6 +77,11 @@ public:
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &key, const ceph::bufferlist &value) final;
+
+  omap_set_keys_ret omap_set_keys(
+    omap_root_t &omap_root,
+    Transaction &t,
+    std::map<std::string, ceph::bufferlist>&& keys) final;
 
   omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,

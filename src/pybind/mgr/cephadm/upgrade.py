@@ -8,13 +8,27 @@ import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, MONITORING_STACK_TYPES
-from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_image_digest(digest: str, default_registry: str) -> str:
+    # normal case:
+    #   ceph/ceph -> docker.io/ceph/ceph
+    # edge cases that shouldn't ever come up:
+    #   ubuntu -> docker.io/ubuntu    (ubuntu alias for library/ubuntu)
+    # no change:
+    #   quay.ceph.io/ceph/ceph -> ceph
+    #   docker.io/ubuntu -> no change
+    bits = digest.split('/')
+    if '.' not in bits[0] or len(bits) < 3:
+        digest = 'docker.io/' + digest
+    return digest
 
 
 class UpgradeState:
@@ -66,6 +80,7 @@ class CephadmUpgrade:
         'UPGRADE_FAILED_PULL',
         'UPGRADE_REDEPLOY_DAEMON',
         'UPGRADE_BAD_TARGET_VERSION',
+        'UPGRADE_EXCEPTION'
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -127,7 +142,7 @@ class CephadmUpgrade:
 
     def _check_target_version(self, version: str) -> Optional[str]:
         try:
-            (major, minor, patch) = version.split('.')
+            (major, minor, _) = version.split('.', 2)
             assert int(minor) >= 0
             # patch might be a number or {number}-g{sha1}
         except ValueError:
@@ -137,7 +152,7 @@ class CephadmUpgrade:
 
         # to far a jump?
         current_version = self.mgr.version.split('ceph version ')[1]
-        current_major, current_minor, current_patch = current_version.split('-')[0].split('.')
+        (current_major, current_minor, _) = current_version.split('-')[0].split('.', 2)
         if int(current_major) < int(major) - 2:
             return f'ceph can only upgrade 1 or 2 major versions at a time; {current_version} -> {version} is too big a jump'
         if int(current_major) > int(major):
@@ -171,7 +186,7 @@ class CephadmUpgrade:
                 raise OrchestratorError(version_error)
             target_name = self.mgr.container_image_base + ':v' + version
         elif image:
-            target_name = image
+            target_name = normalize_image_digest(image, self.mgr.default_registry)
         else:
             raise OrchestratorError('must specify either image or version')
         if self.upgrade_state:
@@ -184,6 +199,13 @@ class CephadmUpgrade:
                 self._save_upgrade_state()
                 return 'Resumed upgrade to %s' % self.target_image
             return 'Upgrade to %s in progress' % self.target_image
+
+        running_mgr_count = len([daemon for daemon in self.mgr.cache.get_daemons_by_type(
+            'mgr') if daemon.status == DaemonDescriptionStatus.running])
+
+        if running_mgr_count < 2:
+            raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
+
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
             target_name=target_name,
@@ -236,7 +258,16 @@ class CephadmUpgrade:
         :return:
         """
         if self.upgrade_state and not self.upgrade_state.paused:
-            self._do_upgrade()
+            try:
+                self._do_upgrade()
+            except Exception as e:
+                self._fail_upgrade('UPGRADE_EXCEPTION', {
+                    'severity': 'error',
+                    'summary': 'Upgrade: failed due to an unexpected exception',
+                    'count': 1,
+                    'detail': [f'Unexpected exception occurred during upgrade process: {str(e)}'],
+                })
+                return False
             return True
         return False
 
@@ -295,7 +326,9 @@ class CephadmUpgrade:
             self.upgrade_state.progress_id = str(uuid.uuid4())
             self._save_upgrade_state()
         self.mgr.remote('progress', 'update', self.upgrade_state.progress_id,
-                        ev_msg='Upgrade to %s' % self.target_image,
+                        ev_msg='Upgrade to %s' % (
+                            self.upgrade_state.target_version or self.target_image
+                        ),
                         ev_progress=progress,
                         add_to_ceph_s=True)
 
@@ -387,6 +420,44 @@ class CephadmUpgrade:
 
         return continue_upgrade
 
+    def _enough_mons_for_ok_to_stop(self) -> bool:
+        # type () -> bool
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'quorum_status',
+        })
+        try:
+            j = json.loads(out)
+        except Exception:
+            raise OrchestratorError('failed to parse quorum status')
+
+        mons = [m['name'] for m in j['monmap']['mons']]
+        return len(mons) > 2
+
+    def _enough_mds_for_ok_to_stop(self, mds_daemon: DaemonDescription) -> bool:
+        # type (DaemonDescription) -> bool
+
+        # find fs this mds daemon belongs to
+        fsmap = self.mgr.get("fs_map")
+        for i in fsmap.get('filesystems', []):
+            fs = i["mdsmap"]
+            fs_name = fs["fs_name"]
+
+            assert mds_daemon.daemon_id
+            if fs_name != mds_daemon.service_name().split('.', 1)[1]:
+                # wrong fs for this mds daemon
+                continue
+
+            # get number of mds daemons for this fs
+            mds_count = len(
+                [daemon for daemon in self.mgr.cache.get_daemons_by_service(mds_daemon.service_name())])
+
+            # standby mds daemons for this fs?
+            if fs["max_mds"] < mds_count:
+                return True
+            return False
+
+        return True  # if mds has no fs it should pass ok-to-stop
+
     def _do_upgrade(self):
         # type: () -> None
         if not self.upgrade_state:
@@ -436,7 +507,7 @@ class CephadmUpgrade:
             # tolerate/fix upgrade state from older version
             self.upgrade_state.target_version = target_version.split(' ')[2]
             target_version = self.upgrade_state.target_version
-        target_major, target_minor, target_patch = target_version.split('.')
+        (target_major, _) = target_version.split('.', 1)
         target_major_name = self.mgr.lookup_release_name(int(target_major))
 
         if first:
@@ -464,9 +535,12 @@ class CephadmUpgrade:
 
             need_upgrade_self = False
             need_upgrade: List[Tuple[DaemonDescription, bool]] = []
+            need_upgrade_deployer: List[Tuple[DaemonDescription, bool]] = []
             for d in daemons:
                 if d.daemon_type != daemon_type:
                     continue
+                assert d.daemon_type is not None
+                assert d.daemon_id is not None
                 correct_digest = False
                 if (any(d in target_digests for d in (d.container_image_digests or []))
                         or d.daemon_type in MONITORING_STACK_TYPES):
@@ -479,24 +553,26 @@ class CephadmUpgrade:
                         done += 1
                         continue
 
-                if correct_digest:
-                    logger.debug('daemon %s.%s not deployed by correct version' % (
-                        d.daemon_type, d.daemon_id))
-                else:
-                    logger.debug('daemon %s.%s not correct (%s, %s, %s)' % (
-                        daemon_type, d.daemon_id,
-                        d.container_image_name, d.container_image_digests, d.version))
-
-                assert d.daemon_type is not None
-                assert d.daemon_id is not None
-
                 if self.mgr.daemon_is_self(d.daemon_type, d.daemon_id):
                     logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
                                 self.mgr.get_mgr_id())
                     need_upgrade_self = True
                     continue
 
-                need_upgrade.append((d, correct_digest))
+                if correct_digest:
+                    logger.debug('daemon %s.%s not deployed by correct version' % (
+                        d.daemon_type, d.daemon_id))
+                    need_upgrade_deployer.append((d, True))
+                else:
+                    logger.debug('daemon %s.%s not correct (%s, %s, %s)' % (
+                        daemon_type, d.daemon_id,
+                        d.container_image_name, d.container_image_digests, d.version))
+                    need_upgrade.append((d, False))
+
+            if not need_upgrade_self:
+                # only after the mgr itself is upgraded can we expect daemons to have
+                # deployed_by == target_digests
+                need_upgrade += need_upgrade_deployer
 
             # prepare filesystems for daemon upgrades?
             if (
@@ -529,9 +605,17 @@ class CephadmUpgrade:
                         to_upgrade.append(d_entry)
                     continue
 
-                if d.daemon_type in ['mon', 'osd', 'mds']:
+                if d.daemon_type == 'osd':
                     # NOTE: known_ok_to_stop is an output argument for
                     # _wait_for_ok_to_stop
+                    if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                        return
+
+                if d.daemon_type == 'mon' and self._enough_mons_for_ok_to_stop():
+                    if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                        return
+
+                if d.daemon_type == 'mds' and self._enough_mds_for_ok_to_stop(d):
                     if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                         return
 

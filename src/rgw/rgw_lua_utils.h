@@ -149,26 +149,24 @@ struct EmptyMetaTable {
   // by default everythinmg is "readonly"
   // to change, overload this function in the derived
   static int NewIndexClosure(lua_State* L) {
-    throw std::runtime_error("trying to write to readonly field");
-    return NO_RETURNVAL;
+    return luaL_error(L, "trying to write to readonly field");
   }
   
   // by default nothing is iterable
   // to change, overload this function in the derived
   static int PairsClosure(lua_State* L) {
-    throw std::runtime_error("trying to iterate over non-iterable field");
-    return ONE_RETURNVAL;
+    return luaL_error(L, "trying to iterate over non-iterable field");
   }
   
   // by default nothing is iterable
   // to change, overload this function in the derived
   static int LenClosure(lua_State* L) {
-    throw std::runtime_error("trying to get length of non-iterable field");
-    return ONE_RETURNVAL;
+    return luaL_error(L, "trying to get length of non-iterable field");
   }
 
-  static void throw_unknown_field(const std::string& index, const std::string& table) {
-    throw std::runtime_error("unknown field name: " + index + " provided to: " + table);
+  static int error_unknown_field(lua_State* L, const std::string& index, const std::string& table) {
+    return luaL_error(L, "unknown field name: %s provided to: %s",
+                      index.c_str(), table.c_str());
   }
 };
 

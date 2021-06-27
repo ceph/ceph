@@ -267,6 +267,24 @@ namespace crimson::os::seastore::omap_manager {
  * and related methods.
  *
  * Also included are helpers for doing splits and merges as for a btree.
+ *
+ * layout diagram:
+ *
+ * # <----------------------------- node range --------------------------------------------> #
+ * #                                                         #<~># free space                #
+ * # <------------- left part -----------------------------> # <~# <----- right keys  -----> #
+ * #               # <------------ left keys --------------> #~> #                           #
+ * #               #                         keys [2, n) |<~>#   #<~>| right keys [2, n)     #
+ * #               # <--- key 0 ----> | <--- key 1 ----> |   #   #   | <- k1 -> | <-- k0 --> #
+ * #               #                  |                  |   #   #   |          |            #
+ * #  num_ | meta  # key | key | val  | key | key | val  |   #   #   | key      | key        #
+ * #  keys | depth # off | len | laddr| off | len | laddr|   #   #   | buff     | buff       #
+ * #       |       # 0   | 0   | 0    | 1   | 1   | 1    |...#...#...| key 1    | key 0      #
+ * #                 |                  |                            | <- off --+----------> #
+ * #                 |                  |                                  ^    | <- off --> #
+ *                   |                  |                                  |          ^
+ *                   |                  +----------------------------------+          |
+ *                   +----------------------------------------------------------------+
  */
 class StringKVInnerNodeLayout {
   char *buf = nullptr;
@@ -866,6 +884,27 @@ private:
 
 };
 
+/**
+ * StringKVLeafNodeLayout
+ *
+ * layout diagram:
+ *
+ * # <----------------------------- node range -------------------------------------------------> #
+ * #                                                       #<~># free space                       #
+ * # <------------- left part ---------------------------> # <~# <----- right key-value pairs --> #
+ * #               # <------------ left keys ------------> #~> #                                  #
+ * #               #                       keys [2, n) |<~>#   #<~>| right kvs [2, n)             #
+ * #               # <--- key 0 ---> | <--- key 1 ---> |   #   #   | <-- kv 1 --> | <-- kv 0 -->  #
+ * #               #                 |                 |   #   #   |              |               #
+ * # num_ | meta   # key | key | val | key | key | val |   #   #   | key   | val  | key   | val   #
+ * # keys | depth  # off | len | len | off | len | len |   #   #   | buff  | buff | buff  | buff  #
+ * #               # 0   | 0   | 0   | 1   | 1   | 1   |...#...#...| key 1 | val 1| key 0 | val 0 #
+ * #                 |                 |                           | <--- off ----+-------------> #
+ * #                 |                 |                                   ^      | <--- off ---> #
+ *                   |                 |                                   |             ^
+ *                   |                 +-----------------------------------+             |
+ *                   +-------------------------------------------------------------------+
+ */
 class StringKVLeafNodeLayout {
   char *buf = nullptr;
 

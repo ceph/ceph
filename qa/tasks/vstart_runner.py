@@ -182,6 +182,22 @@ class LocalRemoteProcess(object):
         self.check_status = check_status
         self.exitstatus = self.returncode = None
 
+    def _write_stdout(self, out):
+        if isinstance(self.stdout, StringIO):
+            self.stdout.write(out.decode(errors='ignore'))
+        elif self.stdout is None:
+            pass
+        else:
+            self.stdout.write(out)
+
+    def _write_stderr(self, err):
+        if isinstance(self.stderr, StringIO):
+            self.stderr.write(err.decode(errors='ignore'))
+        elif self.stderr is None:
+            pass
+        else:
+            self.stderr.write(err)
+
     def wait(self):
         if self.finished:
             # Avoid calling communicate() on a dead process because it'll
@@ -193,18 +209,8 @@ class LocalRemoteProcess(object):
 
         out, err = self.subproc.communicate()
         out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
-        if isinstance(self.stdout, StringIO):
-            self.stdout.write(out.decode(errors='ignore'))
-        elif self.stdout is None:
-            pass
-        else:
-            self.stdout.write(out)
-        if isinstance(self.stderr, StringIO):
-            self.stderr.write(err.decode(errors='ignore'))
-        elif self.stderr is None:
-            pass
-        else:
-            self.stderr.write(err)
+        self._write_stdout(out)
+        self._write_stderr(err)
 
         self.exitstatus = self.returncode = self.subproc.returncode
 
@@ -222,19 +228,11 @@ class LocalRemoteProcess(object):
 
         if self.subproc.poll() is not None:
             out, err = self.subproc.communicate()
-            if isinstance(self.stdout, StringIO):
-                self.stdout.write(out.decode(errors='ignore'))
-            elif self.stdout is None:
-                pass
-            else:
-                self.stdout.write(out)
-            if isinstance(self.stderr, StringIO):
-                self.stderr.write(err.decode(errors='ignore'))
-            elif self.stderr is None:
-                pass
-            else:
-                self.stderr.write(err)
+            self._write_stdout(out)
+            self._write_stderr(err)
+
             self.exitstatus = self.returncode = self.subproc.returncode
+
             return True
         else:
             return False
@@ -306,14 +304,25 @@ class LocalRemote(object):
         # None
         return mkdtemp(suffix=suffix, prefix='', dir=parentdir)
 
-    def mktemp(self, suffix=None, parentdir=None):
+    def mktemp(self, suffix='', parentdir='', path=None, data=None,
+               owner=None, mode=None):
         """
         Make a remote temporary file
 
         Returns: the path of the temp file created.
         """
         from tempfile import mktemp
-        return mktemp(suffix=suffix, dir=parentdir)
+        if not path:
+            path = mktemp(suffix=suffix, dir=parentdir)
+        if not parentdir:
+            path = os.path.join('/tmp', path)
+
+        if data:
+            # sudo is set to False since root user can't write files in /tmp
+            # owned by other users.
+            self.write_file(path=path, data=data, sudo=False)
+
+        return path
 
     def write_file(self, path, data, sudo=False, mode=None, owner=None,
                                      mkdir=False, append=False):
@@ -434,6 +443,7 @@ class LocalRemote(object):
                                        stderr=subprocess.PIPE,
                                        stdin=subprocess.PIPE,
                                        cwd=cwd,
+                                       env=env,
                                        shell=True)
         else:
             # Sanity check that we've got a list of strings
@@ -840,7 +850,7 @@ class LocalCephManager(CephManager):
 
 class LocalCephCluster(CephCluster):
     def __init__(self, ctx):
-        # Deliberately skip calling parent constructor
+        # Deliberately skip calling CephCluster constructor
         self._ctx = ctx
         self.mon_manager = LocalCephManager()
         self._conf = defaultdict(dict)
@@ -911,9 +921,19 @@ class LocalCephCluster(CephCluster):
 
 class LocalMDSCluster(LocalCephCluster, MDSCluster):
     def __init__(self, ctx):
-        super(LocalMDSCluster, self).__init__(ctx)
-        self.mds_ids = ctx.daemons.daemons['ceph.mds'].keys()
-        self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
+        LocalCephCluster.__init__(self, ctx)
+        # Deliberately skip calling MDSCluster constructor
+        self._mds_ids = ctx.daemons.daemons['ceph.mds'].keys()
+        log.debug("Discovered MDS IDs: {0}".format(self._mds_ids))
+        self._mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
+
+    @property
+    def mds_ids(self):
+        return self._mds_ids
+
+    @property
+    def mds_daemons(self):
+        return self._mds_daemons
 
     def clear_firewall(self):
         # FIXME: unimplemented
@@ -938,10 +958,10 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
         self.mgr_daemons = dict([(id_, LocalDaemon("mgr", id_)) for id_ in self.mgr_ids])
 
 
-class LocalFilesystem(Filesystem, LocalMDSCluster):
+class LocalFilesystem(LocalMDSCluster, Filesystem):
     def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False):
-        # Deliberately skip calling parent constructor
-        self._ctx = ctx
+        # Deliberately skip calling Filesystem constructor
+        LocalMDSCluster.__init__(self, ctx)
 
         self.id = None
         self.name = name
@@ -952,23 +972,7 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
         self.fs_config = fs_config
         self.ec_profile = fs_config.get('ec_profile')
 
-        # Hack: cheeky inspection of ceph.conf to see what MDSs exist
-        self.mds_ids = set()
-        for line in open("ceph.conf").readlines():
-            match = re.match("^\[mds\.(.+)\]$", line)
-            if match:
-                self.mds_ids.add(match.group(1))
-
-        if not self.mds_ids:
-            raise RuntimeError("No MDSs found in ceph.conf!")
-
-        self.mds_ids = list(self.mds_ids)
-
-        log.debug("Discovered MDS IDs: {0}".format(self.mds_ids))
-
         self.mon_manager = LocalCephManager()
-
-        self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
 
         self.client_remote = LocalRemote()
 
@@ -1006,6 +1010,12 @@ class LocalCluster(object):
 
     def only(self, requested):
         return self.__class__(rolename=requested)
+
+    def run(self, *args, **kwargs):
+        r = []
+        for remote in self.remotes.keys():
+            r.append(remote.run(*args, **kwargs))
+        return r
 
 
 class LocalContext(object):

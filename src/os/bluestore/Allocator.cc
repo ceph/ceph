@@ -5,6 +5,7 @@
 #include "StupidAllocator.h"
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
+#include "BtreeAllocator.h"
 #include "HybridAllocator.h"
 #ifdef HAVE_LIBZBD
 #include "ZonedAllocator.h"
@@ -25,8 +26,7 @@ class Allocator::SocketHook : public AdminSocketHook {
   friend class Allocator;
   std::string name;
 public:
-  explicit SocketHook(Allocator *alloc,
-                      const std::string& _name) :
+  SocketHook(Allocator *alloc, std::string_view _name) :
     alloc(alloc), name(_name)
   {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
@@ -81,8 +81,8 @@ public:
         f->open_object_section("free");
         char off_hex[30];
         char len_hex[30];
-        snprintf(off_hex, sizeof(off_hex) - 1, "0x%lx", off);
-        snprintf(len_hex, sizeof(len_hex) - 1, "0x%lx", len);
+        snprintf(off_hex, sizeof(off_hex) - 1, "0x%zx", off);
+        snprintf(len_hex, sizeof(len_hex) - 1, "0x%zx", len);
         f->dump_string("offset", off_hex);
         f->dump_string("length", len_hex);
         f->close_section();
@@ -106,7 +106,7 @@ public:
   }
 
 };
-Allocator::Allocator(const std::string& name,
+Allocator::Allocator(std::string_view name,
                      int64_t _capacity,
                      int64_t _block_size)
   : device_size(_capacity), block_size(_block_size)
@@ -124,8 +124,8 @@ const string& Allocator::get_name() const {
   return asok_hook->name;
 }
 
-Allocator *Allocator::create(CephContext* cct, string type,
-                             int64_t size, int64_t block_size, const std::string& name)
+Allocator *Allocator::create(CephContext* cct, std::string_view type,
+                             int64_t size, int64_t block_size, std::string_view name)
 {
   Allocator* alloc = nullptr;
   if (type == "stupid") {
@@ -134,6 +134,8 @@ Allocator *Allocator::create(CephContext* cct, string type,
     alloc = new BitmapAllocator(cct, size, block_size, name);
   } else if (type == "avl") {
     return new AvlAllocator(cct, size, block_size, name);
+  } else if (type == "btree") {
+    return new BtreeAllocator(cct, size, block_size, name);
   } else if (type == "hybrid") {
     return new HybridAllocator(cct, size, block_size,
       cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),

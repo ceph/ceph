@@ -39,7 +39,7 @@ class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
   bool need_stats;
   bool wants_reversed;
   std::string prefix;
-  std::vector<rgw::sal::RGWBucketList> reverse_buffer;
+  std::vector<rgw::sal::BucketList> reverse_buffer;
 
   uint64_t get_default_max() const override {
     return 0;
@@ -53,11 +53,11 @@ public:
   ~RGWListBuckets_ObjStore_SWIFT() override {}
 
   int get_params(optional_yield y) override;
-  void handle_listing_chunk(rgw::sal::RGWBucketList&& buckets) override;
+  void handle_listing_chunk(rgw::sal::BucketList&& buckets) override;
   void send_response_begin(bool has_buckets) override;
-  void send_response_data(rgw::sal::RGWBucketList& buckets) override;
-  void send_response_data_reversed(rgw::sal::RGWBucketList& buckets);
-  void dump_bucket_entry(const rgw::sal::RGWBucket& obj);
+  void send_response_data(rgw::sal::BucketList& buckets) override;
+  void send_response_data_reversed(rgw::sal::BucketList& buckets);
+  void dump_bucket_entry(const rgw::sal::Bucket& obj);
   void send_response_end() override;
 
   bool should_get_stats() override { return need_stats; }
@@ -235,7 +235,7 @@ protected:
   struct info
   {
     bool is_admin_info;
-    function<void (Formatter&, const ConfigProxy&, rgw::sal::RGWStore*)> list_data;
+    function<void (Formatter&, const ConfigProxy&, rgw::sal::Store*)> list_data;
   };
 
   static const vector<pair<string, struct info>> swift_info;
@@ -245,10 +245,10 @@ public:
 
   void execute(optional_yield y) override;
   void send_response() override;
-  static void list_swift_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::RGWStore* store);
-  static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::RGWStore* store);
-  static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::RGWStore* store);
-  static void list_slo_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::RGWStore* store);
+  static void list_swift_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Store* store);
+  static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Store* store);
+  static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Store* store);
+  static void list_slo_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Store* store);
   static bool is_expired(const std::string& expires, const DoutPrefixProvider* dpp);
 };
 
@@ -273,7 +273,7 @@ public:
   RGWFormPost() = default;
   ~RGWFormPost() = default;
 
-  void init(rgw::sal::RGWStore* store,
+  void init(rgw::sal::Store* store,
             req_state* s,
             RGWHandler* dialect_handler) override;
 
@@ -344,7 +344,7 @@ public:
 
 
 class RGWSwiftWebsiteHandler {
-  rgw::sal::RGWStore* const store;
+  rgw::sal::Store* const store;
   req_state* const s;
   RGWHandler_REST* const handler;
 
@@ -359,7 +359,7 @@ class RGWSwiftWebsiteHandler {
   RGWOp* get_ws_index_op();
   RGWOp* get_ws_listing_op();
 public:
-  RGWSwiftWebsiteHandler(rgw::sal::RGWStore* const store,
+  RGWSwiftWebsiteHandler(rgw::sal::Store* const store,
                          req_state* const s,
                          RGWHandler_REST* const handler)
     : store(store),
@@ -385,7 +385,7 @@ protected:
     return false;
   }
 
-  static int init_from_header(rgw::sal::RGWStore* store, struct req_state* s,
+  static int init_from_header(rgw::sal::Store* store, struct req_state* s,
                               const std::string& frontend_prefix);
 public:
   explicit RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
@@ -395,7 +395,7 @@ public:
 
   int validate_bucket_name(const string& bucket);
 
-  int init(rgw::sal::RGWStore *store, struct req_state *s, rgw::io::BasicClient *cio) override;
+  int init(rgw::sal::Store* store, struct req_state *s, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield y) override;
 
@@ -443,7 +443,7 @@ public:
     return website_handler->retarget_bucket(op, new_op);
   }
 
-  int init(rgw::sal::RGWStore* const store,
+  int init(rgw::sal::Store* const store,
            struct req_state* const s,
            rgw::io::BasicClient* const cio) override {
     website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
@@ -482,7 +482,7 @@ public:
     return website_handler->retarget_object(op, new_op);
   }
 
-  int init(rgw::sal::RGWStore* const store,
+  int init(rgw::sal::Store* const store,
            struct req_state* const s,
            rgw::io::BasicClient* const cio) override {
     website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
@@ -502,7 +502,7 @@ public:
   RGWRESTMgr_SWIFT() = default;
   ~RGWRESTMgr_SWIFT() override = default;
 
-  RGWHandler_REST *get_handler(rgw::sal::RGWStore *store,
+  RGWHandler_REST *get_handler(rgw::sal::Store* store,
 			       struct req_state *s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
@@ -536,7 +536,7 @@ public:
     return new RGWGetCrossDomainPolicy_ObjStore_SWIFT();
   }
 
-  int init(rgw::sal::RGWStore* const store,
+  int init(rgw::sal::Store* const store,
            struct req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
@@ -574,7 +574,7 @@ public:
   RGWRESTMgr_SWIFT_CrossDomain() = default;
   ~RGWRESTMgr_SWIFT_CrossDomain() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
 			       struct req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
@@ -593,7 +593,7 @@ public:
     return new RGWGetHealthCheck_ObjStore_SWIFT();
   }
 
-  int init(rgw::sal::RGWStore* const store,
+  int init(rgw::sal::Store* const store,
            struct req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
@@ -631,7 +631,7 @@ public:
   RGWRESTMgr_SWIFT_HealthCheck() = default;
   ~RGWRESTMgr_SWIFT_HealthCheck() override = default;
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
+  RGWHandler_REST* get_handler(rgw::sal::Store* store,
 			       struct req_state* const s,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
@@ -650,7 +650,7 @@ public:
     return new RGWInfo_ObjStore_SWIFT();
   }
 
-  int init(rgw::sal::RGWStore* const store,
+  int init(rgw::sal::Store* const store,
            struct req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
@@ -678,7 +678,7 @@ public:
   RGWRESTMgr_SWIFT_Info() = default;
   ~RGWRESTMgr_SWIFT_Info() override = default;
 
-  RGWHandler_REST *get_handler(rgw::sal::RGWStore *store,
+  RGWHandler_REST *get_handler(rgw::sal::Store* store,
 			       struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;

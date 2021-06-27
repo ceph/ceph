@@ -345,7 +345,6 @@ class PSDiskFailurePredictor(Predictor):
 
         all_attrs = [set(disk_day.keys()) for disk_day in disk_days]
         attr_list = list(set.intersection(*all_attrs))
-        attr_list = list(disk_days[0].keys())
         prev_days = disk_days[:-1]
         curr_days = disk_days[1:]
         diff_disk_days = []

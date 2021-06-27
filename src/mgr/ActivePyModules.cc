@@ -425,6 +425,23 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       mgr_map.dump(&f);
       return f.get();
     });
+  } else if (what == "mgr_ips") {
+    return cluster_state.with_mgrmap([&](const MgrMap &mgr_map) {
+      with_gil_t with_gil{no_gil};
+      f.open_array_section("ips");
+      std::set<std::string> did;
+      for (auto& i : server.get_myaddrs().v) {
+	std::string ip = i.ip_only_to_str();
+	if (did.count(ip)) {
+	  continue;
+	}
+	did.insert(ip);
+	f.dump_string("ip", ip);
+      }
+      f.close_section();
+      return f.get();
+    });
+
   } else if (what == "have_local_config_map") {
     with_gil_t with_gil{no_gil};
     f.dump_bool("have_local_config_map", have_local_config_map);
@@ -970,7 +987,8 @@ PyObject *construct_with_capsule(
   PyObject *module = PyImport_ImportModule(module_name.c_str());
   if (!module) {
     derr << "Failed to import python module:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(module);
 
@@ -978,7 +996,8 @@ PyObject *construct_with_capsule(
       module, (const char*)clsname.c_str());
   if (!wrapper_type) {
     derr << "Failed to get python type:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(wrapper_type);
 
@@ -991,7 +1010,8 @@ PyObject *construct_with_capsule(
   auto wrapper_instance = PyObject_CallObject(wrapper_type, pArgs);
   if (wrapper_instance == nullptr) {
     derr << "Failed to construct python OSDMap:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(wrapper_instance != nullptr);
   Py_DECREF(pArgs);

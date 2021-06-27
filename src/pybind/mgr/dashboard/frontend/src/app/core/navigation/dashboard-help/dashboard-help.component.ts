@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
@@ -13,8 +13,6 @@ import { AboutComponent } from '../about/about.component';
   styleUrls: ['./dashboard-help.component.scss']
 })
 export class DashboardHelpComponent implements OnInit {
-  @ViewChild('docsForm', { static: true })
-  docsFormElement: any;
   docsUrl: string;
   modalRef: NgbModalRef;
   icons = Icons;
@@ -29,9 +27,5 @@ export class DashboardHelpComponent implements OnInit {
 
   openAboutModal() {
     this.modalRef = this.modalService.show(AboutComponent, null, { size: 'lg' });
-  }
-
-  goToApiDocs() {
-    this.docsFormElement.nativeElement.submit();
   }
 }

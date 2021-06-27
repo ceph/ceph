@@ -8,9 +8,6 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-#include "rgw_fcgi.h"
-#endif
 
 #include "common/QueueRing.h"
 
@@ -30,23 +27,6 @@ struct RGWRequest
     s = _s;
   }
 }; /* RGWRequest */
-
-#if defined(WITH_RADOSGW_FCGI_FRONTEND)
-struct RGWFCGXRequest : public RGWRequest {
-  FCGX_Request *fcgx;
-  QueueRing<FCGX_Request *> *qr;
-
-  RGWFCGXRequest(uint64_t req_id, QueueRing<FCGX_Request *> *_qr)
-	  : RGWRequest(req_id), qr(_qr) {
-    qr->dequeue(&fcgx);
-  }
-
-  ~RGWFCGXRequest() override {
-    FCGX_Finish_r(fcgx);
-    qr->enqueue(fcgx);
-  }
-};
-#endif
 
 struct RGWLoadGenRequest : public RGWRequest {
 	string method;
