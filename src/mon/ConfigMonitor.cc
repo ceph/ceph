@@ -348,7 +348,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	goto reply;
       }
       if (!entity.is_client() &&
-	  !boost::get<boost::blank>(&opt->daemon_value)) {
+	  opt->daemon_value != Option::value_t{}) {
 	odata.append(Option::to_str(opt->daemon_value));
       } else {
 	odata.append(Option::to_str(opt->value));
