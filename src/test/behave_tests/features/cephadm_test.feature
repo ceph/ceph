@@ -1,25 +1,23 @@
 
 Feature: Install a basic Ceph cluster
-  In order to be able to provide storage services
+  Order to be able to provide storage services
   As an system administrator
   I want to install a Ceph cluster in the following server infraestructure:
-          - 3 nodes with 4Gb RAM, 2 CPUs, and 3 storage devices of 20Gb each.
+          - s3 nodes with 8Gb RAM, 4 CPUs, and 3 storage devices of 20Gb each.
           - Using Fedora32 image in each node
 
 
   Scenario: Install cephadm
     Given I log as root into ceph-node-00 and I execute
-        """"
+        """
         curl --silent --remote-name --location https://raw.githubusercontent.com/ceph/ceph/octopus/src/cephadm/cephadm
         chmod +x cephadm
         """
     When I execute
         """
-        # cephadm version
+        cephadm version
         """
     Then I get
         """
-        <<<
-          ceph version 16.0.0-428-g7c2a0a4 (7c2a0a455e50b7482f671071c924229c42654ab4) octopus (rc))
-        >>>
+        ceph version 16.0.0-428-g7c2a0a4 (7c2a0a455e50b7482f671071c924229c42654ab4) octopus (rc))
         """

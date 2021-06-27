@@ -1,54 +1,12 @@
-
+import logging
 import os
 import re
 
 from jinja2 import Template
+from kcli_handler import execute_kcli_cmd
 
-KCLI_PLANS_DIR = "kcli_plans"
-
-KCLI_PLAN_TEMPLATE = """
-parameters:
- nodes: {{ nodes }}
- pool: default
- network: default
- domain: cephlab.com
- prefix: ceph
- numcpus: {{ numcpus }}
- memory: {{ memory }}
- image: {{ image }}
- notify: false
- admin_password: password
- disks: {{ disks }}
-
-{% raw %}
-{% for number in range(0, nodes) %}
-{{ prefix }}-node-0{{ number }}:
- image: {{ image }}
- numcpus: {{ numcpus }}
- memory: {{ memory }}
- reserveip: true
- reservedns: true
- sharedkey: true
- domain: {{ domain }}
- nets:
-  - {{ network }}
- disks: {{ disks }}
- pool: {{ pool }}
- {% if ceph_dev_folder is defined %}
- sharedfolders: [{{ ceph_dev_folder }}]
- {% endif %}
- cmds:
- - yum -y install python3 chrony lvm2 podman
- - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
- - echo "after installing the python3"
- - setenforce 0
- {% if number == 0 %}
- scripts:
-  - bootstrap-cluster_dev.sh
- {% endif %}
-{% endfor %}
-{% endraw %}
-"""
+KCLI_PLANS_DIR = "generated_plans"
+KCLI_PLAN_NAME = "behave_test_plan"
 
 Configuration = {
     "nodes": 1,
@@ -61,77 +19,107 @@ Configuration = {
     "image": "fedora33",
     "notify": False,
     "admin_password": "password",
-    "disks": [150, 3]
+    "disks": [150, 3],
 }
 
 
-def _parse_memory_value(value):
+def _write_file(file_path, data):
+    with open(file_path, "w") as file:
+        file.write(data)
+
+
+def _read_file(file_path):
+    file = open(file_path, "r")
+    data = "".join(file.readlines())
+    file.close()
+    return data
+
+
+def _loaded_templates():
+    temp_dir = os.path.join(os.getcwd(), "template")
+    logging.info("Loading templates")
+    kcli = _read_file(os.path.join(temp_dir, "kcli_plan_template"))
+    script = _read_file(os.path.join(temp_dir, "bootstrap_script_template"))
+    kcli_temp = Template(kcli)
+    return (kcli_temp, script)
+
+
+def clean_generated(dir_path):
+    logging.info("Deleting generated files")
+    for file in os.listdir(dir_path):
+        os.remove(os.path.join(dir_path, file))
+    os.rmdir(dir_path)
+
+
+def _parse_value(value):
+    if value.isnumeric():
+        return int(value)
+
     if value.endswith("gb"):
-        value = value.replace('gb', '')
-        return int(value) * 1024
+        return int(value.replace("gb", "")) * 1024
     elif value.endswith("mb"):
-        return value.replace('mb', '')
-
-
-def _parse_value(spec_value):
-    if spec_value.isnumeric():
-        return int(spec_value)
-    if spec_value.endswith("gb") or spec_value.endswith("mb"):
-        return _parse_memory_value(spec_value)
-    return spec_value
+        return value.replace("mb", "")
+    return value
 
 
 def _parse_feature_specifications(features):
-    parsed_string = re.search(
+    parsed_str = re.search(
         r"(?P<nodes>[\d]+) nodes with (?P<memory>[\w\.-]+) ram",
         features.lower(),
     )
-    if parsed_string:
-        for spec_key in parsed_string.groupdict().keys():
-            Configuration[spec_key] = _parse_value(
-                parsed_string.group(spec_key)
-            )
-
-    parsed_string = re.search(
-        r"(?P<numcpus>[\d]+) cpus",
-        features.lower(),
-    )
-    if parsed_string:
-        Configuration["numcpus"] = parsed_string.group("numcpus")
-
-    parsed_string = re.search(
+    if parsed_str:
+        for spec_key in parsed_str.groupdict().keys():
+            Configuration[spec_key] = _parse_value(parsed_str.group(spec_key))
+    parsed_str = re.search(r"(?P<numcpus>[\d]+) cpus", features.lower())
+    if parsed_str:
+        Configuration["numcpus"] = parsed_str.group("numcpus")
+    parsed_str = re.search(
         r"(?P<disk>[\d]+) storage devices of (?P<volume>[\w\.-]+)Gb each",
         features,
     )
-    if parsed_string:
+    if parsed_str:
         Configuration["disks"] = [
-            _parse_value(parsed_string.group("volume"))
-            ] * _parse_value(parsed_string.group("disk"))
-
-    parsed_string = re.search(
-        r"(?P<image>[\w\.-]+) image",
-        features.lower(),
-    )
-    if parsed_string:
-        Configuration["image"] = parsed_string.group("image")
-
+            _parse_value(parsed_str.group("volume"))
+        ] * _parse_value(parsed_str.group("disk"))
+    parsed_str = re.search(r"(?P<image>[\w\.-]+) image", features.lower())
+    if parsed_str:
+        Configuration["image"] = parsed_str.group("image")
     return Configuration
 
 
+def _handle_kcli_plan(command_type, plan_file_path=None):
+    _output = None
+    if command_type == "create":
+        _output = execute_kcli_cmd(
+            f"create plan -f {plan_file_path} {KCLI_PLAN_NAME}"
+        )
+    elif command_type == "delete":
+        _output = execute_kcli_cmd(f"delete plan {KCLI_PLAN_NAME} -y")
+    logging.info(f"kcli output : {_output}")
+
+
 def before_feature(context, feature):
-    # Passing only line with specs
     kcli_plans_dir_path = os.path.join(os.getcwd(), KCLI_PLANS_DIR)
     if not os.path.exists(kcli_plans_dir_path):
         os.mkdir(kcli_plans_dir_path)
 
-    loaded_template = Template(KCLI_PLAN_TEMPLATE)
     features = " ".join(
         [line for line in feature.description if line.startswith('-')]
     )
-    feature_config = _parse_feature_specifications(
-        "".join(features)
-    )
-    plans_file_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
-    generated_template = loaded_template.render(feature_config)
-    with open(plans_file_path, "w") as file:
-        file.write(generated_template)
+    feature_config = _parse_feature_specifications("".join(features))
+    kcli_plan_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
+    script_path = os.path.join(kcli_plans_dir_path, "bootstrap_cluster_dev.sh")
+
+    loaded_kcli, loaded_script = _loaded_templates()
+    gen_kcli = loaded_kcli.render(feature_config)
+
+    _write_file(script_path, loaded_script)
+    _write_file(kcli_plan_path, gen_kcli)
+    logging.info("Calling kcli create command")
+    _handle_kcli_plan("create", kcli_plan_path)
+
+
+def after_feature(context, feature):
+    if os.path.exists(KCLI_PLANS_DIR):
+        clean_generated(os.path.abspath(KCLI_PLANS_DIR))
+    _handle_kcli_plan("delete")
