@@ -9796,6 +9796,20 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
+bool Client::is_atime_need_update(Inode *in)
+{
+    if (in->mtime > in->atime)
+      return true;
+    if (in->ctime > in->atime)
+      return true;
+    utime_t now = ceph_clock_now();
+    ldout(cct, 20) << _func_ << ":" << "on inode" << *in << "ino->atime" 
+      << in->atime.tv.tv_sec << "now time" << now.tv.tv_sec;
+    if (now.tv.tv_sec - in.tv.tv_sev >= 24*60*60)
+      return true;
+    return false;
+}
+
 int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -9921,6 +9935,13 @@ success:
   lat = ceph_clock_now();
   lat -= start;
   logger->tinc(l_c_read, lat);
+  if(conf->client_maintain_atime && is_atime_need_update(in)){
+    in->atime = ceph_clock_now();
+    in->change_attr++;
+    in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+    check_caps(in, 0);
+  }
+
 
 done:
   // done!
