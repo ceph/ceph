@@ -10774,7 +10774,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   if (data_pools.size() == 1) {
     objecter->get_fs_stats(stats, data_pools[0], &cond);
   } else {
-    objecter->get_fs_stats(stats, boost::optional<int64_t>(), &cond);
+    objecter->get_fs_stats(stats, std::optional<int64_t>(), &cond);
   }
 
   lock.unlock();

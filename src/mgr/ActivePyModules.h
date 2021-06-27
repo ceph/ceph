@@ -127,12 +127,12 @@ public:
   PyObject *get_store_prefix(const std::string &module_name,
 			      const std::string &prefix) const;
   void set_store(const std::string &module_name,
-      const std::string &key, const boost::optional<std::string> &val);
+      const std::string &key, const std::optional<std::string> &val);
 
   bool get_config(const std::string &module_name,
       const std::string &key, std::string *val) const;
   std::pair<int, std::string> set_config(const std::string &module_name,
-      const std::string &key, const boost::optional<std::string> &val);
+      const std::string &key, const std::optional<std::string> &val);
 
   PyObject *get_typed_config(const std::string &module_name,
 			     const std::string &key,
@@ -174,7 +174,7 @@ public:
   void update_kv_data(
     const std::string prefix,
     bool incremental,
-    const map<std::string, boost::optional<bufferlist>, std::less<>>& data);
+    const map<std::string, std::optional<bufferlist>, std::less<>>& data);
   void _refresh_config_map();
 
   // Public so that MonCommandCompletion can use it

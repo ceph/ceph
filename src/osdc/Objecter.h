@@ -2164,7 +2164,7 @@ public:
 
   struct StatfsOp {
     ceph_tid_t tid;
-    boost::optional<int64_t> data_pool;
+    std::optional<int64_t> data_pool;
     using OpSig = void(boost::system::error_code,
 		       const struct ceph_statfs);
     using OpComp = ceph::async::Completion<OpSig>;
@@ -3783,10 +3783,10 @@ private:
   void _fs_stats_submit(StatfsOp *op);
 public:
   void handle_fs_stats_reply(MStatfsReply *m);
-  void get_fs_stats(boost::optional<int64_t> poolid,
+  void get_fs_stats(std::optional<int64_t> poolid,
 		    decltype(StatfsOp::onfinish)&& onfinish);
   template<typename CompletionToken>
-  auto get_fs_stats(boost::optional<int64_t> poolid,
+  auto get_fs_stats(std::optional<int64_t> poolid,
 		    CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, StatfsOp::OpSig> init(token);
     get_fs_stats(poolid,
@@ -3794,7 +3794,7 @@ public:
 					  std::move(init.completion_handler)));
     return init.result.get();
   }
-  void get_fs_stats(struct ceph_statfs& result, boost::optional<int64_t> poolid,
+  void get_fs_stats(struct ceph_statfs& result, std::optional<int64_t> poolid,
 		    Context *onfinish) {
     get_fs_stats(poolid, OpContextVert(onfinish, result));
   }

@@ -692,7 +692,7 @@ void PGMapDigest::pool_cache_io_rate_summary(ceph::Formatter *f, ostream *out,
 }
 
 ceph_statfs PGMapDigest::get_statfs(OSDMap &osdmap,
-				    boost::optional<int64_t> data_pool) const
+				    std::optional<int64_t> data_pool) const
 {
   ceph_statfs statfs;
   bool filter = false;

@@ -1077,7 +1077,7 @@ void RADOS::stat_pools(const std::vector<std::string>& pools,
 
 void RADOS::stat_fs(std::optional<std::int64_t> _pool,
 		    std::unique_ptr<StatFSComp> c) {
-  boost::optional<int64_t> pool;
+  std::optional<int64_t> pool;
   if (_pool)
     pool = *pool;
   impl->objecter->get_fs_stats(
