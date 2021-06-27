@@ -61,13 +61,22 @@ def systemd_escape_path(p: str):
     p = re.sub(r'/{2,}', '/', p)
     return systemd_escape(p)
 
-def normalize_rbd_spec(spec: str):
+class InvalidConfigError(ValueError):
+    pass
+
+parsed_specs = set()
+
+def validate_rbd_spec(spec: str):
     if spec.startswith('/') or spec.endswith('/'):
-        raise ValueError(
+        raise InvalidConfigError(
             'rbd image or snapshot specification {} cannot starts or ends with /'
             .format(spec))
     if '/' not in spec:
         spec = 'rbd/' + spec
+
+    if spec in parsed_specs:
+        raise InvalidConfigError('{} can only be mapped once'.format(spec))
+    parsed_specs.add(spec)
     return spec
 
 def split_rbdmap_options(options: str):
@@ -194,7 +203,7 @@ def generate_one(spec: RbdMapSpec, dir_fd: int, source: str):
     def opener(path, flags):
         return os.open(path, flags, dir_fd=dir_fd, mode=0o644)
 
-    rbd_spec = normalize_rbd_spec(spec.rbd_spec)
+    rbd_spec = validate_rbd_spec(spec.rbd_spec)
     rbd_dev_path = '/dev/rbd/' + rbd_spec
     map_unit_name = 'rbdmap@{}.service'.format(systemd_escape(rbd_spec))
     device_unit_name = systemd_escape_path(rbd_dev_path) + '.device'
@@ -258,6 +267,7 @@ def generate(normal_dir: str, early_dir: str, late_dir: str):
         config_file = RBDTAB_PATH
         parser = parse_rbdtab_line
     else:
+        logger.warning('rbdmap is deprecated, please use rbdtab')
         config_file = RBDMAP_PATH
         parser = parse_rbdmap_line
 
@@ -268,6 +278,9 @@ def generate(normal_dir: str, early_dir: str, late_dir: str):
                 continue
             try:
                 generate_one(parser(line.strip()), dir_fd, config_file)
+            except InvalidConfigError as ex:
+                logger.error('line %d: %s', i, ex.args[0])
+                failed = True
             except:
                 logger.error('failed to generate unit for line %d', i, exc_info=True)
                 failed = True
