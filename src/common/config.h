@@ -17,6 +17,7 @@
 
 #include <map>
 #include <boost/container/small_vector.hpp>
+#include <boost/variant.hpp>
 #include "common/ConfUtils.h"
 #include "common/code_environment.h"
 #include "log/SubsystemMap.h"
@@ -201,7 +202,7 @@ public:
 		Callback&& cb, Args&&... args) const ->
     std::result_of_t<Callback(const T&, Args...)> {
     return std::forward<Callback>(cb)(
-      boost::get<T>(this->get_val_generic(values, key)),
+      std::get<T>(this->get_val_generic(values, key)),
       std::forward<Args>(args)...);
   }
 
@@ -357,7 +358,7 @@ public:
 template<typename T>
 const T md_config_t::get_val(const ConfigValues& values,
 			     const std::string_view key) const {
-  return boost::get<T>(this->get_val_generic(values, key));
+  return std::get<T>(this->get_val_generic(values, key));
 }
 
 inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {

@@ -106,7 +106,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
 
 static int conf_stringify(const Option::value_t& v, string *out)
 {
-  if (boost::get<boost::blank>(&v)) {
+  if (v == Option::value_t{}) {
     return -ENOENT;
   }
   *out = Option::to_str(v);
@@ -193,7 +193,7 @@ md_config_t::md_config_t(ConfigValues& values,
   for (const auto &i : schema) {
     const Option &opt = i.second;
     if (opt.type == Option::TYPE_STR) {
-      bool has_daemon_default = !boost::get<boost::blank>(&opt.daemon_value);
+      bool has_daemon_default = (opt.daemon_value != Option::value_t{});
       Option::value_t default_val;
       if (is_daemon && has_daemon_default) {
 	default_val = opt.daemon_value;
@@ -202,7 +202,7 @@ md_config_t::md_config_t(ConfigValues& values,
       }
       // We call pre_validate as a sanity check, but also to get any
       // side effect (value modification) from the validator.
-      std::string *def_str = boost::get<std::string>(&default_val);
+      auto* def_str = std::get_if<std::string>(&default_val);
       std::string val = *def_str;
       std::string err;
       if (opt.pre_validate(&val, &err) != 0) {
@@ -1055,7 +1055,7 @@ Option::value_t md_config_t::_get_val(
   std::ostream *err) const
 {
   if (key.empty()) {
-    return Option::value_t(boost::blank());
+    return {};
   }
 
   // In key names, leading and trailing whitespace are not significant.
@@ -1064,7 +1064,7 @@ Option::value_t md_config_t::_get_val(
   const Option *o = find_option(k);
   if (!o) {
     // not a valid config option
-    return Option::value_t(boost::blank());
+    return {};
   }
 
   return _get_val(values, *o, stack, err);
@@ -1097,7 +1097,7 @@ Option::value_t md_config_t::_get_val_nometa(const ConfigValues& values,
 
 const Option::value_t& md_config_t::_get_val_default(const Option& o) const
 {
-  bool has_daemon_default = !boost::get<boost::blank>(&o.daemon_value);
+  bool has_daemon_default = (o.daemon_value != Option::value_t{});
   if (is_daemon && has_daemon_default) {
     return o.daemon_value;
   } else {
@@ -1146,7 +1146,7 @@ Option::value_t md_config_t::_expand_meta(
   if (!stack) {
     return in;
   }
-  const std::string *str = boost::get<const std::string>(&in);
+  const auto str = std::get_if<std::string>(&in);
   if (!str) {
     // strings only!
     return in;
@@ -1490,19 +1490,19 @@ class assign_visitor : public boost::static_visitor<>
   {
     T *member = const_cast<T *>(&(conf->*(boost::get<const T Config::*>(ptr))));
 
-    *member = boost::get<T>(val);
+    *member = std::get<T>(val);
   }
   void operator()(uint64_t Config::* ptr) const
   {
     using T = uint64_t;
     auto member = const_cast<T*>(&(conf->*(boost::get<const T Config::*>(ptr))));
-    *member = boost::apply_visitor(get_size_visitor<T>{}, val);
+    *member = std::visit(get_size_visitor<T>{}, val);
   }
   void operator()(int64_t Config::* ptr) const
   {
     using T = int64_t;
     auto member = const_cast<T*>(&(conf->*(boost::get<const T Config::*>(ptr))));
-    *member = boost::apply_visitor(get_size_visitor<T>{}, val);
+    *member = std::visit(get_size_visitor<T>{}, val);
   }
 };
 } // anonymous namespace
@@ -1527,13 +1527,13 @@ void md_config_t::update_legacy_val(ConfigValues& values,
 
 static void dump(Formatter *f, int level, Option::value_t in)
 {
-  if (const bool *v = boost::get<const bool>(&in)) {
+  if (const auto v = std::get_if<bool>(&in)) {
     f->dump_bool(ceph_conf_level_name(level), *v);
-  } else if (const int64_t *v = boost::get<const int64_t>(&in)) {
+  } else if (const auto v = std::get_if<int64_t>(&in)) {
     f->dump_int(ceph_conf_level_name(level), *v);
-  } else if (const uint64_t *v = boost::get<const uint64_t>(&in)) {
+  } else if (const auto v = std::get_if<uint64_t>(&in)) {
     f->dump_unsigned(ceph_conf_level_name(level), *v);
-  } else if (const double *v = boost::get<const double>(&in)) {
+  } else if (const auto v = std::get_if<double>(&in)) {
     f->dump_float(ceph_conf_level_name(level), *v);
   } else {
     f->dump_stream(ceph_conf_level_name(level)) << Option::to_str(in);

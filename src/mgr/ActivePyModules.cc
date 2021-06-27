@@ -1117,7 +1117,7 @@ PyObject *ActivePyModules::get_foreign_config(
     value = p->second;
   } else {
     if (!entity.is_client() &&
-	!boost::get<boost::blank>(&opt->daemon_value)) {
+	opt->daemon_value != Option::value_t{}) {
       value = Option::to_str(opt->daemon_value);
     } else {
       value = Option::to_str(opt->value);
