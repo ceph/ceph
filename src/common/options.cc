@@ -210,7 +210,7 @@ int Option::parse_value(
     }
   } else if (type == Option::TYPE_MILLISECS) {
     try {
-      *out = boost::lexical_cast<uint64_t>(val);
+      *out = std::chrono::milliseconds(boost::lexical_cast<uint64_t>(val));
     } catch (const boost::bad_lexical_cast& e) {
       *error_message = e.what();
       return -EINVAL;
