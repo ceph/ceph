@@ -66,13 +66,18 @@ class InvalidConfigError(ValueError):
 
 parsed_specs = set()
 
-def validate_rbd_spec(spec: str):
+def validate_rbd_spec(spec: str, default_pool=False):
     if spec.startswith('/') or spec.endswith('/'):
         raise InvalidConfigError(
             'rbd image or snapshot specification {} cannot starts or ends with /'
             .format(spec))
-    if '/' not in spec:
-        spec = 'rbd/' + spec
+
+    if default_pool:
+        if '/' not in spec:
+            spec = 'rbd/' + spec
+    else:
+        if '/' not in spec:
+            raise InvalidConfigError('pool name in mandatory in the second field')
 
     if spec in parsed_specs:
         raise InvalidConfigError('{} can only be mapped once'.format(spec))
@@ -113,7 +118,7 @@ def empty_systemd_unit_options():
 
 def parse_rbdmap_line(line: str):
     cells = line.split(maxsplit=1)
-    rbd_spec = cells[0]
+    rbd_spec = validate_rbd_spec(cells[0], default_pool=True)
     opts = cells[1] if len(cells) >= 2 else None
     map_generic_args = []
     device_type = None
@@ -149,6 +154,8 @@ def parse_rbdtab_line(line: str):
     systemd_unit_options = empty_systemd_unit_options()
 
     device_type, rbd_spec, *cells = line.split()
+    rbd_spec = validate_rbd_spec(rbd_spec)
+
     map_generic_args = []
 
     def next_cell():
@@ -203,9 +210,8 @@ def generate_one(spec: RbdMapSpec, dir_fd: int, source: str):
     def opener(path, flags):
         return os.open(path, flags, dir_fd=dir_fd, mode=0o644)
 
-    rbd_spec = validate_rbd_spec(spec.rbd_spec)
-    rbd_dev_path = '/dev/rbd/' + rbd_spec
-    map_unit_name = 'rbdmap@{}.service'.format(systemd_escape(rbd_spec))
+    rbd_dev_path = '/dev/rbd/' + spec.rbd_spec
+    map_unit_name = 'rbdmap@{}.service'.format(systemd_escape(spec.rbd_spec))
     device_unit_name = systemd_escape_path(rbd_dev_path) + '.device'
 
     unit_extra = []
