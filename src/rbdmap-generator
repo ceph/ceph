@@ -31,9 +31,12 @@ After=remote-fs-pre.target rbdmap-pre.target systemd-udevd-kernel.socket network
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/rbd device map %I{rbd_map_args}
-ExecStartPost=-/etc/ceph/rbd.d/%I map /dev/rbd/%I
-ExecStop=-/etc/ceph/rbd.d/%I unmap /dev/rbd/%I
 ExecStop=/usr/bin/rbd device unmap %I{rbd_unmap_args}
+{service_extra}'''
+
+RBDMAP_LAGENCY_HOOKS = \
+'''ExecStartPost=-/etc/ceph/rbd.d/%I map /dev/rbd/%I
+ExecStop=-/etc/ceph/rbd.d/%I unmap /dev/rbd/%I
 '''
 
 VALID_CHARS = string.ascii_letters + string.digits + ':_.'
@@ -87,6 +90,7 @@ class RbdMapSpec(NamedTuple):
     map_generic_args: List[str]
     map_options: Optional[str]
     unmap_options: Optional[str]
+    service_extra: Optional[str] = None
 
 def empty_systemd_unit_options():
     return {
@@ -118,7 +122,11 @@ def parse_rbdmap_line(line: str):
             else:
                 map_generic_args.append(a)
 
-    return RbdMapSpec(rbd_spec, empty_systemd_unit_options(), device_type, map_generic_args, map_options, None)
+    return RbdMapSpec(
+        rbd_spec, empty_systemd_unit_options(), device_type, map_generic_args, map_options,
+        unmap_options=None,
+        service_extra=RBDMAP_LAGENCY_HOOKS,
+    )
 
 SYSTEMD_KEY_PREFIX = 'x-systemd.'
 RBDMAP_TARGET = 'rbdmap.target'
@@ -219,6 +227,7 @@ def generate_one(spec: RbdMapSpec, dir_fd: int, source: str):
         'rbd_map_args': rbd_map_args,
         'rbd_unmap_args': rbd_unmap_args,
         'unit_extra': '\n'.join(unit_extra),
+        'service_extra': spec.service_extra or '',
     }
     with open(map_unit_name, 'w', opener=opener) as f:
         f.write(RBDMAP_TEMPLATE.format_map(template_args))
