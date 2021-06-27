@@ -439,6 +439,10 @@ int CrushTester::test()
     min_x = 0;
     max_x = 1023;
   }
+  if (min_rep < 0 && max_rep < 0) {
+    cerr << "must specify --num-rep or both --min-rep and --max-rep" << std::endl;
+    return -EINVAL;
+  }
 
   // initial osd weights
   vector<__u32> weight;
@@ -478,19 +482,14 @@ int CrushTester::test()
         err << "rule " << r << " dne" << std::endl;
       continue;
     }
-    int minr = min_rep, maxr = max_rep;
-    if (min_rep < 0 || max_rep < 0) {
-      minr = crush.get_rule_mask_min_size(r);
-      maxr = crush.get_rule_mask_max_size(r);
-    }
     
     if (output_statistics)
       err << "rule " << r << " (" << crush.get_rule_name(r)
       << "), x = " << min_x << ".." << max_x
-      << ", numrep = " << minr << ".." << maxr
+      << ", numrep = " << min_rep << ".." << max_rep
       << std::endl;
 
-    for (int nr = minr; nr <= maxr; nr++) {
+    for (int nr = min_rep; nr <= max_rep; nr++) {
       vector<int> per(crush.get_max_devices());
       map<int,int> sizes;
 
@@ -720,13 +719,8 @@ int CrushTester::compare(CrushWrapper& crush2)
         err << "rule " << r << " dne" << std::endl;
       continue;
     }
-    int minr = min_rep, maxr = max_rep;
-    if (min_rep < 0 || max_rep < 0) {
-      minr = crush.get_rule_mask_min_size(r);
-      maxr = crush.get_rule_mask_max_size(r);
-    }
     int bad = 0;
-    for (int nr = minr; nr <= maxr; nr++) {
+    for (int nr = min_rep; nr <= max_rep; nr++) {
       for (int x = min_x; x <= max_x; ++x) {
 	vector<int> out;
 	crush.do_rule(r, x, out, nr, weight, 0);
@@ -740,7 +734,7 @@ int CrushTester::compare(CrushWrapper& crush2)
     if (bad) {
       ret = -1;
     }
-    int max = (maxr - minr + 1) * (max_x - min_x + 1);
+    int max = (max_rep - min_rep + 1) * (max_x - min_x + 1);
     double ratio = (double)bad / (double)max;
     cout << "rule " << r << " had " << bad << "/" << max
 	 << " mismatched mappings (" << ratio << ")" << std::endl;
