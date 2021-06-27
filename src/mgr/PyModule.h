@@ -181,6 +181,6 @@ public:
   std::pair<int, std::string> set_config(
     MonClient *monc,
     const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val);
+    const std::string &key, const std::optional<std::string>& val);
 
 };
