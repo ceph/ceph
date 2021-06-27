@@ -335,8 +335,14 @@ AlienStore::get_attrs(CollectionRef ch,
   return seastar::do_with(attrs_t{}, [=] (auto &aset) {
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, &aset] {
       auto c = static_cast<AlienCollection*>(ch.get());
-      return store->getattrs(c->collection, oid,
-		             reinterpret_cast<map<string,bufferptr>&>(aset));
+      std::map<std::string, ceph::bufferptr> blueaset;
+      const auto r = store->getattrs(c->collection, oid, blueaset);
+      for (auto& [bluekey, blueval] : blueaset) {
+        ceph::bufferlist bl;
+        bl.push_back(std::move(blueval));
+        aset.emplace(std::move(bluekey), std::move(bl));
+      }
+      return r;
     }).then([&aset] (int r) -> get_attrs_ertr::future<attrs_t> {
       if (r == -ENOENT) {
         return crimson::ct_error::enoent::make();
