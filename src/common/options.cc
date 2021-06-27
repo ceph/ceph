@@ -210,8 +210,8 @@ int Option::parse_value(
     }
   } else if (type == Option::TYPE_MILLISECS) {
     try {
-      *out = std::chrono::milliseconds(boost::lexical_cast<uint64_t>(val));
-    } catch (const boost::bad_lexical_cast& e) {
+      *out = std::chrono::milliseconds(std::stoull(val));
+    } catch (const std::logic_error& e) {
       *error_message = e.what();
       return -EINVAL;
     }
