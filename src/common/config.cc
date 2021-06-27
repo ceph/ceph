@@ -13,8 +13,6 @@
  */
 
 #include <filesystem>
-#include <boost/type_traits.hpp>
-
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -1455,7 +1453,7 @@ int md_config_t::_rm_val(ConfigValues& values,
 
 namespace {
 template<typename Size>
-struct get_size_visitor : public boost::static_visitor<Size>
+struct get_size_visitor
 {
   get_size_visitor() {}
 
@@ -1474,34 +1472,33 @@ struct get_size_visitor : public boost::static_visitor<Size>
 /**
  * Handles assigning from a variant-of-types to a variant-of-pointers-to-types
  */
-template<class Config>
-class assign_visitor : public boost::static_visitor<>
+class assign_visitor
 {
-  Config *conf;
+  ConfigValues *conf;
   Option::value_t val;
   public:
 
-  assign_visitor(Config *conf_, Option::value_t val_)
+  assign_visitor(ConfigValues *conf_, Option::value_t val_)
     : conf(conf_), val(val_)
   {}
 
   template <typename T>
-  void operator()(T Config::* ptr) const
+  void operator()(T ConfigValues::* ptr) const
   {
-    T *member = const_cast<T *>(&(conf->*(boost::get<const T Config::*>(ptr))));
+    T *member = const_cast<T *>(&(conf->*(ptr)));
 
     *member = std::get<T>(val);
   }
-  void operator()(uint64_t Config::* ptr) const
+  void operator()(uint64_t ConfigValues::* ptr) const
   {
     using T = uint64_t;
-    auto member = const_cast<T*>(&(conf->*(boost::get<const T Config::*>(ptr))));
+    auto member = const_cast<T*>(&(conf->*(ptr)));
     *member = std::visit(get_size_visitor<T>{}, val);
   }
-  void operator()(int64_t Config::* ptr) const
+  void operator()(int64_t ConfigValues::* ptr) const
   {
     using T = int64_t;
-    auto member = const_cast<T*>(&(conf->*(boost::get<const T Config::*>(ptr))));
+    auto member = const_cast<T*>(&(conf->*(ptr)));
     *member = std::visit(get_size_visitor<T>{}, val);
   }
 };
@@ -1522,7 +1519,7 @@ void md_config_t::update_legacy_val(ConfigValues& values,
                                     md_config_t::member_ptr_t member_ptr)
 {
   Option::value_t v = _get_val(values, opt);
-  boost::apply_visitor(assign_visitor(&values, v), member_ptr);
+  std::visit(assign_visitor(&values, v), member_ptr);
 }
 
 static void dump(Formatter *f, int level, Option::value_t in)

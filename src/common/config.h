@@ -16,8 +16,8 @@
 #define CEPH_CONFIG_H
 
 #include <map>
+#include <variant>
 #include <boost/container/small_vector.hpp>
-#include <boost/variant.hpp>
 #include "common/ConfUtils.h"
 #include "common/code_environment.h"
 #include "log/SubsystemMap.h"
@@ -70,14 +70,14 @@ extern const char *ceph_conf_level_name(int level);
  */
 struct md_config_t {
 public:
-  typedef boost::variant<int64_t ConfigValues::*,
-                         uint64_t ConfigValues::*,
-                         std::string ConfigValues::*,
-                         double ConfigValues::*,
-                         bool ConfigValues::*,
-                         entity_addr_t ConfigValues::*,
-			 entity_addrvec_t ConfigValues::*,
-                         uuid_d ConfigValues::*> member_ptr_t;
+  typedef std::variant<int64_t ConfigValues::*,
+                       uint64_t ConfigValues::*,
+                       std::string ConfigValues::*,
+                       double ConfigValues::*,
+                       bool ConfigValues::*,
+                       entity_addr_t ConfigValues::*,
+                       entity_addrvec_t ConfigValues::*,
+                       uuid_d ConfigValues::*> member_ptr_t;
 
   // For use when intercepting configuration updates
   typedef std::function<bool(
@@ -361,7 +361,7 @@ const T md_config_t::get_val(const ConfigValues& values,
   return std::get<T>(this->get_val_generic(values, key));
 }
 
-inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {
+inline std::ostream& operator<<(std::ostream& o, const std::monostate&) {
       return o << "INVALID_CONFIG_VALUE";
 }
 
