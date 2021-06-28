@@ -5700,7 +5700,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
           return;
         mdr->locking_state |= MutationImpl::ALL_LOCKED;
       }
-      SnapRealm *realm = cur->find_snaprealm();
       const auto srnode = cur->get_projected_srnode();
       if (val == (srnode && srnode->is_subvolume())) {
         dout(20) << "already marked subvolume" << dendl;
