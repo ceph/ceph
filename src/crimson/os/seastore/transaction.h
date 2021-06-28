@@ -25,8 +25,6 @@ class Transaction;
  */
 class Transaction {
 public:
-  OrderingHandle handle;
-
   using Ref = std::unique_ptr<Transaction>;
   enum class get_extent_ret {
     PRESENT,
@@ -121,6 +119,31 @@ public:
     return conflicted;
   }
 
+  auto &get_handle() {
+    return handle;
+  }
+
+  Transaction(
+    OrderingHandle &&handle,
+    bool weak,
+    journal_seq_t initiated_after
+  ) : weak(weak),
+      retired_gate_token(initiated_after),
+      handle(std::move(handle))
+  {}
+
+
+  ~Transaction() {
+    for (auto i = write_set.begin();
+	 i != write_set.end();) {
+      i->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*i++);
+    }
+  }
+
+  friend class crimson::os::seastore::SeaStore;
+  friend class TransactionConflictCondition;
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -152,24 +175,7 @@ private:
 
   bool conflicted = false;
 
-public:
-  Transaction(
-    OrderingHandle &&handle,
-    bool weak,
-    journal_seq_t initiated_after
-  ) : handle(std::move(handle)), weak(weak),
-      retired_gate_token(initiated_after) {}
-
-  ~Transaction() {
-    for (auto i = write_set.begin();
-	 i != write_set.end();) {
-      i->state = CachedExtent::extent_state_t::INVALID;
-      write_set.erase(*i++);
-    }
-  }
-
-  friend class crimson::os::seastore::SeaStore;
-  friend class TransactionConflictCondition;
+  OrderingHandle handle;
 };
 using TransactionRef = Transaction::Ref;
 

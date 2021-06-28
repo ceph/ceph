@@ -224,7 +224,7 @@ TransactionManager::submit_transaction(
   LOG_PREFIX(TransactionManager::submit_transaction);
   DEBUGT("about to await throttle", t);
   return trans_intr::make_interruptible(
-    t.handle.enter(write_pipeline.wait_throttle)
+    t.get_handle().enter(write_pipeline.wait_throttle)
   ).then_interruptible([this] {
     return trans_intr::make_interruptible(segment_cleaner->await_hard_limits());
   }).then_interruptible([this, &t]() {
@@ -239,7 +239,7 @@ TransactionManager::submit_transaction_direct(
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   DEBUGT("about to prepare", tref);
   return trans_intr::make_interruptible(
-    tref.handle.enter(write_pipeline.prepare)
+    tref.get_handle().enter(write_pipeline.prepare)
   ).then_interruptible([this, FNAME, &tref]() mutable
 		       -> submit_transaction_iertr::future<> {
     auto record = cache->try_construct_record(tref);
@@ -247,7 +247,7 @@ TransactionManager::submit_transaction_direct(
 
     DEBUGT("about to submit to journal", tref);
 
-    return journal->submit_record(std::move(*record), tref.handle
+    return journal->submit_record(std::move(*record), tref.get_handle()
     ).safe_then([this, FNAME, &tref](auto p) mutable {
       auto [addr, journal_seq] = p;
       DEBUGT("journal commit to {} seq {}", tref, addr, journal_seq);
@@ -266,14 +266,14 @@ TransactionManager::submit_transaction_direct(
 	return SegmentManager::release_ertr::now();
       }
     }).safe_then([&tref] {
-      return tref.handle.complete();
+      return tref.get_handle().complete();
     }).handle_error(
       submit_transaction_iertr::pass_further{},
       crimson::ct_error::all_same_way([](auto e) {
 	ceph_assert(0 == "Hit error submitting to journal");
       }));
     }).finally([&tref]() {
-      tref.handle.exit();
+      tref.get_handle().exit();
     });
 }
 
