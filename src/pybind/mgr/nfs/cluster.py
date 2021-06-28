@@ -44,7 +44,6 @@ def create_ganesha_pool(mgr: 'MgrModule') -> None:
 
 class NFSCluster:
     def __init__(self, mgr: 'Module') -> None:
-        self.pool_name = POOL_NAME
         self.mgr = mgr
 
     def _get_common_conf_obj_name(self, cluster_id: str) -> str:
@@ -58,7 +57,6 @@ class NFSCluster:
             # nfs + ingress
             # run NFS on non-standard port
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
-                                  pool=self.pool_name, namespace=cluster_id,
                                   placement=PlacementSpec.from_string(placement),
                                   # use non-default port so we don't conflict with ingress
                                   port=12049)
@@ -75,7 +73,6 @@ class NFSCluster:
         else:
             # standalone nfs
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
-                                  pool=self.pool_name, namespace=cluster_id,
                                   placement=PlacementSpec.from_string(placement))
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
