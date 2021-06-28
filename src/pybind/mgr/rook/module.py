@@ -182,18 +182,21 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         for host_name, host_devs in discovered_devs.items():
             devs = []
             for d in host_devs:
-                if 'cephVolumeData' in d and d['cephVolumeData']:
-                    devs.append(inventory.Device.from_json(json.loads(d['cephVolumeData'])))
-                else:
-                    devs.append(inventory.Device(
-                        path = '/dev/' + d['name'],
-                        sys_api = dict(
-                            rotational = '1' if d['rotational'] else '0',
-                            size = d['size']
-                        ),
-                        available = False,
-                        rejected_reasons=['device data coming from ceph-volume not provided'],
-                    ))
+                devs.append(inventory.Device(
+                    path = d['path'],
+                    sys_api = dict(
+                        size = d['size']
+                    ),
+                    available = d['status']['state']=='Available',
+                ))
+                if 'property' in d:
+                    devs[-1].sys_api['rotational'] = '1' if d['property']=='Rotational' else '0'
+                if 'deviceID' in d and d['deviceID']:
+                    devs[-1].device_id = d['deviceID'].split('/')[-1]
+                if 'serial' in d and d['serial']:
+                    if not devs[-1].lsm_data:
+                        devs[-1].lsm_data = dict()
+                    devs[-1].lsm_data['serialNum'] = d['serial']
 
             result.append(orchestrator.InventoryHost(host_name, inventory.Devices(devs)))
 
