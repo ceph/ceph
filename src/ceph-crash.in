@@ -30,6 +30,10 @@ def parse_args():
     parser.add_argument(
         '--name', '-n',
         help='ceph name to authenticate as (default: try client.crash, client.admin)')
+    parser.add_argument(
+        '--log-level', '-l',
+        help='log level output (default: INFO), support INFO or DEBUG')
+
     return parser.parse_args()
 
 
@@ -86,6 +90,9 @@ def main():
     signal.signal(signal.SIGTERM, handler)
 
     args = parse_args()
+    if args.log_level == 'DEBUG':
+        log.setLevel(logging.DEBUG)
+
     postdir = os.path.join(args.path, 'posted')
     if args.name:
         auth_names = [args.name]
