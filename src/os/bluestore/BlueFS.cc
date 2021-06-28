@@ -1900,13 +1900,12 @@ void BlueFS::_drop_link_D(FileRef file)
     nodes.file_map.erase(file->fnode.ino);
     file->deleted = true;
 
-    if (file->dirty_seq) {
+    if (file->dirty_seq > dirty.seq_stable) {
       // retract request to serialize changes
-      ceph_assert(file->dirty_seq > dirty.seq_stable);
       ceph_assert(dirty.files.count(file->dirty_seq));
       auto it = dirty.files[file->dirty_seq].iterator_to(*file);
       dirty.files[file->dirty_seq].erase(it);
-      file->dirty_seq = 0;
+      file->dirty_seq = dirty.seq_stable;
     }
   }
 }
@@ -2247,6 +2246,40 @@ void BlueFS::_compact_log_dump_metadata_N(bluefs_transaction_t *t,
     }
   }
 }
+/* Streams to t files modified before *capture_before_seq* and all dirs */
+void BlueFS::compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
+					     uint64_t capture_before_seq)
+{
+  std::lock_guard nl(nodes.lock);
+
+  t->seq = 1;
+  t->uuid = super.uuid;
+  dout(20) << __func__ << " op_init" << dendl;
+
+  t->op_init();
+  for (auto& [ino, file_ref] : nodes.file_map) {
+    if (ino == 1)
+      continue;
+    ceph_assert(ino > 1);
+    std::lock_guard fl(file_ref->lock);
+    if (file_ref->dirty_seq < capture_before_seq) {
+      dout(20) << __func__ << " op_file_update " << file_ref->fnode << dendl;
+      t->op_file_update(file_ref->fnode);
+    } else {
+      dout(20) << __func__ << " skipping just modified, dirty_seq="
+	       << file_ref->dirty_seq << " " << file_ref->fnode << dendl;
+    }
+  }
+  for (auto& [path, dir_ref] : nodes.dir_map) {
+    dout(20) << __func__ << " op_dir_create " << path << dendl;
+    t->op_dir_create(path);
+    for (auto& [fname, file_ref] : dir_ref->file_map) {
+      dout(20) << __func__ << " op_dir_link " << path << "/" << fname
+	       << " to " << file_ref->fnode.ino << dendl;
+      t->op_dir_link(path, fname, file_ref->fnode.ino);
+    }
+  }
+}
 
 void BlueFS::_compact_log_sync_LN_LD()
 {
@@ -2452,7 +2485,7 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
   //this needs files lock
   //what will happen, if a file is modified *twice* before we stream it to log?
   //the later state that we capture will be seen earlier and replay will see a temporary retraction (!)
-  _compact_log_dump_metadata_N(&t, 0);
+  compact_log_async_dump_metadata_NF(&t, seq_now);
 
   uint64_t max_alloc_size = std::max(alloc_size[BDEV_WAL],
 				     std::max(alloc_size[BDEV_DB],
@@ -2740,10 +2773,9 @@ void BlueFS::_clear_dirty_set_stable_D(uint64_t seq)
       auto l = p->second.begin();
       while (l != p->second.end()) {
         File *file = &*l;
-        ceph_assert(file->dirty_seq > 0);
         ceph_assert(file->dirty_seq <= dirty.seq_stable);
         dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
-        file->dirty_seq = 0;
+        file->dirty_seq = dirty.seq_stable;
         p->second.erase(l++);
       }
 
@@ -2914,7 +2946,7 @@ int BlueFS::_signal_dirty_to_log_D(FileWriter *h)
 
   h->file->fnode.mtime = ceph_clock_now();
   ceph_assert(h->file->fnode.ino >= 1);
-  if (h->file->dirty_seq == 0) {
+  if (h->file->dirty_seq <= dirty.seq_stable) {
     h->file->dirty_seq = dirty.seq_live;
     dirty.files[h->file->dirty_seq].push_back(*h->file);
     dout(20) << __func__ << " dirty_seq = " << dirty.seq_live
@@ -3266,13 +3298,7 @@ int BlueFS::fsync(FileWriter *h)
     }
   }
   if (old_dirty_seq) {
-    uint64_t s = log.seq_live; // AKAK !!! locks!
-    dout(20) << __func__ << " file metadata was dirty (" << old_dirty_seq
-	     << ") on " << h->file->fnode << ", flushing log" << dendl;
     _flush_and_sync_log_LD(old_dirty_seq);
-    // AK - TODO - think - how can dirty_seq change if we are under h lock?
-    ceph_assert(h->file->dirty_seq == 0 ||  // cleaned
-		h->file->dirty_seq >= s);    // or redirtied by someone else
   }
   _maybe_compact_log_LN_NF_LD_D();
   return 0;

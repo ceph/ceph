@@ -442,6 +442,9 @@ private:
   };
   void _compact_log_dump_metadata_N(bluefs_transaction_t *t,
 				 int flags);
+  void compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
+					  uint64_t capture_before_seq);
+
   void _compact_log_sync_LN_LD();
   void _compact_log_async_LD_NF_D();
 
