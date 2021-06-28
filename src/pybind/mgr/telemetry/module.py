@@ -19,7 +19,7 @@ from collections import defaultdict
 from mgr_module import MgrModule
 
 
-ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
+ALL_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
 
 LICENSE='sharing-1-0'
 LICENSE_NAME='Community Data License Agreement - Sharing - Version 1.0'
@@ -149,6 +149,13 @@ class Module(MgrModule):
             'default': True,
             'description': 'Share device health metrics (e.g., SMART data, minus potentially identifying info like serial numbers)',
         },
+        {
+            'name': 'channel_perf',
+            'type': 'bool',
+            'default': False,
+            'description': 'Share perf counter metrics summed across the whole cluster',
+        },
+
     ]
 
     COMMANDS = [
@@ -359,6 +366,104 @@ class Module(MgrModule):
             crashlist.append(c)
         return crashlist
 
+    def gather_perf_counters(self) -> Dict[str, dict]:
+        # Initialize 'perf schema' dict
+        perf_schema = defaultdict(dict)
+
+        # Get initial info, condense among like daemons (i.e. 'osd' = 'osd.0'
+        # + 'osd.1' + 'osd.2') and put results into 'perf schema'
+        initial_info = self.get_all_perf_counters()
+        for daemon in initial_info:
+            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
+            if daemon_type not in perf_schema:
+                perf_schema[daemon_type] = initial_info[daemon]
+            else:
+                for collection in perf_schema[daemon_type]:
+                    for field in perf_schema[daemon_type][collection]:
+                        if type(perf_schema[daemon_type][collection][field]) != str:
+                            perf_schema[daemon_type][collection][field] += initial_info[daemon][collection][field]
+
+        # Initialize 'result' dict
+        result = defaultdict(dict) # type: Dict[str, dict]
+        for daemon in perf_schema:
+            result[daemon] = {}
+            for collection in perf_schema[daemon]:
+                col_split = collection.split('.')
+                result[daemon][col_split[0]] = {}
+
+        # Derive 'perf dump' from the output of 'perf schema'
+        for daemon in perf_schema:
+            for collection in perf_schema[daemon]:
+
+                # Split the collection to avoid redundancy in json report; i.e.:
+                #   bluestore.kv_flush_lat, bluestore.kv_final_lat --> bluestore: kv_flush_lat, kv_final_lat
+                col_split = collection.split('.')
+
+                # Initialize the collection dictionary; i.e.:
+                #   "bluestore": {
+                #       "kv_flush_lat": {
+                #       },
+                #   },
+                result[daemon][col_split[0]][col_split[1]] = result[daemon][col_split[0]].get(col_split[1], {})
+
+                # Derive sum from perf_schema output; applies in all situations.
+                #   'sum' = the perf_schema 'value' field
+                # (see https://docs.ceph.com/en/latest/dev/perf_counters/)
+                _sum = perf_schema[daemon][collection]['value']
+
+                # In the case that there is a 'count' field in perf_schema, derive 'avgcount' and 'avgtime'
+                # from perf_schema output.
+                #   'avgcount' = the perf_schema 'count' field
+                #   'avgtime' = 'sum' / 'avgcount'
+                # (see https://docs.ceph.com/en/latest/dev/perf_counters/)
+                #
+                # Example of perf_schema output:
+                #   "mon.b": {
+                #       "bluestore.kv_flush_lat": {
+                #           "count": 2431,
+                #           "description": "Average kv_thread flush latency",
+                #           "nick": "fl_l",
+                #           "priority": 8,
+                #           "type": 5,
+                #           "units": 1,
+                #           "value": 88814109
+                #       },
+                #   },
+                if 'count' in perf_schema[daemon][collection]:
+                    avgcount = perf_schema[daemon][collection]['count']
+
+                    # Check for divide by 0
+                    if avgcount != 0:
+                        _sum = _sum / 1000000000
+                        avgtime = _sum / avgcount
+                    else:
+                        avgtime = 0
+
+                    # Add to result; i.e.:
+                    #   "mon.b": {
+                    #       "bluestore": {
+                    #           "kv_flush_lat": {
+                    #               "avgcount": 2516,
+                    #               "sum": 0.081231401,
+                    #               "avgtime": 0.000032285
+                    #           },
+                    #       },
+                    #   },
+                    result[daemon][col_split[0]][col_split[1]]['avgcount'] = avgcount
+                    result[daemon][col_split[0]][col_split[1]]['sum'] = _sum
+                    result[daemon][col_split[0]][col_split[1]]['avgtime'] = avgtime
+
+                # In the case that there is no 'count' field in perf_schema, just include the sum; i.e.:
+                    #   "mon.b": {
+                    #       "bluefs": {
+                    #           "db_total_bytes": 1073733632,
+                    #       },
+                    #   },
+                else:
+                    result[daemon][col_split[0]][col_split[1]] = _sum
+
+        return result
+
     def get_active_channels(self):
         r = []
         if self.channel_basic:
@@ -369,6 +474,8 @@ class Module(MgrModule):
             r.append('device')
         if self.channel_ident:
             r.append('ident')
+        if self.channel_perf:
+            r.append('perf')
         return r
 
     def gather_device_report(self):
@@ -681,6 +788,9 @@ class Module(MgrModule):
 
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
+
+        if 'perf' in channels:
+            report['perf counters'] = self.gather_perf_counters()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
