@@ -1028,7 +1028,7 @@ struct ObjectOperation {
     object_copy_cursor_t *cursor;
     uint64_t *out_size;
     ceph::real_time *out_mtime;
-    std::map<std::string,ceph::buffer::list> *out_attrs;
+    std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs;
     ceph::buffer::list *out_data, *out_omap_header, *out_omap_data;
     std::vector<snapid_t> *out_snaps;
     snapid_t *out_snap_seq;
@@ -1043,7 +1043,7 @@ struct ObjectOperation {
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
 			      ceph::real_time *m,
-			      std::map<std::string,ceph::buffer::list> *a,
+			      std::map<std::string,ceph::buffer::list,std::less<>> *a,
 			      ceph::buffer::list *d, ceph::buffer::list *oh,
 			      ceph::buffer::list *o,
 			      std::vector<snapid_t> *osnaps,
@@ -1122,7 +1122,7 @@ struct ObjectOperation {
 		uint64_t max,
 		uint64_t *out_size,
 		ceph::real_time *out_mtime,
-		std::map<std::string,ceph::buffer::list> *out_attrs,
+		std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs,
 		ceph::buffer::list *out_data,
 		ceph::buffer::list *out_omap_header,
 		ceph::buffer::list *out_omap_data,

@@ -10431,7 +10431,7 @@ int BlueStore::getattr(
 int BlueStore::getattrs(
   CollectionHandle &c_,
   const ghobject_t& oid,
-  map<string,bufferptr>& aset)
+  map<string,bufferptr,less<>>& aset)
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
