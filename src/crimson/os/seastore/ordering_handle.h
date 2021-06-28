@@ -56,16 +56,16 @@ inline OrderingHandle get_dummy_ordering_handle() {
 
 struct WritePipeline {
   OrderedExclusivePhase wait_throttle{
-    "TransactionManager::wait_throttle"
+    "WritePipeline::wait_throttle_phase"
   };
   OrderedExclusivePhase prepare{
-    "TransactionManager::prepare_phase"
+    "WritePipeline::prepare_phase"
   };
   OrderedConcurrentPhase device_submission{
-    "TransactionManager::journal_phase"
+    "WritePipeline::device_submission_phase"
   };
   OrderedExclusivePhase finalize{
-    "TransactionManager::finalize_phase"
+    "WritePipeline::finalize_phase"
   };
 };
 
