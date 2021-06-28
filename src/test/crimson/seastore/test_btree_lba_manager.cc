@@ -63,7 +63,7 @@ struct btree_lba_manager_test :
       ceph_assert(0 == "cannot fail");
     }
 
-    return journal.submit_record(std::move(*record), t->handle).safe_then(
+    return journal.submit_record(std::move(*record), t->get_handle()).safe_then(
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);
