@@ -142,7 +142,7 @@ def _get_dict_spec(s_type, s_id):
             dict(hosts=["host1:1.1.1.1"])
     }
     if s_type == 'nfs':
-        dict_spec['pool'] = 'pool'
+        pass
     elif s_type == 'iscsi':
         dict_spec['pool'] = 'pool'
         dict_spec['api_user'] = 'api_user'
