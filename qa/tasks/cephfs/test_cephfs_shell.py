@@ -137,7 +137,7 @@ class TestCephFSShell(CephFSTestCase):
             scriptfile.write(script)
         # copy script to the machine running cephfs-shell.
         mount_x.client_remote.put_file(scriptpath, scriptpath)
-        mount_x.run_shell('chmod 755 ' + scriptpath)
+        mount_x.run_shell_payload(f"chmod 755 {scriptpath}")
 
         args = ["cephfs-shell", '-b', scriptpath]
         if shell_conf_path:
@@ -321,8 +321,7 @@ class TestGetAndPut(TestCephFSShell):
             size = i + 1
             ofarg = 'of=' + path.join(tempdir, file_)
             bsarg = 'bs=' + str(size) + 'M'
-            self.mount_a.run_shell(['dd', 'if=/dev/urandom', ofarg, bsarg,
-                                    'count=1'])
+            self.mount_a.run_shell_payload(f"dd if=/dev/urandom {ofarg} {bsarg} count=1")
 
         self.run_cephfs_shell_cmd('put ' + tempdir)
         for file_ in files:
@@ -332,16 +331,15 @@ class TestGetAndPut(TestCephFSShell):
                 self.mount_a.stat(path.join(self.mount_a.mountpoint,
                                             tempdirname, file_))
 
-        self.mount_a.run_shell(['rm', '-rf', tempdir])
+        self.mount_a.run_shell_payload(f"rm -rf {tempdir}")
 
         self.run_cephfs_shell_cmd('get ' + tempdirname)
         pwd = self.get_cephfs_shell_cmd_output('!pwd')
         for file_ in files:
             if file_ == tempdirname:
-               self.mount_a.run_shell('stat ' + path.join(pwd, file_))
+               self.mount_a.run_shell_payload(f"stat {path.join(pwd, file_)}")
             else:
-               self.mount_a.run_shell('stat ' + path.join(pwd, tempdirname,
-                                                          file_))
+               self.mount_a.run_shell_payload(f"stat {path.join(pwd, tempdirname, file_)}")
 
     def test_get_with_target_name(self):
         """
@@ -488,7 +486,7 @@ class TestCD(TestCephFSShell):
         to root directory.
         """
         path = 'dir1/dir2/dir3'
-        self.mount_a.run_shell('mkdir -p ' + path)
+        self.mount_a.run_shell_payload(f"mkdir -p {path}")
         expected_cwd = '/'
 
         script = 'cd {}\ncd\ncwd\n'.format(path)
@@ -501,7 +499,7 @@ class TestCD(TestCephFSShell):
         to the path passed in the argument.
         """
         path = 'dir1/dir2/dir3'
-        self.mount_a.run_shell('mkdir -p ' + path)
+        self.mount_a.run_shell_payload(f"mkdir -p {path}")
         expected_cwd = '/dir1/dir2/dir3'
 
         script = 'cd {}\ncwd\n'.format(path)
@@ -528,7 +526,7 @@ class TestDU(TestCephFSShell):
         dir_abspath = path.join(self.mount_a.mountpoint, dirname)
         regfilename = 'some_regfile'
         regfile_abspath = path.join(dir_abspath, regfilename)
-        self.mount_a.run_shell('mkdir ' + dir_abspath)
+        self.mount_a.run_shell_payload(f"mkdir {dir_abspath}")
         self.mount_a.client_remote.write_file(regfile_abspath,
                                               'somedata', sudo=True)
 
@@ -544,7 +542,7 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_empty_dirs(self):
         dirname = 'some_directory'
         dir_abspath = path.join(self.mount_a.mountpoint, dirname)
-        self.mount_a.run_shell('mkdir ' + dir_abspath)
+        self.mount_a.run_shell_payload(f"mkdir {dir_abspath}")
 
         size = humansize(self.mount_a.stat(dir_abspath)['st_size'])
         expected_output = r'{}{}{}'.format(size, " +", dirname)
@@ -559,8 +557,7 @@ class TestDU(TestCephFSShell):
                                               'somedata', sudo=True)
         hlinkname = 'some_hardlink'
         hlink_abspath = path.join(self.mount_a.mountpoint, hlinkname)
-        self.mount_a.run_shell(['sudo', 'ln', regfile_abspath,
-                                hlink_abspath], omit_sudo=False)
+        self.mount_a.run_shell_payload(f"ln {regfile_abspath} {hlink_abspath}")
 
         size = humansize(self.mount_a.stat(hlink_abspath)['st_size'])
         expected_output = r'{}{}{}'.format(size, " +", hlinkname)
@@ -575,7 +572,7 @@ class TestDU(TestCephFSShell):
                                               'somedata', sudo=True)
         slinkname = 'some_softlink'
         slink_abspath = path.join(self.mount_a.mountpoint, slinkname)
-        self.mount_a.run_shell(['ln', '-s', regfile_abspath, slink_abspath])
+        self.mount_a.run_shell_payload(f"ln -s {regfile_abspath} {slink_abspath}")
 
         size = humansize(self.mount_a.lstat(slink_abspath)['st_size'])
         expected_output = r'{}{}{}'.format((size), " +", slinkname)
@@ -586,10 +583,10 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_softlinks_to_dirs(self):
         dirname = 'some_directory'
         dir_abspath = path.join(self.mount_a.mountpoint, dirname)
-        self.mount_a.run_shell('mkdir ' + dir_abspath)
+        self.mount_a.run_shell_payload(f"mkdir {dir_abspath}")
         slinkname = 'some_softlink'
         slink_abspath = path.join(self.mount_a.mountpoint, slinkname)
-        self.mount_a.run_shell(['ln', '-s', dir_abspath, slink_abspath])
+        self.mount_a.run_shell_payload(f"ln -s {dir_abspath} {slink_abspath}")
 
         size = humansize(self.mount_a.lstat(slink_abspath)['st_size'])
         expected_output = r'{}{}{}'.format(size, " +", slinkname)
@@ -612,11 +609,11 @@ class TestDU(TestCephFSShell):
         slink_abspath = path.join(self.mount_a.mountpoint, slinkname)
         slink2_abspath = path.join(self.mount_a.mountpoint, slink2name)
 
-        self.mount_a.run_shell('mkdir ' + dir_abspath)
-        self.mount_a.run_shell('touch ' + regfile_abspath)
-        self.mount_a.run_shell(['ln', regfile_abspath, hlink_abspath])
-        self.mount_a.run_shell(['ln', '-s', regfile_abspath, slink_abspath])
-        self.mount_a.run_shell(['ln', '-s', dir_abspath, slink2_abspath])
+        self.mount_a.run_shell_payload(f"mkdir {dir_abspath}")
+        self.mount_a.run_shell_payload(f"touch {regfile_abspath}")
+        self.mount_a.run_shell_payload(f"ln {regfile_abspath} {hlink_abspath}")
+        self.mount_a.run_shell_payload(f"ln -s {regfile_abspath} {slink_abspath}")
+        self.mount_a.run_shell_payload(f"ln -s {dir_abspath} {slink2_abspath}")
 
         dir2_name = 'dir2'
         dir21_name = 'dir21'
@@ -624,8 +621,8 @@ class TestDU(TestCephFSShell):
         dir2_abspath = path.join(self.mount_a.mountpoint, dir2_name)
         dir21_abspath = path.join(dir2_abspath, dir21_name)
         regfile121_abspath = path.join(dir21_abspath, regfile121_name)
-        self.mount_a.run_shell('mkdir -p ' + dir21_abspath)
-        self.mount_a.run_shell('touch ' + regfile121_abspath)
+        self.mount_a.run_shell_payload(f"mkdir -p {dir21_abspath}")
+        self.mount_a.run_shell_payload(f"touch {regfile121_abspath}")
 
         self.mount_a.client_remote.write_file(regfile_abspath,
                                               'somedata', sudo=True)
@@ -731,7 +728,7 @@ class TestDF(TestCephFSShell):
 
     def test_df_for_valid_directory(self):
         dir_name = 'dir1'
-        mount_output = self.mount_a.run_shell('mkdir ' + dir_name)
+        mount_output = self.mount_a.run_shell_payload(f"mkdir {dir_name}")
         log.info("cephfs-shell mount output:\n{}".format(mount_output))
         self.validate_df(dir_name)
 
@@ -799,10 +796,10 @@ class TestQuota(TestCephFSShell):
     def test_exceed_file_limit(self):
         self.test_set()
         dir_abspath = path.join(self.mount_a.mountpoint, self.dir_name)
-        self.mount_a.run_shell('touch '+dir_abspath+'/file1')
+        self.mount_a.run_shell_payload(f"touch {dir_abspath}/file1")
         file2 = path.join(dir_abspath, "file2")
         try:
-            self.mount_a.run_shell('touch '+file2)
+            self.mount_a.run_shell_payload(f"touch {file2}")
             raise Exception("Something went wrong!! File creation should have failed")
         except CommandFailedError:
             # Test should pass as file quota set to 2
@@ -924,8 +921,8 @@ class TestLS(TestCephFSShell):
 
         for (file_size, file_name) in zip(file_sizes, file_names):
             temp_file = self.mount_a.client_remote.mktemp(file_name)
-            self.mount_a.run_shell(f"fallocate -l {file_size} {temp_file}")
-            self.mount_a.run_shell(f'mv {temp_file} ./')
+            self.mount_a.run_shell_payload(f"fallocate -l {file_size} {temp_file}")
+            self.mount_a.run_shell_payload(f'mv {temp_file} ./')
 
         ls_H_output = self.get_cephfs_shell_cmd_output(['ls', '-lH'])
 
