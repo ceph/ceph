@@ -39,6 +39,9 @@ public:
   // admin socket helpers
   void peer_status(Formatter *f);
 
+  // reopen logs
+  void reopen_logs();
+
 private:
   inline static const std::string PRIMARY_SNAP_ID_KEY = "primary_snap_id";
 
