@@ -374,3 +374,13 @@
   zone are provided, the user is now responsible for setting up the
   multisite configuration beforehand--cephadm no longer attempts to
   create missing realms or zones.
+
+* The cephadm NFS support has been simplified to no longer allow the
+  pool and namespace where configuration is stored to be customized.
+  As a result, the ``ceph orch apply nfs`` command no longer has
+  ``--pool`` or ``--namespace`` arguments.
+
+  Existing cephadm NFS deployments (from earlier version of Pacific or
+  from Octopus) will be automatically migrated when the cluster is
+  upgraded.  Note that the NFS ganesha daemons will be redeployed and
+  it is possible that their IPs will change.
