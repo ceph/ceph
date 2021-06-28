@@ -32,4 +32,8 @@ sudo $CEPHADM -v add-repo --release 15.2.7
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 
+# putting it here, as there is no dedicated ceph-volume test suite
+test "$(ceph --version)" -eq "$(ceph-volume --version)"
+
+
 echo OK.

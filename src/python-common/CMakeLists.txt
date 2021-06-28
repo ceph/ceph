@@ -1,3 +1,6 @@
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ceph/version.py.in
+  ${CMAKE_CURRENT_SOURCE_DIR}/ceph/version.py @ONLY)
+
 include(Distutils)
 distutils_install_module(ceph)
 
