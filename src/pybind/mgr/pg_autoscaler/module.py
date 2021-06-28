@@ -5,9 +5,10 @@ Automatically scale pg_num based on how much data is stored in each pool.
 import json
 import mgr_util
 import threading
+from typing import Optional, Tuple
 import uuid
 from prettytable import PrettyTable
-from mgr_module import MgrModule, Option
+from mgr_module import CLIReadCommand, CLIWriteCommand, MgrModule, Option
 
 """
 Some terminology is made up for the purposes of this module:
@@ -82,26 +83,6 @@ class PgAutoscaler(MgrModule):
     """
     PG autoscaler.
     """
-    COMMANDS = [
-        {
-            "cmd": "osd pool autoscale-status",
-            "desc": "report on pool pg_num sizing recommendation and intent",
-            "perm": "r",
-        },
-        {
-            "cmd": "osd pool set autoscale-profile scale-up",
-            "desc": ("set the autoscaler behavior to start out with minimum pgs"
-                     "and scales up when there is pressure"),
-            "perm": "rw",
-        },
-        {
-            "cmd": "osd pool set autoscale-profile scale-down",
-            "desc": ("set the autoscaler behavior to start out with full pgs and"
-                     "scales down when there is pressure"),
-            "perm": "rw",
-        }
-    ]
-
     NATIVE_OPTIONS = [
         'mon_target_pg_per_osd',
         'mon_max_pg_per_osd',
@@ -151,34 +132,17 @@ class PgAutoscaler(MgrModule):
         if not autoscale_profile:
             self.set_module_option("autoscale_profile", "scale-up")
 
-    def handle_command(self, inbuf, cmd):
-        if cmd['prefix'] == "osd pool autoscale-status":
-            retval = self._command_autoscale_status(cmd)
-
-        elif cmd['prefix'] == "osd pool set autoscale-profile scale-up":
-            if self.autoscale_profile == "scale-up":
-                retval = 0, "", "autoscale-profile is already a scale-up!"
-            else:
-                self.set_module_option("autoscale_profile", "scale-up")
-                retval = 0, "", "autoscale-profile is now scale-up"
-
-        elif cmd['prefix'] == "osd pool set autoscale-profile scale-down":
-            if self.autoscale_profile == "scale-down":
-                retval = 0, "", "autoscale-profile is already a scale-down!"
-            else:
-                self.set_module_option("autoscale_profile", "scale-down")
-                retval = 0, "", "autoscale-profile is now scale-down"
-        else:
-            assert False  # ceph-mgr should never pass us unknown cmds
-        return retval
-
-    def _command_autoscale_status(self, cmd):
+    @CLIReadCommand('osd pool autoscale-status')
+    def _command_autoscale_status(self, format: str = 'plain') -> Tuple[int, str, str]:
+        """
+        report on pool pg_num sizing recommendation and intent
+        """
         osdmap = self.get_osdmap()
         pools = osdmap.get_pools_by_name()
         profile = self.autoscale_profile
         ps, root_map, pool_root = self._get_pool_status(osdmap, pools, profile)
 
-        if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
+        if format in ('json', 'json-pretty'):
             return 0, json.dumps(ps, indent=4, sort_keys=True), ''
         else:
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
@@ -238,6 +202,29 @@ class PgAutoscaler(MgrModule):
                     p['pg_autoscale_mode'],
                 ])
             return 0, table.get_string(), ''
+
+    @CLIWriteCommand("osd pool set autoscale-profile scale-up")
+    def set_profile_scale_up(self) -> Tuple[int, str, str]:
+        """
+        set the autoscaler behavior to start out with minimum pgs and scales up when there is pressure
+        """
+        if self.autoscale_profile == "scale-up":
+            return 0, "", "autoscale-profile is already a scale-up!"
+        else:
+            self.set_module_option("autoscale_profile", "scale-up")
+            return 0, "", "autoscale-profile is now scale-up"
+
+    @CLIWriteCommand("osd pool set autoscale-profile scale-down")
+    def set_profile_scale_down(self) -> Tuple[int, str, str]:
+        """
+        set the autoscaler behavior to start out with full pgs and
+        scales down when there is pressure
+        """
+        if self.autoscale_profile == "scale-down":
+            return 0, "", "autoscale-profile is already a scale-down!"
+        else:
+            self.set_module_option("autoscale_profile", "scale-down")
+            return 0, "", "autoscale-profile is now scale-down"
 
     def serve(self):
         self.config_notify()
