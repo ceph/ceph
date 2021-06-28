@@ -166,14 +166,36 @@ get_pid ${POOL}
 dd if=/dev/urandom of=${DATA} bs=1M count=${SIZE}
 _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
 [ "`dd if=${DATA} bs=1M | md5sum`" = "`rbd -p ${POOL} --no-progress export ${IMAGE} - | md5sum`" ]
+unmap_device ${DEV} ${PID}
 
-# trim test
+# notrim test
+DEV=`_sudo rbd device --device-type nbd --options notrim map ${POOL}/${IMAGE}`
+get_pid ${POOL}
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
   $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
   $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -eq "${provisioned}" ]
-_sudo mkfs.ext4 -E discard ${DEV} # better idea?
+# should fail discard as at time of mapping notrim was used
+expect_false _sudo blkdiscard ${DEV}
+sync
+provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
+  $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
+used=`rbd -p ${POOL} --format xml du ${IMAGE} |
+  $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
+[ "${used}" -eq "${provisioned}" ]
+unmap_device ${DEV} ${PID}
+
+# trim test
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
+  $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
+used=`rbd -p ${POOL} --format xml du ${IMAGE} |
+  $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
+[ "${used}" -eq "${provisioned}" ]
+# should honor discard as at time of mapping trim was considered by default
+_sudo blkdiscard ${DEV}
 sync
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
   $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
