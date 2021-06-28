@@ -351,6 +351,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def drain_host(self, hostname: str) -> OrchResult[str]:
+        """
+        drain all daemons from a host
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def update_host_addr(self, host: str, addr: str) -> OrchResult[str]:
         """
         Update a host's address
