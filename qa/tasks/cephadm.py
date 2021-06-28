@@ -583,10 +583,10 @@ def ceph_mgrs(ctx, config):
             for mgr in [r for r in roles
                         if teuthology.is_type('mgr', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mgr)
-                if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mgr:
-                    continue
                 log.info('Adding %s on %s' % (mgr, remote.shortname))
                 nodes.append(remote.shortname + '=' + id_)
+                if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mgr:
+                    continue
                 daemons[mgr] = (remote, id_)
         if nodes:
             _shell(ctx, cluster_name, remote, [
