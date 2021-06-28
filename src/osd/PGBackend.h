@@ -212,7 +212,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
-       const std::map<std::string, ceph::buffer::list> &attrs) = 0;
+       const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
 
      virtual bool try_lock_for_read(
        const hobject_t &hoid,
@@ -557,7 +557,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual int objects_get_attrs(
      const hobject_t &hoid,
-     std::map<std::string, ceph::buffer::list> *out);
+     std::map<std::string, ceph::buffer::list, std::less<>> *out);
 
    virtual int objects_read_sync(
      const hobject_t &hoid,

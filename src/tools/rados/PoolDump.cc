@@ -96,7 +96,7 @@ int PoolDump::dump(IoCtx *io_ctx)
     // Compose TYPE_ATTRS chunk
     // ========================
     std::map<std::string, bufferlist> raw_xattrs;
-    std::map<std::string, bufferlist> xattrs;
+    std::map<std::string, bufferlist,less<>> xattrs;
     r = io_ctx->getxattrs(oid, raw_xattrs);
     if (r < 0) {
       cerr << "error getting xattr set " << oid << ": " << cpp_strerror(r)

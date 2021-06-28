@@ -806,7 +806,7 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
   }
 
   //Handle attrs for this object
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   ret = store->getattrs(ch, obj, aset);
   if (ret) return ret;
   attr_section as(aset);
@@ -2143,7 +2143,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
 int do_list_attrs(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   auto ch = store->open_collection(coll);
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   int r = store->getattrs(ch, ghobj, aset);
   if (r < 0) {
     cerr << "getattrs: " << cpp_strerror(r) << std::endl;
@@ -3005,7 +3005,7 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
 	ObjectStore::Transaction t;
 	t.touch(cid, oid);
 
-	map<string,bufferptr> attrs;
+	map<string,bufferptr,less<>> attrs;
 	src->getattrs(ch, oid, attrs);
 	if (!attrs.empty()) {
 	  t.setattrs(cid, oid, attrs);
