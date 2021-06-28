@@ -863,8 +863,6 @@ spec:
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = NFSServiceSpec(
                 service_id='name',
-                pool='pool',
-                namespace='namespace',
                 placement=ps)
             unmanaged_spec = ServiceSpec.from_json(spec.to_json())
             unmanaged_spec.unmanaged = True
@@ -981,8 +979,6 @@ spec:
             ), CephadmOrchestrator.apply_rgw),
             (NFSServiceSpec(
                 service_id='name',
-                pool='pool',
-                namespace='namespace'
             ), CephadmOrchestrator.apply_nfs),
             (IscsiServiceSpec(
                 service_id='name',

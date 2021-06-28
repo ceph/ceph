@@ -320,8 +320,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 spec[svc] = orchestrator.ServiceDescription(
                     spec=NFSServiceSpec(
                         service_id=nfs_name,
-                        pool=nfs['spec']['rados']['pool'],
-                        namespace=nfs['spec']['rados'].get('namespace', None),
                         placement=PlacementSpec(count=active),
                     ),
                     size=active,
