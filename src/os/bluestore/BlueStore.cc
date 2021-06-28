@@ -7551,7 +7551,7 @@ int BlueStore::_fsck_check_extents(
 	    bs.set(pos);
         });
         if (repairer) {
-	  repairer->get_space_usage_tracker().set_used( e.offset, e.length, cid, oid);
+	  repairer->set_space_used(e.offset, e.length, cid, oid);
         }
 
       if (e.end() > bdev->get_size()) {
@@ -7875,8 +7875,11 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
            << " zombie spanning blob(s) found, the first one: "
            << *first_broken << dendl;
       if(repairer) {
-        auto txn = repairer->fix_spanning_blobs(db);
-	_record_onode(o, txn);
+        repairer->fix_spanning_blobs(
+	  db,
+	  [&](KeyValueDB::Transaction txn) {
+	    _record_onode(o, txn);
+	  });
       }
     }
   }
@@ -8620,7 +8623,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     }
   );
   if (repair) {
-    repairer.get_space_usage_tracker().init(
+    repairer.init_space_usage_tracker(
       bdev->get_size(),
       min_alloc_size);
   }
@@ -8812,7 +8815,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   if (repair && repairer.preprocess_misreference(db)) {
 
     dout(1) << __func__ << " sorting out misreferenced extents" << dendl;
-    auto& space_tracker = repairer.get_space_usage_tracker();
     auto& misref_extents = repairer.get_misreferences();
     interval_set<uint64_t> to_release;
     it = db->get_iterator(PREFIX_OBJ);
@@ -8834,7 +8836,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
 	ghobject_t oid;
 	int r = get_key_object(it->key(), &oid);
-	if (r < 0 || !space_tracker.is_used(oid)) {
+	if (r < 0 || !repairer.is_used(oid)) {
 	  continue;
 	}
 
@@ -8857,7 +8859,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	    expected_statfs = &expected_pool_statfs[pool_id];
 	  }
 	}
-	if (!space_tracker.is_used(c->cid)) {
+	if (!repairer.is_used(c->cid)) {
 	  continue;
 	}
 
@@ -16102,6 +16104,7 @@ bool BlueStoreRepairer::remove_key(KeyValueDB *db,
 				   const string& prefix,
 				   const string& key)
 {
+  std::lock_guard l(lock);
   if (!remove_key_txn) {
     remove_key_txn = db->get_transaction();
   }
@@ -16113,6 +16116,8 @@ bool BlueStoreRepairer::remove_key(KeyValueDB *db,
 
 void BlueStoreRepairer::fix_per_pool_omap(KeyValueDB *db)
 {
+  std::lock_guard l(lock); // possibly redundant
+  ceph_assert(fix_per_pool_omap_txn == nullptr);
   fix_per_pool_omap_txn = db->get_transaction();
   ++to_repair_cnt;
   bufferlist bl;
@@ -16125,6 +16130,7 @@ bool BlueStoreRepairer::fix_shared_blob(
   uint64_t sbid,
   const bufferlist* bl)
 {
+  std::lock_guard l(lock); // possibly redundant
   KeyValueDB::Transaction txn;
   if (fix_misreferences_txn) { // reuse this txn
     txn = fix_misreferences_txn;
@@ -16150,6 +16156,7 @@ bool BlueStoreRepairer::fix_statfs(KeyValueDB *db,
 				   const string& key,
 				   const store_statfs_t& new_statfs)
 {
+  std::lock_guard l(lock);
   if (!fix_statfs_txn) {
     fix_statfs_txn = db->get_transaction();
   }
@@ -16166,6 +16173,7 @@ bool BlueStoreRepairer::fix_leaked(KeyValueDB *db,
 				   FreelistManager* fm,
 				   uint64_t offset, uint64_t len)
 {
+  std::lock_guard l(lock);
   if (!fix_fm_leaked_txn) {
     fix_fm_leaked_txn = db->get_transaction();
   }
@@ -16177,6 +16185,7 @@ bool BlueStoreRepairer::fix_false_free(KeyValueDB *db,
 				       FreelistManager* fm,
 				       uint64_t offset, uint64_t len)
 {
+  std::lock_guard l(lock);
   if (!fix_fm_false_free_txn) {
     fix_fm_false_free_txn = db->get_transaction();
   }
@@ -16195,17 +16204,22 @@ bool BlueStoreRepairer::fix_bluefs_extents(std::atomic<uint64_t>& out_of_sync_fl
   return true;
 }
 
-KeyValueDB::Transaction BlueStoreRepairer::fix_spanning_blobs(KeyValueDB* db)
+bool BlueStoreRepairer::fix_spanning_blobs(
+  KeyValueDB* db,
+  std::function<void(KeyValueDB::Transaction)> f)
 {
+  std::lock_guard l(lock);
   if (!fix_onode_txn) {
     fix_onode_txn = db->get_transaction();
   }
+  f(fix_onode_txn);
   ++to_repair_cnt;
-  return fix_onode_txn;
+  return true;
 }
 
 bool BlueStoreRepairer::preprocess_misreference(KeyValueDB *db)
 {
+  //NB: not for use in multithreading mode!!!
   if (misreferenced_extents.size()) {
     size_t n = space_usage_tracker.filter_out(misreferenced_extents);
     ceph_assert(n > 0);
@@ -16219,6 +16233,7 @@ bool BlueStoreRepairer::preprocess_misreference(KeyValueDB *db)
 
 unsigned BlueStoreRepairer::apply(KeyValueDB* db)
 {
+  //NB: not for use in multithreading mode!!!
   if (fix_per_pool_omap_txn) {
     db->submit_transaction_sync(fix_per_pool_omap_txn);
     fix_per_pool_omap_txn = nullptr;
