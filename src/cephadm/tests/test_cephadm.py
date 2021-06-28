@@ -629,6 +629,86 @@ docker.io/ceph/daemon-base:octopus
                 infer_fsid(ctx)
             assert ctx.fsid == result
 
+    @pytest.mark.parametrize('fsid, config, name, list_daemons, result, ',
+        [
+            (
+                None,
+                '/foo/bar.conf',
+                None,
+                [],
+                '/foo/bar.conf',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [{'name': 'mon.a'}],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [{'name': 'osd.0'}],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                '/foo/bar.conf',
+                'mon.a',
+                [{'name': 'mon.a'}],
+                '/foo/bar.conf',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                'mon.a',
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                'osd.0',
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/osd.0/config',
+            ),
+            (
+                None,
+                None,
+                None,
+                [],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+        ])
+    @mock.patch('cephadm.call')
+    def test_infer_config(self, _call, fsid, config, name, list_daemons, result, cephadm_fs):
+        # build the context
+        ctx = cd.CephadmContext()
+        ctx.fsid = fsid
+        ctx.config = config
+        ctx.name = name
+
+        # mock the decorator
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        infer_config = cd.infer_config(mock_fn)
+
+        # mock the shell config
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+
+        # test
+        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+            infer_config(ctx)
+            assert ctx.config == result
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer

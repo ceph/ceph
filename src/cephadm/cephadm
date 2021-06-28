@@ -1696,11 +1696,11 @@ def infer_config(func):
             logger.debug('Using specified config: %s' % ctx.config)
             return func(ctx)
         if ctx.fsid:
-            name = ctx.name
+            name = ctx.name if 'name' in ctx else None
             if not name:
                 daemon_list = list_daemons(ctx, detail=False)
                 for daemon in daemon_list:
-                    if daemon['name'].startswith('mon.'):
+                    if daemon.get('name', '').startswith('mon.'):
                         name = daemon['name']
                         break
             if name:
