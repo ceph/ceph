@@ -366,14 +366,17 @@ candidate hosts.
 
 .. _cephadm-spec-unmanaged:
 
-Disable automatic deployment of daemons
-=======================================
+Disabling automatic deployment of daemons
+=========================================
 
-Cephadm supports disabling the automated deployment and removal of daemons per service. In
-this case, the CLI supports two commands that are dedicated to this mode. 
+Cephadm supports disabling the automated deployment and removal of daemons on a
+per service basis. The CLI supports two commands for this.
 
-To disable the automatic management of dameons, apply
-the :ref:`orchestrator-cli-service-spec` with ``unmanaged=True``. 
+Disabling automatic management of daemons
+-----------------------------------------
+
+To disable the automatic management of dameons, set ``unmanaged=True`` in the
+:ref:`orchestrator-cli-service-spec` (``mgr.yaml``).
 
 ``mgr.yaml``:
 
@@ -384,16 +387,22 @@ the :ref:`orchestrator-cli-service-spec` with ``unmanaged=True``.
   placement:
     label: mgr
 
-.. code-block:: bash
 
-  ceph orch apply -i mgr.yaml
+.. prompt:: bash #
+
+   ceph orch apply -i mgr.yaml
+
 
 .. note::
 
-  cephadm will no longer deploy any new daemons, if the placement
-  specification matches additional hosts.
+  After you apply this change in the Service Specification, cephadm will no
+  longer deploy any new daemons (even if the placement specification matches
+  additional hosts).
 
-To manually deploy a daemon on a host, please execute:
+Deploying a daemon on a host manually
+-------------------------------------
+
+To manually deploy a daemon on a host, run a command of the following form:
 
    .. prompt:: bash #
 
@@ -405,7 +414,10 @@ For example :
 
      ceph orch daemon add mgr --placement=my_host
 
-To manually remove a daemon, please run:
+Removing a daemon from a host manually
+--------------------------------------
+
+To manually remove a daemon, run a command of the following form:
 
    .. prompt:: bash #
 
@@ -421,6 +433,9 @@ For example:
 
   For managed services (``unmanaged=False``), cephadm will automatically
   deploy a new daemon a few seconds later.
+
+See also
+--------
     
 * See :ref:`cephadm-osd-declarative` for special handling of unmanaged OSDs. 
 * See also :ref:`cephadm-pause`
