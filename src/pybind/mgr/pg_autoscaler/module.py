@@ -79,6 +79,23 @@ class PgAdjustmentProgress(object):
                       refs=[("pool", self.pool_id)])
 
 
+class CrushSubtreeResourceStatus:
+    def __init__(self):
+        self.root_ids = []
+        self.osds = set()
+        self.osd_count = None  # Number of OSDs
+        self.pg_target = None  # Ideal full-capacity PG count?
+        self.pg_current = 0  # How many PGs already?
+        self.pg_left = 0
+        self.capacity = None  # Total capacity of OSDs in subtree
+        self.pool_ids = []
+        self.pool_names = []
+        self.pool_count = None
+        self.pool_used = 0
+        self.total_target_ratio = 0.0
+        self.total_target_bytes = 0 # including replication / EC overhead
+
+
 class PgAutoscaler(MgrModule):
     """
     PG autoscaler.
@@ -247,22 +264,6 @@ class PgAutoscaler(MgrModule):
         result = {}
         pool_root = {}
         roots = []
-
-        class CrushSubtreeResourceStatus(object):
-            def __init__(self):
-                self.root_ids = []
-                self.osds = set()
-                self.osd_count = None  # Number of OSDs
-                self.pg_target = None  # Ideal full-capacity PG count?
-                self.pg_current = 0  # How many PGs already?
-                self.pg_left = 0
-                self.capacity = None  # Total capacity of OSDs in subtree
-                self.pool_ids = []
-                self.pool_names = []
-                self.pool_count = None
-                self.pool_used = 0
-                self.total_target_ratio = 0.0
-                self.total_target_bytes = 0 # including replication / EC overhead
 
         # identify subtrees (note that they may overlap!)
         for pool_id, pool in osdmap.get_pools().items():
