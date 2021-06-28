@@ -33,12 +33,12 @@ def resolve_ip(hostname: str) -> str:
         raise NFSInvalidOperation(f"Cannot resolve IP for host {hostname}: {e}")
 
 
-def create_ganesha_pool(mgr: 'MgrModule', pool: str) -> None:
+def create_ganesha_pool(mgr: 'MgrModule') -> None:
     pool_list = [p['pool_name'] for p in mgr.get_osdmap().dump().get('pools', [])]
-    if pool not in pool_list:
-        mgr.check_mon_command({'prefix': 'osd pool create', 'pool': pool})
+    if POOL_NAME not in pool_list:
+        mgr.check_mon_command({'prefix': 'osd pool create', 'pool': POOL_NAME})
         mgr.check_mon_command({'prefix': 'osd pool application enable',
-                               'pool': pool,
+                               'pool': POOL_NAME,
                                'app': 'nfs'})
 
 
@@ -105,7 +105,7 @@ class NFSCluster:
                 raise NFSInvalidOperation(f"cluster id {cluster_id} is invalid. "
                                           f"{invalid_str.group()} is char not permitted")
 
-            create_ganesha_pool(self.mgr, self.pool_name)
+            create_ganesha_pool(self.mgr)
 
             self.create_empty_rados_obj(cluster_id)
 
