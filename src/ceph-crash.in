@@ -80,6 +80,7 @@ def handler(signum):
     sys.exit(0)
 
 def main():
+    global auth_names
     # exit code 0 on SIGINT, SIGTERM
     signal.signal(signal.SIGINT, handler)
     signal.signal(signal.SIGTERM, handler)
