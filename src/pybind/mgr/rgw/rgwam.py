@@ -17,14 +17,10 @@ import base64
 import logging
 import errno
 
-import orchestrator
-
 from urllib.parse import urlparse
 
 from .types import RGWAMException, RGWAMCmdRunException, RGWPeriod, RGWUser, RealmToken
 from .diff import RealmsEPs
-
-from ceph.deployment.service_spec import RGWSpec
 
 
 DEFAULT_PORT = 8000
@@ -433,11 +429,7 @@ class RGWAM:
             if start_radosgw:
                 o = urlparse(ep)
                 svc_id = realm_name  + '.' + zone_name
-                spec = RGWSpec(service_id = svc_id,
-                               rgw_realm = realm_name,
-                               rgw_zone = zone_name,
-                               rgw_frontend_port = o.port)
-                self.env.mgr.apply_rgw(spec)
+                self.env.mgr.apply_rgw(svc_id, realm_name, zone_name, o.port)
 
         realm_token = RealmToken(ep, sys_user.uid, sys_access_key, sys_secret)
 
@@ -577,16 +569,9 @@ class RGWAM:
         #                       rgw_frontend_port = o.port)
         #        self.env.mgr.apply_rgw(spec)
 
-        spec = RGWSpec(service_id = svc_id,
-                       rgw_realm = realm_name,
-                       rgw_zone = zone_name)
+        self.env.mgr.apply_rgw(svc_id, realm_name, zone_name)
 
-        completion = self.env.mgr.apply_rgw(spec)
-        orchestrator.raise_if_exception(completion)
-
-        completion = self.env.mgr.list_daemons(svc_id, 'rgw', refresh=True)
-
-        daemons = orchestrator.raise_if_exception(completion)
+        daemons = self.env.mgr.list_daemons(svc_id, 'rgw', refresh=True)
 
         ep = []
         for s in daemons:
@@ -614,13 +599,11 @@ class RGWAM:
         hostname = None
         refresh = True
 
-        completion = self.env.mgr.list_daemons(service_name,
-                                               daemon_type,
-                                               daemon_id=daemon_id,
-                                               host=hostname,
-                                               refresh=refresh)
-
-        daemons = orchestrator.raise_if_exception(completion)
+        daemons = self.env.mgr.list_daemons(service_name,
+                                            daemon_type,
+                                            daemon_id=daemon_id,
+                                            host=hostname,
+                                            refresh=refresh)
 
         rep = RealmsEPs()
 

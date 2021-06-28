@@ -1,4 +1,7 @@
-from .module import Module
+try:
+    from .module import Module
+except ImportError:
+    pass
 
 import logging
 
