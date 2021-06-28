@@ -635,7 +635,22 @@ public:
       list_hook_options>;
   public:
     token_t(journal_seq_t created_after) : created_after(created_after) {}
-    ~token_t();
+
+    void drop_self();
+    void add_self();
+
+    void reset(journal_seq_t _created_after) {
+      drop_self();
+      created_after = _created_after;
+      add_self();
+    }
+
+    ~token_t() {
+      if (parent) {
+	drop_self();
+	parent = nullptr;
+      }
+    }
   };
 
   void prune() {
@@ -651,7 +666,7 @@ public:
 
   void add_token(token_t &t) {
     t.parent = this;
-    live_tokens.push_back(t);
+    t.add_self();
   }
 
   void add_extent(CachedExtent &extent) {
@@ -664,13 +679,16 @@ private:
   CachedExtent::list retired_extents;
 };
 
-inline retired_extent_gate_t::token_t::~token_t() {
-  if (parent) {
-    parent->live_tokens.erase(
-      parent->live_tokens.s_iterator_to(*this));
-    parent->prune();
-    parent = nullptr;
-  }
+inline void retired_extent_gate_t::token_t::add_self() {
+  assert(parent);
+  parent->live_tokens.push_back(*this);
+}
+
+inline void retired_extent_gate_t::token_t::drop_self() {
+  assert(parent);
+  parent->live_tokens.erase(
+    parent->live_tokens.s_iterator_to(*this));
+  parent->prune();
 }
 
 /**
