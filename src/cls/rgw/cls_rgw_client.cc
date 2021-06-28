@@ -21,6 +21,66 @@ using namespace librados;
 const string BucketIndexShardsManager::KEY_VALUE_SEPARATOR = "#";
 const string BucketIndexShardsManager::SHARDS_SEPARATOR = ",";
 
+
+int CLSRGWConcurrentIO::operator()() {
+  int ret = 0;
+  iter = objs_container.begin();
+  for (; iter != objs_container.end() && max_aio-- > 0; ++iter) {
+    ret = issue_op(iter->first, iter->second);
+    if (ret < 0)
+      break;
+  }
+
+  int num_completions = 0, r = 0;
+  std::map<int, std::string> completed_objs;
+  std::map<int, std::string> retry_objs;
+  while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r,
+				      need_multiple_rounds() ? &completed_objs : nullptr,
+				      !need_multiple_rounds() ? &retry_objs : nullptr)) {
+    if (r >= 0 && ret >= 0) {
+      for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
+	int issue_ret = issue_op(iter->first, iter->second);
+	if (issue_ret < 0) {
+	  ret = issue_ret;
+	  break;
+	}
+      }
+    } else if (ret >= 0) {
+      ret = r;
+    }
+
+    // if we're at the end with this round, see if another round is needed
+    if (iter == objs_container.end()) {
+      if (need_multiple_rounds() && !completed_objs.empty()) {
+	// For those objects which need another round, use them to reset
+	// the container
+	reset_container(completed_objs);
+	iter = objs_container.begin();
+      } else if (! need_multiple_rounds() && !retry_objs.empty()) {
+	reset_container(retry_objs);
+	iter = objs_container.begin();
+      }
+
+      // if container was reset above
+      if (iter != objs_container.end()) {
+	for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
+	  int issue_ret = issue_op(iter->first, iter->second);
+	  if (issue_ret < 0) {
+	    ret = issue_ret;
+	    break;
+	  }
+	}
+      }
+    }
+  }
+
+  if (ret < 0) {
+    cleanup();
+  }
+  return ret;
+} // CLSRGWConcurrintIO::operator()()
+
+
 /**
  * This class represents the bucket index object operation callback context.
  */
@@ -67,7 +127,11 @@ void BucketIndexAioManager::do_completion(int id) {
 }
 
 bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
-    int *num_completions, int *ret_code, map<int, string> *objs) {
+						 int *num_completions,
+						 int *ret_code,
+						 std::map<int, std::string> *completed_objs,
+						 std::map<int, std::string> *retry_objs)
+{
   std::unique_lock locker{lock};
   if (pendings.empty() && completions.empty()) {
     return false;
@@ -82,18 +146,35 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   auto iter = completions.begin();
   for (; iter != completions.end(); ++iter) {
     int r = iter->second->get_return_value();
-    if (objs && r == 0) { /* update list of successfully completed objs */
+
+    // see if we may need to copy completions or retries
+    if (completed_objs || retry_objs) {
       auto liter = completion_objs.find(iter->first);
       if (liter != completion_objs.end()) {
-        (*objs)[liter->first] = liter->second;
+	if (completed_objs && r == 0) { /* update list of successfully completed objs */
+	  (*completed_objs)[liter->first] = liter->second;
+	}
+
+	if (r == -EAGAIN && retry_objs) {
+	  (*retry_objs)[liter->first] = liter->second;
+	}
+      } else {
+	// NB: should we log an error here; currently no logging
+	// context to use
       }
     }
-    if (ret_code && (r < 0 && r != valid_ret_code))
+
+    if (ret_code && (r < 0 && r != valid_ret_code)) {
       (*ret_code) = r;
+    }
+
     iter->second->release();
   }
-  if (num_completions)
+
+  if (num_completions) {
     (*num_completions) = completions.size();
+  }
+
   completions.clear();
 
   return true;
@@ -255,8 +336,20 @@ static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
 
 int CLSRGWIssueBucketList::issue_op(int shard_id, const string& oid)
 {
+  // set the marker depending on whether we've already queried this
+  // shard and gotten a -EAGAIN return value; if we have use the
+  // marker in the return to advance the search, otherwise use the
+  // marker passed in by the caller
+  cls_rgw_obj_key marker;
+  auto iter = result.find(shard_id);
+  if (iter != result.end()) {
+    marker = iter->second.marker;
+  } else {
+    marker = start_obj;
+  }
+
   return issue_bucket_list_op(io_ctx, oid,
-			      start_obj, filter_prefix, delimiter,
+			      marker, filter_prefix, delimiter,
 			      num_entries, list_versions, &manager,
 			      &result[shard_id]);
 }

@@ -428,6 +428,12 @@ struct rgw_cls_list_ret {
   rgw_bucket_dir dir;
   bool is_truncated;
 
+  // if is_truncated is true, starting marker for next iteration; this
+  // is necessary as it's possible after maximum number of tries we
+  // still might have zero entries to return, in which case we have to
+  // at least move the ball foward
+  cls_rgw_obj_key marker;
+
   // cls_filtered is not transmitted; it is assumed true for versions
   // on/after 3 and false for prior versions; this allows the rgw
   // layer to know when an older osd (cls) does not do the filtering
@@ -439,16 +445,20 @@ struct rgw_cls_list_ret {
   {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     encode(dir, bl);
     encode(is_truncated, bl);
+    encode(marker, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(dir, bl);
     decode(is_truncated, bl);
     cls_filtered = struct_v >= 3;
+    if (struct_v >= 4) {
+      decode(marker, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;

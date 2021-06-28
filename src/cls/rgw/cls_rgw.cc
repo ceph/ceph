@@ -172,10 +172,10 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
  * namespace".
  */
 static int get_obj_vals(cls_method_context_t hctx,
-			const string& start,
-			const string& filter_prefix,
+			const std::string& start,
+			const std::string& filter_prefix,
                         int num_entries,
-			map<string, bufferlist> *pkeys,
+			std::map<std::string, bufferlist> *pkeys,
 			bool *pmore)
 {
   int ret = cls_cxx_map_get_vals(hctx, start, filter_prefix,
@@ -188,7 +188,7 @@ static int get_obj_vals(cls_method_context_t hctx,
     return 0;
   }
 
-  auto last_element = pkeys->rbegin();
+  auto last_element = pkeys->crbegin();
   if ((unsigned char)last_element->first[0] < BI_PREFIX_CHAR) {
     /* if the first character of the last entry is less than the
      * prefix then all entries must preceed the "ugly namespace" and
@@ -197,11 +197,11 @@ static int get_obj_vals(cls_method_context_t hctx,
     return 0;
   }
 
-  auto first_element = pkeys->begin();
+  auto first_element = pkeys->cbegin();
   if ((unsigned char)first_element->first[0] > BI_PREFIX_CHAR) {
-    /* the first character of the last entry is in or after the "ugly
-     * namespace", so if the first character of the first entry
-     * follows the "ugly namespace" then all entries do and we're done
+    /* if the first character of the first entry is after the "ugly
+     * namespace" then all entries must follow the "ugly namespace"
+     * then all entries do and we're done
      */
     return 0;
   }
@@ -212,10 +212,10 @@ static int get_obj_vals(cls_method_context_t hctx,
    * outside the "ugly namespace"
    */
 
-  auto comp = [](const pair<string, bufferlist>& l, const string &r) {
+  auto comp = [](const pair<std::string, bufferlist>& l, const std::string &r) {
 		return l.first < r;
 	      };
-  string new_start = {static_cast<char>(BI_PREFIX_CHAR + 1)};
+  std::string new_start = {static_cast<char>(BI_PREFIX_CHAR + 1)};
 
   auto lower = pkeys->lower_bound(string{static_cast<char>(BI_PREFIX_CHAR)});
   auto upper = std::lower_bound(lower, pkeys->end(), new_start, comp);
@@ -225,11 +225,11 @@ static int get_obj_vals(cls_method_context_t hctx,
     return 0;
   }
 
-  if (pkeys->size() && new_start < pkeys->rbegin()->first) {
+  if (pkeys->size() && new_start < pkeys->crbegin()->first) {
     new_start = pkeys->rbegin()->first;
   }
 
-  map<string, bufferlist> new_keys;
+  std::map<std::string, bufferlist> new_keys;
 
   /* now get some more keys */
   ret = cls_cxx_map_get_vals(hctx, new_start, filter_prefix,
@@ -485,29 +485,35 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return rc;
   }
 
-  string start_after_key;   // key that we can start listing at, one of a)
-                            // sent in by caller, b) last item visited, or
-                            // c) when delimiter present, a key that will
-                            // move past the subdirectory
-  encode_list_index_key(hctx, op.start_obj, &start_after_key);
+  // key that we can start listing at, one of a) sent in by caller, b)
+  // last item visited, or c) when delimiter present, a key that will
+  // move past the subdirectory
+  std::string start_after_omap_key;
+  encode_list_index_key(hctx, op.start_obj, &start_after_omap_key);
 
-  string previous_key; // last key stored in result, so if we have to
-		       // call get_obj_vals multiple times, we do not
-		       // add the overlap to result
-  string previous_prefix_key; // last prefix_key stored in result, so
-			      // we can skip over entries with the
-			      // same prefix_key
+  // this is set whenenver start_after_omap_key is set to keep them in
+  // sync since this will be the returned marker when a marker is
+  // returned
+  cls_rgw_obj_key start_after_entry_key;
+
+  // last key stored in result, so if we have to call get_obj_vals
+  // multiple times, we do not add the overlap to result
+  std::string prev_omap_key;
+
+  // last prefix_key stored in result, so we can skip over entries
+  // with the same prefix_key
+  std::string prev_prefix_omap_key;
 
   bool done = false;   // whether we need to keep calling get_obj_vals
   bool more = true;    // output parameter of get_obj_vals
   bool has_delimiter = !op.delimiter.empty();
 
   if (has_delimiter &&
-      start_after_key > op.filter_prefix &&
-      boost::algorithm::ends_with(start_after_key, op.delimiter)) {
+      start_after_omap_key > op.filter_prefix &&
+      boost::algorithm::ends_with(start_after_omap_key, op.delimiter)) {
     // advance past all subdirectory entries if we start after a
     // subdirectory
-    start_after_key = cls_rgw_after_delim(start_after_key);
+    start_after_omap_key = cls_rgw_after_delim(start_after_omap_key);
   }
 
   for (int attempt = 0;
@@ -516,8 +522,12 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	 !done &&
 	 name_entry_map.size() < op.num_entries;
        ++attempt) {
-    map<string, bufferlist> keys;
-    rc = get_obj_vals(hctx, start_after_key, op.filter_prefix,
+    std::map<std::string, bufferlist> keys;
+
+    // note: get_obj_vals skips past the "ugly namespace" (i.e.,
+    // entries that start with the BI_PREFIX_CHAR), so no need to
+    // check for such entries
+    rc = get_obj_vals(hctx, start_after_omap_key, op.filter_prefix,
 		      op.num_entries - name_entry_map.size(),
 		      &keys, &more);
     if (rc < 0) {
@@ -527,13 +537,6 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     done = keys.empty();
 
     for (auto kiter = keys.cbegin(); kiter != keys.cend(); ++kiter) {
-      if (!bi_is_objs_index(kiter->first)) {
-	// we're done if we walked off the end of the objects area of
-	// the bucket index
-        done = true;
-        break;
-      }
-
       rgw_bucket_dir_entry entry;
       try {
 	const bufferlist& entrybl = kiter->second;
@@ -545,7 +548,8 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         return -EINVAL;
       }
 
-      start_after_key = kiter->first;
+      start_after_omap_key = kiter->first;
+      start_after_entry_key = entry.key;
       CLS_LOG(20, "%s: working on key=%s len=%zu",
 	      __func__, kiter->first.c_str(), kiter->first.size());
 
@@ -580,10 +584,10 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
           string prefix_key =
 	    key.name.substr(0, delim_pos + op.delimiter.length());
 
-	  if (prefix_key == previous_prefix_key) {
+	  if (prefix_key == prev_prefix_omap_key) {
 	    continue; // we've already added this;
 	  } else {
-	    previous_prefix_key = prefix_key;
+	    prev_prefix_omap_key = prefix_key;
 	  }
 
 	  if (name_entry_map.size() < op.num_entries) {
@@ -601,11 +605,12 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	  // make sure that if this is the last item added to the
 	  // result from this call to get_obj_vals, the next call will
 	  // skip past rest of "subdirectory"
-	  start_after_key = cls_rgw_after_delim(prefix_key);
+	  start_after_omap_key = cls_rgw_after_delim(prefix_key);
+	  start_after_entry_key.set(start_after_omap_key);
 
-	  // advance to past this subdirectory, but then back up one,
+	  // advance past this subdirectory, but then back up one,
 	  // so the loop increment will put us in the right place
-	  kiter = keys.lower_bound(start_after_key);
+	  kiter = keys.lower_bound(start_after_omap_key);
 	  --kiter;
 
           continue;
@@ -616,9 +621,9 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       }
 
       if (name_entry_map.size() < op.num_entries &&
-	  kiter->first != previous_key) {
+	  kiter->first != prev_omap_key) {
         name_entry_map[kiter->first] = entry;
-	previous_key = kiter->first;
+	prev_omap_key = kiter->first;
 	CLS_LOG(20, "%s: got object entry %s[%s] num entries=%d\n",
 		__func__, key.name.c_str(), key.instance.c_str(),
 		int(name_entry_map.size()));
@@ -627,8 +632,16 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   } // for (int attempt...
 
   ret.is_truncated = more && !done;
+  if (ret.is_truncated) {
+    ret.marker = start_after_entry_key;
+  }
   encode(ret, *out);
-  return 0;
+
+  if (ret.is_truncated && name_entry_map.size() == 0) {
+    return -EAGAIN;
+  } else {
+    return 0;
+  }
 } // rgw_bucket_list
 
 static int check_index(cls_method_context_t hctx,
