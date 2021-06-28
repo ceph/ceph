@@ -7,19 +7,6 @@ from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
 
-from cephadm import remotes
-
-try:
-    import remoto
-    import execnet.gateway_bootstrap
-except ImportError:
-    remoto = None
-
-try:
-    import asyncssh
-except ImportError:
-    asyncssh = None
-
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec
@@ -41,7 +28,6 @@ from . import ssh
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
-    from remoto.backends import BaseConnection
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +43,8 @@ class CephadmServe:
     On the other hand, These function should *not* be called form
     CLI handlers, to avoid blocking the CLI
     """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
@@ -310,16 +298,13 @@ class CephadmServe:
                     if match:
                         continue
                 self.log.info(f'Updating {host}:{path}')
-                self._write_remote_file(host, path, content, mode, uid, gid)
+                CephadmServe.loop.run_until_complete(self.ssh._write_remote_file(host, path, content, mode, uid, gid))
                 self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
                 updated_files = True
             for path in old_files.keys():
                 self.log.info(f'Removing {host}:{path}')
-                with self._remote_connection(host) as tpl:
-                    conn, connr = tpl
-                    out, err, code = remoto.process.check(
-                        conn,
-                        ['rm', '-f', path])
+                cmd = ['rm', '-f', path]
+                CephadmServe.loop.run_until_complete(self.ssh.check_execute_command(host, cmd, addr=addr))
                 updated_files = True
                 self.mgr.cache.removed_client_file(host, path)
             if updated_files:
@@ -1161,7 +1146,7 @@ class CephadmServe:
         :env_vars: in format -> [KEY=VALUE, ..]
         """
 
-        self._remote_connection(host, addr)        
+        CephadmServe.loop.run_until_complete(self.ssh._remote_connection(host, addr))      
 
         self.log.debug(f"_run_cephadm : command = {command}")
         self.log.debug(f"_run_cephadm : args = {args}")
@@ -1203,37 +1188,35 @@ class CephadmServe:
                 self.log.debug('stdin: %s' % stdin)
 
             cmd = ['which', 'python3']
-            python = asyncio.get_event_loop().run_until_complete(self.ssh.check_execute_command(host, cmd, addr=addr))
+            python = CephadmServe.loop.run_until_complete(self.ssh.check_execute_command(host, cmd, addr=addr))
             cmd = [python, self.mgr.cephadm_binary_path] + final_args
 
             try:
-                out, err, code = asyncio.get_event_loop().run_until_complete(self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr))
+                out, err, code = CephadmServe.loop.run_until_complete(self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr))
                 if code == 2:
                     ls_cmd = ['ls', self.mgr.cephadm_binary_path]
-                    out_ls, err_ls, code_ls = asyncio.get_event_loop().run_until_complete(self.ssh.execute_command(host, ls_cmd, addr=addr))
+                    out_ls, err_ls, code_ls = CephadmServe.loop.run_until_complete(self.ssh.execute_command(host, ls_cmd, addr=addr))
                     if code_ls == 2:
                         self._deploy_cephadm_binary(host, addr)
-                        out, err, code = asyncio.get_event_loop().run_until_complete(self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr))
+                        out, err, code = CephadmServe.loop.run_until_complete(self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr))
 
-            except RuntimeError as e:
-                self.mgr._reset_con(host)
+            except Exception as e:
+                self.ssh._reset_con(host)
                 if error_ok:
                     return [], [str(e)], 1
                 raise
 
-        # elif self.mgr.mode == 'cephadm-package':
-        #     try:
-        #         out, err, code = remoto.process.check(
-        #             conn,
-        #             ['sudo', '/usr/bin/cephadm'] + final_args,
-        #             stdin=stdin)
-        #     except RuntimeError as e:
-        #         self.mgr._reset_con(host)
-        #         if error_ok:
-        #             return [], [str(e)], 1
-        #         raise
-        # else:
-        #     assert False, 'unsupported mode'
+        elif self.mgr.mode == 'cephadm-package':
+            try:
+                cmd = ['sudo', '/usr/bin/cephadm'] + final_args
+                out, err, code = CephadmServe.loop.run_until_complete(self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8'), addr=addr))
+            except Exception as e:
+                self.ssh._reset_con(host)
+                if error_ok:
+                    return [], [str(e)], 1
+                raise
+        else:
+            assert False, 'unsupported mode'
 
         self.log.debug(f'code: {code}')
         if out:
@@ -1288,12 +1271,4 @@ class CephadmServe:
     def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        asyncio.get_event_loop().run_until_complete(self.ssh._write_remote_file(host, self.mgr.cephadm_binary_path, self.mgr._cephadm.encode('utf-8'), addr=addr))
-
-    def _remote_connection(self,
-                           host: str,
-                           addr: Optional[str] = None,
-                           ) -> Iterator[Tuple["BaseConnection", Any]]:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        asyncio.get_event_loop().run_until_complete(self.ssh._remote_connection(host, addr))
+        CephadmServe.loop.run_until_complete(self.ssh._write_remote_file(host, self.mgr.cephadm_binary_path, self.mgr._cephadm.encode('utf-8'), addr=addr))

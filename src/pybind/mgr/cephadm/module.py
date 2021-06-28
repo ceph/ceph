@@ -42,8 +42,8 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
-from . import remotes
 from . import utils
+from . import ssh
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
     RbdMirrorService, CrashService, CephadmService, CephfsMirrorService
@@ -63,20 +63,10 @@ from .utils import CEPH_TYPES, GATEWAY_TYPES, forall_hosts, cephadmNoImage
 from .configchecks import CephadmConfigChecks
 
 try:
-    import remoto
-    # NOTE(mattoliverau) Patch remoto until remoto PR
-    # (https://github.com/alfredodeza/remoto/pull/56) lands
-    from distutils.version import StrictVersion
-    if StrictVersion(remoto.__version__) <= StrictVersion('1.2'):
-        def remoto_has_connection(self: Any) -> bool:
-            return self.gateway.hasreceiver()
-
-        from remoto.backends import BaseConnection
-        BaseConnection.has_connection = remoto_has_connection
-    import remoto.process
+    import asyncssh
 except ImportError as e:
-    remoto = None
-    remoto_import_error = str(e)
+    asyncssh = None
+    asyncssh_import_error = str(e)
 
 logger = logging.getLogger(__name__)
 
@@ -355,6 +345,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.run = True
         self.event = Event()
 
+        self.ssh = ssh.SSHConnection(self)
+
         if self.get_store('pause'):
             self.paused = True
         else:
@@ -393,9 +385,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
-
-        self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
-                                    remoto.backends.LegacyModuleExecute]] = {}
 
         self.notify('mon_map', None)
         self.config_notify()
@@ -664,7 +653,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         elif self.mode == 'cephadm-package':
             self.ssh_user = 'cephadm'
 
-        self._reset_cons()
+        self.ssh._reset_cons()
 
     def validate_ssh_config_content(self, ssh_config: Optional[str]) -> None:
         if ssh_config is None or len(ssh_config.strip()) == 0:
@@ -682,31 +671,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             raise OrchestratorValidationError("ssh_config \"{}\" does not exist".format(
                 ssh_config_fname))
 
-    def _reset_con(self, host: str) -> None:
-        conn, r = self._cons.get(host, (None, None))
-        if conn:
-            self.log.debug('_reset_con close %s' % host)
-            conn.exit()
-            del self._cons[host]
-
-    def _reset_cons(self) -> None:
-        for host, conn_and_r in self._cons.items():
-            self.log.debug('_reset_cons close %s' % host)
-            conn, r = conn_and_r
-            conn.exit()
-        self._cons = {}
-
     def offline_hosts_remove(self, host: str) -> None:
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
 
     @staticmethod
     def can_run() -> Tuple[bool, str]:
-        if remoto is not None:
+        if asyncssh is not None:
             return True, ""
         else:
-            return False, "loading remoto library:{}".format(
-                remoto_import_error)
+            return False, "loading asyncssh library:{}".format(
+                asyncssh_import_error)
 
     def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         """
@@ -1289,22 +1264,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._kick_serve_loop()
         return HandleCommandResult()
 
-    def _executable_path(self, conn: 'remoto.backends.BaseConnection', executable: str) -> str:
-        """
-        Remote validator that accepts a connection object to ensure that a certain
-        executable is available returning its full path if so.
-
-        Otherwise an exception with thorough details will be raised, informing the
-        user that the executable was not found.
-        """
-        executable_path = conn.remote_module.which(executable)
-        if not executable_path:
-            raise RuntimeError("Executable '{}' not found on host '{}'".format(
-                executable, conn.hostname))
-        self.log.debug("Found executable '{}' at path '{}'".format(executable,
-                                                                   executable_path))
-        return executable_path
-
     def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
         image: Optional[str] = None
@@ -1433,7 +1392,7 @@ Then run the following:
         """
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
-        self._reset_con(host)
+        self.ssh._reset_con(host)
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
         return "Removed host '{}'".format(host)
@@ -1442,7 +1401,7 @@ Then run the following:
     def update_host_addr(self, host: str, addr: str) -> str:
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
-        self._reset_con(host)
+        self.ssh._reset_con(host)
         self.event.set()  # refresh stray health check
         self.log.info('Set host %s addr to %s' % (host, addr))
         return "Updated host '{}' addr to '{}'".format(host, addr)
