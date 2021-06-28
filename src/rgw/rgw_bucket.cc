@@ -515,7 +515,7 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
   }
   do {
       list<string> keys;
-      ret = store->meta_list_keys_next(handle, 1000, keys, &truncated);
+      ret = store->meta_list_keys_next(dpp, handle, 1000, keys, &truncated);
       if (ret < 0) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         store->meta_list_keys_complete(handle);
@@ -1428,7 +1428,7 @@ int RGWBucketAdminOp::info(rgw::sal::Store* store,
     while (ret == 0 && truncated) {
       std::list<std::string> buckets;
       constexpr int max_keys = 1000;
-      ret = store->meta_list_keys_next(handle, max_keys, buckets,
+      ret = store->meta_list_keys_next(dpp, handle, max_keys, buckets,
 						   &truncated);
       for (auto& bucket_name : buckets) {
         if (show_stats) {
@@ -1597,7 +1597,7 @@ static int process_stale_instances(rgw::sal::Store* store, RGWBucketAdminOpState
   do {
     list<std::string> keys;
 
-    ret = store->meta_list_keys_next(handle, default_max_keys, keys, &truncated);
+    ret = store->meta_list_keys_next(dpp, handle, default_max_keys, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -1730,7 +1730,7 @@ int RGWBucketAdminOp::fix_lc_shards(rgw::sal::Store* store,
                                  });
       do {
         list<std::string> keys;
-        ret = store->meta_list_keys_next(handle, default_max_keys, keys, &truncated);
+        ret = store->meta_list_keys_next(dpp, handle, default_max_keys, keys, &truncated);
         if (ret < 0 && ret != -ENOENT) {
           std::cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
           return ret;

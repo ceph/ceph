@@ -52,7 +52,8 @@ public:
 private:
   int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
                     const OpenParams& params = {});
-  int pool_iterate(librados::IoCtx& ioctx,
+  int pool_iterate(const DoutPrefixProvider *dpp,
+                   librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
                    uint32_t num, vector<rgw_bucket_dir_entry>& objs,
                    RGWAccessListFilter *filter,
@@ -67,7 +68,7 @@ public:
   void shutdown() override;
 
   uint64_t instance_id();
-  bool check_secure_mon_conn() const;
+  bool check_secure_mon_conn(const DoutPrefixProvider *dpp) const;
 
   RGWAsyncRadosProcessor *get_async_processor() {
     return async_processor.get();
@@ -97,8 +98,8 @@ public:
   public:
     Pool() {}
 
-    int create();
-    int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
+    int create(const DoutPrefixProvider *dpp);
+    int create(const DoutPrefixProvider *dpp, const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup();
     int open(const DoutPrefixProvider *dpp, const OpenParams& params = {});
 
@@ -124,7 +125,7 @@ public:
       List(Pool *_pool) : pool(_pool) {}
 
       int init(const DoutPrefixProvider *dpp, const string& marker, RGWAccessListFilter *filter = nullptr);
-      int get_next(int max,
+      int get_next(const DoutPrefixProvider *dpp, int max,
                    std::vector<string> *oids,
                    bool *is_truncated);
 

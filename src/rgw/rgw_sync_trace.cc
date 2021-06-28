@@ -71,7 +71,7 @@ int RGWSyncTraceServiceMapThread::process(const DoutPrefixProvider *dpp)
 {
   map<string, string> status;
   status["current_sync"] = manager->get_active_names();
-  int ret = store->update_service_map(std::move(status));
+  int ret = store->update_service_map(dpp, std::move(status));
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: update_service_map() returned ret=" << ret << dendl;
   }
