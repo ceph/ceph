@@ -58,8 +58,7 @@ class NFSService(CephService):
         from nfs.cluster import create_ganesha_pool
 
         assert self.TYPE == spec.service_type
-        assert spec.pool
-        create_ganesha_pool(self.mgr, spec.pool)
+        create_ganesha_pool(self.mgr)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
