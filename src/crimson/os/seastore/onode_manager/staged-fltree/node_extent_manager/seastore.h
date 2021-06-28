@@ -109,11 +109,12 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     ).safe_then([addr, &t](auto&& e) -> read_ertr::future<NodeExtentRef> {
       TRACET("read {}B at {:#x} -- {}",
              t, e->get_length(), e->get_laddr(), *e);
-      if (!e->is_valid() || t.is_conflicted()) {
+      if (t.is_conflicted()) {
         ERRORT("transaction conflict detected on extent read {}", t, *e);
 	assert(t.is_conflicted());
 	return crimson::ct_error::eagain::make();
       }
+      assert(e->is_valid());
       assert(e->get_laddr() == addr);
       std::ignore = addr;
       return read_ertr::make_ready_future<NodeExtentRef>(e);
