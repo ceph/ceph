@@ -70,6 +70,8 @@ public:
   // admin socket helpers
   void mirror_status(Formatter *f);
 
+  void reopen_logs();
+
 private:
   bool is_blocklisted(const std::scoped_lock<ceph::mutex> &locker) const {
     bool blocklisted = false;
