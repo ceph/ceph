@@ -51,7 +51,7 @@ def post_crash(path):
         stderr = pr.communicate(input=f.read())
         rc = pr.wait()
         f.close()
-        if rc != 0:
+        if rc != 0 or stderr != "":
             log.warning('post %s as %s failed: %s' % (path, n, stderr))
         if rc == 0:
             break
