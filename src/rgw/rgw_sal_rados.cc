@@ -474,10 +474,10 @@ int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
   return store->getRados()->check_bucket_empty(dpp, info, y);
 }
 
-int RadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
 				optional_yield y, bool check_size_only)
 {
-    return store->getRados()->check_quota(owner->get_id(), get_key(),
+    return store->getRados()->check_quota(dpp, owner->get_id(), get_key(),
 					  user_quota, bucket_quota, obj_size, y, check_size_only);
 }
 
@@ -539,7 +539,7 @@ int RadosBucket::purge_instance(const DoutPrefixProvider* dpp)
            << "): " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
-    ret = store->getRados()->bi_remove(bs);
+    ret = store->getRados()->bi_remove(dpp, bs);
     if (ret < 0) {
       cerr << "ERROR: failed to remove bucket index object: "
            << cpp_strerror(-ret) << std::endl;
@@ -992,10 +992,10 @@ int RadosStore::log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferli
   return ret;
 }
 
-int RadosStore::register_to_service_map(const std::string& daemon_type,
+int RadosStore::register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
 					   const map<std::string, std::string>& meta)
 {
-  return rados->register_to_service_map(daemon_type, meta);
+  return rados->register_to_service_map(dpp, daemon_type, meta);
 }
 
 void RadosStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
@@ -1053,9 +1053,9 @@ int RadosStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const std::st
   return ctl()->meta.mgr->list_keys_init(dpp, section, marker, phandle);
 }
 
-int RadosStore::meta_list_keys_next(void* handle, int max, list<std::string>& keys, bool* truncated)
+int RadosStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<std::string>& keys, bool* truncated)
 {
-  return ctl()->meta.mgr->list_keys_next(handle, max, keys, truncated);
+  return ctl()->meta.mgr->list_keys_next(dpp, handle, max, keys, truncated);
 }
 
 void RadosStore::meta_list_keys_complete(void* handle)
@@ -1618,10 +1618,10 @@ int RadosObject::RadosStatOp::stat_async(const DoutPrefixProvider *dpp)
   return parent_op.stat_async(dpp);
 }
 
-int RadosObject::RadosStatOp::wait()
+int RadosObject::RadosStatOp::wait(const DoutPrefixProvider *dpp)
 {
   result.obj = source;
-  int ret =  parent_op.wait();
+  int ret =  parent_op.wait(dpp);
   if (ret < 0)
     return ret;
 

@@ -658,7 +658,7 @@ int RGWSI_SysObj_Core::pool_list_prefixed_objs(const DoutPrefixProvider *dpp,
   do {
     vector<string> oids;
 #define MAX_OBJS_DEFAULT 1000
-    int r = op.get_next(MAX_OBJS_DEFAULT, &oids, &is_truncated);
+    int r = op.get_next(dpp, MAX_OBJS_DEFAULT, &oids, &is_truncated);
     if (r < 0) {
       return r;
     }
@@ -693,7 +693,8 @@ int RGWSI_SysObj_Core::pool_list_objects_init(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& _ctx,
+int RGWSI_SysObj_Core::pool_list_objects_next(const DoutPrefixProvider *dpp,
+                                              RGWSI_SysObj::Pool::ListCtx& _ctx,
                                               int max,
                                               vector<string> *oids,
                                               bool *is_truncated)
@@ -702,10 +703,10 @@ int RGWSI_SysObj_Core::pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& _ctx,
     return -EINVAL;
   }
   auto& ctx = static_cast<PoolListImplInfo&>(*_ctx.impl);
-  int r = ctx.op.get_next(max, oids, is_truncated);
+  int r = ctx.op.get_next(dpp, max, oids, is_truncated);
   if (r < 0) {
     if(r != -ENOENT)
-      ldout(cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
+      ldpp_dout(dpp, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
     return r;
   }
 

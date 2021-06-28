@@ -2200,7 +2200,7 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   do {
     std::list<std::string> keys;
     left = op_state.max_entries - count;
-    ret = store->meta_list_keys_next(handle, left, keys, &truncated);
+    ret = store->meta_list_keys_next(dpp, handle, left, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     } if (ret != -ENOENT) {
