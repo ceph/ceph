@@ -220,8 +220,8 @@ void decode_json_obj(std::set<T>& l, JSONObj *obj)
   }
 }
 
-template<class T>
-void decode_json_obj(boost::container::flat_set<T>& l, JSONObj *obj)
+template<class T, class Compare, class Alloc>
+void decode_json_obj(boost::container::flat_set<T, Compare, Alloc>& l, JSONObj *obj)
 {
   l.clear();
 
@@ -560,9 +560,9 @@ static void encode_json(const char *name, const std::set<T, Compare>& l, ceph::F
   f->close_section();
 }
 
-template<class T, class Compare = std::less<T> >
+template<class T, class Compare, class Alloc>
 static void encode_json(const char *name,
-                        const boost::container::flat_set<T, Compare>& l,
+                        const boost::container::flat_set<T, Compare, Alloc>& l,
                         ceph::Formatter *f)
 {
   f->open_array_section(name);
