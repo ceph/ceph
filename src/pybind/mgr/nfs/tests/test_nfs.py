@@ -83,13 +83,13 @@ EXPORT
     conf_nodeb = '%url "rados://ganesha/ns/export-1"'
 
     conf_nfs_foo = '''
-%url "rados://ganesha2/foo/export-1"
+%url "rados://nfs-ganesha/foo/export-1"
 
-%url "rados://ganesha2/foo/export-2"'''
+%url "rados://nfs-ganesha/foo/export-2"'''
 
     clusters = {
         'foo': {
-            'pool': 'ganesha2',
+            'pool': 'nfs-ganesha',
             'namespace': 'foo',
             'type': "ORCHESTRATOR",
             'daemon_conf': 'conf-nfs.foo',
