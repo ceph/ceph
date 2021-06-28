@@ -31,20 +31,27 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
   LOG_PREFIX(Cache::retire_extent);
-  if (auto ext = t.write_set.find_offset(addr); ext != t.write_set.end()) {
-    DEBUGT("found {} in t.write_set", t, addr);
+  CachedExtentRef ext;
+  auto result = t.get_extent(addr, &ext);
+  if (result == Transaction::get_extent_ret::PRESENT) {
+    DEBUGT("found {} in t", t, addr);
     t.add_to_retired_set(CachedExtentRef(&*ext));
     return retire_extent_iertr::now();
-  } else if (auto iter = extents.find_offset(addr);
-      iter != extents.end()) {
-    auto ret = CachedExtentRef(&*iter);
+  } else if (result == Transaction::get_extent_ret::RETIRED) {
+    ERRORT("{} is already retired", t, addr);
+    ceph_abort();
+  }
+
+  // absent from transaction
+  result = query_cache_for_extent(addr, &ext);
+  if (result == Transaction::get_extent_ret::PRESENT) {
     return trans_intr::make_interruptible(
-      ret->wait_io()
-    ).then_interruptible([&t, ret=std::move(ret)]() mutable {
-      t.add_to_retired_set(ret);
+      ext->wait_io()
+    ).then_interruptible([&t, ext=std::move(ext)]() mutable {
+      t.add_to_retired_set(ext);
       return retire_extent_iertr::now();
     });
-  } else {
+  } else { // result == get_extent_ret::ABSENT
     t.add_to_retired_uncached(addr, length);
     return retire_extent_iertr::now();
   }
