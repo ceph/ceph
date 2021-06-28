@@ -191,10 +191,11 @@ class KubernetesResource(Generic[T]):
 class RookCluster(object):
     # import of client.CoreV1Api must be optional at import time.
     # Instead allow mgr/rook to be imported anyway.
-    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', rook_env: 'RookEnv'):
+    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', rook_env: 'RookEnv'):
         self.rook_env = rook_env  # type: RookEnv
         self.coreV1_api = coreV1_api  # client.CoreV1Api
         self.batchV1_api = batchV1_api
+        self.customObjects_api = customObjects_api
 
         #  TODO: replace direct k8s calls with Rook API calls
         # when they're implemented

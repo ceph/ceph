@@ -102,6 +102,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._initialized = threading.Event()
         self._k8s_CoreV1_api: Optional[client.CoreV1Api] = None
         self._k8s_BatchV1_api: Optional[client.BatchV1Api] = None
+        self._k8s_CustomObjects_api: Optional[client.CustomObjectsApi] = None
         self._rook_cluster: Optional[RookCluster] = None
         self._rook_env = RookEnv()
 
@@ -141,6 +142,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._k8s_CoreV1_api = client.CoreV1Api()
         self._k8s_BatchV1_api = client.BatchV1Api()
+        self._k8s_CustomObjects_api = client.CustomObjectsApi()
 
         try:
             # XXX mystery hack -- I need to do an API call from
@@ -155,6 +157,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._rook_cluster = RookCluster(
             self._k8s_CoreV1_api,
             self._k8s_BatchV1_api,
+            self._k8s_CustomObjects_api,
             self._rook_env)
 
         self._initialized.set()
