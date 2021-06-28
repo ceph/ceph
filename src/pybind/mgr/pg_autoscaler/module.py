@@ -108,10 +108,10 @@ class PgAutoscaler(MgrModule):
     ]
 
     MODULE_OPTIONS = [
-        {
-            'name': 'sleep_interval',
-            'default': str(60),
-        },
+        Option(
+            name='sleep_interval',
+            type='secs',
+            default=60),
         Option(
             'autoscale_profile',
             default='scale-up',
@@ -244,7 +244,7 @@ class PgAutoscaler(MgrModule):
         while not self._shutdown.is_set():
             self._maybe_adjust()
             self._update_progress_events()
-            self._shutdown.wait(timeout=int(self.sleep_interval))
+            self._shutdown.wait(timeout=self.sleep_interval)
 
     def shutdown(self):
         self.log.info('Stopping pg_autoscaler')
