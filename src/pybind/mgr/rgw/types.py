@@ -1,5 +1,7 @@
 import json
 
+from abc import abstractmethod
+
 class RGWAMException(Exception):
     def __init__(self, message, orig = None):
         if orig:
@@ -19,6 +21,15 @@ class RGWAMCmdRunException(RGWAMException):
         self.retcode = retcode
         self.stdout = stdout
         self.stderr = stderr
+
+class RGWAMEnvMgr:
+    @abstractmethod
+    def apply_rgw(self, svc_id, realm_name, zone_name, port = None):
+        pass
+
+    @abstractmethod
+    def list_daemons(self, service_name, daemon_type = None, daemon_id = None, hostname = None, refresh = True):
+        pass
 
 
 class JSONObj:

@@ -6,11 +6,34 @@ import subprocess
 from mgr_module import MgrModule, CLICommand, HandleCommandResult, Option
 import orchestrator
 
+from ceph.deployment.service_spec import RGWSpec
+
 from typing import cast, Any, Optional, Sequence
 
 from . import *
-from .types import RGWAMException
+from .types import RGWAMException, RGWAMEnvMgr
 from .rgwam import EnvArgs, RGWAM
+
+
+class RGWAMOrchMgr(RGWAMEnvMgr):
+    def __init__(self, mgr):
+        self.mgr = mgr
+
+    def apply_rgw(self, svc_id, realm_name, zone_name, port = None):
+        spec = RGWSpec(service_id = svc_id,
+                       rgw_realm = realm_name,
+                       rgw_zone = zone_name,
+                       rgw_frontend_port = port)
+        completion = self.mgr.apply_rgw(spec)
+        orchestrator.raise_if_exception(completion)
+
+    def list_daemons(self, service_name, daemon_type = None, daemon_id = None, host = None, refresh = True):
+        completion = self.mgr.list_daemons(service_name,
+                                           daemon_type,
+                                           daemon_id=daemon_id,
+                                           host=host,
+                                           refresh=refresh)
+        return orchestrator.raise_if_exception(completion)
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
@@ -29,7 +52,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         with self.lock:
             self.inited = True
-            self.env = EnvArgs(self,
+            self.env = EnvArgs(RGWAMOrchMgr(self),
                                str(self.get_ceph_conf_path()),
                                f'mgr.{self.get_mgr_id()}',
                                str(self.get_ceph_option('keyring')))
