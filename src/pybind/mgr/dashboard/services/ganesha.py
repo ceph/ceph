@@ -104,8 +104,8 @@ class Ganesha(object):
             spec = cast(NFSServiceSpec, service.spec)
             try:
                 orch_result[spec.service_id] = {
-                    'pool': spec.pool,
-                    'namespace': spec.namespace,
+                    'pool': 'nfs-ganesha',
+                    'namespace': spec.service_id,
                     'type': ClusterType.ORCHESTRATOR,
                     'daemon_conf': spec.rados_config_name()
                 }
