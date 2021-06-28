@@ -1,4 +1,3 @@
-import asyncio
 import asyncssh
 import asyncssh.logging
 import logging
@@ -14,11 +13,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 class SSHConnection:
+
     cons = {}
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
-    
+
     async def _remote_connection(self,
                                  host: str,
                                  addr: Optional[str] = None,
@@ -60,7 +62,7 @@ class SSHConnection:
                     log_content = log_string.getvalue()
                     log_string.flush()
                     logger.debug(log_content)
-                    msg = f'Failed to connect to {host} ({addr}) due to: {str(e)}' + '\n' + f'Log: {log_output}'
+                    msg = f'Failed to connect to {host} ({addr}) due to: {str(e)}' + '\n' + f'Log: {log_content}'
                 else:
                     msg = f'Failed to connect to {host} ({addr}) due to: {str(e)}'
                 ssh_logger.removeHandler(ch)
@@ -71,7 +73,7 @@ class SSHConnection:
 
     async def execute_command(self,
                               host: str,
-                              cmd: List[str], 
+                              cmd: List[str],
                               stdin: Optional[bytes] = b"",
                               addr: Optional[str] = None,
                               ) -> Tuple[str, str, int]:
@@ -83,9 +85,9 @@ class SSHConnection:
         return out, err, r.returncode
 
     async def check_execute_command(self,
-                                    host: str, 
-                                    cmd: List[str], 
-                                    stdin: Optional[bytes] = b"", 
+                                    host: str,
+                                    cmd: List[str],
+                                    stdin: Optional[bytes] = b"",
                                     addr: Optional[str] = None
                                     ) -> str:
         out, err, code = await self.execute_command(host, cmd, stdin, addr)
@@ -107,7 +109,7 @@ class SSHConnection:
             await self.check_execute_command(host, ['mkdir', '-p', dirname], addr=addr)
             tmp_path = path + '.new'
             await self.check_execute_command(host, ['touch', tmp_path], addr=addr)
-            if uid != None and gid != None and mode != None:
+            if uid is not None and gid is not None and mode is not None:
                 # shlex quote takes str or byte object, not int
                 await self.check_execute_command(host, ['sudo', 'chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
                 await self.check_execute_command(host, ['sudo', 'chmod', oct(mode)[2:], tmp_path], addr=addr)
@@ -117,7 +119,7 @@ class SSHConnection:
             msg = f"Unable to write {host}:{path}: {e}"
             logger.exception(msg)
             raise OrchestratorError(msg)
-    
+
     async def _reset_con(self, host: str) -> None:
         conn = SSHConnection.cons.get(host)
         if conn:

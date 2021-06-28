@@ -4,8 +4,7 @@ import logging
 import uuid
 import asyncio
 from collections import defaultdict
-from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -304,7 +303,7 @@ class CephadmServe:
             for path in old_files.keys():
                 self.log.info(f'Removing {host}:{path}')
                 cmd = ['rm', '-f', path]
-                CephadmServe.loop.run_until_complete(self.ssh.check_execute_command(host, cmd, addr=addr))
+                CephadmServe.loop.run_until_complete(self.ssh.check_execute_command(host, cmd))
                 updated_files = True
                 self.mgr.cache.removed_client_file(host, path)
             if updated_files:
@@ -1146,7 +1145,7 @@ class CephadmServe:
         :env_vars: in format -> [KEY=VALUE, ..]
         """
 
-        CephadmServe.loop.run_until_complete(self.ssh._remote_connection(host, addr))      
+        CephadmServe.loop.run_until_complete(self.ssh._remote_connection(host, addr))
 
         self.log.debug(f"_run_cephadm : command = {command}")
         self.log.debug(f"_run_cephadm : args = {args}")
