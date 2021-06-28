@@ -41,11 +41,10 @@ def post_crash(path):
                   '-n', n,
                   'crash', 'post', '-i', '-'],
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         f = open(os.path.join(path, 'meta'), 'rb')
-        stdout, stderr = pr.communicate(input=f.read())
+        stderr = pr.communicate(input=f.read())
         rc = pr.wait()
         f.close()
         if rc != 0:
