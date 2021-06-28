@@ -120,6 +120,11 @@ public:
     return ret;
   }
 
+  /// Resets transaction preserving
+  void reset_transaction_preserve_handle(Transaction &t) {
+    t.reset_preserve_handle(last_commit);
+  }
+
   /**
    * drop_from_cache
    *

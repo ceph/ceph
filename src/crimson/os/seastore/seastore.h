@@ -137,8 +137,9 @@ private:
 
     ceph::os::Transaction::iterator iter;
 
-    void reset(TransactionRef &&t) {
-      transaction = std::move(t);
+    template <typename TM>
+    void reset_preserve_handle(TM &tm) {
+      tm->reset_transaction_preserve_handle(*transaction);
       onodes.clear();
       iter = ext_transaction.begin();
     }
@@ -152,11 +153,13 @@ private:
     ceph::os::Transaction &&t,
     F &&f) {
     return seastar::do_with(
-      internal_context_t{ ch, std::move(t) },
+      internal_context_t(
+	ch, std::move(t),
+	transaction_manager->create_transaction()),
       std::forward<F>(f),
       [this](auto &ctx, auto &f) {
 	return repeat_eagain([&]() {
-	  ctx.reset(transaction_manager->create_transaction());
+	  ctx.reset_preserve_handle(transaction_manager);
 	  return std::invoke(f, ctx);
 	}).handle_error(
 	  crimson::ct_error::eagain::pass_further{},

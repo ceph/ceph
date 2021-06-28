@@ -144,6 +144,20 @@ public:
   friend class crimson::os::seastore::SeaStore;
   friend class TransactionConflictCondition;
 
+  void reset_preserve_handle(journal_seq_t initiated_after) {
+    root.reset();
+    offset = 0;
+    read_set.clear();
+    write_set.clear();
+    fresh_block_list.clear();
+    mutated_block_list.clear();
+    retired_set.clear();
+    to_release = NULL_SEG_ID;
+    retired_uncached.clear();
+    retired_gate_token.reset(initiated_after);
+    conflicted = false;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
