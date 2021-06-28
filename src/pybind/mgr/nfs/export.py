@@ -392,9 +392,24 @@ class ExportMgr:
         try:
             if not export_config:
                 raise NFSInvalidOperation("Empty Config!!")
-            new_export = json.loads(export_config)
+            j = json.loads(export_config)
             # check export type
-            return self._apply_export(cluster_id, new_export)
+            if isinstance(j, list):
+                ret, out, err = (0, '', '')
+                for export in j:
+                    try:
+                        r, o, e = self._apply_export(cluster_id, export)
+                    except Exception as e:
+                        r, o, e = exception_handler(e, f'Failed to apply export: {e}')
+                        if r:
+                            ret = r
+                    if o:
+                        out += o + '\n'
+                    if e:
+                        err += e + '\n'
+                return ret, out, err
+            else:
+                return self._apply_export(cluster_id, j)
         except NotImplementedError:
             return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
         except Exception as e:
