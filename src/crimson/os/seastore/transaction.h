@@ -148,8 +148,6 @@ private:
 
   std::vector<std::pair<paddr_t, extent_len_t>> retired_uncached;
 
-  journal_seq_t initiated_after;
-
   retired_extent_gate_t::token_t retired_gate_token;
 
   bool conflicted = false;
