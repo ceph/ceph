@@ -51,6 +51,8 @@ except ImportError:
     pass  # just used for type checking.
 
 
+POOL_NAME = 'nfs-ganesha'   # keep in sync with mgr/nfs/nfs_utils.py
+
 T = TypeVar('T')
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -502,7 +504,7 @@ class RookCluster(object):
                     spec=cnfs.Spec(
                         rados=cnfs.Rados(
                             namespace=self.rook_env.namespace,
-                            pool=spec.pool
+                            pool=POOL_NAME,
                             ),
                         server=cnfs.Server(
                             active=count
@@ -510,8 +512,7 @@ class RookCluster(object):
                         )
                     )
 
-            if spec.namespace:
-                rook_nfsgw.spec.rados.namespace = spec.namespace
+            rook_nfsgw.spec.rados.namespace = cast(str, spec.service_id)
 
             return rook_nfsgw
 
