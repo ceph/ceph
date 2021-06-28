@@ -418,8 +418,6 @@ class PgAutoscaler(MgrModule):
             cr_name = crush_map.get_rule_by_id(p['crush_rule'])['rule_name']
             root_id = int(crush_map.get_rule_root(cr_name))
 
-            pool_root[pool_name] = root_id
-
             capacity = root_map[root_id].capacity
             if capacity == 0:
                 self.log.debug('skipping empty subtree %s', cr_name)
