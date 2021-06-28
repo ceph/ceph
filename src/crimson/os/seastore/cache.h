@@ -372,12 +372,9 @@ public:
   /**
    * try_construct_record
    *
-   * First checks for conflicts.  If a racing write has mutated/retired
-   * an extent mutated by this transaction, nullopt will be returned.
-   *
-   * Otherwise, a record will be returned valid for use with Journal.
+   * Construct the record for Journal from transaction.
    */
-  std::optional<record_t> try_construct_record(
+  record_t try_construct_record(
     Transaction &t ///< [in, out] current transaction
   );
 

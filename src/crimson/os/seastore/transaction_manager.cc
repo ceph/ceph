@@ -240,13 +240,12 @@ TransactionManager::submit_transaction_direct(
   ).then_interruptible([this, FNAME, &tref]() mutable
 		       -> submit_transaction_iertr::future<> {
     auto record = cache->try_construct_record(tref);
-    assert(record); // interruptible future would have already failed
 
     tref.get_handle().maybe_release_collection_lock();
 
     DEBUGT("about to submit to journal", tref);
 
-    return journal->submit_record(std::move(*record), tref.get_handle()
+    return journal->submit_record(std::move(record), tref.get_handle()
     ).safe_then([this, FNAME, &tref](auto p) mutable {
       auto [addr, journal_seq] = p;
       DEBUGT("journal commit to {} seq {}", tref, addr, journal_seq);

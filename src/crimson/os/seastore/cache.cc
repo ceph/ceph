@@ -235,7 +235,7 @@ CachedExtentRef Cache::duplicate_for_write(
   return ret;
 }
 
-std::optional<record_t> Cache::try_construct_record(Transaction &t)
+record_t Cache::try_construct_record(Transaction &t)
 {
   LOG_PREFIX(Cache::try_construct_record);
   DEBUGT("enter", t);
@@ -343,7 +343,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       });
   }
 
-  return std::make_optional<record_t>(std::move(record));
+  return record;
 }
 
 void Cache::complete_commit(
