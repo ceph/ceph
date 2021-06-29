@@ -303,8 +303,8 @@ class TestScrubChecks(CephFSTestCase):
         mds_rank = 0
         test_dir = "scrub_repair_path"
 
-        self.mount_a.run_shell(["sudo", "mkdir", test_dir])
-        self.mount_a.run_shell(["sudo", "touch", "{0}/file".format(test_dir)])
+        self.mount_a.run_shell(["mkdir", test_dir])
+        self.mount_a.run_shell(["touch", "{0}/file".format(test_dir)])
         dir_objname = "{:x}.00000000".format(self.mount_a.path_to_ino(test_dir))
 
         self.mount_a.umount_wait()
@@ -323,7 +323,7 @@ class TestScrubChecks(CephFSTestCase):
 
         # fragstat indicates the directory is not empty, rmdir should fail
         with self.assertRaises(CommandFailedError) as ar:
-            self.mount_a.run_shell(["sudo", "rmdir", test_dir])
+            self.mount_a.run_shell(["rmdir", test_dir])
         self.assertEqual(ar.exception.exitstatus, 1)
 
         self.tell_command(mds_rank, "scrub start /{0} repair".format(test_dir),
@@ -333,7 +333,7 @@ class TestScrubChecks(CephFSTestCase):
         time.sleep(10)
 
         # fragstat should be fixed
-        self.mount_a.run_shell(["sudo", "rmdir", test_dir])
+        self.mount_a.run_shell(["rmdir", test_dir])
 
     @staticmethod
     def json_validator(json_out, rc, element, expected_value):
