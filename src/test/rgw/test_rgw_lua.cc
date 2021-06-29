@@ -494,6 +494,26 @@ TEST(TestRGWLua, Acl)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, User)
+{
+  const std::string script = R"(
+    assert(Request.User)
+    assert(Request.User.Id == "myid")
+    assert(Request.User.Tenant == "mytenant")
+  )";
+
+  DEFINE_REQ_STATE;
+
+  rgw_user u;
+  u.tenant = "mytenant";
+  u.id = "myid";
+  s.user.reset(new sal::RadosUser(nullptr, u));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_EQ(rc, 0);
+}
+
+
 TEST(TestRGWLua, UseFunction)
 {
 	const std::string script = R"(
