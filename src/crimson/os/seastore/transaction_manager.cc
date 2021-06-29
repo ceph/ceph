@@ -223,11 +223,8 @@ TransactionManager::submit_transaction(
 {
   LOG_PREFIX(TransactionManager::submit_transaction);
   DEBUGT("about to await throttle", t);
-  return trans_intr::make_interruptible(
-    t.get_handle().enter(write_pipeline.wait_throttle)
-  ).then_interruptible([this] {
-    return trans_intr::make_interruptible(segment_cleaner->await_hard_limits());
-  }).then_interruptible([this, &t]() {
+  return trans_intr::make_interruptible(segment_cleaner->await_hard_limits()
+  ).then_interruptible([this, &t]() {
     return submit_transaction_direct(t);
   });
 }
@@ -244,6 +241,8 @@ TransactionManager::submit_transaction_direct(
 		       -> submit_transaction_iertr::future<> {
     auto record = cache->try_construct_record(tref);
     assert(record); // interruptible future would have already failed
+
+    tref.get_handle().maybe_release_collection_lock();
 
     DEBUGT("about to submit to journal", tref);
 
