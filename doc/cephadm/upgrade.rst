@@ -2,9 +2,9 @@
 Upgrading Ceph
 ==============
 
-Cephadm is capable of safely upgrading Ceph from one bugfix release to
-another.  For example, you can upgrade from v15.2.0 (the first Octopus
-release) to the next point release v15.2.1.
+Cephadm can safely upgrade Ceph from one bugfix release to the next.  For
+example, you can upgrade from v15.2.0 (the first Octopus release) to the next
+point release, v15.2.1.
 
 The automated upgrade process follows Ceph best practices.  For example:
 
@@ -13,7 +13,7 @@ The automated upgrade process follows Ceph best practices.  For example:
   will remain available.
 
 Keep in mind that the Ceph cluster health status is likely to switch to
-`HEALTH_WARNING` during the upgrade.
+``HEALTH_WARNING`` during the upgrade.
 
 
 Starting the upgrade
