@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 
 from io import StringIO
@@ -203,21 +204,15 @@ class KernelMount(CephFSMount):
         """
         Read the debug file "filename", return None if the file doesn't exist.
         """
-        debug_dir = self._find_debug_dir()
 
-        pyscript = dedent("""
-            import os
+        path = os.path.join(self._find_debug_dir(), filename)
 
-            print(open(os.path.join("{debug_dir}", "{filename}")).read())
-            """).format(debug_dir=debug_dir, filename=filename)
-
+        stdout = StringIO()
         stderr = StringIO()
         try:
-            output = self.client_remote.sh([
-                'sudo', 'python3', '-c', pyscript
-            ], stderr=stderr, timeout=(5*60))
-
-            return output
+            self.run_shell_payload(f"sudo dd if={path}", timeout=(5*60),
+                stdout=stdout, stderr=stderr)
+            return stdout.getvalue()
         except CommandFailedError:
             if 'no such file or directory' in stderr.getvalue().lower():
                 return None
