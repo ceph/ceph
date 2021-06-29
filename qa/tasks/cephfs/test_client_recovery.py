@@ -135,9 +135,11 @@ class TestClientRecovery(CephFSTestCase):
         # =================
         # Check that if I stop an MDS and a client goes away, the MDS waits
         # for the reconnect period
-        self.fs.fail()
 
         mount_a_client_id = self.mount_a.get_global_id()
+
+        self.fs.fail()
+
         self.mount_a.umount_wait(force=True)
 
         self.fs.set_joinable()
