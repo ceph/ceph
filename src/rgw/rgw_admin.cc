@@ -5140,17 +5140,12 @@ int main(int argc, const char **argv)
       break;
     case OPT::ZONE_DEFAULT:
       {
-	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
-	int ret = zonegroup.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
-	if (ret < 0) {
-	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
-	}
 	if (zone_id.empty() && zone_name.empty()) {
 	  cerr << "no zone name or id provided" << std::endl;
 	  return EINVAL;
 	}
 	RGWZoneParams zone(zone_id, zone_name);
-	ret = zone.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
+	int ret = zone.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
