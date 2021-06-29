@@ -26,6 +26,11 @@
 #  include "include/libcephsqlite.h"
 #endif
 
+#ifdef WITH_LIBCEPHFSSQLITE
+#  include <sqlite3.h>
+#  include "include/libcephfssqlite.h"
+#endif
+
 #include "mgr/MgrContext.h"
 
 #include "DaemonServer.h"
@@ -381,6 +386,31 @@ void Mgr::init()
     addrv.parse(ident);
     ident = (char*)realloc(ident, 0);
     py_module_registry->register_client("libcephsqlite", addrv);
+  }
+#endif
+
+#ifdef WITH_LIBCEPHFSSQLITE
+    dout(4) << "Using sqlite3 version: " << sqlite3_libversion() << dendl;
+  sqlite3_auto_extension((void (*)())sqlite3_cephfssqlite_init);
+  {
+    sqlite3* db = nullptr;
+    if (int rc = sqlite3_open_v2(":memory:", &db, SQLITE_OPEN_READWRITE, nullptr); rc == SQLITE_OK) {
+      sqlite3_close(db);
+    } else {
+      derr << "could not open sqlite3: " << rc << dendl;
+      ceph_abort();
+    }
+  }
+  {
+    char *ident = nullptr;
+    if (int rc = cephfssqlite_setcct(g_ceph_context, &ident); rc < 0) {
+      derr << "could not set libcephfssqlite cct: " << rc << dendl;
+      ceph_abort();
+    }
+    entity_addrvec_t addrv;
+    addrv.parse(ident);
+    ident = (char*)realloc(ident, 0);
+    py_module_registry->register_client("libcephfssqlite", addrv);
   }
 #endif
 

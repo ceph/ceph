@@ -290,6 +290,11 @@ if(WITH_LIBCEPHSQLITE)
   find_package(SQLite3 REQUIRED)
 endif()
 
+option(WITH_LIBCEPHFSSQLITE "libcephfssqlite client library" ON)
+if(WITH_LIBCEPHFSSQLITE)
+  find_package(SQLite3 REQUIRED)
+endif()
+
 # key-value store
 option(WITH_KVS "Key value store is here" ON)
 
