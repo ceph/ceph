@@ -166,6 +166,10 @@ const string& RGWZoneGroup::get_names_oid_prefix() const
   return zonegroup_names_oid_prefix;
 }
 
+string RGWZoneGroup::get_predefined_id(CephContext *cct) const {
+  return cct->_conf.get_val<string>("rgw_zonegroup_id");
+}
+
 const string& RGWZoneGroup::get_predefined_name(CephContext *cct) const {
   return cct->_conf->rgw_zonegroup;
 }
@@ -371,6 +375,10 @@ int RGWSystemMetaObj::init(const DoutPrefixProvider *dpp, CephContext *_cct, RGW
 
   if (old_format && id.empty()) {
     id = name;
+  }
+
+  if (id.empty()) {
+    id = get_predefined_id(cct);
   }
 
   if (id.empty()) {
@@ -707,6 +715,10 @@ RGWRealm::~RGWRealm() {}
 RGWRemoteMetaLog::~RGWRemoteMetaLog()
 {
   delete error_logger;
+}
+
+string RGWRealm::get_predefined_id(CephContext *cct) const {
+  return cct->_conf.get_val<string>("rgw_realm_id");
 }
 
 const string& RGWRealm::get_predefined_name(CephContext *cct) const {
@@ -1791,6 +1803,10 @@ const string& RGWZoneParams::get_names_oid_prefix() const
 const string& RGWZoneParams::get_info_oid_prefix(bool old_format) const
 {
   return zone_info_oid_prefix;
+}
+
+string RGWZoneParams::get_predefined_id(CephContext *cct) const {
+  return cct->_conf.get_val<string>("rgw_zone_id");
 }
 
 const string& RGWZoneParams::get_predefined_name(CephContext *cct) const {

@@ -151,6 +151,7 @@ public:
   virtual const std::string get_default_oid(bool old_format = false) const = 0;
   virtual const std::string& get_names_oid_prefix() const = 0;
   virtual const std::string& get_info_oid_prefix(bool old_format = false) const = 0;
+  virtual std::string get_predefined_id(CephContext *cct) const = 0;
   virtual const std::string& get_predefined_name(CephContext *cct) const = 0;
 
   void dump(Formatter *f) const;
@@ -399,6 +400,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const std::string get_default_oid(bool old_format = false) const override;
   const std::string& get_names_oid_prefix() const override;
   const std::string& get_info_oid_prefix(bool old_format = false) const override;
+  std::string get_predefined_id(CephContext *cct) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
   int init(const DoutPrefixProvider *dpp, 
@@ -831,6 +833,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   const std::string get_default_oid(bool old_region_format = false) const override;
   const std::string& get_info_oid_prefix(bool old_region_format = false) const override;
   const std::string& get_names_oid_prefix() const override;
+  std::string get_predefined_id(CephContext *cct) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
   void dump(Formatter *f) const;
@@ -984,6 +987,7 @@ public:
   const std::string get_default_oid(bool old_format = false) const override;
   const std::string& get_names_oid_prefix() const override;
   const std::string& get_info_oid_prefix(bool old_format = false) const override;
+  std::string get_predefined_id(CephContext *cct) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
   using RGWSystemMetaObj::read_id; // expose as public for radosgw-admin
