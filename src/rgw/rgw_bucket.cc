@@ -1858,15 +1858,273 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("attrs", attrs, obj);
 }
 
+// Package together data/functionality needed to manage an operation
+// on bucket metadata. Essentially a larger wrapper for
+// RGWSysObjectCtx.
+
+class BOpContext {
+  RGWBucketCtl& b;
+  std::optional<RGWSysObjectCtx> ctxo;
+  RGWSysObjectCtx& ctx;
+
+  int pre_modify(const DoutPrefixProvider *dpp,
+		 optional_yield y, const std::string& key,
+		 RGWMetadataLogData& log_data,
+		 RGWObjVersionTracker *objv_tracker,
+		 RGWMDLogStatus op_type) {
+    /* if write version has not been set, and there's a read version, set it so that we can
+     * log it
+     */
+    if (objv_tracker &&
+	objv_tracker->read_version.ver && !objv_tracker->write_version.ver) {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+    /* if write version has not been set, and there's a read version, set it so that we can
+     * log it
+     */
+    if (objv_tracker) {
+      log_data.read_version = objv_tracker->read_version;
+      log_data.write_version = objv_tracker->write_version;
+    }
+
+    log_data.status = op_type;
+
+    bufferlist logbl;
+    encode(log_data, logbl);
+
+    return b.svc.mdlog->add_entry(dpp, get_hash_key(key), get_section(),
+				  key, logbl);
+  }
+
+  int post_modify(const DoutPrefixProvider *dpp,
+		  optional_yield y,
+		  const std::string& key,
+		  RGWMetadataLogData& log_data,
+		  RGWObjVersionTracker *objv_tracker,
+		  int ret) {
+    if (ret >= 0)
+      log_data.status = MDLOG_STATUS_COMPLETE;
+    else
+      log_data.status = MDLOG_STATUS_ABORT;
+
+    bufferlist logbl;
+    encode(log_data, logbl);
+
+    int r = b.svc.mdlog->add_entry(dpp, get_hash_key(key),
+				   get_section(), key, logbl);
+    if (ret < 0)
+      return ret;
+
+    if (r < 0)
+      return r;
+
+    return ret;
+  }
+
+  template<typename F>
+  int do_mutate(const DoutPrefixProvider *dpp,
+		optional_yield y,
+		const string& key,
+		F&& f,
+		RGWMDLogStatus op_type,
+		RGWObjVersionTracker* objv_tracker) {
+    RGWMetadataLogData log_data;
+    auto ret = pre_modify(dpp, y, key, log_data, objv_tracker,
+			  op_type);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = std::forward<F>(f)();
+    ret = post_modify(dpp, y, key, log_data, objv_tracker, ret);
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
+public:
+  BOpContext(RGWBucketCtl* b)
+    : b(*b), ctxo(b->svc.sysobj->init_obj_ctx()), ctx(*ctxo) {}
+  BOpContext(RGWBucketCtl* b, RGWSysObjectCtx& ctx) : b(*b), ctx(ctx) {}
+  BOpContext(BOpContext&) = default;
+
+  virtual ~BOpContext() = default;
+  const rgw_pool& get_pool() const {
+    return b.svc.zone->get_zone_params().domain_root;
+  }
+  virtual std::string key_to_oid(const std::string& key) const = 0;
+  virtual const std::string& get_oid_prefix() const = 0;
+  virtual bool is_valid_oid(const std::string& oid) const = 0;
+  virtual std::string oid_to_key(const std::string& oid) const = 0;
+  virtual const std::string& get_section() const = 0;
+
+  /* key to use for hashing entries for log shard placement */
+  virtual std::string get_hash_key(const std::string& key) {
+    return fmt::format("{}:{}", get_section(), key);
+  }
+
+  int get(const DoutPrefixProvider *dpp,
+	  optional_yield y,
+	  const std::string& key,
+	  ceph::buffer::list* bl,
+	  RGWObjVersionTracker*  objv_tracker,
+	  ceph::real_time* mtime,
+	  std::map<std::string, ceph::buffer::list> *attrs,
+	  rgw_cache_entry_info* cache_info,
+	  const boost::optional<obj_version>& refresh_version) {
+    return rgw_get_system_obj(ctx, get_pool(), key_to_oid(key), *bl,
+			      objv_tracker, mtime, y, dpp, attrs, cache_info,
+			      refresh_version);
+  }
+
+  int put(const DoutPrefixProvider *dpp,
+	  optional_yield y,
+	  const string& key,
+	  ceph::buffer::list& bl,
+	  bool exclusive,
+	  RGWObjVersionTracker* objv_tracker,
+	  ceph::real_time mtime,
+	  std::map<std::string, ceph::buffer::list>* attrs) {
+    return do_mutate(dpp, y, key,
+		     [&] {
+		       return rgw_put_system_obj(dpp, ctx, get_pool(), key, bl,
+						 exclusive, objv_tracker, mtime,
+						 y, attrs);
+		     }, MDLOG_STATUS_WRITE, objv_tracker);
+  }
+
+  int remove_raw(const DoutPrefixProvider *dpp,
+		 optional_yield y,
+		 const string& key,
+		 RGWObjVersionTracker* objv_tracker) {
+    rgw_raw_obj k(get_pool(), key_to_oid(key));
+    auto sysobj = ctx.get_obj(k);
+    return sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .remove(dpp, y);
+  }
+
+  int remove(const DoutPrefixProvider *dpp,
+	     optional_yield y,
+	     const string& key,
+	     RGWObjVersionTracker* objv_tracker) {
+    return do_mutate(dpp, y, key,
+		     [&] {
+		       return remove_raw(dpp, y, key, objv_tracker);
+		     }, MDLOG_STATUS_REMOVE, objv_tracker);
+  }
+};
+
+class BucketOpContext : public BOpContext {
+public:
+  using BOpContext::BOpContext;
+
+  std::string key_to_oid(const std::string& key) const override {
+    return std::string(key);
+  }
+
+  const std::string& get_oid_prefix() const override {
+    static const std::string prefix = ""s;
+    return prefix;
+  }
+
+  bool is_valid_oid(const std::string& oid) const override {
+    return (!oid.empty() && oid[0] != '.');
+  }
+
+  std::string oid_to_key(const std::string& oid) const override {
+    /* should have been called after is_valid_oid(), so no need to
+     * check for validity */
+    return std::string(oid);
+  }
+  const std::string& get_section() const override {
+    static const string section = "bucket"s;
+    return section;
+  }
+};
+
+class BucketInstanceOpContext : public BOpContext {
+public:
+  using BOpContext::BOpContext;
+
+  const string& get_oid_prefix() const override {
+    static const std::string prefix = ".bucket.meta.";
+    return prefix;
+  }
+
+  bool is_valid_oid(const string& oid) const override {
+    const auto& prefix = get_oid_prefix();
+    return (oid.compare(0, prefix.size(), prefix) == 0);
+  }
+
+  // 'tenant/' is used in bucket instance keys for sync to avoid
+  // parsing ambiguity with the existing instance[:shard] format. once
+  // we parse the shard, the / is replaced with a : to match the
+  // [tenant:]instance format
+  std::string key_to_oid(const string& key) const override {
+    const auto& prefix = get_oid_prefix();
+    std::string oid = prefix + key;
+
+    // replace tenant/ with tenant:
+    auto c = oid.find('/', prefix.size());
+    if (c != string::npos) {
+      oid[c] = ':';
+    }
+
+    return oid;
+  }
+
+  // convert bucket instance oids back to the tenant/ format for metadata keys.
+  // it's safe to parse 'tenant:' only for oids, because they won't contain the
+  // optional :shard at the end
+  std::string oid_to_key(const std::string& oid) const override {
+    const auto& prefix = get_oid_prefix();
+
+    /* this should have been called after oid was checked for validity */
+    if (oid.size() < prefix.size()) { /* just sanity check */
+      return {};
+    }
+
+    auto key = oid.substr(prefix.size());
+
+    // find first : (could be tenant:bucket or bucket:instance)
+    auto c = key.find(':');
+    if (c != string::npos) {
+      // if we find another :, the first one was for tenant
+      if (key.find(':', c + 1) != string::npos) {
+        key[c] = '/';
+      }
+    }
+
+    return key;
+  }
+
+  /*
+   * hash entry for mdlog placement. Use the same hash key we'd have
+   * for the bucket entry point, so that the log entries end up at the
+   * same log shard, so that we process them in order
+   */
+  string get_hash_key(const string& key) override {
+    string k = "bucket:";
+    int pos = key.find(':');
+    if (pos < 0)
+      k.append(key);
+    else
+      k.append(key.substr(0, pos));
+
+    return k;
+  }
+
+  const std::string& get_section() const override {
+    static const string section = "bucket.instance"s;
+    return section;
+  }
+};
+
 class RGWBucketMetadataHandler : public RGWBucketMetadataHandlerBase {
 public:
-  struct Svc {
-    RGWSI_Bucket *bucket{nullptr};
-  } svc;
-
-  struct Ctl {
-    RGWBucketCtl *bucket{nullptr};
-  } ctl;
+  RGWBucketCtl *bucketctl{nullptr};
 
   RGWBucketMetadataHandler() {}
 
@@ -1874,13 +2132,13 @@ public:
             RGWBucketCtl *bucket_ctl) override {
     base_init(bucket_svc->ctx(),
               bucket_svc->get_ep_be_handler().get());
-    svc.bucket = bucket_svc;
-    ctl.bucket = bucket_ctl;
+    bucketctl = bucket_ctl;
   }
 
   string get_type() override { return "bucket"; }
 
-  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) override {
+  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv,
+				  const ceph::real_time& mtime) override {
     RGWBucketEntryPoint be;
 
     try {
@@ -1892,56 +2150,66 @@ public:
     return new RGWBucketEntryMetadataObject(be, objv, mtime);
   }
 
-  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
+  int do_get(RGWSI_MetaBackend_Handler::Op*, string& entry,
+	     RGWMetadataObject **obj, optional_yield y,
+	     const DoutPrefixProvider *dpp) override {
     RGWObjVersionTracker ot;
     RGWBucketEntryPoint be;
 
     real_time mtime;
     map<string, bufferlist> attrs;
 
-    RGWSI_Bucket_EP_Ctx ctx(op->ctx());
+    BucketOpContext ctx(bucketctl);
 
-    int ret = svc.bucket->read_bucket_entrypoint_info(ctx, entry, &be, &ot, &mtime, &attrs, y, dpp);
+    int ret = bucketctl->read_bucket_entrypoint_info(ctx, entry, &be, y, dpp,
+						     &ot, &mtime, &attrs,
+						     nullptr, boost::none);
     if (ret < 0)
       return ret;
 
-    RGWBucketEntryMetadataObject *mdo = new RGWBucketEntryMetadataObject(be, ot.read_version, mtime, std::move(attrs));
+    auto mdo = new RGWBucketEntryMetadataObject(be, ot.read_version, mtime,
+						std::move(attrs));
 
     *obj = mdo;
 
     return 0;
   }
 
-  int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
-             RGWMetadataObject *obj,
-             RGWObjVersionTracker& objv_tracker,
+  int do_put(RGWSI_MetaBackend_Handler::Op*, string& entry,
+	     RGWMetadataObject *obj,
+	     RGWObjVersionTracker& objv_tracker,
              optional_yield y,
              const DoutPrefixProvider *dpp,
              RGWMDLogSyncType type, bool from_remote_zone) override;
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
-                optional_yield y, const DoutPrefixProvider *dpp) override {
+  int do_remove(RGWSI_MetaBackend_Handler::Op*, string& entry,
+		RGWObjVersionTracker& objv_tracker, optional_yield y,
+		const DoutPrefixProvider *dpp) override {
     RGWBucketEntryPoint be;
 
     real_time orig_mtime;
 
-    RGWSI_Bucket_EP_Ctx ctx(op->ctx());
-
-    int ret = svc.bucket->read_bucket_entrypoint_info(ctx, entry, &be, &objv_tracker, &orig_mtime, nullptr, y, dpp);
+    BucketOpContext ctx(bucketctl);
+    int ret = bucketctl->read_bucket_entrypoint_info(ctx, entry, &be, y, dpp,
+						     &objv_tracker, &orig_mtime,
+						     nullptr, nullptr,
+						     boost::none);
     if (ret < 0)
       return ret;
 
     /*
-     * We're unlinking the bucket but we don't want to update the entrypoint here - we're removing
-     * it immediately and don't want to invalidate our cached objv_version or the bucket obj removal
+     * We're unlinking the bucket but we don't want to update the
+     * entrypoint here - we're removing it immediately and don't want
+     * to invalidate our cached objv_version or the bucket obj removal
      * will incorrectly fail.
      */
-    ret = ctl.bucket->unlink_bucket(be.owner, be.bucket, y, dpp, false);
+    ret = bucketctl->unlink_bucket(be.owner, be.bucket, y, dpp, false);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
-    ret = svc.bucket->remove_bucket_entrypoint_info(ctx, entry, &objv_tracker, y, dpp);
+    ret = bucketctl->remove_bucket_entrypoint_info(ctx, entry, y, dpp,
+						   &objv_tracker);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "could not delete bucket=" << entry << dendl;
     }
@@ -1996,16 +2264,17 @@ int RGWMetadataHandlerPut_Bucket::put_checked(const DoutPrefixProvider *dpp)
   auto mtime = obj->get_mtime();
   auto pattrs = obj->get_pattrs();
 
-  RGWSI_Bucket_EP_Ctx ctx(op->ctx());
+  BucketOpContext ctx(bhandler->bucketctl);
 
-  return bhandler->svc.bucket->store_bucket_entrypoint_info(ctx, entry,
-                                                           be,
-                                                           false,
-                                                           mtime,
-                                                           pattrs,
-                                                           &objv_tracker,
+  return bhandler->bucketctl->store_bucket_entrypoint_info(ctx,
+							   entry,
+							   be,
 							   y,
-                                                           dpp);
+							   dpp,
+							   false,
+							   &objv_tracker,
+                                                           mtime,
+                                                           pattrs);
 }
 
 int RGWMetadataHandlerPut_Bucket::put_post(const DoutPrefixProvider *dpp)
@@ -2016,9 +2285,11 @@ int RGWMetadataHandlerPut_Bucket::put_post(const DoutPrefixProvider *dpp)
 
   /* link bucket */
   if (be.linked) {
-    ret = bhandler->ctl.bucket->link_bucket(be.owner, be.bucket, be.creation_time, y, dpp, false);
+    ret = bhandler->bucketctl->link_bucket(be.owner, be.bucket,
+					   be.creation_time, y, dpp, false);
   } else {
-    ret = bhandler->ctl.bucket->unlink_bucket(be.owner, be.bucket, y, dpp, false);
+    ret = bhandler->bucketctl->unlink_bucket(be.owner, be.bucket, y, dpp,
+					     false);
   }
 
   return ret;
@@ -2089,13 +2360,16 @@ class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
 public:
   RGWArchiveBucketMetadataHandler() {}
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
+  int do_remove(RGWSI_MetaBackend_Handler::Op*, string& entry,
+		RGWObjVersionTracker& objv_tracker,
                 optional_yield y, const DoutPrefixProvider *dpp) override {
-    auto cct = svc.bucket->ctx();
+    auto cct = dpp->get_cct();
 
-    RGWSI_Bucket_EP_Ctx ctx(op->ctx());
+    BucketOpContext ctx(bucketctl);
 
-    ldpp_dout(dpp, 5) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
+    ldpp_dout(dpp, 5)
+      << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry
+      << " ... proceeding to rename" << dendl;
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2109,12 +2383,15 @@ public:
 
     RGWBucketEntryPoint be;
     map<string, bufferlist> attrs;
-    int ret = svc.bucket->read_bucket_entrypoint_info(ctx, entry, &be, &objv_tracker, &mtime, &attrs, y, dpp);
+    int ret = bucketctl->read_bucket_entrypoint_info(ctx, entry, &be, y, dpp,
+						     &objv_tracker, &mtime,
+						     &attrs, nullptr,
+						     boost::none);
     if (ret < 0) {
         return ret;
     }
 
-    string bi_meta_name = RGWSI_Bucket::get_bi_meta_key(be.bucket);
+    string bi_meta_name = bucketctl->get_bi_meta_key(be.bucket);
 
     /* read original bucket instance info */
 
@@ -2122,16 +2399,19 @@ public:
     ceph::real_time orig_mtime;
     RGWBucketInfo old_bi;
 
-    ret = ctl.bucket->read_bucket_instance_info(be.bucket, &old_bi, y, dpp, RGWBucketCtl::BucketInstance::GetParams()
-                                                                    .set_mtime(&orig_mtime)
-                                                                    .set_attrs(&attrs_m));
+    ret = bucketctl->read_bucket_instance_info(
+      be.bucket, &old_bi, y, dpp,
+      RGWBucketCtl::BucketInstance::GetParams()
+      .set_mtime(&orig_mtime)
+      .set_attrs(&attrs_m));
+
     if (ret < 0) {
         return ret;
     }
 
     archive_meta_info ami;
 
-    if (!ami.from_attrs(svc.bucket->ctx(), attrs_m)) {
+    if (!ami.from_attrs(dpp->get_cct(), attrs_m)) {
       ami.orig_bucket = old_bi.bucket;
       ami.store_in_attrs(attrs_m);
     }
@@ -2158,11 +2438,13 @@ public:
 
     new_be.bucket.name = new_bucket_name;
 
-    ret = ctl.bucket->store_bucket_instance_info(be.bucket, new_bi, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
-                                                                    .set_exclusive(false)
-                                                                    .set_mtime(orig_mtime)
-                                                                    .set_attrs(&attrs_m)
-                                                                    .set_orig_info(&old_bi));
+    ret = bucketctl->store_bucket_instance_info(
+      be.bucket, new_bi, y, dpp,
+      RGWBucketCtl::BucketInstance::PutParams()
+      .set_exclusive(false)
+      .set_mtime(orig_mtime)
+      .set_attrs(&attrs_m)
+      .set_orig_info(&old_bi));
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket instance info for bucket=" << new_bi.bucket << " ret=" << ret << dendl;
       return ret;
@@ -2173,8 +2455,9 @@ public:
     RGWObjVersionTracker ot;
     ot.generate_new_write_ver(cct);
 
-    ret = svc.bucket->store_bucket_entrypoint_info(ctx, RGWSI_Bucket::get_entrypoint_meta_key(new_be.bucket),
-                                                   new_be, true, mtime, &attrs, nullptr, y, dpp);
+    ret = bucketctl->store_bucket_entrypoint_info(
+      ctx, bucketctl->get_entrypoint_meta_key(new_be.bucket),
+      new_be, y, dpp, true, nullptr, mtime, &attrs);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
@@ -2182,7 +2465,8 @@ public:
 
     /* link new bucket */
 
-    ret = ctl.bucket->link_bucket(new_be.owner, new_be.bucket, new_be.creation_time, y, dpp, false);
+    ret = bucketctl->link_bucket(new_be.owner, new_be.bucket,
+				 new_be.creation_time, y, dpp, false);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to link new bucket for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
@@ -2190,9 +2474,10 @@ public:
 
     /* clean up old stuff */
 
-    ret = ctl.bucket->unlink_bucket(be.owner, entry_bucket, y, dpp, false);
+    ret = bucketctl->unlink_bucket(be.owner, entry_bucket, y, dpp, false);
     if (ret < 0) {
-        ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
+        ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner="
+			   << be.owner << dendl;
     }
 
     // if (ret == -ECANCELED) it means that there was a race here, and someone
@@ -2200,17 +2485,18 @@ public:
     // whether it was a newly created bucket entrypoint ...  in which case we
     // should ignore the error and move forward, or whether it is a higher version
     // of the same bucket instance ... in which we should retry
-    ret = svc.bucket->remove_bucket_entrypoint_info(ctx,
-                                                    RGWSI_Bucket::get_entrypoint_meta_key(be.bucket),
-                                                    &objv_tracker,
-                                                    y,
-                                                    dpp);
+    ret = bucketctl->remove_bucket_entrypoint_info(
+      ctx,
+      bucketctl->get_entrypoint_meta_key(be.bucket),
+      y,
+      dpp,
+      &objv_tracker);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
     }
 
-    ret = ctl.bucket->remove_bucket_instance_info(be.bucket, old_bi, y, dpp);
+    ret = bucketctl->remove_bucket_instance_info(be.bucket, old_bi, y, dpp);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "could not delete bucket=" << entry << dendl;
     }
@@ -2247,7 +2533,6 @@ public:
     return RGWBucketMetadataHandler::do_put(op, entry, obj,
                                             objv_tracker, y, dpp, type, from_remote_zone);
   }
-
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandlerBase {
@@ -2549,270 +2834,6 @@ void RGWBucketCtl::init(RGWUserCtl *user_ctl,
 
 
 }
-
-// Package together data/functionality needed to manage an operation
-// on bucket metadata. Essentially a larger wrapper for
-// RGWSysObjectCtx.
-
-class BOpContext {
-  RGWBucketCtl& b;
-  std::optional<RGWSysObjectCtx> ctxo;
-  RGWSysObjectCtx& ctx;
-
-  int pre_modify(const DoutPrefixProvider *dpp,
-		 optional_yield y, const std::string& key,
-		 RGWMetadataLogData& log_data,
-		 RGWObjVersionTracker *objv_tracker,
-		 RGWMDLogStatus op_type) {
-    /* if write version has not been set, and there's a read version, set it so that we can
-     * log it
-     */
-    if (objv_tracker &&
-	objv_tracker->read_version.ver && !objv_tracker->write_version.ver) {
-      objv_tracker->write_version = objv_tracker->read_version;
-      objv_tracker->write_version.ver++;
-    }
-    /* if write version has not been set, and there's a read version, set it so that we can
-     * log it
-     */
-    if (objv_tracker) {
-      log_data.read_version = objv_tracker->read_version;
-      log_data.write_version = objv_tracker->write_version;
-    }
-
-    log_data.status = op_type;
-
-    bufferlist logbl;
-    encode(log_data, logbl);
-
-    return b.svc.mdlog->add_entry(dpp, get_hash_key(key), get_section(),
-				  key, logbl);
-  }
-
-  int post_modify(const DoutPrefixProvider *dpp,
-		  optional_yield y,
-		  const std::string& key,
-		  RGWMetadataLogData& log_data,
-		  RGWObjVersionTracker *objv_tracker,
-		  int ret) {
-    if (ret >= 0)
-      log_data.status = MDLOG_STATUS_COMPLETE;
-    else
-      log_data.status = MDLOG_STATUS_ABORT;
-
-    bufferlist logbl;
-    encode(log_data, logbl);
-
-    int r = b.svc.mdlog->add_entry(dpp, get_hash_key(key),
-				   get_section(), key, logbl);
-    if (ret < 0)
-      return ret;
-
-    if (r < 0)
-      return r;
-
-    return ret;
-  }
-
-  template<typename F>
-  int do_mutate(const DoutPrefixProvider *dpp,
-		optional_yield y,
-		const string& key,
-		F&& f,
-		RGWMDLogStatus op_type,
-		RGWObjVersionTracker* objv_tracker) {
-    RGWMetadataLogData log_data;
-    auto ret = pre_modify(dpp, y, key, log_data, objv_tracker,
-			  op_type);
-    if (ret < 0) {
-      return ret;
-    }
-    ret = std::forward<F>(f)();
-    ret = post_modify(dpp, y, key, log_data, objv_tracker, ret);
-    if (ret < 0)
-      return ret;
-
-    return 0;
-  }
-
-public:
-  BOpContext(RGWBucketCtl* b)
-    : b(*b), ctxo(b->svc.sysobj->init_obj_ctx()), ctx(*ctxo) {}
-  BOpContext(RGWBucketCtl* b, RGWSysObjectCtx& ctx) : b(*b), ctx(ctx) {}
-  BOpContext(BOpContext&) = default;
-
-  virtual ~BOpContext() = default;
-  const rgw_pool& get_pool() const {
-    return b.svc.zone->get_zone_params().domain_root;
-  }
-  virtual std::string key_to_oid(const std::string& key) const = 0;
-  virtual const std::string& get_oid_prefix() const = 0;
-  virtual bool is_valid_oid(const std::string& oid) const = 0;
-  virtual std::string oid_to_key(const std::string& oid) const = 0;
-  virtual const std::string& get_section() const = 0;
-
-  /* key to use for hashing entries for log shard placement */
-  virtual std::string get_hash_key(const std::string& key) {
-    return fmt::format("{}:{}", get_section(), key);
-  }
-
-  int get(const DoutPrefixProvider *dpp,
-	  optional_yield y,
-	  const std::string& key,
-	  ceph::buffer::list* bl,
-	  RGWObjVersionTracker*  objv_tracker,
-	  ceph::real_time* mtime,
-	  std::map<std::string, ceph::buffer::list> *attrs,
-	  rgw_cache_entry_info* cache_info,
-	  const boost::optional<obj_version>& refresh_version) {
-    return rgw_get_system_obj(ctx, get_pool(), key_to_oid(key), *bl,
-			      objv_tracker, mtime, y, dpp, attrs, cache_info,
-			      refresh_version);
-  }
-
-  int put(const DoutPrefixProvider *dpp,
-	  optional_yield y,
-	  const string& key,
-	  ceph::buffer::list& bl,
-	  bool exclusive,
-	  RGWObjVersionTracker* objv_tracker,
-	  ceph::real_time mtime,
-	  std::map<std::string, ceph::buffer::list>* attrs) {
-    return do_mutate(dpp, y, key,
-		     [&] {
-		       return rgw_put_system_obj(dpp, ctx, get_pool(), key, bl,
-						 exclusive, objv_tracker, mtime,
-						 y, attrs);
-		     }, MDLOG_STATUS_WRITE, objv_tracker);
-  }
-
-  int remove_raw(const DoutPrefixProvider *dpp,
-		 optional_yield y,
-		 const string& key,
-		 RGWObjVersionTracker* objv_tracker) {
-    rgw_raw_obj k(get_pool(), key_to_oid(key));
-    auto sysobj = ctx.get_obj(k);
-    return sysobj.wop()
-      .set_objv_tracker(objv_tracker)
-      .remove(dpp, y);
-  }
-
-  int remove(const DoutPrefixProvider *dpp,
-	     optional_yield y,
-	     const string& key,
-	     RGWObjVersionTracker* objv_tracker) {
-    return do_mutate(dpp, y, key,
-		     [&] {
-		       return remove_raw(dpp, y, key, objv_tracker);
-		     }, MDLOG_STATUS_REMOVE, objv_tracker);
-  }
-};
-
-class BucketOpContext : public BOpContext {
-public:
-  using BOpContext::BOpContext;
-
-  std::string key_to_oid(const std::string& key) const override {
-    return std::string(key);
-  }
-
-  const std::string& get_oid_prefix() const override {
-    static const std::string prefix = ""s;
-    return prefix;
-  }
-
-  bool is_valid_oid(const std::string& oid) const override {
-    return (!oid.empty() && oid[0] != '.');
-  }
-
-  std::string oid_to_key(const std::string& oid) const override {
-    /* should have been called after is_valid_oid(), so no need to
-     * check for validity */
-    return std::string(oid);
-  }
-  const std::string& get_section() const override {
-    static const string section = "bucket"s;
-    return section;
-  }
-};
-
-class BucketInstanceOpContext : public BOpContext {
-public:
-  using BOpContext::BOpContext;
-
-  const string& get_oid_prefix() const override {
-    static const std::string prefix = ".bucket.meta.";
-    return prefix;
-  }
-
-  bool is_valid_oid(const string& oid) const override {
-    const auto& prefix = get_oid_prefix();
-    return (oid.compare(0, prefix.size(), prefix) == 0);
-  }
-
-  // 'tenant/' is used in bucket instance keys for sync to avoid
-  // parsing ambiguity with the existing instance[:shard] format. once
-  // we parse the shard, the / is replaced with a : to match the
-  // [tenant:]instance format
-  std::string key_to_oid(const string& key) const override {
-    const auto& prefix = get_oid_prefix();
-    std::string oid = prefix + key;
-
-    // replace tenant/ with tenant:
-    auto c = oid.find('/', prefix.size());
-    if (c != string::npos) {
-      oid[c] = ':';
-    }
-
-    return oid;
-  }
-
-  // convert bucket instance oids back to the tenant/ format for metadata keys.
-  // it's safe to parse 'tenant:' only for oids, because they won't contain the
-  // optional :shard at the end
-  std::string oid_to_key(const std::string& oid) const override {
-    const auto& prefix = get_oid_prefix();
-
-    /* this should have been called after oid was checked for validity */
-    if (oid.size() < prefix.size()) { /* just sanity check */
-      return {};
-    }
-
-    auto key = oid.substr(prefix.size());
-
-    // find first : (could be tenant:bucket or bucket:instance)
-    auto c = key.find(':');
-    if (c != string::npos) {
-      // if we find another :, the first one was for tenant
-      if (key.find(':', c + 1) != string::npos) {
-        key[c] = '/';
-      }
-    }
-
-    return key;
-  }
-
-  /*
-   * hash entry for mdlog placement. Use the same hash key we'd have
-   * for the bucket entry point, so that the log entries end up at the
-   * same log shard, so that we process them in order
-   */
-  string get_hash_key(const string& key) override {
-    string k = "bucket:";
-    int pos = key.find(':');
-    if (pos < 0)
-      k.append(key);
-    else
-      k.append(key.substr(0, pos));
-
-    return k;
-  }
-
-  const std::string& get_section() const override {
-    static const string section = "bucket.instance"s;
-    return section;
-  }
-};
 
 int RGWBucketCtl::read_bucket_entrypoint_info(
   BucketOpContext& ctx,
