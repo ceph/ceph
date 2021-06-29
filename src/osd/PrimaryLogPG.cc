@@ -4900,6 +4900,31 @@ void PrimaryLogPG::snap_trimmer(epoch_t queued)
   return;
 }
 
+namespace {
+
+template<typename U, typename V>
+int do_cmp_xattr(int op, const U& lhs, const V& rhs)
+{
+  switch (op) {
+  case CEPH_OSD_CMPXATTR_OP_EQ:
+    return lhs == rhs;
+  case CEPH_OSD_CMPXATTR_OP_NE:
+    return lhs != rhs;
+  case CEPH_OSD_CMPXATTR_OP_GT:
+    return lhs > rhs;
+  case CEPH_OSD_CMPXATTR_OP_GTE:
+    return lhs >= rhs;
+  case CEPH_OSD_CMPXATTR_OP_LT:
+    return lhs < rhs;
+  case CEPH_OSD_CMPXATTR_OP_LTE:
+    return lhs <= rhs;
+  default:
+    return -EINVAL;
+  }
+}
+
+} // anonymous namespace
+
 int PrimaryLogPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
 {
   __u64 v2;
@@ -4911,47 +4936,14 @@ int PrimaryLogPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
     v2 = 0;
 
   dout(20) << "do_xattr_cmp_u64 '" << v1 << "' vs '" << v2 << "' op " << op << dendl;
-
-  switch (op) {
-  case CEPH_OSD_CMPXATTR_OP_EQ:
-    return (v1 == v2);
-  case CEPH_OSD_CMPXATTR_OP_NE:
-    return (v1 != v2);
-  case CEPH_OSD_CMPXATTR_OP_GT:
-    return (v1 > v2);
-  case CEPH_OSD_CMPXATTR_OP_GTE:
-    return (v1 >= v2);
-  case CEPH_OSD_CMPXATTR_OP_LT:
-    return (v1 < v2);
-  case CEPH_OSD_CMPXATTR_OP_LTE:
-    return (v1 <= v2);
-  default:
-    return -EINVAL;
-  }
+  return do_cmp_xattr(op, v1, v2);
 }
 
 int PrimaryLogPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
 {
-  string v2s(xattr.c_str(), xattr.length());
-
+  string_view v2s(xattr.c_str(), xattr.length());
   dout(20) << "do_xattr_cmp_str '" << v1s << "' vs '" << v2s << "' op " << op << dendl;
-
-  switch (op) {
-  case CEPH_OSD_CMPXATTR_OP_EQ:
-    return (v1s.compare(v2s) == 0);
-  case CEPH_OSD_CMPXATTR_OP_NE:
-    return (v1s.compare(v2s) != 0);
-  case CEPH_OSD_CMPXATTR_OP_GT:
-    return (v1s.compare(v2s) > 0);
-  case CEPH_OSD_CMPXATTR_OP_GTE:
-    return (v1s.compare(v2s) >= 0);
-  case CEPH_OSD_CMPXATTR_OP_LT:
-    return (v1s.compare(v2s) < 0);
-  case CEPH_OSD_CMPXATTR_OP_LTE:
-    return (v1s.compare(v2s) <= 0);
-  default:
-    return -EINVAL;
-  }
+  return do_cmp_xattr(op, v1s, v2s);
 }
 
 int PrimaryLogPG::do_writesame(OpContext *ctx, OSDOp& osd_op)
