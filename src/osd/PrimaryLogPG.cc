@@ -15,6 +15,8 @@
  *
  */
 
+#include <charconv>
+
 #include "boost/tuple/tuple.hpp"
 #include "boost/intrusive_ptr.hpp"
 #include "PG.h"
@@ -4925,16 +4927,19 @@ int do_cmp_xattr(int op, const U& lhs, const V& rhs)
 
 } // anonymous namespace
 
-int PrimaryLogPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
+int PrimaryLogPG::do_xattr_cmp_u64(int op, uint64_t v1, bufferlist& xattr)
 {
-  __u64 v2;
+  uint64_t v2;
 
-  string v2s(xattr.c_str(), xattr.length());
-  if (v2s.length())
-    v2 = strtoull(v2s.c_str(), NULL, 10);
-  else
+  if (xattr.length()) {
+    const char* first = xattr.c_str();
+    if (auto [p, ec] = std::from_chars(first, first + xattr.length(), v2);
+	ec != std::errc()) {
+      return -EINVAL;
+    }
+  } else {
     v2 = 0;
-
+  }
   dout(20) << "do_xattr_cmp_u64 '" << v1 << "' vs '" << v2 << "' op " << op << dendl;
   return do_cmp_xattr(op, v1, v2);
 }

@@ -1379,7 +1379,7 @@ protected:
                    unsigned split_bits) override;
   void apply_and_flush_repops(bool requeue);
 
-  int do_xattr_cmp_u64(int op, __u64 v1, ceph::buffer::list& xattr);
+  int do_xattr_cmp_u64(int op, uint64_t v1, ceph::buffer::list& xattr);
   int do_xattr_cmp_str(int op, std::string& v1s, ceph::buffer::list& xattr);
 
   // -- checksum --
