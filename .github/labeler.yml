@@ -244,7 +244,7 @@ nfs:
   - src/pybind/mgr/dashboard/tests/test_ganesha.py
   - qa/tasks/cephfs/test_nfs.py
   - qa/tasks/mgr/dashboard/test_ganesha.py
-  - doc/cephfs/fs-nfs-exports.rst
+  - doc/mgr/nfs.rst
   - doc/cephfs/nfs.rst
   - doc/cephadm/nfs.rst
   - doc/radosgw/nfs.rst
