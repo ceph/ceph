@@ -66,6 +66,7 @@ public:
   void init() {}
   void shutdown() override;
 
+  std::string cluster_fsid();
   uint64_t instance_id();
   bool check_secure_mon_conn() const;
 
