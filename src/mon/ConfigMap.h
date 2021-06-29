@@ -4,6 +4,7 @@
 #pragma once
 
 #include <map>
+#include <optional>
 #include <ostream>
 #include <string>
 
@@ -146,7 +147,7 @@ struct ConfigChangeSet {
   std::string name;
 
   // key -> (old value, new value)
-  std::map<std::string,std::pair<boost::optional<std::string>,boost::optional<std::string>>> diff;
+  std::map<std::string,std::pair<std::optional<std::string>,std::optional<std::string>>> diff;
 
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;

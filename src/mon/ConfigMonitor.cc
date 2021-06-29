@@ -348,7 +348,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	goto reply;
       }
       if (!entity.is_client() &&
-	  !boost::get<boost::blank>(&opt->daemon_value)) {
+	  opt->daemon_value != Option::value_t{}) {
 	odata.append(Option::to_str(opt->daemon_value));
       } else {
 	odata.append(Option::to_str(opt->value));
@@ -587,7 +587,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       bl.append(value);
       pending[key] = bl;
     } else {
-      pending[key] = boost::none;
+      pending[key].reset();
     }
     goto update;
   } else if (prefix == "config reset") {
@@ -614,7 +614,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	  bl.append(*i.second.first);
 	  pending[i.first] = bl;
 	} else if (i.second.second) {
-	  pending[i.first] = boost::none;
+	  pending[i.first].reset();
 	}
       }
     }
@@ -798,7 +798,7 @@ void ConfigMonitor::load_config()
       if (p != renamed_pacific.end()) {
 	if (mon.monmap->min_mon_release >= ceph_release_t::pacific) {
 	  // schedule a cleanup
-	  pending_cleanup[key] = boost::none;
+	  pending_cleanup[key].reset();
 	  pending_cleanup[who + "/" + p->second] = it->value();
 	}
 	// continue loading under the new name
@@ -831,18 +831,18 @@ void ConfigMonitor::load_config()
     if (who.size() &&
 	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
       derr << __func__ << " invalid mask for key " << key << dendl;
-      pending_cleanup[key] = boost::none;
+      pending_cleanup[key].reset();
     } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
       dout(10) << __func__ << " NO_MON_UPDATE option '"
 	       << name << "' = '" << value << "' for " << name
 	       << dendl;
-      pending_cleanup[key] = boost::none;
+      pending_cleanup[key].reset();
     } else {
       if (section_name.empty()) {
 	// we prefer global/$option instead of just $option
 	derr << __func__ << " adding global/ prefix to key '" << key << "'"
 	     << dendl;
-	pending_cleanup[key] = boost::none;
+	pending_cleanup[key].reset();
 	pending_cleanup["global/"s + key] = it->value();
       }
       Section *section = &config_map.global;;

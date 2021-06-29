@@ -185,7 +185,7 @@ PyModuleConfig::~PyModuleConfig() = default;
 std::pair<int, std::string> PyModuleConfig::set_config(
     MonClient *monc,
     const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val)
+    const std::string &key, const std::optional<std::string>& val)
 {
   const std::string global_key = "mgr/" + module_name + "/" + key;
   Command set_cmd;

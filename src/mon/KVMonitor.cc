@@ -298,7 +298,7 @@ bool KVMonitor::prepare_command(MonOpRequestRef op)
   else if (prefix == "config-key del" ||
 	   prefix == "config-key rm") {
     ss << "key deleted";
-    pending[key] = boost::none;
+    pending[key].reset();
     goto update;
   }
   else {
@@ -375,7 +375,7 @@ void KVMonitor::do_osd_destroy(int32_t id, uuid_d& uuid)
     if (iter->key().find(prefix) != 0) {
       break;
     }
-    pending[iter->key()] = boost::none;
+    pending[iter->key()].reset();
   }
 
   propose_pending();
@@ -491,7 +491,7 @@ bool KVMonitor::maybe_send_update(Subscription *sub)
       int err = get_version(cur, bl);
       ceph_assert(err == 0);
 
-      std::map<std::string,boost::optional<ceph::buffer::list>> pending;
+      std::map<std::string,std::optional<ceph::buffer::list>> pending;
       auto p = bl.cbegin();
       ceph::decode(pending, p);
 
