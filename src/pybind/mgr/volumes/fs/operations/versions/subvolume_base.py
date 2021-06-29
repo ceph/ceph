@@ -332,3 +332,12 @@ class SubvolumeBase(object):
             'bytes_quota': "infinite" if nsize == 0 else nsize, 'bytes_used': int(usedbytes),
             'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
             'pool_namespace': pool_namespace, 'features': self.features, 'state': self.state.value}
+
+    def set_mirrored(self):
+        self.metadata_mgr.update_global_section("mirrored", 1)
+        self.metadata_mgr.flush()
+
+    def unset_mirrored(self):
+        self.metadata_mgr.remove_option(MetadataManager.GLOBAL_SECTION, "mirrored")
+        self.metadata_mgr.flush()
+
