@@ -159,6 +159,14 @@ class FSPerfStats(object):
             self.log.debug("client_metadata={0}, to_purge={1}".format(
                 self.client_metadata['metadata'], self.client_metadata['to_purge']))
 
+    def re_register_queries(self):
+        #re-register user queries
+        for filter_spec in list(self.user_queries.keys()):
+            user_query = self.user_queries[filter_spec]
+            user_query[QUERY_IDS] = self.register_mds_perf_query(filter_spec)
+            user_query[GLOBAL_QUERY_ID] = self.register_global_perf_query(filter_spec)
+            user_query[QUERY_LAST_REQUEST] = datetime.now()
+
     def update_client_meta(self, rank_set):
         new_updates = {}
         pending_updates = [v[0] for v in self.client_metadata['in_progress'].values()]
