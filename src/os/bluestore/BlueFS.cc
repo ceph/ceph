@@ -2302,7 +2302,6 @@ void BlueFS::_rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
 					 int flags,
 					 std::optional<bluefs_layout_t> layout)
 {
-  //ceph_assert(ceph_mutex_is_notlocked(log.lock));
   std::lock_guard ll(log.lock);
 
   File *log_file = log.writer->file.get();
@@ -2482,11 +2481,7 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
 
   // 2. prepare compacted log
   bluefs_transaction_t t;
-  //this needs files lock
-  //what will happen, if a file is modified *twice* before we stream it to log?
-  //the later state that we capture will be seen earlier and replay will see a temporary retraction (!)
   compact_log_async_dump_metadata_NF(&t, seq_now);
-
   uint64_t max_alloc_size = std::max(alloc_size[BDEV_WAL],
 				     std::max(alloc_size[BDEV_DB],
 					      alloc_size[BDEV_SLOW]));
@@ -2598,15 +2593,6 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
 
   // delete the new log, remove from the dirty files list
   _close_writer(new_log_writer);
-  // flush_special does not dirty files
-  /*
-  if (new_log->dirty_seq) {
-    std::lock_guard dl(dirty.lock);
-    ceph_assert(dirty.files.count(new_log->dirty_seq));
-    auto it = dirty.files[new_log->dirty_seq].iterator_to(*new_log);
-    dirty.files[new_log->dirty_seq].erase(it);
-  }
-  */
   new_log_writer = nullptr;
   new_log = nullptr;
   log_cond.notify_all();
@@ -2866,7 +2852,7 @@ int BlueFS::_flush_and_sync_log_jump_D(uint64_t jump_to,
   ceph_assert(ceph_mutex_is_locked(log.lock));
 
   ceph_assert(jump_to);
-  // we synchronize writing to log, by lock to log_lock
+  // we synchronize writing to log, by lock to log.lock
 
   dirty.lock.lock();
   uint64_t seq =_log_advance_seq();
@@ -3143,41 +3129,47 @@ void BlueFS::_wait_for_aio(FileWriter *h)
 }
 #endif
 
-
-void BlueFS::append_try_flush/*_WFL_WFN*/(FileWriter *h, const char* buf, size_t len)
+void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)
 {
-  std::unique_lock hl(h->lock);
-  size_t max_size = 1ull << 30; // cap to 1GB
-  while (len > 0) {
-    bool need_flush = true;
-    auto l0 = h->get_buffer_length();
-    if (l0 < max_size) {
-      size_t l = std::min(len, max_size - l0);
-      h->append(buf, l);
-      buf += l;
-      len -= l;
-      need_flush = h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size;
-    }
-    if (need_flush) {
-      bool flushed = false;
-      int r = _flush_F(h, true, &flushed);
-      ceph_assert(r == 0);
-      if (r == 0 && flushed) {
-	_maybe_compact_log_LN_NF_LD_D();
+  bool flushed_sum = false;
+  {
+    std::unique_lock hl(h->lock);
+    size_t max_size = 1ull << 30; // cap to 1GB
+    while (len > 0) {
+      bool need_flush = true;
+      auto l0 = h->get_buffer_length();
+      if (l0 < max_size) {
+	size_t l = std::min(len, max_size - l0);
+	h->append(buf, l);
+	buf += l;
+	len -= l;
+	need_flush = h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size;
       }
-      // make sure we've made any progress with flush hence the
-      // loop doesn't iterate forever
-      ceph_assert(h->get_buffer_length() < max_size);
+      if (need_flush) {
+	bool flushed = false;
+	int r = _flush_F(h, true, &flushed);
+	ceph_assert(r == 0);
+	flushed_sum |= flushed;
+	// make sure we've made any progress with flush hence the
+	// loop doesn't iterate forever
+	ceph_assert(h->get_buffer_length() < max_size);
+      }
     }
+  }
+  if (flushed_sum) {
+    _maybe_compact_log_LN_NF_LD_D();
   }
 }
 
 void BlueFS::flush(FileWriter *h, bool force)
 {
-  std::unique_lock hl(h->lock);
   bool flushed = false;
-  int r = _flush_F(h, force, &flushed);
-  ceph_assert(r == 0);
+  int r;
+  {
+    std::unique_lock hl(h->lock);
+    r = _flush_F(h, force, &flushed);
+    ceph_assert(r == 0);
+  }
   if (r == 0 && flushed) {
     _maybe_compact_log_LN_NF_LD_D();
   }
