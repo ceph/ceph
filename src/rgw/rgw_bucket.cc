@@ -3239,24 +3239,22 @@ int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
   return 0;
 }
 
-int RGWBucketCtl::do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                              RGWBucketInfo& info,
+int RGWBucketCtl::do_store_linked_bucket_info(RGWSysObjectCtx& ctx,
+					      RGWBucketInfo& info,
                                               RGWBucketInfo *orig_info,
                                               bool exclusive, real_time mtime,
                                               obj_version *pep_objv,
                                               map<string, bufferlist> *pattrs,
                                               bool create_entry_point,
-					      optional_yield y, const DoutPrefixProvider *dpp)
+					      optional_yield y,
+					      const DoutPrefixProvider *dpp)
 {
   bool create_head = !info.has_instance_obj || create_entry_point;
+  BucketInstanceOpContext bictx(this, ctx);
 
-  int ret = svc.bucket->store_bucket_instance_info(ctx.bi,
-                                                   RGWSI_Bucket::get_bi_meta_key(info.bucket),
-                                                   info,
-                                                   orig_info,
-                                                   exclusive,
-                                                   mtime, pattrs,
-						   y, dpp);
+  int ret = do_store_bucket_instance_info(bictx, get_bi_meta_key(info.bucket),
+					  info, orig_info, exclusive, mtime,
+					  pattrs, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -3278,22 +3276,19 @@ int RGWBucketCtl::do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
       *pep_objv = ot.write_version;
     }
   }
-  ret = svc.bucket->store_bucket_entrypoint_info(ctx.ep,
-                                                 RGWSI_Bucket::get_entrypoint_meta_key(info.bucket),
-                                                 entry_point,
-                                                 exclusive,
-                                                 mtime,
-                                                 pattrs,
-                                                 &ot,
-						 y,
-                                                 dpp);
+
+  BucketOpContext bctx(this, ctx);
+  store_bucket_entrypoint_info(bctx, get_entrypoint_meta_key(info.bucket),
+			       entry_point, y, dpp, exclusive, &ot, mtime,
+			       pattrs);
   if (ret < 0)
     return ret;
 
   return 0;
 }
-int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                          const rgw_bucket& bucket,
+
+int RGWBucketCtl::convert_old_bucket_info(RGWSysObjectCtx& ctx,
+					  const rgw_bucket& bucket,
                                           optional_yield y,
                                           const DoutPrefixProvider *dpp)
 {
@@ -3302,13 +3297,13 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
   RGWBucketInfo info;
-  auto cct = svc.bucket->ctx();
+  BucketOpContext bctx(this, ctx);
 
-  ldpp_dout(dpp, 10) << "RGWRados::convert_old_bucket_info(): bucket=" << bucket << dendl;
-
-  int ret = svc.bucket->read_bucket_entrypoint_info(ctx.ep,
-                                                    RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                    &entry_point, &ot, &ep_mtime, &attrs, y, dpp);
+  ldpp_dout(dpp, 10) << "RGWRados::convert_old_bucket_info(): bucket="
+		     << bucket << dendl;
+  int ret = read_bucket_entrypoint_info(bctx, get_entrypoint_meta_key(bucket),
+					&entry_point, y, dpp, &ot, &ep_mtime,
+					&attrs, nullptr, boost::none);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: get_bucket_entrypoint_info() returned " << ret << " bucket=" << bucket << dendl;
     return ret;
@@ -3338,26 +3333,31 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                             optional_yield y,
                                             const DoutPrefixProvider *dpp)
 {
-  return call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    rgw_bucket& bucket = bucket_info.bucket;
+  auto ctx = svc.sysobj->init_obj_ctx();
+  rgw_bucket& bucket = bucket_info.bucket;
 
-    if (!bucket_info.has_instance_obj) {
-      /* an old bucket object, need to convert it */
-        int ret = convert_old_bucket_info(ctx, bucket, y, dpp);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
-          return ret;
-        }
+  if (!bucket_info.has_instance_obj) {
+    /* an old bucket object, need to convert it */
+    int ret = convert_old_bucket_info(ctx, bucket, y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
+      return ret;
     }
+  }
 
-    return store_bucket_instance_info(bucket,
-				      bucket_info,
-				      y,
-				      dpp,
-				      BucketInstance::PutParams().set_attrs(&attrs)
-				      .set_objv_tracker(objv_tracker)
-				      .set_orig_info(&bucket_info));
-    });
+  BucketInstanceOpContext bictx(this, ctx);
+  if (objv_tracker) {
+    bucket_info.objv_tracker = *objv_tracker;
+  }
+  return do_store_bucket_instance_info(bictx,
+				       get_bi_meta_key(bucket),
+				       bucket_info,
+				       &bucket_info,
+				       false,
+				       {},
+				       &attrs,
+				       y,
+				       dpp);
 }
 
 

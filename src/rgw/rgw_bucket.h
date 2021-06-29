@@ -781,8 +781,8 @@ public:
                           const DoutPrefixProvider *dpp);
 
 private:
-  int convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                              const rgw_bucket& bucket,
+  int convert_old_bucket_info(RGWSysObjectCtx& ctx,
+			      const rgw_bucket& bucket,
                               optional_yield y,
                               const DoutPrefixProvider *dpp);
 
@@ -797,8 +797,8 @@ private:
     optional_yield y,
     const DoutPrefixProvider *dpp);
 
-  int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                  RGWBucketInfo& info,
+  int do_store_linked_bucket_info(RGWSysObjectCtx& ctx,
+				  RGWBucketInfo& info,
                                   RGWBucketInfo *orig_info,
                                   bool exclusive, real_time mtime,
                                   obj_version *pep_objv,
