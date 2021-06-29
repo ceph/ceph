@@ -87,6 +87,9 @@ seastar::future<> ClientRequest::start()
 	return interruptor::with_interruption([this, pgref]() mutable {
           epoch_t same_interval_since = pgref->get_interval_start_epoch();
           logger().debug("{} same_interval_since: {}", *this, same_interval_since);
+          if (m->finish_decode()) {
+            m->clear_payload();
+          }
           const bool has_pg_op = is_pg_op();
           auto interruptible_do_op = interruptor::wrap_function([=] {
             PG &pg = *pgref;
@@ -108,9 +111,6 @@ seastar::future<> ClientRequest::start()
             }).then_interruptible([this,
                                    has_pg_op,
                                    pgref=std::move(pgref)]() mutable {
-              if (m->finish_decode()) {
-                m->clear_payload();
-              }
               return (has_pg_op ?
                       process_pg_op(pgref) :
                       process_op(pgref));
