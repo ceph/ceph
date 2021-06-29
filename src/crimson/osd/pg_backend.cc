@@ -862,7 +862,11 @@ static int do_xattr_cmp_u64(int op, uint64_t lhs, bufferlist& rhs_xattr)
   uint64_t rhs;
 
   if (rhs_xattr.length() > 0) {
-    std::from_chars(rhs_xattr.c_str(), rhs_xattr.c_str() + rhs_xattr.length(), rhs);
+    const char* first = rhs_xattr.c_str();
+    if (auto [p, ec] = std::from_chars(first, first + rhs_xattr.length(), rhs);
+	ec != std::errc()) {
+      return -EINVAL;
+    }
   } else {
     rhs = 0;
   }
