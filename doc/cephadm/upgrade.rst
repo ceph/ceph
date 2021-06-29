@@ -41,28 +41,32 @@ For example, to upgrade to v15.2.1:
 Monitoring the upgrade
 ======================
 
-Determine whether an upgrade is in process and what version the cluster is
-upgrading to with:
+Determine (1) whether an upgrade is in progress and (2) which version the
+cluster is upgrading to by running the following command:
 
 .. prompt:: bash #
 
   ceph orch upgrade status
 
-While the upgrade is underway, you will see a progress bar in the ceph
-status output. For example:
+Watching the progress bar during a Ceph upgrade
+-----------------------------------------------
 
-.. prompt:: bash #
+During the upgrade, a progress bar is visible in the ceph status output. It
+looks like this:
 
-  ceph -s
+.. code-block:: console
 
-Expected output::
+  # ceph -s
 
   [...]
     progress:
       Upgrade to docker.io/ceph/ceph:v15.2.1 (00h 20m 12s)
         [=======.....................] (time remaining: 01h 43m 31s)
 
-You can also watch the cephadm log by running the following command:
+Watching the cephadm log during an upgrade
+------------------------------------------
+
+Watch the cephadm log by running the following command:
 
 .. prompt:: bash #
 
