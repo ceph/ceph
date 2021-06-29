@@ -224,7 +224,7 @@ public:
 
   // cast to double
   operator double() const {
-    return (double)sec() + ((double)nsec() / 1000000000.0L);
+    return (double)sec() + ((double)nsec() / 1000000000.0f);
   }
   operator ceph_timespec() const {
     ceph_timespec ts;
