@@ -522,7 +522,7 @@ CephFS distributed file system
 * First class NFS gateway support in Ceph is here! It's now possible to create
   scale-out ("active-active") NFS gateway clusters that export CephFS using
   a few commands. The gateways are deployed via cephadm (or Rook, in the future).
-  For more information, see :ref:`cephfs-nfs`.
+  For more information, see :ref:`mgr-nfs`.
 
 * Multiple active MDS file system scrub is now stable. It is no longer necessary
   to set ``max_mds`` to 1 and wait for non-zero ranks to stop. Scrub commands
