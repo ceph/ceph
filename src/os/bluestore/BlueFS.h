@@ -121,6 +121,11 @@ public:
     std::atomic_int num_reading;
 
     void* vselector_hint = nullptr;
+    /* lock protects fnode and other the parts that can be modified during read & write operations.
+       Does not protect values that are fixed
+       Does not need to be taken when doing one-time operations:
+       _replay, device_migrate_to_existing, device_migrate_to_new */
+    ceph::mutex lock = ceph::make_mutex("BlueFS::File::lock");
 
   private:
     FRIEND_MAKE_REF(File);
@@ -299,8 +304,9 @@ public:
   };
 
 private:
-  ceph::mutex lock = ceph::make_mutex("BlueFS::lock");
-
+  ceph::mutex log_lock = ceph::make_mutex("BlueFS::log_lock");
+  ceph::mutex dirs_lock = ceph::make_mutex("BlueFS::dirs_lock");
+  ceph::mutex dirty_lock = ceph::make_mutex("BlueFS::dirty_lock");
   PerfCounters *logger = nullptr;
 
   uint64_t max_bytes[MAX_BDEV] = {0};
@@ -324,13 +330,12 @@ private:
   FileWriter *log_writer = 0;  ///< writer for the log
   bluefs_transaction_t log_t;  ///< pending, unwritten log transaction
   bool log_flushing = false;   ///< true while flushing the log
-  ceph::condition_variable log_cond;
 
-  uint64_t new_log_jump_to = 0;
-  uint64_t old_log_jump_to = 0;
-  FileRef new_log = nullptr;
-  FileWriter *new_log_writer = nullptr;
-
+  ceph::condition_variable log_cond;                             ///< used for state control between log flush / log compaction
+  ceph::mutex cond_lock = ceph::make_mutex("BlueFS::cond_lock"); ///< ....
+  std::atomic<bool> log_is_compacting{false};                    ///< signals that bluefs log is already ongoing compaction
+  std::atomic<bool> log_forbidden_to_expand{false};              ///< used to signal that async compaction is in state
+                                                                 ///  that prohibits expansion of bluefs log
   /*
    * There are up to 3 block devices:
    *
@@ -344,6 +349,11 @@ private:
   std::vector<Allocator*> alloc;                   ///< allocators for bdevs
   std::vector<uint64_t> alloc_size;                ///< alloc size for each device
   std::vector<interval_set<uint64_t>> pending_release; ///< extents to release
+  // TODO: it should be examined what makes pending_release immune to
+  // eras in a way similar to dirty_files. Hints:
+  // 1) we have actually only 2 eras: log_seq and log_seq+1
+  // 2) we usually not remove extents from files. And when we do, we force log-syncing.
+
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
@@ -390,10 +400,9 @@ private:
   int _signal_dirty_to_log(FileWriter *h);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
-  int _flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l);
   int _flush(FileWriter *h, bool force, bool *flushed = nullptr);
   int _flush_special(FileWriter *h);
-  int _fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l);
+  int _fsync(FileWriter *h);
 
 #ifdef HAVE_LIBAIO
   void _claim_completed_aios(FileWriter *h, std::list<aio_t> *ls);
@@ -409,11 +418,10 @@ private:
   void _flush_and_sync_log_core(int64_t available_runway);
   int _flush_and_sync_log_jump(uint64_t jump_to,
 			       int64_t available_runway);
-  int _flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
-			  uint64_t want_seq = 0);
+  int flush_and_sync_log(uint64_t want_seq = 0);
 
-  uint64_t _estimate_log_size();
-  bool _should_compact_log();
+  uint64_t estimate_log_size();
+  bool should_start_compact_log();
 
   enum {
     REMOVE_DB = 1,
@@ -421,12 +429,12 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata(bluefs_transaction_t *t,
-				  int flags);
-  void _compact_log_sync();
-  void _compact_log_async(std::unique_lock<ceph::mutex>& l);
+  void compact_log_dump_metadata(bluefs_transaction_t *t,
+				 int flags);
+  void compact_log_sync();
+  void compact_log_async();
 
-  void _rewrite_log_and_layout_sync(bool allocate_with_fallback,
+  void rewrite_log_and_layout_sync(bool allocate_with_fallback,
 				    int super_dev,
 				    int log_dev,
 				    int new_log_dev,
@@ -435,7 +443,7 @@ private:
 
   //void _aio_finish(void *priv);
 
-  void _flush_bdev_safely(FileWriter *h);
+  void _flush_bdev(FileWriter *h);
   void flush_bdev();  // this is safe to call without a lock
   void flush_bdev(std::array<bool, MAX_BDEV>& dirty_bdevs);  // this is safe to call without a lock
 
@@ -454,8 +462,6 @@ private:
     uint64_t len,    ///< [in] this many bytes
     char *out);      ///< [out] optional: or copy it here
 
-  void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
-
   int _open_super();
   int _write_super(int dev);
   int _check_allocations(const bluefs_fnode_t& fnode,
@@ -468,6 +474,7 @@ private:
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
+  void _drain_writer(FileWriter *h);
   void _close_writer(FileWriter *h);
 
   // always put the super in the second 4k block.  FIXME should this be
@@ -533,10 +540,8 @@ public:
     FileReader **h,
     bool random = false);
 
-  void close_writer(FileWriter *h) {
-    std::lock_guard l(lock);
-    _close_writer(h);
-  }
+  // data added after last fsync() is lost
+  void close_writer(FileWriter *h);
 
   int rename(std::string_view old_dir, std::string_view old_file,
 	     std::string_view new_dir, std::string_view new_file);
@@ -560,7 +565,7 @@ public:
   /// sync any uncommitted state to disk
   void sync_metadata(bool avoid_compact);
   /// test and compact log, if necessary
-  void _maybe_compact_log(std::unique_lock<ceph::mutex>& l);
+  void maybe_compact_log();
 
   void set_volume_selector(BlueFSVolumeSelector* s) {
     vselector.reset(s);
@@ -582,42 +587,11 @@ public:
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
 
-  void flush(FileWriter *h, bool force = false) {
-    std::unique_lock l(lock);
-    int r = _flush(h, force, l);
-    ceph_assert(r == 0);
-  }
+  void flush(FileWriter *h, bool force = false);
 
-  void append_try_flush(FileWriter *h, const char* buf, size_t len) {
-    size_t max_size = 1ull << 30; // cap to 1GB
-    while (len > 0) {
-      bool need_flush = true;
-      auto l0 = h->get_buffer_length();
-      if (l0 < max_size) {
-	size_t l = std::min(len, max_size - l0);
-	h->append(buf, l);
-	buf += l;
-	len -= l;
-	need_flush = h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size;
-      }
-      if (need_flush) {
-	flush(h, true);
-	// make sure we've made any progress with flush hence the
-	// loop doesn't iterate forever
-	ceph_assert(h->get_buffer_length() < max_size);
-      }
-    }
-  }
-  void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
-    std::lock_guard l(lock);
-    _flush_range(h, offset, length);
-  }
-  int fsync(FileWriter *h) {
-    std::unique_lock l(lock);
-    int r = _fsync(h, l);
-    _maybe_compact_log(l);
-    return r;
-  }
+  void append_try_flush(FileWriter *h, const char* buf, size_t len);
+  void flush_range(FileWriter *h, uint64_t offset, uint64_t length);
+  int fsync(FileWriter *h);
   int64_t read(FileReader *h, uint64_t offset, size_t len,
 	   ceph::buffer::list *outbl, char *out) {
     // no need to hold the global lock here; we only touch h and
@@ -632,18 +606,9 @@ public:
     // atomics and asserts).
     return _read_random(h, offset, len, out);
   }
-  void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
-    std::lock_guard l(lock);
-    _invalidate_cache(f, offset, len);
-  }
-  int preallocate(FileRef f, uint64_t offset, uint64_t len) {
-    std::lock_guard l(lock);
-    return _preallocate(f, offset, len);
-  }
-  int truncate(FileWriter *h, uint64_t offset) {
-    std::lock_guard l(lock);
-    return _truncate(h, offset);
-  }
+  void invalidate_cache(FileRef f, uint64_t offset, uint64_t len);
+  int preallocate(FileRef f, uint64_t offset, uint64_t len);
+  int truncate(FileWriter *h, uint64_t offset);
   int do_replay_recovery_read(FileReader *log,
 			      size_t log_pos,
 			      size_t read_offset,
