@@ -45,6 +45,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   // absent from transaction
   result = query_cache_for_extent(addr, &ext);
   if (result == Transaction::get_extent_ret::PRESENT) {
+    t.add_to_read_set(ext);
     return trans_intr::make_interruptible(
       ext->wait_io()
     ).then_interruptible([&t, ext=std::move(ext)]() mutable {
@@ -52,6 +53,21 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
       return retire_extent_iertr::now();
     });
   } else { // result == get_extent_ret::ABSENT
+    // FIXME this will cause incorrect transaction invalidation because t
+    // will not be notified if other transactions that modify the extent at
+    // this addr are committed.
+    //
+    // Say that we have transaction A and B, conflicting on extent E at laddr
+    // L:
+    //   A: dec_ref(L) // cause uncached retirement
+    //   B: read(L) -> E
+    //   B: mutate(E)
+    //   B: submit_transaction() // assume successful
+    //   A: about to submit...
+    //
+    // A cannot be invalidated because E is not in A's read-set
+    //
+    // TODO: leverage RetiredExtentPlaceholder to fix the issue.
     t.add_to_retired_uncached(addr, length);
     return retire_extent_iertr::now();
   }
