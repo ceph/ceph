@@ -3,6 +3,7 @@
 
 #include "pg_backend.h"
 
+#include <charconv>
 #include <optional>
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/adaptor/transformed.hpp>
