@@ -2308,24 +2308,15 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               schema:
                 properties:
-                  max_size:
-                    description: Maximum size of Rule
-                    type: integer
-                  min_size:
-                    description: Minimum size of Rule
-                    type: integer
                   rule_id:
                     description: Rule ID
                     type: integer
                   rule_name:
                     description: Rule Name
                     type: string
-                  ruleset:
-                    description: RuleSet related to the rule
-                    type: integer
                   steps:
                     description: Steps included in the rule
                     items:
@@ -2337,10 +2328,7 @@ paths:
                 required:
                 - rule_id
                 - rule_name
-                - ruleset
                 - type
-                - min_size
-                - max_size
                 - steps
                 type: object
           description: OK
@@ -2444,7 +2432,7 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v2.0+json:
               type: object
           description: OK
         '400':
