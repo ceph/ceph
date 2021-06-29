@@ -3135,6 +3135,14 @@ static string safe_opt(std::optional<string>& os)
   return os.value_or(string());
 }
 
+void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_var, const string& conf_name)
+{
+  var = cct->_conf.get_val<string>(conf_name);
+  if (!var.empty()) {
+    opt_var = var;
+  }
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -3155,8 +3163,6 @@ int main(int argc, const char **argv)
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
     g_conf().set_val_or_die("rgw_zonegroup", g_conf()->rgw_region.c_str());
   }
-
-  common_init_finish(g_ceph_context);
 
   rgw_user user_id_arg;
   std::unique_ptr<rgw::sal::User> user;
@@ -3365,6 +3371,10 @@ int main(int argc, const char **argv)
   bool raw_storage_op = false;
 
   std::optional<std::string> rgw_obj_fs; // radoslist field separator
+
+  init_realm_param(cct.get(), realm_id, opt_realm_id, "rgw_realm_id");
+  init_realm_param(cct.get(), zonegroup_id, opt_zonegroup_id, "rgw_zonegroup_id");
+  init_realm_param(cct.get(), zone_id, opt_zone_id, "rgw_zone_id");
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -3632,11 +3642,13 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*)NULL)) {
       realm_id = val;
       opt_realm_id = val;
+      g_conf().set_val("rgw_realm_id", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*)NULL)) {
       realm_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*)NULL)) {
       zonegroup_id = val;
       opt_zonegroup_id = val;
+      g_conf().set_val("rgw_zonegroup_id", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
@@ -3654,6 +3666,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
       zone_id = val;
       opt_zone_id = val;
+      g_conf().set_val("rgw_zone_id", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
@@ -3810,6 +3823,9 @@ int main(int argc, const char **argv)
       ++i;
     }
   }
+
+  /* common_init_finish needs to be called after g_conf().set_val() */
+  common_init_finish(g_ceph_context);
 
   if (args.empty()) {
     usage();
