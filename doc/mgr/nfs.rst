@@ -1,4 +1,4 @@
-.. _cephfs-nfs:
+.. _mgr-nfs:
 
 =======================
 CephFS Exports over NFS
