@@ -21,7 +21,7 @@ class Module(MgrModule):
         },
     ]
     MODULE_OPTIONS: List[Option] = []
-    NOTIFY_TYPES = [NotifyType.command]
+    NOTIFY_TYPES = [NotifyType.command, NotifyType.fs_map]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -29,7 +29,9 @@ class Module(MgrModule):
 
     def notify(self, notify_type: NotifyType, notify_id):
         if notify_type == NotifyType.command:
-            self.fs_perf_stats.notify(notify_id)
+            self.fs_perf_stats.notify_cmd(notify_id)
+        elif notify_type == NotifyType.fs_map:
+            self.fs_perf_stats.notify_fsmap()
 
     def handle_command(self, inbuf, cmd):
         prefix = cmd['prefix']

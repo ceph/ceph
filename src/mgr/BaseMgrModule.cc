@@ -1322,6 +1322,13 @@ ceph_remove_mds_perf_query(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_reregister_mds_perf_queries(BaseMgrModule *self, PyObject *args)
+{
+  self->py_modules->reregister_mds_perf_queries();
+  Py_RETURN_NONE;
+}
+
+static PyObject*
 ceph_get_mds_perf_counters(BaseMgrModule *self, PyObject *args)
 {
   MetricQueryID query_id;
@@ -1511,6 +1518,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_remove_mds_perf_query", (PyCFunction)ceph_remove_mds_perf_query,
     METH_VARARGS, "Remove an mds perf query"},
+
+  {"_ceph_reregister_mds_perf_queries", (PyCFunction)ceph_reregister_mds_perf_queries,
+    METH_NOARGS, "Re-register mds perf queries"},
 
   {"_ceph_get_mds_perf_counters", (PyCFunction)ceph_get_mds_perf_counters,
     METH_VARARGS, "Get mds perf counters"},

@@ -115,6 +115,12 @@ void MetricCollector<Query, Limit, Key, Report>::remove_all_queries() {
 }
 
 template <typename Query, typename Limit, typename Key, typename Report>
+void MetricCollector<Query, Limit, Key, Report>::reregister_queries() {
+  dout(20) << dendl;
+  listener.handle_query_updated();
+}
+
+template <typename Query, typename Limit, typename Key, typename Report>
 int MetricCollector<Query, Limit, Key, Report>::get_counters_generic(
     MetricQueryID query_id, std::map<Key, PerformanceCounters> *c) {
   dout(20) << dendl;
