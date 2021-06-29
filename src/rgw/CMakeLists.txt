@@ -126,6 +126,7 @@ set(librgw_common_srcs
   rgw_role.cc
   rgw_sal.cc
   rgw_sal_rados.cc
+  rgw_sal_dbstore.cc
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
@@ -228,6 +229,10 @@ if(WITH_JAEGER)
   add_dependencies(rgw_common jaegertracing::libjaegertracing)
 endif()
 
+if(WITH_RADOSGW_DBSTORE)
+  add_subdirectory(store/dbstore)
+endif()
+
 set(rgw_a_srcs
   rgw_auth_keystone.cc
   rgw_client_io.cc
@@ -295,6 +300,10 @@ set(rgw_libs rgw_a)
 
 list(APPEND rgw_libs ${LUA_LIBRARIES})
 
+if(WITH_RADOSGW_DBSTORE)
+  target_link_libraries(rgw_a PRIVATE dbstore)
+endif()
+
 set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
   rgw_dmclock_sync_scheduler.cc
@@ -327,6 +336,7 @@ target_link_libraries(radosgw
 if(WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
+  target_link_libraries(rgw_a PRIVATE OpenSSL::SSL)
 endif()
 set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
   SOVERSION 2)
@@ -414,10 +424,13 @@ target_link_libraries(rgw
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
   target_link_libraries(rgw PRIVATE OpenSSL::SSL)
+  target_link_libraries(rgw_a PRIVATE RabbitMQ::RabbitMQ)
+  target_link_libraries(rgw_a PRIVATE OpenSSL::SSL)
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw PRIVATE RDKafka::RDKafka)
+  target_link_libraries(rgw_a PRIVATE RDKafka::RDKafka)
 endif()
 
 target_link_libraries(rgw PRIVATE ${LUA_LIBRARIES})

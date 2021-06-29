@@ -24,11 +24,13 @@
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_d3n_datacache.h"
+#include "rgw_sal_dbstore.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 extern "C" {
 extern rgw::sal::Store* newStore(void);
+extern rgw::sal::Store* newRGWDBStore(void);
 }
 
 rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache, bool use_gc)
@@ -69,6 +71,15 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     return store;
   }
 
+  if (svc.compare("dbstore") == 0) {
+    store = newRGWDBStore();
+
+    /* Initialize the dbstore with cct & dpp */
+    DBStore *db = static_cast<rgw::sal::RGWDBStore *>(store)->getDBStore();
+    db->set_context(cct);
+    return store;
+  }
+
   return nullptr;
 }
 
@@ -93,6 +104,9 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
     }
   }
 
+  if (svc.compare("dbstore") == 0) {
+    store = newRGWDBStore();
+  }
   return store;
 }
 
