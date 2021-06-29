@@ -374,6 +374,7 @@ class RadosStore : public Store {
     }
 
     virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
+    virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) override;
     virtual int get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) override;
     virtual int get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) override;
     virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) override;
