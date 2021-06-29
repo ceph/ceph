@@ -134,6 +134,7 @@ void Cache::retire_extent(CachedExtentRef ref)
   retired_extent_gate.add_extent(*ref);
 
   invalidate(*ref);
+  extents.erase(*ref);
 }
 
 void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
@@ -302,11 +303,6 @@ record_t Cache::try_construct_record(Transaction &t)
 
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
-  for (auto &i: t.retired_set) {
-    DEBUGT("retiring {}", t, *i);
-    retire_extent(i);
-  }
-
   for (auto &&i : t.retired_uncached) {
     CachedExtentRef to_retire;
     if (query_cache_for_extent(i.first, &to_retire) ==
@@ -315,12 +311,16 @@ record_t Cache::try_construct_record(Transaction &t)
 	RetiredExtentPlaceholder
 	>(i.second);
       to_retire->set_paddr(i.first);
+      to_retire->state = CachedExtent::extent_state_t::CLEAN;
     }
 
     t.retired_set.insert(to_retire);
     extents.insert(*to_retire);
-    to_retire->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
-    retired_extent_gate.add_extent(*to_retire);
+  }
+
+  for (auto &i: t.retired_set) {
+    DEBUGT("retiring {}", t, *i);
+    retire_extent(i);
   }
 
   record.extents.reserve(t.fresh_block_list.size());
