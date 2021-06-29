@@ -790,6 +790,30 @@ static int autoreg(sqlite3* db, char** err, const struct sqlite3_api_routines* t
   return SQLITE_OK;
 }
 
+/* You may wonder why we have an atexit handler? After all, atexit/exit creates
+ * a mess for multithreaded programs. Well, sqlite3 does not have an API for
+ * orderly removal of extensions. And, in fact, any API we might make
+ * unofficially (such as "sqlite3_cephsqlite_fini") would potentially race with
+ * other threads interacting with sqlite3 + the "ceph" VFS. There is a method
+ * for removing a VFS but it's not called by sqlite3 in any error scenario and
+ * there is no mechanism within sqlite3 to tell a VFS to unregister itself.
+ *
+ * This all would be mostly okay if /bin/sqlite3 did not call exit(3), but it
+ * does. (This occurs only for the sqlite3 binary, not when used as a library.)
+ * exit(3) calls destructors on all static-duration structures for the program.
+ * This breaks any outstanding threads created by the librados handle in all
+ * sorts of fantastic ways from C++ exceptions to memory faults.  In general,
+ * Ceph libraries are not tolerant of exit(3) (_exit(3) is okay!). Applications
+ * must clean up after themselves or _exit(3).
+ *
+ * So, we have an atexit handler for libcephsqlite. This simply shuts down the
+ * RADOS handle. We can be assured that this occurs before any ceph library
+ * static-duration structures are destructed due to ordering guarantees by
+ * exit(3). Generally, we only see this called when the VFS is used by
+ * /bin/sqlite3 and only during sqlite3 error scenarios (like I/O errors
+ * arrising from blocklisting).
+ */
+
 static void cephsqlite_atexit()
 {
   if (auto vfs = sqlite3_vfs_find("ceph"); vfs) {
