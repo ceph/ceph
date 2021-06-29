@@ -15,10 +15,15 @@
  *
  */
 
-#include <charconv>
+#include <errno.h>
 
-#include "boost/tuple/tuple.hpp"
-#include "boost/intrusive_ptr.hpp"
+#include <charconv>
+#include <sstream>
+#include <utility>
+
+#include <boost/intrusive_ptr.hpp>
+#include <boost/tuple/tuple.hpp>
+
 #include "PG.h"
 #include "pg_scrubber.h"
 #include "PrimaryLogPG.h"
@@ -32,9 +37,12 @@
 
 #include "cls/cas/cls_cas_ops.h"
 #include "common/ceph_crypto.h"
+#include "common/config.h"
 #include "common/errno.h"
 #include "common/scrub_types.h"
 #include "common/perf_counters.h"
+#include "common/CDC.h"
+#include "common/EventTrace.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDBackoff.h"
@@ -48,9 +56,7 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MCommandReply.h"
 #include "messages/MOSDScrubReserve.h"
-#include "common/EventTrace.h"
 
-#include "common/config.h"
 #include "include/compat.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
@@ -71,15 +77,9 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-#include <sstream>
-#include <utility>
-
-#include <errno.h>
 #ifdef HAVE_JAEGER
 #include "common/tracer.h"
 #endif
-
-#include <common/CDC.h>
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
