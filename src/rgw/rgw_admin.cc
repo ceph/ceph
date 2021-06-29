@@ -3010,7 +3010,7 @@ static int search_entities_by_zone(rgw_zone_id zone_id,
   auto& found = *pfound;
 
   list<string> realms;
-  int r = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->list_realms(realms);
+  int r = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->list_realms(dpp(), realms);
   if (r < 0) {
     cerr << "failed to list realms: " << cpp_strerror(-r) << std::endl;
     return r;
@@ -3020,7 +3020,7 @@ static int search_entities_by_zone(rgw_zone_id zone_id,
     string realm_id;
     string period_id;
     RGWRealm realm(realm_id, realm_name);
-    r = realm.init(g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
+    r = realm.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
     if (r < 0) {
       cerr << "WARNING: can't open realm " << realm_name << ": " << cpp_strerror(-r) << " ... skipping" << std::endl;
       continue;
@@ -3042,7 +3042,7 @@ static int try_to_resolve_local_zone(string& zone_id, string& zone_name)
 {
   /* try to read zone info */
   RGWZoneParams zone(zone_id, zone_name);
-  int r = zone.init(g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
+  int r = zone.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
   if (r == -ENOENT) {
     ldpp_dout(dpp(), 20) << __func__ << "(): local zone not found (id=" << zone_id << ", name= " << zone_name << ")" << dendl;
     return r;
@@ -3125,6 +3125,16 @@ static int try_to_resolve_local_entities(string& realm_id, string& realm_name,
   return 0;
 }
 
+static bool empty_opt(std::optional<string>& os)
+{
+  return (!os || os->empty());
+}
+
+static string safe_opt(std::optional<string>& os)
+{
+  return os.value_or(string());
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -3163,8 +3173,11 @@ int main(int argc, const char **argv)
   std::optional<string> opt_region;
   std::string master_zone;
   std::string realm_name, realm_id, realm_new_name;
+  std::optional<string> opt_realm_name, opt_realm_id;
   std::string zone_name, zone_id, zone_new_name;
+  std::optional<string> opt_zone_name, opt_zone_id;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
+  std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
   std::string redirect_zone;
@@ -3618,10 +3631,12 @@ int main(int argc, const char **argv)
       opt_region = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*)NULL)) {
       realm_id = val;
+      opt_realm_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*)NULL)) {
       realm_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*)NULL)) {
       zonegroup_id = val;
+      opt_zonegroup_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
@@ -3638,6 +3653,7 @@ int main(int argc, const char **argv)
       api_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
       zone_id = val;
+      opt_zone_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
@@ -4038,6 +4054,18 @@ int main(int argc, const char **argv)
   zone_name = g_conf()->rgw_zone;
   zonegroup_name = g_conf()->rgw_zonegroup;
 
+  if (!realm_name.empty()) {
+    opt_realm_name = realm_name;
+  }
+
+  if (!zone_name.empty()) {
+    opt_zone_name = zone_name;
+  }
+
+  if (!zonegroup_name.empty()) {
+    opt_zonegroup_name = zonegroup_name;
+  }
+
   RGWStreamFlusher stream_flusher(formatter.get(), cout);
 
   RGWUserAdminOpState user_op(store);
@@ -4309,11 +4337,11 @@ int main(int argc, const char **argv)
       break;
     case OPT::REALM_DELETE:
       {
-	RGWRealm realm(realm_id, realm_name);
-	if (realm_name.empty() && realm_id.empty()) {
+	if (empty_opt(opt_realm_name) && empty_opt(opt_realm_id)) {
 	  cerr << "missing realm name or id" << std::endl;
 	  return EINVAL;
 	}
+	RGWRealm realm(safe_opt(opt_realm_id), safe_opt(opt_realm_name));
 	int ret = realm.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
 	if (ret < 0) {
 	  cerr << "realm.init failed: " << cpp_strerror(-ret) << std::endl;
@@ -4682,11 +4710,11 @@ int main(int argc, const char **argv)
       break;
     case OPT::ZONEGROUP_DELETE:
       {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
+	if (empty_opt(opt_zonegroup_id) && empty_opt(opt_zonegroup_name)) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
 	  return EINVAL;
 	}
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	RGWZoneGroup zonegroup(safe_opt(opt_zonegroup_id), safe_opt(opt_zonegroup_name));
 	int ret = zonegroup.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj,
 				 null_yield);
 	if (ret < 0) {
@@ -5136,11 +5164,11 @@ int main(int argc, const char **argv)
       break;
     case OPT::ZONE_DELETE:
       {
-	if (zone_id.empty() && zone_name.empty()) {
+	if (empty_opt(opt_zone_id) && empty_opt(opt_zone_name)) {
 	  cerr << "no zone name or id provided" << std::endl;
 	  return EINVAL;
 	}
-	RGWZoneParams zone(zone_id, zone_name);
+	RGWZoneParams zone(safe_opt(opt_zone_id), safe_opt(opt_zone_name));
 	int ret = zone.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
@@ -5163,14 +5191,14 @@ int main(int argc, const char **argv)
           }
           ret = zonegroup.remove_zone(dpp(), zone.get_id(), null_yield);
           if (ret < 0 && ret != -ENOENT) {
-            cerr << "failed to remove zone " << zone_name << " from zonegroup " << zonegroup.get_name() << ": "
+            cerr << "failed to remove zone " << zone.get_name() << " from zonegroup " << zonegroup.get_name() << ": "
               << cpp_strerror(-ret) << std::endl;
           }
         }
 
 	ret = zone.delete_obj(dpp(), null_yield);
 	if (ret < 0) {
-	  cerr << "failed to delete zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to delete zone " << zone.get_name() << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
       }
