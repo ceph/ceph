@@ -901,15 +901,15 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
     break;
     case CEPH_OSD_CMPXATTR_MODE_U64:
       {
-        uint64_t val;
+        uint64_t lhs;
         try {
-          decode(val, bp);
+          decode(lhs, bp);
 	} catch (ceph::buffer::error& e) {
           logger().info("cmp_xattr: buffer error expection");
           result = -EINVAL;
           break;
 	}
-        result = do_xattr_cmp_u64(osd_op.op.xattr.cmp_op, val, xattr);
+        result = do_xattr_cmp_u64(osd_op.op.xattr.cmp_op, lhs, xattr);
       }
     break;
     default:
