@@ -82,7 +82,7 @@ protected:
     interval_set<uint64_t>&& intervals_included,
     ceph::bufferlist&& data_included,
     ceph::bufferlist&& omap_header,
-    const std::map<string, bufferlist> &attrs,
+    const std::map<std::string, bufferlist, std::less<>> &attrs,
     std::map<string, bufferlist>&& omap_entries,
     ceph::os::Transaction *t);
   void submit_push_complete(
@@ -161,7 +161,7 @@ private:
     bool complete,
     bool clear_omap,
     ObjectStore::Transaction* t,
-    const map<string, bufferlist> &attrs,
+    const std::map<std::string, bufferlist, std::less<>> &attrs,
     bufferlist&& omap_header);
   using interruptor = crimson::interruptible::interruptor<
     crimson::osd::IOInterruptCondition>;
