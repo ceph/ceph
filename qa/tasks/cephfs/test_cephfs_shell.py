@@ -512,8 +512,7 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_regfiles(self):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
-        self.mount_a.client_remote.write_file(regfile_abspath,
-                                              'somedata', sudo=True)
+        self.mount_a.client_remote.write_file(regfile_abspath, 'somedata')
 
         size = humansize(self.mount_a.stat(regfile_abspath)['st_size'])
         expected_output = r'{}{}{}'.format(size, " +", regfilename)
@@ -527,8 +526,7 @@ class TestDU(TestCephFSShell):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(dir_abspath, regfilename)
         self.mount_a.run_shell_payload(f"mkdir {dir_abspath}")
-        self.mount_a.client_remote.write_file(regfile_abspath,
-                                              'somedata', sudo=True)
+        self.mount_a.client_remote.write_file(regfile_abspath, 'somedata')
 
         # XXX: we stat `regfile_abspath` here because ceph du reports a non-empty
         # directory's size as sum of sizes of all files under it.
@@ -553,8 +551,7 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_hardlinks(self):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
-        self.mount_a.client_remote.write_file(regfile_abspath,
-                                              'somedata', sudo=True)
+        self.mount_a.client_remote.write_file(regfile_abspath, 'somedata')
         hlinkname = 'some_hardlink'
         hlink_abspath = path.join(self.mount_a.mountpoint, hlinkname)
         self.mount_a.run_shell_payload(f"ln {regfile_abspath} {hlink_abspath}")
@@ -568,8 +565,7 @@ class TestDU(TestCephFSShell):
     def test_du_works_for_softlinks_to_files(self):
         regfilename = 'some_regfile'
         regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
-        self.mount_a.client_remote.write_file(regfile_abspath,
-                                              'somedata', sudo=True)
+        self.mount_a.client_remote.write_file(regfile_abspath, 'somedata')
         slinkname = 'some_softlink'
         slink_abspath = path.join(self.mount_a.mountpoint, slinkname)
         self.mount_a.run_shell_payload(f"ln -s {regfile_abspath} {slink_abspath}")
@@ -624,10 +620,8 @@ class TestDU(TestCephFSShell):
         self.mount_a.run_shell_payload(f"mkdir -p {dir21_abspath}")
         self.mount_a.run_shell_payload(f"touch {regfile121_abspath}")
 
-        self.mount_a.client_remote.write_file(regfile_abspath,
-                                              'somedata', sudo=True)
-        self.mount_a.client_remote.write_file(regfile121_abspath,
-                                              'somemoredata', sudo=True)
+        self.mount_a.client_remote.write_file(regfile_abspath, 'somedata')
+        self.mount_a.client_remote.write_file(regfile121_abspath, 'somemoredata')
 
         # TODO: is there a way to trigger/force update ceph.dir.rbytes?
         # wait so that attr ceph.dir.rbytes gets a chance to be updated.
@@ -815,8 +809,7 @@ class TestQuota(TestCephFSShell):
         file_abspath = path.join(dir_abspath, filename)
         try:
             # Write should fail as bytes quota is set to 6
-            self.mount_a.client_remote.write_file(file_abspath,
-                    'Disk raise Exception', sudo=True)
+            self.mount_a.client_remote.write_file(file_abspath, 'Disk raise Exception')
             raise Exception("Write should have failed")
         except CommandFailedError:
             # Test should pass only when write command fails
