@@ -387,7 +387,6 @@ else
         esac
         munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
-        $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
@@ -477,5 +476,4 @@ if $for_make_check; then
     done
     rm -rf $top_srcdir/install-deps-python3
     rm -rf $XDG_CACHE_HOME
-    type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi

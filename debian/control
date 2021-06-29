@@ -84,7 +84,8 @@ Build-Depends: automake,
                pkg-config,
                prometheus <pkg.ceph.check>,
                protobuf-compiler <pkg.ceph.crimson>,
-               python3-all-dev,
+               python3.8,
+               python3.8-dev,
                python3-cherrypy3,
                python3-jwt <pkg.ceph.check>,
                python3-nose <pkg.ceph.check>,
@@ -1032,7 +1033,7 @@ Description: Meta-package for python libraries for the Ceph libraries
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package is a metapackage for all Python 2 bindings.
+ This package is a metapackage for all Python 3 bindings.
 
 Package: python3-rados
 Architecture: linux-any
