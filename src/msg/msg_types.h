@@ -694,6 +694,9 @@ struct entity_addrvec_t {
   friend bool operator<(const entity_addrvec_t& l, const entity_addrvec_t& r) {
     return l.v < r.v;  // see lexicographical_compare()
   }
+  friend bool operator>(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v > r.v;  // see lexicographical_compare()
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
 

@@ -486,7 +486,7 @@ ceph_set_module_option(BaseMgrModule *self, PyObject *args)
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  boost::optional<string> val;
+  std::optional<string> val;
   if (value) {
     val = value;
   }
@@ -529,7 +529,7 @@ ceph_store_set(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "sz:ceph_store_set", &key, &value)) {
     return nullptr;
   }
-  boost::optional<string> val;
+  std::optional<string> val;
   if (value) {
     val = value;
   }

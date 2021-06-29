@@ -661,7 +661,7 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
 }
 
 void ActivePyModules::set_store(const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val)
+    const std::string &key, const std::optional<std::string>& val)
 {
   const std::string global_key = PyModule::mgr_store_prefix
                                    + module_name + "/" + key;
@@ -708,7 +708,7 @@ void ActivePyModules::set_store(const std::string &module_name,
 std::pair<int, std::string> ActivePyModules::set_config(
   const std::string &module_name,
   const std::string &key,
-  const boost::optional<std::string>& val)
+  const std::optional<std::string>& val)
 {
   return module_config.set_config(&monc, module_name, key, val);
 }
@@ -730,7 +730,7 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
 void ActivePyModules::update_kv_data(
   const std::string prefix,
   bool incremental,
-  const map<std::string, boost::optional<bufferlist>, std::less<>>& data)
+  const map<std::string, std::optional<bufferlist>, std::less<>>& data)
 {
   std::lock_guard l(lock);
   bool do_config = false;
@@ -1117,7 +1117,7 @@ PyObject *ActivePyModules::get_foreign_config(
     value = p->second;
   } else {
     if (!entity.is_client() &&
-	!boost::get<boost::blank>(&opt->daemon_value)) {
+	opt->daemon_value != Option::value_t{}) {
       value = Option::to_str(opt->daemon_value);
     } else {
       value = Option::to_str(opt->value);
