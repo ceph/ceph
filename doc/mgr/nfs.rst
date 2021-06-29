@@ -278,7 +278,7 @@ An existing export can be dumped in JSON format with:
 
 .. prompt:: bash #
 
-    ceph nfs export info *<pseudo_path>*
+    ceph nfs export info *<cluster_id>* *<pseudo_path>*
 
 An export can be created or modified by importing a JSON description in the
 same format:
