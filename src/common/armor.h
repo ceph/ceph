@@ -5,14 +5,14 @@
 extern "C" {
 #endif
 
-int ceph_armor(char *dst, const char *dst_end,
-	       const char *src, const char *end);
+int ceph_armor(char *dst, char * const dst_end,
+	       const char * src, const char *end);
 
-int ceph_armor_linebreak(char *dst, const char *dst_end,
+int ceph_armor_linebreak(char *dst, char * const dst_end,
 	       const char *src, const char *end,
 	       int line_width);
-int ceph_unarmor(char *dst, const char *dst_end,
-		 const char *src, const char *end);
+int ceph_unarmor(char *dst, char * const dst_end,
+		 const char *src, const char * const end);
 #ifdef __cplusplus
 }
 #endif
