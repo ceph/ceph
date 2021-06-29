@@ -1216,7 +1216,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._configure_guest_auth(guest_mount, authid, key)
 
         # mount the subvolume, and write to it
-        guest_mount.mount(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
         guest_mount.write_n_mb("data.bin", 1)
 
         # authorize guest authID read access to subvolume
@@ -1226,7 +1226,7 @@ class TestSubvolumes(TestVolumesHelper):
         # guest client sees the change in access level to read only after a
         # remount of the subvolume.
         guest_mount.umount_wait()
-        guest_mount.mount(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
 
         # read existing content of the subvolume
         self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
@@ -1272,7 +1272,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._configure_guest_auth(guest_mount, authid, key)
 
         # mount the subvolume, and write to it
-        guest_mount.mount(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
         guest_mount.write_n_mb("data.bin", 1)
 
         # authorize guest authID read access to subvolume
@@ -1282,7 +1282,7 @@ class TestSubvolumes(TestVolumesHelper):
         # guest client sees the change in access level to read only after a
         # remount of the subvolume.
         guest_mount.umount_wait()
-        guest_mount.mount(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
 
         # read existing content of the subvolume
         self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
@@ -1887,7 +1887,7 @@ class TestSubvolumes(TestVolumesHelper):
             self._configure_guest_auth(guest_mounts[i], auth_id, key)
 
             # mount the subvolume, and write to it
-            guest_mounts[i].mount(cephfs_mntpt=mount_path)
+            guest_mounts[i].mount_wait(cephfs_mntpt=mount_path)
             guest_mounts[i].write_n_mb("data.bin", 1)
 
         # Evict client, guest_mounts[0], using auth ID 'guest' and has mounted
