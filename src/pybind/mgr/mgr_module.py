@@ -799,8 +799,10 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         return self._ceph_get(data_name)
 
     def get_mgr_ip(self) -> str:
-        # we don't have get() for standby modules; make do with the hostname
-        return socket.gethostname()
+        ips = self.get("mgr_ips").get('ips', [])
+        if not ips:
+            return socket.gethostname()
+        return ips[0]
 
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
