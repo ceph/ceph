@@ -666,7 +666,7 @@ class Filesystem(MDSCluster):
         from tasks.cephfs.fuse_mount import FuseMount
         d = misc.get_testdir(self._ctx)
         m = FuseMount(self._ctx, {}, d, "admin", self.client_remote, cephfs_name=self.name)
-        m.mount()
+        m.mount_wait()
         m.run_shell_payload(cmd)
         m.umount_wait(require_clean=True)
 

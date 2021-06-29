@@ -650,14 +650,14 @@ class TestMultiFilesystems(CephFSTestCase):
         fs_a, fs_b = self._setup_two()
 
         # Mount a client on fs_a
-        self.mount_a.mount(cephfs_name=fs_a.name)
+        self.mount_a.mount_wait(cephfs_name=fs_a.name)
         self.mount_a.write_n_mb("pad.bin", 1)
         self.mount_a.write_n_mb("test.bin", 2)
         a_created_ino = self.mount_a.path_to_ino("test.bin")
         self.mount_a.create_files()
 
         # Mount a client on fs_b
-        self.mount_b.mount(cephfs_name=fs_b.name)
+        self.mount_b.mount_wait(cephfs_name=fs_b.name)
         self.mount_b.write_n_mb("test.bin", 1)
         b_created_ino = self.mount_b.path_to_ino("test.bin")
         self.mount_b.create_files()
