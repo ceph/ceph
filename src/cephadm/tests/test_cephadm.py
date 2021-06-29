@@ -27,7 +27,7 @@ from .fixtures import (
 
 with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
-    cd = SourceFileLoader('cephadm', 'cephadm').load_module()
+    cd = SourceFileLoader('cephadm', 'cephadm.py').load_module()
 
 
 class TestCephAdm(object):
@@ -728,7 +728,7 @@ iMN28C2bKGao5UHvdER1rGy7
         assert exporter.unit_run
         lines = exporter.unit_run.split('\n')
         assert len(lines) == 2
-        assert "cephadm exporter --fsid foobar --id test --port 9443 &" in lines[1]
+        assert "cephadm.py exporter --fsid foobar --id test --port 9443 &" in lines[1]
 
     def test_binary_path(self, exporter):
         assert os.path.isfile(exporter.binary_path)

@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+# mypy: ignore-errors
 
 import asyncio
 import asyncio.subprocess
