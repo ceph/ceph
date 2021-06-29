@@ -14,6 +14,15 @@
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/sharded.hh>
 
+#if __cplusplus > 201703L
+#include <semaphore>
+namespace crimson {
+  using std::counting_semaphore;
+}
+#else
+#include "semaphore.h"
+#endif
+
 namespace crimson::os {
 
 struct WorkItem {
@@ -75,33 +84,32 @@ struct SubmitQueue {
 struct ShardedWorkQueue {
 public:
   WorkItem* pop_front(std::chrono::milliseconds& queue_max_wait) {
-    WorkItem* work_item = nullptr;
-    std::unique_lock lock{mutex};
-    cond.wait_for(lock, queue_max_wait, [this, &work_item] {
-      return pending.pop(work_item) || is_stopping();
-    });
-    return work_item;
+    if (sem.try_acquire_for(queue_max_wait)) {
+      if (!is_stopping()) {
+        WorkItem* work_item = nullptr;
+        [[maybe_unused]] bool popped = pending.pop(work_item);
+        assert(popped);
+        return work_item;
+      }
+    }
+    return nullptr;
   }
   void stop() {
-    {
-      std::unique_lock lock{mutex};
-      stopping = true;
-    }
-    cond.notify_all();
+    stopping = true;
+    sem.release();
   }
   void push_back(WorkItem* work_item) {
     [[maybe_unused]] bool pushed = pending.push(work_item);
     assert(pushed);
-    cond.notify_one();
+    sem.release();
   }
 private:
   bool is_stopping() const {
     return stopping;
   }
-  bool stopping = false;
-  std::mutex mutex;
-  std::condition_variable cond;
+  std::atomic<bool> stopping = false;
   static constexpr unsigned QUEUE_SIZE = 128;
+  crimson::counting_semaphore<QUEUE_SIZE> sem{0};
   boost::lockfree::queue<WorkItem*> pending{QUEUE_SIZE};
 };
 
