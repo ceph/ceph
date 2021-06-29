@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <regex>
@@ -87,6 +88,7 @@ struct cephsqlite_appdata {
     if (striper_logger) {
       cct->get_perfcounters_collection()->remove(striper_logger.get());
     }
+    cluster.shutdown();
   }
   int setup_perf() {
     ceph_assert(cct);
@@ -136,7 +138,6 @@ struct cephsqlite_appdata {
   std::unique_ptr<PerfCounters> logger;
   std::shared_ptr<PerfCounters> striper_logger;
   librados::Rados cluster;
-  struct sqlite3_vfs vfs{};
 };
 
 struct cephsqlite_fileloc {
@@ -789,14 +790,25 @@ static int autoreg(sqlite3* db, char** err, const struct sqlite3_api_routines* t
   return SQLITE_OK;
 }
 
+static void cephsqlite_atexit()
+{
+  if (auto vfs = sqlite3_vfs_find("ceph"); vfs) {
+    if (vfs->pAppData) {
+      auto&& appd = getdata(vfs);
+      delete &appd;
+      vfs->pAppData = nullptr;
+    }
+  }
+}
+
 LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sqlite3_api_routines* api)
 {
   SQLITE_EXTENSION_INIT2(api);
 
   auto vfs = sqlite3_vfs_find("ceph");
   if (!vfs) {
+    vfs = (sqlite3_vfs*) calloc(1, sizeof(sqlite3_vfs));
     auto appd = new cephsqlite_appdata;
-    vfs = &appd->vfs;
     vfs->iVersion = 2;
     vfs->szOsFile = sizeof(struct cephsqlite_file);
     vfs->mxPathname = 4096;
@@ -807,8 +819,15 @@ LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sql
     vfs->xAccess = Access;
     vfs->xFullPathname = FullPathname;
     vfs->xCurrentTimeInt64 = CurrentTime;
-    appd->cct = nullptr;
-    sqlite3_vfs_register(vfs, 0);
+    if (int rc = sqlite3_vfs_register(vfs, 0); rc) {
+      delete appd;
+      free(vfs);
+      return rc;
+    }
+  }
+
+  if (int rc = std::atexit(cephsqlite_atexit); rc) {
+    return SQLITE_INTERNAL;
   }
 
   if (int rc = sqlite3_auto_extension((void(*)(void))autoreg); rc) {
