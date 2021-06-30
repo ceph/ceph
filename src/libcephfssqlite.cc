@@ -50,7 +50,6 @@ SQLITE_EXTENSION_INIT1
 #include "common/async/context_pool.h"
 
 #include "include/libcephfssqlite.h"
-#include "SimpleRADOSStriper.h"
 #include "client/Client.h"
 
 // !! ceph_subsys_cephfssqlite would get undeclared error
@@ -361,8 +360,8 @@ static int FileSize(sqlite3_file *file, sqlite_int64 *osize)
 
 static bool parsepath(std::string_view path, struct cephfssqlite_fileloc* fileloc)
 {
-    static const std::regex re1{"^file:/*(\\*[[:digit:]]+)([[:alnum:]-_./]+)\\?vfs=cephfs$"};
-    static const std::regex re2{"^file:/*([[:alnum:]-_.]+)([[:alnum:]-_./]+)\\?vfs=cephfs$"};
+    static const std::regex re1{"^file:/*(\\*[[:digit:]]+)([[:alnum:]-_./]+)\\?"};
+    static const std::regex re2{"^file:/*([[:alnum:]-_.]+)([[:alnum:]-_./]+)\\?"};
 
     std::cmatch cm;
     if (std::regex_match(path.data(), cm, re1) || std::regex_match(path.data(), cm, re2)) {

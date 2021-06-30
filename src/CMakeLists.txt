@@ -830,9 +830,9 @@ if(WITH_LIBCEPHSQLITE)
 endif(WITH_LIBCEPHSQLITE)
 
 if(WITH_LIBCEPHFSSQLITE)
-  set(cephfssqlite_srcs libcephfssqlite.cc SimpleRADOSStriper.cc)
+  set(cephfssqlite_srcs libcephfssqlite.cc)
   add_library(cephfssqlite ${CEPH_SHARED} ${cephfssqlite_srcs})
-  target_link_libraries(cephfssqlite PRIVATE cls_lock_client librados ceph-common SQLite3::SQLite3 ${EXTRALIBS})
+  target_link_libraries(cephfssqlite PRIVATE client ceph-common SQLite3::SQLite3 ${EXTRALIBS})
   set_target_properties(cephfssqlite PROPERTIES
           CXX_VISIBILITY_PRESET hidden
           VISIBILITY_INLINES_HIDDEN ON)
