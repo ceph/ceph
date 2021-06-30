@@ -345,7 +345,7 @@ class PgRecoveryEvent(Event):
                 complete.add(pg)
                 continue
             # Only checks the state of each PGs when it's epoch >= the OSDMap's epoch
-            if int(info['reported_epoch']) < int(self._start_epoch):
+            if info['reported_epoch'] < self._start_epoch:
                 continue
 
             state = info['state']
