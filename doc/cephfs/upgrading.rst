@@ -71,6 +71,12 @@ command. Older versions of Ceph require you to stop these daemons manually.
 
     ceph fs set <fs_name> max_mds <old_max_mds>
 
+9. Restore setting for ``allow_standby_replay`` (if applicable):
+
+::
+
+    ceph fs set <fs_name> allow_standby_replay true
+
 
 Upgrading pre-Firefly file systems past Jewel
 =============================================
