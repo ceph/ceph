@@ -177,11 +177,15 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # Ignore here to make self.available() fail with a proper error message
             pass
 
+        assert isinstance(self.storage_class_name, str)
+
         self._rook_cluster = RookCluster(
             self._k8s_CoreV1_api,
             self._k8s_BatchV1_api,
             self._k8s_CustomObjects_api,
-            self._rook_env)
+            self._k8s_StorageV1_api,
+            self._rook_env,
+            self.storage_class_name)
 
         self._initialized.set()
 
