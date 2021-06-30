@@ -140,7 +140,7 @@ def _title_message(commit, pr, strict):
     message = "    " + "\n    ".join(lines)
     return (title, message)
 
-def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags):
+def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict, use_tags):
 
     issue2prs = {}
     pr2issues = {}
@@ -252,6 +252,11 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
                     '<a href="http://tracker.ceph.com/issues/{issue}">issue#{issue}</a>'
                     ).format(issue=issue), pr2issues[pr]
                 )
+            elif markdown:
+                issues = map(lambda issue: (
+                    '[issue#{issue}](http://tracker.ceph.com/issues/{issue})'
+                    ).format(issue=issue), pr2issues[pr]
+                )
             else:
                 issues = map(lambda issue: (
                     '`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_'
@@ -274,6 +279,13 @@ def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags
                     "https://github.com/ceph/ceph/pull/{pr}\""
                     ">pr#{pr}</a>, {author})</p></li>"
                 ).format(
+                    title=title,
+                    issues=issues,
+                    author=author, pr=pr
+                )
+            )
+        elif markdown:
+            print ("- {title} ({issues}[pr#{pr}](https://github.com/ceph/ceph/pull/{pr}), {author})\n".format(
                     title=title,
                     issues=issues,
                     author=author, pr=pr
@@ -318,7 +330,10 @@ if __name__ == "__main__":
                         help="output plain text only, no links")
     parser.add_argument("--html",
                         action='store_true', default=None,
-                        help="output html format for website blog")
+                        help="output html format for (old wordpress) website blog")
+    parser.add_argument("--markdown",
+                        action='store_true', default=None,
+                        help="output markdown format for new ceph.io blog")
     parser.add_argument("--verbose", "-v",
                         action='store_true', default=None,
                         help="verbose")
@@ -345,6 +360,7 @@ if __name__ == "__main__":
         args.rev,
         args.text,
         args.html,
+        args.markdown,
         args.verbose,
         args.strict,
         args.use_tags
