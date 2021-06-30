@@ -1,9 +1,9 @@
-import asyncio
 import asyncssh
 import asyncssh.logging
 import logging
 import os
 import tempfile
+from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
 from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Any
@@ -22,6 +22,7 @@ Host *
   UserKnownHostsFile /dev/null
   ConnectTimeout=30
 """
+
 
 class SSHManager:
 
@@ -48,49 +49,54 @@ class SSHManager:
             logger.debug("Opening connection to {} with ssh options '{}'".format(
                 n, self.mgr._ssh_options))
 
-            ssh_logger = logging.getLogger()
-            asyncssh.logging.set_log_level(logging.DEBUG)
-            log_string = StringIO()
-            ch = logging.StreamHandler(log_string)
-            ch.setLevel(logging.DEBUG)
-            ssh_logger.addHandler(ch)
-
-            try:
-                conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name], known_hosts=None, config=[self.mgr.ssh_config_fname])
-                SSHManager.cons[host] = conn
-            except OSError as e:
-                log_content = log_string.getvalue()
-                log_string.flush()
-                logger.debug(log_content)
-                msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}" + '\n' + f'Log: {log_content}'
-                ssh_logger.removeHandler(ch)
-                raise OrchestratorError(msg)
-            except asyncssh.Error as e:
-                # need to do smth like CephadmServe(self.mgr)._check_host(host), but how to import CephadmServe cyclical import ? 
-                o = self._check_host(host)
-                if o is not None:
-                    log_content = log_string.getvalue()
-                    log_string.flush()
-                    logger.debug(log_content)
-                    msg = f'Failed to connect to {host} ({addr}) due to: {str(e)}' + '\n' + f'Log: {log_content}'
-                else:
-                    msg = f'Failed to connect to {host} ({addr}) due to: {str(e)}'
-                ssh_logger.removeHandler(ch)
-                raise OrchestratorError(msg)
+            with self.redirect_log(host, addr):
+                try:
+                    conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name], known_hosts=None, config=[self.mgr.ssh_config_fname])
+                    SSHManager.cons[host] = conn
+                except OSError:
+                    raise
+                except asyncssh.Error:
+                    raise
 
         conn = SSHManager.cons.get(host)
         return conn
+
+    @contextmanager
+    def redirect_log(self, host, addr):
+        ssh_logger = logging.getLogger()
+        asyncssh.logging.set_log_level(logging.DEBUG)
+        log_string = StringIO()
+        ch = logging.StreamHandler(log_string)
+        ch.setLevel(logging.DEBUG)
+        ssh_logger.addHandler(ch)
+
+        try:
+            yield
+        except OSError as e:
+            log_content = log_string.getvalue()
+            log_string.flush()
+            logger.debug(log_content)
+            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}" + '\n' + f'Log: {log_content}'
+            raise OrchestratorError(msg)
+        except asyncssh.Error as e:
+            log_content = log_string.getvalue()
+            log_string.flush()
+            logger.debug(log_content)
+            msg = f'Failed to connect to {host} ({addr}). {str(e)}' + '\n' + f'Log: {log_content}'
+            raise OrchestratorError(msg)
+        finally:
+            ssh_logger.removeHandler(ch)
 
     def remote_connection(self, *args: Any) -> "SSHClientConnection":
         return self.mgr.loop.run_until_complete(self._remote_connection(*args))
 
     async def _execute_command(self,
-                              host: str,
-                              cmd: List[str],
-                              stdin: Optional[bytes] = b"",
-                              addr: Optional[str] = None,
-                              **kwargs: Any,
-                              ) -> Tuple[str, str, int]:
+                               host: str,
+                               cmd: List[str],
+                               stdin: Optional[bytes] = b"",
+                               addr: Optional[str] = None,
+                               **kwargs: Any,
+                               ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
         cmd = " ".join(quote(x) for x in cmd)
         r = await conn.run(cmd, input=stdin.decode() if stdin else None)
@@ -102,15 +108,15 @@ class SSHManager:
         return self.mgr.loop.run_until_complete(self._execute_command(*args, **kwargs))
 
     async def _check_execute_command(self,
-                                    host: str,
-                                    cmd: List[str],
-                                    stdin: Optional[bytes] = b"",
-                                    addr: Optional[str] = None,
-                                    **kwargs: Any,
-                                    ) -> str:
+                                     host: str,
+                                     cmd: List[str],
+                                     stdin: Optional[bytes] = b"",
+                                     addr: Optional[str] = None,
+                                     **kwargs: Any,
+                                     ) -> str:
         out, err, code = await self._execute_command(host, cmd, stdin, addr)
         if code != 0:
-            print(f'Command {cmd} failed. {err}')
+            raise OrchestratorError(f'Command {cmd} failed. {err}')
         return out
 
     def check_execute_command(self, *args: Any, **kwargs: Any) -> str:

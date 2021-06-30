@@ -17,7 +17,6 @@ from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
 import datetime
 import os
 import random
-import tempfile
 import multiprocessing.pool
 import subprocess
 from prettytable import PrettyTable

@@ -2,7 +2,6 @@ import hashlib
 import json
 import logging
 import uuid
-import asyncio
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple
 
@@ -42,8 +41,6 @@ class CephadmServe:
     On the other hand, These function should *not* be called form
     CLI handlers, to avoid blocking the CLI
     """
-    # loop = asyncio.new_event_loop()
-    # asyncio.set_event_loop(loop)
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr

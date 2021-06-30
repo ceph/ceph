@@ -7,7 +7,6 @@ import yaml
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
-from cephadm.ssh import SSHManager
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 
 try:
