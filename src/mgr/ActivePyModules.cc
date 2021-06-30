@@ -493,11 +493,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     std::set<std::string> did;
     for (auto& i : myaddrs.v) {
       std::string ip = i.ip_only_to_str();
-      if (did.count(ip)) {
-	continue;
+      if (auto [where, inserted] = did.insert(ip); inserted) {
+	f.dump_string("ip", ip);
       }
-      did.insert(ip);
-      f.dump_string("ip", ip);
     }
     f.close_section();
     return f.get();
