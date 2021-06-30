@@ -239,7 +239,7 @@ TransactionManager::submit_transaction_direct(
     tref.get_handle().enter(write_pipeline.prepare)
   ).then_interruptible([this, FNAME, &tref]() mutable
 		       -> submit_transaction_iertr::future<> {
-    auto record = cache->try_construct_record(tref);
+    auto record = cache->prepare_record(tref);
 
     tref.get_handle().maybe_release_collection_lock();
 
