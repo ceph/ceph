@@ -573,13 +573,13 @@ using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 #define FORWARD(METHOD)					\
   template <typename... Args>				\
   auto METHOD(Args&&... args) const {			\
-    return tm.METHOD(std::forward<Args>(args)...);	\
+    return tm->METHOD(std::forward<Args>(args)...);	\
   }
 
 #define PARAM_FORWARD(METHOD)					\
   template <typename T, typename... Args>			\
   auto METHOD(Args&&... args) const {				\
-    return tm.METHOD<T>(std::forward<Args>(args)...);	\
+    return tm->METHOD<T>(std::forward<Args>(args)...);	\
   }
 
 #define INT_FORWARD(METHOD)						\
@@ -588,7 +588,7 @@ using TransactionManagerRef = std::unique_ptr<TransactionManager>;
     return with_trans_intr(						\
       t,								\
       [this](auto&&... args) {						\
-	return tm.METHOD(std::forward<decltype(args)>(args)...);	\
+	return tm->METHOD(std::forward<decltype(args)>(args)...);	\
       },								\
       std::forward<Args>(args)...);					\
   }
@@ -599,18 +599,24 @@ using TransactionManagerRef = std::unique_ptr<TransactionManager>;
     return with_trans_intr(						\
       t,								\
       [this](auto&&... args) {						\
-	return tm.METHOD<T>(std::forward<decltype(args)>(args)...);	\
+	return tm->METHOD<T>(std::forward<decltype(args)>(args)...);	\
       },								\
       std::forward<Args>(args)...);					\
   }
 
 /// Temporary translator to non-interruptible futures
 class InterruptedTransactionManager {
-  TransactionManager &tm;
+  TransactionManager *tm = nullptr;
 public:
+  InterruptedTransactionManager() = default;
   InterruptedTransactionManager(const InterruptedTransactionManager &) = default;
   InterruptedTransactionManager(InterruptedTransactionManager &&) = default;
-  InterruptedTransactionManager(TransactionManager &tm) : tm(tm) {}
+  InterruptedTransactionManager(TransactionManager &tm) : tm(&tm) {}
+
+  InterruptedTransactionManager &operator=(
+    const InterruptedTransactionManager &) = default;
+  InterruptedTransactionManager &operator=(
+    InterruptedTransactionManager &&) = default;
 
   FORWARD(mkfs)
   FORWARD(mount)
@@ -642,6 +648,8 @@ public:
 
   FORWARD(get_segment_cleaner)
   FORWARD(get_lba_manager)
+
+  void reset() { tm = nullptr; }
 };
 
 class InterruptedTMRef {
