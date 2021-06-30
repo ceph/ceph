@@ -336,7 +336,7 @@ protected:
       std::map<uint64_t, bool> &missing_sync_points,
       std::map<uint64_t,
       std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
-      int entry_index);
+      uint64_t entry_index);
   void update_sync_points(
       std::map<uint64_t, bool> &missing_sync_points,
       std::map<uint64_t,

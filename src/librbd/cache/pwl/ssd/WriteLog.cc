@@ -659,8 +659,8 @@ template <typename I>
 bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
   CephContext *cct = m_image_ctx.cct;
   GenericLogEntriesVector retiring_entries;
-  uint32_t initial_first_valid_entry;
-  uint32_t first_valid_entry;
+  uint64_t initial_first_valid_entry;
+  uint64_t first_valid_entry;
 
   std::lock_guard retire_locker(this->m_log_retire_lock);
   ldout(cct, 20) << "Look for entries to retire" << dendl;

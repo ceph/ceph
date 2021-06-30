@@ -297,8 +297,8 @@ struct WriteLogPoolRoot {
                                   * sync gen number are flushed. */
   uint32_t block_size;           /* block size */
   uint32_t num_log_entries;
-  uint32_t first_free_entry;     /* Entry following the newest valid entry */
-  uint32_t first_valid_entry;    /* Index of the oldest valid entry in the log */
+  uint64_t first_free_entry;     /* Entry following the newest valid entry */
+  uint64_t first_valid_entry;    /* Index of the oldest valid entry in the log */
 
   #ifdef WITH_RBD_SSD_CACHE
   DENC(WriteLogPoolRoot, v, p) {
