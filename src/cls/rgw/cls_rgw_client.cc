@@ -8,6 +8,8 @@
 
 #include "common/debug.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 using std::list;
 using std::map;
 using std::pair;
@@ -57,6 +59,7 @@ int CLSRGWConcurrentIO::operator()() {
 	reset_container(completed_objs);
 	iter = objs_container.begin();
       } else if (! need_multiple_rounds() && !retry_objs.empty()) {
+	ldpp_dout((DoutPrefixProvider*) io_ctx.cct(), 0) << "ERIC " << __func__ << " about to retry " << retry_objs.size() << " shards" << dendl;
 	reset_container(retry_objs);
 	iter = objs_container.begin();
       }

@@ -341,6 +341,12 @@ struct cls_rgw_obj_key {
   cls_rgw_obj_key(const std::string &_name) : name(_name) {}
   cls_rgw_obj_key(const std::string& n, const std::string& i) : name(n), instance(i) {}
 
+#if 1 // temporary for ERIC output
+  std::string to_string() const {
+    return name + '(' + instance + ')';
+  }
+#endif
+
   void set(const std::string& _name) {
     name = _name;
     instance.clear();

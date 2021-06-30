@@ -522,6 +522,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	 !done &&
 	 name_entry_map.size() < op.num_entries;
        ++attempt) {
+    CLS_LOG(0, "ERIC %s: attempt %d\n", __func__, attempt);
     std::map<std::string, bufferlist> keys;
 
     // note: get_obj_vals skips past the "ugly namespace" (i.e.,
@@ -637,9 +638,12 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
   encode(ret, *out);
 
+  CLS_LOG(0, "ERIC %s: about to return, is_truncated=%d, marker=\"%s\"\n", __func__, ret.is_truncated, escape_str(ret.marker.to_string()).c_str());
   if (ret.is_truncated && name_entry_map.size() == 0) {
+    CLS_LOG(0, "ERIC %s: returning -EGAGAIN\n", __func__);
     return -EAGAIN;
   } else {
+    CLS_LOG(0, "ERIC %s: returning 0\n", __func__);
     return 0;
   }
 } // rgw_bucket_list
