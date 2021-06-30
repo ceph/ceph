@@ -100,16 +100,13 @@ class SSHConnection:
                                     addr: Optional[str] = None,
                                     **kwargs,
                                     ) -> str:
-        out, err, code = await self.execute_command(host, cmd, stdin, addr)
+        out, err, code = await self._execute_command(host, cmd, stdin, addr)
         if code != 0:
             print(f'Command {cmd} failed. {err}')
         return out
 
-    # def check_execute_command(self, *args, **kwargs) -> Tuple[str, str, int]:
-    #     return self.mgr.loop.run_until_complete(self._check_execute_command(*args, **kwargs))
-
     def check_execute_command(self, *args, **kwargs) -> Tuple[str, str, int]:
-        return self.mgr.loop.run_until_complete(self._check_execute_command(*args))
+        return self.mgr.loop.run_until_complete(self._check_execute_command(*args, **kwargs))
 
     async def _write_remote_file(self,
                                  host: str,
@@ -123,15 +120,15 @@ class SSHConnection:
                                  ) -> None:
         try:
             dirname = os.path.dirname(path)
-            await self.check_execute_command(host, ['mkdir', '-p', dirname], addr=addr)
+            await self._check_execute_command(host, ['mkdir', '-p', dirname], addr=addr)
             tmp_path = path + '.new'
-            await self.check_execute_command(host, ['touch', tmp_path], addr=addr)
+            await self._check_execute_command(host, ['touch', tmp_path], addr=addr)
             if uid is not None and gid is not None and mode is not None:
                 # shlex quote takes str or byte object, not int
-                await self.check_execute_command(host, ['sudo', 'chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
-                await self.check_execute_command(host, ['sudo', 'chmod', oct(mode)[2:], tmp_path], addr=addr)
-            await self.check_execute_command(host, ['tee', '-', tmp_path], stdin=content, addr=addr)
-            await self.check_execute_command(host, ['mv', tmp_path, path], addr=addr)
+                await self._check_execute_command(host, ['sudo', 'chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
+                await self._check_execute_command(host, ['sudo', 'chmod', oct(mode)[2:], tmp_path], addr=addr)
+            await self._check_execute_command(host, ['tee', '-', tmp_path], stdin=content, addr=addr)
+            await self._check_execute_command(host, ['mv', tmp_path, path], addr=addr)
         except Exception as e:
             msg = f"Unable to write {host}:{path}: {e}"
             logger.exception(msg)

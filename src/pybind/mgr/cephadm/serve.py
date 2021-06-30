@@ -1187,7 +1187,7 @@ class CephadmServe:
                 self.log.debug('stdin: %s' % stdin)
 
             cmd = ['which', 'python3']
-            python = self.ssh.check_execute_command(host, cmd, stdin=None, addr=addr)
+            python = self.ssh.check_execute_command(host, cmd, addr=addr)
             cmd = [python, self.mgr.cephadm_binary_path] + final_args
 
             try:
