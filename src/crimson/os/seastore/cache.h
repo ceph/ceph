@@ -231,18 +231,26 @@ public:
   get_extent_if_cached_ret get_extent_if_cached(
     Transaction &t,
     paddr_t offset) {
-    return seastar::do_with(
-      CachedExtentRef(),
-      [this, &t, offset](auto &ret) {
-	auto status = query_cache_for_extent(t, offset, &ret);
-	auto wait = seastar::now();
-	if (status == Transaction::get_extent_ret::PRESENT) {
-	  wait = ret->wait_io();
-	}
-	return trans_intr::make_interruptible(
-	  wait.then([ret] { return std::move(ret); })
-	);
-      });
+    CachedExtentRef ret;
+    auto result = t.get_extent(offset, &ret);
+    if (result != Transaction::get_extent_ret::ABSENT) {
+      // including get_extent_ret::RETIRED
+      return get_extent_if_cached_iertr::make_ready_future<
+        CachedExtentRef>(ret);
+    }
+
+    // get_extent_ret::PRESENT from transaction
+    result = query_cache_for_extent(offset, &ret);
+    if (result == Transaction::get_extent_ret::ABSENT) {
+      return get_extent_if_cached_iertr::make_ready_future<
+        CachedExtentRef>();
+    }
+
+    // get_extent_ret::PRESENT from cache
+    return ret->wait_io().then([ret] {
+      return get_extent_if_cached_iertr::make_ready_future<
+        CachedExtentRef>(ret);
+    });
   }
 
   /**
@@ -585,18 +593,6 @@ private:
       return Transaction::get_extent_ret::PRESENT;
     } else {
       return Transaction::get_extent_ret::ABSENT;
-    }
-  }
-
-  Transaction::get_extent_ret query_cache_for_extent(
-    Transaction &t,
-    paddr_t offset,
-    CachedExtentRef *out) {
-    auto result = t.get_extent(offset, out);
-    if (result != Transaction::get_extent_ret::ABSENT) {
-      return result;
-    } else {
-      return query_cache_for_extent(offset, out);
     }
   }
 
