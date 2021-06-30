@@ -2561,6 +2561,22 @@ TEST(LibCephFS, SnapInfo) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, LookupInoMDSDir) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  Inode *inode;
+  auto ino = inodeno_t(0x100); /* rank 0 ~mdsdir */
+  ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));
+  ino = inodeno_t(0x600); /* rank 0 first stray dir */
+  ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, LookupVino) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
@@ -3492,6 +3508,30 @@ TEST(LibCephFS, SetMountTimeout) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_set_mount_timeout(cmount, 5));
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
-
   ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, LookupMdsPrivateInos) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  Inode *inode;
+  for (int ino = 0; ino < MDS_INO_SYSTEM_BASE; ino++) {
+    if (MDS_IS_PRIVATE_INO(ino)) {
+      ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));
+    } else if (ino == CEPH_INO_ROOT || ino == CEPH_INO_GLOBAL_SNAPREALM) {
+      ASSERT_EQ(0, ceph_ll_lookup_inode(cmount, ino, &inode));
+    } else if (ino == CEPH_INO_LOST_AND_FOUND) {
+      // the ino 3 will only exists after the recovery tool ran, so
+      // it may return -ESTALE with a fresh fs cluster
+      int r = ceph_ll_lookup_inode(cmount, ino, &inode);
+      ASSERT_TRUE(r == -ESTALE || r == 0);
+    } else {
+      // currently the ino 0 and 4~99 is not useded yet.
+      ASSERT_EQ(-ESTALE, ceph_ll_lookup_inode(cmount, ino, &inode));
+    }
+  }
 }
