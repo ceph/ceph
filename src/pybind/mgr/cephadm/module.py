@@ -346,9 +346,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.run = True
         self.event = Event()
 
-        # self.loop = asyncio.new_event_loop()
-        # asyncio.set_event_loop(self.loop)
-        self.ssh = ssh.SSHConnection(self)
+        self.ssh = ssh.SSHManager(self)
 
         if self.get_store('pause'):
             self.paused = True
@@ -405,7 +403,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self._worker_pool = multiprocessing.pool.ThreadPool(10)
 
-        self._reconfig_ssh()
+        self.ssh._reconfig_ssh()
 
         CephadmOrchestrator.instance = self
 
@@ -611,57 +609,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 continue
             return name
 
-    def _reconfig_ssh(self) -> None:
-        temp_files = []  # type: list
-        ssh_options = []  # type: List[str]
-
-        # ssh_config
-        self.ssh_config_fname = self.ssh_config_file
-        ssh_config = self.get_store("ssh_config")
-        if ssh_config is not None or self.ssh_config_fname is None:
-            if not ssh_config:
-                ssh_config = DEFAULT_SSH_CONFIG
-            f = tempfile.NamedTemporaryFile(prefix='cephadm-conf-')
-            os.fchmod(f.fileno(), 0o600)
-            f.write(ssh_config.encode('utf-8'))
-            f.flush()  # make visible to other processes
-            temp_files += [f]
-            self.ssh_config_fname = f.name
-        if self.ssh_config_fname:
-            self.validate_ssh_config_fname(self.ssh_config_fname)
-            ssh_options += ['-F', self.ssh_config_fname]
-        self.ssh_config = ssh_config
-
-        # identity
-        ssh_key = self.get_store("ssh_identity_key")
-        ssh_pub = self.get_store("ssh_identity_pub")
-        self.ssh_pub = ssh_pub
-        self.ssh_key = ssh_key
-        if ssh_key and ssh_pub:
-            self.tkey = tempfile.NamedTemporaryFile(prefix='cephadm-identity-')
-            self.tkey.write(ssh_key.encode('utf-8'))
-            os.fchmod(self.tkey.fileno(), 0o600)
-            self.tkey.flush()  # make visible to other processes
-            tpub = open(self.tkey.name + '.pub', 'w')
-            os.fchmod(tpub.fileno(), 0o600)
-            tpub.write(ssh_pub)
-            tpub.flush()  # make visible to other processes
-            temp_files += [self.tkey, tpub]
-            ssh_options += ['-i', self.tkey.name]
-
-        self._temp_files = temp_files
-        if ssh_options:
-            self._ssh_options = ' '.join(ssh_options)  # type: Optional[str]
-        else:
-            self._ssh_options = None
-
-        if self.mode == 'root':
-            self.ssh_user = self.get_store('ssh_user', default='root')
-        elif self.mode == 'cephadm-package':
-            self.ssh_user = 'cephadm'
-
-        self.ssh._reset_cons()
-
     def validate_ssh_config_content(self, ssh_config: Optional[str]) -> None:
         if ssh_config is None or len(ssh_config.strip()) == 0:
             raise OrchestratorValidationError('ssh_config cannot be empty')
@@ -711,7 +658,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     def _validate_and_set_ssh_val(self, what: str, new: Optional[str], old: Optional[str]) -> None:
         self.set_store(what, new)
-        self._reconfig_ssh()
+        self.ssh._reconfig_ssh()
         if self.cache.get_hosts():
             # Can't check anything without hosts
             host = self.cache.get_hosts()[0]
@@ -719,7 +666,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if r is not None:
                 # connection failed reset user
                 self.set_store(what, old)
-                self._reconfig_ssh()
+                self.ssh._reconfig_ssh()
                 raise OrchestratorError('ssh connection %s@%s failed' % (self.ssh_user, host))
         self.log.info(f'Set ssh {what}')
 
@@ -747,7 +694,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.set_store("ssh_config", None)
         self.ssh_config_tmp = None
         self.log.info('Cleared ssh_config')
-        self._reconfig_ssh()
+        self.ssh._reconfig_ssh()
         return 0, "", ""
 
     @orchestrator._cli_read_command('cephadm get-ssh-config')
@@ -790,7 +737,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 tmp_dir.cleanup()
             self.set_store('ssh_identity_key', secret)
             self.set_store('ssh_identity_pub', pub)
-            self._reconfig_ssh()
+            self.ssh._reconfig_ssh()
         return 0, '', ''
 
     @orchestrator._cli_write_command(
@@ -824,7 +771,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Clear cluster SSH key"""
         self.set_store('ssh_identity_key', None)
         self.set_store('ssh_identity_pub', None)
-        self._reconfig_ssh()
+        self.ssh._reconfig_ssh()
         self.log.info('Cleared cluster SSH key')
         return 0, '', ''
 
@@ -919,7 +866,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                              addr=addr,
                                                              error_ok=True, no_fsid=True)
             if code:
-                return 1, '', ('check-host failed:\n' + '\n'.join(err))
+                # err will contain stdout and stderr, so we filter on the message text to
+                # only show the errors
+                errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
+                raise OrchestratorError('Host %s (%s) failed check(s): %s' % (
+                    host, addr, errors))
         except OrchestratorError:
             self.log.exception(f"check-host failed for '{host}'")
             return 1, '', ('check-host failed:\n'

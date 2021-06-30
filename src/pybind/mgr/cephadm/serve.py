@@ -48,7 +48,7 @@ class CephadmServe:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
-        self.ssh = ssh.SSHConnection(mgr)
+        self.ssh = ssh.SSHManager(mgr)
 
     def serve(self) -> None:
         """
@@ -1208,7 +1208,7 @@ class CephadmServe:
         elif self.mgr.mode == 'cephadm-package':
             try:
                 cmd = ['sudo', '/usr/bin/cephadm'] + final_args
-                out, err, code = self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8'), addr=addr)
+                out, err, code = self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
             except Exception as e:
                 self.ssh._reset_con(host)
                 if error_ok:
@@ -1225,9 +1225,7 @@ class CephadmServe:
         if code and not error_ok:
             raise OrchestratorError(
                 f'cephadm exited with an error code: {code}, stderr: {err}')
-        out = [out]
-        err = [err]
-        return out, err, code
+        return [out], [err], code
 
     def _get_container_image_info(self, image_name: str) -> ContainerInspectInfo:
         # pick a random host...
