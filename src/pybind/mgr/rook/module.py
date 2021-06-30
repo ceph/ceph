@@ -73,6 +73,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     MODULE_OPTIONS: List[Option] = [
         # TODO: configure k8s API addr instead of assuming local
+        Option(
+            'storage_class_name',
+            type='str',
+            default='local-sc',
+            desc='storage class name for LSO-discovered PVs',
+        ),
     ]
 
     @staticmethod
@@ -105,8 +111,23 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._k8s_CustomObjects_api: Optional[client.CustomObjectsApi] = None
         self._rook_cluster: Optional[RookCluster] = None
         self._rook_env = RookEnv()
+        self.storage_class_name = self.get_module_option('storage_class_name')
 
         self._shutdown = threading.Event()
+    def config_notify(self) -> None:
+        """
+        This method is called whenever one of our config options is changed.
+
+        TODO: this method should be moved into mgr_module.py
+        """
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],  # type: ignore
+                    self.get_module_option(opt['name']))  # type: ignore
+            self.log.debug(' mgr option %s = %s',
+                           opt['name'], getattr(self, opt['name']))  # type: ignore
+
+        self._rook_cluster.storage_class_name = self.storage_class_name
 
     def shutdown(self) -> None:
         self._shutdown.set()
