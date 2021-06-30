@@ -1362,7 +1362,7 @@ int KStore::getattr(
 int KStore::getattrs(
   CollectionHandle& ch,
   const ghobject_t& oid,
-  map<string,bufferptr>& aset)
+  map<string,bufferptr,less<>>& aset)
 {
   dout(15) << __func__ << " " << ch->cid << " " << oid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());

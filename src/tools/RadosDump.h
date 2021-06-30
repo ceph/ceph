@@ -219,9 +219,9 @@ struct data_section {
 };
 
 struct attr_section {
-  map<string,bufferlist> data;
-  explicit attr_section(const map<string,bufferlist> &data) : data(data) { }
-  explicit attr_section(map<string, bufferptr> &data_)
+  map<string,bufferlist,less<>> data;
+  explicit attr_section(const map<string,bufferlist,less<>> &data) : data(data) { }
+  explicit attr_section(map<string, bufferptr, less<>> &data_)
   {
     for (std::map<std::string, bufferptr>::iterator i = data_.begin();
          i != data_.end(); ++i) {

@@ -467,7 +467,7 @@ int PGBackend::objects_get_attr(
 
 int PGBackend::objects_get_attrs(
   const hobject_t &hoid,
-  map<string, bufferlist> *out)
+  map<string, bufferlist, less<>> *out)
 {
   return store->getattrs(
     ch,
@@ -479,7 +479,7 @@ void PGBackend::rollback_setattrs(
   const hobject_t &hoid,
   map<string, std::optional<bufferlist> > &old_attrs,
   ObjectStore::Transaction *t) {
-  map<string, bufferlist> to_set;
+  map<string, bufferlist, less<>> to_set;
   ceph_assert(!hoid.is_temp());
   for (map<string, std::optional<bufferlist> >::iterator i = old_attrs.begin();
        i != old_attrs.end();
