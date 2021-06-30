@@ -350,7 +350,7 @@ int RGWCtlDef::init(RGWServices& svc, const DoutPrefixProvider *dpp)
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
 
   bucket_meta_handler->init(svc.bucket, bucket.get());
-  bi_meta_handler->init(svc.zone, svc.bucket, svc.bi);
+  bi_meta_handler->init(svc.bucket, bucket.get());
 
   RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
   otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);

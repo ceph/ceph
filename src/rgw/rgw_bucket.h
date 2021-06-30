@@ -194,9 +194,8 @@ public:
 class RGWBucketInstanceMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
 public:
   virtual ~RGWBucketInstanceMetadataHandlerBase() {}
-  virtual void init(RGWSI_Zone *zone_svc,
-                    RGWSI_Bucket *bucket_svc,
-                    RGWSI_BucketIndex *bi_svc) = 0;
+  virtual void init(RGWSI_Bucket *bucket_svc,
+		    RGWBucketCtl* bucket_ctl) = 0;
 };
 
 class RGWBucketMetaHandlerAllocator {
@@ -417,9 +416,11 @@ template <class T>
 class RGWChainedCacheImpl;
 class BucketOpContext;
 class BucketInstanceOpContext;
+class RGWBucketInstanceMetadataHandler;
 
 class RGWBucketCtl
 {
+  friend RGWBucketInstanceMetadataHandler;
   CephContext *cct;
 
   struct Svc {
@@ -700,11 +701,30 @@ public:
 				optional_yield y,
 				const DoutPrefixProvider *dpp,
 				const BucketInstance::GetParams& params = {});
+  int do_store_bucket_instance_info(
+    BucketInstanceOpContext& ctx,
+    const string& key,
+    RGWBucketInfo& info,
+    std::optional<RGWBucketInfo*> orig_info,
+    bool exclusive,
+    ceph::real_time mtime,
+    std::map<std::string, ceph::buffer::list>* pattrs,
+    optional_yield y,
+    const DoutPrefixProvider *dpp);
+
+
   int store_bucket_instance_info(const rgw_bucket& bucket,
                                  RGWBucketInfo& info,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp,
                                  const BucketInstance::PutParams& params = {});
+  int remove_bucket_instance_info(BucketInstanceOpContext& ctx,
+				  const std::string& key,
+				  RGWBucketInfo& info,
+				  optional_yield y,
+				  const DoutPrefixProvider *dpp,
+				  RGWObjVersionTracker* objv_tracker);
+
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
                                   optional_yield y,
@@ -783,17 +803,6 @@ private:
 			      const rgw_bucket& bucket,
                               optional_yield y,
                               const DoutPrefixProvider *dpp);
-
-  int do_store_bucket_instance_info(
-    BucketInstanceOpContext& ctx,
-    const string& key,
-    RGWBucketInfo& info,
-    std::optional<RGWBucketInfo*> orig_info,
-    bool exclusive,
-    ceph::real_time mtime,
-    std::map<std::string, ceph::buffer::list>* pattrs,
-    optional_yield y,
-    const DoutPrefixProvider *dpp);
 
   int do_store_linked_bucket_info(RGWSysObjectCtx& ctx,
 				  RGWBucketInfo& info,

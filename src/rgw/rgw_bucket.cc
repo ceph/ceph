@@ -2241,20 +2241,23 @@ public:
   int put_post(const DoutPrefixProvider *dpp) override;
 };
 
-int RGWBucketMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
+int RGWBucketMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
+				     string& entry,
                                      RGWMetadataObject *obj,
                                      RGWObjVersionTracker& objv_tracker,
 				     optional_yield y,
                                      const DoutPrefixProvider *dpp,
-                                     RGWMDLogSyncType type, bool from_remote_zone)
+                                     RGWMDLogSyncType type,
+				     bool from_remote_zone)
 {
-  RGWMetadataHandlerPut_Bucket put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
+  RGWMetadataHandlerPut_Bucket put_op(this, op, entry, obj, objv_tracker, y,
+				      type, from_remote_zone);
   return do_put_operate(&put_op, dpp);
 }
 
 int RGWMetadataHandlerPut_Bucket::put_checked(const DoutPrefixProvider *dpp)
 {
-  RGWBucketEntryMetadataObject *orig_obj = static_cast<RGWBucketEntryMetadataObject *>(old_obj);
+  auto orig_obj = static_cast<RGWBucketEntryMetadataObject *>(old_obj);
 
   if (orig_obj) {
     obj->set_pattrs(&orig_obj->get_attrs());
@@ -2536,37 +2539,31 @@ public:
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandlerBase {
-  int read_bucket_instance_entry(RGWSI_Bucket_BI_Ctx& ctx,
+  int read_bucket_instance_entry(BucketInstanceOpContext& ctx,
                                  const string& entry,
                                  RGWBucketCompleteInfo *bi,
                                  ceph::real_time *pmtime,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) {
-    return svc.bucket->read_bucket_instance_info(ctx,
-                                                 entry,
-                                                 &bi->info,
-                                                 pmtime, &bi->attrs,
-                                                 y,
-                                                 dpp);
+    return bucketctl->read_bucket_instance_info(ctx,
+						entry,
+						&bi->info,
+						y, dpp,
+						pmtime, &bi->attrs,
+						nullptr, boost::none,
+						nullptr);
   }
 
 public:
-  struct Svc {
-    RGWSI_Zone *zone{nullptr};
-    RGWSI_Bucket *bucket{nullptr};
-    RGWSI_BucketIndex *bi{nullptr};
-  } svc;
+  RGWBucketCtl* bucketctl;
 
   RGWBucketInstanceMetadataHandler() {}
 
-  void init(RGWSI_Zone *zone_svc,
-	    RGWSI_Bucket *bucket_svc,
-	    RGWSI_BucketIndex *bi_svc) override {
+  void init(RGWSI_Bucket *bucket_svc,
+	    RGWBucketCtl* bucket_ctl) override {
     base_init(bucket_svc->ctx(),
               bucket_svc->get_bi_be_handler().get());
-    svc.zone = zone_svc;
-    svc.bucket = bucket_svc;
-    svc.bi = bi_svc;
+    bucketctl = bucket_ctl;
   }
 
   string get_type() override { return "bucket.instance"; }
@@ -2583,39 +2580,59 @@ public:
     return new RGWBucketInstanceMetadataObject(bci, objv, mtime);
   }
 
-  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
+  int do_get(RGWSI_MetaBackend_Handler::Op*, string& entry,
+	     RGWMetadataObject **obj, optional_yield y,
+	     const DoutPrefixProvider *dpp) override {
     RGWBucketCompleteInfo bci;
     real_time mtime;
 
-    RGWSI_Bucket_BI_Ctx ctx(op->ctx());
+    BucketInstanceOpContext ctx(bucketctl);
 
-    int ret = svc.bucket->read_bucket_instance_info(ctx, entry, &bci.info, &mtime, &bci.attrs, y, dpp);
+    int ret = bucketctl->read_bucket_instance_info(ctx, entry, &bci.info, y,
+						   dpp, &mtime,&bci.attrs,
+						   nullptr, boost::none,
+						   nullptr);
     if (ret < 0)
       return ret;
 
-    RGWBucketInstanceMetadataObject *mdo = new RGWBucketInstanceMetadataObject(bci, bci.info.objv_tracker.read_version, mtime);
+    auto mdo = new RGWBucketInstanceMetadataObject(
+      bci,
+      bci.info.objv_tracker.read_version,
+      mtime);
 
     *obj = mdo;
 
     return 0;
   }
 
-  int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
+  int do_put(RGWSI_MetaBackend_Handler::Op*, string& entry,
              RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 	     optional_yield y, const DoutPrefixProvider *dpp,
              RGWMDLogSyncType sync_type, bool from_remote_zone) override;
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
+  int do_remove(RGWSI_MetaBackend_Handler::Op*, string& entry,
+		RGWObjVersionTracker& objv_tracker,
                 optional_yield y, const DoutPrefixProvider *dpp) override {
     RGWBucketCompleteInfo bci;
 
-    RGWSI_Bucket_BI_Ctx ctx(op->ctx());
+    BucketInstanceOpContext ctx(bucketctl);
 
     int ret = read_bucket_instance_entry(ctx, entry, &bci, nullptr, y, dpp);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    return svc.bucket->remove_bucket_instance_info(ctx, entry, bci.info, &bci.info.objv_tracker, y, dpp);
+    return bucketctl->remove_bucket_instance_info(ctx, entry, bci.info, y, dpp,
+						  &bci.info.objv_tracker);
+  }
+  auto get_zone() const {
+    return bucketctl->svc.zone->get_zone();
+  }
+  auto get_zonesvc() const {
+    return bucketctl->svc.zone;
+  }
+
+  auto get_bi() const {
+    return bucketctl->svc.bi;
   }
 };
 
@@ -2625,13 +2642,16 @@ class RGWMetadataHandlerPut_BucketInstance : public RGWMetadataHandlerPut_SObj
   RGWBucketInstanceMetadataHandler *bihandler;
   RGWBucketInstanceMetadataObject *obj;
 public:
-  RGWMetadataHandlerPut_BucketInstance(CephContext *_cct,
-                                       RGWBucketInstanceMetadataHandler *_handler,
-                                       RGWSI_MetaBackend_Handler::Op *_op, string& entry,
-                                       RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-				       optional_yield y,
-                                       RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj, objv_tracker, y, type, from_remote_zone),
-                                       cct(_cct), bihandler(_handler) {
+  RGWMetadataHandlerPut_BucketInstance(
+    CephContext *_cct,
+    RGWBucketInstanceMetadataHandler *_handler,
+    RGWSI_MetaBackend_Handler::Op *_op, string& entry,
+    RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+    optional_yield y,
+    RGWMDLogSyncType type, bool from_remote_zone)
+    : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj,
+				 objv_tracker, y, type, from_remote_zone),
+      cct(_cct), bihandler(_handler) {
     obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
 
     auto& bci = obj->get_bci();
@@ -2647,7 +2667,7 @@ public:
   int put_post(const DoutPrefixProvider *dpp) override;
 };
 
-int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
+int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op* op,
                                              string& entry,
                                              RGWMetadataObject *obj,
                                              RGWObjVersionTracker& objv_tracker,
@@ -2655,8 +2675,8 @@ int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
                                              const DoutPrefixProvider *dpp,
                                              RGWMDLogSyncType type, bool from_remote_zone)
 {
-  RGWMetadataHandlerPut_BucketInstance put_op(svc.bucket->ctx(), this, op, entry, obj,
-                                              objv_tracker, y, type, from_remote_zone);
+  RGWMetadataHandlerPut_BucketInstance put_op(dpp->get_cct(), this, op, entry,
+					      obj, objv_tracker, y, type, from_remote_zone);
   return do_put_operate(&put_op, dpp);
 }
 
@@ -2706,7 +2726,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
       auto index_type = bci_index.type;
       auto num_shards = bci_index.normal.num_shards;
       init_default_bucket_layout(cct, bci.info.layout,
-				 bihandler->svc.zone->get_zone(),
+				 bihandler->get_zone(),
 				 num_shards, index_type);
     } else {
       bci.info.layout = old_bci->info.layout;
@@ -2724,11 +2744,14 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
     bci.info.bucket.name = bucket_name;
     bci.info.bucket.bucket_id = bucket_instance;
     bci.info.bucket.tenant = tenant_name;
-    // if the sync module never writes data, don't require the zone to specify all placement targets
-    if (bihandler->svc.zone->sync_module_supports_writes()) {
-      ret = bihandler->svc.zone->select_bucket_location_by_rule(dpp, bci.info.placement_rule, &rule_info, y);
+    // if the sync module never writes data, don't require the zone to
+    // specify all placement targets
+    if (bihandler->get_zonesvc()->sync_module_supports_writes()) {
+      ret = bihandler->get_zonesvc()->select_bucket_location_by_rule(
+	dpp, bci.info.placement_rule, &rule_info, y);
       if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: select_bucket_placement() returned "
+			  << ret << dendl;
         return ret;
       }
     }
@@ -2746,9 +2769,10 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
   return 0;
 }
 
-int RGWMetadataHandlerPut_BucketInstance::put_checked(const DoutPrefixProvider *dpp)
+int RGWMetadataHandlerPut_BucketInstance::put_checked(
+  const DoutPrefixProvider *dpp)
 {
-  RGWBucketInstanceMetadataObject *orig_obj = static_cast<RGWBucketInstanceMetadataObject *>(old_obj);
+  auto orig_obj = static_cast<RGWBucketInstanceMetadataObject *>(old_obj);
 
   RGWBucketInfo *orig_info = (orig_obj ? &orig_obj->get_bucket_info() : nullptr);
 
@@ -2756,17 +2780,17 @@ int RGWMetadataHandlerPut_BucketInstance::put_checked(const DoutPrefixProvider *
   auto mtime = obj->get_mtime();
   auto pattrs = obj->get_pattrs();
 
-  RGWSI_Bucket_BI_Ctx ctx(op->ctx());
+  BucketInstanceOpContext ctx(bihandler->bucketctl);
 
-  return bihandler->svc.bucket->store_bucket_instance_info(ctx,
-                                                         entry,
-                                                         info,
-                                                         orig_info,
-                                                         false,
-                                                         mtime,
-                                                         pattrs,
-							 y,
-                                                         dpp);
+  return bihandler->bucketctl->do_store_bucket_instance_info(ctx,
+							     entry,
+							     info,
+							     orig_info,
+							     false,
+							     mtime,
+							     pattrs,
+							     y,
+							     dpp);
 }
 
 int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp)
@@ -2775,7 +2799,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
 
   objv_tracker = bci.info.objv_tracker;
 
-  int ret = bihandler->svc.bi->init_index(dpp, bci.info);
+  int ret = bihandler->get_bi()->init_index(dpp, bci.info);
   if (ret < 0) {
     return ret;
   }
@@ -2783,12 +2807,17 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
   return STATUS_APPLIED;
 }
 
-class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+class RGWArchiveBucketInstanceMetadataHandler
+  : public RGWBucketInstanceMetadataHandler {
 public:
   RGWArchiveBucketInstanceMetadataHandler() {}
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) override {
-    ldpp_dout(dpp, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
+  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry,
+		RGWObjVersionTracker& objv_tracker, optional_yield y,
+		const DoutPrefixProvider *dpp) override {
+    ldpp_dout(dpp, 0)
+      << "SKIP: bucket instance removal is not allowed on archive zone: "
+      << "bucket.instance:" << entry << dendl;
     return 0;
   }
 };
@@ -3193,6 +3222,37 @@ int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
 				       params.attrs,
 				       y,
 				       dpp);
+}
+
+int RGWBucketCtl::remove_bucket_instance_info(BucketInstanceOpContext& ctx,
+					      const std::string& key,
+                                              RGWBucketInfo& info,
+                                              optional_yield y,
+                                              const DoutPrefixProvider *dpp,
+                                              RGWObjVersionTracker* objv_tracker)
+{
+  if (objv_tracker) {
+    info.objv_tracker = *objv_tracker;
+  }
+
+  // We don't go through mdlog here. Apparently that's done in handle
+  // bi removal?
+  auto ret = ctx.remove_raw(dpp, y, key, objv_tracker);
+
+  if (ret < 0 &&
+      ret != -ENOENT) {
+    return ret;
+  }
+
+  int r = svc.bucket_sync->handle_bi_removal(dpp, info, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
+    /* returning success as index is just keeping hints, so will keep extra hints,
+     * but bucket removal succeeded
+     */
+  }
+
+  return 0;
 }
 
 int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
