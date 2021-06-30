@@ -127,8 +127,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     self.get_module_option(opt['name']))  # type: ignore
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))  # type: ignore
-
-        self._rook_cluster.storage_class_name = self.storage_class_name
+        assert isinstance(self.storage_class_name, str)
+        self.rook_cluster.storage_class_name = self.storage_class_name
 
     def shutdown(self) -> None:
         self._shutdown.set()
