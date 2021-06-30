@@ -212,7 +212,7 @@ private:
       });
   }
 
-  using _omap_get_value_ertr = OMapManager::base_ertr::extend<
+  using _omap_get_value_ertr = with_trans_ertr<OMapManager::base_iertr>::extend<
     crimson::ct_error::enodata
     >;
   using _omap_get_value_ret = _omap_get_value_ertr::future<ceph::bufferlist>;
@@ -221,7 +221,7 @@ private:
     omap_root_t &&root,
     std::string_view key) const;
 
-  using _omap_get_values_ertr = OMapManager::base_ertr;
+  using _omap_get_values_ertr = with_trans_ertr<OMapManager::base_iertr>;
   using _omap_get_values_ret = _omap_get_values_ertr::future<omap_values_t>;
   _omap_get_values_ret _omap_get_values(
     Transaction &t,
@@ -229,7 +229,8 @@ private:
     const omap_keys_t &keys) const;
 
   using _omap_list_bare_ret = OMapManager::omap_list_bare_ret;
-  using _omap_list_ret = OMapManager::omap_list_ret;
+  using _omap_list_ret =
+    _omap_get_values_ertr::future<OMapManager::omap_list_bare_ret>;
   _omap_list_ret _omap_list(
     const omap_root_le_t& omap_root,
     Transaction& t,
@@ -248,7 +249,8 @@ private:
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
 
-  using tm_ertr = with_trans_ertr<TransactionManager::base_iertr>;
+  using tm_iertr = TransactionManager::base_iertr;
+  using tm_ertr = with_trans_ertr<tm_iertr>;
   using tm_ret = tm_ertr::future<>;
   tm_ret _do_transaction_step(
     internal_context_t &ctx,

@@ -618,6 +618,8 @@ public:
   InterruptedTransactionManager &operator=(
     InterruptedTransactionManager &&) = default;
 
+  TransactionManager &get_tm() const { return *tm; }
+
   FORWARD(mkfs)
   FORWARD(mount)
   FORWARD(close)
