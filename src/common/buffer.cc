@@ -1258,8 +1258,12 @@ static ceph::spinlock debug_lock;
             buffer::create_aligned(unaligned._len, align_memory)));
         had_to_rebuild = true;
       }
-      _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
-      _num += 1;
+      if (unaligned.get_num_buffers()) {
+        _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
+        _num += 1;
+      } else {
+        // a bufferlist containing only 0-length bptrs is rebuilt as empty
+      }
       ++p_prev;
     }
     return had_to_rebuild;

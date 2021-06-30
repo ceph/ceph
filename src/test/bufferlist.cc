@@ -1848,6 +1848,23 @@ TEST(BufferList, rebuild_aligned_size_and_memory) {
   EXPECT_TRUE(bl.is_aligned(SIMD_ALIGN));
   EXPECT_TRUE(bl.is_n_align_sized(BUFFER_SIZE));
   EXPECT_EQ(3U, bl.get_num_buffers());
+
+  {
+    /* bug replicator, to test rebuild_aligned_size_and_memory() in the
+     * scenario where the first bptr is both size and memory aligned and
+     * the second is 0-length */
+    bl.clear();
+    bufferptr ptr1(buffer::create_aligned(4096, 4096));
+    bl.append(ptr1);
+    bufferptr ptr(10);
+    /* bl.back().length() must be 0 */
+    bl.append(ptr, 0, 0);
+    EXPECT_EQ(bl.get_num_buffers(), 2);
+    EXPECT_EQ(bl.back().length(), 0);
+    /* rebuild_aligned() calls rebuild_aligned_size_and_memory() */
+    bl.rebuild_aligned(4096);
+    EXPECT_EQ(bl.get_num_buffers(), 1);
+  }
 }
 
 TEST(BufferList, is_zero) {
