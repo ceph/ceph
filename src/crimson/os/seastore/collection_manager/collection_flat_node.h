@@ -9,7 +9,7 @@
 
 namespace crimson::os::seastore::collection_manager {
 struct coll_context_t {
-  InterruptedTransactionManager tm;
+  TransactionManager &tm;
   Transaction &t;
 };
 
@@ -115,7 +115,7 @@ struct CollectionNode
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
-  using list_ertr = CollectionManager::list_ertr;
+  using list_iertr = CollectionManager::list_iertr;
   using list_ret = CollectionManager::list_ret;
   list_ret list();
 
@@ -124,15 +124,15 @@ struct CollectionNode
     SUCCESS,
     OVERFLOW
   };
-  using create_ertr = CollectionManager::create_ertr;
-  using create_ret = create_ertr::future<create_result_t>;
+  using create_iertr = CollectionManager::create_iertr;
+  using create_ret = create_iertr::future<create_result_t>;
   create_ret create(coll_context_t cc, coll_t coll, unsigned bits);
 
-  using remove_ertr = CollectionManager::remove_ertr;
+  using remove_iertr = CollectionManager::remove_iertr;
   using remove_ret = CollectionManager::remove_ret;
   remove_ret remove(coll_context_t cc, coll_t coll);
 
-  using update_ertr = CollectionManager::update_ertr;
+  using update_iertr = CollectionManager::update_iertr;
   using update_ret = CollectionManager::update_ret;
   update_ret update(coll_context_t cc, coll_t coll, unsigned bits);
 

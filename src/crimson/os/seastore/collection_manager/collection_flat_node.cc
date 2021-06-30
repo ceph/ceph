@@ -53,7 +53,7 @@ CollectionNode::list()
     list_result.emplace_back(coll, bits);
   }
   return list_ret(
-    list_ertr::ready_future_marker{},
+    interruptible::ready_future_marker{},
     std::move(list_result));
 }
 
@@ -72,7 +72,7 @@ CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
   if (encoded_sizeof((base_coll_map_t&)decoded) > get_bptr().length()) {
     decoded.erase(iter);
     return create_ret(
-      create_ertr::ready_future_marker{},
+      interruptible::ready_future_marker{},
       create_result_t::OVERFLOW);
   } else {
     if (auto buffer = maybe_get_delta_buffer(); buffer) {
@@ -80,7 +80,7 @@ CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
     }
     copy_to_node();
     return create_ret(
-      create_ertr::ready_future_marker{},
+      interruptible::ready_future_marker{},
       create_result_t::SUCCESS);
   }
 }
