@@ -91,22 +91,27 @@ There are a few health alerts that can arise during the upgrade process.
 UPGRADE_NO_STANDBY_MGR
 ----------------------
 
-This alert means that Ceph requires an active and standby manager daemon in
-order to proceed, but there is currently no standby.
+This alert (``UPGRADE_NO_STANDBY_MGR``) means that Ceph does not detect an
+active standby manager daemon. In order to proceed with the upgrade, Ceph
+requires an active standby manager daemon (which you can think of in this
+context as "a second manager").
 
-You can ensure that Cephadm is configured to run 2 (or more) managers by running the following command:
+You can ensure that Cephadm is configured to run 2 (or more) managers by
+running the following command:
 
 .. prompt:: bash #
 
   ceph orch apply mgr 2  # or more
 
-You can check the status of existing mgr daemons by running the following command:
+You can check the status of existing mgr daemons by running the following
+command:
 
 .. prompt:: bash #
 
   ceph orch ps --daemon-type mgr
 
-If an existing mgr daemon has stopped, you can try to restart it by running the following command: 
+If an existing mgr daemon has stopped, you can try to restart it by running the
+following command: 
 
 .. prompt:: bash #
 
@@ -115,12 +120,13 @@ If an existing mgr daemon has stopped, you can try to restart it by running the 
 UPGRADE_FAILED_PULL
 -------------------
 
-This alert means that Ceph was unable to pull the container image for the
-target version. This can happen if you specify a version or container image
-that does not exist (e.g. "1.2.3"), or if the container registry can not
-be reached by one or more hosts in the cluster.
+This alert (``UPGRADE_FAILED_PULL``) means that Ceph was unable to pull the
+container image for the target version. This can happen if you specify a
+version or container image that does not exist (e.g. "1.2.3"), or if the
+container registry can not be reached by one or more hosts in the cluster.
 
-To cancel the existing upgrade and to specify a different target version, run the following commands: 
+To cancel the existing upgrade and to specify a different target version, run
+the following commands: 
 
 .. prompt:: bash #
 
