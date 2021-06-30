@@ -26,16 +26,15 @@ Host *
 
 class SSHManager:
 
-    cons: Dict[str, "SSHClientConnection"] = {}
-
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
+        self.cons: Dict[str, "SSHClientConnection"] = {}
 
     async def _remote_connection(self,
                                  host: str,
                                  addr: Optional[str] = None,
                                  ) -> "SSHClientConnection":
-        if not SSHManager.cons.get(host):
+        if not self.cons.get(host):
             if not addr and host in self.mgr.inventory:
                 addr = self.mgr.inventory.get_addr(host)
 
@@ -52,13 +51,13 @@ class SSHManager:
             with self.redirect_log(host, addr):
                 try:
                     conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name], known_hosts=None, config=[self.mgr.ssh_config_fname])
-                    SSHManager.cons[host] = conn
+                    self.cons[host] = conn
                 except OSError:
                     raise
                 except asyncssh.Error:
                     raise
 
-        conn = SSHManager.cons.get(host)
+        conn = self.cons.get(host)
         return conn
 
     @contextmanager
@@ -152,19 +151,19 @@ class SSHManager:
         return self.mgr.loop.run_until_complete(self._write_remote_file(*args, **kwargs))
 
     async def _reset_con(self, host: str) -> None:
-        conn = SSHManager.cons.get(host)
+        conn = self.cons.get(host)
         if conn:
             logger.debug(f'_reset_con close {host}')
             conn.close()
             await conn.wait_closed()
-            del SSHManager.cons[host]
+            del self.cons[host]
 
     async def _reset_cons(self) -> None:
-        for host, conn in SSHManager.cons.items():
+        for host, conn in self.cons.items():
             logger.debug(f'_reset_cons close {host}')
             conn.close()
             await conn.wait_closed()
-        SSHManager.cons = {}
+        self.cons = {}
 
     def _reconfig_ssh(self) -> None:
         temp_files = []  # type: list
