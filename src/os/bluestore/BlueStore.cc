@@ -12397,6 +12397,19 @@ void BlueStore::_zoned_cleaner_stop() {
   dout(10) << __func__ << " done" << dendl;
 }
 
+void BlueStore::_zoned_reset_zones(const std::set<uint64_t> *zones_to_clean){
+  for (auto it = zones_to_clean->begin(); it != zones_to_clean->end(); ) {
+    uint64_t start = *it;
+    uint64_t end = start;
+    it++;
+    while (it != zones_to_clean->end() && end + 1 == *it) {
+        end = *it;
+        it++;
+    }
+    bdev->reset_zones(start, end);
+  }
+}
+
 void BlueStore::_zoned_cleaner_thread() {
   dout(10) << __func__ << " start" << dendl;
   std::unique_lock l{zoned_cleaner_lock};
@@ -12422,6 +12435,7 @@ void BlueStore::_zoned_cleaner_thread() {
 	_zoned_clean_zone(zone_num);
       }
       f->mark_zones_to_clean_free(zones_to_clean, db);
+      _zoned_reset_zones(zones_to_clean);
       a->mark_zones_to_clean_free();
       l.lock();
     }
@@ -12434,6 +12448,40 @@ void BlueStore::_zoned_clean_zone(uint64_t zone_num) {
   dout(10) << __func__ << " cleaning zone " << zone_num << dendl;
   // TODO: (1) copy live objects from zone_num to a new zone, (2) issue a RESET
   // ZONE operation to the device for the corresponding zone.
+
+  zone_state_t zone_state;
+  std::string pfx = _zoned_get_prefix(zone_num * bdev->get_zone_size());
+  KeyValueDB::Iterator it = db->get_iterator(pfx, KeyValueDB::ITERATOR_NOCACHE);
+
+  while (it->valid())
+  {
+    std::string k = it->key();
+    bufferlist bl = it->value();
+    auto p = bl.cbegin();
+    int64_t offset;
+    ::decode(offset, p);
+    dout(40) << __func__ << " Copying object with key (zone_num + oid): " << k << " and offset: " << offset << dendl;
+    ghobject_t oid;
+    int r = get_key_object(k, &oid);
+    CollectionRef c = _get_collection(coll_t::meta());
+    OnodeRef o = c->get_onode(oid, false);
+    o->extent_map.fault_range(db, 0, o->onode.size);
+    ceph_assert(offset == o->zoned_get_ondisk_starting_offset());
+    //Should I use _read here and the flag = CEPH_OSD_OP_FLAG_FADVISE_NOCACHE
+    r = _do_read(c.get(), o, 0, o->onode.size, bl, 0);
+    ceph_assert(r >= 0 && r <= (int)o->onode.size);
+
+    OpSequencer *osr = static_cast<OpSequencer *>(c->osr.get());
+    TransContext *txc = _txc_create(c.get(), osr, nullptr);
+    OnodeRef clonedO = c->get_onode(oid, false);
+    clonedO->oid.hobj.set_hash(o->oid.hobj.get_hash());
+
+    _clone(txc, c, o, clonedO);
+    _do_write(txc, c, o, 0, o->onode.size, bl, 0);
+    txc->write_onode(o);
+    _do_truncate(txc, c, clonedO, 0);
+  }
+
 }
 #endif
 
