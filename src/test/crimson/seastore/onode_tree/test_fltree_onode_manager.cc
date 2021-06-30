@@ -71,7 +71,7 @@ struct fltree_onode_manager_test_t
 
   virtual void _init() final {
     TMTestState::_init();
-    manager.reset(new FLTreeOnodeManager(*tm));
+    manager.reset(new FLTreeOnodeManager(itm));
   }
 
   virtual void _destroy() final {
@@ -89,7 +89,7 @@ struct fltree_onode_manager_test_t
 	  [this](auto &t) {
 	    return manager->mkfs(*t
 	    ).safe_then([this, &t] {
-	      return tm->submit_transaction(*t);
+	      return submit_transaction_fut(*t);
 	    });
 	  });
       }).safe_then([this] {

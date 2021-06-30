@@ -55,7 +55,7 @@ struct omap_manager_test_t :
 
   seastar::future<> set_up_fut() final {
     return tm_setup().then([this] {
-      omap_manager = omap_manager::create_omap_manager(*tm);
+      omap_manager = omap_manager::create_omap_manager(itm);
       return seastar::now();
     });
   }
@@ -190,7 +190,7 @@ struct omap_manager_test_t :
   void replay() {
     logger().debug("{}: begin", __func__);
     restart();
-    omap_manager = omap_manager::create_omap_manager(*tm);
+    omap_manager = omap_manager::create_omap_manager(itm);
     logger().debug("{}: end", __func__);
   }
 };
