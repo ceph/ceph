@@ -38,7 +38,7 @@ class TestPgRecoveryEvent(object):
             1
           ],
           "pgid": "1.0",
-          "reported_epoch": "30"
+          "reported_epoch": 30
         },
        {
           "state": "active+clean",
@@ -55,7 +55,7 @@ class TestPgRecoveryEvent(object):
             1
           ],
           "pgid": "1.1",
-          "reported_epoch": "30"
+          "reported_epoch": 30
         },
        {
           "state": "active+clean",
@@ -72,7 +72,7 @@ class TestPgRecoveryEvent(object):
             1
           ],
           "pgid": "1.2",
-          "reported_epoch": "30"
+          "reported_epoch": 30
         }
         ]
         }
