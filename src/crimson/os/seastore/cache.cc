@@ -486,9 +486,12 @@ Cache::replay_delta(
       -> get_extent_ertr::future<CachedExtentRef> {
       auto retiter = extents.find_offset(addr);
       if (retiter != extents.end()) {
-	return seastar::make_ready_future<CachedExtentRef>(&*retiter);
+        CachedExtentRef ret = &*retiter;
+        return ret->wait_io().then([ret] {
+          return ret;
+        });
       } else {
-	return seastar::make_ready_future<CachedExtentRef>();
+        return seastar::make_ready_future<CachedExtentRef>();
       }
     };
     auto extent_fut = (delta.pversion == 0 ?
