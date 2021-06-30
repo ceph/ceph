@@ -210,6 +210,8 @@ class RookCluster(object):
         # when they're implemented
         self.pvs : KubernetesResource[client.V1PersistentVolumeList] = KubernetesResource(self.coreV1_api.list_persistent_volume)                                                 
         
+        self.storage_classes : KubernetesResource = KubernetesResource(self.storageV1_api.list_storage_class)
+
         self.discovery_results: KubernetesResource = KubernetesResource(self.customObjects_api.list_cluster_custom_object,
                                                  group="local.storage.openshift.io",
                                                  version="v1alpha1",
@@ -260,20 +262,31 @@ class RookCluster(object):
                 return item['spec']['nodeName'] in nodenames
             else:
                 return True
+        matching_sc = [i for i in self.storage_classes.items if self.storage_class_name == i.metadata.name]
+        if len(matching_sc) == 0:
+            log.exception("no storage class exists matching name provided in ceph config at mgr/rook/storage_class_name")
+            raise Exception('No storage class exists matching name provided in ceph config at mgr/rook/storage_class_name')
+        if len(matching_sc) > 1:
+            log.exception("too many storage classes matching name provided in ceph config at mgr/rook/storage_class_name")
+            raise Exception('Too many storage classes matching name provided in ceph config at mgr/rook/storage_class_name')
+        storage_class = matching_sc[0]
 
-        try:
-            devices = [i for i in self.discovery_results.items if predicate(i)]
-        except ApiException as dummy_e:
-            log.exception("Failed to fetch device metadata")
-            raise
+        lso_discovery_results = []
+        # this means the storage class was created by LSO
+        if 'local.storage.openshift.io/owner-name' in storage_class.metadata.labels:
+            try:
+                lso_discovery_results = [i for i in self.discovery_results.items if predicate(i)]
+            except ApiException as dummy_e:
+                log.exception("Failed to fetch device metadata")
+                raise
 
         nodename_to_devices = {}
         lso_devices = {}
-        for i in devices:
+        for i in lso_discovery_results:
             drives = i['status']['discoveredDevices']
             for drive in drives:
                 lso_devices[drive['deviceID'].split('/')[-1]] = drive
-        pvs = [i for i in self.pvs.items]
+        pvs_in_sc = [i for i in self.pvs.items if i.spec.storage_class_name == self.storage_class_name]
 
         def convert_size(size_str: str):
             units = ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei")
@@ -287,7 +300,7 @@ class RookCluster(object):
             size = coeff * (2 ** (10 * factor))
             return size
 
-        for i in pvs:
+        for i in pvs_in_sc:
             if (not i.metadata.annotations) or ('storage.openshift.com/device-id' not in i.metadata.annotations) or (i.metadata.annotations['storage.openshift.com/device-id'] not in lso_devices):
                 size = convert_size(i.spec.capacity['storage'])
                 path = i.spec.host_path.path if i.spec.host_path else ('/dev/' + i.metadata.annotations['storage.openshift.com/device-name']) if i.metadata.annotations['storage.openshift.com/device-name'] else ''
