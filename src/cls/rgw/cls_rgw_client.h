@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CLS_RGW_CLIENT_H
-#define CEPH_CLS_RGW_CLIENT_H
+#pragma once
 
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
@@ -639,6 +638,4 @@ int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oi
 int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid);
 int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid,
                                   cls_rgw_bucket_instance_entry *entry);
-#endif
-
 #endif

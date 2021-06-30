@@ -17,8 +17,6 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
 
 #define GC_LIST_DEFAULT_MAX 128
 
