@@ -42,8 +42,8 @@ class CephadmServe:
     On the other hand, These function should *not* be called form
     CLI handlers, to avoid blocking the CLI
     """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    # loop = asyncio.new_event_loop()
+    # asyncio.set_event_loop(loop)
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
@@ -297,13 +297,13 @@ class CephadmServe:
                     if match:
                         continue
                 self.log.info(f'Updating {host}:{path}')
-                CephadmServe.loop.run_until_complete(self.ssh._write_remote_file(host, path, content, mode, uid, gid))
+                self.ssh.write_remote_file(host, path, content, mode, uid, gid)
                 self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
                 updated_files = True
             for path in old_files.keys():
                 self.log.info(f'Removing {host}:{path}')
                 cmd = ['rm', '-f', path]
-                CephadmServe.loop.run_until_complete(self.ssh.check_execute_command(host, cmd))
+                self.ssh.check_execute_command(host, cmd)
                 updated_files = True
                 self.mgr.cache.removed_client_file(host, path)
             if updated_files:
@@ -1145,7 +1145,7 @@ class CephadmServe:
         :env_vars: in format -> [KEY=VALUE, ..]
         """
 
-        CephadmServe.loop.run_until_complete(self.ssh._remote_connection(host, addr))
+        self.ssh.remote_connection(host, addr)
 
         self.log.debug(f"_run_cephadm : command = {command}")
         self.log.debug(f"_run_cephadm : args = {args}")
@@ -1187,17 +1187,17 @@ class CephadmServe:
                 self.log.debug('stdin: %s' % stdin)
 
             cmd = ['which', 'python3']
-            python = CephadmServe.loop.run_until_complete(self.ssh.check_execute_command(host, cmd, addr=addr))
+            python = self.ssh.check_execute_command(host, cmd, stdin=None, addr=addr)
             cmd = [python, self.mgr.cephadm_binary_path] + final_args
 
             try:
-                out, err, code = CephadmServe.loop.run_until_complete(self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr))
+                out, err, code = self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
                 if code == 2:
                     ls_cmd = ['ls', self.mgr.cephadm_binary_path]
-                    out_ls, err_ls, code_ls = CephadmServe.loop.run_until_complete(self.ssh.execute_command(host, ls_cmd, addr=addr))
+                    out_ls, err_ls, code_ls = self.ssh.execute_command(host, ls_cmd, addr=addr)
                     if code_ls == 2:
                         self._deploy_cephadm_binary(host, addr)
-                        out, err, code = CephadmServe.loop.run_until_complete(self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr))
+                        out, err, code = self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
 
             except Exception as e:
                 self.ssh._reset_con(host)
@@ -1208,7 +1208,7 @@ class CephadmServe:
         elif self.mgr.mode == 'cephadm-package':
             try:
                 cmd = ['sudo', '/usr/bin/cephadm'] + final_args
-                out, err, code = CephadmServe.loop.run_until_complete(self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8'), addr=addr))
+                out, err, code = self.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8'), addr=addr)
             except Exception as e:
                 self.ssh._reset_con(host)
                 if error_ok:
@@ -1270,4 +1270,4 @@ class CephadmServe:
     def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        CephadmServe.loop.run_until_complete(self.ssh._write_remote_file(host, self.mgr.cephadm_binary_path, self.mgr._cephadm.encode('utf-8'), addr=addr))
+        self.ssh.write_remote_file(host, self.mgr.cephadm_binary_path, self.mgr._cephadm.encode('utf-8'), addr=addr)

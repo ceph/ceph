@@ -1,7 +1,9 @@
+import asyncio
 import asyncssh
 import asyncssh.logging
 import logging
 import os
+import tempfile
 from io import StringIO
 from shlex import quote
 from typing import TYPE_CHECKING, Optional, List, Tuple
@@ -9,7 +11,7 @@ from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
-    from asyncssh import SSHClientConnection
+    from asyncssh.connection import SSHClientConnection
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +73,15 @@ class SSHConnection:
         conn = SSHConnection.cons.get(host)
         return conn
 
-    async def execute_command(self,
+    def remote_connection(self, *args) -> "SSHClientConnection":
+        return self.mgr.loop.run_until_complete(self._remote_connection(*args))
+
+    async def _execute_command(self,
                               host: str,
                               cmd: List[str],
                               stdin: Optional[bytes] = b"",
                               addr: Optional[str] = None,
+                              **kwargs,
                               ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
         cmd = " ".join(quote(x) for x in cmd)
@@ -84,16 +90,26 @@ class SSHConnection:
         err = r.stderr.rstrip('\n')
         return out, err, r.returncode
 
-    async def check_execute_command(self,
+    def execute_command(self, *args, **kwargs) -> Tuple[str, str, int]:
+        return self.mgr.loop.run_until_complete(self._execute_command(*args, **kwargs))
+
+    async def _check_execute_command(self,
                                     host: str,
                                     cmd: List[str],
                                     stdin: Optional[bytes] = b"",
-                                    addr: Optional[str] = None
+                                    addr: Optional[str] = None,
+                                    **kwargs,
                                     ) -> str:
         out, err, code = await self.execute_command(host, cmd, stdin, addr)
         if code != 0:
             print(f'Command {cmd} failed. {err}')
         return out
+
+    # def check_execute_command(self, *args, **kwargs) -> Tuple[str, str, int]:
+    #     return self.mgr.loop.run_until_complete(self._check_execute_command(*args, **kwargs))
+
+    def check_execute_command(self, *args, **kwargs) -> Tuple[str, str, int]:
+        return self.mgr.loop.run_until_complete(self._check_execute_command(*args))
 
     async def _write_remote_file(self,
                                  host: str,
@@ -102,7 +118,8 @@ class SSHConnection:
                                  mode: Optional[int] = None,
                                  uid: Optional[int] = None,
                                  gid: Optional[int] = None,
-                                 addr: Optional[str] = None
+                                 addr: Optional[str] = None,
+                                 **kwargs,
                                  ) -> None:
         try:
             dirname = os.path.dirname(path)
@@ -120,6 +137,9 @@ class SSHConnection:
             logger.exception(msg)
             raise OrchestratorError(msg)
 
+    def write_remote_file(self, *args, **kwargs) -> Tuple[str, str, int]:
+        return self.mgr.loop.run_until_complete(self._write_remote_file(*args, **kwargs))
+
     async def _reset_con(self, host: str) -> None:
         conn = SSHConnection.cons.get(host)
         if conn:
@@ -134,3 +154,59 @@ class SSHConnection:
             conn.close()
             await conn.wait_closed()
         SSHConnection.cons = {}
+
+    # def _reconfig_ssh(self) -> None:
+    #     temp_files = []  # type: list
+    #     ssh_options = []  # type: List[str]
+
+    #     # ssh_config
+    #     self.ssh_config_fname = self.mgr.ssh_config_file
+    #     ssh_config = self.mgr.get_store("ssh_config")
+    #     if ssh_config is not None or self.ssh_config_fname is None:
+    #         if not ssh_config:
+    #             ssh_config = DEFAULT_SSH_CONFIG
+    #         f = tempfile.NamedTemporaryFile(prefix='cephadm-conf-')
+    #         os.fchmod(f.fileno(), 0o600)
+    #         f.write(ssh_config.encode('utf-8'))
+    #         f.flush()  # make visible to other processes
+    #         temp_files += [f]
+    #         self.ssh_config_fname = f.name
+    #     if self.ssh_config_fname:
+    #         self.validate_ssh_config_fname(self.ssh_config_fname)
+    #         ssh_options += ['-F', self.ssh_config_fname]
+    #     self.ssh_config = ssh_config
+
+    #     # identity
+    #     ssh_key = self.mgr.get_store("ssh_identity_key")
+    #     ssh_pub = self.mgr.get_store("ssh_identity_pub")
+    #     self.ssh_pub = ssh_pub
+    #     self.ssh_key = ssh_key
+    #     if ssh_key and ssh_pub:
+    #         self.mgr.tkey = tempfile.NamedTemporaryFile(prefix='cephadm-identity-')
+    #         self.mgr.tkey.write(ssh_key.encode('utf-8'))
+    #         os.fchmod(self.mgr.tkey.fileno(), 0o600)
+    #         self.mgr.tkey.flush()  # make visible to other processes
+    #         tpub = open(self.mgr.tkey.name + '.pub', 'w')
+    #         os.fchmod(tpub.fileno(), 0o600)
+    #         tpub.write(ssh_pub)
+    #         tpub.flush()  # make visible to other processes
+    #         temp_files += [self.mgr.tkey, tpub]
+    #         ssh_options += ['-i', self.mgr.tkey.name]
+
+    #     self._temp_files = temp_files
+    #     if ssh_options:
+    #         self.mgr._ssh_options = ' '.join(ssh_options)  # type: Optional[str]
+    #     else:
+    #         self.mgr._ssh_options = None
+
+    #     if self.mgr.mode == 'root':
+    #         self.ssh_user = self.mgr.get_store('ssh_user', default='root')
+    #     elif self.mgr.mode == 'cephadm-package':
+    #         self.ssh_user = 'cephadm'
+
+    #     self._reset_cons()
+
+    # def validate_ssh_config_fname(self, ssh_config_fname: str) -> None:
+    #     if not os.path.isfile(ssh_config_fname):
+    #         raise OrchestratorValidationError("ssh_config \"{}\" does not exist".format(
+    #             ssh_config_fname))

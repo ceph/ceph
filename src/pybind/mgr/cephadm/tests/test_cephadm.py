@@ -7,6 +7,7 @@ import yaml
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
+from cephadm.ssh import SSHConnection
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 
 try:
@@ -1161,11 +1162,11 @@ spec:
                     code, out, err = cephadm_module.check_host('test')
                     assert err == ''
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     @mock.patch("remoto.process.check")
-    @mock.patch("cephadm.module.CephadmServe._write_remote_file")
-    def test_etc_ceph(self, _write_file, _check, _get_connection, cephadm_module):
-        _get_connection.return_value = mock.Mock(), mock.Mock()
+    @mock.patch("cephadm.ssh.SSHConnection._write_remote_file")
+    def test_etc_ceph(self, _write_file, _check, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = '{}', '', 0
         _check.return_value = '{}', '', 0
         _write_file.return_value = None
 

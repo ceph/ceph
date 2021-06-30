@@ -3,6 +3,7 @@ import errno
 import logging
 import re
 import shlex
+import asyncio
 from collections import defaultdict
 from configparser import ConfigParser
 from functools import wraps
@@ -345,6 +346,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.run = True
         self.event = Event()
 
+        # self.loop = asyncio.new_event_loop()
+        # asyncio.set_event_loop(self.loop)
         self.ssh = ssh.SSHConnection(self)
 
         if self.get_store('pause'):
@@ -486,6 +489,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         A command handler will typically change the declarative state
         of cephadm. This loop will then attempt to apply this new state.
         """
+        # for ssh in serve
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+
         serve = CephadmServe(self)
         serve.serve()
 
