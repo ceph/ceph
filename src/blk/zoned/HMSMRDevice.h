@@ -41,6 +41,7 @@ class HMSMRDevice final : public BlockDevice {
   string vdo_name;
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
+  int zbd_dev; /// zbd_open File Descriptor
 
   ceph::mutex debug_lock = ceph::make_mutex("HMSMRDevice::debug_lock");
   interval_set<uint64_t> debug_inflight;
@@ -134,6 +135,8 @@ public:
   int get_devices(std::set<std::string> *ls) const final;
 
   bool is_smr() const final { return true; }
+
+  uint64_t reset_zones(uint64_t zone_num_start, uint64_t zone_num_end);
 
   bool get_thin_utilization(uint64_t *total, uint64_t *avail) const final;
 

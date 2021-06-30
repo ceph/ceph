@@ -200,6 +200,11 @@ public:
     return conventional_region_size;
   }
 
+  virtual uint64_t reset_zones(uint64_t zone_num_start, uint64_t zone_num_end) {
+    ceph_assert(is_smr());
+    return 0;
+  }
+
   virtual void aio_submit(IOContext *ioc) = 0;
 
   void set_no_exclusive_lock() {
