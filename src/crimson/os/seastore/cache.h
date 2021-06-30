@@ -326,9 +326,14 @@ public:
       return trans_intr::make_interruptible(
 	get_extent_by_type(type, offset, laddr, length)
       ).si_then([=, &t](CachedExtentRef ret) {
-	t.add_to_read_set(ret);
-	return get_extent_ertr::make_ready_future<CachedExtentRef>(
-	  std::move(ret));
+        if (!ret->is_valid()) {
+          t.conflicted = true;
+          return get_extent_ertr::make_ready_future<CachedExtentRef>();
+        } else {
+          t.add_to_read_set(ret);
+          return get_extent_ertr::make_ready_future<CachedExtentRef>(
+            std::move(ret));
+        }
       });
     }
   }
