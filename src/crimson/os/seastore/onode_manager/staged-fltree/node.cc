@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "common/likely.h"
+#include "crimson/common/utility.h"
 #include "crimson/os/seastore/logging.h"
 
 #include "node_extent_manager.h"
@@ -1828,6 +1829,7 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
     }
     return seastar::now().then(
         [c, &pos, this_ref = std::move(this_ref), this, FNAME] () mutable {
+      assert_moveable(this_ref);
 #ifndef NDEBUG
       assert(!impl->is_keys_empty());
       if (impl->has_single_value()) {
