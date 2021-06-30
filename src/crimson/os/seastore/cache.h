@@ -247,6 +247,7 @@ public:
     }
 
     // get_extent_ret::PRESENT from cache
+    t.add_to_read_set(ret);
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>(ret);
