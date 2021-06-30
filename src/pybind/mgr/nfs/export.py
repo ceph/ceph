@@ -392,15 +392,28 @@ class ExportMgr:
         try:
             if not export_config:
                 raise NFSInvalidOperation("Empty Config!!")
-            j = json.loads(export_config)
+            try:
+                j = json.loads(export_config)
+            except ValueError:
+                # okay, not JSON.  is it an EXPORT block?
+                try:
+                    blocks = GaneshaConfParser(export_config).parse()
+                    exports = [
+                        Export.from_export_block(block, cluster_id)
+                        for block in blocks
+                    ]
+                    j = [export.to_dict() for export in exports]
+                except Exception as ex:
+                    raise NFSInvalidOperation(f"Input must be JSON or a ganesha EXPORT block: {ex}")
+
             # check export type
             if isinstance(j, list):
                 ret, out, err = (0, '', '')
                 for export in j:
                     try:
                         r, o, e = self._apply_export(cluster_id, export)
-                    except Exception as e:
-                        r, o, e = exception_handler(e, f'Failed to apply export: {e}')
+                    except Exception as ex:
+                        r, o, e = exception_handler(ex, f'Failed to apply export: {ex}')
                         if r:
                             ret = r
                     if o:
