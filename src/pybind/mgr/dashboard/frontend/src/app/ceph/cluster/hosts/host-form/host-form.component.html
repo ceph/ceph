@@ -32,6 +32,38 @@
           </div>
         </div>
 
+        <!-- Address -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="addr"
+                 i18n>Nework address</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="192.168.0.1"
+                   id="addr"
+                   name="addr"
+                   formControlName="addr">
+            <span class="invalid-feedback"
+                  *ngIf="hostForm.showError('addr', formDir, 'pattern')"
+                  i18n>The value is not a valid IP address.</span>
+          </div>
+        </div>
+
+        <!-- Labels -->
+        <div class="form-group row">
+          <label i18n
+                 for="labels"
+                 class="cd-col-form-label">Labels</label>
+          <div class="cd-col-form-input">
+            <cd-select-badges id="labels"
+                              [data]="hostForm.controls.labels.value"
+                              [customBadges]="true"
+                              [messages]="messages">
+            </cd-select-badges>
+          </div>
+        </div>
+
         <!-- Maintenance Mode -->
         <div class="form-group row">
           <div class="cd-col-form-offset">
