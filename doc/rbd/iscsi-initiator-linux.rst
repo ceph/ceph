@@ -33,6 +33,7 @@ Install the iSCSI initiator and multipath tools:
        devices {
                device {
                        vendor                 "LIO-ORG"
+                       product                "TCMU device"
                        hardware_handler       "1 alua"
                        path_grouping_policy   "failover"
                        path_selector          "queue-length 0"
