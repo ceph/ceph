@@ -2805,7 +2805,7 @@ TEST_P(StoreTest, SimpleAttrTest) {
     bl.append(bp);
     ASSERT_TRUE(bl_eq(val, bl));
 
-    map<string,bufferptr> bm;
+    map<string,bufferptr,less<>> bm;
     r = store->getattrs(ch, hoid, bm);
     ASSERT_EQ(0, r);
 
@@ -4565,7 +4565,7 @@ public:
     boost::uniform_int<> u3(0, 100);
     uint64_t size = u0(*rng);
     uint64_t name_len;
-    map<string, bufferlist> attrs;
+    map<string, bufferlist, less<>> attrs;
     set<string> keys;
     for (map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
          it != contents[obj].attrs.end(); ++it)
@@ -4607,7 +4607,7 @@ public:
     available_objects.erase(obj);
     ObjectStore::Transaction t;
 
-    map<string, bufferlist> attrs;
+    map<string, bufferlist, less<>> attrs;
     set<string> keys;
 
     while (entries--) {
@@ -4644,7 +4644,7 @@ public:
       } while (contents[obj].attrs.empty());
       expected = contents[obj].attrs;
     }
-    map<string, bufferlist> attrs;
+    map<string, bufferlist, less<>> attrs;
     int r = store->getattrs(ch, obj, attrs);
     ASSERT_TRUE(r == 0);
     ASSERT_TRUE(attrs.size() == expected.size());
@@ -5736,7 +5736,7 @@ TEST_P(StoreTest, XattrTest) {
     ASSERT_EQ(r, 0);
   }
 
-  map<string, bufferptr> aset;
+  map<string, bufferptr, less<>> aset;
   store->getattrs(ch, hoid, aset);
   ASSERT_EQ(aset.size(), attrs.size());
   for (map<string, bufferptr>::iterator i = aset.begin();
