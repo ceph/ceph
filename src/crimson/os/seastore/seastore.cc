@@ -87,7 +87,11 @@ seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
       [this](auto &t) {
 	return onode_manager->mkfs(*t
 	).safe_then([this, &t] {
-	  return collection_manager->mkfs(*t);
+	  return with_trans_intr(
+	    *t,
+	    [this](auto &t) {
+	      return collection_manager->mkfs(t);
+	    });
 	}).safe_then([this, &t](auto coll_root) {
 	  transaction_manager->write_collection_root(
 	    *t,
@@ -172,9 +176,13 @@ seastar::future<std::vector<coll_t>> SeaStore::list_collections()
 	  [this, &ret](auto &t) {
 	    return transaction_manager->read_collection_root(*t
 	    ).safe_then([this, &t](auto coll_root) {
-	      return collection_manager->list(
-		coll_root,
-		*t);
+	      return with_trans_intr(
+		*t,
+		[this, &coll_root](auto &t) {
+		  return collection_manager->list(
+		    coll_root,
+		    t);
+		});
 	    }).safe_then([&ret](auto colls) {
 	      ret.resize(colls.size());
 	      std::transform(
@@ -981,18 +989,21 @@ SeaStore::tm_ret SeaStore::_create_collection(
     return seastar::do_with(
       _cmroot,
       [=, &ctx](auto &cmroot) {
-	return collection_manager->create(
-	  cmroot,
+	return with_trans_intr(
 	  *ctx.transaction,
-	  cid,
-	  bits
-	).safe_then([=, &ctx, &cmroot] {
-	  if (cmroot.must_update()) {
-	    transaction_manager->write_collection_root(
-	      *ctx.transaction,
-	      cmroot);
-	  }
-	});
+	  [=, &cmroot](auto &t) {
+	    return collection_manager->create(
+	      cmroot,
+	      t,
+	      cid,
+	      bits);
+	  }).safe_then([=, &ctx, &cmroot] {
+	    if (cmroot.must_update()) {
+	      transaction_manager->write_collection_root(
+		*ctx.transaction,
+		cmroot);
+	    }
+	  });
       });
   }).handle_error(
     tm_ertr::pass_further{},
@@ -1012,18 +1023,21 @@ SeaStore::tm_ret SeaStore::_remove_collection(
     return seastar::do_with(
       _cmroot,
       [=, &ctx](auto &cmroot) {
-	return collection_manager->remove(
-	  cmroot,
+	return with_trans_intr(
 	  *ctx.transaction,
-	  cid
-	).safe_then([=, &ctx, &cmroot] {
-	  // param here denotes whether it already existed, probably error
-	  if (cmroot.must_update()) {
-	    transaction_manager->write_collection_root(
-	      *ctx.transaction,
-	      cmroot);
-	  }
-	});
+	  [=, &cmroot](auto &t) {
+	    return collection_manager->remove(
+	      cmroot,
+	      t,
+	      cid);
+	  }).safe_then([=, &ctx, &cmroot] {
+	    // param here denotes whether it already existed, probably error
+	    if (cmroot.must_update()) {
+	      transaction_manager->write_collection_root(
+		*ctx.transaction,
+		cmroot);
+	    }
+	  });
       });
   }).handle_error(
     tm_ertr::pass_further{},
