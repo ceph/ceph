@@ -308,7 +308,7 @@ public:
     laddr_t laddr,
     segment_off_t length) {
     CachedExtentRef ret;
-    auto status = query_cache_for_extent(t, offset, &ret);
+    auto status = t.get_extent(offset, &ret);
     if (status == Transaction::get_extent_ret::RETIRED) {
       return seastar::make_ready_future<CachedExtentRef>();
     } else if (status == Transaction::get_extent_ret::PRESENT) {
