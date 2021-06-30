@@ -384,7 +384,8 @@ class Module(MgrModule):
                 for collection in perf_schema[daemon_type]:
                     for field in perf_schema[daemon_type][collection]:
                         if type(perf_schema[daemon_type][collection][field]) != str:
-                            perf_schema[daemon_type][collection][field] += initial_info[daemon][collection][field]
+                            perf_schema[daemon_type][collection][field] += \
+                                    initial_info[daemon][collection][field]
 
         # Initialize 'result' dict
         result = defaultdict(dict) # type: Dict[str, dict]
@@ -399,7 +400,8 @@ class Module(MgrModule):
             for collection in perf_schema[daemon]:
 
                 # Split the collection to avoid redundancy in json report; i.e.:
-                #   bluestore.kv_flush_lat, bluestore.kv_final_lat --> bluestore: kv_flush_lat, kv_final_lat
+                #   bluestore.kv_flush_lat, bluestore.kv_final_lat --> 
+                #   bluestore: kv_flush_lat, kv_final_lat
                 col_split = collection.split('.')
 
                 # Initialize the collection dictionary; i.e.:
@@ -407,15 +409,17 @@ class Module(MgrModule):
                 #       "kv_flush_lat": {
                 #       },
                 #   },
-                result[daemon][col_split[0]][col_split[1]] = result[daemon][col_split[0]].get(col_split[1], {})
+                result[daemon][col_split[0]][col_split[1]] = \
+                        result[daemon][col_split[0]].get(col_split[1], {})
 
                 # Derive sum from perf_schema output; applies in all situations.
                 #   'sum' = the perf_schema 'value' field
                 # (see https://docs.ceph.com/en/latest/dev/perf_counters/)
                 _sum = perf_schema[daemon][collection]['value']
 
-                # In the case that there is a 'count' field in perf_schema, derive 'avgcount' and 'avgtime'
-                # from perf_schema output.
+                # In the case that there is a 'count' field in perf_schema, derive 
+                # 'avgcount' and 'avgtime' from perf_schema output.
+                #
                 #   'avgcount' = the perf_schema 'count' field
                 #   'avgtime' = 'sum' / 'avgcount'
                 # (see https://docs.ceph.com/en/latest/dev/perf_counters/)
@@ -456,7 +460,9 @@ class Module(MgrModule):
                     result[daemon][col_split[0]][col_split[1]]['sum'] = _sum
                     result[daemon][col_split[0]][col_split[1]]['avgtime'] = avgtime
 
-                # In the case that there is no 'count' field in perf_schema, just include the sum; i.e.:
+                # In the case that there is no 'count' field in perf_schema, just include 
+                # the sum; i.e.:
+
                     #   "mon.b": {
                     #       "bluefs": {
                     #           "db_total_bytes": 1073733632,
