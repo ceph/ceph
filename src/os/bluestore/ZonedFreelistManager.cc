@@ -314,16 +314,43 @@ int ZonedFreelistManager::_read_cfg(cfg_reader_t cfg_reader) {
   return 0;
 }
 
+std::set<uint64_t> ZonedFreelistManager::get_cleaning_in_progress_zones(
+    KeyValueDB *kvdb) const {
+  bufferlist bl;
+  std::set<uint64_t> zones_to_clean;
+  if (kvdb->get(meta_prefix, CLEANING_IN_PROGRESS_KEY, &bl) == 0) {
+    decode(zones_to_clean, bl);
+  }
+  return zones_to_clean;
+}
+
 void ZonedFreelistManager::mark_zones_to_clean_free(
-    const std::set<uint64_t> *zones_to_clean, KeyValueDB *kvdb) {
+    const std::set<uint64_t>& zones_to_clean, KeyValueDB *kvdb) {
   dout(10) << __func__ << dendl;
 
   KeyValueDB::Transaction txn = kvdb->get_transaction();
-  for (auto zone_num : *zones_to_clean) {
+  for (auto zone_num : zones_to_clean) {
     ldout(cct, 10) << __func__ << " zone " << zone_num << " is now clean in DB" << dendl;
 
     zone_state_t zone_state;
     write_zone_state_to_db(zone_num, zone_state, txn);
   }
+  txn->rmkey(meta_prefix, CLEANING_IN_PROGRESS_KEY);
+  kvdb->submit_transaction_sync(txn);
+}
+
+// Marks the zones currently being cleaned in the db. Should be called before
+// starting the cleaning. If we crash mid-cleaning, the recovery code will check
+// if there is a key CLEANING_IN_PROGRESS_KEY in the meta_prefix namespace, and
+// if so, will read the zones and resume cleaning.
+void ZonedFreelistManager::mark_zones_to_clean_in_progress(
+    const std::set<uint64_t>& zones_to_clean, KeyValueDB *kvdb) {
+  dout(10) << __func__ << dendl;
+
+  bufferlist bl;
+  encode(zones_to_clean, bl);
+  
+  KeyValueDB::Transaction txn = kvdb->get_transaction();
+  txn->set(meta_prefix, CLEANING_IN_PROGRESS_KEY, bl);
   kvdb->submit_transaction_sync(txn);
 }
