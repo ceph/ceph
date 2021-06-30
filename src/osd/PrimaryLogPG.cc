@@ -15,8 +15,15 @@
  *
  */
 
-#include "boost/tuple/tuple.hpp"
-#include "boost/intrusive_ptr.hpp"
+#include <errno.h>
+
+#include <charconv>
+#include <sstream>
+#include <utility>
+
+#include <boost/intrusive_ptr.hpp>
+#include <boost/tuple/tuple.hpp>
+
 #include "PG.h"
 #include "pg_scrubber.h"
 #include "PrimaryLogPG.h"
@@ -30,9 +37,12 @@
 
 #include "cls/cas/cls_cas_ops.h"
 #include "common/ceph_crypto.h"
+#include "common/config.h"
 #include "common/errno.h"
 #include "common/scrub_types.h"
 #include "common/perf_counters.h"
+#include "common/CDC.h"
+#include "common/EventTrace.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDBackoff.h"
@@ -46,9 +56,7 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MCommandReply.h"
 #include "messages/MOSDScrubReserve.h"
-#include "common/EventTrace.h"
 
-#include "common/config.h"
 #include "include/compat.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
@@ -69,15 +77,9 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-#include <sstream>
-#include <utility>
-
-#include <errno.h>
 #ifdef HAVE_JAEGER
 #include "common/tracer.h"
 #endif
-
-#include <common/CDC.h>
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
@@ -4900,58 +4902,53 @@ void PrimaryLogPG::snap_trimmer(epoch_t queued)
   return;
 }
 
-int PrimaryLogPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
+namespace {
+
+template<typename U, typename V>
+int do_cmp_xattr(int op, const U& lhs, const V& rhs)
 {
-  __u64 v2;
-
-  string v2s(xattr.c_str(), xattr.length());
-  if (v2s.length())
-    v2 = strtoull(v2s.c_str(), NULL, 10);
-  else
-    v2 = 0;
-
-  dout(20) << "do_xattr_cmp_u64 '" << v1 << "' vs '" << v2 << "' op " << op << dendl;
-
   switch (op) {
   case CEPH_OSD_CMPXATTR_OP_EQ:
-    return (v1 == v2);
+    return lhs == rhs;
   case CEPH_OSD_CMPXATTR_OP_NE:
-    return (v1 != v2);
+    return lhs != rhs;
   case CEPH_OSD_CMPXATTR_OP_GT:
-    return (v1 > v2);
+    return lhs > rhs;
   case CEPH_OSD_CMPXATTR_OP_GTE:
-    return (v1 >= v2);
+    return lhs >= rhs;
   case CEPH_OSD_CMPXATTR_OP_LT:
-    return (v1 < v2);
+    return lhs < rhs;
   case CEPH_OSD_CMPXATTR_OP_LTE:
-    return (v1 <= v2);
+    return lhs <= rhs;
   default:
     return -EINVAL;
   }
 }
 
+} // anonymous namespace
+
+int PrimaryLogPG::do_xattr_cmp_u64(int op, uint64_t v1, bufferlist& xattr)
+{
+  uint64_t v2;
+
+  if (xattr.length()) {
+    const char* first = xattr.c_str();
+    if (auto [p, ec] = std::from_chars(first, first + xattr.length(), v2);
+	ec != std::errc()) {
+      return -EINVAL;
+    }
+  } else {
+    v2 = 0;
+  }
+  dout(20) << "do_xattr_cmp_u64 '" << v1 << "' vs '" << v2 << "' op " << op << dendl;
+  return do_cmp_xattr(op, v1, v2);
+}
+
 int PrimaryLogPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
 {
-  string v2s(xattr.c_str(), xattr.length());
-
+  string_view v2s(xattr.c_str(), xattr.length());
   dout(20) << "do_xattr_cmp_str '" << v1s << "' vs '" << v2s << "' op " << op << dendl;
-
-  switch (op) {
-  case CEPH_OSD_CMPXATTR_OP_EQ:
-    return (v1s.compare(v2s) == 0);
-  case CEPH_OSD_CMPXATTR_OP_NE:
-    return (v1s.compare(v2s) != 0);
-  case CEPH_OSD_CMPXATTR_OP_GT:
-    return (v1s.compare(v2s) > 0);
-  case CEPH_OSD_CMPXATTR_OP_GTE:
-    return (v1s.compare(v2s) >= 0);
-  case CEPH_OSD_CMPXATTR_OP_LT:
-    return (v1s.compare(v2s) < 0);
-  case CEPH_OSD_CMPXATTR_OP_LTE:
-    return (v1s.compare(v2s) <= 0);
-  default:
-    return -EINVAL;
-  }
+  return do_cmp_xattr(op, v1s, v2s);
 }
 
 int PrimaryLogPG::do_writesame(OpContext *ctx, OSDOp& osd_op)

@@ -3,6 +3,7 @@
 
 #include "pg_backend.h"
 
+#include <charconv>
 #include <optional>
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/adaptor/transformed.hpp>
@@ -830,58 +831,49 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
     return get_attr_errorator::now();
   });
 }
-static int do_xattr_cmp_str(int op, const string& lhs, bufferlist& rhs_xattr)
+
+namespace {
+
+template<typename U, typename V>
+int do_cmp_xattr(int op, const U& lhs, const V& rhs)
 {
-  string rhs(rhs_xattr.c_str(), rhs_xattr.length());
-
-  logger().debug("do_xattr_cmp_str '{}' vs '{}' op {}", lhs, rhs, op);
-
   switch (op) {
   case CEPH_OSD_CMPXATTR_OP_EQ:
-    return (lhs.compare(rhs) == 0);
+    return lhs == rhs;
   case CEPH_OSD_CMPXATTR_OP_NE:
-    return (lhs.compare(rhs) != 0);
+    return lhs != rhs;
   case CEPH_OSD_CMPXATTR_OP_GT:
-    return (lhs.compare(rhs) > 0);
+    return lhs > rhs;
   case CEPH_OSD_CMPXATTR_OP_GTE:
-    return (lhs.compare(rhs) >= 0);
+    return lhs >= rhs;
   case CEPH_OSD_CMPXATTR_OP_LT:
-    return (lhs.compare(rhs) < 0);
+    return lhs < rhs;
   case CEPH_OSD_CMPXATTR_OP_LTE:
-    return (lhs.compare(rhs) <= 0);
+    return lhs <= rhs;
   default:
     return -EINVAL;
   }
 }
+
+} // anonymous namespace
 
 static int do_xattr_cmp_u64(int op, uint64_t lhs, bufferlist& rhs_xattr)
 {
   uint64_t rhs;
 
   if (rhs_xattr.length() > 0) {
-    std::from_chars(rhs_xattr.c_str(), rhs_xattr.c_str() + rhs_xattr.length(), rhs);
+    const char* first = rhs_xattr.c_str();
+    if (auto [p, ec] = std::from_chars(first, first + rhs_xattr.length(), rhs);
+	ec != std::errc()) {
+      return -EINVAL;
+    }
   } else {
     rhs = 0;
   }
   logger().debug("do_xattr_cmp_u64 '{}' vs '{}' op {}", lhs, rhs, op);
-
-  switch (op) {
-  case CEPH_OSD_CMPXATTR_OP_EQ:
-    return (lhs == rhs);
-  case CEPH_OSD_CMPXATTR_OP_NE:
-    return (lhs != rhs);
-  case CEPH_OSD_CMPXATTR_OP_GT:
-    return (lhs > rhs);
-  case CEPH_OSD_CMPXATTR_OP_GTE:
-    return (lhs >= rhs);
-  case CEPH_OSD_CMPXATTR_OP_LT:
-    return (lhs < rhs);
-  case CEPH_OSD_CMPXATTR_OP_LTE:
-    return (lhs <= rhs);
-  default:
-    return -EINVAL;
-  }
+  return do_cmp_xattr(op, lhs, rhs);
 }
+
 PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
   const ObjectState& os,
   OSDOp& osd_op) const
@@ -900,23 +892,24 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
     switch (osd_op.op.xattr.cmp_mode) {
     case CEPH_OSD_CMPXATTR_MODE_STRING:
       {
-        string val;
-        bp.copy(osd_op.op.xattr.value_len, val);
-        result = do_xattr_cmp_str(osd_op.op.xattr.cmp_op, val, xattr);
-        logger().debug("cmpxattr val={}, xattr= {}", val, xattr);
+        string lhs;
+        bp.copy(osd_op.op.xattr.value_len, lhs);
+        string_view rhs(xattr.c_str(), xattr.length());
+        result = do_cmp_xattr(osd_op.op.xattr.cmp_op, lhs, rhs);
+        logger().debug("cmpxattr lhs={}, rhs={}", lhs, rhs);
       }
     break;
     case CEPH_OSD_CMPXATTR_MODE_U64:
       {
-        uint64_t val;
+        uint64_t lhs;
         try {
-          decode(val, bp);
+          decode(lhs, bp);
 	} catch (ceph::buffer::error& e) {
           logger().info("cmp_xattr: buffer error expection");
           result = -EINVAL;
           break;
 	}
-        result = do_xattr_cmp_u64(osd_op.op.xattr.cmp_op, val, xattr);
+        result = do_xattr_cmp_u64(osd_op.op.xattr.cmp_op, lhs, xattr);
       }
     break;
     default:
