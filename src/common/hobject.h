@@ -130,8 +130,8 @@ public:
     return hobject_t_max();
   }
 
-  hobject_t(object_t oid, const std::string& key, snapid_t snap, uint32_t hash,
-	    int64_t pool, std::string nspace)
+  hobject_t(const object_t& oid, const std::string& key, snapid_t snap,
+            uint32_t hash, int64_t pool, const std::string& nspace)
     : oid(oid), snap(snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
       key(oid.name == key ? std::string() : key) {
@@ -139,7 +139,7 @@ public:
   }
 
   hobject_t(const sobject_t &soid, const std::string &key, uint32_t hash,
-	    int64_t pool, std::string nspace)
+	    int64_t pool, const std::string& nspace)
     : oid(soid.oid), snap(soid.snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
       key(soid.oid.name == key ? std::string() : key) {
