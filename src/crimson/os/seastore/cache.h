@@ -384,11 +384,11 @@ public:
   );
 
   /**
-   * try_construct_record
+   * prepare_record
    *
    * Construct the record for Journal from transaction.
    */
-  record_t try_construct_record(
+  record_t prepare_record(
     Transaction &t ///< [in, out] current transaction
   );
 

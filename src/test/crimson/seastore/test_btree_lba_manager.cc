@@ -58,7 +58,7 @@ struct btree_lba_manager_test :
 
   seastar::future<> submit_transaction(TransactionRef t)
   {
-    auto record = cache.try_construct_record(*t);
+    auto record = cache.prepare_record(*t);
     return journal.submit_record(std::move(record), t->get_handle()).safe_then(
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;

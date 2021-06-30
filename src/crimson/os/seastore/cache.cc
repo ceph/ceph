@@ -252,9 +252,9 @@ CachedExtentRef Cache::duplicate_for_write(
   return ret;
 }
 
-record_t Cache::try_construct_record(Transaction &t)
+record_t Cache::prepare_record(Transaction &t)
 {
-  LOG_PREFIX(Cache::try_construct_record);
+  LOG_PREFIX(Cache::prepare_record);
   DEBUGT("enter", t);
 
   // Should be valid due to interruptible future
