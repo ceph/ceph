@@ -482,15 +482,15 @@ Cache::replay_delta(
     add_extent(root);
     return replay_delta_ertr::now();
   } else {
-    auto get_extent_if_cached = [this](paddr_t addr)
+    auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
-      auto retiter = extents.find_offset(addr);
-      if (retiter != extents.end()) {
-        CachedExtentRef ret = &*retiter;
+      CachedExtentRef ret;
+      auto result = query_cache_for_extent(addr, &ret);
+      if (result == Transaction::get_extent_ret::PRESENT) {
         return ret->wait_io().then([ret] {
           return ret;
         });
-      } else {
+      } else { // get_extent_ret::ABSENT
         return seastar::make_ready_future<CachedExtentRef>();
       }
     };
@@ -500,7 +500,7 @@ Cache::replay_delta(
 	delta.paddr,
 	delta.laddr,
 	delta.length) :
-      get_extent_if_cached(
+      _get_extent_if_cached(
 	delta.paddr)
     ).handle_error(
       replay_delta_ertr::pass_further{},
