@@ -9,11 +9,6 @@ export class CreateClusterWelcomePageHelper extends PageHelper {
   createCluster() {
     cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph');
     cy.get('[name=create-cluster]').click();
-
-    cy.get('cd-dashboard').should('exist');
-    const notification = new NotificationSidebarPageHelper();
-    notification.open();
-    notification.getNotifications().should('contain', 'Cluster creation feature not implemented');
   }
 
   doSkip() {
