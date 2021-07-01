@@ -31,20 +31,43 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
   LOG_PREFIX(Cache::retire_extent);
-  if (auto ext = t.write_set.find_offset(addr); ext != t.write_set.end()) {
-    DEBUGT("found {} in t.write_set", t, addr);
+  CachedExtentRef ext;
+  auto result = t.get_extent(addr, &ext);
+  if (result == Transaction::get_extent_ret::PRESENT) {
+    DEBUGT("found {} in t", t, addr);
     t.add_to_retired_set(CachedExtentRef(&*ext));
     return retire_extent_iertr::now();
-  } else if (auto iter = extents.find_offset(addr);
-      iter != extents.end()) {
-    auto ret = CachedExtentRef(&*iter);
+  } else if (result == Transaction::get_extent_ret::RETIRED) {
+    ERRORT("{} is already retired", t, addr);
+    ceph_abort();
+  }
+
+  // absent from transaction
+  result = query_cache_for_extent(addr, &ext);
+  if (result == Transaction::get_extent_ret::PRESENT) {
+    t.add_to_read_set(ext);
     return trans_intr::make_interruptible(
-      ret->wait_io()
-    ).then_interruptible([&t, ret=std::move(ret)]() mutable {
-      t.add_to_retired_set(ret);
+      ext->wait_io()
+    ).then_interruptible([&t, ext=std::move(ext)]() mutable {
+      t.add_to_retired_set(ext);
       return retire_extent_iertr::now();
     });
-  } else {
+  } else { // result == get_extent_ret::ABSENT
+    // FIXME this will cause incorrect transaction invalidation because t
+    // will not be notified if other transactions that modify the extent at
+    // this addr are committed.
+    //
+    // Say that we have transaction A and B, conflicting on extent E at laddr
+    // L:
+    //   A: dec_ref(L) // cause uncached retirement
+    //   B: read(L) -> E
+    //   B: mutate(E)
+    //   B: submit_transaction() // assume successful
+    //   A: about to submit...
+    //
+    // A cannot be invalidated because E is not in A's read-set
+    //
+    // TODO: leverage RetiredExtentPlaceholder to fix the issue.
     t.add_to_retired_uncached(addr, length);
     return retire_extent_iertr::now();
   }
@@ -125,7 +148,9 @@ void Cache::retire_extent(CachedExtentRef ref)
   remove_from_dirty(ref);
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
   retired_extent_gate.add_extent(*ref);
-  ref->state = CachedExtent::extent_state_t::INVALID;
+
+  invalidate(*ref);
+  extents.erase(*ref);
 }
 
 void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
@@ -227,9 +252,9 @@ CachedExtentRef Cache::duplicate_for_write(
   return ret;
 }
 
-std::optional<record_t> Cache::try_construct_record(Transaction &t)
+record_t Cache::prepare_record(Transaction &t)
 {
-  LOG_PREFIX(Cache::try_construct_record);
+  LOG_PREFIX(Cache::prepare_record);
   DEBUGT("enter", t);
 
   // Should be valid due to interruptible future
@@ -294,11 +319,6 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
-  for (auto &i: t.retired_set) {
-    DEBUGT("retiring {}", t, *i);
-    retire_extent(i);
-  }
-
   for (auto &&i : t.retired_uncached) {
     CachedExtentRef to_retire;
     if (query_cache_for_extent(i.first, &to_retire) ==
@@ -307,12 +327,16 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 	RetiredExtentPlaceholder
 	>(i.second);
       to_retire->set_paddr(i.first);
+      to_retire->state = CachedExtent::extent_state_t::CLEAN;
     }
 
     t.retired_set.insert(to_retire);
     extents.insert(*to_retire);
-    to_retire->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
-    retired_extent_gate.add_extent(*to_retire);
+  }
+
+  for (auto &i: t.retired_set) {
+    DEBUGT("retiring {}", t, *i);
+    retire_extent(i);
   }
 
   record.extents.reserve(t.fresh_block_list.size());
@@ -335,7 +359,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
       });
   }
 
-  return std::make_optional<record_t>(std::move(record));
+  return record;
 }
 
 void Cache::complete_commit(
@@ -462,9 +486,12 @@ Cache::replay_delta(
       -> get_extent_ertr::future<CachedExtentRef> {
       auto retiter = extents.find_offset(addr);
       if (retiter != extents.end()) {
-	return seastar::make_ready_future<CachedExtentRef>(&*retiter);
+        CachedExtentRef ret = &*retiter;
+        return ret->wait_io().then([ret] {
+          return ret;
+        });
       } else {
-	return seastar::make_ready_future<CachedExtentRef>();
+        return seastar::make_ready_future<CachedExtentRef>();
       }
     };
     auto extent_fut = (delta.pversion == 0 ?

@@ -740,7 +740,7 @@ public:
   }
 
   std::ostream &print_detail(std::ostream &out) const final {
-    return out << "RetiredExtentPlaceholder";
+    return out << ", RetiredExtentPlaceholder";
   }
 
   void on_delta_write(paddr_t record_block_offset) final {
