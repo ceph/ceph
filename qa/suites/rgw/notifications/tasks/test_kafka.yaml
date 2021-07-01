@@ -4,6 +4,5 @@ tasks:
       kafka_version: 2.6.0
 - notification-tests:
     client.0:
-      force-branch: master
       extra_attr: ["kafka_test"]
       rgw_server: client.0
