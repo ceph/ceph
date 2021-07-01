@@ -625,13 +625,14 @@
     -o [ --options ] arg            device specific options
   
   rbd help device list
-  usage: rbd device list [--device-type <device-type>] [--format <format>] 
-                         [--pretty-format] 
+  usage: rbd device list [--device-type <device-type>] [--all] 
+                         [--format <format>] [--pretty-format] 
   
   List mapped rbd images.
   
   Optional arguments
     -t [ --device-type ] arg device type [ggate, krbd (default), nbd]
+    --all                    show more device specific details
     --format arg             output format (plain, json, or xml) [default: plain]
     --pretty-format          pretty formatting (json and xml)
   

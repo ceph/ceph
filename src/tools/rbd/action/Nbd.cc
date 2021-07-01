@@ -125,6 +125,10 @@ int execute_list(const po::variables_map &vm,
 
   args.push_back("list-mapped");
 
+  if (vm["all"].as<bool>()) {
+    args.push_back("--all");
+  }
+
   if (vm.count("format")) {
     args.push_back("--format");
     args.push_back(vm["format"].as<at::Format>().value);

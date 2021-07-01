@@ -251,7 +251,7 @@ Commands
   Deep copy the content of a src-image into the newly created dest-image.
   Dest-image will have the same size, object size, image format, and snapshots as src-image.
 
-:command:`device list` [-t | --device-type *device-type*] [--format plain | json | xml] --pretty-format
+:command:`device list` [-t | --device-type *device-type*] [--all] [--format plain | json | xml] [--pretty-format]
   Show the rbd images that are mapped via the rbd kernel module
   (default) or other supported device.
 

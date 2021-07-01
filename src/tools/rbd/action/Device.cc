@@ -161,6 +161,8 @@ const DeviceOperations *get_device_operations(const po::variables_map &vm) {
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   add_device_type_option(options);
+  options->add_options()
+    ("all", po::bool_switch(), "show more device specific details");
   at::add_format_options(options);
 }
 
