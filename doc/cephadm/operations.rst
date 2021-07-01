@@ -5,25 +5,35 @@ Cephadm Operations
 Watching cephadm log messages
 =============================
 
-Cephadm logs to the ``cephadm`` cluster log channel, meaning you can
-monitor progress in realtime with::
+Cephadm writes logs to the ``cephadm`` cluster log channel. You can
+monitor Ceph's activity in real time by reading the logs as they fill
+up. Run the following command to see the logs in real time:
 
-  # ceph -W cephadm
+.. prompt:: bash #
 
-By default it will show info-level events and above.  To see
-debug-level messages too::
+  ceph -W cephadm
 
-  # ceph config set mgr mgr/cephadm/log_to_cluster_level debug
-  # ceph -W cephadm --watch-debug
+By default, this command shows info-level events and above.  To see
+debug-level messages as well as info-level events, run the following
+command:
 
-Be careful: the debug messages are very verbose!
+.. prompt:: bash #
 
-You can see recent events with::
+  ceph config set mgr mgr/cephadm/log_to_cluster_level debug
+  ceph -W cephadm --watch-debug
 
-  # ceph log last cephadm
+.. warning::
+
+  The debug messages are very verbose!
+
+You can see recent events by running the following command:
+
+.. prompt:: bash #
+
+  ceph log last cephadm
 
 These events are also logged to the ``ceph.cephadm.log`` file on
-monitor hosts and to the monitor daemons' stderr.
+monitor hosts as well as to the monitor daemons' stderr.
 
 
 .. _cephadm-logs:
@@ -34,21 +44,31 @@ Ceph daemon logs
 Logging to stdout
 -----------------
 
-Traditionally, Ceph daemons have logged to ``/var/log/ceph``.  By
-default, cephadm daemons log to stderr and the logs are
-captured by the container runtime environment.  For most systems, by
-default, these logs are sent to journald and accessible via
+Ceph daemons traditionally write logs to ``/var/log/ceph``. Ceph
+daemons log to stderr by default and Ceph logs are captured by the
+container runtime environment. By default, most systems send these
+logs to journald, which means that they are accessible via
 ``journalctl``.
+
+Example of logging to stdout 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For example, to view the logs for the daemon ``mon.foo`` for a cluster
 with ID ``5c5a50ae-272a-455d-99e9-32c6a013e694``, the command would be
-something like::
+something like:
+
+.. prompt:: bash #
 
   journalctl -u ceph-5c5a50ae-272a-455d-99e9-32c6a013e694@mon.foo
 
 This works well for normal operations when logging levels are low.
 
-To disable logging to stderr::
+Disabling logging to stderr
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To disable logging to stderr:
+
+.. prompt:: bash #
 
   ceph config set global log_to_stderr false
   ceph config set global mon_cluster_log_to_stderr false
@@ -56,20 +76,37 @@ To disable logging to stderr::
 Logging to files
 ----------------
 
-You can also configure Ceph daemons to log to files instead of stderr,
-just like they have in the past.  When logging to files, Ceph logs appear
-in ``/var/log/ceph/<cluster-fsid>``.
+You can also configure Ceph daemons to log to files instead of to
+stderr if you prefer logs to appear in files (as they did in earlier
+versions of Ceph).  When Ceph logs to files, the logs appear in
+``/var/log/ceph/<cluster-fsid>``. If you choose to configure Ceph to
+log to files instead of to stderr, remember to configure Ceph so that
+it will not log to stderr (the commands for this are covered below).
 
-To enable logging to files::
+Enabling logging to files
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To enable logging to files, run the following commands:
+
+.. prompt:: bash #
 
   ceph config set global log_to_file true
   ceph config set global mon_cluster_log_to_file true
 
-We recommend disabling logging to stderr (see above) or else everything
-will be logged twice::
+Disabling logging to stderr
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you choose to log to files, we recommend disabling logging to
+stderr (see above) or else everything will be logged twice. Run the
+following commands to disable logging to stderr:
+
+.. prompt:: bash #
 
   ceph config set global log_to_stderr false
   ceph config set global mon_cluster_log_to_stderr false
+
+Modifying the log retention schedule
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 By default, cephadm sets up log rotation on each host to rotate these
 files.  You can configure the logging retention schedule by modifying
@@ -117,7 +154,7 @@ CEPHADM Operations
 ------------------
 
 CEPHADM_PAUSED
-^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~
 
 Cephadm background work has been paused with ``ceph orch pause``.  Cephadm
 continues to perform passive monitoring activities (like checking
@@ -131,7 +168,7 @@ Resume cephadm work with::
 .. _cephadm-stray-host:
 
 CEPHADM_STRAY_HOST
-^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~
 
 One or more hosts have running Ceph daemons but are not registered as
 hosts managed by *cephadm*.  This means that those services cannot
@@ -157,7 +194,7 @@ See :ref:`cephadm-fqdn` for more information about host names and
 domain names.
 
 CEPHADM_STRAY_DAEMON
-^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~
 
 One or more Ceph daemons are running but not are not managed by
 *cephadm*.  This may be because they were deployed using a different
@@ -175,7 +212,7 @@ This warning can be disabled entirely with::
   ceph config set mgr mgr/cephadm/warn_on_stray_daemons false
 
 CEPHADM_HOST_CHECK_FAILED
-^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 One or more hosts have failed the basic cephadm host check, which verifies
 that (1) the host is reachable and cephadm can be executed there, and (2)
@@ -254,48 +291,48 @@ The name of each configuration check, can then be used to enable or disable a sp
   ceph cephadm config-check disable kernel_security
 
 CEPHADM_CHECK_KERNEL_LSM
-^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~
 Each host within the cluster is expected to operate within the same Linux Security Module (LSM) state. For example,
 if the majority of the hosts are running with SELINUX in enforcing mode, any host not running in this mode
 would be flagged as an anomaly and a healtcheck (WARNING) state raised.
 
 CEPHADM_CHECK_SUBSCRIPTION
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 This check relates to the status of vendor subscription. This check is only performed for hosts using RHEL, but helps
 to confirm that all your hosts are covered by an active subscription so patches and updates
 are available.
 
 CEPHADM_CHECK_PUBLIC_MEMBERSHIP
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 All members of the cluster should have NICs configured on at least one of the public network subnets. Hosts
 that are not on the public network will rely on routing which may affect performance
 
 CEPHADM_CHECK_MTU
-^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~
 The MTU of the NICs on OSDs can be a key factor in consistent performance. This check examines hosts
 that are running OSD services to ensure that the MTU is configured consistently within the cluster. This is
 determined by establishing the MTU setting that the majority of hosts are using, with any anomalies being
 resulting in a Ceph healthcheck.
 
 CEPHADM_CHECK_LINKSPEED
-^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~
 Similar to the MTU check, linkspeed consistency is also a factor in consistent cluster performance.
 This check determines the linkspeed shared by the majority of "OSD hosts", resulting in a healthcheck for
 any hosts that are set at a lower linkspeed rate.
 
 CEPHADM_CHECK_NETWORK_MISSING
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The public_network and cluster_network settings support subnet definitions for IPv4 and IPv6. If these
 settings are not found on any host in the cluster a healthcheck is raised.
 
 CEPHADM_CHECK_CEPH_RELEASE
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 Under normal operations, the ceph cluster should be running daemons under the same ceph release (i.e. all
 pacific). This check looks at the active release for each daemon, and reports any anomalies as a
 healthcheck. *This check is bypassed if an upgrade process is active within the cluster.*
 
 CEPHADM_CHECK_KERNEL_VERSION
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The OS kernel version (maj.min) is checked for consistency across the hosts. Once again, the
 majority of the hosts is used as the basis of identifying anomalies.
 
