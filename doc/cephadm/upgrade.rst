@@ -76,11 +76,11 @@ Watch the cephadm log by running the following command:
 Canceling an upgrade
 ====================
 
-You can stop the upgrade process at any time with:
+You can stop the upgrade process at any time by running the following command:
 
 .. prompt:: bash #
 
-  # ceph orch upgrade stop
+  ceph orch upgrade stop
 
 
 Potential problems
