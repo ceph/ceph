@@ -87,11 +87,13 @@ private:
   std::thread thread_engine;
   ucp_worker_h ucp_worker;
   std::map<uint64_t, UCXConSktImpl*> ucx_connections;
+  int engine_status = 0;
   void dispatch_am_message(UCXConSktImpl *ucx_con,
                            const void *header, size_t header_length,
                            void *data, const ucp_am_recv_param_t *param);
 public:
   UCXProEngine(CephContext *cct, ucp_worker_h ucp_worker);
+  ~UCXProEngine(void);
 
   void fire_polling();
   void progress();
@@ -127,9 +129,12 @@ private:
   ceph::mutex send_lock = ceph::make_mutex("UCXConSktImpl::send_lock");
   ceph::mutex recv_lock = ceph::make_mutex("UCXConSktImpl::recv_lock");
   bool is_server;
+public:
   bool active;
   bool pending;
+  int err_con = 0;
 
+private:
   void handle_connection_error(ucs_status_t status);
   static
   void ep_error_cb(void *arg, ucp_ep_h ep, ucs_status_t status);

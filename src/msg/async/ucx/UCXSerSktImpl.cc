@@ -104,6 +104,7 @@ int UCXSerSktImpl::accept(ConnectedSocket *ser_con_socket, const SocketOptions &
   }
 
   ucx_ser_conskt->set_connection_status(1);
+  ucx_ser_conskt->active = true;
   *ser_con_socket = ConnectedSocket(std::unique_ptr<UCXConSktImpl>(ucx_ser_conskt));
 
   return 0;

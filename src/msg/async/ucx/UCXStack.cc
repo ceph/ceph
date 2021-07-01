@@ -74,6 +74,7 @@ int UCXWorker::connect(const entity_addr_t &peer_addr,
     return rst;
   }
 
+  ucx_peerskt->active = true;
   *peer_skt = ConnectedSocket(std::unique_ptr<UCXConSktImpl>(ucx_peerskt));
 
   return rst;
@@ -93,6 +94,14 @@ UCXProEngine::UCXProEngine(CephContext *cct, ucp_worker_h ucp_worker)
 {
 }
 
+UCXProEngine::~UCXProEngine(void)
+{
+  ldout(cct, 20) << __LINE__ << dendl;
+  engine_status = -1;
+  thread_engine.join();
+  ldout(cct, 20) << __LINE__ << dendl;
+}
+
 void UCXProEngine::fire_polling()
 {
   std::lock_guard lk{lock};
@@ -108,7 +117,11 @@ void UCXProEngine::fire_polling()
 void UCXProEngine::progress()
 {
   ldout(cct, 20) << " ucp_worker_progress start " << dendl;
+  engine_status = 1;
   while (true) {
+    if (engine_status != 1) {
+      break;
+    }
     ucp_worker_progress(ucp_worker);
   }
 }

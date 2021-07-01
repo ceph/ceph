@@ -142,6 +142,8 @@ ssize_t UCXConSktImpl::send(ceph::bufferlist &bl, bool more)
 
 void UCXConSktImpl::shutdown()
 {
+  err_con = 1;
+  active = false;
 }
 
 void UCXConSktImpl::close()
