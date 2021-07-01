@@ -544,7 +544,7 @@ class RadosNotification : public Notification {
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			       const ceph::real_time& mtime, const std::string& etag) override;
+			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
 };
 
 class RadosGCChain : public GCChain {
