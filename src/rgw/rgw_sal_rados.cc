@@ -1917,9 +1917,9 @@ int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags
 }
 
 int RadosNotification::publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-				     const ceph::real_time& mtime, const std::string& etag)
+				     const ceph::real_time& mtime, const std::string& etag, const std::string& version)
 {
-  return rgw::notify::publish_commit(obj, size, mtime, etag, event_type, res, dpp);
+  return rgw::notify::publish_commit(obj, size, mtime, etag, version, event_type, res, dpp);
 }
 
 void RadosGCChain::update(const DoutPrefixProvider *dpp, RGWObjManifest* manifest)
