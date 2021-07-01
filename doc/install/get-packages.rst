@@ -322,17 +322,6 @@ before attempting an install.
 Debian Packages
 ~~~~~~~~~~~~~~~
 
-Ceph requires additional third party libraries.
-
-- libaio1
-- libsnappy1
-- libcurl3
-- curl
-- libgoogle-perftools4
-- google-perftools
-- libleveldb1
-
-
 The repository package installs the repository details on your local system for
 use with ``apt``. Replace ``{release}`` with the latest Ceph release. Replace
 ``{version}`` with the latest Ceph version number. Replace ``{distro}`` with
@@ -352,15 +341,6 @@ To add the EPEL repository, execute the following
 .. prompt:: bash $
 
    sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
-
-Ceph requires the following packages:
-
-- snappy
-- leveldb
-- gdisk
-- python-argparse
-- gperftools-libs
-
 
 Packages are currently built for the RHEL/CentOS8 (``el8``) platforms.  The
 repository package installs the repository details on your local system for use
