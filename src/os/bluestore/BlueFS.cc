@@ -3516,7 +3516,7 @@ int BlueFS::open_for_write(
   FileWriter **h,
   bool overwrite)
 {
-  std::lock_guard nl(nodes.lock);
+  std::unique_lock nl(nodes.lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
   map<string,DirRef>::iterator p = nodes.dir_map.find(dirname);
   DirRef dir;
@@ -3578,6 +3578,7 @@ int BlueFS::open_for_write(
   dout(20) << __func__ << " mapping " << dirname << "/" << filename
 	   << " vsel_hint " << file->vselector_hint
 	   << dendl;
+  nl.unlock();
   {
     std::lock_guard ll(log.lock);
     log.t.op_file_update(file->fnode);
