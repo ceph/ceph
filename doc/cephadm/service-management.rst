@@ -316,22 +316,25 @@ Cephadm uses a declarative state to define the layout of the cluster. This
 state consists of a list of service specifications containing placement
 specifications (See :ref:`orchestrator-cli-service-spec` ). 
 
-Cephadm constantly compares list of actually running daemons in the cluster
-with the desired service specifications and will either add or remove new 
-daemons.
+Cephadm continually compares a list of daemons actually running in the cluster
+against the list in the service specifications. Cephadm adds new daemons and
+removes old daemons as necessary in order to conform to the service
+specifications.
 
-First, cephadm will select a list of candidate hosts. It first looks for 
-explicit host names and will select those. In case there are no explicit hosts 
-defined, cephadm looks for a label specification. If there is no label defined 
-in the specification, cephadm will select hosts based on a host pattern. If 
-there is no pattern defined, cepham will finally select all known hosts as
-candidates.
+Cephadm does the following to maintain compliance with the service
+specifications.
 
-Then, cephadm will consider existing daemons of this services and will try to
-avoid moving any daemons.
+Cephadm first selects a list of candidate hosts. Cephadm seeks explicit host
+names and selects them. If cephadm finds no explicit host names, it looks for
+label specifications. If no label is defined in the specification, cephadm
+selects hosts based on a host pattern. If no host pattern is defined, as a last
+resort, cephadm selects all known hosts as candidates.
 
-Cephadm supports the deployment of a specific amount of services. Let's 
-consider a service specification like so:
+Cephadm is aware of existing daemons running services and tries to avoid moving
+them.
+
+Cephadm supports the deployment of a specific amount of services.
+Consider the following service specification:
 
 .. code-block:: yaml
 
@@ -341,34 +344,39 @@ consider a service specification like so:
       count: 3
       label: myfs
 
-This instructs cephadm to deploy three daemons on hosts labeled with
-``myfs`` across the cluster.
+This service specifcation instructs cephadm to deploy three daemons on hosts
+labeled ``myfs`` across the cluster.
 
-Then, in case there are less than three daemons deployed on the candidate 
-hosts, cephadm will then randomly choose hosts for deploying new daemons.
+If there are fewer than three daemons deployed on the candidate hosts, cephadm
+randomly chooses hosts on which to deploy new daemons.
 
-In case there are more than three daemons deployed, cephadm will remove 
-existing daemons.
+If there are more than three daemons deployed on the candidate hosts, cephadm
+removes existing daemons.
 
-Finally, cephadm will remove daemons on hosts that are outside of the list of 
+Finally, cephadm removes daemons on hosts that are outside of the list of
 candidate hosts.
 
-However, there is a special cases that cephadm needs to consider.
+.. note::
+    
+   There is a special case that cephadm must consider.
 
-In case the are fewer hosts selected by the placement specification than 
-demanded by ``count``, cephadm will only deploy on selected hosts.
+   If there are fewer hosts selected by the placement specification than 
+   demanded by ``count``, cephadm will deploy only on the selected hosts.
 
 
 .. _cephadm-spec-unmanaged:
 
-Disable automatic deployment of daemons
-=======================================
+Disabling automatic deployment of daemons
+=========================================
 
-Cephadm supports disabling the automated deployment and removal of daemons per service. In
-this case, the CLI supports two commands that are dedicated to this mode. 
+Cephadm supports disabling the automated deployment and removal of daemons on a
+per service basis. The CLI supports two commands for this.
 
-To disable the automatic management of dameons, apply
-the :ref:`orchestrator-cli-service-spec` with ``unmanaged=True``. 
+Disabling automatic management of daemons
+-----------------------------------------
+
+To disable the automatic management of dameons, set ``unmanaged=True`` in the
+:ref:`orchestrator-cli-service-spec` (``mgr.yaml``).
 
 ``mgr.yaml``:
 
@@ -379,16 +387,22 @@ the :ref:`orchestrator-cli-service-spec` with ``unmanaged=True``.
   placement:
     label: mgr
 
-.. code-block:: bash
 
-  ceph orch apply -i mgr.yaml
+.. prompt:: bash #
+
+   ceph orch apply -i mgr.yaml
+
 
 .. note::
 
-  cephadm will no longer deploy any new daemons, if the placement
-  specification matches additional hosts.
+  After you apply this change in the Service Specification, cephadm will no
+  longer deploy any new daemons (even if the placement specification matches
+  additional hosts).
 
-To manually deploy a daemon on a host, please execute:
+Deploying a daemon on a host manually
+-------------------------------------
+
+To manually deploy a daemon on a host, run a command of the following form:
 
    .. prompt:: bash #
 
@@ -400,7 +414,10 @@ For example :
 
      ceph orch daemon add mgr --placement=my_host
 
-To manually remove a daemon, please run:
+Removing a daemon from a host manually
+--------------------------------------
+
+To manually remove a daemon, run a command of the following form:
 
    .. prompt:: bash #
 
@@ -416,6 +433,9 @@ For example:
 
   For managed services (``unmanaged=False``), cephadm will automatically
   deploy a new daemon a few seconds later.
+
+See also
+--------
     
 * See :ref:`cephadm-osd-declarative` for special handling of unmanaged OSDs. 
 * See also :ref:`cephadm-pause`

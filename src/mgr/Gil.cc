@@ -77,3 +77,38 @@ Gil::~Gil()
   dout(25) << "GIL released for thread state " << pThreadState.ts << dendl;
 }
 
+without_gil_t::without_gil_t()
+{
+  assert(PyGILState_Check());
+  release_gil();
+}
+
+without_gil_t::~without_gil_t()
+{
+  if (save) {
+    acquire_gil();
+  }
+}
+
+void without_gil_t::release_gil()
+{
+  save = PyEval_SaveThread();
+}
+
+void without_gil_t::acquire_gil()
+{
+  assert(save);
+  PyEval_RestoreThread(save);
+  save = nullptr;
+}
+
+with_gil_t::with_gil_t(without_gil_t& allow_threads)
+  : allow_threads{allow_threads}
+{
+  allow_threads.acquire_gil();
+}
+
+with_gil_t::~with_gil_t()
+{
+  allow_threads.release_gil();
+}

@@ -1472,7 +1472,7 @@ do_rgw_create_users()
     local akey='0555b35654ad1656d804'
     local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
     debug echo "setting up user testid"
-    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com --system -c $conf_fn > /dev/null
 
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
@@ -1523,6 +1523,11 @@ do_rgw()
         fi
     fi
     # Start server
+    if [ "$cephadm" -gt 0 ]; then
+        ceph_adm orch apply rgw rgwTest
+        return
+    fi
+
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20 --debug-ms=1"
