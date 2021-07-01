@@ -2,9 +2,9 @@
 Upgrading Ceph
 ==============
 
-Cephadm is capable of safely upgrading Ceph from one bugfix release to
-another.  For example, you can upgrade from v15.2.0 (the first Octopus
-release) to the next point release v15.2.1.
+Cephadm can safely upgrade Ceph from one bugfix release to the next.  For
+example, you can upgrade from v15.2.0 (the first Octopus release) to the next
+point release, v15.2.1.
 
 The automated upgrade process follows Ceph best practices.  For example:
 
@@ -13,7 +13,7 @@ The automated upgrade process follows Ceph best practices.  For example:
   will remain available.
 
 Keep in mind that the Ceph cluster health status is likely to switch to
-`HEALTH_WARNING` during the upgrade.
+``HEALTH_WARNING`` during the upgrade.
 
 
 Starting the upgrade
@@ -41,28 +41,32 @@ For example, to upgrade to v15.2.1:
 Monitoring the upgrade
 ======================
 
-Determine whether an upgrade is in process and what version the cluster is
-upgrading to with:
+Determine (1) whether an upgrade is in progress and (2) which version the
+cluster is upgrading to by running the following command:
 
 .. prompt:: bash #
 
   ceph orch upgrade status
 
-While the upgrade is underway, you will see a progress bar in the ceph
-status output. For example:
+Watching the progress bar during a Ceph upgrade
+-----------------------------------------------
 
-.. prompt:: bash #
+During the upgrade, a progress bar is visible in the ceph status output. It
+looks like this:
 
-  ceph -s
+.. code-block:: console
 
-Expected output::
+  # ceph -s
 
   [...]
     progress:
       Upgrade to docker.io/ceph/ceph:v15.2.1 (00h 20m 12s)
         [=======.....................] (time remaining: 01h 43m 31s)
 
-You can also watch the cephadm log by running the following command:
+Watching the cephadm log during an upgrade
+------------------------------------------
+
+Watch the cephadm log by running the following command:
 
 .. prompt:: bash #
 
@@ -72,11 +76,11 @@ You can also watch the cephadm log by running the following command:
 Canceling an upgrade
 ====================
 
-You can stop the upgrade process at any time with:
+You can stop the upgrade process at any time by running the following command:
 
 .. prompt:: bash #
 
-  # ceph orch upgrade stop
+  ceph orch upgrade stop
 
 
 Potential problems

@@ -253,17 +253,22 @@ public:
      *
      * returns all extents with dirty_from < bound
      */
-    using get_next_dirty_extents_ertr = crimson::errorator<>;
-    using get_next_dirty_extents_ret = get_next_dirty_extents_ertr::future<
+    using get_next_dirty_extents_iertr = crimson::errorator<>;
+    using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
       std::vector<CachedExtentRef>>;
     virtual get_next_dirty_extents_ret get_next_dirty_extents(
       journal_seq_t bound,///< [in] return extents with dirty_from < bound
       size_t max_bytes    ///< [in] return up to max_bytes of extents
     ) = 0;
 
+
     using extent_mapping_ertr = crimson::errorator<
       crimson::ct_error::input_output_error,
       crimson::ct_error::eagain>;
+    using extent_mapping_iertr = trans_iertr<
+      crimson::errorator<
+	crimson::ct_error::input_output_error>
+      >;
 
     /**
      * rewrite_extent
@@ -273,8 +278,8 @@ public:
      * handle finding the current instance if it is still alive and
      * otherwise ignore it.
      */
-    using rewrite_extent_ertr = extent_mapping_ertr;
-    using rewrite_extent_ret = rewrite_extent_ertr::future<>;
+    using rewrite_extent_iertr = extent_mapping_iertr;
+    using rewrite_extent_ret = rewrite_extent_iertr::future<>;
     virtual rewrite_extent_ret rewrite_extent(
       Transaction &t,
       CachedExtentRef extent) = 0;
@@ -288,8 +293,8 @@ public:
      * See TransactionManager::get_extent_if_live and
      * LBAManager::get_physical_extent_if_live.
      */
-    using get_extent_if_live_ertr = extent_mapping_ertr;
-    using get_extent_if_live_ret = get_extent_if_live_ertr::future<
+    using get_extent_if_live_iertr = extent_mapping_iertr;
+    using get_extent_if_live_ret = get_extent_if_live_iertr::future<
       CachedExtentRef>;
     virtual get_extent_if_live_ret get_extent_if_live(
       Transaction &t,
@@ -325,14 +330,14 @@ public:
      *
      * Submits transaction without any space throttling.
      */
-    using submit_transaction_direct_ertr = crimson::errorator<
-      crimson::ct_error::eagain,
-      crimson::ct_error::input_output_error
+    using submit_transaction_direct_iertr = trans_iertr<
+      crimson::errorator<
+        crimson::ct_error::input_output_error>
       >;
     using submit_transaction_direct_ret =
-      submit_transaction_direct_ertr::future<>;
+      submit_transaction_direct_iertr::future<>;
     virtual submit_transaction_direct_ret submit_transaction_direct(
-      TransactionRef t) = 0;
+      Transaction &t) = 0;
   };
 
 private:
@@ -551,6 +556,7 @@ public:
   }
 
   using work_ertr = ExtentCallbackInterface::extent_mapping_ertr;
+  using work_iertr = ExtentCallbackInterface::extent_mapping_iertr;
 
 private:
 
@@ -561,8 +567,8 @@ private:
    *
    * Writes out dirty blocks dirtied earlier than limit.
    */
-  using rewrite_dirty_ertr = ExtentCallbackInterface::extent_mapping_ertr;
-  using rewrite_dirty_ret = rewrite_dirty_ertr::future<>;
+  using rewrite_dirty_iertr = work_iertr;
+  using rewrite_dirty_ret = rewrite_dirty_iertr::future<>;
   rewrite_dirty_ret rewrite_dirty(
     Transaction &t,
     journal_seq_t limit);
@@ -662,7 +668,7 @@ private:
     }
   } gc_process;
 
-  using gc_ertr = ExtentCallbackInterface::extent_mapping_ertr::extend_ertr<
+  using gc_ertr = work_ertr::extend_ertr<
     ExtentCallbackInterface::scan_extents_ertr
     >;
 

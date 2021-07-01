@@ -3861,7 +3861,7 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
 
   {
     char buf[2];
-    map<string, bufferptr> aset;
+    map<string, bufferptr, less<>> aset;
     r = _fgetattrs(**o, aset);
     if (r < 0)
       goto out3;
@@ -4134,7 +4134,7 @@ public:
   }
 
   void finish(int r) override {
-    BackTrace *bt = new BackTrace(1);
+    BackTrace *bt = new ClibBackTrace(1);
     generic_dout(-1) << "FileStore: sync_entry timed out after "
 	   << m_commit_timeo << " seconds.\n";
     bt->print(*_dout);
@@ -4469,7 +4469,7 @@ int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
+int FileStore::_fgetattrs(int fd, map<string,bufferptr,less<>>& aset)
 {
   // get attr list
   char names1[100];
@@ -4520,7 +4520,7 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
   return 0;
 }
 
-int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
+int FileStore::_fsetattrs(int fd, map<string, bufferptr, less<>> &aset)
 {
   for (map<string, bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -4635,7 +4635,9 @@ int FileStore::getattr(CollectionHandle& ch, const ghobject_t& oid, const char *
   }
 }
 
-int FileStore::getattrs(CollectionHandle& ch, const ghobject_t& oid, map<string,bufferptr>& aset)
+int FileStore::getattrs(CollectionHandle& ch,
+			const ghobject_t& oid,
+			std::map<std::string,bufferptr,std::less<>>& aset)
 {
   tracepoint(objectstore, getattrs_enter, ch->cid.c_str());
   const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
@@ -4718,8 +4720,8 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
 {
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
-  map<string, bufferptr> inline_set;
-  map<string, bufferptr> inline_to_set;
+  map<string, bufferptr, less<>> inline_set;
+  map<string, bufferptr, less<>> inline_to_set;
   FDRef fd;
   int spill_out = -1;
   bool incomplete_inline = false;
@@ -4862,7 +4864,7 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
 {
   dout(15) << __FUNC__ << ": " << cid << "/" << oid << dendl;
 
-  map<string,bufferptr> aset;
+  map<string,bufferptr,less<>> aset;
   FDRef fd;
   set<string> omap_attrs;
   Index index;

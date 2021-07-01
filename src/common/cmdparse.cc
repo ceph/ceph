@@ -438,7 +438,7 @@ handle_bad_get(CephContext *cct, const string& k, const char *tname)
   lderr(cct) << errstr.str() << dendl;
 
   ostringstream oss;
-  oss << BackTrace(1);
+  oss << ClibBackTrace(1);
   lderr(cct) << oss.str() << dendl;
 
   if (status == 0)

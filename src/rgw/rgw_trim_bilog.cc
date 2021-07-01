@@ -673,7 +673,7 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
 
     do {
       // get the next key and marker
-      r = mgr->list_keys_next(handle, 1, keys, &truncated);
+      r = mgr->list_keys_next(dpp, handle, 1, keys, &truncated);
       if (r < 0) {
         ldpp_dout(dpp, 10) << "failed to list metadata: "
             << cpp_strerror(r) << dendl;
@@ -711,7 +711,7 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
   auto g = make_scope_guard([=] { mgr->list_keys_complete(handle); });
   do {
     // get the next key and marker
-    r = mgr->list_keys_next(handle, 1, keys, &truncated);
+    r = mgr->list_keys_next(dpp, handle, 1, keys, &truncated);
     if (r < 0) {
       ldpp_dout(dpp, 10) << "failed to list metadata: "
           << cpp_strerror(r) << dendl;

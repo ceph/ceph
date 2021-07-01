@@ -206,6 +206,8 @@ struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer> 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing> {
   explicit RangeBlocked(my_context ctx);
   using reactions = mpl::list<sc::transition<Unblocked, PendingTimer>>;
+
+  Scrub::BlockedRangeWarning m_timeout;
 };
 
 struct PendingTimer : sc::state<PendingTimer, ActiveScrubbing> {

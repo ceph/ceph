@@ -277,4 +277,11 @@ struct ScrubPgIF {
   virtual void scrub_requested(scrub_level_t scrub_level,
 			       scrub_type_t scrub_type,
 			       requested_scrub_t& req_flags) = 0;
+
+  // --------------- debugging via the asok ------------------------------
+
+  virtual int asok_debug(std::string_view cmd,
+			 std::string param,
+			 Formatter* f,
+			 stringstream& ss) = 0;
 };

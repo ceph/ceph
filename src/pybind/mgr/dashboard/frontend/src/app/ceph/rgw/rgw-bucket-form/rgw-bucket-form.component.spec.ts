@@ -136,6 +136,10 @@ describe('RgwBucketFormComponent', () => {
       testValidator('bucket-name-is-unique', true);
     }));
 
+    it('bucket names must not contain spaces', fakeAsync(() => {
+      testValidator('bucket name  with   spaces', false, 'onlyLowerCaseAndNumbers');
+    }));
+
     it('should get zonegroup and placement targets', () => {
       const payload: Record<string, any> = {
         zonegroup: 'default',

@@ -60,9 +60,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   NodeLayoutT& operator=(NodeLayoutT&&) = delete;
   ~NodeLayoutT() override = default;
 
-  static URef load(NodeExtentRef extent, bool expect_is_level_tail) {
+  static URef load(NodeExtentRef extent) {
     std::unique_ptr<NodeLayoutT> ret(new NodeLayoutT(extent));
-    assert(ret->is_level_tail() == expect_is_level_tail);
     return ret;
   }
 

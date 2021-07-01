@@ -535,6 +535,12 @@ docker.io/ceph/daemon-base:octopus
         ctx.container_engine = mock_docker()
         assert not cd.should_log_to_journald(ctx)
 
+    def test_normalize_image_digest(self):
+        s = 'myhostname:5000/ceph/ceph@sha256:753886ad9049004395ae990fbb9b096923b5a518b819283141ee8716ddf55ad1'
+        assert cd.normalize_image_digest(s) == s
+
+        s = 'ceph/ceph:latest'
+        assert cd.normalize_image_digest(s) == f'{cd.DEFAULT_REGISTRY}/{s}'
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer

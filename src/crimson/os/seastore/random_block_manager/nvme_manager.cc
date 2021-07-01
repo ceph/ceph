@@ -174,7 +174,7 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
     interval_set<blk_id_t>(),
     bp,
     [&, this] (auto &allocated, auto &addr, auto &alloc_extent, auto &bp) mutable {
-    return crimson::do_until(
+    return crimson::repeat(
 	[&, this] () mutable {
 	return device->read(
 	    addr,
@@ -213,12 +213,12 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
 	      logger().debug("find_free_list: allocated: {} alloc_extent {}",
 			      allocated, alloc_extent);
 	      if (((uint64_t)size)/super.block_size == allocated) {
-		return find_block_ertr::make_ready_future<bool>(true);
+		return seastar::stop_iteration::yes;
 	      } else if (addr >= super.start_data_area) {
 		alloc_extent.clear();
-		return find_block_ertr::make_ready_future<bool>(true);
+		return seastar::stop_iteration::yes;
 	      }
-	      return find_block_ertr::make_ready_future<bool>(false);
+	      return seastar::stop_iteration::no;
 	      });
 	}).safe_then([&allocated, &alloc_extent, size, this] () {
 	  logger().debug(" allocated: {} size {} ",
@@ -598,7 +598,7 @@ NVMeManager::check_bitmap_blocks_ertr::future<> NVMeManager::check_bitmap_blocks
   auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
   return seastar::do_with(uint64_t(super.start_alloc_area), uint64_t(0), bp,
     [&, this] (auto &addr, auto &free_blocks, auto &bp) mutable {
-    return crimson::do_until([&, this] () mutable {
+    return crimson::repeat([&, this] () mutable {
       return device->read(addr,bp).safe_then(
 	[&bp, &addr, &free_blocks, this]() mutable {
 	logger().debug("verify_bitmap_blocks: addr {}", addr);
@@ -614,9 +614,9 @@ NVMeManager::check_bitmap_blocks_ertr::future<> NVMeManager::check_bitmap_blocks
 	}
 	addr += super.block_size;
 	if (addr >= super.start_data_area) {
-	  return find_block_ertr::make_ready_future<bool>(true);
+	  return seastar::stop_iteration::yes;
 	}
-	return find_block_ertr::make_ready_future<bool>(false);
+	return seastar::stop_iteration::no;
       });
     }).safe_then([&free_blocks, this] () {
       logger().debug(" free_blocks: {} ", free_blocks);

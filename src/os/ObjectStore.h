@@ -601,7 +601,7 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   virtual int getattrs(CollectionHandle &c, const ghobject_t& oid,
-		       std::map<std::string,ceph::buffer::ptr>& aset) = 0;
+		       std::map<std::string,ceph::buffer::ptr, std::less<>>& aset) = 0;
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -612,8 +612,8 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
-	       std::map<std::string,ceph::buffer::list>& aset) {
-    std::map<std::string,ceph::buffer::ptr> bmap;
+	       std::map<std::string,ceph::buffer::list,std::less<>>& aset) {
+    std::map<std::string,ceph::buffer::ptr,std::less<>> bmap;
     int r = getattrs(c, oid, bmap);
     for (auto i = bmap.begin(); i != bmap.end(); ++i) {
       aset[i->first].append(i->second);

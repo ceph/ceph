@@ -22,7 +22,7 @@ from prettytable import PrettyTable, HEADER
 from signal import signal, Signals, SIGWINCH
 from termios import TIOCGWINSZ
 from types import FrameType
-from typing import Any, Callable, Dict, Optional, Sequence, TextIO, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, TextIO, Tuple
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
@@ -32,7 +32,7 @@ READ_CHUNK_SIZE = 4096
 
 
 def admin_socket(asok_path: str,
-                 cmd: Sequence[str],
+                 cmd: List[str],
                  format: Optional[str] = '') -> bytes:
     """
     Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the

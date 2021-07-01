@@ -19,6 +19,12 @@
 
 * The ``device_health_metrics`` pool has been renamed ``.mgr``. It is now
   used as a common store for all ``ceph-mgr`` modules.
+* fs: A file system can be renamed using the `fs rename` command. Any cephx
+  credentials authorized for the old file system name will need to be
+  reauthorized to the new file system name. Since the operations of the clients
+  using these re-authorized IDs may be disrupted, this command requires the
+  "--yes-i-really-mean-it" flag. Also, mirroring is expected to be disabled
+  on the file system.
 
 * RGW: `radosgw-admin realm delete` is now renamed to `radosgw-admin realm rm`. This
   is consistent with the help message.

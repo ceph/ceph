@@ -40,7 +40,7 @@ tasks:
 
 - cephadm.shell:
     host.a:
-      - ceph nfs export create cephfs foofs foo --binding /fake
+      - ceph nfs export create cephfs foofs foo --pseudo-path /fake
 
 - vip.exec:
     host.a:

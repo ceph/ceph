@@ -284,16 +284,32 @@ int Mirror::init(std::string &reason) {
 
 void Mirror::shutdown() {
   dout(20) << dendl;
-
-  std::unique_lock locker(m_lock);
   m_stopping = true;
   m_cond.notify_all();
 }
 
+void Mirror::reopen_logs() {
+  for (auto &[filesystem, mirror_action] : m_mirror_actions) {
+    mirror_action.fs_mirror->reopen_logs();
+  }
+  g_ceph_context->reopen_logs();
+}
+
 void Mirror::handle_signal(int signum) {
   dout(10) << ": signal=" << signum << dendl;
-  ceph_assert(signum == SIGTERM || signum == SIGINT);
-  shutdown();
+
+  std::scoped_lock locker(m_lock);
+  switch (signum) {
+  case SIGHUP:
+    reopen_logs();
+    break;
+  case SIGINT:
+  case SIGTERM:
+    shutdown();
+    break;
+  default:
+    ceph_abort_msgf("unexpected signal %d", signum);
+  }
 }
 
 void Mirror::handle_enable_mirroring(const Filesystem &filesystem,

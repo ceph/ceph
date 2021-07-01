@@ -222,13 +222,6 @@ TEST_F(TestAMQP, MaxConnections)
   }
   EXPECT_EQ(amqp::get_connection_count(), amqp::get_max_connections());
   amqp_mock::set_valid_host("localhost");
-  // delete connections to make space for new ones
-  for (auto conn : connections) {
-    EXPECT_TRUE(amqp::disconnect(conn));
-  }
-  // wait for them to be deleted
-  std::this_thread::sleep_for(long_wait_time);
-  EXPECT_LT(amqp::get_connection_count(), amqp::get_max_connections());
 }
 
 std::atomic<bool> callback_invoked = false;
@@ -391,27 +384,6 @@ TEST_F(TestAMQP, FailWrite)
   wait_until_drained();
   EXPECT_TRUE(callback_invoked);
   amqp_mock::FAIL_NEXT_WRITE = false;
-  callback_invoked = false;
-  amqp_mock::set_valid_host("localhost");
-}
-
-TEST_F(TestAMQP, ClosedConnection)
-{
-  callback_invoked = false;
-  const auto current_connections = amqp::get_connection_count();
-  const std::string host("localhost3");
-  amqp_mock::set_valid_host(host);
-  conn = amqp::connect("amqp://" + host, "ex1", false, false, boost::none);
-  EXPECT_TRUE(conn);
-  EXPECT_EQ(amqp::get_connection_count(), current_connections + 1);
-  EXPECT_TRUE(amqp::disconnect(conn));
-  std::this_thread::sleep_for(long_wait_time);
-  // make sure number of connections decreased back
-  EXPECT_EQ(amqp::get_connection_count(), current_connections);
-  auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_nack);
-  EXPECT_LT(rc, 0);
-  std::this_thread::sleep_for(long_wait_time);
-  EXPECT_FALSE(callback_invoked);
   callback_invoked = false;
   amqp_mock::set_valid_host("localhost");
 }

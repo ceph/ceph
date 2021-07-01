@@ -105,7 +105,7 @@ class OSD final : public crimson::net::Dispatcher,
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
   void update_stats();
-  MessageRef get_stats() const final;
+  MessageURef get_stats() const final;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
@@ -224,6 +224,12 @@ private:
     stop_acked.set_value();
   }
   seastar::future<> prepare_to_stop();
+  bool should_restart() const;
+  seastar::future<> restart();
+  seastar::future<> shutdown();
+  void update_heartbeat_peers();
+  friend class PGAdvanceMap;
+
 public:
   blocking_future<Ref<PG>> get_or_create_pg(
     spg_t pgid,
@@ -232,15 +238,7 @@ public:
   blocking_future<Ref<PG>> wait_for_pg(
     spg_t pgid);
   Ref<PG> get_pg(spg_t pgid);
-
-  bool should_restart() const;
-  seastar::future<> restart();
-  seastar::future<> shutdown();
-
   seastar::future<> send_beacon();
-  void update_heartbeat_peers();
-
-  friend class PGAdvanceMap;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const OSD& osd) {

@@ -21,6 +21,10 @@ BtreeOMapManager::BtreeOMapManager(
   TransactionManager &tm)
   : tm(tm) {}
 
+BtreeOMapManager::BtreeOMapManager(
+  InterruptedTransactionManager tm)
+  : tm(tm) {}
+
 BtreeOMapManager::initialize_omap_ret
 BtreeOMapManager::initialize_omap(Transaction &t)
 {

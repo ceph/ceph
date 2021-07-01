@@ -24,7 +24,7 @@ namespace crimson::mgr
 // implement WithStats if you want to report stats to mgr periodically
 class WithStats {
 public:
-  virtual MessageRef get_stats() const = 0;
+  virtual MessageURef get_stats() const = 0;
   virtual ~WithStats() {}
 };
 

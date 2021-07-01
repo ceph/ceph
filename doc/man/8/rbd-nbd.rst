@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--encryption-format *format*] [--encryption-passphrase-file *passphrase-file*] [--io-timeout *seconds*] [--reattach-timeout *seconds*] map *image-spec* | *snap-spec*
+| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--notrim] [--encryption-format *format*] [--encryption-passphrase-file *passphrase-file*] [--io-timeout *seconds*] [--reattach-timeout *seconds*] map *image-spec* | *snap-spec*
 | **rbd-nbd** unmap *nbd device* | *image-spec* | *snap-spec*
 | **rbd-nbd** list-mapped
 | **rbd-nbd** attach --device *nbd device* *image-spec* | *snap-spec*
@@ -46,6 +46,10 @@ Options
 .. option:: --exclusive
 
    Forbid writes by other clients.
+
+.. option:: --notrim
+
+   Turn off trim/discard.
 
 .. option:: --encryption-format
 

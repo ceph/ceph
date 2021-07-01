@@ -24,7 +24,11 @@ extraopts += -DWITH_CEPHFS_JAVA=ON
 extraopts += -DWITH_CEPHFS_SHELL=ON
 extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 extraopts += -DWITH_GRAFANA=ON
-extraopts += -DWITH_RBD_RWL=ON
+ifeq ($(DEB_HOST_ARCH), amd64)
+  extraopts += -DWITH_RBD_RWL=ON
+else
+  extraopts += -DWITH_RBD_RWL=OFF
+endif
 extraopts += -DWITH_RBD_SSD_CACHE=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib

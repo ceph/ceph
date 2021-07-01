@@ -12,13 +12,10 @@
 
 // The interrupt condition generally works this way:
 //
-//  1. It is created by "enable_interruption" method, and is recorded in the thread
-//     local global variable "::crimson::interruptible::interrupt_cond" (each "enable_
-//     interruption" is paired with a "disable_interruption" to ensure that the global
-//     interrupt_cond won't hold unexpected interrupt conditions during the execution
-//     of unrelated continuations);
+//  1. It is created by call_with_interruption_impl method, and is recorded in the thread
+//     local global variable "::crimson::interruptible::interrupt_cond".
 //  2. Any continuation that's created within the execution of the continuation
-//     that calls the "enable_interruption" method will capture the "interrupt_cond";
+//     that calls the call_with_interruption_impl method will capture the "interrupt_cond";
 //     and when they starts to run, they will put that capture interruption condition
 //     into "::crimson::interruptible::interrupt_cond" so that further continuations
 //     created can also capture the interruption condition;
@@ -33,8 +30,8 @@
 // different continuation chains won't be able to interfere with each other.
 //
 // The global "interrupt_cond" can work as a signal about whether the continuation
-// is supposed to be interrupted, the reason that the global "interrupt_cond" and
-// "enable_interruption" are added is that there may be this scenario:
+// is supposed to be interrupted, the reason that the global "interrupt_cond"
+// exists is that there may be this scenario:
 //
 //     Say there's some method PG::func1(), in which the continuations created may
 //     or may not be supposed to be interrupted in different situations. If we don't
@@ -42,9 +39,8 @@
 //     PG::func1() to indicate whether the current run should create to-be-interrupted
 //     continuations or not.
 //
-// For users to insert an interruption condition, interruptor::with_interruption() in which
-// enable_interruption and disable_interruption would be called should be invoked. And users
-// can only handle interruption in the interruptible_future_detail::handle_interruption method.
+// interruptor::with_interruption() and helpers can be used by users to wrap a future in
+// the interruption machinery.
 
 namespace crimson::interruptible {
 
@@ -269,25 +265,6 @@ public:
   using core_type::available;
   using core_type::failed;
 
-  template <typename Func>
-  [[gnu::always_inline]]
-  auto handle_interruption(Func&& func) {
-    return core_type::then_wrapped(
-      [func=std::move(func),
-      interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable {
-      if (fut.failed()) {
-	std::exception_ptr ex = fut.get_exception();
-	if (interrupt_condition->is_interruption(ex)) {
-	  return seastar::futurize_invoke(std::move(func), std::move(ex));
-	} else {
-	  return seastar::make_exception_future<T>(std::move(ex));
-	}
-      } else {
-	return seastar::make_ready_future<T>(fut.get());
-      }
-    });
-  }
-
   template <typename Func,
 	    typename Result = interrupt_futurize_t<
 		std::invoke_result_t<Func, seastar::future<T>>>>
@@ -414,6 +391,24 @@ public:
     return core_type::finally(std::forward<Func>(func));
   }
 private:
+  template <typename Func>
+  [[gnu::always_inline]]
+  auto handle_interruption(Func&& func) {
+    return core_type::then_wrapped(
+      [func=std::move(func)](auto&& fut) mutable {
+	if (fut.failed()) {
+	  std::exception_ptr ex = fut.get_exception();
+	  if (InterruptCond::is_interruption(ex)) {
+	    return seastar::futurize_invoke(std::move(func), std::move(ex));
+	  } else {
+	    return seastar::make_exception_future<T>(std::move(ex));
+	  }
+	} else {
+	  return seastar::make_ready_future<T>(fut.get());
+	}
+      });
+  }
+
   seastar::future<T> to_future() {
     return static_cast<core_type&&>(std::move(*this));
   }
@@ -432,24 +427,7 @@ private:
 		std::move(fut));
     });
   }
-  template <typename Iterator, typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::do_for_each(
-	    Iterator, Iterator, AsyncAction&&);
-  template <typename Iterator, typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::do_for_each(
-	    Iterator, Iterator, AsyncAction&&);
-  template <typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::repeat(AsyncAction&&);
-  template <typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::repeat(AsyncAction&&);
+  friend interruptor<InterruptCond>;
   friend class interruptible_future_builder<InterruptCond>;
   template <typename U>
   friend struct ::seastar::futurize;
@@ -467,7 +445,6 @@ private:
   friend class ::crimson::maybe_handle_error_t;
   template <typename>
   friend class ::seastar::internal::extract_values_from_futures_vector;
-  friend class interruptor<InterruptCond>::parallel_for_each_state;
   template <typename, typename>
   friend class interruptible_future_detail;
   template <typename ResolvedVectorTransform, typename Future>
@@ -483,9 +460,21 @@ private:
 
 template <typename InterruptCond, typename Errorator>
 struct interruptible_errorator {
+  using base_ertr = Errorator;
+
   template <typename ValueT = void>
   using future = interruptible_future_detail<InterruptCond,
 	typename Errorator::template future<ValueT>>;
+
+  template <class... NewAllowedErrorsT>
+  using extend = interruptible_errorator<
+    InterruptCond,
+    typename Errorator::template extend<NewAllowedErrorsT...>>;
+
+  template <class Ertr>
+  using extend_ertr = interruptible_errorator<
+    InterruptCond,
+    typename Errorator::template extend_ertr<Ertr>>;
 
   template <typename ValueT = void, typename... A>
   static interruptible_future_detail<
@@ -497,15 +486,6 @@ struct interruptible_errorator {
 	Errorator::template make_ready_future<ValueT>(
 	  std::forward<A>(value)...));
   }
-  template <typename ValueT = void>
-  static interruptible_future_detail<
-    InterruptCond,
-    typename Errorator::template future<ValueT>>
-  make_ready_future() {
-    return interruptible_future_detail<
-      InterruptCond, typename Errorator::template future<ValueT>>(
-	Errorator::template make_ready_future<ValueT>());
-  }
   static interruptible_future_detail<
     InterruptCond,
     typename Errorator::template future<>> now() {
@@ -513,6 +493,8 @@ struct interruptible_errorator {
       InterruptCond, typename Errorator::template future<>>(
 	Errorator::now());
   }
+
+  using pass_further = typename Errorator::pass_further;
 };
 
 template <typename InterruptCond,
@@ -524,7 +506,9 @@ class [[nodiscard]] interruptible_future_detail<
   : private ErroratedFuture<::crimson::errorated_future_marker<T>>
 {
 public:
-  using core_type = ErroratedFuture<::crimson::errorated_future_marker<T>>;
+  using core_type = ErroratedFuture<crimson::errorated_future_marker<T>>;
+  using errorator_type = typename core_type::errorator_type;
+
   template <typename U>
   using interrupt_futurize_t =
     typename interruptor<InterruptCond>::template futurize_t<U>;
@@ -532,6 +516,8 @@ public:
   using core_type::available;
   using core_type::failed;
   using core_type::core_type;
+
+  using value_type = typename core_type::value_type;
 
   interruptible_future_detail(seastar::future<T>&& fut)
     : core_type(std::move(fut))
@@ -542,14 +528,7 @@ public:
   [[gnu::always_inline]]
   interruptible_future_detail(
     ErroratedFuture2<::crimson::errorated_future_marker<U...>>&& fut)
-    : core_type(std::move(fut)) {
-    using src_errorator_t = \
-      typename ErroratedFuture2<
-	::crimson::errorated_future_marker<U...>>::errorator_type;
-    static_assert(core_type::errorator_type::template contains_once_v<
-		    src_errorator_t>,
-		  "conversion is only possible from less-or-eq errorated future!");
-  }
+    : core_type(std::move(fut)) {}
 
   template <template <typename...> typename ErroratedFuture2,
 	    typename... U>
@@ -571,6 +550,21 @@ public:
     interruptible_future_detail<InterruptCond, seastar::future<T>>&& fut)
     : core_type(static_cast<seastar::future<T>&&>(fut)) {}
 
+  template <class... A>
+  [[gnu::always_inline]]
+  interruptible_future_detail(ready_future_marker, A&&... a)
+    : core_type(::seastar::make_ready_future<typename core_type::value_type>(
+		  std::forward<A>(a)...)) {
+  }
+  [[gnu::always_inline]]
+  interruptible_future_detail(exception_future_marker, ::seastar::future_state_base&& state) noexcept
+    : core_type(::seastar::futurize<core_type>::make_exception_future(std::move(state))) {
+  }
+  [[gnu::always_inline]]
+  interruptible_future_detail(exception_future_marker, std::exception_ptr&& ep) noexcept
+    : core_type(::seastar::futurize<core_type>::make_exception_future(std::move(ep))) {
+  }
+
   template<bool interruptible = true, typename ValueInterruptCondT, typename ErrorVisitorT,
 	   std::enable_if_t<!interruptible, int> = 0>
   [[gnu::always_inline]]
@@ -579,6 +573,11 @@ public:
 	std::forward<ValueInterruptCondT>(valfunc),
 	std::forward<ErrorVisitorT>(errfunc));
     return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
+  }
+
+  template <typename... Args>
+  auto si_then(Args&&... args) {
+    return safe_then_interruptible(std::forward<Args>(args)...);
   }
 
 
@@ -714,6 +713,19 @@ public:
 	    typename ErrorVisitorHeadT,
 	    typename... ErrorVisitorTailT>
   [[gnu::always_inline]]
+  auto safe_then_interruptible(ValueInterruptCondT&& valfunc,
+			       ErrorVisitorHeadT&& err_func_head,
+			       ErrorVisitorTailT&&... err_func_tail) {
+    return safe_then_interruptible(
+	std::forward<ValueInterruptCondT>(valfunc),
+	::crimson::composer(std::forward<ErrorVisitorHeadT>(err_func_head),
+			    std::forward<ErrorVisitorTailT>(err_func_tail)...));
+  }
+
+  template <typename ValueInterruptCondT,
+	    typename ErrorVisitorHeadT,
+	    typename... ErrorVisitorTailT>
+  [[gnu::always_inline]]
   auto safe_then_interruptible_tuple(ValueInterruptCondT&& valfunc,
 			       ErrorVisitorHeadT&& err_func_head,
 			       ErrorVisitorTailT&&... err_func_tail) {
@@ -789,30 +801,42 @@ public:
     auto fut = core_type::finally(std::forward<Func>(func));
     return (interrupt_futurize_t<decltype(fut)>)(std::move(fut));
   }
+
 private:
+  template <typename Func>
+  [[gnu::always_inline]]
+  auto handle_interruption(Func&& func) {
+    // see errorator.h safe_then definition
+    using func_result_t =
+      typename std::invoke_result<Func, std::exception_ptr>::type;
+    using func_ertr_t =
+      typename core_type::template get_errorator_t<func_result_t>;
+    using this_ertr_t = typename core_type::errorator_type;
+    using ret_ertr_t = typename this_ertr_t::template extend_ertr<func_ertr_t>;
+    using futurator_t = typename ret_ertr_t::template futurize<func_result_t>;
+    return core_type::then_wrapped(
+      [func=std::move(func),
+       interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable
+      -> typename futurator_t::type {
+	if (fut.failed()) {
+	  std::exception_ptr ex = fut.get_exception();
+	  if (InterruptCond::is_interruption(ex)) {
+	    return futurator_t::invoke(std::move(func), std::move(ex));
+	  } else {
+	    return futurator_t::make_exception_future(std::move(ex));
+	  }
+	} else {
+	  return std::move(fut);
+	}
+      });
+  }
+
   ErroratedFuture<::crimson::errorated_future_marker<T>>
   to_future() {
     return static_cast<core_type&&>(std::move(*this));
   }
 
-  template <typename Iterator, typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::do_for_each(
-	    Iterator, Iterator, AsyncAction&&);
-  template <typename Iterator, typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::do_for_each(
-	    Iterator, Iterator, AsyncAction&&);
-  template <typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::repeat(AsyncAction&&);
-  template <typename AsyncAction, typename Result,
-	    std::enable_if_t<
-	      !is_interruptible_future<Result>::value, int>>
-  friend auto interruptor<InterruptCond>::repeat(AsyncAction&&);
+  friend class interruptor<InterruptCond>;
   friend class interruptible_future_builder<InterruptCond>;
   template <typename U>
   friend struct ::seastar::futurize;
@@ -848,6 +872,9 @@ template <typename InterruptCond>
 struct interruptor
 {
 public:
+  template <typename T>
+  using future = interruptible_future<InterruptCond, T>;
+
   template <typename FutureType>
   [[gnu::always_inline]]
   static interruptible_future_detail<InterruptCond, FutureType>
@@ -880,6 +907,13 @@ public:
       return seastar::futurize<T>::apply(std::forward<Func>(func),
 					 std::forward<std::tuple<Args...>>(args));
     }
+
+    template <typename Func, typename... Args>
+    static type invoke(Func&& func, Args&&... args) noexcept {
+      return seastar::futurize<T>::invoke(
+	std::forward<Func>(func),
+	std::forward<Args>(args)...);
+    }
   };
 
   template <typename FutureType>
@@ -891,6 +925,13 @@ public:
       return seastar::futurize<FutureType>::apply(
 	  std::forward<Func>(func),
 	  std::forward<std::tuple<Args...>>(args));
+    }
+
+    template <typename Func, typename... Args>
+    static type invoke(Func&& func, Args&&... args) noexcept {
+      return seastar::futurize<FutureType>::invoke(
+	  std::forward<Func>(func),
+	  std::forward<Args>(args)...);
     }
   };
 
@@ -911,30 +952,50 @@ public:
   }
 
   template <typename OpFunc, typename OnInterrupt,
+	    typename... Params>
+  static inline auto with_interruption_cond(
+    OpFunc&& opfunc, OnInterrupt&& efunc, InterruptCond &&cond, Params&&... params) {
+    return internal::call_with_interruption_impl(
+      seastar::make_lw_shared<InterruptCond>(std::move(cond)),
+      std::forward<OpFunc>(opfunc),
+      std::forward<Params>(params)...
+    ).template handle_interruption(std::move(efunc));
+  }
+
+  template <typename OpFunc, typename OnInterrupt,
 	    typename... InterruptCondParams>
   static inline auto with_interruption(
     OpFunc&& opfunc, OnInterrupt&& efunc, InterruptCondParams&&... params) {
-      // there may case like:
-      // 	with_interruption([] {
-      // 		return ...
-      // 		.then_interruptible([] {
-      // 			with_interruption(...);
-      // 		})
-      // 	});
-      // in which the inner with_interruption might errorly release
-      // ::crimson::interruptible::interrupt_cond<InterruptCond>,
-      // so we have to avoid this scenario.
-      //
-      // TODO: maybe some kind of interrupt_cond stack should be implemented?
-      bool created = enable_interruption(
-	  std::forward<InterruptCondParams>(params)...);
-      auto fut = futurize<std::result_of_t<OpFunc()>>::apply(
-	    std::move(opfunc), std::make_tuple())
-	.template handle_interruption(std::move(efunc));
-      if (__builtin_expect(created, true)) {
-	disable_interruption();
-      }
-      return fut;
+    return with_interruption_cond(
+      std::forward<OpFunc>(opfunc),
+      std::forward<OnInterrupt>(efunc),
+      InterruptCond(std::forward<InterruptCondParams>(params)...));
+  }
+
+  template <typename Error,
+	    typename Func,
+	    typename... Params>
+  static inline auto with_interruption_to_error(
+    Func &&f, InterruptCond &&cond, Params&&... params) {
+    using func_result_t = std::invoke_result_t<Func, Params...>;
+    using func_ertr_t =
+      typename seastar::template futurize<func_result_t>::errorator_type;
+    using with_trans_ertr =
+      typename func_ertr_t::template extend_ertr<errorator<Error>>;
+
+    using value_type = typename func_result_t::value_type;
+    using ftype = typename std::conditional_t<
+      std::is_same_v<value_type, seastar::internal::monostate>,
+      typename with_trans_ertr::template future<>,
+      typename with_trans_ertr::template future<value_type>>;
+
+    return with_interruption_cond(
+      std::forward<Func>(f),
+      [](auto e) -> ftype {
+	return Error::make();
+      },
+      std::forward<InterruptCond>(cond),
+      std::forward<Params>(params)...);
   }
 
   template <typename Func>
@@ -1029,7 +1090,7 @@ public:
       );
     } else {
       return make_interruptible(
-	  ::crimson::do_until(
+	  ::crimson::repeat(
 	    [action=std::move(action),
 	    interrupt_condition=interrupt_cond<InterruptCond>] {
 	    return call_with_interruption(
@@ -1057,7 +1118,7 @@ public:
       );
     } else {
       return make_interruptible(
-	  ::crimson::do_until(
+	  ::crimson::repeat(
 	    [action=std::move(action),
 	    interrupt_condition=interrupt_cond<InterruptCond>] {
 	    return call_with_interruption(
@@ -1249,24 +1310,6 @@ public:
       seastar::thread::yield();
       interrupt_cond<InterruptCond> = interruption_condition;
     }
-  }
-private:
-  // return true if an new interrupt condition is created and false otherwise
-  template <typename... Args>
-  [[gnu::always_inline]]
-  static bool enable_interruption(Args&&... args) {
-    if (!interrupt_cond<InterruptCond>){
-      interrupt_cond<InterruptCond> = seastar::make_lw_shared<
-	InterruptCond>(std::forward<Args>(args)...);
-      return true;
-    }
-    return false;
-  }
-
-  [[gnu::always_inline]]
-  static void disable_interruption() {
-    if (interrupt_cond<InterruptCond>)
-      interrupt_cond<InterruptCond>.release();
   }
 };
 

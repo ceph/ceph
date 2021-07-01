@@ -5,20 +5,8 @@
 
 #include "node_extent_manager/dummy.h"
 #include "node_extent_manager/seastore.h"
-#include "stages/node_stage_layout.h"
 
 namespace crimson::os::seastore::onode {
-
-std::pair<node_type_t, field_type_t> NodeExtent::get_types() const
-{
-  const auto header = reinterpret_cast<const node_header_t*>(get_read());
-  auto node_type = header->get_node_type();
-  auto field_type = header->get_field_type();
-  if (!field_type.has_value()) {
-    throw std::runtime_error("load failed: bad field type");
-  }
-  return {node_type, *field_type};
-}
 
 NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync)
 {
@@ -30,7 +18,7 @@ NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync)
 }
 
 NodeExtentManagerURef NodeExtentManager::create_seastore(
-    TransactionManager& tm, laddr_t min_laddr, double p_eagain)
+    InterruptedTransactionManager tm, laddr_t min_laddr, double p_eagain)
 {
   if (p_eagain == 0.0) {
     return NodeExtentManagerURef(

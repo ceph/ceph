@@ -56,6 +56,17 @@ struct node_header_t {
     is_level_tail = static_cast<uint8_t>(value);
   }
 } __attribute__((packed));
+inline std::ostream& operator<<(std::ostream& os, const node_header_t& header) {
+  auto field_type = header.get_field_type();
+  if (field_type.has_value()) {
+    os << "header" << header.get_node_type() << *field_type
+       << "(is_level_tail=" << header.get_is_level_tail()
+       << ", level=" << (unsigned)header.level << ")";
+  } else {
+    os << "header(INVALID)";
+  }
+  return os;
+}
 
 template <typename FixedKeyType, field_type_t _FIELD_TYPE>
 struct _slot_t {

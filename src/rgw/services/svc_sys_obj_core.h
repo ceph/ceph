@@ -118,7 +118,8 @@ protected:
                                      const std::string& marker,
                                      const std::string& prefix,
                                      RGWSI_SysObj::Pool::ListCtx *ctx);
-  virtual int pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& ctx,
+  virtual int pool_list_objects_next(const DoutPrefixProvider *dpp,
+                                     RGWSI_SysObj::Pool::ListCtx& ctx,
                                      int max,
                                      vector<string> *oids,
                                      bool *is_truncated);

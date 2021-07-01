@@ -34,12 +34,21 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
 					 uint64_t align)
 {
   const auto compare = range_tree.key_comp();
+  uint32_t search_count = 0;
+  uint64_t search_bytes = 0;
   auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
       *cursor = offset + size;
       return offset;
+    }
+    if (max_search_count > 0 && ++search_count > max_search_count) {
+      return -1ULL;
+    }
+    if (search_bytes = rs->start - rs_start->start;
+	max_search_bytes > 0 && search_bytes > max_search_bytes) {
+      return -1ULL;
     }
   }
   if (*cursor == 0) {
@@ -52,6 +61,12 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
     if (offset + size <= rs->end) {
       *cursor = offset + size;
       return offset;
+    }
+    if (max_search_count > 0 && ++search_count > max_search_count) {
+      return -1ULL;
+    }
+    if (max_search_bytes > 0 && search_bytes + rs->start > max_search_bytes) {
+      return -1ULL;
     }
   }
   return -1ULL;
@@ -240,35 +255,30 @@ int AvlAllocator::_allocate(
 
   const int free_pct = num_free * 100 / device_size;
   uint64_t start = 0;
-  /*
-   * If we're running low on space switch to using the size
-   * sorted AVL tree (best-fit).
-   */
+  // If we're running low on space, find a range by size by looking up in the size
+  // sorted tree (best-fit), instead of searching in the area pointed by cursor
   if (force_range_size_alloc ||
       max_size < range_size_alloc_threshold ||
       free_pct < range_size_alloc_free_pct) {
+    start = -1ULL;
+  } else {
+    /*
+     * Find the largest power of 2 block size that evenly divides the
+     * requested size. This is used to try to allocate blocks with similar
+     * alignment from the same area (i.e. same cursor bucket) but it does
+     * not guarantee that other allocations sizes may exist in the same
+     * region.
+     */
+    uint64_t align = size & -size;
+    ceph_assert(align != 0);
+    uint64_t* cursor = &lbas[cbits(align) - 1];
+    start = _pick_block_after(cursor, size, unit);
+    dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
+  }
+  if (start == -1ULL) {
     do {
       start = _pick_block_fits(size, unit);
       dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
-      if (start != uint64_t(-1ULL)) {
-        break;
-      }
-      // try to collect smaller extents as we could fail to retrieve
-      // that large block due to misaligned extents
-      size = p2align(size >> 1, unit);
-    } while (size >= unit);
-  } else {
-    do {
-      /*
-       * Find the largest power of 2 block size that evenly divides the
-       * requested size. This is used to try to allocate blocks with similar
-       * alignment from the same area (i.e. same cursor bucket) but it does
-       * not guarantee that other allocations sizes may exist in the same
-       * region.
-       */
-      uint64_t* cursor = &lbas[cbits(size) - 1];
-      start = _pick_block_after(cursor, size, unit);
-      dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
       }
@@ -328,6 +338,10 @@ AvlAllocator::AvlAllocator(CephContext* cct,
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
   range_size_alloc_free_pct(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct")),
+  max_search_count(
+    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_ff_max_search_count")),
+  max_search_bytes(
+    cct->_conf.get_val<Option::size_t>("bluestore_avl_alloc_ff_max_search_bytes")),
   range_count_cap(max_mem / sizeof(range_seg_t)),
   cct(cct)
 {}

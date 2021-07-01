@@ -44,7 +44,7 @@ struct object_data_handler_test_t:
   object_data_handler_test_t() {}
 
   auto submit_transaction(TransactionRef &&t) {
-    return tm->submit_transaction(std::move(t)
+    return tm->submit_transaction(*t
     ).safe_then([this] {
       return segment_cleaner->run_until_halt();
     });

@@ -16,7 +16,7 @@ namespace crimson::osd {
 InternalClientRequest::InternalClientRequest(Ref<PG> pg)
   : pg(std::move(pg))
 {
-  assert(bool(pg));
+  assert(bool(this->pg));
 }
 
 InternalClientRequest::~InternalClientRequest()

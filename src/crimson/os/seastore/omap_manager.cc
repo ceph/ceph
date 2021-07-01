@@ -10,7 +10,7 @@
 namespace crimson::os::seastore::omap_manager {
 
 OMapManagerRef create_omap_manager(
-  TransactionManager &trans_manager) {
+  InterruptedTransactionManager trans_manager) {
   return OMapManagerRef(new BtreeOMapManager(trans_manager));
 }
 

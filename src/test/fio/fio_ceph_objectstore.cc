@@ -743,7 +743,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
     bl.push_back(buffer::copy(reinterpret_cast<char*>(u->xfer_buf),
                               u->xfer_buflen ) );
 
-    map<string,bufferptr> attrset;
+    map<string,bufferptr,less<>> attrset;
     map<string, bufferlist> omaps;
     // enqueue a write transaction on the collection's handle
     ObjectStore::Transaction t;
@@ -827,7 +827,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       }
     }
 
-    if (attrset.size()) {
+    if (!attrset.empty()) {
       t.setattrs(coll.cid, object.oid, attrset);
     }
     t.write(coll.cid, object.oid, u->offset, u->xfer_buflen, bl, flags);

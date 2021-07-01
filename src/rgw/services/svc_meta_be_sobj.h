@@ -166,7 +166,8 @@ public:
                    optional_yield y) override;
 
   int list_init(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *_ctx, const string& marker) override;
-  int list_next(RGWSI_MetaBackend::Context *_ctx,
+  int list_next(const DoutPrefixProvider *dpp,
+                RGWSI_MetaBackend::Context *_ctx,
                 int max, list<string> *keys,
                 bool *truncated) override;
   int list_get_marker(RGWSI_MetaBackend::Context *ctx,

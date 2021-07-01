@@ -297,7 +297,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
       if (!recursive) {
 	lockdep_dout(0) << "\n";
 	*_dout << "recursive lock of " << name << " (" << id << ")\n";
-	auto bt = new ceph::BackTrace(BACKTRACE_SKIP);
+	auto bt = new ceph::ClibBackTrace(BACKTRACE_SKIP);
 	bt->print(*_dout);
 	if (p->second) {
 	  *_dout << "\npreviously locked at\n";
@@ -312,7 +312,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
 
       // did we just create a cycle?
       if (does_follow(id, p->first)) {
-        auto bt = new ceph::BackTrace(BACKTRACE_SKIP);
+        auto bt = new ceph::ClibBackTrace(BACKTRACE_SKIP);
 	lockdep_dout(0) << "new dependency " << lock_names[p->first]
 		<< " (" << p->first << ") -> " << name << " (" << id << ")"
 		<< " creates a cycle at\n";
@@ -338,7 +338,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
       } else {
 	ceph::BackTrace* bt = NULL;
         if (force_backtrace || lockdep_force_backtrace()) {
-          bt = new ceph::BackTrace(BACKTRACE_SKIP);
+          bt = new ceph::ClibBackTrace(BACKTRACE_SKIP);
         }
         follows[p->first].set(id);
         follows_bt[p->first][id] = bt;
@@ -363,7 +363,7 @@ int lockdep_locked(const char *name, int id, bool force_backtrace)
 
   lockdep_dout(20) << "_locked " << name << dendl;
   if (force_backtrace || lockdep_force_backtrace())
-    held[p][id] = new ceph::BackTrace(BACKTRACE_SKIP);
+    held[p][id] = new ceph::ClibBackTrace(BACKTRACE_SKIP);
   else
     held[p][id] = 0;
 out:

@@ -459,5 +459,4 @@ TEST_P(AllocTest, test_bonus_empty_fragmented)
 INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap", "avl"));
-
+  ::testing::Values("stupid", "bitmap", "avl", "btree"));

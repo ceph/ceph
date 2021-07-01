@@ -5,6 +5,7 @@
 #include "StupidAllocator.h"
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
+#include "BtreeAllocator.h"
 #include "HybridAllocator.h"
 #ifdef HAVE_LIBZBD
 #include "ZonedAllocator.h"
@@ -133,6 +134,8 @@ Allocator *Allocator::create(CephContext* cct, std::string_view type,
     alloc = new BitmapAllocator(cct, size, block_size, name);
   } else if (type == "avl") {
     return new AvlAllocator(cct, size, block_size, name);
+  } else if (type == "btree") {
+    return new BtreeAllocator(cct, size, block_size, name);
   } else if (type == "hybrid") {
     return new HybridAllocator(cct, size, block_size,
       cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),

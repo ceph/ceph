@@ -4624,6 +4624,17 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       gather++;
       if (lock->is_cached())
 	invalidate_lock_caches(lock);
+
+      // After a client request is early replied the mdlog won't be flushed
+      // immediately, but before safe replied the request will hold the write
+      // locks. So if the client sends another request to a different MDS
+      // daemon, which then needs to request read lock from current MDS daemon,
+      // then that daemon maybe stuck at most for 5 seconds. Which will lead
+      // the client stuck at most 5 seconds.
+      //
+      // Let's try to flush the mdlog when the write lock is held, which will
+      // release the write locks after mdlog is successfully flushed.
+      mds->mdlog->flush();
     }
     
     if (lock->get_parent()->is_replicated() && old_state == LOCK_MIX) {

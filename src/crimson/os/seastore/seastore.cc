@@ -9,6 +9,8 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include <seastar/core/shared_mutex.hh>
+
 #include "common/safe_io.h"
 #include "os/Transaction.h"
 
@@ -41,13 +43,6 @@ SeaStore::SeaStore(
 {}
 
 SeaStore::~SeaStore() = default;
-
-class SeastoreCollection final : public FuturizedCollection {
-public:
-  template <typename... T>
-  SeastoreCollection(T&&... args) :
-    FuturizedCollection(std::forward<T>(args)...) {}
-};
 
 seastar::future<> SeaStore::stop()
 {
@@ -98,7 +93,7 @@ seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 	    *t,
 	    coll_root);
 	  return transaction_manager->submit_transaction(
-	    std::move(t));
+	    *t);
 	});
       });
   }).safe_then([this] {
@@ -250,11 +245,9 @@ SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
   auto c = static_cast<SeastoreCollection*>(ch.get());
   LOG_PREFIX(SeaStore::get_attr);
   DEBUG("{} {}", c->get_cid(), oid);
-  using get_attr_ertr = TransactionManager::base_ertr::extend<
-    crimson::ct_error::enodata>;
   return repeat_with_onode<ceph::bufferlist>(
     c, oid, [=](auto &t, auto& onode)
-    -> get_attr_ertr::future<ceph::bufferlist> {
+    -> _omap_get_value_ertr::future<ceph::bufferlist> {
     auto& layout = onode.get_layout();
     if (name == OI_ATTR && layout.oi_size) {
       ceph::bufferlist bl;
@@ -351,7 +344,7 @@ SeaStore::omap_get_values(
   return repeat_with_onode<omap_values_t>(
     c,
     oid,
-    [this, &keys](auto &t, auto &onode) {
+    [this, keys](auto &t, auto &onode) {
       omap_root_t omap_root = onode.get_layout().omap_root.get();
       return _omap_get_values(
 	t,
@@ -601,15 +594,7 @@ seastar::future<> SeaStore::do_transaction(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
-  /* TODO: add ordering to Collection
-   *
-   * TransactionManager::submit_transction will ensure that
-   * beginning at that point operations remain ordered through
-   * to the jorunal.  We still need a pipeline stage associated
-   * with each collection to ensure that this portion in
-   * SeaStore::do_transaction remains correctly ordered for operations
-   * submitted on the same collection. TODO
-   */
+  // repeat_with_internal_context ensures ordering via collection lock
   return repeat_with_internal_context(
     _ch,
     std::move(_t),
@@ -618,16 +603,18 @@ seastar::future<> SeaStore::do_transaction(
 	*ctx.transaction, ctx.iter.get_objects()
       ).safe_then([this, &ctx](auto &&read_onodes) {
 	ctx.onodes = std::move(read_onodes);
-	return crimson::do_until(
-	  [this, &ctx]() -> tm_ertr::future<bool> {
+	return crimson::repeat(
+	  [this, &ctx]() -> tm_ertr::future<seastar::stop_iteration> {
 	    if (ctx.iter.have_op()) {
 	      return _do_transaction_step(
 		ctx, ctx.ch, ctx.onodes, ctx.iter
 	      ).safe_then([] {
-		return seastar::make_ready_future<bool>(false);
+		return seastar::make_ready_future<seastar::stop_iteration>(
+		  seastar::stop_iteration::no);
 	      });
 	    } else {
-	      return seastar::make_ready_future<bool>(true);
+	      return seastar::make_ready_future<seastar::stop_iteration>(
+		seastar::stop_iteration::yes);
 	    };
 	  });
       }).safe_then([this, &ctx] {
@@ -637,7 +624,7 @@ seastar::future<> SeaStore::do_transaction(
         // destruction in debug mode, which need to be done before calling
         // submit_transaction().
         ctx.onodes.clear();
-	return transaction_manager->submit_transaction(std::move(ctx.transaction));
+	return transaction_manager->submit_transaction(*ctx.transaction);
       }).safe_then([&ctx]() {
 	for (auto i : {
 	    ctx.ext_transaction.get_on_applied(),
@@ -1067,7 +1054,7 @@ seastar::future<> SeaStore::write_meta(const std::string& key,
         return transaction_manager->update_root_meta(
 	  *t, key, value
 	).safe_then([this, &t] {
-	  return transaction_manager->submit_transaction(std::move(t));
+	  return transaction_manager->submit_transaction(*t);
 	});
       });
     }).handle_error(

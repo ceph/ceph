@@ -476,7 +476,6 @@ private:
 
 MDSRank::MDSRank(
     mds_rank_t whoami_,
-    std::string fs_name_,
     ceph::mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -494,7 +493,7 @@ MDSRank::MDSRank(
     damage_table(whoami_), sessionmap(this),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
                g_conf()->osd_num_op_tracker_shard),
-    progress_thread(this), whoami(whoami_), fs_name(fs_name_),
+    progress_thread(this), whoami(whoami_),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
       new LambdaContext([this](int r) {
@@ -1429,8 +1428,7 @@ void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
   // send mdsmap first?
   auto addrs = mdsmap->get_addrs(mds);
   if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    auto _m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap,
-				    std::string(mdsmap->get_fs_name()));
+    auto _m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap);
     send_message_mds(_m, addrs);
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
@@ -3226,7 +3224,7 @@ void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostr
 
 void MDSRank::dump_status(Formatter *f) const
 {
-  f->dump_string("fs_name", fs_name);
+  f->dump_string("fs_name", std::string(mdsmap->get_fs_name()));
   if (state == MDSMap::STATE_REPLAY ||
       state == MDSMap::STATE_STANDBY_REPLAY) {
     mdlog->dump_replay_status(f);
@@ -3618,7 +3616,6 @@ bool MDSRank::evict_client(int64_t session_id,
 
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
-    std::string fs_name_,
     ceph::mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -3630,7 +3627,7 @@ MDSRankDispatcher::MDSRankDispatcher(
     Context *respawn_hook_,
     Context *suicide_hook_,
     boost::asio::io_context& ioc)
-  : MDSRank(whoami_, fs_name_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
+  : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
             msgr, monc_, mgrc, respawn_hook_, suicide_hook_, ioc)
 {
     g_conf().add_observer(this);

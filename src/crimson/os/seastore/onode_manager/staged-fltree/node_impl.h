@@ -181,7 +181,7 @@ class InternalNodeImpl : public NodeImpl {
   };
   static eagain_future<fresh_impl_t> allocate(context_t, field_type_t, bool, level_t);
 
-  static InternalNodeImplURef load(NodeExtentRef, field_type_t, bool);
+  static InternalNodeImplURef load(NodeExtentRef, field_type_t);
 
  protected:
   InternalNodeImpl() = default;
@@ -261,7 +261,7 @@ class LeafNodeImpl : public NodeImpl {
   };
   static eagain_future<fresh_impl_t> allocate(context_t, field_type_t, bool);
 
-  static LeafNodeImplURef load(NodeExtentRef, field_type_t, bool);
+  static LeafNodeImplURef load(NodeExtentRef, field_type_t);
 
  protected:
   LeafNodeImpl() = default;

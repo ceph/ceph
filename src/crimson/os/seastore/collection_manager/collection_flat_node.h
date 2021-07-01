@@ -9,7 +9,7 @@
 
 namespace crimson::os::seastore::collection_manager {
 struct coll_context_t {
-  TransactionManager &tm;
+  InterruptedTransactionManager tm;
   Transaction &t;
 };
 

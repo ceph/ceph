@@ -197,7 +197,7 @@ public:
   }
 
   ceph_statfs get_statfs(OSDMap &osdmap,
-                         boost::optional<int64_t> data_pool) const;
+                         std::optional<int64_t> data_pool) const;
 
   int64_t get_rule_avail(int ruleno) const {
     auto i = avail_space_by_rule.find(ruleno);

@@ -16,7 +16,7 @@
 std::string foo()
 {
   std::ostringstream oss;
-  oss << ceph::BackTrace(1);
+  oss << ceph::ClibBackTrace(1);
   return oss.str();
 }
 

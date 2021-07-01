@@ -275,7 +275,7 @@ private:
 
     // must be filled if state == WRITING
     std::map<int, ceph::buffer::list> returned_data;
-    std::map<std::string, ceph::buffer::list> xattrs;
+    std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
     ECUtil::HashInfoRef hinfo;
     ObjectContextRef obc;
     std::set<pg_shard_t> waiting_on_pushes;
@@ -298,7 +298,7 @@ private:
   void handle_recovery_read_complete(
     const hobject_t &hoid,
     boost::tuple<uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > &to_read,
-    std::optional<std::map<std::string, ceph::buffer::list> > attrs,
+    std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs,
     RecoveryMessages *m);
   void handle_recovery_push(
     const PushOp &op,
@@ -340,7 +340,7 @@ public:
   struct read_result_t {
     int r;
     std::map<pg_shard_t, int> errors;
-    std::optional<std::map<std::string, ceph::buffer::list> > attrs;
+    std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs;
     std::list<
       boost::tuple<
 	uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > > returned;
@@ -630,7 +630,7 @@ public:
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true,
-				    const std::map<std::string, ceph::buffer::ptr> *attr = NULL);
+				    const std::map<std::string, ceph::buffer::ptr, std::less<>> *attr = NULL);
 
 public:
   ECBackend(
@@ -661,7 +661,7 @@ public:
 
   int objects_get_attrs(
     const hobject_t &hoid,
-    std::map<std::string, ceph::buffer::list> *out) override;
+    std::map<std::string, ceph::buffer::list, std::less<>> *out) override;
 
   void rollback_append(
     const hobject_t &hoid,

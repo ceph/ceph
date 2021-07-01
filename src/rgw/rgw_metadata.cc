@@ -342,7 +342,7 @@ public:
 
     return 0;
   }
-  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) override  {
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated) override  {
     iter_data *data = static_cast<iter_data *>(handle);
     for (int i = 0; i < max && data->iter != data->sections.end(); ++i, ++(data->iter)) {
       keys.push_back(*data->iter);
@@ -539,11 +539,11 @@ int RGWMetadataHandler_GenericMetaBE::list_keys_init(const DoutPrefixProvider *d
   return 0;
 }
 
-int RGWMetadataHandler_GenericMetaBE::list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)
+int RGWMetadataHandler_GenericMetaBE::list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated)
 {
   auto op = static_cast<RGWSI_MetaBackend_Handler::Op_ManagedCtx *>(handle);
 
-  int ret = op->list_next(max, &keys, truncated);
+  int ret = op->list_next(dpp, max, &keys, truncated);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -802,13 +802,13 @@ int RGWMetadataManager::list_keys_init(const DoutPrefixProvider *dpp, const stri
   return 0;
 }
 
-int RGWMetadataManager::list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)
+int RGWMetadataManager::list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated)
 {
   list_keys_handle *h = static_cast<list_keys_handle *>(handle);
 
   RGWMetadataHandler *handler = h->handler;
 
-  return handler->list_keys_next(h->handle, max, keys, truncated);
+  return handler->list_keys_next(dpp, h->handle, max, keys, truncated);
 }
 
 void RGWMetadataManager::list_keys_complete(void *handle)

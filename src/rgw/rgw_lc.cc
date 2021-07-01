@@ -307,7 +307,7 @@ int RGWLC::bucket_lc_prepare(int index, LCWorker* worker)
   vector<rgw::sal::Lifecycle::LCEntry> entries;
   string marker;
 
-  dout(5) << "RGWLC::bucket_lc_prepare(): PREPARE "
+  ldpp_dout(this, 5) << "RGWLC::bucket_lc_prepare(): PREPARE "
 	  << "index: " << index << " worker ix: " << worker->ix
 	  << dendl;
 
@@ -337,7 +337,7 @@ int RGWLC::bucket_lc_prepare(int index, LCWorker* worker)
   return 0;
 }
 
-static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days,
+static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, ceph::real_time mtime, int days,
 			    ceph::real_time *expire_time = nullptr)
 {
   double timediff, cmp;
@@ -358,7 +358,7 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days,
     *expire_time = mtime + make_timespan(cmp);
   }
 
-  ldout(cct, 20) << __func__ << __func__
+  ldpp_dout(dpp, 20) << __func__ << __func__
 		 << "(): mtime=" << mtime << " days=" << days
 		 << " base_time=" << base_time << " timediff=" << timediff
 		 << " cmp=" << cmp
@@ -469,7 +469,7 @@ public:
         list_params.marker = pre_obj.key;
         int ret = fetch(dpp);
         if (ret < 0) {
-          ldout(store->ctx(), 0) << "ERROR: list_op returned ret=" << ret
+          ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret
 				 << dendl;
           return ret;
         }
@@ -841,7 +841,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
     auto wt = boost::get<std::tuple<lc_op, rgw_bucket_dir_entry>>(wi);
     auto& [rule, obj] = wt;
     RGWMPObj mp_obj;
-    if (obj_has_expired(cct, obj.meta.mtime, rule.mp_expiration)) {
+    if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
       rgw_obj_key key(obj.key);
       if (!mp_obj.from_meta(key.name)) {
 	return;
@@ -876,7 +876,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
        ++prefix_iter) {
 
     if (worker_should_stop(stop_at, once)) {
-      ldout(cct, 5) << __func__ << " interval budget EXPIRED worker "
+      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
 		     << worker->ix
 		     << dendl;
       return 0;
@@ -964,7 +964,7 @@ static int check_tags(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool *skip)
     int ret = read_obj_tags(dpp, oc.obj.get(), oc.rctx, tags_bl);
     if (ret < 0) {
       if (ret != -ENODATA) {
-        ldout(oc.cct, 5) << "ERROR: read_obj_tags returned r="
+        ldpp_dout(oc.dpp, 5) << "ERROR: read_obj_tags returned r="
 			 << ret << " " << oc.wq->thr_name() << dendl;
       }
       return 0;
@@ -974,13 +974,13 @@ static int check_tags(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool *skip)
       auto iter = tags_bl.cbegin();
       dest_obj_tags.decode(iter);
     } catch (buffer::error& err) {
-      ldout(oc.cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet "
+      ldpp_dout(oc.dpp,0) << "ERROR: caught buffer::error, couldn't decode TagSet "
 		      << oc.wq->thr_name() << dendl;
       return -EIO;
     }
 
     if (! has_all_tags(op, dest_obj_tags)) {
-      ldout(oc.cct, 20) << __func__ << "() skipping obj " << oc.obj
+      ldpp_dout(oc.dpp, 20) << __func__ << "() skipping obj " << oc.obj
 			<< " as tags do not match in rule: "
 			<< op.id << " "
 			<< oc.wq->thr_name() << dendl;
@@ -1007,7 +1007,7 @@ public:
       if (ret == -ENOENT) {
         return false;
       }
-      ldout(oc.cct, 0) << "ERROR: check_tags on obj=" << oc.obj
+      ldpp_dout(oc.dpp, 0) << "ERROR: check_tags on obj=" << oc.obj
 		       << " returned ret=" << ret << " "
 		       << oc.wq->thr_name() << dendl;
       return false;
@@ -1060,7 +1060,7 @@ public:
 	ceph::real_clock::to_time_t(*op.expiration_date);
       *exp_time = *op.expiration_date;
     } else {
-      is_expired = obj_has_expired(oc.cct, mtime, op.expiration, exp_time);
+      is_expired = obj_has_expired(dpp, oc.cct, mtime, op.expiration, exp_time);
     }
 
     ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key << ": is_expired="
@@ -1075,20 +1075,20 @@ public:
     if (o.is_delete_marker()) {
       r = remove_expired_obj(oc.dpp, oc, true);
       if (r < 0) {
-	ldout(oc.cct, 0) << "ERROR: current is-dm remove_expired_obj "
+	ldpp_dout(oc.dpp, 0) << "ERROR: current is-dm remove_expired_obj "
 			 << oc.bucket << ":" << o.key
 			 << " " << cpp_strerror(r) << " "
 			 << oc.wq->thr_name() << dendl;
       return r;
       }
-      ldout(oc.cct, 2) << "DELETED: current is-dm "
+      ldpp_dout(oc.dpp, 2) << "DELETED: current is-dm "
 		       << oc.bucket << ":" << o.key
 		       << " " << oc.wq->thr_name() << dendl;
     } else {
       /* ! o.is_delete_marker() */
       r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioned());
       if (r < 0) {
-	ldout(oc.cct, 0) << "ERROR: remove_expired_obj "
+	ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj "
 			 << oc.bucket << ":" << o.key
 			 << " " << cpp_strerror(r) << " "
 			 << oc.wq->thr_name() << dendl;
@@ -1097,7 +1097,7 @@ public:
       if (perfcounter) {
         perfcounter->inc(l_rgw_lc_expire_current, 1);
       }
-      ldout(oc.cct, 2) << "DELETED:" << oc.bucket << ":" << o.key
+      ldpp_dout(oc.dpp, 2) << "DELETED:" << oc.bucket << ":" << o.key
 		       << " " << oc.wq->thr_name() << dendl;
     }
     return 0;
@@ -1120,7 +1120,7 @@ public:
     }
 
     int expiration = oc.op.noncur_expiration;
-    bool is_expired = obj_has_expired(oc.cct, oc.effective_mtime, expiration,
+    bool is_expired = obj_has_expired(dpp, oc.cct, oc.effective_mtime, expiration,
 				      exp_time);
 
     ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key << ": is_expired="
@@ -1135,7 +1135,7 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true);
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
+      ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
 		       << oc.bucket << ":" << o.key
 		       << " " << cpp_strerror(r)
 		       << " " << oc.wq->thr_name() << dendl;
@@ -1144,7 +1144,7 @@ public:
     if (perfcounter) {
       perfcounter->inc(l_rgw_lc_expire_noncurrent, 1);
     }
-    ldout(oc.cct, 2) << "DELETED:" << oc.bucket << ":" << o.key
+    ldpp_dout(oc.dpp, 2) << "DELETED:" << oc.bucket << ":" << o.key
 		     << " (non-current expiration) "
 		     << oc.wq->thr_name() << dendl;
     return 0;
@@ -1179,7 +1179,7 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true);
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj (delete marker expiration) "
+      ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (delete marker expiration) "
 		       << oc.bucket << ":" << o.key
 		       << " " << cpp_strerror(r)
 		       << " " << oc.wq->thr_name()
@@ -1189,7 +1189,7 @@ public:
     if (perfcounter) {
       perfcounter->inc(l_rgw_lc_expire_dm, 1);
     }
-    ldout(oc.cct, 2) << "DELETED:" << oc.bucket << ":" << o.key
+    ldpp_dout(oc.dpp, 2) << "DELETED:" << oc.bucket << ":" << o.key
 		     << " (delete marker expiration) "
 		     << oc.wq->thr_name() << dendl;
     return 0;
@@ -1231,10 +1231,10 @@ public:
 	ceph::real_clock::to_time_t(*transition.date);
       *exp_time = *transition.date;
     } else {
-      is_expired = obj_has_expired(oc.cct, mtime, transition.days, exp_time);
+      is_expired = obj_has_expired(dpp, oc.cct, mtime, transition.days, exp_time);
     }
 
-    ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired="
+    ldpp_dout(oc.dpp, 20) << __func__ << "(): key=" << o.key << ": is_expired="
 		      << is_expired << " "
 		      << oc.wq->thr_name() << dendl;
 
@@ -1511,7 +1511,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       ++prefix_iter) {
 
     if (worker_should_stop(stop_at, once)) {
-      ldout(cct, 5) << __func__ << " interval budget EXPIRED worker "
+      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
 		     << worker->ix
 		     << dendl;
       return 0;
@@ -1568,7 +1568,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 							obj_names[index],
 							cookie);
 
-  dout(5) << "RGWLC::bucket_lc_post(): POST " << entry
+  ldpp_dout(this, 5) << "RGWLC::bucket_lc_post(): POST " << entry
 	  << " index: " << index << " worker ix: " << worker->ix
 	  << dendl;
 
@@ -1679,7 +1679,7 @@ bool RGWLC::expired_session(time_t started)
 
   auto now = time(nullptr);
 
-  dout(16) << "RGWLC::expired_session"
+  ldpp_dout(this, 16) << "RGWLC::expired_session"
 	   << " started: " << started
 	   << " interval: " << interval << "(*2==" << 2*interval << ")"
 	   << " now: " << now
@@ -1700,7 +1700,7 @@ time_t RGWLC::thread_stop_at()
 int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
   bool once = false)
 {
-  dout(5) << "RGWLC::process(): ENTER: "
+  ldpp_dout(this, 5) << "RGWLC::process(): ENTER: "
 	  << "index: " << index << " worker ix: " << worker->ix
 	  << dendl;
 
@@ -1740,12 +1740,12 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       if (ret >= 0) {
 	if (entry.status == lc_processing) {
 	  if (expired_session(entry.start_time)) {
-	    dout(5) << "RGWLC::process(): STALE lc session found for: " << entry
+	    ldpp_dout(this, 5) << "RGWLC::process(): STALE lc session found for: " << entry
 		    << " index: " << index << " worker ix: " << worker->ix
 		    << " (clearing)"
 		    << dendl;
 	  } else {
-	    dout(5) << "RGWLC::process(): ACTIVE entry: " << entry
+	    ldpp_dout(this, 5) << "RGWLC::process(): ACTIVE entry: " << entry
 		    << " index: " << index << " worker ix: " << worker->ix
 		  << dendl;
 	    goto exit;
@@ -2135,7 +2135,7 @@ std::string s3_expiration_header(
   RGWObjTags::tag_map_t obj_tag_map = obj_tagset.get_tags();
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 16)) {
     for (const auto& elt : obj_tag_map) {
-      ldout(cct, 16) << __func__
+      ldpp_dout(dpp, 16) << __func__
 		     <<  "() key=" << elt.first << " val=" << elt.second
 		     << dendl;
     }

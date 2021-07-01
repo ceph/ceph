@@ -27,7 +27,7 @@ class OMapManager {
   * until these functions future resolved.
   */
 public:
-  using base_ertr = TransactionManager::base_ertr;
+  using base_ertr = with_trans_ertr<TransactionManager::base_iertr>;
 
   /**
    * allocate omap tree root node
@@ -170,7 +170,7 @@ using OMapManagerRef = std::unique_ptr<OMapManager>;
 namespace omap_manager {
 
 OMapManagerRef create_omap_manager (
-  TransactionManager &trans_manager);
+  InterruptedTransactionManager trans_manager);
 }
 
 }

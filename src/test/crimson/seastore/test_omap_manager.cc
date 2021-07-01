@@ -193,11 +193,6 @@ struct omap_manager_test_t :
     omap_manager = omap_manager::create_omap_manager(*tm);
     logger().debug("{}: end", __func__);
   }
-
-  void submit_transaction(TransactionRef &&t) {
-    tm->submit_transaction(std::move(t)).unsafe_get0();
-    segment_cleaner->run_until_halt().get0();
-  }
 };
 
 TEST_F(omap_manager_test_t, basic)

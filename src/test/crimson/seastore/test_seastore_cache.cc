@@ -29,16 +29,12 @@ struct cache_test_t : public seastar_test_suite_t {
     : segment_manager(segment_manager::create_test_ephemeral()),
       cache(*segment_manager) {}
 
-  seastar::future<std::optional<paddr_t>> submit_transaction(
+  seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
-    auto record = cache.try_construct_record(*t);
-    if (!record) {
-      return seastar::make_ready_future<std::optional<paddr_t>>(
-	std::nullopt);
-    }
+    auto record = cache.prepare_record(*t);
 
     bufferlist bl;
-    for (auto &&block : record->extents) {
+    for (auto &&block : record.extents) {
       bl.append(block.bl);
     }
 
@@ -57,7 +53,7 @@ struct cache_test_t : public seastar_test_suite_t {
     ).safe_then(
       [this, prev, t=std::move(t)]() mutable {
 	cache.complete_commit(*t, prev, seq /* TODO */);
-	return seastar::make_ready_future<std::optional<paddr_t>>(prev);
+        return prev;
       },
       crimson::ct_error::all_same_way([](auto e) {
 	ASSERT_FALSE("failed to submit");
@@ -67,6 +63,16 @@ struct cache_test_t : public seastar_test_suite_t {
 
   auto get_transaction() {
     return cache.create_transaction();
+  }
+
+  template <typename T, typename... Args>
+  auto get_extent(Transaction &t, Args&&... args) {
+    return with_trans_intr(
+      t,
+      [this](auto &&... args) {
+	return cache.get_extent<T>(args...);
+      },
+      std::forward<Args>(args)...);
   }
 
   seastar::future<> set_up_fut() final {
@@ -80,9 +86,7 @@ struct cache_test_t : public seastar_test_suite_t {
 	    return cache.mkfs(*transaction).safe_then(
 	      [this, &transaction] {
 		return submit_transaction(std::move(transaction)).then(
-		  [](auto p) {
-		    ASSERT_TRUE(p);
-		  });
+		  [](auto p) {});
 	      });
 	  });
       }).handle_error(
@@ -110,13 +114,12 @@ TEST_F(cache_test_t, test_addr_fixup)
 	TestBlockPhysical::SIZE);
       extent->set_contents('c');
       csum = extent->get_crc32c();
-      auto ret = submit_transaction(std::move(t)).get0();
-      ASSERT_TRUE(ret);
+      submit_transaction(std::move(t)).get0();
       addr = extent->get_paddr();
     }
     {
       auto t = get_transaction();
-      auto extent = cache.get_extent<TestBlockPhysical>(
+      auto extent = get_extent<TestBlockPhysical>(
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
@@ -145,7 +148,7 @@ TEST_F(cache_test_t, test_dirty_extent)
       {
 	// test that read with same transaction sees new block though
 	// uncommitted
-	auto extent = cache.get_extent<TestBlockPhysical>(
+	auto extent = get_extent<TestBlockPhysical>(
 	  *t,
 	  reladdr,
 	  TestBlockPhysical::SIZE).unsafe_get0();
@@ -155,19 +158,18 @@ TEST_F(cache_test_t, test_dirty_extent)
 	ASSERT_EQ(extent->get_version(), 0);
 	ASSERT_EQ(csum, extent->get_crc32c());
       }
-      auto ret = submit_transaction(std::move(t)).get0();
-      ASSERT_TRUE(ret);
+      submit_transaction(std::move(t)).get0();
       addr = extent->get_paddr();
     }
     {
       // test that consecutive reads on the same extent get the same ref
       auto t = get_transaction();
-      auto extent = cache.get_extent<TestBlockPhysical>(
+      auto extent = get_extent<TestBlockPhysical>(
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
       auto t2 = get_transaction();
-      auto extent2 = cache.get_extent<TestBlockPhysical>(
+      auto extent2 = get_extent<TestBlockPhysical>(
 	*t2,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
@@ -176,7 +178,7 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // read back test block
       auto t = get_transaction();
-      auto extent = cache.get_extent<TestBlockPhysical>(
+      auto extent = get_extent<TestBlockPhysical>(
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
@@ -189,7 +191,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	// test that concurrent read with fresh transaction sees old
         // block
 	auto t2 = get_transaction();
-	auto extent = cache.get_extent<TestBlockPhysical>(
+	auto extent = get_extent<TestBlockPhysical>(
 	  *t2,
 	  addr,
 	  TestBlockPhysical::SIZE).unsafe_get0();
@@ -201,7 +203,7 @@ TEST_F(cache_test_t, test_dirty_extent)
       }
       {
 	// test that read with same transaction sees new block
-	auto extent = cache.get_extent<TestBlockPhysical>(
+	auto extent = get_extent<TestBlockPhysical>(
 	  *t,
 	  addr,
 	  TestBlockPhysical::SIZE).unsafe_get0();
@@ -212,8 +214,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	ASSERT_EQ(csum2, extent->get_crc32c());
       }
       // submit transaction
-      auto ret = submit_transaction(std::move(t)).get0();
-      ASSERT_TRUE(ret);
+      submit_transaction(std::move(t)).get0();
       ASSERT_TRUE(extent->is_dirty());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
@@ -222,7 +223,7 @@ TEST_F(cache_test_t, test_dirty_extent)
     {
       // test that fresh transaction now sees newly dirty block
       auto t = get_transaction();
-      auto extent = cache.get_extent<TestBlockPhysical>(
+      auto extent = get_extent<TestBlockPhysical>(
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();

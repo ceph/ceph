@@ -43,12 +43,12 @@ FileStoreDiff::~FileStoreDiff()
 }
 
 
-bool FileStoreDiff::diff_attrs(std::map<std::string,bufferptr>& b,
-    std::map<std::string,bufferptr>& a)
+bool FileStoreDiff::diff_attrs(std::map<std::string,bufferptr,std::less<>>& b,
+    std::map<std::string,bufferptr,std::less<>>& a)
 {
   bool ret = false;
-  std::map<std::string, bufferptr>::iterator b_it = b.begin();
-  std::map<std::string, bufferptr>::iterator a_it = a.begin();
+  auto b_it = b.begin();
+  auto a_it = a.begin();
   for (; b_it != b.end(); ++b_it, ++a_it) {
     if (b_it->first != a_it->first) {
       cout << "diff_attrs name mismatch (verify: " << b_it->first
@@ -204,7 +204,7 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
       ret = true;
     }
 
-    std::map<std::string, bufferptr> a_obj_attrs_map, b_obj_attrs_map;
+    std::map<std::string, bufferptr, std::less<>> a_obj_attrs_map, b_obj_attrs_map;
     err = a_store->getattrs(a_ch, a_obj, a_obj_attrs_map);
     if (err < 0) {
       cout << "diff_objects getattrs on A object " << coll << "/" << a_obj

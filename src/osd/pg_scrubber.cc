@@ -642,6 +642,12 @@ bool PgScrubber::select_range()
 
   dout(15) << __func__ << " range selected: " << m_start << " //// " << m_end << " //// "
 	   << m_max_end << dendl;
+
+  // debug: be 'blocked' if told so by the 'pg scrub_debug block' asok command
+  if (m_debug_blockrange > 0) {
+    m_debug_blockrange--;
+    return false;
+  }
   return true;
 }
 
@@ -693,6 +699,11 @@ bool PgScrubber::range_intersects_scrub(const hobject_t& start, const hobject_t&
 {
   // does [start, end] intersect [scrubber.start, scrubber.m_max_end)
   return (start < m_max_end && end >= m_start);
+}
+
+Scrub::BlockedRangeWarning PgScrubber::acquire_blocked_alarm()
+{
+  return std::make_unique<blocked_range_t>(m_osds, ceph::timespan{300s}, m_pg_id);
 }
 
 /**
@@ -2008,6 +2019,23 @@ ostream& PgScrubber::show(ostream& out) const
   return out << " [ " << m_pg_id << ": " << m_flags << " ] ";
 }
 
+int PgScrubber::asok_debug(std::string_view cmd,
+			   std::string param,
+			   Formatter* f,
+			   stringstream& ss)
+{
+  dout(10) << __func__ << " cmd: " << cmd << " param: " << param << dendl;
+
+  if (cmd == "block") {
+    // set a flag that will cause the next 'select_range' to report a blocked object
+    m_debug_blockrange = 1;
+  } else if (cmd == "unblock") {
+    // send an 'unblock' event, as if a blocked range was freed
+    m_debug_blockrange = 0;
+    m_fsm->process_event(Unblocked{});
+  }
+  return 0;
+}
 // ///////////////////// preemption_data_t //////////////////////////////////
 
 PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg}
@@ -2268,6 +2296,33 @@ ostream& operator<<(ostream& out, const MapsCollectionStatus& sf)
     out << " local ";
   }
   return out << " ] ";
+}
+
+// ///////////////////// blocked_range_t ///////////////////////////////
+
+blocked_range_t::blocked_range_t(OSDService* osds, ceph::timespan waittime, spg_t pg_id)
+    : m_osds{osds}
+{
+  auto now_is = std::chrono::system_clock::now();
+  m_callbk = new LambdaContext([now_is, pg_id, osds]([[maybe_unused]] int r) {
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now_is);
+    char buf[50];
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&now_c));
+    lgeneric_subdout(g_ceph_context, osd, 10)
+      << "PgScrubber: " << pg_id << " blocked on an object for too long (since " << buf
+      << ")" << dendl;
+    osds->clog->warn() << "osd." << osds->whoami << " PgScrubber: " << pg_id << " blocked on an object for too long (since " << buf << ")";
+    return;
+  });
+
+  std::lock_guard l(m_osds->sleep_lock);
+  m_osds->sleep_timer.add_event_after(waittime, m_callbk);
+}
+
+blocked_range_t::~blocked_range_t()
+{
+  std::lock_guard l(m_osds->sleep_lock);
+  m_osds->sleep_timer.cancel_event(m_callbk);
 }
 
 }  // namespace Scrub

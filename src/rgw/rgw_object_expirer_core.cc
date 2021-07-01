@@ -72,14 +72,14 @@ static void objexp_get_shard(int shard_num,
   *shard = objexp_hint_get_shardname(shard_num);
 }
 
-static int objexp_hint_parse(CephContext *cct, cls_timeindex_entry &ti_entry,
+static int objexp_hint_parse(const DoutPrefixProvider *dpp, CephContext *cct, cls_timeindex_entry &ti_entry,
                              objexp_hint_entry *hint_entry)
 {
   try {
     auto iter = ti_entry.value.cbegin();
     decode(*hint_entry, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: couldn't decode avail_pools" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: couldn't decode avail_pools" << dendl;
   }
 
   return 0;
@@ -238,7 +238,7 @@ void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 15) << "got removal hint for: " << iter->key_ts.sec() \
         << " - " << iter->key_ext << dendl;
 
-    int ret = objexp_hint_parse(store->ctx(), *iter, &hint);
+    int ret = objexp_hint_parse(dpp, store->ctx(), *iter, &hint);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
       continue;
@@ -392,13 +392,13 @@ void *RGWObjectExpirer::OEWorker::entry() {
   utime_t last_run;
   do {
     utime_t start = ceph_clock_now();
-    ldout(cct, 2) << "object expiration: start" << dendl;
+    ldpp_dout(this, 2) << "object expiration: start" << dendl;
     if (oe->inspect_all_shards(this, last_run, start)) {
       /* All shards have been processed properly. Next time we can start
        * from this moment. */
       last_run = start;
     }
-    ldout(cct, 2) << "object expiration: stop" << dendl;
+    ldpp_dout(this, 2) << "object expiration: stop" << dendl;
 
 
     if (oe->going_down())

@@ -87,6 +87,9 @@ seastar::future<> ClientRequest::start()
 	return interruptor::with_interruption([this, pgref]() mutable {
           epoch_t same_interval_since = pgref->get_interval_start_epoch();
           logger().debug("{} same_interval_since: {}", *this, same_interval_since);
+          if (m->finish_decode()) {
+            m->clear_payload();
+          }
           const bool has_pg_op = is_pg_op();
           auto interruptible_do_op = interruptor::wrap_function([=] {
             PG &pg = *pgref;
@@ -108,9 +111,6 @@ seastar::future<> ClientRequest::start()
             }).then_interruptible([this,
                                    has_pg_op,
                                    pgref=std::move(pgref)]() mutable {
-              if (m->finish_decode()) {
-                m->clear_payload();
-              }
               return (has_pg_op ?
                       process_pg_op(pgref) :
                       process_op(pgref));
@@ -141,8 +141,8 @@ ClientRequest::process_pg_op(
   Ref<PG> &pg)
 {
   return pg->do_pg_ops(m)
-    .then_interruptible([this, pg=std::move(pg)](Ref<MOSDOpReply> reply) {
-      return conn->send(reply);
+    .then_interruptible([this, pg=std::move(pg)](MURef<MOSDOpReply> reply) {
+      return conn->send(std::move(reply));
     });
 }
 
@@ -214,10 +214,10 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
     }).then_interruptible(
       [this, pg, all_completed=std::move(all_completed)]() mutable {
       return all_completed.safe_then_interruptible(
-        [this, pg](Ref<MOSDOpReply> reply) {
+        [this, pg](MURef<MOSDOpReply> reply) {
         return with_blocking_future_interruptible<IOInterruptCondition>(
             handle.enter(pp(*pg).send_reply)).then_interruptible(
-              [this, reply=std::move(reply)] {
+              [this, reply=std::move(reply)]() mutable{
               return conn->send(std::move(reply));
             });
       }, crimson::ct_error::eagain::handle([this, pg]() mutable {

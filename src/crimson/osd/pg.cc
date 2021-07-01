@@ -736,7 +736,7 @@ PG::do_osd_ops_execute(
   }));
 }
 
-PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<Ref<MOSDOpReply>>>
+PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<MURef<MOSDOpReply>>>
 PG::do_osd_ops(
   Ref<MOSDOp> m,
   ObjectContextRef obc,
@@ -745,7 +745,7 @@ PG::do_osd_ops(
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
-  return do_osd_ops_execute<Ref<MOSDOpReply>>(
+  return do_osd_ops_execute<MURef<MOSDOpReply>>(
     seastar::make_lw_shared<OpsExecuter>(
       std::move(obc), op_info, get_pool().info, get_backend(), *m),
     m->ops,
@@ -757,7 +757,7 @@ PG::do_osd_ops(
       if (result > 0 && !rvec) {
         result = 0;
       }
-      auto reply = ceph::make_message<MOSDOpReply>(m.get(),
+      auto reply = crimson::make_message<MOSDOpReply>(m.get(),
                                              result,
                                              get_osdmap_epoch(),
                                              0,
@@ -767,16 +767,16 @@ PG::do_osd_ops(
         "do_osd_ops: {} - object {} sending reply",
         *m,
         m->get_hobj());
-      return do_osd_ops_iertr::make_ready_future<Ref<MOSDOpReply>>(
+      return do_osd_ops_iertr::make_ready_future<MURef<MOSDOpReply>>(
         std::move(reply));
     },
     [m, this] (const std::error_code& e) {
-      auto reply = ceph::make_message<MOSDOpReply>(
+      auto reply = crimson::make_message<MOSDOpReply>(
         m.get(), -e.value(), get_osdmap_epoch(), 0, false);
       reply->set_enoent_reply_versions(
         peering_state.get_info().last_update,
         peering_state.get_info().last_user_version);
-      return do_osd_ops_iertr::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+      return do_osd_ops_iertr::make_ready_future<MURef<MOSDOpReply>>(std::move(reply));
     });
 }
 
@@ -798,7 +798,7 @@ PG::do_osd_ops(
     std::move(failure_func));
 }
 
-PG::interruptible_future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
+PG::interruptible_future<MURef<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
 {
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
@@ -810,16 +810,16 @@ PG::interruptible_future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
     logger().debug("will be handling pg op {}", ceph_osd_op_name(osd_op.op.op));
     return ox->execute_op(osd_op);
   }).then_interruptible([m, this, ox = std::move(ox)] {
-    auto reply = ceph::make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
+    auto reply = crimson::make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
                                            CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
                                            false);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    return seastar::make_ready_future<MURef<MOSDOpReply>>(std::move(reply));
   }).handle_exception_type_interruptible([=](const crimson::osd::error& e) {
-    auto reply = ceph::make_message<MOSDOpReply>(
+    auto reply = crimson::make_message<MOSDOpReply>(
       m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
     reply->set_enoent_reply_versions(peering_state.get_info().last_update,
 				     peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    return seastar::make_ready_future<MURef<MOSDOpReply>>(std::move(reply));
   });
 }
 
@@ -982,8 +982,7 @@ PG::with_existing_clone_obc(ObjectContextRef clone, with_obc_func_t&& func)
 PG::load_obc_iertr::future<crimson::osd::ObjectContextRef>
 PG::load_head_obc(ObjectContextRef obc)
 {
-  hobject_t oid = obc->get_oid();
-  return backend->load_metadata(oid).safe_then_interruptible(
+  return backend->load_metadata(obc->get_oid()).safe_then_interruptible(
     [obc=std::move(obc)](auto md)
     -> load_obc_ertr::future<crimson::osd::ObjectContextRef> {
     const hobject_t& oid = md->os.oi.soid;
@@ -1103,11 +1102,11 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
       [req, lcod=peering_state.get_info().last_complete, this] {
       peering_state.update_last_complete_ondisk(lcod);
       const auto map_epoch = get_osdmap_epoch();
-      auto reply = ceph::make_message<MOSDRepOpReply>(
+      auto reply = crimson::make_message<MOSDRepOpReply>(
         req.get(), pg_whoami, 0,
 	map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
       reply->set_last_complete_ondisk(lcod);
-      return shard_services.send_to_osd(req->from.osd, reply, map_epoch);
+      return shard_services.send_to_osd(req->from.osd, std::move(reply), map_epoch);
     });
 }
 

@@ -191,13 +191,17 @@ BasePyOSDMap_init(BasePyOSDMap *self, PyObject *args, PyObject *kwds)
     PyObject *osdmap_capsule = nullptr;
     static const char *kwlist[] = {"osdmap_capsule", NULL};
 
-    if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
-                                      const_cast<char**>(kwlist),
-                                      &osdmap_capsule)) {
-      ceph_abort();
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O",
+				     const_cast<char**>(kwlist),
+				     &osdmap_capsule)) {
       return -1;
     }
-    ceph_assert(PyObject_TypeCheck(osdmap_capsule, &PyCapsule_Type));
+    if (!PyObject_TypeCheck(osdmap_capsule, &PyCapsule_Type)) {
+      PyErr_Format(PyExc_TypeError,
+		   "Expected a PyCapsule_Type, not %s",
+		   Py_TYPE(osdmap_capsule)->tp_name);
+      return -1;
+    }
 
     self->osdmap = (OSDMap*)PyCapsule_GetPointer(
         osdmap_capsule, nullptr);
@@ -272,6 +276,35 @@ static PyObject *osdmap_pool_raw_used_rate(BasePyOSDMap *self, PyObject *args)
   return PyFloat_FromDouble(rate);
 }
 
+static PyObject *osdmap_build_simple(PyObject *cls, PyObject *args, PyObject *kwargs)
+{
+  static const char *kwlist[] = {"epoch", "uuid", "num_osd", nullptr};
+  int epoch = 1;
+  char* uuid_str = nullptr;
+  int num_osd = -1;
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "izi",
+				   const_cast<char**>(kwlist),
+				   &epoch, &uuid_str, &num_osd)) {
+    Py_RETURN_NONE;
+  }
+  uuid_d uuid;
+  if (uuid_str) {
+    if (!uuid.parse(uuid_str)) {
+      PyErr_Format(PyExc_ValueError, "bad uuid %s", uuid_str);
+      Py_RETURN_NONE;
+    }
+  } else {
+    uuid.generate_random();
+  }
+
+  auto osdmap = without_gil([&] {
+    OSDMap* osdmap = new OSDMap();
+    // negative osd is allowed, in that case i just count all osds in ceph.conf
+    osdmap->build_simple(g_ceph_context, epoch, uuid, num_osd);
+    return osdmap;
+  });
+  return construct_with_capsule("mgr_module", "OSDMap", reinterpret_cast<void*>(osdmap));
+}
 
 PyMethodDef BasePyOSDMap_methods[] = {
   {"_get_epoch", (PyCFunction)osdmap_get_epoch, METH_NOARGS, "Get OSDMap epoch"},
@@ -293,6 +326,8 @@ PyMethodDef BasePyOSDMap_methods[] = {
     "Calculate up+acting OSDs for a PG ID"},
   {"_pool_raw_used_rate", (PyCFunction)osdmap_pool_raw_used_rate, METH_VARARGS,
    "Get raw space to logical space ratio"},
+  {"_build_simple", (PyCFunction)osdmap_build_simple, METH_VARARGS | METH_CLASS,
+   "Create a simple OSDMap"},
   {NULL, NULL, 0, NULL}
 };
 

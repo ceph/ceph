@@ -21,7 +21,7 @@ namespace crimson::os::seastore::onode {
 class SeastoreSuper final: public Super {
  public:
   SeastoreSuper(Transaction& t, RootNodeTracker& tracker,
-                laddr_t root_addr, TransactionManager& tm)
+                laddr_t root_addr, InterruptedTransactionManager& tm)
     : Super(t, tracker), root_addr{root_addr}, tm{tm} {}
   ~SeastoreSuper() override = default;
  protected:
@@ -36,7 +36,7 @@ class SeastoreSuper final: public Super {
   }
  private:
   laddr_t root_addr;
-  TransactionManager& tm;
+  InterruptedTransactionManager tm;
 };
 
 class SeastoreNodeExtent final: public NodeExtent {
@@ -70,15 +70,15 @@ class SeastoreNodeExtent final: public NodeExtent {
 
 class TransactionManagerHandle : public NodeExtentManager {
  public:
-  TransactionManagerHandle(TransactionManager& tm) : tm{tm} {}
-  TransactionManager& tm;
+  TransactionManagerHandle(InterruptedTransactionManager tm) : tm{tm} {}
+  InterruptedTransactionManager tm;
 };
 
 template <bool INJECT_EAGAIN=false>
 class SeastoreNodeExtentManager final: public TransactionManagerHandle {
  public:
   SeastoreNodeExtentManager(
-      TransactionManager& tm, laddr_t min, double p_eagain)
+      InterruptedTransactionManager tm, laddr_t min, double p_eagain)
       : TransactionManagerHandle(tm), addr_min{min}, p_eagain{p_eagain} {
     if constexpr (INJECT_EAGAIN) {
       assert(p_eagain > 0.0 && p_eagain < 1.0);
@@ -106,16 +106,18 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       }
     }
     return tm.read_extent<SeastoreNodeExtent>(t, addr
-    ).safe_then([addr, &t](auto&& e) {
+    ).safe_then([addr, &t](auto&& e) -> read_ertr::future<NodeExtentRef> {
       TRACET("read {}B at {:#x} -- {}",
              t, e->get_length(), e->get_laddr(), *e);
-      if (!e->is_valid()) {
-        ERRORT("read invalid extent: {}", t, *e);
-        ceph_abort("fatal error");
+      if (t.is_conflicted()) {
+        ERRORT("transaction conflict detected on extent read {}", t, *e);
+	assert(t.is_conflicted());
+	return crimson::ct_error::eagain::make();
       }
+      assert(e->is_valid());
       assert(e->get_laddr() == addr);
       std::ignore = addr;
-      return NodeExtentRef(e);
+      return read_ertr::make_ready_future<NodeExtentRef>(e);
     });
   }
 

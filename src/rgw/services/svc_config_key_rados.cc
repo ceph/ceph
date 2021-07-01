@@ -4,7 +4,7 @@
 
 int RGWSI_ConfigKey_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
-  maybe_insecure_mon_conn = !svc.rados->check_secure_mon_conn();
+  maybe_insecure_mon_conn = !svc.rados->check_secure_mon_conn(dpp);
 
   return 0;
 }

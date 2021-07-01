@@ -701,7 +701,7 @@ void RGWOp_DATALog_Notify::execute(optional_yield y) {
     }
   }
 
-  store->wakeup_data_sync_shards(source_zone, updated_shards);
+  store->wakeup_data_sync_shards(this, source_zone, updated_shards);
 
   op_ret = 0;
 }

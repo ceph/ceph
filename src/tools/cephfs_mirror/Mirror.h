@@ -130,6 +130,8 @@ private:
 
   void schedule_mirror_update_task();
   void update_fs_mirrors();
+
+  void reopen_logs();
 };
 
 } // namespace mirror

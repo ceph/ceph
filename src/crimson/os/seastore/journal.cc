@@ -705,9 +705,9 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
   }
   auto retref = std::make_unique<size_t>(0);
   auto budget_used = *retref;
-  return crimson::do_until(
+  return crimson::repeat(
     [=, &cursor, &budget_used, &handler]() mutable
-    -> scan_valid_records_ertr::future<bool> {
+    -> scan_valid_records_ertr::future<seastar::stop_iteration> {
       return [=, &handler, &cursor, &budget_used] {
 	if (!cursor.last_valid_header_found) {
 	  return read_validate_record_metadata(cursor.offset, nonce
@@ -737,7 +737,7 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
 	      return scan_valid_records_ertr::now();
 	    }
 	  }).safe_then([=, &cursor, &budget_used, &handler] {
-	    return crimson::do_until(
+	    return crimson::repeat(
 	      [=, &budget_used, &cursor, &handler] {
 		logger().debug(
 		  "Journal::scan_valid_records: valid record read, processing queue");
@@ -747,11 +747,13 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
 		   * location since it itself cannot yet have been committed
 		   * at its own time of submission.  Thus, the most recently
 		   * read record must always fall after cursor.last_committed */
-		  return scan_valid_records_ertr::make_ready_future<bool>(true);
+		  return scan_valid_records_ertr::make_ready_future<
+		    seastar::stop_iteration>(seastar::stop_iteration::yes);
 		}
 		auto &next = cursor.pending_records.front();
 		if (next.offset > cursor.last_committed) {
-		  return scan_valid_records_ertr::make_ready_future<bool>(true);
+		  return scan_valid_records_ertr::make_ready_future<
+		    seastar::stop_iteration>(seastar::stop_iteration::yes);
 		}
 		budget_used +=
 		  next.header.dlength + next.header.mdlength;
@@ -761,7 +763,8 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
 		  next.mdbuffer
 		).safe_then([&cursor] {
 		  cursor.pending_records.pop_front();
-		  return scan_valid_records_ertr::make_ready_future<bool>(false);
+		  return scan_valid_records_ertr::make_ready_future<
+		    seastar::stop_iteration>(seastar::stop_iteration::no);
 		});
 	      });
 	  });
@@ -787,8 +790,11 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
 	  });
 	}
       }().safe_then([=, &budget_used, &cursor] {
-	return scan_valid_records_ertr::make_ready_future<bool>(
-	  cursor.is_complete() || budget_used >= budget);
+	if (cursor.is_complete() || budget_used >= budget) {
+	  return seastar::stop_iteration::yes;
+	} else {
+	  return seastar::stop_iteration::no;
+	}
       });
     }).safe_then([retref=std::move(retref)]() mutable -> scan_valid_records_ret {
       return scan_valid_records_ret(

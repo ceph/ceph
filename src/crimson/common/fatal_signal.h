@@ -10,7 +10,7 @@ public:
   FatalSignal();
 
 private:
-  static void signaled(int signum, const siginfo_t* siginfo);
+  static void signaled(int signum, const siginfo_t& siginfo);
 
   template <int... SigNums>
   void install_oneshot_signals_handler();

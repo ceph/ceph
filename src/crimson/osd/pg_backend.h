@@ -9,6 +9,8 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <boost/container/flat_set.hpp>
 
+#include "include/rados.h"
+
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/acked_peers.h"
@@ -188,6 +190,14 @@ public:
     const hobject_t& soid,
     std::string_view key) const;
   get_attr_ierrorator::future<> get_xattrs(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  using cmp_xattr_errorator = ::crimson::os::FuturizedStore::get_attr_errorator;
+  using cmp_xattr_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      cmp_xattr_errorator>;
+  cmp_xattr_ierrorator::future<> cmp_xattr(
     const ObjectState& os,
     OSDOp& osd_op) const;
   using rm_xattr_ertr = crimson::errorator<crimson::ct_error::enoent>;

@@ -4211,7 +4211,7 @@ void Objecter::_finish_pool_stat_op(PoolStatOp *op, int r)
   delete op;
 }
 
-void Objecter::get_fs_stats(boost::optional<int64_t> poolid,
+void Objecter::get_fs_stats(std::optional<int64_t> poolid,
 			    decltype(StatfsOp::onfinish)&& onfinish)
 {
   ldout(cct, 10) << "get_fs_stats" << dendl;

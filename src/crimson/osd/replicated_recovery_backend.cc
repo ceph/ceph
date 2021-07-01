@@ -927,7 +927,7 @@ ReplicatedRecoveryBackend::prep_push_target(
   bool complete,
   bool clear_omap,
   ObjectStore::Transaction* t,
-  const map<string, bufferlist>& attrs,
+  const map<string, bufferlist, less<>>& attrs,
   bufferlist&& omap_header)
 {
   if (!first) {
@@ -1003,7 +1003,7 @@ ReplicatedRecoveryBackend::submit_push_data(
   interval_set<uint64_t>&& intervals_included,
   bufferlist&& data_included,
   bufferlist&& omap_header,
-  const map<string, bufferlist> &attrs,
+  const map<string, bufferlist, less<>> &attrs,
   map<string, bufferlist>&& omap_entries,
   ObjectStore::Transaction *t)
 {

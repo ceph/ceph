@@ -661,7 +661,7 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
 }
 
 void ActivePyModules::set_store(const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val)
+    const std::string &key, const std::optional<std::string>& val)
 {
   const std::string global_key = PyModule::mgr_store_prefix
                                    + module_name + "/" + key;
@@ -708,7 +708,7 @@ void ActivePyModules::set_store(const std::string &module_name,
 std::pair<int, std::string> ActivePyModules::set_config(
   const std::string &module_name,
   const std::string &key,
-  const boost::optional<std::string>& val)
+  const std::optional<std::string>& val)
 {
   return module_config.set_config(&monc, module_name, key, val);
 }
@@ -730,7 +730,7 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
 void ActivePyModules::update_kv_data(
   const std::string prefix,
   bool incremental,
-  const map<std::string, boost::optional<bufferlist>, std::less<>>& data)
+  const map<std::string, std::optional<bufferlist>, std::less<>>& data)
 {
   std::lock_guard l(lock);
   bool do_config = false;
@@ -987,7 +987,8 @@ PyObject *construct_with_capsule(
   PyObject *module = PyImport_ImportModule(module_name.c_str());
   if (!module) {
     derr << "Failed to import python module:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(module);
 
@@ -995,7 +996,8 @@ PyObject *construct_with_capsule(
       module, (const char*)clsname.c_str());
   if (!wrapper_type) {
     derr << "Failed to get python type:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(wrapper_type);
 
@@ -1008,7 +1010,8 @@ PyObject *construct_with_capsule(
   auto wrapper_instance = PyObject_CallObject(wrapper_type, pArgs);
   if (wrapper_instance == nullptr) {
     derr << "Failed to construct python OSDMap:" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name,
+			   "construct_with_capsule "s + module_name + " " + clsname) << dendl;
   }
   ceph_assert(wrapper_instance != nullptr);
   Py_DECREF(pArgs);
@@ -1114,7 +1117,7 @@ PyObject *ActivePyModules::get_foreign_config(
     value = p->second;
   } else {
     if (!entity.is_client() &&
-	!boost::get<boost::blank>(&opt->daemon_value)) {
+	opt->daemon_value != Option::value_t{}) {
       value = Option::to_str(opt->daemon_value);
     } else {
       value = Option::to_str(opt->value);

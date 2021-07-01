@@ -486,7 +486,9 @@ public:
   using ObjectStore::getattr;
   int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, ceph::buffer::ptr& value) override;
   using ObjectStore::getattrs;
-  int getattrs(CollectionHandle& c, const ghobject_t& oid, std::map<std::string,ceph::buffer::ptr>& aset) override;
+  int getattrs(CollectionHandle& c,
+	       const ghobject_t& oid,
+	       std::map<std::string,ceph::buffer::ptr,std::less<>>& aset) override;
 
   int list_collections(std::vector<coll_t>& ls) override;
   bool collection_exists(const coll_t& c) override;

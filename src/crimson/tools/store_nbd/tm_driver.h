@@ -40,13 +40,15 @@ private:
   std::unique_ptr<BlockSegmentManager> segment_manager;
 
   using TransactionManager = crimson::os::seastore::TransactionManager;
-  std::unique_ptr<TransactionManager> tm;
+  using TMRef = crimson::os::seastore::InterruptedTMRef;
+  TMRef tm;
 
   seastar::future<> mkfs();
   void init();
   void clear();
 
-  using read_extents_ertr = TransactionManager::read_extent_ertr;
+  using read_extents_ertr = crimson::os::seastore::with_trans_ertr<
+    TransactionManager::read_extent_iertr>;
   using read_extents_ret = read_extents_ertr::future<
     crimson::os::seastore::lextent_list_t<crimson::os::seastore::TestBlock>
     >;

@@ -181,6 +181,7 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
       return seastar::now();
     },
     [] (auto&& ctx, ObjectContextRef obc, Ref<PG> pg) {
+      assert(pg);
       auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
       if (emplaced) {
         const auto& [cookie, entity] = ctx.key;
@@ -458,6 +459,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_GETXATTRS:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.get_xattrs(os, osd_op);
+    });
+  case CEPH_OSD_OP_CMPXATTR:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.cmp_xattr(os, osd_op);
     });
   case CEPH_OSD_OP_RMXATTR:
     return do_write_op(

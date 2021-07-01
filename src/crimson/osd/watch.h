@@ -61,6 +61,7 @@ public:
       winfo(winfo),
       entity_name(entity_name),
       timeout_timer([this, pg=std::move(pg)] {
+        assert(pg);
         return do_watch_timeout(pg);
       }) {
   }

@@ -69,11 +69,6 @@ struct collection_manager_test_t :
     auto t = tm->create_transaction();
     checking_mappings(coll_root, *t);
   }
-
-  void submit_transaction(TransactionRef &&t) {
-    tm->submit_transaction(std::move(t)).unsafe_get0();
-    segment_cleaner->run_until_halt().get0();
-  }
 };
 
 TEST_F(collection_manager_test_t, basic)

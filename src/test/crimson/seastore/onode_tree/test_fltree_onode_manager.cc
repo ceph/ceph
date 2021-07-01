@@ -89,7 +89,7 @@ struct fltree_onode_manager_test_t
 	  [this](auto &t) {
 	    return manager->mkfs(*t
 	    ).safe_then([this, &t] {
-	      return tm->submit_transaction(std::move(t));
+	      return tm->submit_transaction(*t);
 	    });
 	  });
       }).safe_then([this] {
@@ -104,7 +104,7 @@ struct fltree_onode_manager_test_t
   void with_transaction(F&& f) {
     auto t = tm->create_transaction();
     std::invoke(f, *t);
-    tm->submit_transaction(std::move(t)).unsafe_get0();
+    submit_transaction(std::move(t));
     segment_cleaner->run_until_halt().get0();
   }
 

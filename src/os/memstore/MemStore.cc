@@ -384,7 +384,7 @@ int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
 }
 
 int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
-		       std::map<std::string,ceph::buffer::ptr>& aset)
+		       std::map<std::string,ceph::buffer::ptr,std::less<>>& aset)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << dendl;

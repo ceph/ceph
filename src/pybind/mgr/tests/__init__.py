@@ -175,11 +175,11 @@ if 'UNITTEST' in os.environ:
                 self._store = {}
 
 
-            if self.__class__.__name__ not in M_classes:
+            if self.__class__ not in M_classes:
                 # call those only once.
                 self._register_commands('')
                 self._register_options('')
-                M_classes.add(self.__class__.__name__)
+                M_classes.add(self.__class__)
 
             super(M, self).__init__()
             self._ceph_get_version = mock.Mock()
