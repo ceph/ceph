@@ -38,7 +38,7 @@ export class OsdSummaryPipe implements PipeTransform {
     });
 
     const downCount = value.osds.length - upCount;
-    const outCount = upCount - inCount;
+    const outCount = value.osds.length - inCount;
     if (downCount > 0 || outCount > 0) {
       osdSummary.push({
         content: '',
