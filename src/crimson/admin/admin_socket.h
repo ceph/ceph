@@ -89,8 +89,6 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
   AdminSocket(AdminSocket&&) = delete;
   AdminSocket& operator=(AdminSocket&&) = delete;
 
-  using hook_server_tag = const void*;
-
   /**
    *  create the async Seastar thread that handles asok commands arriving
    *  over the socket.
