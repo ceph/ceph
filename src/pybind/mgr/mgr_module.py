@@ -177,6 +177,10 @@ class OSDMap(ceph_module.BasePyOSDMap):
     def pool_raw_used_rate(self, pool_id: int) -> float:
         return self._pool_raw_used_rate(pool_id)
 
+    @classmethod
+    def build_simple(cls, epoch: int = 1, uuid: Optional[str] = None, num_osd: int = -1):
+        return cls._build_simple(epoch, uuid, num_osd)
+
     def get_ec_profile(self, name: str) -> Optional[List[Dict[str, str]]]:
         # FIXME: efficient implementation
         d = self._dump()
