@@ -181,9 +181,10 @@ public:
     paddr_t offset,       ///< [in] starting addr
     segment_off_t length  ///< [in] length
   ) {
-    if (auto iter = extents.find_offset(offset);
-	       iter != extents.end()) {
-      auto ret = TCachedExtentRef<T>(static_cast<T*>(&*iter));
+    CachedExtentRef _ret;
+    auto result = query_cache_for_extent(offset, &_ret);
+    if (result == Transaction::get_extent_ret::PRESENT) {
+      auto ret = TCachedExtentRef<T>(static_cast<T*>(_ret.get()));
       return ret->wait_io(
       ).then([ret=std::move(ret)]() mutable -> get_extent_ret<T> {
 	// ret may be invalid, caller must check
@@ -191,7 +192,7 @@ public:
 	  get_extent_ertr::ready_future_marker{},
 	  std::move(ret));
       });
-    } else {
+    } else { // get_extent_ret::ABSENT
       auto ref = CachedExtent::make_cached_extent_ref<T>(
 	alloc_cache_buf(length));
       ref->set_io_wait();
