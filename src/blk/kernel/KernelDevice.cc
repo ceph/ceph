@@ -87,11 +87,11 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
 
 int KernelDevice::_lock()
 {
-  dout(10) << __func__ << " " << fd_directs[WRITE_LIFE_NOT_SET] << dendl;
   // When the block changes, systemd-udevd will open the block,
   // read some information and close it. Then a failure occurs here.
   // So we need to try again here.
   int fd = fd_directs[WRITE_LIFE_NOT_SET];
+  dout(10) << __func__ << " fd=" << fd << dendl;
   uint64_t nr_tries = 0;
   for (;;) {
     struct flock fl = { .l_type = F_WRLCK,
