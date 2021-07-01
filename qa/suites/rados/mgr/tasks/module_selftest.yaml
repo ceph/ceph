@@ -23,3 +23,4 @@ tasks:
   - cephfs_test_runner:
       modules:
         - tasks.mgr.test_module_selftest
+      fail_on_skip: false

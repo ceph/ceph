@@ -3,6 +3,7 @@ import time
 import requests
 import errno
 import logging
+
 from teuthology.exceptions import CommandFailedError
 
 from tasks.mgr.mgr_test_case import MgrTestCase
@@ -49,6 +50,13 @@ class TestModuleSelftest(MgrTestCase):
         self._selftest_plugin("influx")
 
     def test_diskprediction_local(self):
+        self._load_module("selftest")
+        python_version = self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "self-test", "python-version")
+        if tuple(int(v) for v in python_version.split('.')) >= (3, 8):
+            # https://tracker.ceph.com/issues/45147
+            self.skipTest(f'python {python_version} not compatible with '
+                          'diskprediction_local')
         self._selftest_plugin("diskprediction_local")
 
     # Not included in qa/packages/packages.yaml
