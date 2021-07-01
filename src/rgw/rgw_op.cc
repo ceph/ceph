@@ -6145,13 +6145,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   mp.init(s->object->get_name(), upload_id);
 
-  // make reservation for notification if needed
-  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
-				s, rgw::notify::ObjectCreatedCompleteMultipartUpload);
-  op_ret = res->publish_reserve(this);
-  if (op_ret < 0) {
-    return;
-  }
 
   meta_oid = mp.get_meta();
 
@@ -6203,6 +6196,14 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
   attrs = meta_obj->get_attrs();
+  
+  // make reservation for notification if needed
+  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(meta_obj.get(),
+				s, rgw::notify::ObjectCreatedCompleteMultipartUpload, &s->object->get_name());
+  op_ret = res->publish_reserve(this);
+  if (op_ret < 0) {
+    return;
+  }
 
   do {
     op_ret = list_multipart_parts(this, s, upload_id, meta_oid, max_parts,
