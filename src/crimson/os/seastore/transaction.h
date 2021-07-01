@@ -25,8 +25,6 @@ class Transaction;
  */
 class Transaction {
 public:
-  OrderingHandle handle;
-
   using Ref = std::unique_ptr<Transaction>;
   enum class get_extent_ret {
     PRESENT,
@@ -121,6 +119,45 @@ public:
     return conflicted;
   }
 
+  auto &get_handle() {
+    return handle;
+  }
+
+  Transaction(
+    OrderingHandle &&handle,
+    bool weak,
+    journal_seq_t initiated_after
+  ) : weak(weak),
+      retired_gate_token(initiated_after),
+      handle(std::move(handle))
+  {}
+
+
+  ~Transaction() {
+    for (auto i = write_set.begin();
+	 i != write_set.end();) {
+      i->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*i++);
+    }
+  }
+
+  friend class crimson::os::seastore::SeaStore;
+  friend class TransactionConflictCondition;
+
+  void reset_preserve_handle(journal_seq_t initiated_after) {
+    root.reset();
+    offset = 0;
+    read_set.clear();
+    write_set.clear();
+    fresh_block_list.clear();
+    mutated_block_list.clear();
+    retired_set.clear();
+    to_release = NULL_SEG_ID;
+    retired_uncached.clear();
+    retired_gate_token.reset(initiated_after);
+    conflicted = false;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -148,30 +185,11 @@ private:
 
   std::vector<std::pair<paddr_t, extent_len_t>> retired_uncached;
 
-  journal_seq_t initiated_after;
-
   retired_extent_gate_t::token_t retired_gate_token;
 
   bool conflicted = false;
 
-public:
-  Transaction(
-    OrderingHandle &&handle,
-    bool weak,
-    journal_seq_t initiated_after
-  ) : handle(std::move(handle)), weak(weak),
-      retired_gate_token(initiated_after) {}
-
-  ~Transaction() {
-    for (auto i = write_set.begin();
-	 i != write_set.end();) {
-      i->state = CachedExtent::extent_state_t::INVALID;
-      write_set.erase(*i++);
-    }
-  }
-
-  friend class crimson::os::seastore::SeaStore;
-  friend class TransactionConflictCondition;
+  OrderingHandle handle;
 };
 using TransactionRef = Transaction::Ref;
 

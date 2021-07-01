@@ -9,6 +9,8 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include <seastar/core/shared_mutex.hh>
+
 #include "common/safe_io.h"
 #include "os/Transaction.h"
 
@@ -41,13 +43,6 @@ SeaStore::SeaStore(
 {}
 
 SeaStore::~SeaStore() = default;
-
-class SeastoreCollection final : public FuturizedCollection {
-public:
-  template <typename... T>
-  SeastoreCollection(T&&... args) :
-    FuturizedCollection(std::forward<T>(args)...) {}
-};
 
 seastar::future<> SeaStore::stop()
 {
@@ -599,15 +594,7 @@ seastar::future<> SeaStore::do_transaction(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
-  /* TODO: add ordering to Collection
-   *
-   * TransactionManager::submit_transction will ensure that
-   * beginning at that point operations remain ordered through
-   * to the jorunal.  We still need a pipeline stage associated
-   * with each collection to ensure that this portion in
-   * SeaStore::do_transaction remains correctly ordered for operations
-   * submitted on the same collection. TODO
-   */
+  // repeat_with_internal_context ensures ordering via collection lock
   return repeat_with_internal_context(
     _ch,
     std::move(_t),
