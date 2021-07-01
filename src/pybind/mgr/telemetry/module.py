@@ -32,7 +32,7 @@ LAST_REVISION_RE_OPT_IN = 2
 
 # Latest revision of the telemetry report.  Bump this each time we make
 # *any* change.
-REVISION = 4
+REVISION = 3
 
 # History of revisions
 # --------------------
@@ -58,9 +58,6 @@ REVISION = 4
 #   - rbd pool and image count, and rbd mirror mode (pool-level)
 #   - rgw daemons, zones, zonegroups; which rgw frontends
 #   - crush map stats
-#
-# Version 4:
-#   - added a new channel called 'perf' to collect perf counter metrics across the cluster
 
 class Module(MgrModule):
     config = dict()
