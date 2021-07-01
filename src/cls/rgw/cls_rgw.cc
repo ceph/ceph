@@ -563,7 +563,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 		__func__, key.name.c_str(), key.instance.c_str());
         continue;
       }
-      
+
       // filter out noncurrent versions, delete markers, and initial marker
       if (!op.list_versions &&
 	  (!entry.is_visible() || op.start_obj.name == key.name)) {
@@ -3676,7 +3676,7 @@ static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   cls_rgw_gc_list_ret op_ret;
 #define GC_LIST_ENTRIES_DEFAULT 128
-  int ret = gc_list_entries(hctx, op.marker, (op.max ? op.max : GC_LIST_ENTRIES_DEFAULT), op.expired_only, 
+  int ret = gc_list_entries(hctx, op.marker, (op.max ? op.max : GC_LIST_ENTRIES_DEFAULT), op.expired_only,
    op_ret.entries, &op_ret.truncated, op_ret.next_marker);
   if (ret < 0)
     return ret;
