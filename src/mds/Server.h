@@ -80,6 +80,7 @@ enum {
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
   l_mdss_cap_acquisition_throttle,
+  l_mdss_req_getvxattr_latency,
   l_mdss_last,
 };
 
@@ -220,6 +221,7 @@ public:
                           file_layout_t *layout);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
   void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
+  void handle_client_getvxattr(MDRequestRef& mdr);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 

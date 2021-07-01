@@ -7408,6 +7408,121 @@ int Client::_getattr(Inode *in, int mask, const UserPerm& perms, bool force)
   return res;
 }
 
+int Client::_getvxattr(
+  Inode *in, 
+  const UserPerm& perms, 
+  const char *attr_name,
+  ssize_t size,
+  void *value)
+{
+  if (!attr_name || strlen(attr_name) <= 0 || strlen(attr_name) > 255)
+    return -ENODATA;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETVXATTR);
+  filepath path;
+  in->make_nosnap_relative_path(path);
+  req->set_filepath(path);
+  req->set_inode(in);
+  req->set_string2(attr_name);
+
+  bufferlist bl;
+  int res = make_request(req, perms, nullptr, nullptr, (mds_rank_t)-1, &bl);
+  ldout(cct, 10) << __func__ << " result=" << res << dendl;
+
+  if (res < 0)
+    return res;
+
+  auto p = bl.cbegin();
+
+  char buf[256];
+  ssize_t len = 0;
+  std::string s_attr_name{attr_name};
+
+  if (s_attr_name == "ceph.dir.layout"sv) {
+    file_layout_t layout{};
+
+    layout.decode(p);
+
+    std::string layout_inheritance;
+
+    decode(layout_inheritance, p);
+
+    int size = sizeof(buf); // temporary override over the function argument
+
+    len = snprintf(buf, size,
+                   "stripe_unit=%u stripe_count=%u object_size=%u pool=",
+                   layout.stripe_unit, layout.stripe_count, layout.object_size);
+    objecter->with_osdmap([&](const OSDMap& o) {
+        if (o.have_pg_pool(layout.pool_id))
+          len += snprintf(buf + len, size - len, "%s",
+                          o.get_pool_name(layout.pool_id).c_str());
+        else
+          len += snprintf(buf + len, size - len, "%" PRIu64,
+                          (uint64_t)layout.pool_id);
+        });
+    if (layout.pool_ns.length())
+      len += snprintf(buf + len, size - len, " pool_namespace=%s",
+                      layout.pool_ns.c_str());
+
+    len += snprintf(buf + len, size - len, " @%s", layout_inheritance.c_str());
+  } else if (s_attr_name == "ceph.dir.layout.stripe_unit"sv) {
+    file_layout_t layout{};
+    decode(layout.stripe_unit, p);
+    len = snprintf(buf, size, "%u", layout.stripe_unit);
+  } else if (s_attr_name == "ceph.dir.layout.stripe_count"sv) {
+    file_layout_t layout{};
+    decode(layout.stripe_count, p);
+    len = snprintf(buf, size, "%u", layout.stripe_count);
+  } else if (s_attr_name == "ceph.dir.layout.object_size"sv) {
+    file_layout_t layout{};
+    decode(layout.object_size, p);
+    len = snprintf(buf, size, "%u", layout.object_size);
+  } else if (s_attr_name == "ceph.dir.layout.pool"sv) {
+    file_layout_t layout{};
+    decode(layout.pool_id, p);
+    objecter->with_osdmap([&](const OSDMap& o) {
+        if (o.have_pg_pool(layout.pool_id))
+          len = snprintf(buf + len, size - len, "%s",
+                         o.get_pool_name(layout.pool_id).c_str());
+        else
+          len = snprintf(buf + len, size - len, "%" PRIu64,
+                         (uint64_t)layout.pool_id);
+        });
+  } else if (s_attr_name == "ceph.dir.layout.pool_namespace"sv) {
+    file_layout_t layout{};
+    decode(layout.pool_ns, p);
+    len = snprintf(buf, size, "%s", layout.pool_ns.c_str());
+  } else if (s_attr_name == "ceph.dir.pin"sv) {
+    mds_rank_t rank;
+    decode(rank, p);
+    len = snprintf(buf, size, "%d", rank);
+  } else if (s_attr_name == "ceph.dir.pin.random"sv) {
+    double val = 0.0;
+    decode(val, p);
+    len = snprintf(buf, sizeof(buf), "%.2f", val);
+  } else if (s_attr_name == "ceph.dir.pin.distributed"sv) {
+    bool val = 0;
+    decode(val, p);
+    len = snprintf(buf, sizeof(buf), "%s",
+        boost::lexical_cast<std::string>(val).c_str());
+  } else {
+    res = -CEPHFS_EINVAL;
+  }
+  if (res >= 0) {
+    if (size != 0) {
+      if (len > size) {
+        res = -CEPHFS_ERANGE;
+        goto out;
+      } else {
+        memcpy(value, buf, len);
+      }
+    }
+    res = len;
+  }
+out:
+  return res;
+}
+
 int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms, InodeRef *inp)
 {
@@ -12214,6 +12329,12 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     goto out;
   }
 
+  // for new getvxattr RPC
+  if (strncmp(name, "ceph.", 5) == 0) {
+    r = _getvxattr(in, perms, name, size, value);
+    goto out;
+  }
+
   if (acl_type == NO_ACL && !strncmp(name, "system.", 7)) {
     r = -CEPHFS_EOPNOTSUPP;
     goto out;
@@ -12223,7 +12344,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
   if (r == 0) {
     string n(name);
     r = -CEPHFS_ENODATA;
-   if (in->xattrs.count(n)) {
+    if (in->xattrs.count(n)) {
       r = in->xattrs[n].length();
       if (r > 0 && size != 0) {
 	if (size >= (unsigned)r)
@@ -12714,6 +12835,7 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%ld.%09ld", (long)in->rstat.rctime.sec(),
       (long)in->rstat.rctime.nsec());
 }
+#if 0
 bool Client::_vxattrcb_dir_pin_exists(Inode *in)
 {
   return in->dir_pin != -CEPHFS_ENODATA;
@@ -12722,7 +12844,7 @@ size_t Client::_vxattrcb_dir_pin(Inode *in, char *val, size_t size)
 {
   return snprintf(val, size, "%ld", (long)in->dir_pin);
 }
-
+#endif
 bool Client::_vxattrcb_snap_btime_exists(Inode *in)
 {
   return !in->snap_btime.is_zero();
@@ -12798,18 +12920,6 @@ size_t Client::_vxattrcb_client_id(Inode *in, char *val, size_t size)
 }
 
 const Client::VXattr Client::_dir_vxattrs[] = {
-  {
-    name: "ceph.dir.layout",
-    getxattr_cb: &Client::_vxattrcb_layout,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_layout_exists,
-    flags: 0,
-  },
-  XATTR_LAYOUT_FIELD(dir, layout, stripe_unit),
-  XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
-  XATTR_LAYOUT_FIELD(dir, layout, object_size),
-  XATTR_LAYOUT_FIELD(dir, layout, pool),
-  XATTR_LAYOUT_FIELD(dir, layout, pool_namespace),
   XATTR_NAME_CEPH(dir, entries, VXATTR_DIRSTAT),
   XATTR_NAME_CEPH(dir, files, VXATTR_DIRSTAT),
   XATTR_NAME_CEPH(dir, subdirs, VXATTR_DIRSTAT),
@@ -12828,6 +12938,7 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   },
   XATTR_QUOTA_FIELD(quota, max_bytes),
   XATTR_QUOTA_FIELD(quota, max_files),
+#if 0
   {
     name: "ceph.dir.pin",
     getxattr_cb: &Client::_vxattrcb_dir_pin,
@@ -12835,6 +12946,7 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     exists_cb: &Client::_vxattrcb_dir_pin_exists,
     flags: 0,
   },
+#endif
   {
     name: "ceph.snap.btime",
     getxattr_cb: &Client::_vxattrcb_snap_btime,

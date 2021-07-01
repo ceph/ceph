@@ -198,6 +198,8 @@ void Server::create_logger()
                    "Request type set file layout latency");
   plb.add_time_avg(l_mdss_req_setdirlayout_latency, "req_setdirlayout_latency",
                    "Request type set directory layout latency");
+  plb.add_time_avg(l_mdss_req_getvxattr_latency, "req_getvxattr_latency",
+                   "Request type get virtual extended attribute latency");
   plb.add_time_avg(l_mdss_req_setxattr_latency, "req_setxattr_latency",
                    "Request type set extended attribute latency");
   plb.add_time_avg(l_mdss_req_rmxattr_latency, "req_rmxattr_latency",
@@ -1993,6 +1995,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_SETDIRLAYOUT:
     code = l_mdss_req_setdirlayout_latency;
     break;
+  case CEPH_MDS_OP_GETVXATTR:
+    code = l_mdss_req_getvxattr_latency;
+    break;
   case CEPH_MDS_OP_SETXATTR:
     code = l_mdss_req_setxattr_latency;
     break;
@@ -2562,6 +2567,9 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     // lookupsnap does not reference a CDentry; treat it as a getattr
   case CEPH_MDS_OP_GETATTR:
     handle_client_getattr(mdr, false);
+    break;
+  case CEPH_MDS_OP_GETVXATTR:
+    handle_client_getvxattr(mdr);
     break;
 
   case CEPH_MDS_OP_SETATTR:
@@ -6252,6 +6260,119 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
+void Server::handle_client_getvxattr(MDRequestRef& mdr)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+  string name(req->get_path2());
+
+  // is a ceph virtual xattr?
+  if (!is_ceph_vxattr(name)) {
+    respond_to_request(mdr, -CEPHFS_EINVAL);
+    return;
+  }
+
+  CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+  if (!cur) {
+    return;
+  }
+  // so far we need all these locks for getting
+  // 1. dir layout and
+  // 2. dir pinning policies
+  MutationImpl::LockOpVec lov;
+  lov.add_rdlock(&cur->xattrlock);
+  lov.add_rdlock(&cur->snaplock);
+  lov.add_rdlock(&cur->policylock);
+  if (!mds->locker->acquire_locks(mdr, lov))
+    return;
+
+  if (!cur->is_dir()) {
+    respond_to_request(mdr, -CEPHFS_ENOTDIR);
+    return;
+  }
+
+  int r = 0;
+  ceph::bufferlist bl;
+  // handle these vxattrs
+  if (name.substr(0, 15) == "ceph.dir.layout"sv) {
+    std::string layout_field;
+
+    if (name.length() > 15)
+      layout_field = name.substr(15);
+
+    struct layout_xattr_info_t {
+      const file_layout_t& layout;
+      const std::string    inheritance_status;
+
+      layout_xattr_info_t(const file_layout_t& l, const std::string& is)
+        : layout(l), inheritance_status(is) { }
+    };
+
+    auto get_inherited_layout = [&](CInode *cur) -> layout_xattr_info_t {
+      auto orig_in = cur;
+      while (cur) {
+        if (cur->get_projected_inode()->has_layout()) {
+          if (cur == orig_in) {
+            // we've found a new layout at this inode
+            return {cur->get_projected_inode()->layout, "new"s};
+          } else {
+            return {cur->get_projected_inode()->layout, "inherited"s};
+          }
+        }
+
+        if (cur->is_root())
+          break;
+
+        cur = cur->get_parent_dir()->get_inode();
+      }
+      return {mdcache->default_file_layout, "default"s};
+    };
+
+    const auto& [layout, inheritance] = get_inherited_layout(cur);
+
+    if (layout_field == ""sv) {
+      layout.encode(bl, (uint64_t)-1);
+      encode(inheritance, bl);
+    } else if (layout_field == ".stripe_unit"sv) {
+      encode(layout.stripe_unit, bl);
+    } else if (layout_field == ".stripe_count"sv) {
+      encode(layout.stripe_count, bl);
+    } else if (layout_field == ".object_size"sv) {
+      encode(layout.object_size, bl);
+    } else if (layout_field == ".pool"sv) {
+      encode(layout.pool_id, bl);
+    } else if (layout_field == ".pool_namespace"sv) {
+      encode(layout.pool_ns, bl);
+    } else {
+      r = -CEPHFS_EINVAL;
+    }
+  } else if (name.substr(0, 12) == "ceph.dir.pin"sv) {
+    std::string pin_field;
+
+    if (name.length() > 12)
+      pin_field = name.substr(12);
+
+    if (pin_field == ""sv) {
+      encode(cur->get_export_pin(), bl);
+    } else if (pin_field == ".random"sv) {
+      encode(cur->get_ephemeral_rand(), bl);
+    } else if (pin_field == ".distributed"sv) {
+      encode(cur->is_ephemeral_dist(), bl);
+    } else {
+      // otherwise respond as invalid request
+      // since we only handle ceph vxattrs here
+      r = -CEPHFS_EINVAL;
+    }
+  } else {
+    // otherwise respond as invalid request
+    // since we only handle ceph vxattrs here
+    r = -CEPHFS_EINVAL;
+  }
+
+  if (r == 0)
+    mdr->reply_extra_bl = bl;
+
+  respond_to_request(mdr, r);
+}
 
 // =================================================================
 // DIRECTORY and NAMESPACE OPS
