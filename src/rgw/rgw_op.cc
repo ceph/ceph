@@ -5007,12 +5007,12 @@ bool RGWCopyObj::parse_copy_location(const boost::string_view& url_src,
   if (dec_src[0] == '/')
     dec_src.remove_prefix(1);
 
-  pos = dec_src.find('/');
+  pos = url_decode(dec_src).find('/');
   if (pos == string::npos)
     return false;
 
-  bucket_name = url_decode(dec_src.substr(0, pos));
-  key.name = url_decode(dec_src.substr(pos + 1));
+  bucket_name = url_decode(dec_src).substr(0, pos);
+  key.name = url_decode(dec_src).substr(pos + 1);
 
   if (key.name.empty()) {
     return false;
