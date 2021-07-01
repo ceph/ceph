@@ -225,7 +225,7 @@ use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
 
 .. prompt:: bash $
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el7.noarch.rpm'
+    su -c 'rpm -Uvh https://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el8.noarch.rpm'
 
 You can download the RPMs directly from
 
@@ -297,15 +297,15 @@ of a repo file. It can be retrieved via an HTTP request, for example
 
 .. prompt:: bash $
 
-    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/centos/7/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/centos/8/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
 
 The use of ``latest`` in the url, means it will figure out which is the last
 commit that has been built. Alternatively, a specific sha1 can be specified.
-For CentOS 7 and the master branch of Ceph, it would look like
+For CentOS 8 and the master branch of Ceph, it would look like
 
 .. prompt:: bash $
 
-    curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/centos/7/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
+    curl -L https://shaman.ceph.com/api/repos/ceph/master/488e6be0edff7eb18343fd5c7e2d7ed56435888f/centos/8/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
 
 .. warning:: Development repositories are no longer available after two weeks.
@@ -351,7 +351,7 @@ To add the EPEL repository, execute the following
 
 .. prompt:: bash $
 
-   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
 
 Ceph requires the following packages:
 
@@ -362,7 +362,7 @@ Ceph requires the following packages:
 - gperftools-libs
 
 
-Packages are currently built for the RHEL/CentOS7 (``el7``) platforms.  The
+Packages are currently built for the RHEL/CentOS8 (``el8``) platforms.  The
 repository package installs the repository details on your local system for use
 with ``yum``. Replace ``{distro}`` with your distribution.
 
