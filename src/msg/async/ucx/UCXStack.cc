@@ -249,6 +249,8 @@ void UCXStack::spawn_worker(std::function<void ()> &&worker_func)
 
 void UCXStack::join_worker(unsigned idx)
 {
+  ceph_assert(worker_threads.size() > idx && worker_threads[idx].joinable());
+  worker_threads[idx].join();
 }
 
 void UCXStack::request_init(void *request)
