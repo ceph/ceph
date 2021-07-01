@@ -116,6 +116,11 @@ public:
     return cache->create_weak_transaction();
   }
 
+  /// Resets transaction
+  void reset_transaction_preserve_handle(Transaction &t) {
+    return cache->reset_transaction_preserve_handle(t);
+  }
+
   /**
    * get_pin
    *
@@ -612,6 +617,7 @@ public:
   FORWARD(close)
   FORWARD(create_transaction)
   FORWARD(create_weak_transaction)
+  FORWARD(reset_transaction_preserve_handle)
   INT_FORWARD(get_pin)
   INT_FORWARD(get_pins)
   PARAM_INT_FORWARD(pin_to_extent)

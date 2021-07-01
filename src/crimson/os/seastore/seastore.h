@@ -25,10 +25,18 @@
 
 namespace crimson::os::seastore {
 
-class SeastoreCollection;
 class Onode;
 using OnodeRef = boost::intrusive_ptr<Onode>;
 class TransactionManager;
+
+class SeastoreCollection final : public FuturizedCollection {
+public:
+  template <typename... T>
+  SeastoreCollection(T&&... args) :
+    FuturizedCollection(std::forward<T>(args)...) {}
+
+  seastar::shared_mutex ordering_lock;
+};
 
 class SeaStore final : public FuturizedStore {
 public:
@@ -128,8 +136,10 @@ private:
 
     internal_context_t(
       CollectionRef ch,
-      ceph::os::Transaction &&_ext_transaction)
+      ceph::os::Transaction &&_ext_transaction,
+      TransactionRef &&transaction)
       : ch(ch), ext_transaction(std::move(_ext_transaction)),
+	transaction(std::move(transaction)),
 	iter(ext_transaction.begin()) {}
 
     TransactionRef transaction;
@@ -137,8 +147,9 @@ private:
 
     ceph::os::Transaction::iterator iter;
 
-    void reset(TransactionRef &&t) {
-      transaction = std::move(t);
+    template <typename TM>
+    void reset_preserve_handle(TM &tm) {
+      tm->reset_transaction_preserve_handle(*transaction);
       onodes.clear();
       iter = ext_transaction.begin();
     }
@@ -152,18 +163,24 @@ private:
     ceph::os::Transaction &&t,
     F &&f) {
     return seastar::do_with(
-      internal_context_t{ ch, std::move(t) },
+      internal_context_t(
+	ch, std::move(t),
+	transaction_manager->create_transaction()),
       std::forward<F>(f),
       [this](auto &ctx, auto &f) {
-	return repeat_eagain([&]() {
-	  ctx.reset(transaction_manager->create_transaction());
-	  return std::invoke(f, ctx);
-	}).handle_error(
-	  crimson::ct_error::eagain::pass_further{},
-	  crimson::ct_error::all_same_way([&ctx](auto e) {
-	    on_error(ctx.ext_transaction);
-	  })
-	);
+	return ctx.transaction->get_handle().take_collection_lock(
+	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
+	).then([&, this] {
+	  return repeat_eagain([&, this] {
+	    ctx.reset_preserve_handle(transaction_manager);
+	    return std::invoke(f, ctx);
+	  }).handle_error(
+	    crimson::ct_error::eagain::pass_further{},
+	    crimson::ct_error::all_same_way([&ctx](auto e) {
+	      on_error(ctx.ext_transaction);
+	    })
+	  );
+	});
       });
   }
 
