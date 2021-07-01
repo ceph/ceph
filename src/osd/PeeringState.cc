@@ -365,11 +365,21 @@ void PeeringState::remove_down_peer_info(const OSDMapRef &osdmap)
       peer_missing.erase(p->first);
       peer_log_requested.erase(p->first);
       peer_missing_requested.erase(p->first);
-      peer_purged.erase(p->first);
       peer_info.erase(p++);
       removed = true;
     } else
       ++p;
+  }
+
+  // Remove any downed osds from peer_purged so we can re-purge if necessary
+  auto it = peer_purged.begin();
+  while (it != peer_purged.end()) {
+    if (!osdmap->is_up(it->osd)) {
+      psdout(10) << " dropping down osd." << *it << " from peer_purged" << dendl;
+      peer_purged.erase(it++);
+    } else {
+      ++it;
+    }
   }
 
   // if we removed anyone, update peers (which include peer_info)
