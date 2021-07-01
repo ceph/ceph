@@ -426,22 +426,18 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       return f.get();
     });
   } else if (what == "mgr_ips") {
-    return cluster_state.with_mgrmap([&](const MgrMap &mgr_map) {
-      with_gil_t with_gil{no_gil};
-      f.open_array_section("ips");
-      std::set<std::string> did;
-      for (auto& i : server.get_myaddrs().v) {
-	std::string ip = i.ip_only_to_str();
-	if (did.count(ip)) {
-	  continue;
-	}
-	did.insert(ip);
+    entity_addrvec_t myaddrs = server.get_myaddrs();
+    with_gil_t with_gil{no_gil};
+    f.open_array_section("ips");
+    std::set<std::string> did;
+    for (auto& i : myaddrs.v) {
+      std::string ip = i.ip_only_to_str();
+      if (auto [where, inserted] = did.insert(ip); inserted) {
 	f.dump_string("ip", ip);
       }
-      f.close_section();
-      return f.get();
-    });
-
+    }
+    f.close_section();
+    return f.get();
   } else if (what == "have_local_config_map") {
     with_gil_t with_gil{no_gil};
     f.dump_bool("have_local_config_map", have_local_config_map);
