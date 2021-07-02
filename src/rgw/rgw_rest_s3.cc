@@ -3577,6 +3577,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {
+  if (s->info.args.sub_resource_exists("encryption"))
+    return nullptr;
+
   if (s->info.args.sub_resource_exists("logging"))
     return new RGWGetBucketLogging_ObjStore_S3;
 
@@ -3629,8 +3632,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 {
-  if (s->info.args.sub_resource_exists("logging"))
-    return NULL;
+  if (s->info.args.sub_resource_exists("logging") ||
+      s->info.args.sub_resource_exists("encryption"))
+    return nullptr;
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
   if (s->info.args.sub_resource_exists("website")) {
@@ -3659,6 +3663,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
+  if (s->info.args.sub_resource_exists("logging") ||
+      s->info.args.sub_resource_exists("encryption"))
+    return nullptr;
+
   if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
   } else if(is_lc_op()) {
