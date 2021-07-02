@@ -393,14 +393,13 @@ void Cache::complete_commit(
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      continue;
+    }
     DEBUGT("mutated {}", t, *i);
     assert(i->prior_instance);
     i->on_delta_write(final_block_start);
     i->prior_instance = CachedExtentRef();
-    if (!i->is_valid()) {
-      DEBUGT("not dirtying invalid {}", t, *i);
-      continue;
-    }
     i->state = CachedExtent::extent_state_t::DIRTY;
     if (i->version == 1 || i->get_type() == extent_types_t::ROOT) {
       i->dirty_from_or_retired_at = seq;
@@ -416,6 +415,9 @@ void Cache::complete_commit(
   }
 
   for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      continue;
+    }
     i->complete_io();
   }
 
