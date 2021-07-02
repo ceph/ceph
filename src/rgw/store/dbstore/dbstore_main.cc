@@ -13,8 +13,6 @@ struct thr_args {
   int thr_id;
 };
 
-int loglevel = L_FULLDEBUG;
-
 void* process(void *arg)
 {
   struct thr_args *t_args = (struct thr_args*)arg;
@@ -23,7 +21,7 @@ void* process(void *arg)
   int thr_id = t_args->thr_id;
   int ret = -1;
 
-  dbout(L_EVENT)<<"Entered thread:"<<thr_id<<"\n";
+  cout<<"Entered thread:"<<thr_id<<"\n";
 
   string user1 = "User1";
   string bucketa = "rgw";
@@ -113,7 +111,7 @@ void* process(void *arg)
 
   db->ListAllUsers(&params);
   db->ListAllBuckets(&params);
-  dbout(L_EVENT)<<"Exiting thread:"<<thr_id<<"\n";
+  cout<<"Exiting thread:"<<thr_id<<"\n";
 
   return 0;
 }
@@ -121,9 +119,10 @@ void* process(void *arg)
 int main(int argc, char *argv[])
 {
   string tenant = "Redhat";
-  string logfile;
+  string logfile = "rgw_dbstore_bin.log";
+  int loglevel = 20;
 
-  class DBStoreManager dbsm;
+  class DBStoreManager *dbsm;
   class DBStore *dbs;
   int rc = 0, tnum = 0;
   void *res;
@@ -133,23 +132,25 @@ int main(int argc, char *argv[])
   pthread_t threads[num_thr];
   struct thr_args t_args[num_thr];
 
+
   cout << "loglevel  " << loglevel << "\n";
-  // format: ./dbstore logfile loglevel
+  // format: ./dbstore-bin logfile loglevel
   if (argc == 3) {
-    logfile = argv[1];
-    loglevel = (atoi)(argv[2]);
-    cout << "loglevel set to " << loglevel << "\n";
+	logfile = argv[1];
+	loglevel = (atoi)(argv[2]);
+	cout << "loglevel set to " << loglevel << "\n";
   }
 
-  dbs = dbsm.getDBStore(tenant, true);
+  dbsm = new DBStoreManager(logfile, loglevel);
+  dbs = dbsm->getDBStore(tenant, true);
 
-  dbout(L_EVENT)<<"No. of threads being created = "<<num_thr<<"\n";
+  cout<<"No. of threads being created = "<<num_thr<<"\n";
 
   /* Initialize thread creation attributes */
   rc = pthread_attr_init(&attr);
 
   if (rc != 0) {
-    dbout(L_ERR)<<" error in pthread_attr_init \n";
+    cout<<" error in pthread_attr_init \n";
     goto out;
   }
 
@@ -159,11 +160,11 @@ int main(int argc, char *argv[])
     rc = pthread_create((pthread_t*)&threads[tnum], &attr, &process,
         &t_args[tnum]);
     if (rc != 0) {
-      dbout(L_ERR)<<" error in pthread_create \n";
+      cout<<" error in pthread_create \n";
       goto out;
     }
 
-    dbout(L_FULLDEBUG)<<"Created thread (thread-id:"<<tnum<<")\n";
+    cout<<"Created thread (thread-id:"<<tnum<<")\n";
   }
 
   /* Destroy the thread attributes object, since it is no
@@ -171,7 +172,7 @@ int main(int argc, char *argv[])
 
   rc = pthread_attr_destroy(&attr);
   if (rc != 0) {
-    dbout(loglevel)<<"error in pthread_attr_destroy \n";
+    cout<<"error in pthread_attr_destroy \n";
   }
 
   /* Now join with each thread, and display its returned value */
@@ -179,14 +180,14 @@ int main(int argc, char *argv[])
   for (tnum = 0; tnum < num_thr; tnum++) {
     rc = pthread_join(threads[tnum], &res);
     if (rc != 0) {
-      dbout(L_ERR)<<"error in pthread_join \n";
+      cout<<"error in pthread_join \n";
     } else {
-      dbout(L_EVENT)<<"Joined with thread "<<tnum<<"\n";
+      cout<<"Joined with thread "<<tnum<<"\n";
     }
   }
 
 out:
-  dbsm.destroyAllHandles();
+  dbsm->destroyAllHandles();
 
   return 0;
 }

@@ -16,15 +16,20 @@ class SQLiteDB : public DBStore, public DBOp{
   private:
     sqlite3_mutex *mutex = NULL;
 
+  protected:
+    CephContext *cct;
+
   public:	
     sqlite3_stmt *stmt = NULL;
     DBOpPrepareParams PrepareParams;
 
-    SQLiteDB(string db_name) : DBStore(db_name) {
+    SQLiteDB(string db_name, CephContext *_cct) : DBStore(db_name, _cct) {
+      cct = _cct;
       InitPrepareParams(PrepareParams);
     }
-    SQLiteDB(sqlite3 *dbi) : DBStore() {
+    SQLiteDB(sqlite3 *dbi, CephContext *_cct) : DBStore(_cct) {
       db = (void*)dbi;
+      cct = _cct;
       InitPrepareParams(PrepareParams);
     }
     ~SQLiteDB() {}
@@ -34,13 +39,12 @@ class SQLiteDB : public DBStore, public DBOp{
     void *openDB();
     int closeDB();
     int Step(DBOpInfo &op, sqlite3_stmt *stmt,
-        int (*cbk)(DBOpInfo &op, sqlite3_stmt *stmt));
+        int (*cbk)(CephContext *cct, DBOpInfo &op, sqlite3_stmt *stmt));
     int Reset(sqlite3_stmt *stmt);
     int InitializeDBOps();
     int FreeDBOps();
     /* default value matches with sqliteDB style */
     int InitPrepareParams(DBOpPrepareParams &params) { return 0; }
-
 
     int createTables();
     int createBucketTable(DBOpParams *params);
@@ -62,9 +66,10 @@ class SQLiteDB : public DBStore, public DBOp{
 class SQLObjectOp : public ObjectOp {
   private:
     sqlite3 **sdb = NULL;
+    CephContext *cct;
 
   public:
-    SQLObjectOp(sqlite3 **sdbi) : sdb(sdbi) {};
+    SQLObjectOp(sqlite3 **sdbi, CephContext *_cct) : sdb(sdbi), cct(_cct) {};
     ~SQLObjectOp() {}
 
     int InitializeObjectOps();
@@ -77,7 +82,7 @@ class SQLInsertUser : public SQLiteDB, public InsertUserOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLInsertUser(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
+    SQLInsertUser(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
     ~SQLInsertUser() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -93,7 +98,7 @@ class SQLRemoveUser : public SQLiteDB, public RemoveUserOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLRemoveUser(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
+    SQLRemoveUser(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
     ~SQLRemoveUser() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -112,7 +117,7 @@ class SQLGetUser : public SQLiteDB, public GetUserOp {
     sqlite3_stmt *userid_stmt = NULL; // Prepared statement to query by user_id
 
   public:
-    SQLGetUser(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
+    SQLGetUser(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
     ~SQLGetUser() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -134,7 +139,7 @@ class SQLInsertBucket : public SQLiteDB, public InsertBucketOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLInsertBucket(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
+    SQLInsertBucket(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
     ~SQLInsertBucket() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -152,7 +157,7 @@ class SQLUpdateBucket : public SQLiteDB, public UpdateBucketOp {
     sqlite3_stmt *owner_stmt = NULL; // Prepared statement
 
   public:
-    SQLUpdateBucket(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
+    SQLUpdateBucket(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
     ~SQLUpdateBucket() {
       if (info_stmt)
         sqlite3_finalize(info_stmt);
@@ -172,7 +177,7 @@ class SQLRemoveBucket : public SQLiteDB, public RemoveBucketOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLRemoveBucket(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
+    SQLRemoveBucket(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
     ~SQLRemoveBucket() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -188,7 +193,7 @@ class SQLGetBucket : public SQLiteDB, public GetBucketOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLGetBucket(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
+    SQLGetBucket(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
     ~SQLGetBucket() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -204,7 +209,7 @@ class SQLListUserBuckets : public SQLiteDB, public ListUserBucketsOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLListUserBuckets(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
+    SQLListUserBuckets(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
     ~SQLListUserBuckets() {
       if (stmt)
         sqlite3_finalize(stmt);
@@ -220,8 +225,8 @@ class SQLInsertObject : public SQLiteDB, public InsertObjectOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLInsertObject(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
-    SQLInsertObject(sqlite3 **sdbi) : SQLiteDB(*sdbi), sdb(sdbi) {}
+    SQLInsertObject(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
+    SQLInsertObject(sqlite3 **sdbi, CephContext *cct) : SQLiteDB(*sdbi, cct), sdb(sdbi) {}
 
     ~SQLInsertObject() {
       if (stmt)
@@ -238,8 +243,8 @@ class SQLRemoveObject : public SQLiteDB, public RemoveObjectOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLRemoveObject(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
-    SQLRemoveObject(sqlite3 **sdbi) : SQLiteDB(*sdbi), sdb(sdbi) {}
+    SQLRemoveObject(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
+    SQLRemoveObject(sqlite3 **sdbi, CephContext *cct) : SQLiteDB(*sdbi, cct), sdb(sdbi) {}
 
     ~SQLRemoveObject() {
       if (stmt)
@@ -256,8 +261,8 @@ class SQLListObject : public SQLiteDB, public ListObjectOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLListObject(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
-    SQLListObject(sqlite3 **sdbi) : SQLiteDB(*sdbi), sdb(sdbi) {}
+    SQLListObject(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
+    SQLListObject(sqlite3 **sdbi, CephContext *cct) : SQLiteDB(*sdbi, cct), sdb(sdbi) {}
 
     ~SQLListObject() {
       if (stmt)
@@ -274,8 +279,8 @@ class SQLPutObjectData : public SQLiteDB, public PutObjectDataOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLPutObjectData(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
-    SQLPutObjectData(sqlite3 **sdbi) : SQLiteDB(*sdbi), sdb(sdbi) {}
+    SQLPutObjectData(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
+    SQLPutObjectData(sqlite3 **sdbi, CephContext *cct) : SQLiteDB(*sdbi, cct), sdb(sdbi) {}
 
     ~SQLPutObjectData() {
       if (stmt)
@@ -292,8 +297,8 @@ class SQLGetObjectData : public SQLiteDB, public GetObjectDataOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLGetObjectData(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
-    SQLGetObjectData(sqlite3 **sdbi) : SQLiteDB(*sdbi), sdb(sdbi) {}
+    SQLGetObjectData(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
+    SQLGetObjectData(sqlite3 **sdbi, CephContext *cct) : SQLiteDB(*sdbi, cct), sdb(sdbi) {}
 
     ~SQLGetObjectData() {
       if (stmt)
@@ -310,8 +315,8 @@ class SQLDeleteObjectData : public SQLiteDB, public DeleteObjectDataOp {
     sqlite3_stmt *stmt = NULL; // Prepared statement
 
   public:
-    SQLDeleteObjectData(void **db) : SQLiteDB((sqlite3 *)(*db)), sdb((sqlite3 **)db) {}
-    SQLDeleteObjectData(sqlite3 **sdbi) : SQLiteDB(*sdbi), sdb(sdbi) {}
+    SQLDeleteObjectData(void **db, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), cct), sdb((sqlite3 **)db) {}
+    SQLDeleteObjectData(sqlite3 **sdbi, CephContext *cct) : SQLiteDB(*sdbi, cct), sdb(sdbi) {}
 
     ~SQLDeleteObjectData() {
       if (stmt)

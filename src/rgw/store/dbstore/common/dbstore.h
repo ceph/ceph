@@ -18,7 +18,9 @@
 #include "dbstore_log.h"
 #include "rgw/rgw_sal.h"
 #include "rgw/rgw_bucket.h"
-//#include "rgw/rgw_common.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "common/ceph_context.h"
 
 using namespace std;
 
@@ -57,6 +59,8 @@ struct DBOpInfo {
 };
 
 struct DBOpParams {
+  CephContext *cct;
+
   /* Tables */
   string user_table;
   string bucket_table;
@@ -366,7 +370,7 @@ class DBOp {
         return fmt::format(CreateQuotaTableQ.c_str(),
             params->quota_table.c_str());
 
-      dbout(L_ERR)<<"Incorrect table type("<<type<<") specified \n";
+      dbout(params->cct, 0) << "Incorrect table type("<<type<<") specified" << dbendl;
 
       return NULL;
     }
@@ -763,17 +767,19 @@ class DBStore {
     uint64_t max_bucket_id = 0;
 
   public:	
-    DBStore(string db_name) : db_name(db_name),
+    DBStore(string db_name, CephContext *_cct) : db_name(db_name),
     user_table(db_name+".user.table"),
     bucket_table(db_name+".bucket.table"),
-    quota_table(db_name+".quota.table")
+    quota_table(db_name+".quota.table"),
+    cct(_cct)
   {}
     /*	DBStore() {}*/
 
-    DBStore() : db_name("default_db"),
+    DBStore(CephContext *_cct) : db_name("default_db"),
     user_table("user.table"),
     bucket_table("bucket.table"),
-    quota_table("quota.table")
+    quota_table("quota.table"),
+    cct(_cct)
   {}
     virtual	~DBStore() {}
 

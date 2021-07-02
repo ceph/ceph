@@ -9,6 +9,9 @@
 #include <string>
 #include <stdio.h>
 #include <iostream>
+#include "common/ceph_context.h"
+#include "common/dbstore.h"
+#include "sqlite/sqliteDB.h"
 
 using namespace std;
 
@@ -22,10 +25,20 @@ class DBStoreManager {
 private:
   map<string, DBStore*> DBStoreHandles;
   DBStore *default_dbstore = NULL;
+  CephContext *cct;
 
 public:
-  DBStoreManager(): DBStoreHandles() {
+  DBStoreManager(CephContext *_cct): DBStoreHandles() {
+    cct = _cct;
 	default_dbstore = createDBStore(default_tenant);
+  };
+  DBStoreManager(string logfile, int loglevel): DBStoreHandles() {
+    vector<const char*> args;
+    cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                        CODE_ENVIRONMENT_UTILITY, 1)->get();
+    cct->_log->set_log_file(logfile);
+    cct->_log->reopen_log_file();
+    cct->_conf->subsys.set_log_level(dout_subsys, loglevel);
   };
   ~DBStoreManager() { destroyAllHandles(); };
 

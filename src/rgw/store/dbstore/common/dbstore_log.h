@@ -10,21 +10,18 @@
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
+#include "common/dout.h" 
 
 using namespace std;
 
-#define L_ERR   0
-#define L_EVENT 1  // Default LogLevel
-#define L_DEBUG 2
-#define L_FULLDEBUG 3
+#define dout_subsys ceph_subsys_rgw
+#undef dout_prefix
+#define dout_prefix *_dout << "rgw dbstore: "
 
-extern int LogLevel;
-extern string LogFile;
-extern ofstream fileout;
-extern ostream *dbout;
+#define dbout_prefix(cct, v) dout_impl(cct, dout_subsys, v) dout_prefix
+#define dbendl_impl  dendl      
 
-#define dbout_prefix *dbout<<__PRETTY_FUNCTION__<<":-"
-
-#define dbout(n) if (n <= LogLevel) dbout_prefix
+#define dbout(cct, v) dbout_prefix(cct, v)
+#define dbendl dbendl_impl
 
 #endif

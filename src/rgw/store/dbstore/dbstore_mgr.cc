@@ -2,9 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "dbstore_mgr.h"
-#include "common/dbstore.h"
-#include "sqlite/sqliteDB.h"
-
 
 /* Given a tenant, find and return the DBStore handle.
  * If not found and 'create' set to true, create one
@@ -43,9 +40,9 @@ DBStore* DBStoreManager::createDBStore(string tenant) {
 
   /* Create the handle */
 #ifdef SQLITE_ENABLED
-  dbs = new SQLiteDB(tenant);
+  dbs = new SQLiteDB(tenant, cct);
 #else
-  dbs = new DBStore(tenant);
+  dbs = new DBStore(tenant, cct);
 #endif
 
   /* API is DBStore::Initialize(string logfile, int loglevel);
