@@ -8691,6 +8691,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 	  ent_list.emplace_back(std::move(dirent));
 	  ++count;
 	} else {
+	  last_added_entry = dirent.key;
 	  *is_truncated = true;
 	  goto check_updates;
 	}
