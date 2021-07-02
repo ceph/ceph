@@ -75,7 +75,11 @@ struct omap_manager_test_t :
     Transaction &t,
     const string &key,
     const bufferlist &val) {
-    omap_manager->omap_set_key(omap_root, t, key, val).unsafe_get0();
+    with_trans_intr(
+      t,
+      [&, this](auto &t) {
+	return omap_manager->omap_set_key(omap_root, t, key, val);
+      }).unsafe_get0();
     test_omap_mappings[key] = val;
   }
 
@@ -105,7 +109,11 @@ struct omap_manager_test_t :
     omap_root_t &omap_root,
     Transaction &t,
     const string &key) {
-    auto ret = omap_manager->omap_get_value(omap_root, t, key).unsafe_get0();
+    auto ret = with_trans_intr(
+      t,
+      [&, this](auto &t) {
+	return omap_manager->omap_get_value(omap_root, t, key);
+      }).unsafe_get0();
     auto iter = test_omap_mappings.find(key);
     if (iter == test_omap_mappings.end()) {
       EXPECT_FALSE(ret);
@@ -121,7 +129,11 @@ struct omap_manager_test_t :
     omap_root_t &omap_root,
     Transaction &t,
     const string &key) {
-    omap_manager->omap_rm_key(omap_root, t, key).unsafe_get0();
+    with_trans_intr(
+      t,
+      [&, this](auto &t) {
+	return omap_manager->omap_rm_key(omap_root, t, key);
+      }).unsafe_get0();
     test_omap_mappings.erase(test_omap_mappings.find(key));
   }
 
@@ -139,9 +151,12 @@ struct omap_manager_test_t :
 
     auto config = OMapManager::omap_list_config_t::with_max(max);
     config.max_result_size = max;
-    auto [complete, results] = omap_manager->omap_list(
-      omap_root, t, start, config
-    ).unsafe_get0();
+
+    auto [complete, results] = with_trans_intr(
+      t,
+      [&, this](auto &t) {
+	return omap_manager->omap_list(omap_root, t, start, config);
+      }).unsafe_get0();
 
     auto it = start ?
       test_omap_mappings.upper_bound(*start) :
@@ -164,7 +179,11 @@ struct omap_manager_test_t :
   void clear(
     omap_root_t &omap_root,
     Transaction &t) {
-    omap_manager->omap_clear(omap_root, t).unsafe_get0();
+    with_trans_intr(
+      t,
+      [&, this](auto &t) {
+	return omap_manager->omap_clear(omap_root, t);
+      }).unsafe_get0();
     EXPECT_EQ(omap_root.get_location(), L_ADDR_NULL);
   }
 
@@ -187,23 +206,30 @@ struct omap_manager_test_t :
     }
     return mkeys;
   }
+
   void replay() {
     logger().debug("{}: begin", __func__);
     restart();
     omap_manager = omap_manager::create_omap_manager(*tm);
     logger().debug("{}: end", __func__);
   }
+
+  auto initialize() {
+    auto t = tm->create_transaction();
+    omap_root_t omap_root = with_trans_intr(
+      *t,
+      [this](auto &t) {
+	return omap_manager->initialize_omap(t);
+      }).unsafe_get0();
+    submit_transaction(std::move(t));
+    return omap_root;
+  }
 };
 
 TEST_F(omap_manager_test_t, basic)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-    }
+    omap_root_t omap_root = initialize();
 
     string key = "owner";
     string val = "test";
@@ -235,12 +261,8 @@ TEST_F(omap_manager_test_t, basic)
 TEST_F(omap_manager_test_t, force_leafnode_split)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-    }
+    omap_root_t omap_root = initialize();
+
     for (unsigned i = 0; i < 40; i++) {
       auto t = tm->create_transaction();
       logger().debug("opened transaction");
@@ -260,12 +282,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split)
 TEST_F(omap_manager_test_t, force_leafnode_split_merge)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-    }
+    omap_root_t omap_root = initialize();
 
     for (unsigned i = 0; i < 80; i++) {
       auto t = tm->create_transaction();
@@ -308,12 +325,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
 TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-    }
+    omap_root_t omap_root = initialize();
 
     for (unsigned i = 0; i < 50; i++) {
       auto t = tm->create_transaction();
@@ -359,12 +371,8 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
 TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-    }
+    omap_root_t omap_root = initialize();
+
     string temp;
     for (unsigned i = 0; i < 40; i++) {
       auto t = tm->create_transaction();
@@ -403,12 +411,8 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
 TEST_F(omap_manager_test_t, internal_force_split)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-    }
+    omap_root_t omap_root = initialize();
+
     for (unsigned i = 0; i < 10; i++) {
       logger().debug("opened split transaction");
       auto t = tm->create_transaction();
@@ -429,12 +433,7 @@ TEST_F(omap_manager_test_t, internal_force_split)
 TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-    }
+    omap_root_t omap_root = initialize();
 
     for (unsigned i = 0; i < 8; i++) {
       logger().debug("opened split transaction");
@@ -474,13 +473,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
 TEST_F(omap_manager_test_t, replay)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-      replay();
-    }
+    omap_root_t omap_root = initialize();
 
     for (unsigned i = 0; i < 8; i++) {
       logger().debug("opened split transaction");
@@ -527,12 +520,7 @@ TEST_F(omap_manager_test_t, replay)
 TEST_F(omap_manager_test_t, internal_force_split_to_root)
 {
   run_async([this] {
-    omap_root_t omap_root(L_ADDR_NULL, 0);
-    {
-      auto t = tm->create_transaction();
-      omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
-      submit_transaction(std::move(t));
-    }
+    omap_root_t omap_root = initialize();
 
     logger().debug("set big keys");
     for (unsigned i = 0; i < 53; i++) {

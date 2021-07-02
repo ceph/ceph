@@ -13,18 +13,18 @@
 namespace crimson::os::seastore::collection_manager {
 
 class FlatCollectionManager : public CollectionManager {
-  InterruptedTransactionManager tm;
+  TransactionManager &tm;
 
   coll_context_t get_coll_context(Transaction &t) {
     return coll_context_t{tm, t};
   }
 
-  using get_root_ertr = base_ertr;
-  using get_root_ret = get_root_ertr::future<CollectionNodeRef>;
+  using get_root_iertr = base_iertr;
+  using get_root_ret = get_root_iertr::future<CollectionNodeRef>;
   get_root_ret get_coll_root(const coll_root_t &coll_root, Transaction &t);
 
 public:
-  explicit FlatCollectionManager(InterruptedTransactionManager tm);
+  explicit FlatCollectionManager(TransactionManager &tm);
 
   mkfs_ret mkfs(Transaction &t) final;
 

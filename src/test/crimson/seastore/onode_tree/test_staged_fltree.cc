@@ -1528,7 +1528,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
         {8, 11,  64, 256, 301, 320},
         {8, 16, 128, 512, 576, 640},
         {0, 16}, {0, 10}, {0, 4});
-    auto moved_nm = (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
+    auto moved_nm = (TEST_SEASTORE ? NodeExtentManager::create_seastore(itm)
                                    : NodeExtentManager::create_dummy(IS_DUMMY_SYNC));
     auto p_nm = moved_nm.get();
     auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, BoundedValue>>(
@@ -1554,7 +1554,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     if constexpr (TEST_SEASTORE) {
       logger().info("seastore replay insert begin");
       restart();
-      tree->reload(NodeExtentManager::create_seastore(*tm));
+      tree->reload(NodeExtentManager::create_seastore(itm));
       logger().info("seastore replay insert end");
     }
     {
@@ -1577,7 +1577,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     if constexpr (TEST_SEASTORE) {
       logger().info("seastore replay erase-1 begin");
       restart();
-      tree->reload(NodeExtentManager::create_seastore(*tm));
+      tree->reload(NodeExtentManager::create_seastore(itm));
       logger().info("seastore replay erase-1 end");
     }
     {
@@ -1599,7 +1599,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
     if constexpr (TEST_SEASTORE) {
       logger().info("seastore replay erase-2 begin");
       restart();
-      tree->reload(NodeExtentManager::create_seastore(*tm));
+      tree->reload(NodeExtentManager::create_seastore(itm));
       logger().info("seastore replay erase-2 end");
     }
     {
@@ -1627,7 +1627,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
         {8, 16, 128, 576,  992, 1200},
         {0, 8}, {0, 10}, {0, 4});
     auto moved_nm = NodeExtentManager::create_seastore(
-        *tm, L_ADDR_MIN, EAGAIN_PROBABILITY);
+        itm, L_ADDR_MIN, EAGAIN_PROBABILITY);
     auto p_nm = static_cast<SeastoreNodeExtentManager<true>*>(moved_nm.get());
     auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS, ExtendedValue>>(
         kvs, std::move(moved_nm));
@@ -1643,7 +1643,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	[this, &tree](auto &t) {
 	  return tree->bootstrap(*t
 	  ).safe_then([this, &t] {
-	    return tm->submit_transaction(*t);
+	    return submit_transaction_fut(*t);
 	  });
 	});
     }).unsafe_get0();
@@ -1663,7 +1663,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	      return tree->insert_one(*t, iter
 	      ).safe_then([this, &t](auto cursor) {
 		cursor.invalidate();
-		return tm->submit_transaction(*t);
+		return submit_transaction_fut(*t);
 	      });
 	    });
         }).unsafe_get0();
@@ -1709,7 +1709,7 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 	    [this, &tree, &iter](auto &t) {
 	      return tree->erase_one(*t, iter
 	      ).safe_then([this, &t] () mutable {
-		return tm->submit_transaction(*t);
+		return submit_transaction_fut(*t);
 	      });
 	    });
         }).unsafe_get0();
