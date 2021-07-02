@@ -31,9 +31,8 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 @daily SUITE_NAME=~/src/ceph-qa-suite_master/suites/ceph-ansible; crontab=$(teuthology-describe-tests --show-facet no $SUITE_NAME | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h4. $SUITE_NAME ; echo " "; echo " ") ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-qa-suite/wiki/ceph-ansible.xml?key=$(cat /etc/redmine-key)
 
 
-## ********** smoke tests on master, nautilus, octopus, and pacific branches
+## ********** smoke tests on master, octopus, and pacific branches
 0 5  * * 0,2,4 CEPH_BRANCH=master; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
-0 7  * * 1 CEPH_BRANCH=nautilus; MACHINE_NAME=giiba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
 0 8  * * 5 CEPH_BRANCH=octopus; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
 7 8  * * 6 CEPH_BRANCH=pacific; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
 
@@ -57,23 +56,9 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 #********** nautilus branch START - weekly
 
-25 13 * * 5  CEPH_BRANCH=nautilus; MACHINE_NAME=gibba; SUITE_NAME=kcephfs;  KERNEL=distro; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 2999 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+25 13 * * 5  CEPH_BRANCH=nautilus; MACHINE_NAME=gibba; SUITE_NAME=kcephfs;  KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 2999 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 15 05 * * 0  CEPH_BRANCH=nautilus; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
 
-
-## upgrades suites for on nautilus
-
-25 01 * * 4  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/nautilus-p2p -k distro -e $CEPH_QA_EMAIL
-
-## !!!! three suites below MUST use --suite-branch jewel, luminous, mimic (see https://tracker.ceph.com/issues/24021)
-## ref: https://github.com/ceph/ceph/pull/27983; https://github.com/ceph/ceph/pull/27934; https://github.com/ceph/ceph/pull/28027
-## --filter "ubuntu_16.04,centos_7.6,rhel_7.6" - test ONLY supported distro BEFORE mimic
-## --filter "ubuntu_16.04,ubuntu_18.04,centos_7.6,rhel_7.6" - test ONLY supported distro AFTER mimic
-## The suites below run withoit filters
-
-47 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel-nautilus -k distro -e $CEPH_QA_EMAIL --suite-branch jewel -t py2
-50 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous-nautilus -k distro -e $CEPH_QA_EMAIL --suite-branch luminous -t py2
-50 01 * * 3  CEPH_BRANCH=nautilus; MACHINE_NAME=gibba; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 100 -m $MACHINE_NAME -s upgrade/client-upgrade-mimic -k distro -e $CEPH_QA_EMAIL --suite-branch mimic -t py2
 
 #********** nautilus branch END
 
