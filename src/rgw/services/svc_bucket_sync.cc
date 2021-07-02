@@ -1,18 +1,20 @@
-#include "svc_bucket_sync_sobj.h"
+#include "svc_bucket_sync.h"
 #include "svc_zone.h"
 #include "svc_sys_obj_cache.h"
-#include "svc_bucket_sobj.h"
 
+#include "rgw/rgw_bucket.h"
 #include "rgw/rgw_bucket_sync.h"
 #include "rgw/rgw_zone.h"
 #include "rgw/rgw_sync_policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-static string bucket_sync_sources_oid_prefix = "bucket.sync-source-hints";
-static string bucket_sync_targets_oid_prefix = "bucket.sync-target-hints";
+static constexpr auto bucket_sync_sources_oid_prefix =
+  "bucket.sync-source-hints"sv;
+static constexpr auto bucket_sync_targets_oid_prefix =
+  "bucket.sync-target-hints"sv;
 
-class RGWSI_Bucket_Sync_SObj_HintIndexManager {
+class RGWSI_Bucket_Sync_HintIndexManager {
   CephContext *cct;
 
   struct {
@@ -21,10 +23,10 @@ class RGWSI_Bucket_Sync_SObj_HintIndexManager {
   } svc;
 
 public:
-  RGWSI_Bucket_Sync_SObj_HintIndexManager(RGWSI_Zone *_zone_svc,
-                                          RGWSI_SysObj *_sysobj_svc) {
-    svc.zone = _zone_svc;
-    svc.sysobj = _sysobj_svc;
+  RGWSI_Bucket_Sync_HintIndexManager(RGWSI_Zone *zone_svc,
+                                     RGWSI_SysObj *sysobj_svc) {
+    svc.zone = zone_svc;
+    svc.sysobj = sysobj_svc;
 
     cct = svc.zone->ctx();
   }
@@ -33,7 +35,7 @@ public:
   rgw_raw_obj get_dests_obj(const rgw_bucket& bucket) const;
 
   template <typename C1, typename C2>
-  int update_hints(const DoutPrefixProvider *dpp, 
+  int update_hints(const DoutPrefixProvider *dpp,
                    const RGWBucketInfo& bucket_info,
                    C1& added_dests,
                    C2& removed_dests,
@@ -42,49 +44,49 @@ public:
                    optional_yield y);
 };
 
-RGWSI_Bucket_Sync_SObj::RGWSI_Bucket_Sync_SObj(CephContext *cct) : RGWSI_Bucket_Sync(cct) {
-}
-RGWSI_Bucket_Sync_SObj::~RGWSI_Bucket_Sync_SObj() {
-}
+RGWSI_Bucket_Sync::RGWSI_Bucket_Sync(CephContext* cct)
+  : RGWServiceInstance(cct) {}
 
-void RGWSI_Bucket_Sync_SObj::init(RGWSI_Zone *_zone_svc,
-                                  RGWSI_SysObj *_sysobj_svc,
-                                  RGWSI_SysObj_Cache *_cache_svc,
-                                  RGWSI_Bucket_SObj *bucket_sobj_svc)
+RGWSI_Bucket_Sync::~RGWSI_Bucket_Sync() = default;
+
+void RGWSI_Bucket_Sync::init(RGWSI_Zone *_zone_svc,
+                             RGWSI_SysObj *_sysobj_svc,
+                             RGWSI_SysObj_Cache *_cache_svc)
 {
   svc.zone = _zone_svc;
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
-  svc.bucket_sobj = bucket_sobj_svc;
 
-  hint_index_mgr.reset(new RGWSI_Bucket_Sync_SObj_HintIndexManager(svc.zone, svc.sysobj));
+  hint_index_mgr.reset(new RGWSI_Bucket_Sync_HintIndexManager(svc.zone,
+                                                              svc.sysobj));
 }
 
-int RGWSI_Bucket_Sync_SObj::do_start(optional_yield, const DoutPrefixProvider *dpp)
+int RGWSI_Bucket_Sync::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
-  sync_policy_cache.reset(new RGWChainedCacheImpl<bucket_sync_policy_cache_entry>);
+  sync_policy_cache.reset(
+    new RGWChainedCacheImpl<bucket_sync_policy_cache_entry>);
   sync_policy_cache->init(svc.cache);
 
   return 0;
 }
 
-void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
-                                               const std::set<rgw_zone_id>& zones,
-                                               const std::set<rgw_bucket>& buckets,
-                                               std::set<rgw_sync_bucket_entity> *hint_entities,
-                                               optional_yield y, const DoutPrefixProvider *dpp)
+void RGWSI_Bucket_Sync::get_hint_entities(
+  const std::set<rgw_zone_id>& zones,
+  const std::set<rgw_bucket>& buckets,
+  std::set<rgw_sync_bucket_entity>* hint_entities,
+  optional_yield y,
+  const DoutPrefixProvider* dpp)
 {
-  vector<rgw_bucket> hint_buckets;
+  std::vector<rgw_bucket> hint_buckets;
 
   hint_buckets.reserve(buckets.size());
 
   for (auto& b : buckets) {
     RGWBucketInfo hint_bucket_info;
-    int ret = svc.bucket_sobj->read_bucket_info(ctx, b, &hint_bucket_info,
-                                                nullptr, nullptr, boost::none,
-                                                y, dpp);
+    int ret = bucketctl->read_bucket_info(b, &hint_bucket_info, y, dpp);
     if (ret < 0) {
-      ldpp_dout(dpp, 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
+      ldpp_dout(dpp, 20) << "could not init bucket info for hint bucket=" << b
+                         << " ... skipping" << dendl;
       continue;
     }
 
@@ -98,27 +100,31 @@ void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
   }
 }
 
-int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
-                                                 rgw_sync_bucket_entity& self_entity,
-                                                 RGWBucketSyncPolicyHandlerRef& handler,
-                                                 RGWBucketSyncPolicyHandlerRef& zone_policy_handler,
-                                                 std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
-                                                 optional_yield y,
-                                                 const DoutPrefixProvider *dpp)
+int RGWSI_Bucket_Sync::resolve_policy_hints(
+  rgw_sync_bucket_entity& self_entity,
+  RGWBucketSyncPolicyHandlerRef& handler,
+  RGWBucketSyncPolicyHandlerRef& zone_policy_handler,
+  std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
+  optional_yield y,
+  const DoutPrefixProvider *dpp)
 {
-  set<rgw_zone_id> source_zones;
-  set<rgw_zone_id> target_zones;
+  std::set<rgw_zone_id> source_zones;
+  std::set<rgw_zone_id> target_zones;
 
   zone_policy_handler->reflect(nullptr, nullptr,
                                nullptr, nullptr,
                                &source_zones,
                                &target_zones,
-                               false); /* relaxed: also get all zones that we allow to sync to/from */
+                               false); /* relaxed: also get all zones
+                                          that we allow to sync
+                                          to/from */
 
   std::set<rgw_sync_bucket_entity> hint_entities;
 
-  get_hint_entities(ctx, source_zones, handler->get_source_hints(), &hint_entities, y, dpp);
-  get_hint_entities(ctx, target_zones, handler->get_target_hints(), &hint_entities, y, dpp);
+  get_hint_entities(source_zones, handler->get_source_hints(), &hint_entities,
+                    y, dpp);
+  get_hint_entities(target_zones, handler->get_target_hints(), &hint_entities,
+                    y, dpp);
 
   std::set<rgw_sync_bucket_pipe> resolved_sources;
   std::set<rgw_sync_bucket_pipe> resolved_dests;
@@ -138,31 +144,38 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
     if (iter != temp_map.end()) {
       hint_bucket_handler = iter->second;
     } else {
-      int r = do_get_policy_handler(ctx, zid, hint_bucket, temp_map, &hint_bucket_handler, y, dpp);
+      int r = do_get_policy_handler(zid, hint_bucket, temp_map,
+                                    &hint_bucket_handler, y, dpp);
       if (r < 0) {
-        ldpp_dout(dpp, 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
+        ldpp_dout(dpp, 20)
+          << "could not get bucket sync policy handler for hint bucket="
+          << hint_bucket << " ... skipping" << dendl;
         continue;
       }
     }
 
     hint_bucket_handler->get_pipes(&resolved_dests,
                                    &resolved_sources,
-                                   self_entity); /* flipping resolved dests and sources as these are
-                                                    relative to the remote entity */
+                                   self_entity); /* flipping resolved
+                                                    dests and sources
+                                                    as these are
+                                                    relative to the
+                                                    remote entity */
   }
 
-  handler->set_resolved_hints(std::move(resolved_sources), std::move(resolved_dests));
+  handler->set_resolved_hints(std::move(resolved_sources),
+                              std::move(resolved_dests));
 
   return 0;
 }
 
-int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                                                  std::optional<rgw_zone_id> zone,
-                                                  std::optional<rgw_bucket> _bucket,
-                                                  std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
-                                                  RGWBucketSyncPolicyHandlerRef *handler,
-                                                  optional_yield y,
-                                                  const DoutPrefixProvider *dpp)
+int RGWSI_Bucket_Sync::do_get_policy_handler(
+  std::optional<rgw_zone_id> zone,
+  std::optional<rgw_bucket> _bucket,
+  std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
+  RGWBucketSyncPolicyHandlerRef *handler,
+  optional_yield y,
+  const DoutPrefixProvider *dpp)
 {
   if (!_bucket) {
     *handler = svc.zone->get_sync_policy_handler(zone);
@@ -171,16 +184,16 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
 
   auto& bucket = *_bucket;
 
-  string zone_key;
-  string bucket_key;
+  std::string zone_key;
+  std::string bucket_key;
 
   if (zone && *zone != svc.zone->zone_id()) {
     zone_key = zone->id;
   }
 
-  bucket_key = RGWSI_Bucket::get_bi_meta_key(bucket);
+  bucket_key = RGWBucketCtl::get_bi_meta_key(bucket);
 
-  string cache_key("bi/" + zone_key + "/" + bucket_key);
+  std::string cache_key("bi/" + zone_key + "/" + bucket_key);
 
   if (auto e = sync_policy_cache->find(cache_key)) {
     *handler = e->handler;
@@ -193,32 +206,33 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
 
-  int r = svc.bucket_sobj->read_bucket_instance_info(ctx.bi,
-                                                     bucket_key,
-                                                     &bucket_info,
-                                                     nullptr,
-                                                     &attrs,
-                                                     y,
-                                                     dpp,
-                                                     &cache_info);
+  int r = bucketctl->read_bucket_instance_info(
+    bucket, &bucket_info, y, dpp,
+    RGWBucketCtl::BucketInstance::GetParams{}.set_attrs(&attrs)
+    .set_cache_info(&cache_info));
+
   if (r < 0) {
     if (r != -ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: svc.bucket->read_bucket_instance_info(key=" << bucket_key << ") returned r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: bucketctl->read_bucket_instance_info(key="
+                        << bucket_key << ") returned r=" << r << dendl;
     }
     return r;
   }
 
   auto zone_policy_handler = svc.zone->get_sync_policy_handler(zone);
   if (!zone_policy_handler) {
-    ldpp_dout(dpp, 20) << "ERROR: could not find policy handler for zone=" << zone << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: could not find policy handler for zone="
+                       << zone << dendl;
     return -ENOENT;
   }
 
-  e.handler.reset(zone_policy_handler->alloc_child(bucket_info, std::move(attrs)));
+  e.handler.reset(zone_policy_handler->alloc_child(bucket_info,
+                                                   std::move(attrs)));
 
   r = e.handler->init(dpp, y);
   if (r < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: failed to init bucket sync policy handler: r=" << r << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: failed to init bucket sync policy handler: r="
+                       << r << dendl;
     return r;
   }
 
@@ -226,17 +240,19 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
 
   rgw_sync_bucket_entity self_entity(zone.value_or(svc.zone->zone_id()), bucket);
 
-  r = resolve_policy_hints(ctx, self_entity,
+  r = resolve_policy_hints(self_entity,
                            e.handler,
                            zone_policy_handler,
                            temp_map, y, dpp);
   if (r < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: failed to resolve policy hints: bucket_key=" << bucket_key << ", r=" << r << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: failed to resolve policy hints: bucket_key="
+                       << bucket_key << ", r=" << r << dendl;
     return r;
   }
 
   if (!sync_policy_cache->put(dpp, svc.cache, cache_key, &e, {&cache_info})) {
-    ldpp_dout(dpp, 20) << "couldn't put bucket_sync_policy cache entry, might have raced with data changes" << dendl;
+    ldpp_dout(dpp, 20) << "couldn't put bucket_sync_policy cache entry, "
+                       << "might have raced with data changes" << dendl;
   }
 
   *handler = e.handler;
@@ -244,21 +260,20 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket_Sync_SObj::get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                                               std::optional<rgw_zone_id> zone,
-                                               std::optional<rgw_bucket> _bucket,
-                                               RGWBucketSyncPolicyHandlerRef *handler,
-                                               optional_yield y,
-                                               const DoutPrefixProvider *dpp)
+int RGWSI_Bucket_Sync::get_policy_handler(std::optional<rgw_zone_id> zone,
+                                          std::optional<rgw_bucket> _bucket,
+                                          RGWBucketSyncPolicyHandlerRef *handler,
+                                          optional_yield y,
+                                          const DoutPrefixProvider *dpp)
 {
   std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef> temp_map;
-  return do_get_policy_handler(ctx, zone, _bucket, temp_map, handler, y, dpp);
+  return do_get_policy_handler(zone, _bucket, temp_map, handler, y, dpp);
 }
 
 static bool diff_sets(std::set<rgw_bucket>& orig_set,
                       std::set<rgw_bucket>& new_set,
-                      vector<rgw_bucket> *added,
-                      vector<rgw_bucket> *removed)
+                      std::vector<rgw_bucket> *added,
+                      std::vector<rgw_bucket> *removed)
 {
   auto oiter = orig_set.begin();
   auto niter = new_set.begin();
@@ -292,9 +307,9 @@ static bool diff_sets(std::set<rgw_bucket>& orig_set,
 }
 
 
-class RGWSI_BS_SObj_HintIndexObj
+class RGWSI_BS_HintIndexObj
 {
-  friend class RGWSI_Bucket_Sync_SObj;
+  friend class RGWSI_Bucket_Sync;
 
   CephContext *cct;
   struct {
@@ -465,17 +480,18 @@ public:
     }
   } info;
 
-  RGWSI_BS_SObj_HintIndexObj(RGWSI_SysObj *_sysobj_svc,
-                             const rgw_raw_obj& _obj) : cct(_sysobj_svc->ctx()),
-                                                        obj_ctx(_sysobj_svc->init_obj_ctx()),
-                                                        obj(_obj),
-                                                        sysobj(obj_ctx.get_obj(obj))
+  RGWSI_BS_HintIndexObj(RGWSI_SysObj *_sysobj_svc,
+                        const rgw_raw_obj& _obj)
+    : cct(_sysobj_svc->ctx()),
+      obj_ctx(_sysobj_svc->init_obj_ctx()),
+      obj(_obj),
+      sysobj(obj_ctx.get_obj(obj))
   {
     svc.sysobj = _sysobj_svc;
   }
 
   template <typename C1, typename C2>
-  int update(const DoutPrefixProvider *dpp, 
+  int update(const DoutPrefixProvider *dpp,
              const rgw_bucket& entity,
              const RGWBucketInfo& info_source,
              C1 *add,
@@ -503,29 +519,31 @@ private:
     info.get_entities(bucket, result);
   }
 };
-WRITE_CLASS_ENCODER(RGWSI_BS_SObj_HintIndexObj::bi_entry)
-WRITE_CLASS_ENCODER(RGWSI_BS_SObj_HintIndexObj::single_instance_info)
-WRITE_CLASS_ENCODER(RGWSI_BS_SObj_HintIndexObj::info_map)
+WRITE_CLASS_ENCODER(RGWSI_BS_HintIndexObj::bi_entry)
+WRITE_CLASS_ENCODER(RGWSI_BS_HintIndexObj::single_instance_info)
+WRITE_CLASS_ENCODER(RGWSI_BS_HintIndexObj::info_map)
 
 template <typename C1, typename C2>
-int RGWSI_BS_SObj_HintIndexObj::update(const DoutPrefixProvider *dpp, 
-                                       const rgw_bucket& entity,
-                                       const RGWBucketInfo& info_source,
-                                       C1 *add,
-                                       C2 *remove,
-                                       optional_yield y)
+int RGWSI_BS_HintIndexObj::update(const DoutPrefixProvider *dpp,
+                                  const rgw_bucket& entity,
+                                  const RGWBucketInfo& info_source,
+                                  C1 *add,
+                                  C2 *remove,
+                                  optional_yield y)
 {
   int r = 0;
 
   auto& info_source_ver = info_source.objv_tracker.read_version;
 
-#define MAX_RETRIES 25
+  static constexpr auto MAX_RETRIES = 25;
 
   for (int i = 0; i < MAX_RETRIES; ++i) {
     if (!has_data) {
       r = read(dpp, y);
       if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: cannot update hint index: failed to read: r=" << r << dendl;
+        ldpp_dout(dpp, 0)
+          << "ERROR: cannot update hint index: failed to read: r="
+          << r << dendl;
         return r;
       }
     }
@@ -547,23 +565,25 @@ int RGWSI_BS_SObj_HintIndexObj::update(const DoutPrefixProvider *dpp,
     }
 
     if (r != -ECANCELED) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to flush hint index: obj=" << obj << " r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to flush hint index: obj=" << obj
+                        << " r=" << r << dendl;
       return r;
     }
 
     invalidate();
   }
-  ldpp_dout(dpp, 0) << "ERROR: failed to flush hint index: too many retries (obj=" << obj << "), likely a bug" << dendl;
+  ldpp_dout(dpp, 0) << "ERROR: failed to flush hint index: too many retries "
+                    << "(obj=" << obj << "), likely a bug" << dendl;
 
   return -EIO;
 }
 
 template <typename C1, typename C2>
-void RGWSI_BS_SObj_HintIndexObj::update_entries(const rgw_bucket& info_source,
-                                                const obj_version& info_source_ver,
-                                                C1 *add,
-                                                C2 *remove,
-                                                single_instance_info *instance)
+void RGWSI_BS_HintIndexObj::update_entries(const rgw_bucket& info_source,
+                                           const obj_version& info_source_ver,
+                                           C1 *add,
+                                           C2 *remove,
+                                           single_instance_info *instance)
 {
   if (remove) {
     for (auto& bucket : *remove) {
@@ -578,14 +598,16 @@ void RGWSI_BS_SObj_HintIndexObj::update_entries(const rgw_bucket& info_source,
   }
 }
 
-int RGWSI_BS_SObj_HintIndexObj::read(const DoutPrefixProvider *dpp, optional_yield y) {
+int RGWSI_BS_HintIndexObj::read(const DoutPrefixProvider *dpp,
+                                optional_yield y) {
   RGWObjVersionTracker _ot;
   bufferlist bl;
   int r = sysobj.rop()
     .set_objv_tracker(&_ot) /* forcing read of current version */
     .read(dpp, &bl, y);
   if (r < 0 && r != -ENOENT) {
-    ldpp_dout(dpp, 0) << "ERROR: failed reading data (obj=" << obj << "), r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed reading data (obj=" << obj
+                      << "), r=" << r << dendl;
     return r;
   }
 
@@ -597,7 +619,8 @@ int RGWSI_BS_SObj_HintIndexObj::read(const DoutPrefixProvider *dpp, optional_yie
       decode(info, iter);
       has_data = true;
     } catch (buffer::error& err) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to decode entries, ignoring" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                        << "(): failed to decode entries, ignoring" << dendl;
       info.clear();
     }
   } else {
@@ -607,7 +630,8 @@ int RGWSI_BS_SObj_HintIndexObj::read(const DoutPrefixProvider *dpp, optional_yie
   return 0;
 }
 
-int RGWSI_BS_SObj_HintIndexObj::flush(const DoutPrefixProvider *dpp, optional_yield y) {
+int RGWSI_BS_HintIndexObj::flush(const DoutPrefixProvider *dpp,
+                                 optional_yield y) {
   int r;
 
   if (!info.empty()) {
@@ -631,73 +655,81 @@ int RGWSI_BS_SObj_HintIndexObj::flush(const DoutPrefixProvider *dpp, optional_yi
   return 0;
 }
 
-rgw_raw_obj RGWSI_Bucket_Sync_SObj_HintIndexManager::get_sources_obj(const rgw_bucket& bucket) const
+rgw_raw_obj RGWSI_Bucket_Sync_HintIndexManager::get_sources_obj(
+  const rgw_bucket& bucket) const
 {
   rgw_bucket b = bucket;
   b.bucket_id.clear();
   return rgw_raw_obj(svc.zone->get_zone_params().log_pool,
-                     bucket_sync_sources_oid_prefix + "." + b.get_key());
+                     std::string(bucket_sync_sources_oid_prefix) +
+                     "." + b.get_key());
 }
 
-rgw_raw_obj RGWSI_Bucket_Sync_SObj_HintIndexManager::get_dests_obj(const rgw_bucket& bucket) const
+rgw_raw_obj RGWSI_Bucket_Sync_HintIndexManager::get_dests_obj(
+  const rgw_bucket& bucket) const
 {
   rgw_bucket b = bucket;
   b.bucket_id.clear();
   return rgw_raw_obj(svc.zone->get_zone_params().log_pool,
-                     bucket_sync_targets_oid_prefix + "." + b.get_key());
+                     std::string(bucket_sync_targets_oid_prefix)
+                     + "." + b.get_key());
 }
 
-template <typename C1, typename C2>
-int RGWSI_Bucket_Sync_SObj_HintIndexManager::update_hints(const DoutPrefixProvider *dpp, 
-                                                          const RGWBucketInfo& bucket_info,
-                                                          C1& added_dests,
-                                                          C2& removed_dests,
-                                                          C1& added_sources,
-                                                          C2& removed_sources,
-                                                          optional_yield y)
+template<typename C1, typename C2>
+int RGWSI_Bucket_Sync_HintIndexManager::update_hints(
+  const DoutPrefixProvider *dpp,
+  const RGWBucketInfo& bucket_info,
+  C1& added_dests,
+  C2& removed_dests,
+  C1& added_sources,
+  C2& removed_sources,
+  optional_yield y)
 {
   C1 self_entity = { bucket_info.bucket };
 
   if (!added_dests.empty() ||
       !removed_dests.empty()) {
     /* update our dests */
-    RGWSI_BS_SObj_HintIndexObj index(svc.sysobj,
-                                     get_dests_obj(bucket_info.bucket));
+    RGWSI_BS_HintIndexObj index(svc.sysobj,
+                                get_dests_obj(bucket_info.bucket));
     int r = index.update(dpp, bucket_info.bucket,
                          bucket_info,
                          &added_dests,
                          &removed_dests,
                          y);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket=" << bucket_info.bucket << " r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket="
+                        << bucket_info.bucket << " r=" << r << dendl;
       return r;
     }
 
     /* update dest buckets */
     for (auto& dest_bucket : added_dests) {
-      RGWSI_BS_SObj_HintIndexObj dep_index(svc.sysobj,
-                                           get_sources_obj(dest_bucket));
+      RGWSI_BS_HintIndexObj dep_index(svc.sysobj,
+                                      get_sources_obj(dest_bucket));
       int r = dep_index.update(dpp, dest_bucket,
                                bucket_info,
                                &self_entity,
                                static_cast<C2 *>(nullptr),
                                y);
       if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket=" << dest_bucket << " r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket="
+                          << dest_bucket << " r=" << r << dendl;
         return r;
       }
     }
     /* update removed dest buckets */
     for (auto& dest_bucket : removed_dests) {
-      RGWSI_BS_SObj_HintIndexObj dep_index(svc.sysobj,
-                                           get_sources_obj(dest_bucket));
+      RGWSI_BS_HintIndexObj dep_index(svc.sysobj,
+                                      get_sources_obj(dest_bucket));
       int r = dep_index.update(dpp, dest_bucket,
                                bucket_info,
                                static_cast<C1 *>(nullptr),
                                &self_entity,
                                y);
       if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket=" << dest_bucket << " r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket="
+                          << dest_bucket << " r=" << r << dendl;
         return r;
       }
     }
@@ -705,8 +737,8 @@ int RGWSI_Bucket_Sync_SObj_HintIndexManager::update_hints(const DoutPrefixProvid
 
   if (!added_sources.empty() ||
       !removed_sources.empty()) {
-    RGWSI_BS_SObj_HintIndexObj index(svc.sysobj,
-                                     get_sources_obj(bucket_info.bucket));
+    RGWSI_BS_HintIndexObj index(svc.sysobj,
+                                get_sources_obj(bucket_info.bucket));
     /* update our sources */
     int r = index.update(dpp, bucket_info.bucket,
                          bucket_info,
@@ -714,35 +746,38 @@ int RGWSI_Bucket_Sync_SObj_HintIndexManager::update_hints(const DoutPrefixProvid
                          &removed_sources,
                          y);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket=" << bucket_info.bucket << " r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket="
+                        << bucket_info.bucket << " r=" << r << dendl;
       return r;
     }
 
     /* update added sources buckets */
     for (auto& source_bucket : added_sources) {
-      RGWSI_BS_SObj_HintIndexObj dep_index(svc.sysobj,
-                                           get_dests_obj(source_bucket));
+      RGWSI_BS_HintIndexObj dep_index(svc.sysobj,
+                                      get_dests_obj(source_bucket));
       int r = dep_index.update(dpp, source_bucket,
                                bucket_info,
                                &self_entity,
                                static_cast<C2 *>(nullptr),
                                y);
       if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket=" << source_bucket << " r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket="
+                          << source_bucket << " r=" << r << dendl;
         return r;
       }
     }
     /* update removed dest buckets */
     for (auto& source_bucket : removed_sources) {
-      RGWSI_BS_SObj_HintIndexObj dep_index(svc.sysobj,
-                                           get_dests_obj(source_bucket));
+      RGWSI_BS_HintIndexObj dep_index(svc.sysobj,
+                                      get_dests_obj(source_bucket));
       int r = dep_index.update(dpp, source_bucket,
                                bucket_info,
                                static_cast<C1 *>(nullptr),
                                &self_entity,
                                y);
       if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket=" << source_bucket << " r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to update targets index for bucket="
+                          << source_bucket << " r=" << r << dendl;
         return r;
       }
     }
@@ -751,9 +786,9 @@ int RGWSI_Bucket_Sync_SObj_HintIndexManager::update_hints(const DoutPrefixProvid
   return 0;
 }
 
-int RGWSI_Bucket_Sync_SObj::handle_bi_removal(const DoutPrefixProvider *dpp, 
-                                              const RGWBucketInfo& bucket_info,
-                                              optional_yield y)
+int RGWSI_Bucket_Sync::handle_bi_removal(const DoutPrefixProvider *dpp,
+                                         const RGWBucketInfo& bucket_info,
+                                         optional_yield y)
 {
   std::set<rgw_bucket> sources_set;
   std::set<rgw_bucket> dests_set;
@@ -787,10 +822,10 @@ int RGWSI_Bucket_Sync_SObj::handle_bi_removal(const DoutPrefixProvider *dpp,
                                       y);
 }
 
-int RGWSI_Bucket_Sync_SObj::handle_bi_update(const DoutPrefixProvider *dpp, 
-                                             RGWBucketInfo& bucket_info,
-                                             RGWBucketInfo *orig_bucket_info,
-                                             optional_yield y)
+int RGWSI_Bucket_Sync::handle_bi_update(const DoutPrefixProvider *dpp,
+                                        RGWBucketInfo& bucket_info,
+                                        RGWBucketInfo *orig_bucket_info,
+                                        optional_yield y)
 {
   std::set<rgw_bucket> orig_sources;
   std::set<rgw_bucket> orig_dests;
@@ -812,45 +847,59 @@ int RGWSI_Bucket_Sync_SObj::handle_bi_update(const DoutPrefixProvider *dpp,
 
   std::vector<rgw_bucket> removed_sources;
   std::vector<rgw_bucket> added_sources;
-  bool found = diff_sets(orig_sources, sources, &added_sources, &removed_sources);
-  ldpp_dout(dpp, 20) << __func__ << "(): bucket=" << bucket_info.bucket << ": orig_sources=" << orig_sources << " new_sources=" << sources << dendl;
-  ldpp_dout(dpp, 20) << __func__ << "(): bucket=" << bucket_info.bucket << ":  potential sources added=" << added_sources << " removed=" << removed_sources << dendl;
-  
+  bool found = diff_sets(orig_sources, sources, &added_sources,
+                         &removed_sources);
+  ldpp_dout(dpp, 20) << __func__ << "(): bucket=" << bucket_info.bucket
+                     << ": orig_sources=" << orig_sources << " new_sources="
+                     << sources << dendl;
+  ldpp_dout(dpp, 20) << __func__ << "(): bucket=" << bucket_info.bucket
+                     << ":  potential sources added=" << added_sources
+                     << " removed=" << removed_sources << dendl;
+
   std::vector<rgw_bucket> removed_dests;
   std::vector<rgw_bucket> added_dests;
   found = found || diff_sets(orig_dests, dests, &added_dests, &removed_dests);
 
-  ldpp_dout(dpp, 20) << __func__ << "(): bucket=" << bucket_info.bucket << ": orig_dests=" << orig_dests << " new_dests=" << dests << dendl;
-  ldpp_dout(dpp, 20) << __func__ << "(): bucket=" << bucket_info.bucket << ":  potential dests added=" << added_dests << " removed=" << removed_dests << dendl;
+  ldpp_dout(dpp, 20) << __func__ << "(): bucket=" << bucket_info.bucket
+                     << ": orig_dests=" << orig_dests << " new_dests="
+                     << dests << dendl;
+  ldpp_dout(dpp, 20) << __func__ << "(): bucket=" << bucket_info.bucket
+                     << ":  potential dests added=" << added_dests
+                     << " removed=" << removed_dests << dendl;
 
   if (!found) {
     return 0;
   }
 
   return hint_index_mgr->update_hints(dpp, bucket_info,
-                                      dests, /* set all dests, not just the ones that were added */
+                                      dests, /* set all dests, not
+                                                just the ones that
+                                                were added */
                                       removed_dests,
-                                      sources, /* set all sources, not just that the ones that were added */
+                                      sources, /* set all sources, not
+                                                  just that the ones
+                                                  that were added */
                                       removed_sources,
                                       y);
 }
 
-int RGWSI_Bucket_Sync_SObj::get_bucket_sync_hints(const DoutPrefixProvider *dpp,
-                                                  const rgw_bucket& bucket,
-                                                  std::set<rgw_bucket> *sources,
-                                                  std::set<rgw_bucket> *dests,
-                                                  optional_yield y)
+int RGWSI_Bucket_Sync::get_bucket_sync_hints(const DoutPrefixProvider *dpp,
+                                             const rgw_bucket& bucket,
+                                             std::set<rgw_bucket> *sources,
+                                             std::set<rgw_bucket> *dests,
+                                             optional_yield y)
 {
   if (!sources && !dests) {
     return 0;
   }
 
   if (sources) {
-    RGWSI_BS_SObj_HintIndexObj index(svc.sysobj,
-                                     hint_index_mgr->get_sources_obj(bucket));
+    RGWSI_BS_HintIndexObj index(svc.sysobj,
+                                hint_index_mgr->get_sources_obj(bucket));
     int r = index.read(dpp, y);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to update sources index for bucket=" << bucket << " r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to update sources index for bucket="
+                        << bucket << " r=" << r << dendl;
       return r;
     }
 
@@ -864,11 +913,12 @@ int RGWSI_Bucket_Sync_SObj::get_bucket_sync_hints(const DoutPrefixProvider *dpp,
   }
 
   if (dests) {
-    RGWSI_BS_SObj_HintIndexObj index(svc.sysobj,
-                                     hint_index_mgr->get_dests_obj(bucket));
+    RGWSI_BS_HintIndexObj index(svc.sysobj,
+                                hint_index_mgr->get_dests_obj(bucket));
     int r = index.read(dpp, y);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to read targets index for bucket=" << bucket << " r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to read targets index for bucket="
+                        << bucket << " r=" << r << dendl;
       return r;
     }
 

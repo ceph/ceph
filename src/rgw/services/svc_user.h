@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -17,18 +16,87 @@
 
 #pragma once
 
-#include "svc_meta_be.h"
-
 #include "rgw/rgw_service.h"
 
+#include "svc_meta_be.h"
+#include "svc_user.h"
+
+class RGWSI_RADOS;
+class RGWSI_Zone;
+class RGWSI_SysObj;
+class RGWSI_SysObj_Cache;
+class RGWSI_Meta;
+class RGWSI_SyncModules;
+class RGWSI_MetaBackend_Handler;
+
+struct rgw_cache_entry_info;
+
 class RGWUserBuckets;
+
+class RGWGetUserHeader_CB;
 class RGWGetUserStats_CB;
 
-class RGWSI_User : public RGWServiceInstance
+template <class T>
+class RGWChainedCacheImpl;
+
+class RGWSI_User final : public RGWServiceInstance
 {
+  friend class PutOperation;
+
+  std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
+  RGWSI_MetaBackend_Handler *be_handler;
+
+  struct user_info_cache_entry {
+    RGWUserInfo info;
+    RGWObjVersionTracker objv_tracker;
+    real_time mtime;
+  };
+
+  using RGWChainedCacheImpl_user_info_cache_entry = RGWChainedCacheImpl<user_info_cache_entry>;
+  unique_ptr<RGWChainedCacheImpl_user_info_cache_entry> uinfo_cache;
+
+  rgw_raw_obj get_buckets_obj(const rgw_user& user_id) const;
+
+  int get_user_info_from_index(RGWSI_MetaBackend::Context *ctx,
+                               const string& key,
+                               const rgw_pool& pool,
+                               RGWUserInfo *info,
+                               RGWObjVersionTracker * const objv_tracker,
+                               real_time * const pmtime,
+                               optional_yield y,
+                               const DoutPrefixProvider *dpp);
+
+  int remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker,
+                       optional_yield y, const DoutPrefixProvider *dpp);
+
+  int remove_key_index(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const RGWAccessKey& access_key, optional_yield y);
+  int remove_email_index(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const string& email, optional_yield y);
+  int remove_swift_name_index(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx, const string& swift_name, optional_yield y);
+
+  /* admin management */
+  int cls_user_update_buckets(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add, optional_yield y);
+  int cls_user_add_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket_entry& entry, optional_yield y);
+  int cls_user_remove_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket& bucket, optional_yield y);
+
+  /* quota stats */
+  int cls_user_flush_bucket_stats(const DoutPrefixProvider *dpp, rgw_raw_obj& user_obj,
+                                  const RGWBucketEnt& ent, optional_yield y);
+  int cls_user_list_buckets(const DoutPrefixProvider *dpp, 
+                            rgw_raw_obj& obj,
+                            const string& in_marker,
+                            const string& end_marker,
+                            const int max_entries,
+                            list<cls_user_bucket_entry>& entries,
+                            string * const out_marker,
+                            bool * const truncated,
+                            optional_yield y);
+
+  int cls_user_reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
+  int cls_user_get_header(const DoutPrefixProvider *dpp, const rgw_user& user, cls_user_header *header, optional_yield y);
+  int cls_user_get_header_async(const DoutPrefixProvider *dpp, const string& user, RGWGetUserHeader_CB *cb);
+
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 public:
-  RGWSI_User(CephContext *cct);
-  virtual ~RGWSI_User();
 
   static string get_meta_key(const rgw_user& user) {
     return user.to_str();
@@ -38,95 +106,121 @@ public:
     return rgw_user(key);
   }
 
-  virtual RGWSI_MetaBackend_Handler *get_be_handler() = 0;
+  struct Svc {
+    RGWSI_User *user{nullptr};
+    RGWSI_RADOS *rados{nullptr};
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_SysObj_Cache *cache{nullptr};
+    RGWSI_Meta *meta{nullptr};
+    RGWSI_MetaBackend *meta_be{nullptr};
+    RGWSI_SyncModules *sync_modules{nullptr};
+  } svc;
 
-  /* base svc_user interfaces */
+  RGWSI_User(CephContext *cct);
+  ~RGWSI_User();
 
-  virtual int read_user_info(RGWSI_MetaBackend::Context *ctx,
-                             const rgw_user& user,
-                             RGWUserInfo *info,
-                             RGWObjVersionTracker * const objv_tracker,
-                             real_time * const pmtime,
-                             rgw_cache_entry_info * const cache_info,
-                             map<string, bufferlist> * const pattrs,
-                             optional_yield y,
-                             const DoutPrefixProvider *dpp) = 0;
+  void init(RGWSI_RADOS *_rados_svc,
+            RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
+	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
+            RGWSI_MetaBackend *_meta_be_svc,
+	    RGWSI_SyncModules *_sync_modules);
 
-  virtual int store_user_info(RGWSI_MetaBackend::Context *ctx,
-                              const RGWUserInfo& info,
-                              RGWUserInfo *old_info,
-                              RGWObjVersionTracker *objv_tracker,
-                              const real_time& mtime,
-                              bool exclusive,
-                              map<string, bufferlist> *attrs,
-                              optional_yield y,
-                              const DoutPrefixProvider *dpp) = 0;
+  RGWSI_MetaBackend_Handler *get_be_handler() {
+    return be_handler;
+  }
 
-  virtual int remove_user_info(RGWSI_MetaBackend::Context *ctx,
-                               const RGWUserInfo& info,
-                               RGWObjVersionTracker *objv_tracker,
-                               optional_yield y,
-                               const DoutPrefixProvider *dpp) = 0;
+  int read_user_info(RGWSI_MetaBackend::Context *ctx,
+                     const rgw_user& user,
+                     RGWUserInfo *info,
+                     RGWObjVersionTracker * const objv_tracker,
+                     real_time * const pmtime,
+                     rgw_cache_entry_info * const cache_info,
+                     map<string, bufferlist> * const pattrs,
+                     optional_yield y,
+                     const DoutPrefixProvider *dpp);
 
-  virtual int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
+  int store_user_info(RGWSI_MetaBackend::Context *ctx,
+                      const RGWUserInfo& info,
+                      RGWUserInfo *old_info,
+                      RGWObjVersionTracker *objv_tracker,
+                      const real_time& mtime,
+                      bool exclusive,
+                      map<string, bufferlist> *attrs,
+                      optional_yield y,
+                      const DoutPrefixProvider *dpp);
+
+  int remove_user_info(RGWSI_MetaBackend::Context *ctx,
+                       const RGWUserInfo& info,
+                       RGWObjVersionTracker *objv_tracker,
+                       optional_yield y,
+                       const DoutPrefixProvider *dpp);
+
+  int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                              const string& email, RGWUserInfo *info,
                              RGWObjVersionTracker *objv_tracker,
                              real_time *pmtime,
                              optional_yield y,
-                             const DoutPrefixProvider *dpp) = 0;
-  virtual int get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
+                             const DoutPrefixProvider *dpp);
+  int get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
                              const string& swift_name,
                              RGWUserInfo *info,        /* out */
                              RGWObjVersionTracker * const objv_tracker,
                              real_time * const pmtime,
                              optional_yield y,
-                             const DoutPrefixProvider *dpp) = 0;
-  virtual int get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
+                             const DoutPrefixProvider *dpp);
+  int get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
                                   const std::string& access_key,
                                   RGWUserInfo *info,
                                   RGWObjVersionTracker* objv_tracker,
                                   real_time *pmtime,
                                   optional_yield y,
-                                  const DoutPrefixProvider *dpp) = 0;
+                                  const DoutPrefixProvider *dpp);
 
-  virtual int add_bucket(const DoutPrefixProvider *dpp, 
+  /* user buckets directory */
+
+  int add_bucket(const DoutPrefixProvider *dpp,
+                 RGWSI_MetaBackend::Context *ctx,
+                 const rgw_user& user,
+                 const rgw_bucket& bucket,
+                 ceph::real_time creation_time,
+                 optional_yield y);
+  int remove_bucket(const DoutPrefixProvider *dpp,
+                    RGWSI_MetaBackend::Context *ctx,
+                    const rgw_user& user,
+                    const rgw_bucket& _bucket,
+                    optional_yield y);
+  int list_buckets(const DoutPrefixProvider *dpp,
+                   RGWSI_MetaBackend::Context *ctx,
+                   const rgw_user& user,
+                   const string& marker,
+                   const string& end_marker,
+                   uint64_t max,
+                   RGWUserBuckets *buckets,
+                   bool *is_truncated,
+                   optional_yield y);
+
+  /* quota related */
+  int flush_bucket_stats(const DoutPrefixProvider *dpp,
                          RGWSI_MetaBackend::Context *ctx,
                          const rgw_user& user,
-                         const rgw_bucket& bucket,
-                         ceph::real_time creation_time,
-                         optional_yield y) = 0;
-  virtual int remove_bucket(const DoutPrefixProvider *dpp, 
-                            RGWSI_MetaBackend::Context *ctx,
-                            const rgw_user& user,
-                            const rgw_bucket& _bucket, optional_yield) = 0;
-  virtual int list_buckets(const DoutPrefixProvider *dpp, 
+                         const RGWBucketEnt& ent, optional_yield y);
+
+  int complete_flush_stats(const DoutPrefixProvider *dpp,
                            RGWSI_MetaBackend::Context *ctx,
-                           const rgw_user& user,
-                           const string& marker,
-                           const string& end_marker,
-                           uint64_t max,
-                           RGWUserBuckets *buckets,
-                           bool *is_truncated,
-                           optional_yield y) = 0;
+			   const rgw_user& user, optional_yield y);
 
-  virtual int flush_bucket_stats(const DoutPrefixProvider *dpp, 
-                                 RGWSI_MetaBackend::Context *ctx,
-                                 const rgw_user& user,
-                                 const RGWBucketEnt& ent, optional_yield y) = 0;
-  virtual int complete_flush_stats(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx,
-				   const rgw_user& user, optional_yield y) = 0;
-  virtual int reset_bucket_stats(const DoutPrefixProvider *dpp, 
-                                 RGWSI_MetaBackend::Context *ctx,
-				 const rgw_user& user,
-                                 optional_yield y) = 0;
-  virtual int read_stats(const DoutPrefixProvider *dpp, 
+  int reset_bucket_stats(const DoutPrefixProvider *dpp,
                          RGWSI_MetaBackend::Context *ctx,
-			 const rgw_user& user, RGWStorageStats *stats,
-			 ceph::real_time *last_stats_sync,         /* last time a full stats sync completed */
-			 ceph::real_time *last_stats_update,
-                         optional_yield y) = 0;  /* last time a stats update was done */
+			 const rgw_user& user,
+                         optional_yield y);
+  int read_stats(const DoutPrefixProvider *dpp,
+                 RGWSI_MetaBackend::Context *ctx,
+		 const rgw_user& user, RGWStorageStats *stats,
+		 ceph::real_time *last_stats_sync,/* last time a full stats sync completed */
+		 ceph::real_time *last_stats_update,
+                 optional_yield y);  /* last time a stats update was done */
 
-  virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx,
-			       const rgw_user& user, RGWGetUserStats_CB *cb) = 0;
+  int read_stats_async(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *ctx,
+		       const rgw_user& user, RGWGetUserStats_CB *cb);
 };
-

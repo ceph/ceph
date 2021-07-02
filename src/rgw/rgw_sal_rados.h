@@ -358,6 +358,12 @@ class RadosStore : public Store {
     std::string luarocks_path;
     RadosZone zone;
 
+  struct configkey_data {
+    bool maybe_insecure_mon_conn = false;
+    std::atomic_flag warned_insecure = ATOMIC_FLAG_INIT;
+    void warn_if_insecure(RadosStore* rs);
+  } ckd;
+
   public:
     RadosStore()
       : rados(nullptr), zone(this) {
@@ -435,7 +441,7 @@ class RadosStore : public Store {
 			       RGWUsageIter& usage_iter,
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
-    virtual int get_config_key_val(std::string name, bufferlist* bl) override;
+    virtual int get_config_key_val(std::string_view name, bufferlist* bl) override;
     virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
     virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<std::string>& keys, bool* truncated) override;
     virtual void meta_list_keys_complete(void* handle) override;
@@ -475,6 +481,7 @@ class RadosStore : public Store {
     /* Unique to RadosStore */
     int get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
 			   librados::IoCtx* ioctx);
+    int clog_warn(std::string_view msg);
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados* getRados(void) { return rados; }
@@ -485,6 +492,8 @@ class RadosStore : public Store {
     const RGWCtl* ctl() const { return &rados->ctl; }
 
     void setUserCtl(RGWUserCtl *_ctl) { user_ctl = _ctl; }
+    bool check_secure_mon_conn() const;
+
 };
 
 class MPRadosSerializer : public MPSerializer {

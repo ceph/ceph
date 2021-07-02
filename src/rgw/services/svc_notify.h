@@ -3,53 +3,54 @@
 
 #pragma once
 
+#include <memory>
+#include <optional>
+#include <vector>
+
+#include <boost/container/flat_set.hpp>
+
+#include "common/Finisher.h"
+#include "common/ceph_mutex.h"
+
 #include "rgw/rgw_service.h"
 
 #include "svc_rados.h"
 
 
-class Context;
-
 class RGWSI_Zone;
-class RGWSI_Finisher;
 
 class RGWWatcher;
-class RGWSI_Notify_ShutdownCB;
 
-class RGWSI_Notify : public RGWServiceInstance
+class RGWSI_Notify final : public RGWServiceInstance
 {
-  friend class RGWWatcher;
-  friend class RGWSI_Notify_ShutdownCB;
-  friend class RGWServices_Def;
+  friend RGWWatcher;
+  friend RGWServices_Def;
 
 public:
   class CB;
 
 private:
+  std::optional<Finisher> finisher;
   RGWSI_Zone *zone_svc{nullptr};
   RGWSI_RADOS *rados_svc{nullptr};
-  RGWSI_Finisher *finisher_svc{nullptr};
 
   ceph::shared_mutex watchers_lock = ceph::make_shared_mutex("watchers_lock");
   rgw_pool control_pool;
 
   int num_watchers{0};
   RGWWatcher **watchers{nullptr};
-  std::set<int> watchers_set;
-  vector<RGWSI_RADOS::Obj> notify_objs;
+  boost::container::flat_set<int> watchers_set;
+  std::vector<RGWSI_RADOS::Obj> notify_objs;
 
   bool enabled{false};
 
   double inject_notify_timeout_probability{0};
   unsigned max_notify_retries{0};
 
-  string get_control_oid(int i);
+  std::string get_control_oid(int i);
   RGWSI_RADOS::Obj pick_control_obj(const string& key);
 
   CB *cb{nullptr};
-
-  std::optional<int> finisher_handle;
-  RGWSI_Notify_ShutdownCB *shutdown_cb{nullptr};
 
   bool finalized{false};
 
@@ -57,11 +58,9 @@ private:
   void finalize_watch();
 
   void init(RGWSI_Zone *_zone_svc,
-            RGWSI_RADOS *_rados_svc,
-            RGWSI_Finisher *_finisher_svc) {
+            RGWSI_RADOS *_rados_svc) {
     zone_svc = _zone_svc;
     rados_svc = _rados_svc;
-    finisher_svc = _finisher_svc;
   }
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
@@ -78,11 +77,9 @@ private:
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(const DoutPrefixProvider *dpp, 
+  int robust_notify(const DoutPrefixProvider *dpp,
                     RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
                     optional_yield y);
-
-  void schedule_context(Context *c);
 public:
   RGWSI_Notify(CephContext *cct): RGWServiceInstance(cct) {}
   ~RGWSI_Notify();

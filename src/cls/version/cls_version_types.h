@@ -43,7 +43,7 @@ struct obj_version {
     return tag.empty();
   }
 
-  bool compare(struct obj_version *v) const {
+  bool compare(const struct obj_version *v) const {
     return (ver == v->ver &&
             tag.compare(v->tag) == 0);
   }

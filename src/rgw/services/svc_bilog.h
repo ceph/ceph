@@ -21,40 +21,38 @@
 
 #include "svc_rados.h"
 
-
-
-
-class RGWSI_BILog_RADOS : public RGWServiceInstance
+class RGWSI_BILog final : public RGWServiceInstance
 {
 public:
   struct Svc {
-    RGWSI_BucketIndex_RADOS *bi{nullptr};
+    RGWSI_BucketIndex *bi{nullptr};
   } svc;
 
-  RGWSI_BILog_RADOS(CephContext *cct);
+  RGWSI_BILog(CephContext *cct);
 
-  void init(RGWSI_BucketIndex_RADOS *bi_rados_svc);
+  void init(RGWSI_BucketIndex *bi_rados_svc);
 
-  int log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id);
-  int log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id);
+  int log_start(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                int shard_id);
+  int log_stop(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+               int shard_id);
 
   int log_trim(const DoutPrefixProvider *dpp,
                const RGWBucketInfo& bucket_info,
                int shard_id,
-               std::string& start_marker,
-               std::string& end_marker);
-  int log_list(const DoutPrefixProvider *dpp,
+               std::string_view start_marker,
+               std::string_view end_marker);
+  int log_list(const DoutPrefixProvider* dpp,
                const RGWBucketInfo& bucket_info,
                int shard_id,
                std::string& marker,
                uint32_t max,
-               std::list<rgw_bi_log_entry>& result,
-               bool *truncated);
+               std::vector<rgw_bi_log_entry>& result,
+               bool* truncated);
 
-  int get_log_status(const DoutPrefixProvider *dpp,
+  int get_log_status(const DoutPrefixProvider* dpp,
                      const RGWBucketInfo& bucket_info,
                      int shard_id,
-                     map<int, string> *markers,
+                     std::map<int, std::string>* markers,
                      optional_yield y);
 };
-

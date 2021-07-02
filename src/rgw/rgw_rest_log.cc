@@ -28,7 +28,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_bilog_rados.h"
+#include "services/svc_bilog.h"
 
 #include "common/errno.h"
 #include "include/ceph_assert.h"
@@ -402,8 +402,8 @@ void RGWOp_BILog_List::execute(optional_yield y) {
 
   send_response();
   do {
-    list<rgw_bi_log_entry> entries;
-    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(s, bucket->get_info(), shard_id,
+    std::vector<rgw_bi_log_entry> entries;
+    int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_list(s, bucket->get_info(), shard_id,
                                                marker, max_entries - count, 
                                                entries, &truncated);
     if (ret < 0) {
@@ -435,9 +435,9 @@ void RGWOp_BILog_List::send_response() {
   s->formatter->open_array_section("entries");
 }
 
-void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& marker)
+void RGWOp_BILog_List::send_response(std::vector<rgw_bi_log_entry>& entries, string& marker)
 {
-  for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+  for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
     rgw_bi_log_entry& entry = *iter;
     encode_json("entry", entry, s->formatter);
 
@@ -542,7 +542,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_trim(s, bucket->get_info(), shard_id, start_marker, end_marker);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_trim(s, bucket->get_info(), shard_id, start_marker, end_marker);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }
@@ -586,7 +586,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
 
   // Note that last_marker is updated to be the marker of the last
   // entry listed
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->list_entries(this, shard_id,
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->list_entries(this, shard_id,
 						     max_entries, entries,
 						     marker, &last_marker,
 						     &truncated);
@@ -647,7 +647,7 @@ void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->get_info(this, shard_id, &info);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->get_info(this, shard_id, &info);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
@@ -745,7 +745,7 @@ void RGWOp_DATALog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->trim_entries(this, shard_id, marker);
+  op_ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->trim_entries(this, shard_id, marker);
 }
 
 // not in header to avoid pulling in rgw_sync.h

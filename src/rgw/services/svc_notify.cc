@@ -6,7 +6,6 @@
 #include "common/errno.h"
 
 #include "svc_notify.h"
-#include "svc_finisher.h"
 #include "svc_zone.h"
 #include "svc_rados.h"
 
@@ -21,7 +20,7 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   RGWSI_Notify *svc;
   int index;
   RGWSI_RADOS::Obj obj;
-  uint64_t watch_handle;
+  uint64_t watch_handle = 0;
   int register_ret{0};
   librados::AioCompletion *register_completion{nullptr};
 
@@ -34,12 +33,15 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
       }
   };
 
-  CephContext *get_cct() const { return cct; }
-  unsigned get_subsys() const { return dout_subsys; }
-  std::ostream& gen_prefix(std::ostream& out) const { return out << "rgw watcher librados: "; }
+  CephContext* get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return dout_subsys; }
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out << "rgw watcher librados: ";
+  }
 
 public:
-  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, RGWSI_RADOS::Obj& o) : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
+  RGWWatcher(CephContext* cct, RGWSI_Notify *s, int i, RGWSI_RADOS::Obj& o)
+    : cct(cct), svc(s), index(i), obj(o) {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
@@ -70,7 +72,7 @@ public:
     lderr(cct) << "RGWWatcher::handle_error cookie " << cookie
 			<< " err " << cpp_strerror(err) << dendl;
     svc->remove_watcher(index);
-    svc->schedule_context(new C_ReinitWatch(this));
+    svc->finisher->queue(new C_ReinitWatch(this));
   }
 
   void reinit() {
@@ -134,17 +136,6 @@ public:
     }
     svc->add_watcher(index);
     return 0;
-  }
-};
-
-
-class RGWSI_Notify_ShutdownCB : public RGWSI_Finisher::ShutdownCB
-{
-  RGWSI_Notify *svc;
-public:
-  RGWSI_Notify_ShutdownCB(RGWSI_Notify *_svc) : svc(_svc) {}
-  void call() override {
-    svc->shutdown();
   }
 };
 
@@ -245,6 +236,8 @@ void RGWSI_Notify::finalize_watch()
 
 int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
+  finisher.emplace(cct);
+  finisher->start();
   int r = zone_svc->start(y, dpp);
   if (r < 0) {
     return r;
@@ -256,11 +249,6 @@ int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   if (r < 0) {
     return r;
   }
-  r = finisher_svc->start(y, dpp);
-  if (r < 0) {
-    return r;
-  }
-
   control_pool = zone_svc->get_zone_params().control_pool;
 
   int ret = init_watch(dpp, y);
@@ -268,11 +256,6 @@ int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     lderr(cct) << "ERROR: failed to initialize watch: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-
-  shutdown_cb = new RGWSI_Notify_ShutdownCB(this);
-  int handle;
-  finisher_svc->register_caller(shutdown_cb, &handle);
-  finisher_handle = handle;
 
   return 0;
 }
@@ -282,13 +265,11 @@ void RGWSI_Notify::shutdown()
   if (finalized) {
     return;
   }
-
-  if (finisher_handle) {
-    finisher_svc->unregister_caller(*finisher_handle);
+  if (finisher) {
+    finisher->stop();
+    finisher = std::nullopt;
   }
   finalize_watch();
-
-  delete shutdown_cb;
 
   finalized = true;
 }
@@ -489,9 +470,4 @@ void RGWSI_Notify::register_watch_cb(CB *_cb)
   std::unique_lock l{watchers_lock};
   cb = _cb;
   _set_enabled(enabled);
-}
-
-void RGWSI_Notify::schedule_context(Context *c)
-{
-  finisher_svc->schedule_context(c);
 }

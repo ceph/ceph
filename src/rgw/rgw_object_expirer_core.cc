@@ -35,7 +35,7 @@
 #include "services/svc_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
-#include "services/svc_bi_rados.h"
+#include "services/svc_bi.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/timeindex/cls_timeindex_client.h"
@@ -55,7 +55,7 @@ static string objexp_hint_get_shardname(int shard_num)
 static int objexp_key_shard(const rgw_obj_index_key& key, int num_shards)
 {
   string obj_key = key.name + key.instance;
-  return RGWSI_BucketIndex_RADOS::bucket_shard_index(obj_key, num_shards);
+  return RGWSI_BucketIndex::bucket_shard_index(obj_key, num_shards);
 }
 
 static string objexp_hint_get_keyext(const string& tenant_name,

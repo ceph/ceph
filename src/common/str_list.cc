@@ -18,8 +18,10 @@ using std::string;
 using std::vector;
 using std::list;
 using ceph::for_each_substr;
+using namespace std::literals;
 
-void get_str_list(const string& str, const char *delims, list<string>& str_list)
+void get_str_list(std::string_view str, std::string_view delims,
+		  std::list<std::string>& str_list)
 {
   str_list.clear();
   for_each_substr(str, delims, [&str_list] (auto token) {
@@ -27,20 +29,21 @@ void get_str_list(const string& str, const char *delims, list<string>& str_list)
     });
 }
 
-void get_str_list(const string& str, list<string>& str_list)
+void get_str_list(std::string_view str, std::list<std::string>& str_list)
 {
-  const char *delims = ";,= \t";
-  get_str_list(str, delims, str_list);
+  get_str_list(str, ";,= \t"sv, str_list);
 }
 
-list<string> get_str_list(const string& str, const char *delims)
+std::list<std::string> get_str_list(std::string_view str,
+				    std::string_view delims)
 {
-  list<string> result;
+  std::list<std::string> result;
   get_str_list(str, delims, result);
   return result;
 }
 
-void get_str_vec(const string& str, const char *delims, vector<string>& str_vec)
+void get_str_vec(std::string_view str, std::string_view delims,
+		 std::vector<string>& str_vec)
 {
   str_vec.clear();
   for_each_substr(str, delims, [&str_vec] (auto token) {
@@ -48,15 +51,14 @@ void get_str_vec(const string& str, const char *delims, vector<string>& str_vec)
     });
 }
 
-void get_str_vec(const string& str, vector<string>& str_vec)
+void get_str_vec(std::string_view str, std::vector<std::string>& str_vec)
 {
-  const char *delims = ";,= \t";
-  get_str_vec(str, delims, str_vec);
+  get_str_vec(str, ";,= \t"sv, str_vec);
 }
 
-vector<string> get_str_vec(const string& str, const char *delims)
+std::vector<std::string> get_str_vec(std::string_view str, std::string_view delims)
 {
-  vector<string> result;
+  std::vector<std::string> result;
   get_str_vec(str, delims, result);
   return result;
 }

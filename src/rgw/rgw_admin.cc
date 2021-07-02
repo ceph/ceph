@@ -63,7 +63,7 @@ extern "C" {
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
-#include "services/svc_bilog_rados.h"
+#include "services/svc_bilog.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta_be_otp.h"
 #include "services/svc_zone.h"
@@ -1105,7 +1105,7 @@ static void show_roles_info(vector<std::unique_ptr<rgw::sal::RGWRole>>& roles, F
 }
 
 static void show_reshard_status(
-  const list<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
+  const vector<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
 {
   formatter->open_array_section("status");
   for (const auto& entry : status) {
@@ -7025,7 +7025,7 @@ next:
     }
 
     RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store), bucket->get_info(), bucket->get_attrs(), nullptr /* no callback */);
-    list<cls_rgw_bucket_instance_entry> status;
+    std::vector<cls_rgw_bucket_instance_entry> status;
     int r = br.get_status(dpp(), &status);
     if (r < 0) {
       cerr << "ERROR: could not get resharding status for bucket " <<
@@ -8142,8 +8142,8 @@ next:
       max_entries = 1000;
 
     do {
-      list<rgw_bi_log_entry> entries;
-      ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_list(dpp(), bucket->get_info(), shard_id, marker, max_entries - count, entries, &truncated);
+      std::vector<rgw_bi_log_entry> entries;
+      ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_list(dpp(), bucket->get_info(), shard_id, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -8151,7 +8151,7 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_bi_log_entry& entry = *iter;
         encode_json("entry", entry, formatter.get());
 
@@ -8625,7 +8625,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_trim(dpp(), bucket->get_info(), shard_id, start_marker, end_marker);
+    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_trim(dpp(), bucket->get_info(), shard_id, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8643,7 +8643,7 @@ next:
       return -ret;
     }
     map<int, string> markers;
-    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->get_log_status(dpp(), bucket->get_info(), shard_id,
+    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->get_log_status(dpp(), bucket->get_info(), shard_id,
 						    &markers, null_yield);
     if (ret < 0) {
       cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
@@ -8707,7 +8707,7 @@ next:
       }
     }
 
-    auto datalog_svc = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados;
+    auto datalog_svc = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog;
     RGWDataChangesLog::LogMarker log_marker;
 
     do {
@@ -8752,7 +8752,7 @@ next:
       list<cls_log_entry> entries;
 
       RGWDataChangesLogInfo info;
-      static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->get_info(dpp(), i, &info);
+      static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->get_info(dpp(), i, &info);
 
       ::encode_json("info", info, formatter.get());
 
@@ -8811,7 +8811,7 @@ next:
 
     // loop until -ENODATA
     do {
-      auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados;
+      auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog;
       ret = datalog->trim_entries(dpp(), shard_id, marker);
     } while (ret == 0);
 
@@ -8826,7 +8826,7 @@ next:
       std::cerr << "log-type not specified." << std::endl;
       return -EINVAL;
     }
-    auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados;
+    auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog;
     ret = datalog->change_format(dpp(), *opt_log_type, null_yield);
     if (ret < 0) {
       cerr << "ERROR: change_format(): " << cpp_strerror(-ret) << std::endl;
@@ -8835,7 +8835,7 @@ next:
   }
 
   if (opt_cmd == OPT::DATALOG_PRUNE) {
-    auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados;
+    auto datalog = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog;
     std::optional<uint64_t> through;
     ret = datalog->trim_generations(dpp(), through);
 

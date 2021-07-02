@@ -24,6 +24,7 @@
 #include "rgw_bucket.h"
 #include "rgw_user.h"
 #include "rgw_string.h"
+#include "rgw_mdlog.h"
 #include "rgw_multi.h"
 #include "rgw_op.h"
 #include "rgw_bucket_sync.h"
@@ -36,7 +37,9 @@
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_user.h"
 #include "services/svc_cls.h"
-#include "services/svc_bilog_rados.h"
+#include "services/svc_bilog.h"
+#include "services/svc_mdlog.h"
+#include "services/svc_sys_obj_cache.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -808,13 +811,13 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
   int shard_id = bucket->get_info().layout.current_index.layout.normal.num_shards? 0 : -1;
 
   if (!sync) {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_stop(dpp, bucket->get_info(), -1);
+    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_stop(dpp, bucket->get_info(), -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing stop bilog:" + cpp_strerror(-r));
       return r;
     }
   } else {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_start(dpp, bucket->get_info(), -1);
+    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog->log_start(dpp, bucket->get_info(), -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing resync bilog:" + cpp_strerror(-r));
       return r;
@@ -822,7 +825,7 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
   }
 
   for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->add_entry(dpp, bucket->get_info(), shard_id);
+    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog->add_entry(dpp, bucket->get_info(), shard_id);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing data log:" + cpp_strerror(-r));
       return r;
@@ -1855,15 +1858,273 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("attrs", attrs, obj);
 }
 
+// Package together data/functionality needed to manage an operation
+// on bucket metadata. Essentially a larger wrapper for
+// RGWSysObjectCtx.
+
+class BOpContext {
+  RGWBucketCtl& b;
+  std::optional<RGWSysObjectCtx> ctxo;
+  RGWSysObjectCtx& ctx;
+
+  int pre_modify(const DoutPrefixProvider *dpp,
+		 optional_yield y, const std::string& key,
+		 RGWMetadataLogData& log_data,
+		 RGWObjVersionTracker *objv_tracker,
+		 RGWMDLogStatus op_type) {
+    /* if write version has not been set, and there's a read version, set it so that we can
+     * log it
+     */
+    if (objv_tracker &&
+	objv_tracker->read_version.ver && !objv_tracker->write_version.ver) {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+    /* if write version has not been set, and there's a read version, set it so that we can
+     * log it
+     */
+    if (objv_tracker) {
+      log_data.read_version = objv_tracker->read_version;
+      log_data.write_version = objv_tracker->write_version;
+    }
+
+    log_data.status = op_type;
+
+    bufferlist logbl;
+    encode(log_data, logbl);
+
+    return b.svc.mdlog->add_entry(dpp, get_hash_key(key), get_section(),
+				  key, logbl);
+  }
+
+  int post_modify(const DoutPrefixProvider *dpp,
+		  optional_yield y,
+		  const std::string& key,
+		  RGWMetadataLogData& log_data,
+		  RGWObjVersionTracker *objv_tracker,
+		  int ret) {
+    if (ret >= 0)
+      log_data.status = MDLOG_STATUS_COMPLETE;
+    else
+      log_data.status = MDLOG_STATUS_ABORT;
+
+    bufferlist logbl;
+    encode(log_data, logbl);
+
+    int r = b.svc.mdlog->add_entry(dpp, get_hash_key(key),
+				   get_section(), key, logbl);
+    if (ret < 0)
+      return ret;
+
+    if (r < 0)
+      return r;
+
+    return ret;
+  }
+
+  template<typename F>
+  int do_mutate(const DoutPrefixProvider *dpp,
+		optional_yield y,
+		const string& key,
+		F&& f,
+		RGWMDLogStatus op_type,
+		RGWObjVersionTracker* objv_tracker) {
+    RGWMetadataLogData log_data;
+    auto ret = pre_modify(dpp, y, key, log_data, objv_tracker,
+			  op_type);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = std::forward<F>(f)();
+    ret = post_modify(dpp, y, key, log_data, objv_tracker, ret);
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
+public:
+  BOpContext(RGWBucketCtl* b)
+    : b(*b), ctxo(b->svc.sysobj->init_obj_ctx()), ctx(*ctxo) {}
+  BOpContext(RGWBucketCtl* b, RGWSysObjectCtx& ctx) : b(*b), ctx(ctx) {}
+  BOpContext(BOpContext&) = default;
+
+  virtual ~BOpContext() = default;
+  const rgw_pool& get_pool() const {
+    return b.svc.zone->get_zone_params().domain_root;
+  }
+  virtual std::string key_to_oid(const std::string& key) const = 0;
+  virtual const std::string& get_oid_prefix() const = 0;
+  virtual bool is_valid_oid(const std::string& oid) const = 0;
+  virtual std::string oid_to_key(const std::string& oid) const = 0;
+  virtual const std::string& get_section() const = 0;
+
+  /* key to use for hashing entries for log shard placement */
+  virtual std::string get_hash_key(const std::string& key) {
+    return fmt::format("{}:{}", get_section(), key);
+  }
+
+  int get(const DoutPrefixProvider *dpp,
+	  optional_yield y,
+	  const std::string& key,
+	  ceph::buffer::list* bl,
+	  RGWObjVersionTracker*  objv_tracker,
+	  ceph::real_time* mtime,
+	  std::map<std::string, ceph::buffer::list> *attrs,
+	  rgw_cache_entry_info* cache_info,
+	  const boost::optional<obj_version>& refresh_version) {
+    return rgw_get_system_obj(ctx, get_pool(), key_to_oid(key), *bl,
+			      objv_tracker, mtime, y, dpp, attrs, cache_info,
+			      refresh_version);
+  }
+
+  int put(const DoutPrefixProvider *dpp,
+	  optional_yield y,
+	  const string& key,
+	  ceph::buffer::list& bl,
+	  bool exclusive,
+	  RGWObjVersionTracker* objv_tracker,
+	  ceph::real_time mtime,
+	  std::map<std::string, ceph::buffer::list>* attrs) {
+    return do_mutate(dpp, y, key,
+		     [&] {
+		       return rgw_put_system_obj(dpp, ctx, get_pool(), key, bl,
+						 exclusive, objv_tracker, mtime,
+						 y, attrs);
+		     }, MDLOG_STATUS_WRITE, objv_tracker);
+  }
+
+  int remove_raw(const DoutPrefixProvider *dpp,
+		 optional_yield y,
+		 const string& key,
+		 RGWObjVersionTracker* objv_tracker) {
+    rgw_raw_obj k(get_pool(), key_to_oid(key));
+    auto sysobj = ctx.get_obj(k);
+    return sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .remove(dpp, y);
+  }
+
+  int remove(const DoutPrefixProvider *dpp,
+	     optional_yield y,
+	     const string& key,
+	     RGWObjVersionTracker* objv_tracker) {
+    return do_mutate(dpp, y, key,
+		     [&] {
+		       return remove_raw(dpp, y, key, objv_tracker);
+		     }, MDLOG_STATUS_REMOVE, objv_tracker);
+  }
+};
+
+class BucketOpContext : public BOpContext {
+public:
+  using BOpContext::BOpContext;
+
+  std::string key_to_oid(const std::string& key) const override {
+    return std::string(key);
+  }
+
+  const std::string& get_oid_prefix() const override {
+    static const std::string prefix = ""s;
+    return prefix;
+  }
+
+  bool is_valid_oid(const std::string& oid) const override {
+    return (!oid.empty() && oid[0] != '.');
+  }
+
+  std::string oid_to_key(const std::string& oid) const override {
+    /* should have been called after is_valid_oid(), so no need to
+     * check for validity */
+    return std::string(oid);
+  }
+  const std::string& get_section() const override {
+    static const string section = "bucket"s;
+    return section;
+  }
+};
+
+class BucketInstanceOpContext : public BOpContext {
+public:
+  using BOpContext::BOpContext;
+
+  const string& get_oid_prefix() const override {
+    static const std::string prefix = ".bucket.meta.";
+    return prefix;
+  }
+
+  bool is_valid_oid(const string& oid) const override {
+    const auto& prefix = get_oid_prefix();
+    return (oid.compare(0, prefix.size(), prefix) == 0);
+  }
+
+  // 'tenant/' is used in bucket instance keys for sync to avoid
+  // parsing ambiguity with the existing instance[:shard] format. once
+  // we parse the shard, the / is replaced with a : to match the
+  // [tenant:]instance format
+  std::string key_to_oid(const string& key) const override {
+    const auto& prefix = get_oid_prefix();
+    std::string oid = prefix + key;
+
+    // replace tenant/ with tenant:
+    auto c = oid.find('/', prefix.size());
+    if (c != string::npos) {
+      oid[c] = ':';
+    }
+
+    return oid;
+  }
+
+  // convert bucket instance oids back to the tenant/ format for metadata keys.
+  // it's safe to parse 'tenant:' only for oids, because they won't contain the
+  // optional :shard at the end
+  std::string oid_to_key(const std::string& oid) const override {
+    const auto& prefix = get_oid_prefix();
+
+    /* this should have been called after oid was checked for validity */
+    if (oid.size() < prefix.size()) { /* just sanity check */
+      return {};
+    }
+
+    auto key = oid.substr(prefix.size());
+
+    // find first : (could be tenant:bucket or bucket:instance)
+    auto c = key.find(':');
+    if (c != string::npos) {
+      // if we find another :, the first one was for tenant
+      if (key.find(':', c + 1) != string::npos) {
+        key[c] = '/';
+      }
+    }
+
+    return key;
+  }
+
+  /*
+   * hash entry for mdlog placement. Use the same hash key we'd have
+   * for the bucket entry point, so that the log entries end up at the
+   * same log shard, so that we process them in order
+   */
+  string get_hash_key(const string& key) override {
+    string k = "bucket:";
+    int pos = key.find(':');
+    if (pos < 0)
+      k.append(key);
+    else
+      k.append(key.substr(0, pos));
+
+    return k;
+  }
+
+  const std::string& get_section() const override {
+    static const string section = "bucket.instance"s;
+    return section;
+  }
+};
+
 class RGWBucketMetadataHandler : public RGWBucketMetadataHandlerBase {
 public:
-  struct Svc {
-    RGWSI_Bucket *bucket{nullptr};
-  } svc;
-
-  struct Ctl {
-    RGWBucketCtl *bucket{nullptr};
-  } ctl;
+  RGWBucketCtl *bucketctl{nullptr};
 
   RGWBucketMetadataHandler() {}
 
@@ -1871,13 +2132,13 @@ public:
             RGWBucketCtl *bucket_ctl) override {
     base_init(bucket_svc->ctx(),
               bucket_svc->get_ep_be_handler().get());
-    svc.bucket = bucket_svc;
-    ctl.bucket = bucket_ctl;
+    bucketctl = bucket_ctl;
   }
 
   string get_type() override { return "bucket"; }
 
-  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) override {
+  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv,
+				  const ceph::real_time& mtime) override {
     RGWBucketEntryPoint be;
 
     try {
@@ -1889,73 +2150,71 @@ public:
     return new RGWBucketEntryMetadataObject(be, objv, mtime);
   }
 
-  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
+  int do_get(RGWSI_MetaBackend_Handler::Op*, string& entry,
+	     RGWMetadataObject **obj, optional_yield y,
+	     const DoutPrefixProvider *dpp) override {
     RGWObjVersionTracker ot;
     RGWBucketEntryPoint be;
 
     real_time mtime;
     map<string, bufferlist> attrs;
 
-    RGWSI_Bucket_EP_Ctx ctx(op->ctx());
+    BucketOpContext ctx(bucketctl);
 
-    int ret = svc.bucket->read_bucket_entrypoint_info(ctx, entry, &be, &ot, &mtime, &attrs, y, dpp);
+    int ret = bucketctl->read_bucket_entrypoint_info(ctx, entry, &be, y, dpp,
+						     &ot, &mtime, &attrs,
+						     nullptr, boost::none);
     if (ret < 0)
       return ret;
 
-    RGWBucketEntryMetadataObject *mdo = new RGWBucketEntryMetadataObject(be, ot.read_version, mtime, std::move(attrs));
+    auto mdo = new RGWBucketEntryMetadataObject(be, ot.read_version, mtime,
+						std::move(attrs));
 
     *obj = mdo;
 
     return 0;
   }
 
-  int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
-             RGWMetadataObject *obj,
-             RGWObjVersionTracker& objv_tracker,
+  int do_put(RGWSI_MetaBackend_Handler::Op*, string& entry,
+	     RGWMetadataObject *obj,
+	     RGWObjVersionTracker& objv_tracker,
              optional_yield y,
              const DoutPrefixProvider *dpp,
              RGWMDLogSyncType type, bool from_remote_zone) override;
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
-                optional_yield y, const DoutPrefixProvider *dpp) override {
+  int do_remove(RGWSI_MetaBackend_Handler::Op*, string& entry,
+		RGWObjVersionTracker& objv_tracker, optional_yield y,
+		const DoutPrefixProvider *dpp) override {
     RGWBucketEntryPoint be;
 
     real_time orig_mtime;
 
-    RGWSI_Bucket_EP_Ctx ctx(op->ctx());
-
-    int ret = svc.bucket->read_bucket_entrypoint_info(ctx, entry, &be, &objv_tracker, &orig_mtime, nullptr, y, dpp);
+    BucketOpContext ctx(bucketctl);
+    int ret = bucketctl->read_bucket_entrypoint_info(ctx, entry, &be, y, dpp,
+						     &objv_tracker, &orig_mtime,
+						     nullptr, nullptr,
+						     boost::none);
     if (ret < 0)
       return ret;
 
     /*
-     * We're unlinking the bucket but we don't want to update the entrypoint here - we're removing
-     * it immediately and don't want to invalidate our cached objv_version or the bucket obj removal
+     * We're unlinking the bucket but we don't want to update the
+     * entrypoint here - we're removing it immediately and don't want
+     * to invalidate our cached objv_version or the bucket obj removal
      * will incorrectly fail.
      */
-    ret = ctl.bucket->unlink_bucket(be.owner, be.bucket, y, dpp, false);
+    ret = bucketctl->unlink_bucket(be.owner, be.bucket, y, dpp, false);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
-    ret = svc.bucket->remove_bucket_entrypoint_info(ctx, entry, &objv_tracker, y, dpp);
+    ret = bucketctl->remove_bucket_entrypoint_info(ctx, entry, y, dpp,
+						   &objv_tracker);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "could not delete bucket=" << entry << dendl;
     }
     /* idempotent */
     return 0;
-  }
-
-  int call(std::function<int(RGWSI_Bucket_EP_Ctx& ctx)> f) {
-    return call(nullopt, f);
-  }
-
-  int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
-           std::function<int(RGWSI_Bucket_EP_Ctx& ctx)> f) {
-    return be_handler->call(bectx_params, [&](RGWSI_MetaBackend_Handler::Op *op) {
-      RGWSI_Bucket_EP_Ctx ctx(op->ctx());
-      return f(ctx);
-    });
   }
 };
 
@@ -1982,20 +2241,23 @@ public:
   int put_post(const DoutPrefixProvider *dpp) override;
 };
 
-int RGWBucketMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
+int RGWBucketMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
+				     string& entry,
                                      RGWMetadataObject *obj,
                                      RGWObjVersionTracker& objv_tracker,
 				     optional_yield y,
                                      const DoutPrefixProvider *dpp,
-                                     RGWMDLogSyncType type, bool from_remote_zone)
+                                     RGWMDLogSyncType type,
+				     bool from_remote_zone)
 {
-  RGWMetadataHandlerPut_Bucket put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
+  RGWMetadataHandlerPut_Bucket put_op(this, op, entry, obj, objv_tracker, y,
+				      type, from_remote_zone);
   return do_put_operate(&put_op, dpp);
 }
 
 int RGWMetadataHandlerPut_Bucket::put_checked(const DoutPrefixProvider *dpp)
 {
-  RGWBucketEntryMetadataObject *orig_obj = static_cast<RGWBucketEntryMetadataObject *>(old_obj);
+  auto orig_obj = static_cast<RGWBucketEntryMetadataObject *>(old_obj);
 
   if (orig_obj) {
     obj->set_pattrs(&orig_obj->get_attrs());
@@ -2005,16 +2267,17 @@ int RGWMetadataHandlerPut_Bucket::put_checked(const DoutPrefixProvider *dpp)
   auto mtime = obj->get_mtime();
   auto pattrs = obj->get_pattrs();
 
-  RGWSI_Bucket_EP_Ctx ctx(op->ctx());
+  BucketOpContext ctx(bhandler->bucketctl);
 
-  return bhandler->svc.bucket->store_bucket_entrypoint_info(ctx, entry,
-                                                           be,
-                                                           false,
-                                                           mtime,
-                                                           pattrs,
-                                                           &objv_tracker,
+  return bhandler->bucketctl->store_bucket_entrypoint_info(ctx,
+							   entry,
+							   be,
 							   y,
-                                                           dpp);
+							   dpp,
+							   false,
+							   &objv_tracker,
+                                                           mtime,
+                                                           pattrs);
 }
 
 int RGWMetadataHandlerPut_Bucket::put_post(const DoutPrefixProvider *dpp)
@@ -2025,9 +2288,11 @@ int RGWMetadataHandlerPut_Bucket::put_post(const DoutPrefixProvider *dpp)
 
   /* link bucket */
   if (be.linked) {
-    ret = bhandler->ctl.bucket->link_bucket(be.owner, be.bucket, be.creation_time, y, dpp, false);
+    ret = bhandler->bucketctl->link_bucket(be.owner, be.bucket,
+					   be.creation_time, y, dpp, false);
   } else {
-    ret = bhandler->ctl.bucket->unlink_bucket(be.owner, be.bucket, y, dpp, false);
+    ret = bhandler->bucketctl->unlink_bucket(be.owner, be.bucket, y, dpp,
+					     false);
   }
 
   return ret;
@@ -2098,13 +2363,16 @@ class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
 public:
   RGWArchiveBucketMetadataHandler() {}
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
+  int do_remove(RGWSI_MetaBackend_Handler::Op*, string& entry,
+		RGWObjVersionTracker& objv_tracker,
                 optional_yield y, const DoutPrefixProvider *dpp) override {
-    auto cct = svc.bucket->ctx();
+    auto cct = dpp->get_cct();
 
-    RGWSI_Bucket_EP_Ctx ctx(op->ctx());
+    BucketOpContext ctx(bucketctl);
 
-    ldpp_dout(dpp, 5) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
+    ldpp_dout(dpp, 5)
+      << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry
+      << " ... proceeding to rename" << dendl;
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2118,12 +2386,15 @@ public:
 
     RGWBucketEntryPoint be;
     map<string, bufferlist> attrs;
-    int ret = svc.bucket->read_bucket_entrypoint_info(ctx, entry, &be, &objv_tracker, &mtime, &attrs, y, dpp);
+    int ret = bucketctl->read_bucket_entrypoint_info(ctx, entry, &be, y, dpp,
+						     &objv_tracker, &mtime,
+						     &attrs, nullptr,
+						     boost::none);
     if (ret < 0) {
         return ret;
     }
 
-    string bi_meta_name = RGWSI_Bucket::get_bi_meta_key(be.bucket);
+    string bi_meta_name = bucketctl->get_bi_meta_key(be.bucket);
 
     /* read original bucket instance info */
 
@@ -2131,16 +2402,19 @@ public:
     ceph::real_time orig_mtime;
     RGWBucketInfo old_bi;
 
-    ret = ctl.bucket->read_bucket_instance_info(be.bucket, &old_bi, y, dpp, RGWBucketCtl::BucketInstance::GetParams()
-                                                                    .set_mtime(&orig_mtime)
-                                                                    .set_attrs(&attrs_m));
+    ret = bucketctl->read_bucket_instance_info(
+      be.bucket, &old_bi, y, dpp,
+      RGWBucketCtl::BucketInstance::GetParams()
+      .set_mtime(&orig_mtime)
+      .set_attrs(&attrs_m));
+
     if (ret < 0) {
         return ret;
     }
 
     archive_meta_info ami;
 
-    if (!ami.from_attrs(svc.bucket->ctx(), attrs_m)) {
+    if (!ami.from_attrs(dpp->get_cct(), attrs_m)) {
       ami.orig_bucket = old_bi.bucket;
       ami.store_in_attrs(attrs_m);
     }
@@ -2167,11 +2441,13 @@ public:
 
     new_be.bucket.name = new_bucket_name;
 
-    ret = ctl.bucket->store_bucket_instance_info(be.bucket, new_bi, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
-                                                                    .set_exclusive(false)
-                                                                    .set_mtime(orig_mtime)
-                                                                    .set_attrs(&attrs_m)
-                                                                    .set_orig_info(&old_bi));
+    ret = bucketctl->store_bucket_instance_info(
+      be.bucket, new_bi, y, dpp,
+      RGWBucketCtl::BucketInstance::PutParams()
+      .set_exclusive(false)
+      .set_mtime(orig_mtime)
+      .set_attrs(&attrs_m)
+      .set_orig_info(&old_bi));
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket instance info for bucket=" << new_bi.bucket << " ret=" << ret << dendl;
       return ret;
@@ -2182,8 +2458,9 @@ public:
     RGWObjVersionTracker ot;
     ot.generate_new_write_ver(cct);
 
-    ret = svc.bucket->store_bucket_entrypoint_info(ctx, RGWSI_Bucket::get_entrypoint_meta_key(new_be.bucket),
-                                                   new_be, true, mtime, &attrs, nullptr, y, dpp);
+    ret = bucketctl->store_bucket_entrypoint_info(
+      ctx, bucketctl->get_entrypoint_meta_key(new_be.bucket),
+      new_be, y, dpp, true, nullptr, mtime, &attrs);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
@@ -2191,7 +2468,8 @@ public:
 
     /* link new bucket */
 
-    ret = ctl.bucket->link_bucket(new_be.owner, new_be.bucket, new_be.creation_time, y, dpp, false);
+    ret = bucketctl->link_bucket(new_be.owner, new_be.bucket,
+				 new_be.creation_time, y, dpp, false);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to link new bucket for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
@@ -2199,9 +2477,10 @@ public:
 
     /* clean up old stuff */
 
-    ret = ctl.bucket->unlink_bucket(be.owner, entry_bucket, y, dpp, false);
+    ret = bucketctl->unlink_bucket(be.owner, entry_bucket, y, dpp, false);
     if (ret < 0) {
-        ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
+        ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner="
+			   << be.owner << dendl;
     }
 
     // if (ret == -ECANCELED) it means that there was a race here, and someone
@@ -2209,17 +2488,18 @@ public:
     // whether it was a newly created bucket entrypoint ...  in which case we
     // should ignore the error and move forward, or whether it is a higher version
     // of the same bucket instance ... in which we should retry
-    ret = svc.bucket->remove_bucket_entrypoint_info(ctx,
-                                                    RGWSI_Bucket::get_entrypoint_meta_key(be.bucket),
-                                                    &objv_tracker,
-                                                    y,
-                                                    dpp);
+    ret = bucketctl->remove_bucket_entrypoint_info(
+      ctx,
+      bucketctl->get_entrypoint_meta_key(be.bucket),
+      y,
+      dpp,
+      &objv_tracker);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
     }
 
-    ret = ctl.bucket->remove_bucket_instance_info(be.bucket, old_bi, y, dpp);
+    ret = bucketctl->remove_bucket_instance_info(be.bucket, old_bi, y, dpp);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "could not delete bucket=" << entry << dendl;
     }
@@ -2256,41 +2536,34 @@ public:
     return RGWBucketMetadataHandler::do_put(op, entry, obj,
                                             objv_tracker, y, dpp, type, from_remote_zone);
   }
-
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandlerBase {
-  int read_bucket_instance_entry(RGWSI_Bucket_BI_Ctx& ctx,
+  int read_bucket_instance_entry(BucketInstanceOpContext& ctx,
                                  const string& entry,
                                  RGWBucketCompleteInfo *bi,
                                  ceph::real_time *pmtime,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) {
-    return svc.bucket->read_bucket_instance_info(ctx,
-                                                 entry,
-                                                 &bi->info,
-                                                 pmtime, &bi->attrs,
-                                                 y,
-                                                 dpp);
+    return bucketctl->read_bucket_instance_info(ctx,
+						entry,
+						&bi->info,
+						y, dpp,
+						pmtime, &bi->attrs,
+						nullptr, boost::none,
+						nullptr);
   }
 
 public:
-  struct Svc {
-    RGWSI_Zone *zone{nullptr};
-    RGWSI_Bucket *bucket{nullptr};
-    RGWSI_BucketIndex *bi{nullptr};
-  } svc;
+  RGWBucketCtl* bucketctl;
 
   RGWBucketInstanceMetadataHandler() {}
 
-  void init(RGWSI_Zone *zone_svc,
-	    RGWSI_Bucket *bucket_svc,
-	    RGWSI_BucketIndex *bi_svc) override {
+  void init(RGWSI_Bucket *bucket_svc,
+	    RGWBucketCtl* bucket_ctl) override {
     base_init(bucket_svc->ctx(),
               bucket_svc->get_bi_be_handler().get());
-    svc.zone = zone_svc;
-    svc.bucket = bucket_svc;
-    svc.bi = bi_svc;
+    bucketctl = bucket_ctl;
   }
 
   string get_type() override { return "bucket.instance"; }
@@ -2307,51 +2580,59 @@ public:
     return new RGWBucketInstanceMetadataObject(bci, objv, mtime);
   }
 
-  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
+  int do_get(RGWSI_MetaBackend_Handler::Op*, string& entry,
+	     RGWMetadataObject **obj, optional_yield y,
+	     const DoutPrefixProvider *dpp) override {
     RGWBucketCompleteInfo bci;
     real_time mtime;
 
-    RGWSI_Bucket_BI_Ctx ctx(op->ctx());
+    BucketInstanceOpContext ctx(bucketctl);
 
-    int ret = svc.bucket->read_bucket_instance_info(ctx, entry, &bci.info, &mtime, &bci.attrs, y, dpp);
+    int ret = bucketctl->read_bucket_instance_info(ctx, entry, &bci.info, y,
+						   dpp, &mtime,&bci.attrs,
+						   nullptr, boost::none,
+						   nullptr);
     if (ret < 0)
       return ret;
 
-    RGWBucketInstanceMetadataObject *mdo = new RGWBucketInstanceMetadataObject(bci, bci.info.objv_tracker.read_version, mtime);
+    auto mdo = new RGWBucketInstanceMetadataObject(
+      bci,
+      bci.info.objv_tracker.read_version,
+      mtime);
 
     *obj = mdo;
 
     return 0;
   }
 
-  int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
+  int do_put(RGWSI_MetaBackend_Handler::Op*, string& entry,
              RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 	     optional_yield y, const DoutPrefixProvider *dpp,
              RGWMDLogSyncType sync_type, bool from_remote_zone) override;
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
+  int do_remove(RGWSI_MetaBackend_Handler::Op*, string& entry,
+		RGWObjVersionTracker& objv_tracker,
                 optional_yield y, const DoutPrefixProvider *dpp) override {
     RGWBucketCompleteInfo bci;
 
-    RGWSI_Bucket_BI_Ctx ctx(op->ctx());
+    BucketInstanceOpContext ctx(bucketctl);
 
     int ret = read_bucket_instance_entry(ctx, entry, &bci, nullptr, y, dpp);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    return svc.bucket->remove_bucket_instance_info(ctx, entry, bci.info, &bci.info.objv_tracker, y, dpp);
+    return bucketctl->remove_bucket_instance_info(ctx, entry, bci.info, y, dpp,
+						  &bci.info.objv_tracker);
+  }
+  auto get_zone() const {
+    return bucketctl->svc.zone->get_zone();
+  }
+  auto get_zonesvc() const {
+    return bucketctl->svc.zone;
   }
 
-  int call(std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
-    return call(nullopt, f);
-  }
-
-  int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
-           std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
-    return be_handler->call(bectx_params, [&](RGWSI_MetaBackend_Handler::Op *op) {
-      RGWSI_Bucket_BI_Ctx ctx(op->ctx());
-      return f(ctx);
-    });
+  auto get_bi() const {
+    return bucketctl->svc.bi;
   }
 };
 
@@ -2361,13 +2642,16 @@ class RGWMetadataHandlerPut_BucketInstance : public RGWMetadataHandlerPut_SObj
   RGWBucketInstanceMetadataHandler *bihandler;
   RGWBucketInstanceMetadataObject *obj;
 public:
-  RGWMetadataHandlerPut_BucketInstance(CephContext *_cct,
-                                       RGWBucketInstanceMetadataHandler *_handler,
-                                       RGWSI_MetaBackend_Handler::Op *_op, string& entry,
-                                       RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-				       optional_yield y,
-                                       RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj, objv_tracker, y, type, from_remote_zone),
-                                       cct(_cct), bihandler(_handler) {
+  RGWMetadataHandlerPut_BucketInstance(
+    CephContext *_cct,
+    RGWBucketInstanceMetadataHandler *_handler,
+    RGWSI_MetaBackend_Handler::Op *_op, string& entry,
+    RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+    optional_yield y,
+    RGWMDLogSyncType type, bool from_remote_zone)
+    : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj,
+				 objv_tracker, y, type, from_remote_zone),
+      cct(_cct), bihandler(_handler) {
     obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
 
     auto& bci = obj->get_bci();
@@ -2383,7 +2667,7 @@ public:
   int put_post(const DoutPrefixProvider *dpp) override;
 };
 
-int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
+int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op* op,
                                              string& entry,
                                              RGWMetadataObject *obj,
                                              RGWObjVersionTracker& objv_tracker,
@@ -2391,8 +2675,8 @@ int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
                                              const DoutPrefixProvider *dpp,
                                              RGWMDLogSyncType type, bool from_remote_zone)
 {
-  RGWMetadataHandlerPut_BucketInstance put_op(svc.bucket->ctx(), this, op, entry, obj,
-                                              objv_tracker, y, type, from_remote_zone);
+  RGWMetadataHandlerPut_BucketInstance put_op(dpp->get_cct(), this, op, entry,
+					      obj, objv_tracker, y, type, from_remote_zone);
   return do_put_operate(&put_op, dpp);
 }
 
@@ -2442,7 +2726,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
       auto index_type = bci_index.type;
       auto num_shards = bci_index.normal.num_shards;
       init_default_bucket_layout(cct, bci.info.layout,
-				 bihandler->svc.zone->get_zone(),
+				 bihandler->get_zone(),
 				 num_shards, index_type);
     } else {
       bci.info.layout = old_bci->info.layout;
@@ -2460,11 +2744,14 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
     bci.info.bucket.name = bucket_name;
     bci.info.bucket.bucket_id = bucket_instance;
     bci.info.bucket.tenant = tenant_name;
-    // if the sync module never writes data, don't require the zone to specify all placement targets
-    if (bihandler->svc.zone->sync_module_supports_writes()) {
-      ret = bihandler->svc.zone->select_bucket_location_by_rule(dpp, bci.info.placement_rule, &rule_info, y);
+    // if the sync module never writes data, don't require the zone to
+    // specify all placement targets
+    if (bihandler->get_zonesvc()->sync_module_supports_writes()) {
+      ret = bihandler->get_zonesvc()->select_bucket_location_by_rule(
+	dpp, bci.info.placement_rule, &rule_info, y);
       if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: select_bucket_placement() returned "
+			  << ret << dendl;
         return ret;
       }
     }
@@ -2482,9 +2769,10 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
   return 0;
 }
 
-int RGWMetadataHandlerPut_BucketInstance::put_checked(const DoutPrefixProvider *dpp)
+int RGWMetadataHandlerPut_BucketInstance::put_checked(
+  const DoutPrefixProvider *dpp)
 {
-  RGWBucketInstanceMetadataObject *orig_obj = static_cast<RGWBucketInstanceMetadataObject *>(old_obj);
+  auto orig_obj = static_cast<RGWBucketInstanceMetadataObject *>(old_obj);
 
   RGWBucketInfo *orig_info = (orig_obj ? &orig_obj->get_bucket_info() : nullptr);
 
@@ -2492,17 +2780,17 @@ int RGWMetadataHandlerPut_BucketInstance::put_checked(const DoutPrefixProvider *
   auto mtime = obj->get_mtime();
   auto pattrs = obj->get_pattrs();
 
-  RGWSI_Bucket_BI_Ctx ctx(op->ctx());
+  BucketInstanceOpContext ctx(bihandler->bucketctl);
 
-  return bihandler->svc.bucket->store_bucket_instance_info(ctx,
-                                                         entry,
-                                                         info,
-                                                         orig_info,
-                                                         false,
-                                                         mtime,
-                                                         pattrs,
-							 y,
-                                                         dpp);
+  return bihandler->bucketctl->do_store_bucket_instance_info(ctx,
+							     entry,
+							     info,
+							     orig_info,
+							     false,
+							     mtime,
+							     pattrs,
+							     y,
+							     dpp);
 }
 
 int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp)
@@ -2511,7 +2799,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
 
   objv_tracker = bci.info.objv_tracker;
 
-  int ret = bihandler->svc.bi->init_index(dpp, bci.info);
+  int ret = bihandler->get_bi()->init_index(dpp, bci.info);
   if (ret < 0) {
     return ret;
   }
@@ -2519,21 +2807,32 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
   return STATUS_APPLIED;
 }
 
-class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+class RGWArchiveBucketInstanceMetadataHandler
+  : public RGWBucketInstanceMetadataHandler {
 public:
   RGWArchiveBucketInstanceMetadataHandler() {}
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) override {
-    ldpp_dout(dpp, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
+  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry,
+		RGWObjVersionTracker& objv_tracker, optional_yield y,
+		const DoutPrefixProvider *dpp) override {
+    ldpp_dout(dpp, 0)
+      << "SKIP: bucket instance removal is not allowed on archive zone: "
+      << "bucket.instance:" << entry << dendl;
     return 0;
   }
 };
 
-RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
+RGWBucketCtl::RGWBucketCtl(RGWSI_MDLog *mdlog_svc,
+			   RGWSI_SysObj *sysobj_svc,
+			   RGWSI_SysObj_Cache *cache_svc,
+			   RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
                            RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx())
 {
+  svc.mdlog = mdlog_svc;
+  svc.sysobj = sysobj_svc;
+  svc.cache = cache_svc;
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
   svc.bucket_sync = bucket_sync_svc;
@@ -2558,34 +2857,81 @@ void RGWBucketCtl::init(RGWUserCtl *user_ctl,
     [this](const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp) {
       return bucket_exports_data(bucket, y, dpp);
     });
+
+  binfo_cache.reset(new RGWChainedCacheImpl<bucket_info_cache_entry>);
+  binfo_cache->init(svc.cache);
+
+
 }
 
-int RGWBucketCtl::call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f) {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ep_ctx) {
-    return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& bi_ctx) {
-      RGWSI_Bucket_X_Ctx ctx{ep_ctx, bi_ctx};
-      return f(ctx);
-    });
-  });
+int RGWBucketCtl::read_bucket_entrypoint_info(
+  BucketOpContext& ctx,
+  const std::string& key,
+  RGWBucketEntryPoint *info,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  RGWObjVersionTracker* objv_tracker,
+  ceph::real_time* mtime,
+  std::map<std::string, ceph::buffer::list>* attrs,
+  rgw_cache_entry_info* cache_info,
+  boost::optional<obj_version> refresh_version)
+{
+  ceph::buffer::list bl;
+  auto ret = ctx.get(dpp, y, key, &bl, objv_tracker, mtime, attrs, cache_info,
+		     refresh_version);
+  if (ret < 0) {
+    return ret;
+  }
+  auto iter = bl.cbegin();
+  try {
+    decode(*info, iter);
+  } catch (const ceph::buffer::error& e) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info: "
+		      << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
 }
 
 int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                               RGWBucketEntryPoint *info,
-                                              optional_yield y, const DoutPrefixProvider *dpp,
+                                              optional_yield y,
+					      const DoutPrefixProvider *dpp,
                                               const Bucket::GetParams& params)
 {
-  return bm_handler->call(params.bectx_params, [&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return svc.bucket->read_bucket_entrypoint_info(ctx,
-                                                   RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                   info,
-                                                   params.objv_tracker,
-                                                   params.mtime,
-                                                   params.attrs,
-						   y,
-                                                   dpp,
-                                                   params.cache_info,
-                                                   params.refresh_version);
-  });
+  BucketOpContext ctx(this);
+  ceph::buffer::list bl;
+  auto ret = ctx.get(dpp, y, get_entrypoint_meta_key(bucket), &bl,
+		     params.objv_tracker, params.mtime, params.attrs,
+		     params.cache_info, params.refresh_version);
+  if (ret < 0) {
+    return ret;
+  }
+  auto iter = bl.cbegin();
+  try {
+    decode(*info, iter);
+  } catch (const ceph::buffer::error& e) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info: "
+		      << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
+}
+
+int RGWBucketCtl::store_bucket_entrypoint_info(
+  BucketOpContext& ctx,
+  const std::string& key,
+  RGWBucketEntryPoint& info,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  bool exclusive,
+  RGWObjVersionTracker* objv_tracker,
+  ceph::real_time mtime,
+  std::map<std::string, ceph::buffer::list>* attrs)
+{
+  ceph::buffer::list bl;
+  encode(info, bl);
+  return ctx.put(dpp, y, key, bl, exclusive, objv_tracker, mtime, attrs);
 }
 
 int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
@@ -2594,60 +2940,138 @@ int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                const DoutPrefixProvider *dpp,
                                                const Bucket::PutParams& params)
 {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return svc.bucket->store_bucket_entrypoint_info(ctx,
-                                                    RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                    info,
-                                                    params.exclusive,
-                                                    params.mtime,
-                                                    params.attrs,
-                                                    params.objv_tracker,
-                                                    y,
-                                                    dpp);
-  });
+  BucketOpContext ctx(this);
+  ceph::buffer::list bl;
+  encode(info, bl);
+  return ctx.put(dpp, y, get_entrypoint_meta_key(bucket), bl, params.exclusive,
+		 params.objv_tracker, params.mtime, params.attrs);
 }
 
-int RGWBucketCtl::remove_bucket_entrypoint_info(const rgw_bucket& bucket,
-                                                optional_yield y,
-                                                const DoutPrefixProvider *dpp,
-                                                const Bucket::RemoveParams& params)
+int RGWBucketCtl::remove_bucket_entrypoint_info(
+  BucketOpContext& ctx,
+  const std::string& key,
+  optional_yield y,
+  const DoutPrefixProvider* dpp,
+  RGWObjVersionTracker* objv_tracker)
 {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return svc.bucket->remove_bucket_entrypoint_info(ctx,
-                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                     params.objv_tracker,
-						     y,
-                                                     dpp);
-  });
+  return ctx.remove(dpp, y, key, objv_tracker);
 }
 
-int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
-                                            RGWBucketInfo *info,
-                                            optional_yield y,
-                                            const DoutPrefixProvider *dpp,
-                                            const BucketInstance::GetParams& params)
+int RGWBucketCtl::remove_bucket_entrypoint_info(
+  const rgw_bucket& bucket,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  const Bucket::RemoveParams& params)
 {
-  int ret = bmi_handler->call(params.bectx_params, [&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return svc.bucket->read_bucket_instance_info(ctx,
-                                                 RGWSI_Bucket::get_bi_meta_key(bucket),
-                                                 info,
-                                                 params.mtime,
-                                                 params.attrs,
-						 y,
-                                                 dpp,
-                                                 params.cache_info,
-                                                 params.refresh_version);
-  });
+  BucketOpContext ctx(this);
+  return ctx.remove(dpp, y, get_entrypoint_meta_key(bucket), params.objv_tracker);
+}
+
+int RGWBucketCtl::read_bucket_instance_info(
+  BucketInstanceOpContext& ctx,
+  const std::string& key,
+  RGWBucketInfo *info,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  ceph::real_time* mtime,
+  std::map<std::string, ceph::buffer::list>* attrs,
+  rgw_cache_entry_info* cache_info,
+  boost::optional<obj_version> refresh_version,
+  RGWObjVersionTracker* objv_tracker)
+{
+  std::string cache_key("bi/");
+  cache_key.append(key);
+
+  if (auto e = binfo_cache->find(cache_key)) {
+    if (refresh_version &&
+        e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
+      ldpp_dout(dpp, 5) << "WARNING: The bucket info cache is inconsistent. "
+			<< "invalidating " << cache_key << dendl;
+      binfo_cache->invalidate(cache_key);
+    } else {
+      if (info)
+	*info = e->info;
+      if (attrs)
+	*attrs = e->attrs;
+      if (mtime)
+	*mtime = e->mtime;
+      if (objv_tracker)
+	*objv_tracker = info->objv_tracker;
+      return 0;
+    }
+  }
+
+  bucket_info_cache_entry e;
+  rgw_cache_entry_info ci;
+  bufferlist bl;
+  RGWObjVersionTracker ot;
+
+  int ret = ctx.get(dpp, y, key, &bl, &ot, &e.mtime,
+		    &e.attrs, &ci, refresh_version);
 
   if (ret < 0) {
+    if (ret != -ENOENT) {
+      ldpp_dout(dpp, -1) << "ERROR: do_read_bucket_instance_info failed: "
+			 << ret << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "do_read_bucket_instance_info, bucket instance "
+			 << "not found (key=" << key << ")" << dendl;
+    }
     return ret;
   }
 
-  if (params.objv_tracker) {
-    *params.objv_tracker = info->objv_tracker;
+  auto iter = bl.cbegin();
+  try {
+    decode(e.info, iter);
+  } catch (const ceph::buffer::error& e) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info: " << e.what()
+		      << dendl;
+    return -EIO;
+  }
+  e.info.objv_tracker = ot;
+  *info = e.info;
+
+  if (objv_tracker) {
+    *objv_tracker = info->objv_tracker;
+  }
+  if (mtime) {
+    *mtime = e.mtime;
+  }
+  if (attrs) {
+    *attrs = e.attrs;
+  }
+  if (cache_info) {
+    *cache_info = ci;
+  }
+
+  /* chain to only bucket instance and *not* bucket entrypoint */
+  if (!binfo_cache->put(dpp, svc.cache, cache_key, &e, {&ci})) {
+    ldpp_dout(dpp, 20) << "couldn't put binfo cache entry, might have raced "
+		       << "with data changes" << dendl;
+  }
+
+  if (refresh_version &&
+      refresh_version->compare(&info->objv_tracker.read_version)) {
+    ldpp_dout(dpp, 5)
+      << "WARNING: The OSD has the same version I have. An administrator may "
+      << "have forced a change; otherwise things are squirrelly." << dendl;
   }
 
   return 0;
+}
+
+int RGWBucketCtl::read_bucket_instance_info(
+  const rgw_bucket& bucket,
+  RGWBucketInfo *info,
+  optional_yield y,
+  const DoutPrefixProvider *dpp,
+  const BucketInstance::GetParams& params)
+{
+  BucketInstanceOpContext ctx(this);
+  return read_bucket_instance_info(ctx, get_bi_meta_key(bucket), info, y,
+				   dpp, params.mtime, params.attrs,
+				   params.cache_info, params.refresh_version,
+				   params.objv_tracker);
 }
 
 int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
@@ -2658,15 +3082,16 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
                                    RGWObjVersionTracker *ep_objv_tracker)
 {
   const rgw_bucket *b = &bucket;
-
+  auto ctx = svc.sysobj->init_obj_ctx();
   std::optional<RGWBucketEntryPoint> ep;
 
   if (b->bucket_id.empty()) {
+    BucketOpContext bctx(this, ctx);
     ep.emplace();
 
-    int r = read_bucket_entrypoint_info(*b, &(*ep), y, dpp, RGWBucketCtl::Bucket::GetParams()
-                                                    .set_bectx_params(params.bectx_params)
-                                                    .set_objv_tracker(ep_objv_tracker));
+    int r = read_bucket_entrypoint_info(bctx, get_entrypoint_meta_key(*b),
+					&(*ep), y, dpp, ep_objv_tracker,
+					nullptr, nullptr, nullptr, boost::none);
     if (r < 0) {
       return r;
     }
@@ -2674,16 +3099,11 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
     b = &ep->bucket;
   }
 
-  int ret = bmi_handler->call(params.bectx_params, [&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return svc.bucket->read_bucket_instance_info(ctx,
-                                                 RGWSI_Bucket::get_bi_meta_key(*b),
-                                                 info,
-                                                 params.mtime,
-                                                 params.attrs,
-						 y, dpp,
-                                                 params.cache_info,
-                                                 params.refresh_version);
-  });
+  BucketInstanceOpContext bictx(this, ctx);
+  auto ret = read_bucket_instance_info(bictx, get_bi_meta_key(*b), info, y, dpp,
+				       params.mtime, params.attrs,
+				       params.cache_info,
+				       params.refresh_version, nullptr);
 
   if (ret < 0) {
     return ret;
@@ -2696,26 +3116,90 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
   return 0;
 }
 
-int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                                const rgw_bucket& bucket,
-                                                RGWBucketInfo& info,
-                                                optional_yield y,
-                                                const DoutPrefixProvider *dpp,
-                                                const BucketInstance::PutParams& params)
+int RGWBucketCtl::do_store_bucket_instance_info(
+  BucketInstanceOpContext& ctx,
+  const string& key,
+  RGWBucketInfo& info,
+  std::optional<RGWBucketInfo*> orig_info,
+  bool exclusive,
+  ceph::real_time mtime,
+  std::map<std::string, ceph::buffer::list>* pattrs,
+  optional_yield y,
+  const DoutPrefixProvider *dpp)
 {
-  if (params.objv_tracker) {
-    info.objv_tracker = *params.objv_tracker;
+  ceph::buffer::list bl;
+  encode(info, bl);
+
+  /*
+   * we might need some special handling if overwriting
+   */
+  RGWBucketInfo shared_bucket_info;
+  if (!orig_info && !exclusive) {  /* if exclusive, we're going to
+				      fail when try to overwrite, so
+				      the whole check here is moot */
+    /*
+     * we're here because orig_info wasn't passed in
+     * we don't have info about what was there before, so need to fetch first
+     */
+    int r  = read_bucket_instance_info(ctx,
+				       key,
+                                       &shared_bucket_info,
+                                       y,
+				       dpp,
+				       nullptr,
+				       nullptr,
+                                       nullptr,
+				       boost::none,
+				       &shared_bucket_info.objv_tracker);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__
+			  << "(): read_bucket_instance_info() of key=" << key
+			  << " returned r=" << r << dendl;
+	return r;
+      }
+    } else {
+      orig_info = &shared_bucket_info;
+    }
   }
 
-  return svc.bucket->store_bucket_instance_info(ctx,
-                                                RGWSI_Bucket::get_bi_meta_key(bucket),
-                                                info,
-                                                params.orig_info,
-                                                params.exclusive,
-                                                params.mtime,
-                                                params.attrs,
-                                                y,
-                                                dpp);
+  if (orig_info && *orig_info && !exclusive) {
+    int r = svc.bi->handle_overwrite(dpp, info, *(orig_info.value()));
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): svc.bi->handle_overwrite() of key=" << key << " returned r=" << r << dendl;
+      return r;
+    }
+  }
+
+  int ret = ctx.put(dpp, y, key, bl, exclusive, &info.objv_tracker, mtime,
+		    pattrs);
+
+  if (ret >= 0) {
+    int r = svc.bucket_sync->handle_bi_update(dpp, info,
+                                              orig_info.value_or(nullptr),
+                                              y);
+    if (r < 0) {
+      return r;
+    }
+  } else if (ret == -EEXIST) {
+    /* well, if it's exclusive we shouldn't overwrite it, because we
+     * might race with another bucket operation on this specific
+     * bucket (e.g., being synced from the master), but since bucket
+     * instance meta object is unique for this specific bucket
+     * instance, we don't need to return an error.
+     * A scenario where we'd get -EEXIST here, is in a multi-zone
+     * config, we're not on the master, creating a bucket, sending
+     * bucket creation to the master, we create the bucket locally,
+     * while in the sync thread we sync the new bucket.
+     */
+    ret = 0;
+  }
+
+  if (ret < 0) {
+    return ret;
+  }
+
+  return ret;
 }
 
 int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
@@ -2724,9 +3208,51 @@ int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                             const DoutPrefixProvider *dpp,
                                             const BucketInstance::PutParams& params)
 {
-  return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return do_store_bucket_instance_info(ctx, bucket, info, y, dpp, params);
-  });
+  if (params.objv_tracker) {
+    info.objv_tracker = *params.objv_tracker;
+  }
+
+  BucketInstanceOpContext ctx(this);
+  return do_store_bucket_instance_info(ctx,
+				       get_bi_meta_key(bucket),
+				       info,
+				       params.orig_info,
+				       params.exclusive,
+				       params.mtime,
+				       params.attrs,
+				       y,
+				       dpp);
+}
+
+int RGWBucketCtl::remove_bucket_instance_info(BucketInstanceOpContext& ctx,
+					      const std::string& key,
+                                              RGWBucketInfo& info,
+                                              optional_yield y,
+                                              const DoutPrefixProvider *dpp,
+                                              RGWObjVersionTracker* objv_tracker)
+{
+  if (objv_tracker) {
+    info.objv_tracker = *objv_tracker;
+  }
+
+  // We don't go through mdlog here. Apparently that's done in handle
+  // bi removal?
+  auto ret = ctx.remove_raw(dpp, y, key, objv_tracker);
+
+  if (ret < 0 &&
+      ret != -ENOENT) {
+    return ret;
+  }
+
+  int r = svc.bucket_sync->handle_bi_removal(dpp, info, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
+    /* returning success as index is just keeping hints, so will keep extra hints,
+     * but bucket removal succeeded
+     */
+  }
+
+  return 0;
 }
 
 int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
@@ -2739,34 +3265,44 @@ int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
     info.objv_tracker = *params.objv_tracker;
   }
 
-  return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return svc.bucket->remove_bucket_instance_info(ctx,
-                                                   RGWSI_Bucket::get_bi_meta_key(bucket),
-                                                   info,
-                                                   &info.objv_tracker,
-                                                   y,
-                                                   dpp);
-  });
+  // We don't go through mdlog here. Apparently that's done in handle
+  // bi removal?
+  BucketInstanceOpContext ctx(this);
+  auto ret = ctx.remove_raw(dpp, y, get_bi_meta_key(bucket),
+			    params.objv_tracker);
+
+  if (ret < 0 &&
+      ret != -ENOENT) {
+    return ret;
+  }
+
+  int r = svc.bucket_sync->handle_bi_removal(dpp, info, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
+    /* returning success as index is just keeping hints, so will keep extra hints,
+     * but bucket removal succeeded
+     */
+  }
+
+  return 0;
 }
 
-int RGWBucketCtl::do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                              RGWBucketInfo& info,
+int RGWBucketCtl::do_store_linked_bucket_info(RGWSysObjectCtx& ctx,
+					      RGWBucketInfo& info,
                                               RGWBucketInfo *orig_info,
                                               bool exclusive, real_time mtime,
                                               obj_version *pep_objv,
                                               map<string, bufferlist> *pattrs,
                                               bool create_entry_point,
-					      optional_yield y, const DoutPrefixProvider *dpp)
+					      optional_yield y,
+					      const DoutPrefixProvider *dpp)
 {
   bool create_head = !info.has_instance_obj || create_entry_point;
+  BucketInstanceOpContext bictx(this, ctx);
 
-  int ret = svc.bucket->store_bucket_instance_info(ctx.bi,
-                                                   RGWSI_Bucket::get_bi_meta_key(info.bucket),
-                                                   info,
-                                                   orig_info,
-                                                   exclusive,
-                                                   mtime, pattrs,
-						   y, dpp);
+  int ret = do_store_bucket_instance_info(bictx, get_bi_meta_key(info.bucket),
+					  info, orig_info, exclusive, mtime,
+					  pattrs, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -2788,22 +3324,19 @@ int RGWBucketCtl::do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
       *pep_objv = ot.write_version;
     }
   }
-  ret = svc.bucket->store_bucket_entrypoint_info(ctx.ep,
-                                                 RGWSI_Bucket::get_entrypoint_meta_key(info.bucket),
-                                                 entry_point,
-                                                 exclusive,
-                                                 mtime,
-                                                 pattrs,
-                                                 &ot,
-						 y,
-                                                 dpp);
+
+  BucketOpContext bctx(this, ctx);
+  store_bucket_entrypoint_info(bctx, get_entrypoint_meta_key(info.bucket),
+			       entry_point, y, dpp, exclusive, &ot, mtime,
+			       pattrs);
   if (ret < 0)
     return ret;
 
   return 0;
 }
-int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                          const rgw_bucket& bucket,
+
+int RGWBucketCtl::convert_old_bucket_info(RGWSysObjectCtx& ctx,
+					  const rgw_bucket& bucket,
                                           optional_yield y,
                                           const DoutPrefixProvider *dpp)
 {
@@ -2812,13 +3345,13 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
   RGWBucketInfo info;
-  auto cct = svc.bucket->ctx();
+  BucketOpContext bctx(this, ctx);
 
-  ldpp_dout(dpp, 10) << "RGWRados::convert_old_bucket_info(): bucket=" << bucket << dendl;
-
-  int ret = svc.bucket->read_bucket_entrypoint_info(ctx.ep,
-                                                    RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                    &entry_point, &ot, &ep_mtime, &attrs, y, dpp);
+  ldpp_dout(dpp, 10) << "RGWRados::convert_old_bucket_info(): bucket="
+		     << bucket << dendl;
+  int ret = read_bucket_entrypoint_info(bctx, get_entrypoint_meta_key(bucket),
+					&entry_point, y, dpp, &ot, &ep_mtime,
+					&attrs, nullptr, boost::none);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: get_bucket_entrypoint_info() returned " << ret << " bucket=" << bucket << dendl;
     return ret;
@@ -2848,27 +3381,31 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                             optional_yield y,
                                             const DoutPrefixProvider *dpp)
 {
-  return call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    rgw_bucket& bucket = bucket_info.bucket;
+  auto ctx = svc.sysobj->init_obj_ctx();
+  rgw_bucket& bucket = bucket_info.bucket;
 
-    if (!bucket_info.has_instance_obj) {
-      /* an old bucket object, need to convert it */
-        int ret = convert_old_bucket_info(ctx, bucket, y, dpp);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
-          return ret;
-        }
+  if (!bucket_info.has_instance_obj) {
+    /* an old bucket object, need to convert it */
+    int ret = convert_old_bucket_info(ctx, bucket, y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
+      return ret;
     }
+  }
 
-    return do_store_bucket_instance_info(ctx.bi,
-                                         bucket,
-                                         bucket_info,
-                                         y,
-                                         dpp,
-                                         BucketInstance::PutParams().set_attrs(&attrs)
-                                                                    .set_objv_tracker(objv_tracker)
-                                                                    .set_orig_info(&bucket_info));
-    });
+  BucketInstanceOpContext bictx(this, ctx);
+  if (objv_tracker) {
+    bucket_info.objv_tracker = *objv_tracker;
+  }
+  return do_store_bucket_instance_info(bictx,
+				       get_bi_meta_key(bucket),
+				       bucket_info,
+				       &bucket_info,
+				       false,
+				       {},
+				       &attrs,
+				       y,
+				       dpp);
 }
 
 
@@ -2880,14 +3417,13 @@ int RGWBucketCtl::link_bucket(const rgw_user& user_id,
                               bool update_entrypoint,
                               rgw_ep_info *pinfo)
 {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_link_bucket(ctx, user_id, bucket, creation_time,
-                          update_entrypoint, pinfo, y, dpp);
-  });
+  BucketOpContext ctx(this);
+  return do_link_bucket(ctx, user_id, bucket, creation_time,
+			update_entrypoint, pinfo, y, dpp);
 }
 
-int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                                 const rgw_user& user_id,
+int RGWBucketCtl::do_link_bucket(BucketOpContext& ctx,
+				 const rgw_user& user_id,
                                  const rgw_bucket& bucket,
                                  ceph::real_time creation_time,
                                  bool update_entrypoint,
@@ -2903,17 +3439,16 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   map<string, bufferlist> attrs, *pattrs = nullptr;
   string meta_key;
 
+  meta_key = get_entrypoint_meta_key(bucket);
   if (update_entrypoint) {
-    meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
     if (pinfo) {
       ep = pinfo->ep;
       pattrs = &pinfo->attrs;
     } else {
-      ret = svc.bucket->read_bucket_entrypoint_info(ctx,
-                                                    meta_key,
-                                                    &ep, &rot,
-                                                    nullptr, &attrs,
-                                                    y, dpp);
+      ret = read_bucket_entrypoint_info(ctx, meta_key, &ep, y, dpp,
+					&rot, nullptr, &attrs,
+					nullptr, boost::none);
+
       if (ret < 0 && ret != -ENOENT) {
         ldpp_dout(dpp, 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
                       << cpp_strerror(-ret) << dendl;
@@ -2938,8 +3473,8 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   ep.linked = true;
   ep.owner = user_id;
   ep.bucket = bucket;
-  ret = svc.bucket->store_bucket_entrypoint_info(
-    ctx, meta_key, ep, false, real_time(), pattrs, &rot, y, dpp);
+  ret = store_bucket_entrypoint_info(ctx, meta_key, ep, y, dpp,
+				     false, &rot, {}, pattrs);
   if (ret < 0)
     goto done_err;
 
@@ -2956,13 +3491,12 @@ done_err:
 
 int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp, bool update_entrypoint)
 {
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_unlink_bucket(ctx, user_id, bucket, update_entrypoint, y, dpp);
-  });
+  BucketOpContext ctx(this);
+  return do_unlink_bucket(ctx, user_id, bucket, update_entrypoint, y, dpp);
 }
 
-int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                                   const rgw_user& user_id,
+int RGWBucketCtl::do_unlink_bucket(BucketOpContext& ctx,
+				   const rgw_user& user_id,
                                    const rgw_bucket& bucket,
                                    bool update_entrypoint,
 				   optional_yield y,
@@ -2971,7 +3505,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   int ret = ctl.user->remove_bucket(dpp, user_id, bucket, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error removing bucket from directory: "
-        << cpp_strerror(-ret)<< dendl;
+		      << cpp_strerror(-ret)<< dendl;
   }
 
   if (!update_entrypoint)
@@ -2980,8 +3514,9 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
-  string meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
-  ret = svc.bucket->read_bucket_entrypoint_info(ctx, meta_key, &ep, &ot, nullptr, &attrs, y, dpp);
+  string meta_key = get_entrypoint_meta_key(bucket);
+  ret = read_bucket_entrypoint_info(ctx, meta_key, &ep, y, dpp, &ot, nullptr,
+				    &attrs, nullptr, boost::none);
   if (ret == -ENOENT)
     return 0;
   if (ret < 0)
@@ -2996,7 +3531,8 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   }
 
   ep.linked = false;
-  return svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false, real_time(), &attrs, &ot, y, dpp);
+  return store_bucket_entrypoint_info(ctx, meta_key, ep, y, dpp, false,
+				      &ot, {}, &attrs);
 }
 
 // TODO: remove RGWRados dependency for bucket listing
@@ -3095,17 +3631,40 @@ int RGWBucketCtl::read_bucket_stats(const rgw_bucket& bucket,
                                     optional_yield y,
                                     const DoutPrefixProvider *dpp)
 {
-  return call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket->read_bucket_stats(ctx, bucket, result, y, dpp);
-  });
+  RGWBucketInfo bucket_info;
+  int ret = read_bucket_info(bucket, &bucket_info, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  result->count = 0;
+  result->size = 0;
+  result->size_rounded = 0;
+
+  std::vector<rgw_bucket_dir_header> headers;
+
+  int r = svc.bi->read_stats(dpp, bucket_info, result, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_stats returned r=" << r << dendl;
+    return r;
+  }
+
+  return 0;
 }
 
 int RGWBucketCtl::read_buckets_stats(map<string, RGWBucketEnt>& m,
                                      optional_yield y, const DoutPrefixProvider *dpp)
 {
-  return call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket->read_buckets_stats(ctx, m, y, dpp);
-  });
+  for (auto iter = m.begin(); iter != m.end(); ++iter) {
+    RGWBucketEnt& ent = iter->second;
+    int r = read_bucket_stats(ent.bucket, &ent, y, dpp);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_bucket_stats returned r=" << r << dendl;
+      return r;
+    }
+  }
+
+  return m.size();
 }
 
 int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp, 
@@ -3133,11 +3692,11 @@ int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
                                           optional_yield y,
                                           const DoutPrefixProvider *dpp)
 {
-  int r = call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket_sync->get_policy_handler(ctx, zone, bucket, phandler, y, dpp);
-  });
+  int r = svc.bucket_sync->get_policy_handler(zone, bucket, phandler, y, dpp);
   if (r < 0) {
-    ldpp_dout(dpp, 20) << __func__ << "(): failed to get policy handler for bucket=" << bucket << " (r=" << r << ")" << dendl;
+    ldpp_dout(dpp, 20) << __func__
+		       << "(): failed to get policy handler for bucket="
+		       << bucket << " (r=" << r << ")" << dendl;
     return r;
   }
   return 0;

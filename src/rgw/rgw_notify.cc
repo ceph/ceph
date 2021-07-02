@@ -24,7 +24,7 @@ struct event_entry_t {
   std::string push_endpoint;
   std::string push_endpoint_args;
   std::string arn_topic;
-  
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(event, bl);

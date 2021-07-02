@@ -23,7 +23,6 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/beast/ssl/ssl_stream.hpp>
 
-#include "services/svc_config_key.h"
 #include "services/svc_zone.h"
 
 #include "rgw_zone.h"
