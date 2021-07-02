@@ -101,7 +101,7 @@ class NFSService(CephService):
                 "pool": POOL_NAME,
                 "namespace": spec.service_id,
                 "rgw_user": rgw_user,
-                "url": spec.rados_config_location(),
+                "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
                 "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
                 "bind_addr": daemon_spec.ip if daemon_spec.ip else '',

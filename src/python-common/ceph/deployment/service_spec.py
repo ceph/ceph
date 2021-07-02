@@ -698,10 +698,6 @@ class NFSServiceSpec(ServiceSpec):
         # type: () -> str
         return 'conf-' + self.service_name()
 
-    def rados_config_location(self):
-        # type: () -> str
-        return 'rados://nfs-ganesha/{self.service_id}/{self.rados_config_name()}'
-
 
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
 
