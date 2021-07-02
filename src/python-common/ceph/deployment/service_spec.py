@@ -663,8 +663,6 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
-    DEFAULT_POOL = '.nfs'
-
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
@@ -673,8 +671,6 @@ class NFSServiceSpec(ServiceSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
-                 pool: Optional[str] = None,
-                 namespace: Optional[str] = None,
                  port: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
@@ -684,10 +680,6 @@ class NFSServiceSpec(ServiceSpec):
             config=config, networks=networks)
 
         self.port = port
-
-        # these fields are obsolete; remove from __init__ and this assert eventually.
-        assert pool is None or pool == self.DEFAULT_POOL
-        assert namespace is None or namespace == self.service_id
 
     def get_port_start(self) -> List[int]:
         if self.port:
