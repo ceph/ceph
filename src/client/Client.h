@@ -797,6 +797,7 @@ public:
   vinodeno_t map_faked_ino(ino_t ino);
 
   //notify the mds to flush the mdlog
+  void flush_mdlog_sync(Inode *in);
   void flush_mdlog_sync();
   void flush_mdlog(MetaSession *session);
 
