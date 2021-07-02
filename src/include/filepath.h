@@ -73,7 +73,9 @@ class filepath {
 
  public:
   filepath() = default;
-  filepath(std::string_view p, inodeno_t i) : ino(i), path(p) {}
+  filepath(std::string_view p, inodeno_t i) : ino(i) {
+    set_path(p);
+  }
   filepath(const filepath& o) {
     ino = o.ino;
     path = o.path;
@@ -90,14 +92,20 @@ class filepath {
    * if we are fed a relative path as a string, either set ino=0 (strictly
    * relative) or 1 (absolute).  throw out any leading '/'.
    */
-  filepath(std::string_view s) { set_path(s); }
-  filepath(const char* s) { set_path(s); }
+  filepath(std::string_view s) {
+    set_path(s);
+  }
+  filepath(const char* s) {
+    set_path(s);
+  }
 
   void set_path(std::string_view s, inodeno_t b) {
+    ceph_assert(s.size() > 0);
     path = s;
     ino = b;
   }
   void set_path(std::string_view s) {
+    ceph_assert(s.size() > 0);
     if (s[0] == '/') {
       path = s.substr(1);
       ino = 1;
