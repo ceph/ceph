@@ -235,12 +235,15 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
   return seastar::do_with(
     begin,
     L_ADDR_NULL,
-    [this, c, min_addr, len, end=end](auto &i, auto &ret) {
+    [this, c, min_addr, max_addr, len, end=end](auto &i, auto &ret) {
       return trans_intr::repeat([=, &i, &ret]()
         -> find_hole_iertr::future<seastar::stop_iteration> {
-	if (i == end) {
-	  return seastar::make_ready_future<seastar::stop_iteration>(
-	    seastar::stop_iteration::yes);
+        if (i == end) {
+          auto update_end = right_end(max_addr);
+          if (i == update_end) {
+	    return seastar::make_ready_future<seastar::stop_iteration>(
+	      seastar::stop_iteration::yes);
+          }
 	}
 	return get_lba_btree_extent(
 	  c,
@@ -635,6 +638,7 @@ LBALeafNode::find_hole_ret LBALeafNode::find_hole(
   logger().debug(
     "LBALeafNode::find_hole min={} max={}, len={}, *this={}",
     min, max, len, *this);
+  auto end = get_meta().end;
   auto [liter, uiter] = bound(min, max);
   for (auto i = liter; i != uiter; ++i) {
     auto ub = i->get_key();
@@ -646,7 +650,7 @@ LBALeafNode::find_hole_ret LBALeafNode::find_hole(
       min = i->get_key() + i->get_val().len;
     }
   }
-  if (min + len <= max) {
+  if (min + len <= max && min != end) {
     return find_hole_ret(
       interruptible::ready_future_marker{},
       min);

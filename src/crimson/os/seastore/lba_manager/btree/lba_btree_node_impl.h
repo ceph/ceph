@@ -275,6 +275,15 @@ struct LBAInternalNode
     return std::make_pair(retl, retr);
   }
 
+  internal_iterator_t right_end(laddr_t r){
+    auto retr = begin();
+    for (; retr != end(); ++retr) {
+      if (retr->get_key() >= r)
+        break;
+    }
+    return retr;
+  }
+
   using split_iertr = base_iertr;
   using split_ret = split_iertr::future<LBANodeRef>;
   split_ret split_entry(
