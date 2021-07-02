@@ -462,14 +462,30 @@ class ExportMgr:
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
             self.rados_pool, cluster_id, fs_name)
         access_type = 'r' if fs_ro else 'rw'
+        nfs_caps = [
+            'mon', 'allow r',
+            'osd', osd_cap,
+            'mds', 'allow {} path={}'.format(access_type, path)
+        ]
 
-        ret, out, err = self.mgr.check_mon_command({
+        ret, out, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.{}'.format(entity),
-            'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow {} path={}'.format(
-                access_type, path)],
+            'caps': nfs_caps,
             'format': 'json',
         })
+        if ret == -errno.EINVAL and 'does not match' in err:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'auth caps',
+                'entity': 'client.{}'.format(entity),
+                'caps': nfs_caps,
+                'format': 'json',
+            })
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'auth get',
+                'entity': 'client.{}'.format(entity),
+                'format': 'json',
+            })
 
         json_res = json.loads(out)
         log.info("Export user created is {}".format(json_res[0]['entity']))
