@@ -5114,6 +5114,8 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
       pi.inode->truncate(old_size, req->head.args.setattr.size);
       le->metablob.add_truncate_start(cur->ino());
     } else {
+      if (mask & CEPH_SETATTR_FSCRYPT_FILE)
+	pi.inode->truncate_seq++;
       pi.inode->size = req->head.args.setattr.size;
       pi.inode->rstat.rbytes = pi.inode->size;
     }
