@@ -6788,7 +6788,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
       const rgw_bucket& b = bs->bucket;
       std::string bucket_id = b.get_key();
       RGWBucketReshardLock reshard_lock(this->store, bucket_info, true);
-      ret = reshard_lock.lock();
+      ret = reshard_lock.lock(dpp);
       if (ret < 0) {
 	ldpp_dout(dpp, 20) << __func__ <<
 	  " INFO: failed to take reshard lock for bucket " <<

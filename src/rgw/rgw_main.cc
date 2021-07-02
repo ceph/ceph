@@ -311,7 +311,8 @@ int radosgw_Main(int argc, const char **argv)
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(g_ceph_context);
 
-  int r = rgw_tools_init(g_ceph_context);
+  const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
+  int r = rgw_tools_init(&dp, g_ceph_context);
   if (r < 0) {
     derr << "ERROR: unable to initialize rgw tools" << dendl;
     return -r;
@@ -322,7 +323,6 @@ int radosgw_Main(int argc, const char **argv)
   rgw_http_client_init(g_ceph_context);
   rgw_kmip_client_init(*new RGWKMIPManagerImpl(g_ceph_context));
   
-  const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
 				 "rados",

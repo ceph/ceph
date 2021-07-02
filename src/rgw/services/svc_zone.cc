@@ -184,7 +184,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   set<rgw_zone_id> source_zones;
   set<rgw_zone_id> target_zones;
 
-  sync_policy_handler->reflect(nullptr, nullptr,
+  sync_policy_handler->reflect(dpp, nullptr, nullptr,
                                nullptr, nullptr,
                                &source_zones,
                                &target_zones,
