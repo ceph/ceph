@@ -221,11 +221,15 @@ void ECBackend::_failed_push(const hobject_t &hoid,
   recovery_ops.erase(hoid);
 
   list<pg_shard_t> fl;
+  bool primary_missing = false;
   for (auto&& i : res.errors) {
     fl.push_back(i.first);
+    if (i.first == get_parent()->whoami_shard()) {
+      primary_missing = true;
+    }
   }
   get_parent()->failed_push(fl, hoid);
-  get_parent()->backfill_add_missing(hoid, v);
+  get_parent()->backfill_add_missing(hoid, v, primary_missing);
   get_parent()->finish_degraded_object(hoid);
 }
 

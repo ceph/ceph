@@ -542,15 +542,18 @@ void PrimaryLogPG::on_primary_error(
   dout(0) << __func__ << ": oid " << oid << " version " << v << dendl;
   primary_failed(oid);
   primary_error(oid, v);
-  backfill_add_missing(oid, v);
+  backfill_add_missing(oid, v, true);
 }
 
 void PrimaryLogPG::backfill_add_missing(
   const hobject_t &oid,
-  eversion_t v)
+  eversion_t v,
+  bool primary_missing)
 {
   dout(0) << __func__ << ": oid " << oid << " version " << v << dendl;
-  backfills_in_flight.erase(oid);
+  if (primary_missing) {
+    backfills_in_flight.erase(oid);
+  }
   missing_loc.add_missing(oid, v, eversion_t());
 }
 
@@ -12370,7 +12373,6 @@ void PrimaryLogPG::_clear_recovery_state()
   last_backfill_started = hobject_t();
   set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
-    ceph_assert(recovering.count(*i));
     backfills_in_flight.erase(i++);
   }
 
