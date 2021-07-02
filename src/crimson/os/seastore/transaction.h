@@ -52,16 +52,24 @@ public:
 
   void add_to_retired_set(CachedExtentRef ref) {
     ceph_assert(!is_weak());
-    if (!ref->is_initial_pending()) {
+    if (ref->is_initial_pending()) {
+      // We decide not to remove it from fresh_block_list because touching this
+      // will affect relative paddrs, and it should be rare to retire a fresh
+      // extent.
+      ref->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*ref);
+    } else if (ref->is_mutation_pending()) {
+      ref->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*ref);
+      assert(ref->prior_instance);
+      retired_set.insert(ref->prior_instance);
+      assert(read_set.count(ref->prior_instance->get_paddr()));
+      ref->prior_instance.reset();
+    } else {
       // && retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
       retired_set.insert(ref);
-    } else {
-      ref->state = CachedExtent::extent_state_t::INVALID;
-    }
-    if (ref->is_pending()) {
-      write_set.erase(*ref);
     }
   }
 
