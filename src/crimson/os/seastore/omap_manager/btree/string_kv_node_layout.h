@@ -322,6 +322,7 @@ public:
       return iter_t<!is_const>(node, index);
     }
 
+    using reference = iter_t&;
     iter_t &operator*() { return *this; }
     iter_t *operator->() { return this; }
 
