@@ -4,12 +4,13 @@ import re
 import socket
 from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING, Tuple
 
+from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
 
 import orchestrator
 
 from .exception import NFSInvalidOperation, ClusterNotFound
-from .utils import POOL_NAME, available_clusters, restart_nfs_service
+from .utils import available_clusters, restart_nfs_service
 from .export import NFSRados, exception_handler
 
 if TYPE_CHECKING:

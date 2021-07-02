@@ -7,10 +7,12 @@ from os.path import normpath
 
 from rados import TimedOut, ObjectNotFound
 
+from mgr_module import NFS_POOL_NAME as POOL_NAME
+
 from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, \
     ClusterNotFound
-from .utils import POOL_NAME, available_clusters, check_fs, restart_nfs_service
+from .utils import available_clusters, check_fs, restart_nfs_service
 
 if TYPE_CHECKING:
     from nfs.module import Module
