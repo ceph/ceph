@@ -986,6 +986,13 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_OMAPRMKEYS, 0, bl.length(), bl);
   }
 
+  void omap_rm_range(std::string_view key_begin, std::string_view key_end) {
+    bufferlist bl;
+    encode(key_begin, bl);
+    encode(key_end, bl);
+    add_data(CEPH_OSD_OP_OMAPRMKEYRANGE, 0, bl.length(), bl);
+  }
+
   // object classes
   void call(const char *cname, const char *method, bufferlist &indata) {
     add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);

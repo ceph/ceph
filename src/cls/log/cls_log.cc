@@ -216,11 +216,9 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   try {
     decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: cls_log_list_op(): failed to decode entry");
+    CLS_LOG(0, "ERROR: cls_log_trim(): failed to decode entry");
     return -EINVAL;
   }
-
-  map<string, bufferlist> keys;
 
   string from_index;
   string to_index;
@@ -230,43 +228,47 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   } else {
     from_index = op.from_marker;
   }
+
+  // cls_cxx_map_remove_range() expects one-past-end
   if (op.to_marker.empty()) {
-    get_index_time_prefix(op.to_time, to_index);
+    auto t = op.to_time;
+    t.nsec_ref() += 1000; // equivalent to usec() += 1
+    t.normalize();
+    get_index_time_prefix(t, to_index);
   } else {
     to_index = op.to_marker;
+    to_index.append(1, '\0');
   }
 
-#define MAX_TRIM_ENTRIES 1000
-  size_t max_entries = MAX_TRIM_ENTRIES;
-  bool more;
+  // list a single key to detect whether the range is empty
+  const size_t max_entries = 1;
+  std::set<std::string> keys;
+  bool more = false;
 
-  int rc = cls_cxx_map_get_vals(hctx, from_index, log_index_prefix, max_entries, &keys, &more);
-  if (rc < 0)
+  int rc = cls_cxx_map_get_keys(hctx, from_index, max_entries, &keys, &more);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_get_keys failed rc=%d", rc);
     return rc;
-
-  map<string, bufferlist>::iterator iter = keys.begin();
-
-  bool removed = false;
-  for (; iter != keys.end(); ++iter) {
-    const string& index = iter->first;
-
-    CLS_LOG(20, "index=%s to_index=%s", index.c_str(), to_index.c_str());
-
-    if (index.compare(0, to_index.size(), to_index) > 0)
-      break;
-
-    CLS_LOG(20, "removing key: index=%s", index.c_str());
-
-    int rc = cls_cxx_map_remove_key(hctx, index);
-    if (rc < 0) {
-      CLS_LOG(1, "ERROR: cls_cxx_map_remove_key failed rc=%d", rc);
-      return -EINVAL;
-    }
-    removed = true;
   }
 
-  if (!removed)
+  if (keys.empty()) {
+    CLS_LOG(20, "range is empty from_index=%s", from_index.c_str());
     return -ENODATA;
+  }
+
+  const std::string& first_key = *keys.begin();
+  if (to_index < first_key) {
+    CLS_LOG(20, "listed key %s past to_index=%s", first_key.c_str(), to_index.c_str());
+    return -ENODATA;
+  }
+
+  CLS_LOG(20, "listed key %s, removing through %s", first_key.c_str(), to_index.c_str());
+
+  rc = cls_cxx_map_remove_range(hctx, first_key, to_index);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_remove_range failed rc=%d", rc);
+    return rc;
+  }
 
   return 0;
 }

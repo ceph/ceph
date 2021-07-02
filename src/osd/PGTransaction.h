@@ -131,7 +131,7 @@ public:
 
     std::map<string, boost::optional<bufferlist> > attr_updates;
 
-    enum class OmapUpdateType {Remove, Insert};
+    enum class OmapUpdateType {Remove, Insert, RemoveRange};
     std::vector<std::pair<OmapUpdateType, bufferlist> > omap_updates;
 
     boost::optional<bufferlist> omap_header;
@@ -478,6 +478,26 @@ public:
     bufferlist bl;
     encode(keys, bl);
     omap_rmkeys(hoid, bl);
+  }
+  void omap_rmkeyrange(
+    const hobject_t &hoid,         ///< [in] object to write
+    bufferlist &range_bl           ///< [in] encode string[2]
+    ) {
+    auto &op = get_object_op_for_modify(hoid);
+    op.omap_updates.emplace_back(
+      make_pair(
+	ObjectOperation::OmapUpdateType::RemoveRange,
+	range_bl));
+  }
+  void omap_rmkeyrange(
+    const hobject_t &hoid,         ///< [in] object to write
+    std::string& key_begin,        ///< [in] first key in range
+    std::string& key_end           ///< [in] first key past range, range is [first,last)
+    ) {
+    bufferlist bl;
+    ::encode(key_begin, bl);
+    ::encode(key_end, bl);
+    omap_rmkeyrange(hoid, bl);
   }
   void omap_setheader(
     const hobject_t &hoid,         ///< [in] object to write
