@@ -44,25 +44,14 @@ tell_result_t::tell_result_t(std::unique_ptr<Formatter> formatter)
   formatter->flush(out);
 }
 
-seastar::future<>
-AdminSocket::register_command(std::unique_ptr<AdminSocketHook>&& hook)
+void AdminSocket::register_command(std::unique_ptr<AdminSocketHook>&& hook)
 {
-  return seastar::with_lock(servers_tbl_rwlock,
-			    [this, hook = std::move(hook)]() mutable {
-    auto prefix = hook->prefix;
-    auto [it, added] = hooks.emplace(prefix, std::move(hook));
-    //  was this server tag already registered?
-    assert(added);
-    if (added) {
-      logger().info("register_command(): {})", it->first);
-    }
-    return seastar::now();
-  });
+  auto prefix = hook->prefix;
+  auto [it, added] = hooks.emplace(prefix, std::move(hook));
+  assert(added);
+  logger().info("register_command(): {})", it->first);
 }
 
-/*
- * Note: parse_cmd() is executed with servers_tbl_rwlock held as shared
- */
 auto AdminSocket::parse_cmd(const std::vector<std::string>& cmd)
   -> std::variant<parsed_command_t, tell_result_t>
 {
@@ -155,26 +144,23 @@ auto AdminSocket::execute_command(const std::vector<std::string>& cmd,
 				  ceph::bufferlist&& buf)
   -> seastar::future<tell_result_t>
 {
-  return seastar::with_shared(servers_tbl_rwlock,
-			      [cmd, buf=std::move(buf), this]() mutable {
-    auto maybe_parsed = parse_cmd(cmd);
-    if (auto* parsed = std::get_if<parsed_command_t>(&maybe_parsed); parsed) {
-      stringstream os;
-      string desc{parsed->hook.desc};
-      if (!validate_cmd(nullptr, desc, parsed->params, os)) {
-	logger().error("AdminSocket::execute_command: "
-		       "failed to validate '{}': {}", cmd, os.str());
-	ceph::bufferlist out;
-	out.append(os);
-	return seastar::make_ready_future<tell_result_t>(
-          tell_result_t{-EINVAL, "invalid command json", std::move(out)});
-      }
-      return parsed->hook.call(parsed->params, parsed->format, std::move(buf));
-    } else {
-      auto& result = std::get<tell_result_t>(maybe_parsed);
-      return seastar::make_ready_future<tell_result_t>(std::move(result));
+  auto maybe_parsed = parse_cmd(cmd);
+  if (auto* parsed = std::get_if<parsed_command_t>(&maybe_parsed); parsed) {
+    stringstream os;
+    string desc{parsed->hook.desc};
+    if (!validate_cmd(nullptr, desc, parsed->params, os)) {
+      logger().error("AdminSocket::execute_command: "
+                     "failed to validate '{}': {}", cmd, os.str());
+      ceph::bufferlist out;
+      out.append(os);
+      return seastar::make_ready_future<tell_result_t>(
+        tell_result_t{-EINVAL, "invalid command json", std::move(out)});
     }
-  });
+    return parsed->hook.call(parsed->params, parsed->format, std::move(buf));
+  } else {
+    auto& result = std::get<tell_result_t>(maybe_parsed);
+    return seastar::make_ready_future<tell_result_t>(std::move(result));
+  }
 }
 
 // an input_stream consumer that reads buffer into a std::string up to the first
@@ -342,18 +328,16 @@ class HelpHook final : public AdminSocketHook {
 				      std::string_view format,
 				      ceph::bufferlist&&) const final
   {
-    return seastar::with_shared(m_as.servers_tbl_rwlock,
-				[format, this] {
-      unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-      f->open_object_section("help");
-      for (const auto& [prefix, hook] : m_as) {
-        if (!hook->help.empty()) {
-          f->dump_string(prefix.data(), hook->help);
-	}
+    unique_ptr<Formatter> f{Formatter::create(format,
+					      "json-pretty", "json-pretty")};
+    f->open_object_section("help");
+    for (const auto& [prefix, hook] : m_as) {
+      if (!hook->help.empty()) {
+        f->dump_string(prefix.data(), hook->help);
       }
-      f->close_section();
-      return seastar::make_ready_future<tell_result_t>(std::move(f));
-    });
+    }
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 };
 
@@ -371,20 +355,18 @@ class GetdescsHook final : public AdminSocketHook {
 				      std::string_view format,
 				      ceph::bufferlist&&) const final
   {
-    return seastar::with_shared(m_as.servers_tbl_rwlock, [format, this] {
-      unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-      int cmdnum = 0;
-      f->open_object_section("command_descriptions");
-      for (const auto& [prefix, hook] : m_as) {
-	auto secname = fmt::format("cmd {:>03}", cmdnum);
-        auto cmd = fmt::format("{} {}", hook->prefix, hook->desc);
-        dump_cmd_and_help_to_json(f.get(), CEPH_FEATURES_ALL, secname,
-                                  cmd, std::string{hook->help});
-        cmdnum++;
-      }
-      f->close_section();
-      return seastar::make_ready_future<tell_result_t>(std::move(f));
-    });
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    int cmdnum = 0;
+    f->open_object_section("command_descriptions");
+    for (const auto& [prefix, hook] : m_as) {
+      auto secname = fmt::format("cmd {:>03}", cmdnum);
+      auto cmd = fmt::format("{} {}", hook->prefix, hook->desc);
+      dump_cmd_and_help_to_json(f.get(), CEPH_FEATURES_ALL, secname,
+				cmd, std::string{hook->help});
+      cmdnum++;
+    }
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 };
 
@@ -529,21 +511,17 @@ public:
 };
 
 /// the hooks that are served directly by the admin_socket server
-seastar::future<> AdminSocket::register_admin_commands()
+void AdminSocket::register_admin_commands()
 {
-  return seastar::when_all_succeed(
-    register_command(std::make_unique<VersionHook>()),
-    register_command(std::make_unique<GitVersionHook>()),
-    register_command(std::make_unique<HelpHook>(*this)),
-    register_command(std::make_unique<GetdescsHook>(*this)),
-    register_command(std::make_unique<ConfigGetHook>()),
-    register_command(std::make_unique<ConfigSetHook>()),
-    register_command(std::make_unique<ConfigShowHook>()),
-    register_command(std::make_unique<ConfigHelpHook>()),
-    register_command(std::make_unique<InjectArgsHook>())
-  ).then_unpack([] {
-    return seastar::now();
-  });
+  register_command(std::make_unique<VersionHook>());
+  register_command(std::make_unique<GitVersionHook>());
+  register_command(std::make_unique<HelpHook>(*this));
+  register_command(std::make_unique<GetdescsHook>(*this));
+  register_command(std::make_unique<ConfigGetHook>());
+  register_command(std::make_unique<ConfigSetHook>());
+  register_command(std::make_unique<ConfigShowHook>());
+  register_command(std::make_unique<ConfigHelpHook>());
+  register_command(std::make_unique<InjectArgsHook>());
 }
 
 }  // namespace crimson::admin
