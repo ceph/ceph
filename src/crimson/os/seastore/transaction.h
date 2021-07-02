@@ -34,7 +34,7 @@ public:
   get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
     if (retired_set.count(addr)) {
       return get_extent_ret::RETIRED;
-    } else if (auto iter = write_set.find_offset(addr);
+    } else if (auto iter = find_in_write_set(addr);
 	iter != write_set.end()) {
       if (out)
 	*out = CachedExtentRef(&*iter);
@@ -74,6 +74,18 @@ public:
 
     auto [iter, inserted] = read_set.emplace(this, ref);
     ceph_assert(inserted);
+  }
+
+  //XXX: boost::intrusive::set seems to have a bug in it, in which
+  //	 it may leak the first item when trying to find a specific item
+  CachedExtent::index::iterator find_in_write_set(paddr_t addr) {
+    auto it = write_set.begin();
+    for (; it != write_set.end(); ++it) {
+	if (it->poffset == addr) {
+	  break;
+	}
+    }
+    return it;
   }
 
   void add_fresh_extent(CachedExtentRef ref) {
