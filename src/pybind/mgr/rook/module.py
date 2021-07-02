@@ -74,9 +74,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     MODULE_OPTIONS: List[Option] = [
         # TODO: configure k8s API addr instead of assuming local
         Option(
-            'storage_class_name',
+            'storage_class',
             type='str',
-            default='local-sc',
+            default='local',
             desc='storage class name for LSO-discovered PVs',
         ),
     ]
@@ -112,9 +112,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._k8s_StorageV1_api: Optional[client.StorageV1Api] = None
         self._rook_cluster: Optional[RookCluster] = None
         self._rook_env = RookEnv()
-        self.storage_class_name = self.get_module_option('storage_class_name')
+        self.storage_class = self.get_module_option('storage_class')
 
         self._shutdown = threading.Event()
+        
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
@@ -127,8 +128,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     self.get_module_option(opt['name']))  # type: ignore
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))  # type: ignore
-        assert isinstance(self.storage_class_name, str)
-        self.rook_cluster.storage_class_name = self.storage_class_name
+        assert isinstance(self.storage_class, str)
+        self.rook_cluster.storage_class = self.storage_class
 
     def shutdown(self) -> None:
         self._shutdown.set()
@@ -177,7 +178,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # Ignore here to make self.available() fail with a proper error message
             pass
 
-        assert isinstance(self.storage_class_name, str)
+        assert isinstance(self.storage_class, str)
 
         self._rook_cluster = RookCluster(
             self._k8s_CoreV1_api,
@@ -185,7 +186,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             self._k8s_CustomObjects_api,
             self._k8s_StorageV1_api,
             self._rook_env,
-            self.storage_class_name)
+            self.storage_class)
 
         self._initialized.set()
 

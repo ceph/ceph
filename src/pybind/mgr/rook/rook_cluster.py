@@ -198,13 +198,13 @@ class KubernetesResource(Generic[T]):
 class RookCluster(object):
     # import of client.CoreV1Api must be optional at import time.
     # Instead allow mgr/rook to be imported anyway.
-    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', storageV1_api: 'client.StorageV1Api', rook_env: 'RookEnv', storage_class_name: 'str'):
+    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', storageV1_api: 'client.StorageV1Api', rook_env: 'RookEnv', storage_class: 'str'):
         self.rook_env = rook_env  # type: RookEnv
         self.coreV1_api = coreV1_api  # client.CoreV1Api
         self.batchV1_api = batchV1_api
         self.customObjects_api = customObjects_api
         self.storageV1_api = storageV1_api  # client.StorageV1Api
-        self.storage_class_name = storage_class_name # type: str
+        self.storage_class = storage_class # type: str
 
         #  TODO: replace direct k8s calls with Rook API calls
         # when they're implemented
@@ -262,13 +262,13 @@ class RookCluster(object):
                 return item['spec']['nodeName'] in nodenames
             else:
                 return True
-        matching_sc = [i for i in self.storage_classes.items if self.storage_class_name == i.metadata.name]
+        matching_sc = [i for i in self.storage_classes.items if self.storage_class == i.metadata.name]
         if len(matching_sc) == 0:
-            log.exception("no storage class exists matching name provided in ceph config at mgr/rook/storage_class_name")
-            raise Exception('No storage class exists matching name provided in ceph config at mgr/rook/storage_class_name')
+            log.exception("no storage class exists matching name provided in ceph config at mgr/rook/storage_class")
+            raise Exception('No storage class exists matching name provided in ceph config at mgr/rook/storage_class')
         if len(matching_sc) > 1:
-            log.exception("too many storage classes matching name provided in ceph config at mgr/rook/storage_class_name")
-            raise Exception('Too many storage classes matching name provided in ceph config at mgr/rook/storage_class_name')
+            log.exception("too many storage classes matching name provided in ceph config at mgr/rook/storage_class")
+            raise Exception('Too many storage classes matching name provided in ceph config at mgr/rook/storage_class')
         storage_class = matching_sc[0]
 
         lso_discovery_results = []
@@ -285,7 +285,7 @@ class RookCluster(object):
             drives = i['status']['discoveredDevices']
             for drive in drives:
                 lso_devices[drive['deviceID'].split('/')[-1]] = drive
-        pvs_in_sc = [i for i in self.pvs.items if i.spec.storage_class_name == self.storage_class_name]
+        pvs_in_sc = [i for i in self.pvs.items if i.spec.storage_class_name == self.storage_class]
 
         def convert_size(size_str: str) -> int:
             units = ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei")
