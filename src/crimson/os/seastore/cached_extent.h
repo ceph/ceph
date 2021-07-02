@@ -69,9 +69,9 @@ public:
   ~read_set_item_t();
 };
 template <typename T>
-struct read_set_t : public std::set<
+using read_set_t = std::set<
   read_set_item_t<T>,
-  typename read_set_item_t<T>::cmp_t> {};
+  typename read_set_item_t<T>::cmp_t>;
 
 class ExtentIndex;
 class CachedExtent : public boost::intrusive_ref_counter<
