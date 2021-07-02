@@ -459,7 +459,7 @@ print(_find_admin_socket("{client_name}"))
             client_name="client.{0}".format(self.client_id),
             mountpoint=self.mountpoint)
 
-        asok_path = self.run_python(pyscript)
+        asok_path = self.run_python(pyscript, sudo=True)
         log.info("Found client admin socket at {0}".format(asok_path))
         return asok_path
 

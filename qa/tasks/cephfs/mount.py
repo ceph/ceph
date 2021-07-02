@@ -12,7 +12,7 @@ from textwrap import dedent
 from IPy import IP
 
 from teuthology.contextutil import safe_while
-from teuthology.misc import get_file, sudo_write_file
+from teuthology.misc import get_file, write_file
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError, Raw
 
@@ -625,7 +625,7 @@ class CephFSMount(object):
         for suffix in self.test_files:
             log.info("Creating file {0}".format(suffix))
             self.client_remote.run(args=[
-                'sudo', 'touch', os.path.join(self.hostfs_mntpt, suffix)
+                'touch', os.path.join(self.hostfs_mntpt, suffix)
             ])
 
     def test_create_file(self, filename='testfile', dirname=None, user=None,
@@ -639,7 +639,7 @@ class CephFSMount(object):
         for suffix in self.test_files:
             log.info("Checking file {0}".format(suffix))
             r = self.client_remote.run(args=[
-                'sudo', 'ls', os.path.join(self.hostfs_mntpt, suffix)
+                'ls', os.path.join(self.hostfs_mntpt, suffix)
             ], check_status=False)
             if r.exitstatus != 0:
                 raise RuntimeError("Expected file {0} not found".format(suffix))
@@ -652,7 +652,7 @@ class CephFSMount(object):
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        sudo_write_file(self.client_remote, path, data)
+        write_file(self.client_remote, path, data)
 
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
@@ -664,7 +664,7 @@ class CephFSMount(object):
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        return self.run_shell(args=['sudo', 'cat', path], omit_sudo=False).\
+        return self.run_shell(args=['cat', path]).\
             stdout.getvalue().strip()
 
     def create_destroy(self):
@@ -673,33 +673,35 @@ class CephFSMount(object):
         filename = "{0} {1}".format(datetime.datetime.now(), self.client_id)
         log.debug("Creating test file {0}".format(filename))
         self.client_remote.run(args=[
-            'sudo', 'touch', os.path.join(self.hostfs_mntpt, filename)
+            'touch', os.path.join(self.hostfs_mntpt, filename)
         ])
         log.debug("Deleting test file {0}".format(filename))
         self.client_remote.run(args=[
-            'sudo', 'rm', '-f', os.path.join(self.hostfs_mntpt, filename)
+            'rm', '-f', os.path.join(self.hostfs_mntpt, filename)
         ])
 
-    def _run_python(self, pyscript, py_version='python3'):
-        return self.client_remote.run(
-               args=['sudo', 'adjust-ulimits', 'daemon-helper', 'kill',
-                     py_version, '-c', pyscript], wait=False, stdin=run.PIPE,
-               stdout=StringIO())
+    def _run_python(self, pyscript, py_version='python3', sudo=False):
+        args = []
+        if sudo:
+            args.append('sudo')
+        args += ['adjust-ulimits', 'daemon-helper', 'kill', py_version, '-c', pyscript]
+        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE, stdout=StringIO())
 
-    def run_python(self, pyscript, py_version='python3'):
-        p = self._run_python(pyscript, py_version)
+    def run_python(self, pyscript, py_version='python3', sudo=False):
+        p = self._run_python(pyscript, py_version, sudo=sudo)
         p.wait()
         return p.stdout.getvalue().strip()
 
-    def run_shell(self, args, omit_sudo=True, timeout=900, **kwargs):
+    def run_shell(self, args, timeout=900, **kwargs):
         args = args.split() if isinstance(args, str) else args
-        # XXX: all commands ran with CephFS mount as CWD must be executed with
-        #  superuser privileges when tests are being run using teuthology.
-        if args[0] != 'sudo':
-            args.insert(0, 'sudo')
+        kwargs.pop('omit_sudo', False)
+        sudo = kwargs.pop('sudo', False)
         cwd = kwargs.pop('cwd', self.mountpoint)
         stdout = kwargs.pop('stdout', StringIO())
         stderr = kwargs.pop('stderr', StringIO())
+
+        if sudo:
+            args.insert(0, 'sudo')
 
         return self.client_remote.run(args=args, cwd=cwd, timeout=timeout, stdout=stdout, stderr=stderr, **kwargs)
 
@@ -845,7 +847,7 @@ class CephFSMount(object):
         i = 0
         while i < timeout:
             r = self.client_remote.run(args=[
-                'sudo', 'ls', os.path.join(self.hostfs_mntpt, basename)
+                'stat', os.path.join(self.hostfs_mntpt, basename)
             ], check_status=False)
             if r.exitstatus == 0:
                 log.debug("File {0} became visible from {1} after {2}s".format(
@@ -943,7 +945,7 @@ class CephFSMount(object):
 
         log.info("check lock on file {0}".format(basename))
         self.client_remote.run(args=[
-            'sudo', 'python3', '-c', pyscript
+            'python3', '-c', pyscript
         ])
 
     def write_background(self, basename="background_file", loop=False):
@@ -1004,6 +1006,7 @@ class CephFSMount(object):
 
     def validate_test_pattern(self, filename, size):
         log.info("Validating {0} bytes from {1}".format(size, filename))
+        # Use sudo because cephfs-data-scan may recreate the file with owner==root
         return self.run_python(dedent("""
             import zlib
             path = "{path}"
@@ -1020,7 +1023,7 @@ class CephFSMount(object):
         """.format(
             path=os.path.join(self.hostfs_mntpt, filename),
             size=size
-        )))
+        )), sudo=True)
 
     def open_n_background(self, fs_path, count):
         """
@@ -1134,7 +1137,7 @@ class CephFSMount(object):
     def lstat(self, fs_path, follow_symlinks=False, wait=True):
         return self.stat(fs_path, follow_symlinks=False, wait=True)
 
-    def stat(self, fs_path, follow_symlinks=True, wait=True):
+    def stat(self, fs_path, follow_symlinks=True, wait=True, **kwargs):
         """
         stat a file, and return the result as a dictionary like this:
         {
@@ -1174,7 +1177,7 @@ class CephFSMount(object):
                 dict([(a, getattr(s, a)) for a in attrs]),
                 indent=2))
             """).format(stat_call=stat_call)
-        proc = self._run_python(pyscript)
+        proc = self._run_python(pyscript, **kwargs)
         if wait:
             proc.wait()
             return json.loads(proc.stdout.getvalue().strip())
@@ -1240,7 +1243,7 @@ class CephFSMount(object):
         proc.wait()
         return int(proc.stdout.getvalue().strip())
 
-    def ls(self, path=None):
+    def ls(self, path=None, **kwargs):
         """
         Wrap ls: return a list of strings
         """
@@ -1248,7 +1251,7 @@ class CephFSMount(object):
         if path:
             cmd.append(path)
 
-        ls_text = self.run_shell(cmd).stdout.getvalue().strip()
+        ls_text = self.run_shell(cmd, **kwargs).stdout.getvalue().strip()
 
         if ls_text:
             return ls_text.split("\n")
@@ -1257,7 +1260,7 @@ class CephFSMount(object):
             # gives you [''] instead of []
             return []
 
-    def setfattr(self, path, key, val):
+    def setfattr(self, path, key, val, **kwargs):
         """
         Wrap setfattr.
 
@@ -1266,16 +1269,16 @@ class CephFSMount(object):
         :param val: xattr value
         :return: None
         """
-        self.run_shell(["setfattr", "-n", key, "-v", val, path])
+        self.run_shell(["setfattr", "-n", key, "-v", val, path], **kwargs)
 
-    def getfattr(self, path, attr):
+    def getfattr(self, path, attr, **kwargs):
         """
         Wrap getfattr: return the values of a named xattr on one file, or
         None if the attribute is not found.
 
         :return: a string
         """
-        p = self.run_shell(["getfattr", "--only-values", "-n", attr, path], wait=False)
+        p = self.run_shell(["getfattr", "--only-values", "-n", attr, path], wait=False, **kwargs)
         try:
             p.wait()
         except CommandFailedError as e:
