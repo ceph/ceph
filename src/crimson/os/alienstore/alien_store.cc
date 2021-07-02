@@ -26,10 +26,11 @@
 #include "crimson/os/futurized_store.h"
 
 namespace {
-  seastar::logger& logger()
-  {
-    return crimson::get_logger(ceph_subsys_bluestore);
-  }
+
+seastar::logger& logger()
+{
+  return crimson::get_logger(ceph_subsys_bluestore);
+}
 
 class OnCommit final: public Context
 {
