@@ -102,7 +102,7 @@ int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, cons
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y);
 
-int rgw_tools_init(CephContext *cct);
+int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct);
 void rgw_tools_cleanup();
 
 template<class H, size_t S>

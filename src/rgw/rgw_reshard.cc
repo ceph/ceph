@@ -372,7 +372,7 @@ int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
 
 int RGWBucketReshard::cancel(const DoutPrefixProvider *dpp)
 {
-  int ret = reshard_lock.lock();
+  int ret = reshard_lock.lock(dpp);
   if (ret < 0) {
     return ret;
   }
@@ -473,7 +473,7 @@ RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RadosStore* _store,
   internal_lock.set_duration(duration);
 }
 
-int RGWBucketReshardLock::lock() {
+int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp) {
   internal_lock.set_must_renew(false);
 
   int ret;
@@ -490,7 +490,7 @@ int RGWBucketReshardLock::lock() {
       " to be held by another RGW process; skipping for now" << dendl;
     return ret;
   } else if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: RGWReshardLock::" << __func__ <<
+    ldpp_dout(dpp, -1) << "ERROR: RGWReshardLock::" << __func__ <<
       " failed to acquire lock on " << lock_oid << ": " <<
       cpp_strerror(-ret) << dendl;
     return ret;
@@ -711,7 +711,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
                               bool verbose, ostream *out, Formatter *formatter,
 			      RGWReshard* reshard_log)
 {
-  int ret = reshard_lock.lock();
+  int ret = reshard_lock.lock(dpp);
   if (ret < 0) {
     return ret;
   }
@@ -862,7 +862,7 @@ int RGWReshard::update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucke
   entry.bucket_id = bucket_info.bucket.bucket_id;
   entry.tenant = bucket_info.owner.tenant;
 
-  int ret = get(entry);
+  int ret = get(dpp, entry);
   if (ret < 0) {
     return ret;
   }
@@ -879,7 +879,7 @@ int RGWReshard::update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucke
 }
 
 
-int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated)
+int RGWReshard::list(const DoutPrefixProvider *dpp, int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated)
 {
   string logshard_oid;
 
@@ -888,14 +888,14 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
   int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
 
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << " " 
+    ldpp_dout(dpp, -1) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << " " 
     << "marker=" << marker << " " << cpp_strerror(ret) << dendl;
     if (ret == -ENOENT) {
       *is_truncated = false;
       ret = 0;
     } else {
       if (ret == -EACCES) {
-        lderr(store->ctx()) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
+        ldpp_dout(dpp, -1) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
                           << ". Fix the pool access permissions of your client" << dendl;
       }
     } 
@@ -904,7 +904,7 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
   return ret;
 }
 
-int RGWReshard::get(cls_rgw_reshard_entry& entry)
+int RGWReshard::get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
 {
   string logshard_oid;
 
@@ -913,7 +913,7 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
   int ret = cls_rgw_reshard_get(store->getRados()->reshard_pool_ctx, logshard_oid, entry);
   if (ret < 0) {
     if (ret != -ENOENT) {
-      lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
+      ldpp_dout(dpp, -1) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
 	" bucket=" << entry.bucket_name << dendl;
     }
     return ret;
@@ -940,11 +940,11 @@ int RGWReshard::remove(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& ent
   return ret;
 }
 
-int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
+int RGWReshard::clear_bucket_resharding(const DoutPrefixProvider *dpp, const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
 {
   int ret = cls_rgw_clear_bucket_resharding(store->getRados()->reshard_pool_ctx, bucket_instance_oid);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to clear bucket resharding, bucket_instance_oid=" << bucket_instance_oid << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to clear bucket resharding, bucket_instance_oid=" << bucket_instance_oid << dendl;
     return ret;
   }
 
@@ -1009,7 +1009,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
   RGWBucketReshardLock logshard_lock(store, logshard_oid, false);
 
-  int ret = logshard_lock.lock();
+  int ret = logshard_lock.lock(dpp);
   if (ret < 0) { 
     ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " <<
       logshard_oid << ", ret = " << ret <<dendl;
@@ -1018,7 +1018,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   
   do {
     std::list<cls_rgw_reshard_entry> entries;
-    ret = list(logshard_num, marker, max_entries, entries, &truncated);
+    ret = list(dpp, logshard_num, marker, max_entries, entries, &truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "cannot list all reshards in logshard oid=" <<
 	logshard_oid << dendl;

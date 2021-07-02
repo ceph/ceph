@@ -1549,7 +1549,7 @@ void get_stale_instances(rgw::sal::Store* store, const std::string& bucket_name,
   // with these
   {
     RGWBucketReshardLock reshard_lock(static_cast<rgw::sal::RadosStore*>(store), cur_bucket->get_info(), true);
-    r = reshard_lock.lock();
+    r = reshard_lock.lock(dpp);
     if (r < 0) {
       // most likely bucket is under reshard, return the sureshot stale instances
       ldpp_dout(dpp, 5) << __func__

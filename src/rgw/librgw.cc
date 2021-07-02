@@ -518,7 +518,7 @@ namespace rgw {
 
     common_init_finish(g_ceph_context);
 
-    rgw_tools_init(g_ceph_context);
+    rgw_tools_init(this, g_ceph_context);
 
     rgw_init_resolver();
     rgw::curl::setup_curl(boost::none);
