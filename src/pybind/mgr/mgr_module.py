@@ -78,6 +78,8 @@ PG_STATES = [
     "wait",
 ]
 
+NFS_POOL_NAME = '.nfs'
+
 
 class CommandResult(object):
     """
