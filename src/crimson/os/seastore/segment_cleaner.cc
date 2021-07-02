@@ -286,7 +286,7 @@ SegmentCleaner::gc_trim_journal_ret SegmentCleaner::gc_trim_journal()
       return seastar::do_with(
 	ecb->create_transaction(),
 	[this](auto &tref) {
-	  return with_trans_intr(*tref, [this, &tref](auto &t) {
+	  return with_trans_intr(*tref, [this](auto &t) {
 	    return rewrite_dirty(t, get_dirty_tail()
 	    ).si_then([this, &t] {
 	      return ecb->submit_transaction_direct(
@@ -332,7 +332,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 	  return seastar::do_with(
 	    ecb->create_transaction(),
 	    [this, &extents](auto &tref) mutable {
-	      return with_trans_intr(*tref, [this, &extents, &tref](auto &t) {
+	      return with_trans_intr(*tref, [this, &extents](auto &t) {
 		return trans_intr::do_for_each(
 		  extents,
 		  [this, &t](auto &extent) {

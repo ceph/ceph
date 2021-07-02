@@ -404,7 +404,7 @@ SeaStore::_omap_get_values_ret SeaStore::_omap_get_values(
     [&](auto &manager, auto &root, auto &ret) {
       return with_trans_intr(
 	t,
-	[&, this](auto &t) {
+	[&](auto &t) {
 	  return trans_intr::do_for_each(
 	    keys.begin(),
 	    keys.end(),
