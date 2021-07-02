@@ -24,7 +24,7 @@ from prettytable import PrettyTable
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
-    NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
+    ServiceSpec, PlacementSpec, assert_valid_host, \
     HostPlacementSpec, IngressSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
@@ -1730,9 +1730,6 @@ Then run the following:
                 virtual_ip=spec.get_virtual_ip(),
                 ports=spec.get_port_start(),
             )
-            if service_type == 'nfs':
-                spec = cast(NFSServiceSpec, spec)
-                sm[nm].rados_config_location = spec.rados_config_location()
             if spec.service_type == 'ingress':
                 # ingress has 2 daemons running per host
                 sm[nm].size *= 2
