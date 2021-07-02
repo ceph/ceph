@@ -73,7 +73,13 @@ public:
     if (is_weak()) return;
 
     auto [iter, inserted] = read_set.emplace(this, ref);
-    ceph_assert(inserted);
+    if (!inserted) {
+      ::crimson::get_logger(ceph_subsys_seastore).debug(
+	"{} {} {} already in read_set",
+	__func__,
+	(void*)this,
+	*ref);
+    }
   }
 
   //XXX: boost::intrusive::set seems to have a bug in it, in which
