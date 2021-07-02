@@ -38,6 +38,7 @@ public:
 
 private:
   typedef std::map<uint8_t, ObjectRecorderPtr> ObjectRecorderPtrs;
+  typedef std::vector<std::unique_ptr<Mutex::Locker>> Lockers;
 
   struct Listener : public JournalMetadataListener {
     JournalRecorder *journal_recorder;
@@ -112,24 +113,14 @@ private:
 
   ObjectRecorderPtr create_object_recorder(uint64_t object_number,
                                            std::shared_ptr<Mutex> lock);
-  void create_next_object_recorder(ObjectRecorderPtr object_recorder);
+  bool create_next_object_recorder(ObjectRecorderPtr object_recorder);
 
   void handle_update();
 
   void handle_closed(ObjectRecorder *object_recorder);
   void handle_overflow(ObjectRecorder *object_recorder);
 
-  void lock_object_recorders() {
-    for (auto& lock : m_object_locks) {
-      lock->Lock();
-    }
-  }
-
-  void unlock_object_recorders() {
-    for (auto& lock : m_object_locks) {
-      lock->Unlock();
-    }
-  }
+  Lockers lock_object_recorders();
 };
 
 } // namespace journal

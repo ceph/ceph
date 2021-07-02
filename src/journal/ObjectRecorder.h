@@ -134,20 +134,25 @@ private:
   InFlightTids m_in_flight_tids;
   InFlightAppends m_in_flight_appends;
   uint64_t m_object_bytes = 0;
-  bool m_overflowed;
-  bool m_object_closed;
+
+  bool m_overflowed = false;
+
+  bool m_object_closed = false;
+  bool m_object_closed_notify = false;
 
   bufferlist m_prefetch_bl;
 
-  bool m_in_flight_flushes;
-  Cond m_in_flight_flushes_cond;
+  uint32_t m_in_flight_callbacks = 0;
+  Cond m_in_flight_callbacks_cond;
   uint64_t m_in_flight_bytes = 0;
 
   bool send_appends(bool force, FutureImplPtr flush_sentinal);
   void handle_append_flushed(uint64_t tid, int r);
   void append_overflowed();
 
-  void notify_handler_unlock();
+  void wake_up_flushes();
+  void notify_handler_unlock(std::shared_ptr<Mutex> &lock,
+                             bool notify_overflowed);
 };
 
 } // namespace journal

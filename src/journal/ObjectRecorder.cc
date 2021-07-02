@@ -26,8 +26,7 @@ ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
     m_cct(NULL), m_op_work_queue(work_queue), m_handler(handler),
     m_order(order), m_soft_max_size(1 << m_order),
     m_max_in_flight_appends(max_in_flight_appends), m_flush_handler(this),
-    m_lock(lock), m_last_flush_time(ceph_clock_now()), m_append_tid(0),
-    m_overflowed(false), m_object_closed(false), m_in_flight_flushes(false) {
+    m_lock(lock), m_last_flush_time(ceph_clock_now()), m_append_tid(0) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
   ceph_assert(m_handler != NULL);
@@ -85,8 +84,8 @@ void ObjectRecorder::flush(Context *on_safe) {
     // if currently handling flush notifications, wait so that
     // we notify in the correct order (since lock is dropped on
     // callback)
-    if (m_in_flight_flushes) {
-      m_in_flight_flushes_cond.Wait(*(m_lock.get()));
+    while (m_in_flight_callbacks > 0) {
+      m_in_flight_callbacks_cond.Wait(*(m_lock.get()));
     }
 
     // attach the flush to the most recent append
@@ -125,9 +124,9 @@ void ObjectRecorder::flush(const FutureImplPtr &future) {
     return;
   }
 
-  bool overflowed = send_appends(true, future);
-  if (overflowed) {
-    notify_handler_unlock();
+  if (!m_object_closed && !m_overflowed && send_appends(true, future)) {
+    ++m_in_flight_callbacks;
+    notify_handler_unlock(m_lock, true);
   } else {
     m_lock->Unlock();
   }
@@ -153,52 +152,63 @@ bool ObjectRecorder::close() {
   ceph_assert(m_lock->is_locked());
 
   ldout(m_cct, 20) << dendl;
+
   send_appends(true, {});
 
   ceph_assert(!m_object_closed);
   m_object_closed = true;
-  return (m_in_flight_tids.empty() && !m_in_flight_flushes);
+
+  if (!m_in_flight_tids.empty() || m_in_flight_callbacks > 0) {
+    m_object_closed_notify = true;
+    return false;
+  }
+
+  return true;
 }
 
 void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
   ldout(m_cct, 20) << "tid=" << tid << ", r=" << r << dendl;
 
+  m_lock->Lock();
+  ++m_in_flight_callbacks;
+
+  auto tid_iter = m_in_flight_tids.find(tid);
+  ceph_assert(tid_iter != m_in_flight_tids.end());
+  m_in_flight_tids.erase(tid_iter);
+
+  InFlightAppends::iterator iter = m_in_flight_appends.find(tid);
+  ceph_assert(iter != m_in_flight_appends.end());
+
+  bool notify_overflowed = false;
   AppendBuffers append_buffers;
-  {
-    m_lock->Lock();
-    auto tid_iter = m_in_flight_tids.find(tid);
-    ceph_assert(tid_iter != m_in_flight_tids.end());
-    m_in_flight_tids.erase(tid_iter);
-
-    InFlightAppends::iterator iter = m_in_flight_appends.find(tid);
-    ceph_assert(iter != m_in_flight_appends.end());
-
-    if (r == -EOVERFLOW) {
-      ldout(m_cct, 10) << "append overflowed" << dendl;
-      m_overflowed = true;
-
-      // notify of overflow once all in-flight ops are complete
-      if (m_in_flight_tids.empty()) {
-        append_overflowed();
-        notify_handler_unlock();
-      } else {
-        m_lock->Unlock();
-      }
-      return;
+  if (r == -EOVERFLOW) {
+    ldout(m_cct, 10) << "append overflowed: "
+                     << "idle=" << m_in_flight_tids.empty() << ", "
+                     << "previous_overflow=" << m_overflowed << dendl;
+    if (m_in_flight_tids.empty()) {
+      append_overflowed();
     }
 
+    if (!m_object_closed && !m_overflowed) {
+      notify_overflowed = true;
+    }
+    m_overflowed = true;
+  } else {
     append_buffers.swap(iter->second);
     ceph_assert(!append_buffers.empty());
 
     for (auto& append_buffer : append_buffers) {
-      m_object_bytes += append_buffer.second.length();
+      auto length = append_buffer.second.length();
+      m_object_bytes += length;
+
+      ceph_assert(m_in_flight_bytes >= length);
+      m_in_flight_bytes -= length;
     }
     ldout(m_cct, 20) << "object_bytes=" << m_object_bytes << dendl;
 
     m_in_flight_appends.erase(iter);
-    m_in_flight_flushes = true;
-    m_lock->Unlock();
   }
+  m_lock->Unlock();
 
   // Flag the associated futures as complete.
   for (auto& append_buffer : append_buffers) {
@@ -206,22 +216,18 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
     append_buffer.first->safe(r);
   }
 
-  // wake up any flush requests that raced with a RADOS callback
+  // attempt to kick off more appends to the object
   m_lock->Lock();
-  m_in_flight_flushes = false;
-  m_in_flight_flushes_cond.Signal();
-
-  if (m_in_flight_appends.empty() && (m_object_closed || m_overflowed)) {
-    // all remaining unsent appends should be redirected to new object
-    notify_handler_unlock();
-  } else {
-    bool overflowed = send_appends(false, {});
-    if (overflowed) {
-      notify_handler_unlock();
-    } else {
-      m_lock->Unlock();
-    }
+  if (!m_object_closed && !m_overflowed && send_appends(false, {})) {
+    notify_overflowed = true;
   }
+
+  ldout(m_cct, 20) << "pending tids=" << m_in_flight_tids << dendl;
+
+  // notify of overflow if one just occurred or indicate that all in-flight
+  // appends have completed on a closed object (or wake up stalled flush
+  // requests that was waiting for this strand to complete).
+  notify_handler_unlock(m_lock, notify_overflowed);
 }
 
 void ObjectRecorder::append_overflowed() {
@@ -264,10 +270,15 @@ bool ObjectRecorder::send_appends(bool force, FutureImplPtr flush_future) {
   if (!force &&
       ((m_flush_interval > 0 && m_pending_buffers.size() >= m_flush_interval) ||
        (m_flush_bytes > 0 && m_pending_bytes >= m_flush_bytes) ||
-       (m_flush_age > 0 &&
-        m_last_flush_time + m_flush_age >= ceph_clock_now()))) {
+       (m_flush_age > 0 && !m_last_flush_time.is_zero() &&
+        m_last_flush_time + m_flush_age <= ceph_clock_now()))) {
     ldout(m_cct, 20) << "forcing batch flush" << dendl;
     force = true;
+  }
+
+  // start tracking flush time after the first append event
+  if (m_last_flush_time.is_zero()) {
+    m_last_flush_time = ceph_clock_now();
   }
 
   auto max_in_flight_appends = m_max_in_flight_appends;
@@ -296,10 +307,10 @@ bool ObjectRecorder::send_appends(bool force, FutureImplPtr flush_future) {
     auto& bl = it->second;
     auto size = m_object_bytes + m_in_flight_bytes + append_bytes + bl.length();
     if (size == m_soft_max_size) {
-      ldout(m_cct, 10) << "object at capacity " << *future << dendl;
+      ldout(m_cct, 10) << "object at capacity (" << size << ") " << *future << dendl;
       m_overflowed = true;
     } else if (size > m_soft_max_size) {
-      ldout(m_cct, 10) << "object beyond capacity " << *future << dendl;
+      ldout(m_cct, 10) << "object beyond capacity (" << size << ") " << *future << dendl;
       m_overflowed = true;
       break;
     }
@@ -346,15 +357,45 @@ bool ObjectRecorder::send_appends(bool force, FutureImplPtr flush_future) {
   return m_overflowed;
 }
 
-void ObjectRecorder::notify_handler_unlock() {
-  ceph_assert(m_lock->is_locked());
-  if (m_object_closed) {
-    m_lock->Unlock();
-    m_handler->closed(this);
-  } else {
+void ObjectRecorder::wake_up_flushes() {
+  ceph_assert(ceph_mutex_is_locked(*m_lock));
+  --m_in_flight_callbacks;
+  if (m_in_flight_callbacks == 0) {
+    m_in_flight_callbacks_cond.SignalAll();
+  }
+}
+
+void ObjectRecorder::notify_handler_unlock(
+    std::shared_ptr<Mutex> &lock, bool notify_overflowed) {
+  ceph_assert(ceph_mutex_is_locked(*m_lock));
+  ceph_assert(m_in_flight_callbacks > 0);
+
+  if (!m_object_closed && notify_overflowed) {
     // TODO need to delay completion until after aio_notify completes
-    m_lock->Unlock();
+    ldout(m_cct, 10) << "overflow" << dendl;
+    ceph_assert(m_overflowed);
+
+    lock->Unlock();
     m_handler->overflow(this);
+    lock->Lock();
+  }
+
+  // wake up blocked flush requests
+  wake_up_flushes();
+
+  // An overflow notification might have blocked a close. A close
+  // notification could lead to the immediate destruction of this object
+  // so the object shouldn't be referenced anymore
+  bool object_closed_notify = false;
+  if (m_in_flight_tids.empty()) {
+    std::swap(object_closed_notify, m_object_closed_notify);
+  }
+  ceph_assert(m_object_closed || !object_closed_notify);
+  lock->Unlock();
+
+  if (object_closed_notify) {
+    ldout(m_cct, 10) << "closed" << dendl;
+    m_handler->closed(this);
   }
 }
 
