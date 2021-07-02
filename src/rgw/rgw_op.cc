@@ -527,8 +527,15 @@ static int read_obj_policy(RGWRados *store,
     const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
     if (bucket_owner.compare(s->user->user_id) != 0 &&
         ! s->auth.identity->is_admin_of(bucket_owner)) {
+      auto r = eval_user_policies(s->iam_user_policies, s->env,
+                                  *s->auth.identity, rgw::IAM::s3ListBucket,
+                                  ARN(bucket));
+      if (r == Effect::Allow)
+        return -ENOENT;
+      if (r == Effect::Deny)
+        return -EACCES;
       if (policy) {
-        auto r =  policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket));
+        r = policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket));
         if (r == Effect::Allow)
           return -ENOENT;
         if (r == Effect::Deny)
