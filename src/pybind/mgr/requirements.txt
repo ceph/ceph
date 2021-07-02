@@ -8,4 +8,5 @@ pyOpenSSL
 execnet
 remoto
 Jinja2
+cherrypy
 pyfakefs

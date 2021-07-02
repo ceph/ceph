@@ -530,11 +530,10 @@ class HostCache():
             return True
         return False
 
-    def update_host_devices_networks(
+    def update_host_devices(
             self,
             host: str,
             dls: List[inventory.Device],
-            nets: Dict[str, Dict[str, List[str]]]
     ) -> None:
         if (
                 host not in self.devices
@@ -544,6 +543,12 @@ class HostCache():
             self.last_device_change[host] = datetime_now()
         self.last_device_update[host] = datetime_now()
         self.devices[host] = dls
+
+    def update_host_networks(
+            self,
+            host: str,
+            nets: Dict[str, Dict[str, List[str]]]
+    ) -> None:
         self.networks[host] = nets
 
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:

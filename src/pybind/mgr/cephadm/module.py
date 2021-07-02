@@ -1,8 +1,10 @@
 import json
+import cherrypy
 import errno
 import logging
 import re
 import shlex
+import threading
 from collections import defaultdict
 from configparser import ConfigParser
 from functools import wraps
@@ -89,6 +91,16 @@ Host *
   UserKnownHostsFile /dev/null
   ConnectTimeout=30
 """
+
+# cherrypy likes to sys.exit on error.  don't let it take us down too!
+
+
+def os_exit_noop(status: int) -> None:
+    pass
+
+
+os._exit = os_exit_noop   # type: ignore
+
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'docker.io/ceph/ceph'
@@ -469,6 +481,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.config_checker = CephadmConfigChecks(self)
 
+        self.cherrypy_thread = CherryPyThread(self)
+
     def shutdown(self) -> None:
         self.log.debug('shutdown')
         self._worker_pool.close()
@@ -695,6 +709,61 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             conn, r = conn_and_r
             conn.exit()
         self._cons = {}
+
+    def _process_ls_output(self, host: str, ls: List[Dict[str, Any]]) -> None:
+        dm = {}
+        for d in ls:
+            if not d['style'].startswith('cephadm'):
+                continue
+            if d['fsid'] != self._cluster_fsid:
+                continue
+            if '.' not in d['name']:
+                continue
+            sd = orchestrator.DaemonDescription()
+            sd.last_refresh = datetime_now()
+            for k in ['created', 'started', 'last_configured', 'last_deployed']:
+                v = d.get(k, None)
+                if v:
+                    setattr(sd, k, str_to_datetime(d[k]))
+            sd.daemon_type = d['name'].split('.')[0]
+            sd.daemon_id = '.'.join(d['name'].split('.')[1:])
+            sd.hostname = host
+            sd.container_id = d.get('container_id')
+            if sd.container_id:
+                # shorten the hash
+                sd.container_id = sd.container_id[0:12]
+            sd.container_image_name = d.get('container_image_name')
+            sd.container_image_id = d.get('container_image_id')
+            sd.container_image_digests = d.get('container_image_digests')
+            sd.memory_usage = d.get('memory_usage')
+            sd.memory_request = d.get('memory_request')
+            sd.memory_limit = d.get('memory_limit')
+            sd._service_name = d.get('service_name')
+            sd.deployed_by = d.get('deployed_by')
+            sd.version = d.get('version')
+            sd.ports = d.get('ports')
+            sd.ip = d.get('ip')
+            sd.rank = int(d['rank']) if d.get('rank') is not None else None
+            sd.rank_generation = int(d['rank_generation']) if d.get(
+                'rank_generation') is not None else None
+            if sd.daemon_type == 'osd':
+                sd.osdspec_affinity = self.osd_service.get_osdspec_affinity(sd.daemon_id)
+            if 'state' in d:
+                sd.status_desc = d['state']
+                sd.status = {
+                    'running': DaemonDescriptionStatus.running,
+                    'stopped': DaemonDescriptionStatus.stopped,
+                    'error': DaemonDescriptionStatus.error,
+                    'unknown': DaemonDescriptionStatus.error,
+                }[d['state']]
+            else:
+                sd.status_desc = 'unknown'
+                sd.status = None
+            dm[sd.name()] = sd
+        self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
+        self.cache.update_host_daemons(host, dm)
+        self.cache.save_host(host)
+        return None
 
     def offline_hosts_remove(self, host: str) -> None:
         if host in self.offline_hosts:
@@ -2564,3 +2633,70 @@ Then run the following:
         The CLI call to retrieve an osd removal report
         """
         return self.to_remove_osds.all_osds()
+
+
+class CherryPyThread(threading.Thread):
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr = mgr
+        self.cherrypy_shutdown_event = threading.Event()
+        super(CherryPyThread, self).__init__(target=self.run)
+
+    def run(self) -> None:
+        class Root(object):
+            exposed = True
+
+            def __init__(self, mgr: "CephadmOrchestrator"):
+                self.mgr = mgr
+
+            def GET(self) -> str:
+                return '''<!DOCTYPE html>
+<html>
+    <head><title>Cephadm HTTP Endpoint</title></head>
+    <body>
+        <p>Cephadm HTTP Endpoint is up and running</p>
+    </body>
+</html>'''
+
+            def POST(self, host: str, ls: str = '', networks: str = '', facts: str = '') -> str:
+                try:
+                    '''Commenting this out for now until the actual cephadm agent has been
+                       added and we can authenticate the POST request. Until then, we shouldn't
+                       give anybody the ability to send host metadata  and assume it's okay
+
+                       This is how we could bring the metadata into our host cache, once the other
+                       portions are implemented.'''
+
+                    # if ls:
+                    #     self.mgr._process_ls_output(host, json.loads(ls))
+                    # if networks:
+                    #     self.mgr.cache.update_host_networks(host, json.loads(networks))
+                    # if facts:
+                    #     self.mgr.cache.update_host_facts(host, json.loads(facts))
+
+                except Exception as e:
+                    return f'Failed to update metadata: {str(e)}'
+                return 'successfully update metadata'
+
+        server_addr = self.mgr.get_mgr_ip()
+        server_port = 8499
+        self.mgr.set_uri('http://{0}:{1}/'.format(server_addr, server_port))
+
+        cherrypy.config.update({
+            'server.socket_host': server_addr,
+            'server.socket_port': server_port,
+            'engine.autoreload.on': False
+        })
+        cherrypy.tree.mount(
+            Root(self.mgr), '/', {'/': {'request.dispatch': cherrypy.dispatch.MethodDispatcher()}})
+        self.mgr.log.info('Starting cherrypy engine...')
+        cherrypy.engine.start()
+        self.mgr.log.info('Cherrypy engine started.')
+        # wait for the shutdown event
+        self.cherrypy_shutdown_event.wait()
+        self.cherrypy_shutdown_event.clear()
+        cherrypy.engine.stop()
+        self.mgr.log.info('Cherrypy engine stopped.')
+
+    def shutdown(self) -> None:
+        self.mgr.log.info('Stopping cherrypy engine...')
+        self.cherrypy_shutdown_event.set()

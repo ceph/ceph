@@ -13,6 +13,7 @@ import os
 import platform
 import pwd
 import random
+import requests
 import shlex
 import shutil
 import socket
@@ -7522,6 +7523,30 @@ def command_maintenance(ctx: CephadmContext):
                 else:
                     return f'success - systemd target {target} enabled and started'
 
+
+##################################
+
+
+def command_send_metadata_http(ctx: CephadmContext):
+    """send host metadata to mgr over http"""
+    ls = list_daemons(ctx)
+    ls_str = json.dumps(ls)
+
+    facts = HostFacts(ctx)
+    facts_str = facts.dump()
+
+    networks = list_networks(ctx)
+    networks_str = json.dumps(networks)
+
+    data = {'host': socket.gethostname(),
+            'ls': ls_str,
+            'networks': networks_str,
+            'facts': facts_str}
+
+    url = f'http://{ctx.mgr_ip}:{ctx.mgr_port}'
+    http_out = requests.post(url, data=data)
+    print(http_out.text)
+
 ##################################
 
 
@@ -8158,6 +8183,18 @@ def _get_parser():
         choices=['enter', 'exit'],
         help='Maintenance action - enter maintenance, or exit maintenance')
     parser_maintenance.set_defaults(func=command_maintenance)
+
+    parser_send_metadata_http = subparsers.add_parser(
+        'send-metadata-http', help='send host metadata to mgr at given ip')
+    parser_send_metadata_http.set_defaults(func=command_send_metadata_http)
+    parser_send_metadata_http.add_argument(
+        '--mgr-ip',
+        required=True,
+        help='ip of host were mgr lives')
+    parser_send_metadata_http.add_argument(
+        '--mgr-port',
+        required=True,
+        help='port where cephadm mgr module is listening')
 
     return parser
 
