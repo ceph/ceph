@@ -843,11 +843,11 @@ namespace rgw::sal {
 
 extern "C" {
 
-  void *newRGWDBStore(void)
+  void *newRGWDBStore(CephContext *cct)
   {
     rgw::sal::RGWDBStore *store = new rgw::sal::RGWDBStore();
     if (store) {
-      DBStoreManager *dbsm = new DBStoreManager();
+      DBStoreManager *dbsm = new DBStoreManager(cct);
 
       if (!dbsm ) {
         delete store; store = nullptr;

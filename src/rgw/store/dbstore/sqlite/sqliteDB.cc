@@ -3,109 +3,109 @@
 
 #include "sqliteDB.h"
 
-#define SQL_PREPARE(params, sdb, stmt, ret, Op) 	\
+#define SQL_PREPARE(cct, params, sdb, stmt, ret, Op) 	\
   do {							\
     string schema;			   		\
     schema = Schema(params);	   		\
     sqlite3_prepare_v2 (*sdb, schema.c_str(), 	\
         -1, &stmt , NULL);		\
     if (!stmt) {					\
-      cout<<"failed to prepare statement " \
+      dbout(cct, 0) <<"failed to prepare statement " \
       <<"for Op("<<Op<<"); Errmsg -"\
-      <<sqlite3_errmsg(*sdb)<<"\n";\
+      <<sqlite3_errmsg(*sdb)<< dbendl;\
       ret = -1;				\
       goto out;				\
     }						\
-    dbout(L_DEBUG)<<"Successfully Prepared stmt for Op("<<Op	\
-    <<") schema("<<schema<<") stmt("<<stmt<<")\n";	\
+    dbout(cct, 20)<<"Successfully Prepared stmt for Op("<<Op	\
+    <<") schema("<<schema<<") stmt("<<stmt<<")"<< dbendl;	\
     ret = 0;					\
   } while(0);
 
-#define SQL_BIND_INDEX(stmt, index, str, sdb)	\
+#define SQL_BIND_INDEX(cct, stmt, index, str, sdb)	\
   do {						\
     index = sqlite3_bind_parameter_index(stmt, str);     \
     \
     if (index <=0)  {				     \
-      cout<<"failed to fetch bind parameter"\
+      dbout(cct, 0) <<"failed to fetch bind parameter"\
       " index for str("<<str<<") in "   \
       <<"stmt("<<stmt<<"); Errmsg -"    \
-      <<sqlite3_errmsg(*sdb)<<"\n"; 	     \
+      <<sqlite3_errmsg(*sdb)<< dbendl; 	     \
       rc = -1;				     \
       goto out;				     \
     }						     \
-    dbout(L_FULLDEBUG)<<"Bind parameter index for str("  \
+    dbout(cct, 20)<<"Bind parameter index for str("  \
     <<str<<") in stmt("<<stmt<<") is "  \
-    <<index<<"\n";			     \
+    <<index<< dbendl;			     \
   }while(0);
 
-#define SQL_BIND_TEXT(stmt, index, str, sdb)			\
+#define SQL_BIND_TEXT(cct, stmt, index, str, sdb)			\
   do {								\
     rc = sqlite3_bind_text(stmt, index, str, -1, SQLITE_TRANSIENT); 	\
     \
     if (rc != SQLITE_OK) {					      	\
-      dbout(L_ERR)<<"sqlite bind text failed for index("     	\
+      dbout(cct, 0)<<"sqlite bind text failed for index("     	\
       <<index<<"), str("<<str<<") in stmt("   	\
       <<stmt<<"); Errmsg - "<<sqlite3_errmsg(*sdb) \
-      <<"\n";				\
+      << dbendl;				\
       rc = -1;					\
       goto out;					\
     }							\
   }while(0);
 
-#define SQL_BIND_INT(stmt, index, num, sdb)			\
+#define SQL_BIND_INT(cct, stmt, index, num, sdb)			\
   do {								\
     rc = sqlite3_bind_int(stmt, index, num);		\
     \
     if (rc != SQLITE_OK) {					\
-      dbout(L_ERR)<<"sqlite bind int failed for index("     	\
+      dbout(cct, 0)<<"sqlite bind int failed for index("     	\
       <<index<<"), num("<<num<<") in stmt("   	\
       <<stmt<<"); Errmsg - "<<sqlite3_errmsg(*sdb) \
-      <<"\n";				\
+      << dbendl;				\
       rc = -1;					\
       goto out;					\
     }							\
   }while(0);
 
-#define SQL_BIND_BLOB(stmt, index, blob, size, sdb)		\
+#define SQL_BIND_BLOB(cct, stmt, index, blob, size, sdb)		\
   do {								\
     rc = sqlite3_bind_blob(stmt, index, blob, size, SQLITE_TRANSIENT);  \
     \
     if (rc != SQLITE_OK) {					\
-      dbout(L_ERR)<<"sqlite bind blob failed for index("     	\
+      dbout(cct, 0)<<"sqlite bind blob failed for index("     	\
       <<index<<"), blob("<<blob<<") in stmt("   	\
       <<stmt<<"); Errmsg - "<<sqlite3_errmsg(*sdb) \
-      <<"\n";				\
+      << dbendl;				\
       rc = -1;					\
       goto out;					\
     }							\
   }while(0);
 
-#define SQL_ENCODE_BLOB_PARAM(stmt, index, param, sdb)		\
+#define SQL_ENCODE_BLOB_PARAM(cct, stmt, index, param, sdb)		\
   do {								\
     bufferlist b;						\
     encode(param, b);					\
-    SQL_BIND_BLOB(stmt, index, b.c_str(), b.length(), sdb); \
+    SQL_BIND_BLOB(cct, stmt, index, b.c_str(), b.length(), sdb); \
   }while(0);
 
-#define SQL_READ_BLOB(stmt, index, void_ptr, len)		\
+#define SQL_READ_BLOB(cct, stmt, index, void_ptr, len)		\
   do {								\
     void_ptr = NULL;					\
     void_ptr = (void *)sqlite3_column_blob(stmt, index);	\
     len = sqlite3_column_bytes(stmt, index);		\
     \
     if (!void_ptr || len == 0) {				\
-      dbout(L_FULLDEBUG)<<"Null value for blob index("  \
-      <<index<<") in stmt("<<stmt<<") \n";   \
+      dbout(cct, 20)<<"Null value for blob index("  \
+      <<index<<") in stmt("<<stmt<<") "<< dbendl;   \
     }							\
   }while(0);
 
-#define SQL_DECODE_BLOB_PARAM(stmt, index, param, sdb)		\
+#define SQL_DECODE_BLOB_PARAM(cct, stmt, index, param, sdb)		\
   do {								\
     bufferlist b;						\
     void *blob;						\
     int blob_len = 0;					\
     \
-    SQL_READ_BLOB(stmt, index, blob, blob_len);		\
+    SQL_READ_BLOB(cct, stmt, index, blob, blob_len);		\
     \
     b.append(reinterpret_cast<char *>(blob), blob_len);	\
     \
@@ -119,13 +119,13 @@
     }					\
     \
     if (!stmt) {				\
-      cout<<"No prepared statement \n";	\
+      dbout(cct, 0) <<"No prepared statement "<< dbendl;	\
       goto out;			\
     }					\
     \
     ret = Bind(params);			\
     if (ret) {				\
-      cout<<"Bind parameters failed for stmt(" <<stmt<<") \n";		\
+      dbout(cct, 0) <<"Bind parameters failed for stmt(" <<stmt<<") "<< dbendl;		\
       goto out;			\
     }					\
     \
@@ -134,7 +134,7 @@
     Reset(stmt);				\
     \
     if (ret) {				\
-      cout<<"Execution failed for stmt(" <<stmt<<")\n";		\
+      dbout(cct, 0) <<"Execution failed for stmt(" <<stmt<<")"<< dbendl;		\
       goto out;			\
     }					\
   }while(0);
@@ -144,7 +144,7 @@ static int list_callback(void *None, int argc, char **argv, char **aname)
   int i;
   for(i=0; i<argc; i++) {
     string arg = argv[i] ? argv[i] : "NULL";
-    cout<<aname[i]<<" = "<<arg<<"\n";
+   // cout<<aname[i]<<" = "<<arg<<"\n";
   }
   return 0;
 }
@@ -212,11 +212,11 @@ enum GetBucket {
   Bucket_User_NS
 };
 
-static int list_user(DBOpInfo &op, sqlite3_stmt *stmt) {
+static int list_user(CephContext *cct, DBOpInfo &op, sqlite3_stmt *stmt) {
   if (!stmt)
     return -1;
 
-  cout<<sqlite3_column_text(stmt, 0)<<"\n";
+  //cout<<sqlite3_column_text(stmt, 0) << dbendl;
   /* Ensure the column names match with the user table defined in dbstore.h                     
      UserID TEXT ,		\ - 0
      Tenant TEXT ,		\ - 1
@@ -251,15 +251,15 @@ static int list_user(DBOpInfo &op, sqlite3_stmt *stmt) {
   op.user.uinfo.display_name = (const char*)sqlite3_column_text(stmt, DisplayName); // user_name
   op.user.uinfo.user_email = (const char*)sqlite3_column_text(stmt, UserEmail);
 
-  SQL_DECODE_BLOB_PARAM(stmt, AccessKeys, op.user.uinfo.access_keys, sdb);
-  SQL_DECODE_BLOB_PARAM(stmt, SwiftKeys, op.user.uinfo.swift_keys, sdb);
-  SQL_DECODE_BLOB_PARAM(stmt, SubUsers, op.user.uinfo.subusers, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, AccessKeys, op.user.uinfo.access_keys, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, SwiftKeys, op.user.uinfo.swift_keys, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, SubUsers, op.user.uinfo.subusers, sdb);
 
   op.user.uinfo.suspended = sqlite3_column_int(stmt, Suspended);
   op.user.uinfo.max_buckets = sqlite3_column_int(stmt, MaxBuckets);
   op.user.uinfo.op_mask = sqlite3_column_int(stmt, OpMask);
 
-  SQL_DECODE_BLOB_PARAM(stmt, UserCaps, op.user.uinfo.caps, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, UserCaps, op.user.uinfo.caps, sdb);
 
   op.user.uinfo.admin = sqlite3_column_int(stmt, Admin);
   op.user.uinfo.system = sqlite3_column_int(stmt, System);
@@ -268,31 +268,31 @@ static int list_user(DBOpInfo &op, sqlite3_stmt *stmt) {
 
   op.user.uinfo.default_placement.storage_class = (const char*)sqlite3_column_text(stmt, PlacementStorageClass);
 
-  SQL_DECODE_BLOB_PARAM(stmt, PlacementTags, op.user.uinfo.placement_tags, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, PlacementTags, op.user.uinfo.placement_tags, sdb);
 
-  SQL_DECODE_BLOB_PARAM(stmt, BucketQuota, op.user.uinfo.bucket_quota, sdb);
-  SQL_DECODE_BLOB_PARAM(stmt, TempURLKeys, op.user.uinfo.temp_url_keys, sdb);
-  SQL_DECODE_BLOB_PARAM(stmt, UserQuota, op.user.uinfo.user_quota, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, BucketQuota, op.user.uinfo.bucket_quota, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, TempURLKeys, op.user.uinfo.temp_url_keys, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, UserQuota, op.user.uinfo.user_quota, sdb);
 
   op.user.uinfo.type = sqlite3_column_int(stmt, TYPE);
 
-  SQL_DECODE_BLOB_PARAM(stmt, MfaIDs, op.user.uinfo.mfa_ids, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, MfaIDs, op.user.uinfo.mfa_ids, sdb);
 
   op.user.uinfo.assumed_role_arn = (const char*)sqlite3_column_text(stmt, AssumedRoleARN);
 
-  SQL_DECODE_BLOB_PARAM(stmt, UserAttrs, op.user.user_attrs, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, UserAttrs, op.user.user_attrs, sdb);
   op.user.user_version.ver = sqlite3_column_int(stmt, UserVersion);
   op.user.user_version.tag = (const char*)sqlite3_column_text(stmt, UserVersionTag);
 
   return 0;
 }
 
-static int list_bucket(DBOpInfo &op, sqlite3_stmt *stmt) {
+static int list_bucket(CephContext *cct, DBOpInfo &op, sqlite3_stmt *stmt) {
   if (!stmt)
     return -1;
 
-  cout<<sqlite3_column_text(stmt, 0)<<", ";
-  cout<<sqlite3_column_text(stmt, 1)<<"\n";
+ // cout<<sqlite3_column_text(stmt, 0)<<", ";
+ // cout<<sqlite3_column_text(stmt, 1) << dbendl;
 
   op.bucket.ent.bucket.name = (const char*)sqlite3_column_text(stmt, BucketName);
   op.bucket.ent.bucket.tenant = (const char*)sqlite3_column_text(stmt, Bucket_Tenant);
@@ -300,7 +300,7 @@ static int list_bucket(DBOpInfo &op, sqlite3_stmt *stmt) {
   op.bucket.ent.bucket.bucket_id = (const char*)sqlite3_column_text(stmt, BucketID);
   op.bucket.ent.size = sqlite3_column_int(stmt, Size);
   op.bucket.ent.size_rounded = sqlite3_column_int(stmt, SizeRounded);
-  SQL_DECODE_BLOB_PARAM(stmt, CreationTime, op.bucket.ent.creation_time, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, CreationTime, op.bucket.ent.creation_time, sdb);
   op.bucket.ent.count = sqlite3_column_int(stmt, Count);
   op.bucket.ent.placement_rule.name = (const char*)sqlite3_column_text(stmt, Bucket_PlacementName);
   op.bucket.ent.placement_rule.storage_class = (const char*)sqlite3_column_text(stmt, Bucket_PlacementStorageClass);
@@ -320,17 +320,17 @@ static int list_bucket(DBOpInfo &op, sqlite3_stmt *stmt) {
   op.bucket.info.zonegroup = (const char*)sqlite3_column_text(stmt, Zonegroup);
   op.bucket.info.has_instance_obj = sqlite3_column_int(stmt, HasInstanceObj);
 
-  SQL_DECODE_BLOB_PARAM(stmt, Quota, op.bucket.info.quota, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, Quota, op.bucket.info.quota, sdb);
   op.bucket.info.requester_pays = sqlite3_column_int(stmt, RequesterPays);
   op.bucket.info.has_website = sqlite3_column_int(stmt, HasWebsite);
-  SQL_DECODE_BLOB_PARAM(stmt, WebsiteConf, op.bucket.info.website_conf, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, WebsiteConf, op.bucket.info.website_conf, sdb);
   op.bucket.info.swift_versioning = sqlite3_column_int(stmt, SwiftVersioning);
   op.bucket.info.swift_ver_location = (const char*)sqlite3_column_text(stmt, SwiftVerLocation);
-  SQL_DECODE_BLOB_PARAM(stmt, MdsearchConfig, op.bucket.info.mdsearch_config, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, MdsearchConfig, op.bucket.info.mdsearch_config, sdb);
   op.bucket.info.new_bucket_instance_id = (const char*)sqlite3_column_text(stmt, NewBucketInstanceID);
-  SQL_DECODE_BLOB_PARAM(stmt, ObjectLock, op.bucket.info.obj_lock, sdb);
-  SQL_DECODE_BLOB_PARAM(stmt, SyncPolicyInfoGroups, op.bucket.info.sync_policy, sdb);
-  SQL_DECODE_BLOB_PARAM(stmt, BucketAttrs, op.bucket.bucket_attrs, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, ObjectLock, op.bucket.info.obj_lock, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, SyncPolicyInfoGroups, op.bucket.info.sync_policy, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, BucketAttrs, op.bucket.bucket_attrs, sdb);
   op.bucket.bucket_version.ver = sqlite3_column_int(stmt, BucketVersion);
   op.bucket.bucket_version.tag = (const char*)sqlite3_column_text(stmt, BucketVersionTag);
 
@@ -340,24 +340,24 @@ static int list_bucket(DBOpInfo &op, sqlite3_stmt *stmt) {
   op.bucket.info.objv_tracker.read_version = op.bucket.bucket_version;
   op.bucket.info.objv_tracker.write_version = op.bucket.bucket_version;
 
-  SQL_DECODE_BLOB_PARAM(stmt, Mtime, op.bucket.mtime, sdb);
+  SQL_DECODE_BLOB_PARAM(cct, stmt, Mtime, op.bucket.mtime, sdb);
 
   op.bucket.list_entries.push_back(op.bucket.ent);
 
   return 0;
 }
 
-static int list_object(DBOpInfo &op, sqlite3_stmt *stmt) {
+static int list_object(CephContext *cct, DBOpInfo &op, sqlite3_stmt *stmt) {
   if (!stmt)
     return -1;
 
-  cout<<sqlite3_column_text(stmt, 0)<<", ";
-  cout<<sqlite3_column_text(stmt, 1)<<"\n";
+ // cout<<sqlite3_column_text(stmt, 0)<<", ";
+ // cout<<sqlite3_column_text(stmt, 1) << dbendl;
 
   return 0;
 }
 
-static int get_objectdata(DBOpInfo &op, sqlite3_stmt *stmt) {
+static int get_objectdata(CephContext *cct, DBOpInfo &op, sqlite3_stmt *stmt) {
   if (!stmt)
     return -1;
 
@@ -367,14 +367,14 @@ static int get_objectdata(DBOpInfo &op, sqlite3_stmt *stmt) {
   blob = sqlite3_column_blob(stmt, 3);
   datalen = sqlite3_column_bytes(stmt, 3);
 
-  cout<<sqlite3_column_text(stmt, 0)<<", ";
+ /* cout<<sqlite3_column_text(stmt, 0)<<", ";
   cout<<sqlite3_column_text(stmt, 1)<<",";
-  cout<<sqlite3_column_int(stmt, 2)<<",";
+  cout<<sqlite3_column_int(stmt, 2)<<",";*/
   char data[datalen+1] = {};
   if (blob)
     strncpy(data, (const char *)blob, datalen);
 
-  cout<<data<<","<<datalen<<"\n";
+//  cout<<data<<","<<datalen << dbendl;
 
   return 0;
 }
@@ -382,14 +382,14 @@ static int get_objectdata(DBOpInfo &op, sqlite3_stmt *stmt) {
 int SQLiteDB::InitializeDBOps()
 {
   (void)createTables();
-  dbops.InsertUser = new SQLInsertUser(&this->db);
-  dbops.RemoveUser = new SQLRemoveUser(&this->db);
-  dbops.GetUser = new SQLGetUser(&this->db);
-  dbops.InsertBucket = new SQLInsertBucket(&this->db);
-  dbops.UpdateBucket = new SQLUpdateBucket(&this->db);
-  dbops.RemoveBucket = new SQLRemoveBucket(&this->db);
-  dbops.GetBucket = new SQLGetBucket(&this->db);
-  dbops.ListUserBuckets = new SQLListUserBuckets(&this->db);
+  dbops.InsertUser = new SQLInsertUser(&this->db, cct);
+  dbops.RemoveUser = new SQLRemoveUser(&this->db, cct);
+  dbops.GetUser = new SQLGetUser(&this->db, cct);
+  dbops.InsertBucket = new SQLInsertBucket(&this->db, cct);
+  dbops.UpdateBucket = new SQLUpdateBucket(&this->db, cct);
+  dbops.RemoveBucket = new SQLRemoveBucket(&this->db, cct);
+  dbops.GetBucket = new SQLGetBucket(&this->db, cct);
+  dbops.ListUserBuckets = new SQLListUserBuckets(&this->db, cct);
 
   return 0;
 }
@@ -413,9 +413,9 @@ void *SQLiteDB::openDB()
   string dbname;
   int rc = 0;
 
-  dbname	= getDBname();
+  dbname = getDBname();
   if (dbname.empty()) {
-    dbout(L_ERR)<<"dbname is NULL\n";
+    dbout(cct, 0)<<"dbname is NULL" << dbendl;
     goto out;
   }
 
@@ -426,10 +426,10 @@ void *SQLiteDB::openDB()
       NULL);
 
   if (rc) {
-    dbout(L_ERR)<<"Cant open "<<dbname<<"; Errmsg - "\
-      <<sqlite3_errmsg((sqlite3*)db)<<"\n";
+    dbout(cct, 0) <<"Cant open "<<dbname<<"; Errmsg - "\
+      <<sqlite3_errmsg((sqlite3*)db) <<  dbendl;
   } else {
-    dbout(L_DEBUG)<<"Opened database("<<dbname<<") successfully\n";
+    dbout(cct, 0) <<"Opened database("<<dbname<<") successfully" <<  dbendl;
   }
 
   exec("PRAGMA foreign_keys=ON", NULL);
@@ -462,7 +462,7 @@ int SQLiteDB::Reset(sqlite3_stmt *stmt)
 }
 
 int SQLiteDB::Step(DBOpInfo &op, sqlite3_stmt *stmt,
-    int (*cbk)(DBOpInfo &op, sqlite3_stmt *stmt))
+    int (*cbk)(CephContext *cct, DBOpInfo &op, sqlite3_stmt *stmt))
 {
   int ret = -1;
 
@@ -474,19 +474,19 @@ again:
   ret = sqlite3_step(stmt);
 
   if ((ret != SQLITE_DONE) && (ret != SQLITE_ROW)) {
-    dbout(L_ERR)<<"sqlite step failed for stmt("<<stmt \
-      <<"); Errmsg - "<<sqlite3_errmsg((sqlite3*)db)<<"\n";
+    dbout(cct, 0)<<"sqlite step failed for stmt("<<stmt \
+      <<"); Errmsg - "<<sqlite3_errmsg((sqlite3*)db) << dbendl;
     return -1;
   } else if (ret == SQLITE_ROW) {
     if (cbk) {
-      (*cbk)(op, stmt);
+      (*cbk)(ctx(), op, stmt);
     } else {
     }
     goto again;
   }
 
-  dbout(L_FULLDEBUG)<<"sqlite step successfully executed for stmt(" \
-    <<stmt<<")  ret = " << ret <<"\n";
+  dbout(cct, 20)<<"sqlite step successfully executed for stmt(" \
+    <<stmt<<")  ret = " << ret << dbendl;
 
   return 0;
 }
@@ -502,14 +502,14 @@ int SQLiteDB::exec(const char *schema,
 
   ret = sqlite3_exec((sqlite3*)db, schema, callback, 0, &errmsg);
   if (ret != SQLITE_OK) {
-    dbout(L_ERR)<<"sqlite exec failed for schema("<<schema \
-      <<"); Errmsg - "<<errmsg<<"\n";
+    dbout(cct, 0) <<"sqlite exec failed for schema("<<schema \
+      <<"); Errmsg - "<<errmsg <<  dbendl;
     sqlite3_free(errmsg);
     goto out;
   }
   ret = 0;
-  dbout(L_FULLDEBUG)<<"sqlite exec successfully processed for schema(" \
-    <<schema<<")\n";
+  dbout(cct, 10) <<"sqlite exec successfully processed for schema(" \
+    <<schema<<")" <<  dbendl;
 out:
   return ret;
 }
@@ -539,7 +539,7 @@ out:
       DeleteUserTable(&params);
     if (cb)
       DeleteBucketTable(&params);
-    dbout(L_ERR)<<"Creation of tables failed \n";
+    dbout(cct, 0)<<"Creation of tables failed" << dbendl;
   }
 
   return ret;
@@ -554,9 +554,9 @@ int SQLiteDB::createUserTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"CreateUserTable failed \n";
+    dbout(cct, 0)<<"CreateUserTable failed" << dbendl;
 
-  dbout(L_FULLDEBUG)<<"CreateUserTable suceeded \n";
+  dbout(cct, 20)<<"CreateUserTable suceeded" << dbendl;
 
   return ret;
 }
@@ -570,9 +570,9 @@ int SQLiteDB::createBucketTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"CreateBucketTable failed \n";
+    dbout(cct, 0)<<"CreateBucketTable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"CreateBucketTable suceeded \n";
+  dbout(cct, 20)<<"CreateBucketTable suceeded " << dbendl;
 
   return ret;
 }
@@ -586,9 +586,9 @@ int SQLiteDB::createObjectTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"CreateObjectTable failed \n";
+    dbout(cct, 0)<<"CreateObjectTable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"CreateObjectTable suceeded \n";
+  dbout(cct, 20)<<"CreateObjectTable suceeded " << dbendl;
 
   return ret;
 }
@@ -602,9 +602,9 @@ int SQLiteDB::createQuotaTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"CreateQuotaTable failed \n";
+    dbout(cct, 0)<<"CreateQuotaTable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"CreateQuotaTable suceeded \n";
+  dbout(cct, 20)<<"CreateQuotaTable suceeded " << dbendl;
 
   return ret;
 }
@@ -618,9 +618,9 @@ int SQLiteDB::createObjectDataTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"CreateObjectDataTable failed \n";
+    dbout(cct, 0)<<"CreateObjectDataTable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"CreateObjectDataTable suceeded \n";
+  dbout(cct, 20)<<"CreateObjectDataTable suceeded " << dbendl;
 
   return ret;
 }
@@ -634,9 +634,9 @@ int SQLiteDB::DeleteUserTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"DeleteUserTable failed \n";
+    dbout(cct, 0)<<"DeleteUserTable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"DeleteUserTable suceeded \n";
+  dbout(cct, 20)<<"DeleteUserTable suceeded " << dbendl;
 
   return ret;
 }
@@ -650,9 +650,9 @@ int SQLiteDB::DeleteBucketTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"DeletebucketTable failed \n";
+    dbout(cct, 0)<<"DeletebucketTable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"DeletebucketTable suceeded \n";
+  dbout(cct, 20)<<"DeletebucketTable suceeded " << dbendl;
 
   return ret;
 }
@@ -666,9 +666,9 @@ int SQLiteDB::DeleteObjectTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"DeleteObjectTable failed \n";
+    dbout(cct, 0)<<"DeleteObjectTable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"DeleteObjectTable suceeded \n";
+  dbout(cct, 20)<<"DeleteObjectTable suceeded " << dbendl;
 
   return ret;
 }
@@ -682,9 +682,9 @@ int SQLiteDB::DeleteObjectDataTable(DBOpParams *params)
 
   ret = exec(schema.c_str(), NULL);
   if (ret)
-    dbout(L_ERR)<<"DeleteObjectDataTable failed \n";
+    dbout(cct, 0)<<"DeleteObjectDataTable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"DeleteObjectDataTable suceeded \n";
+  dbout(cct, 20)<<"DeleteObjectDataTable suceeded " << dbendl;
 
   return ret;
 }
@@ -695,12 +695,12 @@ int SQLiteDB::ListAllUsers(DBOpParams *params)
   string schema;
 
   schema = ListTableSchema(params->user_table);
-  cout<<"########### Listing all Users #############\n";
+ // cout<<"########### Listing all Users #############" << dbendl;
   ret = exec(schema.c_str(), &list_callback);
   if (ret)
-    dbout(L_ERR)<<"GetUsertable failed \n";
+    dbout(cct, 0)<<"GetUsertable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"GetUserTable suceeded \n";
+  dbout(cct, 20)<<"GetUserTable suceeded " << dbendl;
 
   return ret;
 }
@@ -712,12 +712,12 @@ int SQLiteDB::ListAllBuckets(DBOpParams *params)
 
   schema = ListTableSchema(params->bucket_table);
 
-  cout<<"########### Listing all Buckets #############\n";
+//  cout<<"########### Listing all Buckets #############" << dbendl;
   ret = exec(schema.c_str(), &list_callback);
   if (ret)
-    dbout(L_ERR)<<"Listbuckettable failed \n";
+    dbout(cct, 0)<<"Listbuckettable failed " << dbendl;
 
-  dbout(L_FULLDEBUG)<<"ListbucketTable suceeded \n";
+  dbout(cct, 20)<<"ListbucketTable suceeded " << dbendl;
 
   return ret;
 }
@@ -730,12 +730,12 @@ int SQLiteDB::ListAllObjects(DBOpParams *params)
   map<string, class ObjectOp*> objectmap;
   string bucket;
 
-  cout<<"########### Listing all Objects #############\n";
+  //cout<<"########### Listing all Objects #############" << dbendl;
 
   objectmap = getObjectMap();
 
   if (objectmap.empty())
-    dbout(L_DEBUG)<<"objectmap empty \n";
+    dbout(cct, 20)<<"objectmap empty " << dbendl;
 
   for (iter = objectmap.begin(); iter != objectmap.end(); ++iter) {
     bucket = iter->first;
@@ -745,9 +745,9 @@ int SQLiteDB::ListAllObjects(DBOpParams *params)
 
     ret = exec(schema.c_str(), &list_callback);
     if (ret)
-      dbout(L_ERR)<<"ListObjecttable failed \n";
+      dbout(cct, 0)<<"ListObjecttable failed " << dbendl;
 
-    dbout(L_FULLDEBUG)<<"ListObjectTable suceeded \n";
+    dbout(cct, 20)<<"ListObjectTable suceeded " << dbendl;
   }
 
   return ret;
@@ -755,12 +755,12 @@ int SQLiteDB::ListAllObjects(DBOpParams *params)
 
 int SQLObjectOp::InitializeObjectOps()
 {
-  InsertObject = new SQLInsertObject(sdb);
-  RemoveObject = new SQLRemoveObject(sdb);
-  ListObject = new SQLListObject(sdb);
-  PutObjectData = new SQLPutObjectData(sdb);
-  GetObjectData = new SQLGetObjectData(sdb);
-  DeleteObjectData = new SQLDeleteObjectData(sdb);
+  InsertObject = new SQLInsertObject(sdb, cct);
+  RemoveObject = new SQLRemoveObject(sdb, cct);
+  ListObject = new SQLListObject(sdb, cct);
+  PutObjectData = new SQLPutObjectData(sdb, cct);
+  GetObjectData = new SQLGetObjectData(sdb, cct);
+  DeleteObjectData = new SQLDeleteObjectData(sdb, cct);
 
   return 0;
 }
@@ -783,13 +783,13 @@ int SQLInsertUser::Prepare(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLInsertUser - no db\n";
+    dbout(cct, 0)<<"In SQLInsertUser - no db" << dbendl;
     goto out;
   }
 
   p_params.user_table = params->user_table;
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareInsertUser");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareInsertUser");
 out:
   return ret;
 }
@@ -800,20 +800,20 @@ int SQLInsertUser::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.tenant.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.user_id.tenant.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.tenant.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.user_id.tenant.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_id.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.ns.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.user_id.ns.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.ns.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.user_id.ns.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.display_name.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.display_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.display_name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.display_name.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_email.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_email.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
 
   if (!params->op.user.uinfo.access_keys.empty()) {
     string access_key;
@@ -824,75 +824,75 @@ int SQLInsertUser::Bind(struct DBOpParams *params)
     access_key = k.id;
     key = k.key;
 
-    SQL_BIND_INDEX(stmt, index, p_params.op.user.access_keys_id.c_str(), sdb);
-    SQL_BIND_TEXT(stmt, index, access_key.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.access_keys_id.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), stmt, index, access_key.c_str(), sdb);
 
-    SQL_BIND_INDEX(stmt, index, p_params.op.user.access_keys_secret.c_str(), sdb);
-    SQL_BIND_TEXT(stmt, index, key.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.access_keys_secret.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), stmt, index, key.c_str(), sdb);
 
-    SQL_BIND_INDEX(stmt, index, p_params.op.user.access_keys.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.access_keys, sdb);
+    SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.access_keys.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.access_keys, sdb);
   }
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.swift_keys.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.swift_keys, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.swift_keys.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.swift_keys, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.subusers.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.subusers, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.subusers.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.subusers, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.suspended.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.user.uinfo.suspended, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.suspended.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.user.uinfo.suspended, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.max_buckets.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.user.uinfo.max_buckets, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.max_buckets.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.user.uinfo.max_buckets, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.op_mask.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.user.uinfo.op_mask, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.op_mask.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.user.uinfo.op_mask, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_caps.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.caps, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_caps.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.caps, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.admin.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.user.uinfo.admin, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.admin.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.user.uinfo.admin, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.system.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.user.uinfo.system, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.system.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.user.uinfo.system, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.placement_name.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.default_placement.name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.placement_name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.default_placement.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.placement_storage_class.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.default_placement.storage_class.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.placement_storage_class.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.default_placement.storage_class.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.placement_tags.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.placement_tags, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.placement_tags.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.placement_tags, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.bucket_quota.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.bucket_quota, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.bucket_quota.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.bucket_quota, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.temp_url_keys.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.temp_url_keys, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.temp_url_keys.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.temp_url_keys, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_quota.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.user_quota, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_quota.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.user_quota, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.type.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.user.uinfo.type, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.type.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.user.uinfo.type, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.mfa_ids.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.uinfo.mfa_ids, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.mfa_ids.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.uinfo.mfa_ids, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.assumed_role_arn.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.assumed_role_arn.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.assumed_role_arn.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.assumed_role_arn.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_attrs.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.user.user_attrs, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_attrs.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.user.user_attrs, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_ver.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.user.user_version.ver, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_ver.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.user.user_version.ver, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_ver_tag.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.user_version.tag.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_ver_tag.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.user_version.tag.c_str(), sdb);
 
 out:
   return rc;
@@ -913,13 +913,13 @@ int SQLRemoveUser::Prepare(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLRemoveUser - no db\n";
+    dbout(cct, 0)<<"In SQLRemoveUser - no db" << dbendl;
     goto out;
   }
 
   p_params.user_table = params->user_table;
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareRemoveUser");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareRemoveUser");
 out:
   return ret;
 }
@@ -930,8 +930,8 @@ int SQLRemoveUser::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_id.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
 out:
   return rc;
@@ -952,7 +952,7 @@ int SQLGetUser::Prepare(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLGetUser - no db\n";
+    dbout(cct, 0)<<"In SQLGetUser - no db" << dbendl;
     goto out;
   }
 
@@ -960,13 +960,13 @@ int SQLGetUser::Prepare(struct DBOpParams *params)
   p_params.op.query_str = params->op.query_str;
 
   if (params->op.query_str == "email") { 
-    SQL_PREPARE(p_params, sdb, email_stmt, ret, "PrepareGetUser");
+    SQL_PREPARE(ctx(), p_params, sdb, email_stmt, ret, "PrepareGetUser");
   } else if (params->op.query_str == "access_key") { 
-    SQL_PREPARE(p_params, sdb, ak_stmt, ret, "PrepareGetUser");
+    SQL_PREPARE(ctx(), p_params, sdb, ak_stmt, ret, "PrepareGetUser");
   } else if (params->op.query_str == "user_id") { 
-    SQL_PREPARE(p_params, sdb, userid_stmt, ret, "PrepareGetUser");
+    SQL_PREPARE(ctx(), p_params, sdb, userid_stmt, ret, "PrepareGetUser");
   } else { // by default by userid
-    SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareGetUser");
+    SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareGetUser");
   }
 out:
   return ret;
@@ -979,8 +979,8 @@ int SQLGetUser::Bind(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (params->op.query_str == "email") { 
-    SQL_BIND_INDEX(email_stmt, index, p_params.op.user.user_email.c_str(), sdb);
-    SQL_BIND_TEXT(email_stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), email_stmt, index, p_params.op.user.user_email.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), email_stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
   } else if (params->op.query_str == "access_key") { 
     if (!params->op.user.uinfo.access_keys.empty()) {
       string access_key;
@@ -989,21 +989,21 @@ int SQLGetUser::Bind(struct DBOpParams *params)
       const RGWAccessKey& k = it->second;
       access_key = k.id;
 
-      SQL_BIND_INDEX(ak_stmt, index, p_params.op.user.access_keys_id.c_str(), sdb);
-      SQL_BIND_TEXT(ak_stmt, index, access_key.c_str(), sdb);
+      SQL_BIND_INDEX(ctx(), ak_stmt, index, p_params.op.user.access_keys_id.c_str(), sdb);
+      SQL_BIND_TEXT(ctx(), ak_stmt, index, access_key.c_str(), sdb);
     }
   } else if (params->op.query_str == "user_id") { 
-    SQL_BIND_INDEX(userid_stmt, index, p_params.op.user.tenant.c_str(), sdb);
-    SQL_BIND_TEXT(userid_stmt, index, params->op.user.uinfo.user_id.tenant.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), userid_stmt, index, p_params.op.user.tenant.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), userid_stmt, index, params->op.user.uinfo.user_id.tenant.c_str(), sdb);
 
-    SQL_BIND_INDEX(userid_stmt, index, p_params.op.user.user_id.c_str(), sdb);
-    SQL_BIND_TEXT(userid_stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), userid_stmt, index, p_params.op.user.user_id.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), userid_stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-    SQL_BIND_INDEX(userid_stmt, index, p_params.op.user.ns.c_str(), sdb);
-    SQL_BIND_TEXT(userid_stmt, index, params->op.user.uinfo.user_id.ns.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), userid_stmt, index, p_params.op.user.ns.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), userid_stmt, index, params->op.user.uinfo.user_id.ns.c_str(), sdb);
   } else { // by default by userid
-    SQL_BIND_INDEX(stmt, index, p_params.op.user.user_id.c_str(), sdb);
-    SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_id.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
   }
 
 out:
@@ -1034,13 +1034,13 @@ int SQLInsertBucket::Prepare(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLInsertBucket - no db\n";
+    dbout(cct, 0)<<"In SQLInsertBucket - no db" << dbendl;
     goto out;
   }
 
   p_params.bucket_table = params->bucket_table;
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareInsertBucket");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareInsertBucket");
 
 out:
   return ret;
@@ -1052,89 +1052,89 @@ int SQLInsertBucket::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_id.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.tenant.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.tenant.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.tenant.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.tenant.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.marker.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.marker.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.marker.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.marker.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_id.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.bucket_id.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_id.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.bucket_id.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.size.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.ent.size, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.size.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.ent.size, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.size_rounded.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.ent.size_rounded, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.size_rounded.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.ent.size_rounded, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.bucket.info.creation_time, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.bucket.info.creation_time, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.count.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.ent.count, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.count.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.ent.count, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.placement_name.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.placement_rule.name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.placement_name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.placement_rule.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.placement_storage_class.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.placement_rule.storage_class.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.placement_storage_class.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.placement_rule.storage_class.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.flags.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.info.flags, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.flags.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.info.flags, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.zonegroup.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.zonegroup.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.zonegroup.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.zonegroup.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.has_instance_obj.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.info.has_instance_obj, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.has_instance_obj.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.info.has_instance_obj, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.quota.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.bucket.info.quota, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.quota.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.bucket.info.quota, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.requester_pays.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.info.requester_pays, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.requester_pays.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.info.requester_pays, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.has_website.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.info.has_website, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.has_website.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.info.has_website, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.website_conf.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.bucket.info.website_conf, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.website_conf.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.bucket.info.website_conf, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.swift_versioning.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.info.swift_versioning, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.swift_versioning.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.info.swift_versioning, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.swift_ver_location.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.swift_ver_location.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.swift_ver_location.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.swift_ver_location.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.mdsearch_config.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.bucket.info.mdsearch_config, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.mdsearch_config.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.bucket.info.mdsearch_config, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.new_bucket_instance_id.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.new_bucket_instance_id.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.new_bucket_instance_id.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.new_bucket_instance_id.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.obj_lock.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.bucket.info.obj_lock, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.obj_lock.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.bucket.info.obj_lock, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.sync_policy_info_groups.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.bucket.info.sync_policy, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.sync_policy_info_groups.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.bucket.info.sync_policy, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_attrs.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.bucket.bucket_attrs, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_attrs.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.bucket.bucket_attrs, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_ver.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.bucket.bucket_version.ver, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_ver.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.bucket.bucket_version.ver, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_ver_tag.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.bucket_version.tag.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_ver_tag.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.bucket_version.tag.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.mtime.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(stmt, index, params->op.bucket.mtime, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.mtime.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), stmt, index, params->op.bucket.mtime, sdb);
 
 out:
   return rc;
@@ -1146,7 +1146,7 @@ int SQLInsertBucket::Execute(struct DBOpParams *params)
   class SQLObjectOp *ObPtr = NULL;
   string bucket_name = params->op.bucket.info.bucket.name;
 
-  ObPtr = new SQLObjectOp(sdb);
+  ObPtr = new SQLObjectOp(sdb, ctx());
 
   objectmapInsert(bucket_name, ObPtr);
 
@@ -1165,7 +1165,7 @@ int SQLUpdateBucket::Prepare(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLUpdateBucket - no db\n";
+    dbout(cct, 0)<<"In SQLUpdateBucket - no db" << dbendl;
     goto out;
   }
 
@@ -1173,14 +1173,14 @@ int SQLUpdateBucket::Prepare(struct DBOpParams *params)
   p_params.bucket_table = params->bucket_table;
 
   if (params->op.query_str == "attrs") { 
-    SQL_PREPARE(p_params, sdb, attrs_stmt, ret, "PrepareUpdateBucket");
+    SQL_PREPARE(ctx(), p_params, sdb, attrs_stmt, ret, "PrepareUpdateBucket");
   } else if (params->op.query_str == "owner") { 
-    SQL_PREPARE(p_params, sdb, owner_stmt, ret, "PrepareUpdateBucket");
+    SQL_PREPARE(ctx(), p_params, sdb, owner_stmt, ret, "PrepareUpdateBucket");
   } else if (params->op.query_str == "info") { 
-    SQL_PREPARE(p_params, sdb, info_stmt, ret, "PrepareUpdateBucket");
+    SQL_PREPARE(ctx(), p_params, sdb, info_stmt, ret, "PrepareUpdateBucket");
   } else {
-    dbout(L_ERR)<<"In SQLUpdateBucket invalid query_str:" <<
-      params->op.query_str << "\n";
+    dbout(cct, 0)<<"In SQLUpdateBucket invalid query_str:" <<
+      params->op.query_str << "" << dbendl;
     goto out;
   }
 
@@ -1203,90 +1203,90 @@ int SQLUpdateBucket::Bind(struct DBOpParams *params)
   } else if (params->op.query_str == "info") { 
     stmt = &info_stmt;
   } else {
-    dbout(L_ERR)<<"In SQLUpdateBucket invalid query_str:" <<
-      params->op.query_str << "\n";
+    dbout(cct, 0)<<"In SQLUpdateBucket invalid query_str:" <<
+      params->op.query_str << "" << dbendl;
     goto out;
   }
 
   if (params->op.query_str == "attrs") { 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.bucket_attrs.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.bucket_attrs, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.bucket_attrs.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.bucket_attrs, sdb);
   } else if (params->op.query_str == "owner") { 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.info.creation_time, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.info.creation_time, sdb);
   } else if (params->op.query_str == "info") { 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.tenant.c_str(), sdb);
-    SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.bucket.tenant.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.tenant.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.bucket.tenant.c_str(), sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.marker.c_str(), sdb);
-    SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.bucket.marker.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.marker.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.bucket.marker.c_str(), sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.bucket_id.c_str(), sdb);
-    SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.bucket.bucket_id.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.bucket_id.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.bucket.bucket_id.c_str(), sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.info.creation_time, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.info.creation_time, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.count.c_str(), sdb);
-    SQL_BIND_INT(*stmt, index, params->op.bucket.ent.count, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.count.c_str(), sdb);
+    SQL_BIND_INT(ctx(), *stmt, index, params->op.bucket.ent.count, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.placement_name.c_str(), sdb);
-    SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.placement_rule.name.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.placement_name.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.placement_rule.name.c_str(), sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.placement_storage_class.c_str(), sdb);
-    SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.placement_rule.storage_class.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.placement_storage_class.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.placement_rule.storage_class.c_str(), sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.flags.c_str(), sdb);
-    SQL_BIND_INT(*stmt, index, params->op.bucket.info.flags, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.flags.c_str(), sdb);
+    SQL_BIND_INT(ctx(), *stmt, index, params->op.bucket.info.flags, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.zonegroup.c_str(), sdb);
-    SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.zonegroup.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.zonegroup.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.zonegroup.c_str(), sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.has_instance_obj.c_str(), sdb);
-    SQL_BIND_INT(*stmt, index, params->op.bucket.info.has_instance_obj, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.has_instance_obj.c_str(), sdb);
+    SQL_BIND_INT(ctx(), *stmt, index, params->op.bucket.info.has_instance_obj, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.quota.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.info.quota, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.quota.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.info.quota, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.requester_pays.c_str(), sdb);
-    SQL_BIND_INT(*stmt, index, params->op.bucket.info.requester_pays, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.requester_pays.c_str(), sdb);
+    SQL_BIND_INT(ctx(), *stmt, index, params->op.bucket.info.requester_pays, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.has_website.c_str(), sdb);
-    SQL_BIND_INT(*stmt, index, params->op.bucket.info.has_website, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.has_website.c_str(), sdb);
+    SQL_BIND_INT(ctx(), *stmt, index, params->op.bucket.info.has_website, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.website_conf.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.info.website_conf, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.website_conf.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.info.website_conf, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.swift_versioning.c_str(), sdb);
-    SQL_BIND_INT(*stmt, index, params->op.bucket.info.swift_versioning, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.swift_versioning.c_str(), sdb);
+    SQL_BIND_INT(ctx(), *stmt, index, params->op.bucket.info.swift_versioning, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.swift_ver_location.c_str(), sdb);
-    SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.swift_ver_location.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.swift_ver_location.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.swift_ver_location.c_str(), sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.mdsearch_config.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.info.mdsearch_config, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.mdsearch_config.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.info.mdsearch_config, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.new_bucket_instance_id.c_str(), sdb);
-    SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.new_bucket_instance_id.c_str(), sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.new_bucket_instance_id.c_str(), sdb);
+    SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.new_bucket_instance_id.c_str(), sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.obj_lock.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.info.obj_lock, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.obj_lock.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.info.obj_lock, sdb);
 
-    SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.sync_policy_info_groups.c_str(), sdb);
-    SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.info.sync_policy, sdb);
+    SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.sync_policy_info_groups.c_str(), sdb);
+    SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.info.sync_policy, sdb);
   }
 
-  SQL_BIND_INDEX(*stmt, index, p_params.op.user.user_id.c_str(), sdb);
-  SQL_BIND_TEXT(*stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), *stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-  SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
-  SQL_BIND_TEXT(*stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), *stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.bucket_ver.c_str(), sdb);
-  SQL_BIND_INT(*stmt, index, params->op.bucket.bucket_version.ver, sdb);
+  SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.bucket_ver.c_str(), sdb);
+  SQL_BIND_INT(ctx(), *stmt, index, params->op.bucket.bucket_version.ver, sdb);
 
-  SQL_BIND_INDEX(*stmt, index, p_params.op.bucket.mtime.c_str(), sdb);
-  SQL_ENCODE_BLOB_PARAM(*stmt, index, params->op.bucket.mtime, sdb);
+  SQL_BIND_INDEX(ctx(), *stmt, index, p_params.op.bucket.mtime.c_str(), sdb);
+  SQL_ENCODE_BLOB_PARAM(ctx(), *stmt, index, params->op.bucket.mtime, sdb);
 
 out:
   return rc;
@@ -1304,8 +1304,8 @@ int SQLUpdateBucket::Execute(struct DBOpParams *params)
   } else if (params->op.query_str == "info") { 
     stmt = &info_stmt;
   } else {
-    dbout(L_ERR)<<"In SQLUpdateBucket invalid query_str:" <<
-      params->op.query_str << "\n";
+    dbout(cct, 0)<<"In SQLUpdateBucket invalid query_str:" <<
+      params->op.query_str << "" << dbendl;
     goto out;
   }
 
@@ -1320,13 +1320,13 @@ int SQLRemoveBucket::Prepare(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLRemoveBucket - no db\n";
+    dbout(cct, 0)<<"In SQLRemoveBucket - no db" << dbendl;
     goto out;
   }
 
   p_params.bucket_table = params->bucket_table;
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareRemoveBucket");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareRemoveBucket");
 
 out:
   return ret;
@@ -1338,9 +1338,9 @@ int SQLRemoveBucket::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
 out:
   return rc;
@@ -1363,14 +1363,14 @@ int SQLGetBucket::Prepare(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLGetBucket - no db\n";
+    dbout(cct, 0)<<"In SQLGetBucket - no db" << dbendl;
     goto out;
   }
 
   p_params.bucket_table = params->bucket_table;
   p_params.user_table = params->user_table;
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareGetBucket");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareGetBucket");
 
 out:
   return ret;
@@ -1382,9 +1382,9 @@ int SQLGetBucket::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
 out:
   return rc;
@@ -1406,13 +1406,13 @@ int SQLListUserBuckets::Prepare(struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLListUserBuckets - no db\n";
+    dbout(cct, 0)<<"In SQLListUserBuckets - no db" << dbendl;
     goto out;
   }
 
   p_params.bucket_table = params->bucket_table;
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareListUserBuckets");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareListUserBuckets");
 
 out:
   return ret;
@@ -1424,14 +1424,14 @@ int SQLListUserBuckets::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.user.user_id.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.min_marker.c_str(), sdb);
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.min_marker.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.min_marker.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.min_marker.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.list_max_count.c_str(), sdb);
-  SQL_BIND_INT(stmt, index, params->op.list_max_count, sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.list_max_count.c_str(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->op.list_max_count, sdb);
 
 out:
   return rc;
@@ -1454,14 +1454,14 @@ int SQLInsertObject::Prepare(struct DBOpParams *params)
   string bucket_name;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLInsertObject - no db\n";
+    dbout(cct, 0)<<"In SQLInsertObject - no db" << dbendl;
     goto out;
   }
 
   bucket_name = params->op.bucket.info.bucket.name;
   p_params.object_table = bucket_name + ".object.table";
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareInsertObject");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareInsertObject");
 
 out:
   return ret;
@@ -1473,13 +1473,13 @@ int SQLInsertObject::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.object.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.object.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->object.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->object.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
 out:
   return rc;
@@ -1502,7 +1502,7 @@ int SQLRemoveObject::Prepare(struct DBOpParams *params)
   string bucket_name;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLRemoveObject - no db\n";
+    dbout(cct, 0)<<"In SQLRemoveObject - no db" << dbendl;
     goto out;
   }
 
@@ -1512,7 +1512,7 @@ int SQLRemoveObject::Prepare(struct DBOpParams *params)
 
   (void)createObjectTable(&copy);
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareRemoveObject");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareRemoveObject");
 
 out:
   return ret;
@@ -1524,13 +1524,13 @@ int SQLRemoveObject::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.object.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.object.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->object.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->object.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
 out:
   return rc;
@@ -1553,7 +1553,7 @@ int SQLListObject::Prepare(struct DBOpParams *params)
   string bucket_name;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLListObject - no db\n";
+    dbout(cct, 0)<<"In SQLListObject - no db" << dbendl;
     goto out;
   }
 
@@ -1564,7 +1564,7 @@ int SQLListObject::Prepare(struct DBOpParams *params)
   (void)createObjectTable(&copy);
 
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareListObject");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareListObject");
 
 out:
   return ret;
@@ -1576,13 +1576,13 @@ int SQLListObject::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.object.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.object.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->object.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->object.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
 out:
   return rc;
@@ -1605,7 +1605,7 @@ int SQLPutObjectData::Prepare(struct DBOpParams *params)
   string bucket_name;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLPutObjectData - no db\n";
+    dbout(cct, 0)<<"In SQLPutObjectData - no db" << dbendl;
     goto out;
   }
 
@@ -1617,7 +1617,7 @@ int SQLPutObjectData::Prepare(struct DBOpParams *params)
 
   (void)createObjectDataTable(&copy);
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PreparePutObjectData");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PreparePutObjectData");
 
 out:
   return ret;
@@ -1629,25 +1629,25 @@ int SQLPutObjectData::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.object.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.object.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->object.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->object.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.offset.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.offset.c_str(), sdb);
 
-  SQL_BIND_INT(stmt, 3, params->offset, sdb);
+  SQL_BIND_INT(ctx(), stmt, 3, params->offset, sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.data.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.data.c_str(), sdb);
 
-  SQL_BIND_BLOB(stmt, index, params->data.c_str(), params->data.length(), sdb);
+  SQL_BIND_BLOB(ctx(), stmt, index, params->data.c_str(), params->data.length(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.datalen.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.datalen.c_str(), sdb);
 
-  SQL_BIND_INT(stmt, index, params->data.length(), sdb);
+  SQL_BIND_INT(ctx(), stmt, index, params->data.length(), sdb);
 
 out:
   return rc;
@@ -1670,7 +1670,7 @@ int SQLGetObjectData::Prepare(struct DBOpParams *params)
   string bucket_name;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLGetObjectData - no db\n";
+    dbout(cct, 0)<<"In SQLGetObjectData - no db" << dbendl;
     goto out;
   }
 
@@ -1682,7 +1682,7 @@ int SQLGetObjectData::Prepare(struct DBOpParams *params)
 
   (void)createObjectDataTable(&copy);
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareGetObjectData");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareGetObjectData");
 
 out:
   return ret;
@@ -1694,13 +1694,13 @@ int SQLGetObjectData::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.object.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.object.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->object.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->object.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 out:
   return rc;
 }
@@ -1722,7 +1722,7 @@ int SQLDeleteObjectData::Prepare(struct DBOpParams *params)
   string bucket_name;
 
   if (!*sdb) {
-    dbout(L_ERR)<<"In SQLDeleteObjectData - no db\n";
+    dbout(cct, 0)<<"In SQLDeleteObjectData - no db" << dbendl;
     goto out;
   }
 
@@ -1734,7 +1734,7 @@ int SQLDeleteObjectData::Prepare(struct DBOpParams *params)
 
   (void)createObjectDataTable(&copy);
 
-  SQL_PREPARE(p_params, sdb, stmt, ret, "PrepareDeleteObjectData");
+  SQL_PREPARE(ctx(), p_params, sdb, stmt, ret, "PrepareDeleteObjectData");
 
 out:
   return ret;
@@ -1746,13 +1746,13 @@ int SQLDeleteObjectData::Bind(struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(stmt, index, p_params.object.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.object.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->object.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->object.c_str(), sdb);
 
-  SQL_BIND_INDEX(stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(ctx(), stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
 
-  SQL_BIND_TEXT(stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
+  SQL_BIND_TEXT(ctx(), stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 out:
   return rc;
 }
