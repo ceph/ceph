@@ -629,7 +629,7 @@ class CephFSVolumeClient(object):
             raise ValueError("group ID cannot end with '{0}'.".format(
                 META_FILE_EXT))
         path = self._get_group_path(group_id)
-        self._mkdir_p(path, mode)
+        self.fs.mkdirs(path, mode)
 
     def destroy_group(self, group_id):
         path = self._get_group_path(group_id)
@@ -639,23 +639,6 @@ class CephFSVolumeClient(object):
             pass
         else:
             self.fs.rmdir(path)
-
-    def _mkdir_p(self, path, mode=0o755):
-        try:
-            self.fs.stat(path)
-        except cephfs.ObjectNotFound:
-            pass
-        else:
-            return
-
-        parts = path.split(os.path.sep)
-
-        for i in range(1, len(parts) + 1):
-            subpath = os.path.join(*parts[0:i])
-            try:
-                self.fs.stat(subpath)
-            except cephfs.ObjectNotFound:
-                self.fs.mkdir(subpath, mode)
 
     def create_volume(self, volume_path, size=None, data_isolated=False, namespace_isolated=True,
                       mode=0o755):
@@ -674,7 +657,7 @@ class CephFSVolumeClient(object):
         path = self._get_path(volume_path)
         log.info("create_volume: {0}".format(path))
 
-        self._mkdir_p(path, mode)
+        self.fs.mkdirs(path, mode)
 
         if size is not None:
             self.fs.setxattr(path, 'ceph.quota.max_bytes', to_bytes(size), 0)
@@ -732,7 +715,7 @@ class CephFSVolumeClient(object):
 
         # Create the trash folder if it doesn't already exist
         trash = os.path.join(self.volume_prefix, "_deleting")
-        self._mkdir_p(trash)
+        self.fs.mkdirs(trash, 0o755)
 
         # We'll move it to here
         trashed_volume = os.path.join(trash, volume_path.volume_id)
