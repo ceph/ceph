@@ -404,7 +404,7 @@ SeaStore::_omap_get_values_ret SeaStore::_omap_get_values(
     [&](auto &manager, auto &root, auto &ret) {
       return with_trans_intr(
 	t,
-	[&, this](auto &t) {
+	[&](auto &t) {
 	  return trans_intr::do_for_each(
 	    keys.begin(),
 	    keys.end(),
@@ -418,9 +418,8 @@ SeaStore::_omap_get_values_ret SeaStore::_omap_get_values(
 		  bufferlist bl;
 		  bl.append(*p);
 		  ret.emplace(
-		    std::make_pair(
-		      std::move(key),
-		      std::move(bl)));
+		    std::move(key),
+		    std::move(bl));
 		}
 		return seastar::now();
 	      });
