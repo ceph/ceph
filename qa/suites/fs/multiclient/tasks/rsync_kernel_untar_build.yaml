@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse_default_permissions: 0
+
+tasks:
+- rsync:
+    waittime: 10
+    mountpoint: 0
+    data_dir: client.1
+- workunit:
+    clients:
+      client.1:
+        - kernel_untar_build.sh
