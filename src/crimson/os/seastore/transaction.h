@@ -7,6 +7,7 @@
 
 #include <boost/intrusive/list.hpp>
 
+#include "crimson/common/log.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cached_extent.h"
@@ -83,7 +84,13 @@ public:
     if (is_weak()) return;
 
     auto [iter, inserted] = read_set.emplace(this, ref);
-    ceph_assert(inserted);
+    if (!inserted) {
+      ::crimson::get_logger(ceph_subsys_seastore).debug(
+	"{} {} {} already in read_set",
+	__func__,
+	(void*)this,
+	*ref);
+    }
   }
 
   void add_fresh_extent(CachedExtentRef ref) {
