@@ -49,7 +49,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 	  DEBUGT("about to submit_transaction", *transaction);
 	  return with_trans_intr(
 	    *transaction,
-	    [this, FNAME, &transaction](auto&) {
+	    [this, &transaction](auto&) {
 	      return submit_transaction_direct(*transaction);
 	    }
 	  ).handle_error(
