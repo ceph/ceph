@@ -1463,6 +1463,22 @@ Then run the following:
 
         :param host: host name
         """
+        # Verify if it is possible to remove the host safely
+        daemons = self.cache.get_daemons_by_host(host)
+        if daemons:
+            self.log.warning(f"Blocked {host} removal. Daemons running: {daemons}")
+
+            daemons_table = ""
+            daemons_table += "{:<20} {:<15}\n".format("type", "id")
+            daemons_table += "{:<20} {:<15}\n".format("-" * 20, "-" * 15)
+            for d in daemons:
+                daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
+
+            return "Not allowed to remove %s from cluster. " \
+                "The following daemons are running in the host:" \
+                "\n%s\nPlease run 'ceph orch host drain %s' to remove daemons from host" % (
+                    host, daemons_table, host)
+
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
         self._reset_con(host)
@@ -2564,3 +2580,25 @@ Then run the following:
         The CLI call to retrieve an osd removal report
         """
         return self.to_remove_osds.all_osds()
+
+    @handle_orch_error
+    def drain_host(self, hostname):
+        # type: (str) -> str
+        """
+        Drain all daemons from a host.
+        :param host: host name
+        """
+        self.add_host_label(hostname, '_no_schedule')
+
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_host(hostname)
+
+        osds_to_remove = [d.daemon_id for d in daemons if d.daemon_type == 'osd']
+        self.remove_osds(osds_to_remove)
+
+        daemons_table = ""
+        daemons_table += "{:<20} {:<15}\n".format("type", "id")
+        daemons_table += "{:<20} {:<15}\n".format("-" * 20, "-" * 15)
+        for d in daemons:
+            daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
+
+        return "Scheduled to remove the following daemons from host '{}'\n{}".format(hostname, daemons_table)
