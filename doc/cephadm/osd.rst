@@ -211,6 +211,7 @@ If you want to avoid this behavior (disable automatic creation of OSD on availab
 
 * For cephadm, see also :ref:`cephadm-spec-unmanaged`.
 
+.. _cephadm-osd-removal:
 
 Remove an OSD
 =============
