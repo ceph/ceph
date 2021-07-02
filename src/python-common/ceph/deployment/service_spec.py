@@ -663,7 +663,7 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
-    DEFAULT_POOL = 'nfs-ganesha'
+    DEFAULT_POOL = '.nfs'
 
     def __init__(self,
                  service_type: str = 'nfs',
