@@ -6,15 +6,13 @@ import tempfile
 from typing import Dict, Tuple, Any, List, cast, Optional
 
 from mgr_module import HandleCommandResult
+from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 
 from orchestrator import DaemonDescription
 
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
-
-
-POOL_NAME = 'nfs-ganesha'   # make sure this matches pybind/mgr/nfs/nfs_utils.py
 
 logger = logging.getLogger(__name__)
 
