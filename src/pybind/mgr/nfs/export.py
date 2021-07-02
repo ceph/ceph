@@ -590,7 +590,8 @@ class ExportMgr:
                 # re-fetch via old pseudo
                 old_export = self._fetch_export(cluster_id, old_export.pseudo)
                 assert old_export
-                self.mgr.log.debug(f"export {old_export.export_id} pseudo {old_export.pseudo} -> {new_export_dict['pseudo']}")
+                self.mgr.log.debug(
+                    f"export {old_export.export_id} pseudo {old_export.pseudo} -> {new_export_dict['pseudo']}")
 
         new_export = self.create_export_from_dict(
             cluster_id,
