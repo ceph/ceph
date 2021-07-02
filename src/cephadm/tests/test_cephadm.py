@@ -1147,6 +1147,57 @@ class TestBootstrap(object):
                 retval = cd.command_bootstrap(ctx)
                 assert retval == 0
 
+    @pytest.mark.parametrize('mon_addrv, list_networks, err',
+        [
+            # IPv4
+            (
+                '192.168.1.1',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                r'must use square backets',
+            ),
+            (
+                '[192.168.1.1]',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                r'must include port number',
+            ),
+            (
+                '[192.168.1.1:1234]',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                None,
+            ),
+            (
+                '[v2:192.168.1.1:3300,v1:192.168.1.1:6789]',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                None,
+            ),
+            # IPv6
+            (
+                '[::ffff:192.168.1.1:1234]',
+                {'ffff::/64': {'eth0': ['::ffff:c0a8:101']}},
+                None,
+            ),
+            (
+                '[0000:0000:0000:0000:0000:FFFF:C0A8:0101:1234]',
+                {'ffff::/64': {'eth0': ['::ffff:c0a8:101']}},
+                None,
+            ),
+            (
+                '[v2:0000:0000:0000:0000:0000:FFFF:C0A8:0101:3300,v1:0000:0000:0000:0000:0000:FFFF:C0A8:0101:6789]',
+                {'ffff::/64': {'eth0': ['::ffff:c0a8:101']}},
+                None,
+            ),
+        ])
+    def test_mon_addrv(self, mon_addrv, list_networks, err, cephadm_fs):
+        cmd = self._get_cmd('--mon-addrv', mon_addrv)
+        if err:
+            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+                with pytest.raises(cd.Error, match=err):
+                    cd.command_bootstrap(ctx)
+        else:
+            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+                retval = cd.command_bootstrap(ctx)
+                assert retval == 0
+
     def test_allow_fqdn_hostname(self, cephadm_fs):
         hostname = 'foo.bar'
         cmd = self._get_cmd(

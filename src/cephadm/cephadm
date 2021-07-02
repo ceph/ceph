@@ -3492,7 +3492,7 @@ def prepare_mon_addresses(
                             addr_arg)
             port = int(hasport[0])
             # strip off v1: or v2: prefix
-            addr = re.sub(r'^\w+:', '', addr)
+            addr = re.sub(r'^v\d+:', '', addr)
             base_ip = addr[0:-(len(str(port))) - 1]
             check_ip_port(ctx, base_ip, port)
     else:
