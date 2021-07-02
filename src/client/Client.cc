@@ -5764,6 +5764,10 @@ out:
 }
 
 int Client::may_delete(const char *relpath, const UserPerm& perms) {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   ldout(cct, 20) << __func__ << " " << relpath << "; " << perms << dendl;
 
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
@@ -6896,6 +6900,10 @@ int Client::get_or_create(Inode *dir, const char* name,
 
 int Client::walk(std::string_view path, walk_dentry_result* wdr, const UserPerm& perms, bool followsym)
 {
+  if (path.size() == 0) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7010,6 +7018,13 @@ int Client::path_walk(const filepath& origpath, walk_dentry_result* result, cons
 
 int Client::link(const char *relexisting, const char *relpath, const UserPerm& perm, std::string alternate_name)
 {
+  if (!relexisting[0]) {
+    return -CEPHFS_ENOENT;
+  }
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7060,6 +7075,10 @@ int Client::unlink(const char *relpath, const UserPerm& perm)
 
 int Client::unlinkat(int dirfd, const char *relpath, int flags, const UserPerm& perm)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -7158,6 +7177,10 @@ int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm, std::s
 int Client::mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm,
                     std::string alternate_name)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7200,6 +7223,10 @@ int Client::mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm&
 
 int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7262,6 +7289,10 @@ int Client::rmdir(const char *relpath, const UserPerm& perms)
 
 int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t rdev) 
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7301,6 +7332,10 @@ int Client::symlink(const char *target, const char *relpath, const UserPerm& per
 int Client::symlinkat(const char *target, int dirfd, const char *relpath, const UserPerm& perms,
                       std::string alternate_name)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -7346,6 +7381,10 @@ int Client::readlink(const char *relpath, char *buf, loff_t size, const UserPerm
 }
 
 int Client::readlinkat(int dirfd, const char *relpath, char *buf, loff_t size, const UserPerm& perms) {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -7665,6 +7704,10 @@ int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
 int Client::setattr(const char *relpath, struct stat *attr, int mask,
 		    const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7686,6 +7729,10 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask,
 int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 		     const UserPerm& perms, int flags)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7749,6 +7796,10 @@ int Client::fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& 
 int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
 		 frag_info_t *dirstat, int mask)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7806,6 +7857,10 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
 int Client::lstat(const char *relpath, struct stat *stbuf,
 		  const UserPerm& perms, frag_info_t *dirstat, int mask)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -7997,6 +8052,10 @@ int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
 
 int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -8020,6 +8079,10 @@ int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
 
 int Client::chmodat(int dirfd, const char *relpath, mode_t mode, int flags,
                     const UserPerm& perms) {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -8097,6 +8160,10 @@ int Client::lchown(const char *relpath, uid_t new_uid, gid_t new_gid,
 
 int Client::chownat(int dirfd, const char *relpath, uid_t new_uid, gid_t new_gid,
                     int flags, const UserPerm& perms) {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -8180,6 +8247,10 @@ int Client::futime(int fd, struct utimbuf *buf, const UserPerm& perms)
 int Client::utimes(const char *relpath, struct timeval times[2],
                    const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -8209,6 +8280,10 @@ int Client::utimes(const char *relpath, struct timeval times[2],
 int Client::lutimes(const char *relpath, struct timeval times[2],
                     const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -8277,6 +8352,10 @@ int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
 
 int Client::utimensat(int dirfd, const char *relpath, struct timespec times[2], int flags,
                       const UserPerm& perms) {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -8340,6 +8419,10 @@ int Client::flock(int fd, int operation, uint64_t owner)
 
 int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -9071,6 +9154,10 @@ static int _getdir_cb(void *p, struct dirent *de, struct ceph_statx *stx, off_t 
 int Client::getdir(const char *relpath, list<string>& contents,
 		   const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   ldout(cct, 3) << "getdir(" << relpath << ")" << dendl;
   tout(cct) << "getdir" << std::endl;
   tout(cct) << relpath << std::endl;
@@ -9201,6 +9288,10 @@ int Client::_openat(int dirfd, const char *relpath, int flags, const UserPerm& p
 int Client::openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
                    mode_t mode, int stripe_unit, int stripe_count, int object_size,
                    const char *data_pool, std::string alternate_name) {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -10639,6 +10730,11 @@ int Client::fstatx(int fd, struct ceph_statx *stx, const UserPerm& perms,
 int Client::statxat(int dirfd, const char *relpath,
                     struct ceph_statx *stx, const UserPerm& perms,
                     unsigned int want, unsigned int flags) {
+
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -10679,6 +10775,10 @@ int Client::statxat(int dirfd, const char *relpath,
 int Client::chdir(const char *relpath, std::string &new_cwd,
 		  const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -10759,6 +10859,10 @@ void Client::getcwd(string& dir, const UserPerm& perms)
 int Client::statfs(const char *path, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -11175,6 +11279,10 @@ int Client::_flock(Fh *fh, int cmd, uint64_t owner)
 }
 
 int Client::get_snap_info(const char *path, const UserPerm &perms, SnapInfo *snap_info) {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
@@ -11416,6 +11524,10 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
 int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm,
                    mode_t mode, const std::map<std::string, std::string> &metadata)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -11438,6 +11550,10 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm,
 
 int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms, bool check_perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -11478,6 +11594,10 @@ int Client::get_caps_issued(int fd)
 
 int Client::get_caps_issued(const char *path, const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -11983,6 +12103,10 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
 int Client::getxattr(const char *path, const char *name, void *value, size_t size,
 		     const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -11999,6 +12123,10 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
 int Client::lgetxattr(const char *path, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -12030,6 +12158,10 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size,
 int Client::listxattr(const char *path, char *list, size_t size,
 		      const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -12046,6 +12178,10 @@ int Client::listxattr(const char *path, char *list, size_t size,
 int Client::llistxattr(const char *path, char *list, size_t size,
 		       const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -12076,6 +12212,10 @@ int Client::flistxattr(int fd, char *list, size_t size, const UserPerm& perms)
 int Client::removexattr(const char *path, const char *name,
 			const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -12092,6 +12232,10 @@ int Client::removexattr(const char *path, const char *name,
 int Client::lremovexattr(const char *path, const char *name,
 			 const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -12122,6 +12266,10 @@ int Client::fremovexattr(int fd, const char *name, const UserPerm& perms)
 int Client::setxattr(const char *path, const char *name, const void *value,
 		     size_t size, int flags, const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -12140,6 +12288,10 @@ int Client::setxattr(const char *path, const char *name, const void *value,
 int Client::lsetxattr(const char *path, const char *name, const void *value,
 		      size_t size, int flags, const UserPerm& perms)
 {
+  if (!path[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
@@ -14698,6 +14850,10 @@ void Client::ll_interrupt(void *d)
 int Client::describe_layout(const char *relpath, file_layout_t *lp,
 			    const UserPerm& perms)
 {
+  if (!relpath[0]) {
+    return -CEPHFS_ENOENT;
+  }
+
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -CEPHFS_ENOTCONN;
