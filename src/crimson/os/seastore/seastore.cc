@@ -418,9 +418,8 @@ SeaStore::_omap_get_values_ret SeaStore::_omap_get_values(
 		  bufferlist bl;
 		  bl.append(*p);
 		  ret.emplace(
-		    std::make_pair(
-		      std::move(key),
-		      std::move(bl)));
+		    std::move(key),
+		    std::move(bl));
 		}
 		return seastar::now();
 	      });
