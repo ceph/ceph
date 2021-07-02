@@ -67,7 +67,7 @@ protected:
                        pwl::DeferredContexts &later) override;
   void process_work() override;
   void append_scheduled_ops(void) override;
-  void schedule_append_ops(pwl::GenericLogOperations &ops) override;
+  void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) override;
   void remove_pool_file() override;
   void release_ram(std::shared_ptr<GenericLogEntry> log_entry) override;
 

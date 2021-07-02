@@ -1257,19 +1257,19 @@ void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_
 }
 
 template <typename I>
-void AbstractWriteLog<I>::schedule_append(GenericLogOperationsVector &ops)
+void AbstractWriteLog<I>::schedule_append(GenericLogOperationsVector &ops, C_BlockIORequestT *req)
 {
   GenericLogOperations to_append(ops.begin(), ops.end());
 
-  schedule_append_ops(to_append);
+  schedule_append_ops(to_append, req);
 }
 
 template <typename I>
-void AbstractWriteLog<I>::schedule_append(GenericLogOperationSharedPtr op)
+void AbstractWriteLog<I>::schedule_append(GenericLogOperationSharedPtr op, C_BlockIORequestT *req)
 {
   GenericLogOperations to_append { op };
 
-  schedule_append_ops(to_append);
+  schedule_append_ops(to_append, req);
 }
 
 /*

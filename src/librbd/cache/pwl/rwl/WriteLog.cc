@@ -624,7 +624,7 @@ void WriteLog<I>::flush_then_append_scheduled_ops(void)
      * get to the log message append step. */
     if (ops.size()) {
       flush_pmem_buffer(ops);
-      schedule_append_ops(ops);
+      schedule_append_ops(ops, nullptr);
     }
   } while (ops_remain);
   append_scheduled_ops();
@@ -694,7 +694,7 @@ void WriteLog<I>::setup_schedule_append(
  * all prior log entries are persisted everywhere.
  */
 template <typename I>
-void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops)
+void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIORequestT *req)
 {
   bool need_finisher;
   GenericLogOperationsVector appending;
