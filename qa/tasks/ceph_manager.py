@@ -1617,7 +1617,7 @@ class CephManager:
             args.append("--watch-channel")
             args.append(watch_channel)
         return self.controller.run(args=args, wait=False, stdout=StringIO(),
-                                   stdin=run.PIPE)
+                                   stdin=run.PIPE, shell=True)
 
     def get_mon_socks(self):
         """
