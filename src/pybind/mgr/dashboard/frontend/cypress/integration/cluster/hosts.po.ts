@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/hosts', id: 'cd-hosts' },
-  create: { url: '#/hosts/create', id: 'cd-host-form' }
+  add: { url: '#/hosts/(modal:add)', id: 'cd-host-form' }
 };
 
 export class HostsPageHelper extends PageHelper {
@@ -49,21 +49,20 @@ export class HostsPageHelper extends PageHelper {
     });
   }
 
-  @PageHelper.restrictTo(pages.create.url)
+  @PageHelper.restrictTo(pages.add.url)
   add(hostname: string, exist?: boolean, maintenance?: boolean) {
-    cy.get(`${this.pages.create.id}`).within(() => {
+    cy.get(`${this.pages.add.id}`).within(() => {
       cy.get('#hostname').type(hostname);
       if (maintenance) {
         cy.get('label[for=maintenance]').click();
       }
+      if (exist) {
+        cy.get('#hostname').should('have.class', 'ng-invalid');
+      }
       cy.get('cd-submit-button').click();
     });
-    if (exist) {
-      cy.get('#hostname').should('have.class', 'ng-invalid');
-    } else {
-      // back to host list
-      cy.get(`${this.pages.index.id}`);
-    }
+    // back to host list
+    cy.get(`${this.pages.index.id}`);
   }
 
   @PageHelper.restrictTo(pages.index.url)

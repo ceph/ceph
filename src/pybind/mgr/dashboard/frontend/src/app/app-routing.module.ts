@@ -105,13 +105,13 @@ const routes: Routes = [
       },
       {
         path: 'hosts',
+        component: HostsComponent,
         data: { breadcrumbs: 'Cluster/Hosts' },
         children: [
-          { path: '', component: HostsComponent },
           {
-            path: URLVerbs.CREATE,
+            path: URLVerbs.ADD,
             component: HostFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },
