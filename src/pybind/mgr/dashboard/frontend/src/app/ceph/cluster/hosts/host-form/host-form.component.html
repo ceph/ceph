@@ -1,91 +1,94 @@
-<div class="cd-col-form"
-     *cdFormLoading="loading">
-  <form name="hostForm"
-        #formDir="ngForm"
-        [formGroup]="hostForm"
-        novalidate>
-    <div class="card">
-      <div i18n="form title|Example: Create Pool@@formTitle"
-           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+<cd-modal pageURL="hosts">
+  <span class="modal-title"
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
 
-      <div class="card-body">
+  <ng-container class="modal-content">
 
-        <!-- Hostname -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="hostname"
-                 i18n>Hostname</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="mon-123"
-                   id="hostname"
-                   name="hostname"
-                   formControlName="hostname"
-                   autofocus>
-            <span class="invalid-feedback"
-                  *ngIf="hostForm.showError('hostname', formDir, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="hostForm.showError('hostname', formDir, 'uniqueName')"
-                  i18n>The chosen hostname is already in use.</span>
+    <div *cdFormLoading="loading">
+      <form name="hostForm"
+            #formDir="ngForm"
+            [formGroup]="hostForm"
+            novalidate>
+
+        <div class="modal-body">
+
+          <!-- Hostname -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="hostname"
+                   i18n>Hostname</label>
+            <div class="cd-col-form-input">
+              <input class="form-control"
+                     type="text"
+                     placeholder="mon-123"
+                     id="hostname"
+                     name="hostname"
+                     formControlName="hostname"
+                     autofocus>
+              <span class="invalid-feedback"
+                    *ngIf="hostForm.showError('hostname', formDir, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="hostForm.showError('hostname', formDir, 'uniqueName')"
+                    i18n>The chosen hostname is already in use.</span>
+            </div>
           </div>
-        </div>
 
-        <!-- Address -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="addr"
-                 i18n>Nework address</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="192.168.0.1"
-                   id="addr"
-                   name="addr"
-                   formControlName="addr">
-            <span class="invalid-feedback"
-                  *ngIf="hostForm.showError('addr', formDir, 'pattern')"
-                  i18n>The value is not a valid IP address.</span>
+          <!-- Address -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="addr"
+                   i18n>Nework address</label>
+            <div class="cd-col-form-input">
+              <input class="form-control"
+                     type="text"
+                     placeholder="192.168.0.1"
+                     id="addr"
+                     name="addr"
+                     formControlName="addr">
+              <span class="invalid-feedback"
+                    *ngIf="hostForm.showError('addr', formDir, 'pattern')"
+                    i18n>The value is not a valid IP address.</span>
+            </div>
           </div>
-        </div>
 
-        <!-- Labels -->
-        <div class="form-group row">
-          <label i18n
-                 for="labels"
-                 class="cd-col-form-label">Labels</label>
-          <div class="cd-col-form-input">
-            <cd-select-badges id="labels"
-                              [data]="hostForm.controls.labels.value"
-                              [customBadges]="true"
-                              [messages]="messages">
-            </cd-select-badges>
+          <!-- Labels -->
+          <div class="form-group row">
+            <label i18n
+                   for="labels"
+                   class="cd-col-form-label">Labels</label>
+            <div class="cd-col-form-input">
+              <cd-select-badges id="labels"
+                                [data]="hostForm.controls.labels.value"
+                                [customBadges]="true"
+                                [messages]="messages">
+              </cd-select-badges>
+            </div>
           </div>
-        </div>
 
-        <!-- Maintenance Mode -->
-        <div class="form-group row">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input class="custom-control-input"
-                     id="maintenance"
-                     type="checkbox"
-                     formControlName="maintenance">
-              <label class="custom-control-label"
-                     for="maintenance"
-                     i18n>Maintenance Mode</label>
+          <!-- Maintenance Mode -->
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="maintenance"
+                       type="checkbox"
+                       formControlName="maintenance">
+                <label class="custom-control-label"
+                       for="maintenance"
+                       i18n>Maintenance Mode</label>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="card-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="hostForm"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                              wrappingClass="text-right"></cd-form-button-panel>
-      </div>
+        <div class="modal-footer">
+          <cd-form-button-panel (submitActionEvent)="submit()"
+                                [form]="hostForm"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                                wrappingClass="text-right"></cd-form-button-panel>
+        </div>
+      </form>
     </div>
-  </form>
-</div>
+  </ng-container>
+</cd-modal>
