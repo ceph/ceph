@@ -65,10 +65,10 @@ export class LoginComponent implements OnInit {
 
   login() {
     this.authService.login(this.model).subscribe(() => {
-      const urlPath = this.postInstalled ? '/' : '/create-cluster';
+      const urlPath = this.postInstalled ? '/' : '/expand-cluster';
       let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
       if (!this.postInstalled && this.route.snapshot.queryParams['returnUrl'] === '/dashboard') {
-        url = '/create-cluster';
+        url = '/expand-cluster';
       }
       this.router.navigate([url]);
     });

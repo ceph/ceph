@@ -1,7 +1,7 @@
-import { CreateClusterWelcomePageHelper } from '../cluster/cluster-welcome-page.po';
+import { CreateClusterWizardHelper } from 'cypress/integration/cluster/create-cluster.po';
 
 describe('Create cluster page', () => {
-  const createCluster = new CreateClusterWelcomePageHelper();
+  const createCluster = new CreateClusterWizardHelper();
 
   beforeEach(() => {
     cy.login();

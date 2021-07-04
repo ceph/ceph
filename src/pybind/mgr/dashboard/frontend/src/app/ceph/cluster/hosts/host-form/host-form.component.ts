@@ -2,6 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+
 import { HostService } from '~/app/shared/api/host.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -24,6 +26,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   addr: string;
   status: string;
   allLabels: any;
+  pageURL: string;
 
   messages = new SelectMessages({
     empty: $localize`There are no labels.`,
@@ -35,15 +38,19 @@ export class HostFormComponent extends CdForm implements OnInit {
     private router: Router,
     private actionLabels: ActionLabelsI18n,
     private hostService: HostService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    public activeModal: NgbActiveModal
   ) {
     super();
     this.resource = $localize`host`;
-    this.action = this.actionLabels.CREATE;
-    this.createForm();
+    this.action = this.actionLabels.ADD;
   }
 
   ngOnInit() {
+    if (this.router.url.includes('hosts')) {
+      this.pageURL = 'hosts';
+    }
+    this.createForm();
     this.hostService.list().subscribe((resp: any[]) => {
       this.hostnames = resp.map((host) => {
         return host['hostname'];
@@ -53,6 +60,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   }
 
   private createForm() {
+    const disableMaintenance = this.pageURL !== 'hosts';
     this.hostForm = new CdFormGroup({
       hostname: new FormControl('', {
         validators: [
@@ -66,7 +74,7 @@ export class HostFormComponent extends CdForm implements OnInit {
         validators: [CdValidators.ip()]
       }),
       labels: new FormControl([]),
-      maintenance: new FormControl(false)
+      maintenance: new FormControl({ value: disableMaintenance, disabled: disableMaintenance })
     });
   }
 
@@ -77,7 +85,7 @@ export class HostFormComponent extends CdForm implements OnInit {
     this.allLabels = this.hostForm.get('labels').value;
     this.taskWrapper
       .wrapTaskAroundCall({
-        task: new FinishedTask('host/' + URLVerbs.CREATE, {
+        task: new FinishedTask('host/' + URLVerbs.ADD, {
           hostname: hostname
         }),
         call: this.hostService.create(hostname, this.addr, this.allLabels, this.status)
@@ -87,7 +95,9 @@ export class HostFormComponent extends CdForm implements OnInit {
           this.hostForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.router.navigate(['/hosts']);
+          this.pageURL === 'hosts'
+            ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+            : this.activeModal.close();
         }
       });
   }

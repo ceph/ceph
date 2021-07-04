@@ -5,6 +5,7 @@ import { RouterModule } from '@angular/router';
 
 import { TreeModule } from '@circlon/angular-tree-component';
 import {
+  NgbActiveModal,
   NgbDatepickerModule,
   NgbDropdownModule,
   NgbNavModule,
@@ -106,7 +107,6 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     OsdCreationPreviewModalComponent,
     RulesListComponent,
     ActiveAlertListComponent,
-    HostFormComponent,
     ServiceDetailsComponent,
     ServiceDaemonListComponent,
     TelemetryComponent,
@@ -115,6 +115,7 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     OsdFlagsIndivModalComponent,
     PlacementPipe,
     CreateClusterComponent
-  ]
+  ],
+  providers: [NgbActiveModal]
 })
 export class ClusterModule {}
