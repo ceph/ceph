@@ -13,6 +13,9 @@
 namespace crimson::interruptible {
 
 template <typename, typename>
+class parallel_for_each_state;
+
+template <typename, typename>
 class interruptible_future_detail;
 
 }
@@ -439,6 +442,8 @@ private:
       return std::move(maybe_handle_error).get_result();
     }
 
+  protected:
+    using base_t::get_exception;
   public:
     using errorator_type = ::crimson::errorator<AllowedErrors...>;
     using promise_type = seastar::promise<ValueT>;
@@ -717,6 +722,8 @@ private:
     template<typename, typename>
     friend class ::crimson::interruptible::interruptible_future_detail;
     friend class ::crimson::parallel_for_each_state<AllowedErrors...>;
+    template <typename IC, typename FT>
+    friend class ::crimson::interruptible::parallel_for_each_state;
   };
 
   class Enabler {};
