@@ -89,7 +89,7 @@ const routes: Routes = [
 
       // Cluster
       {
-        path: 'create-cluster',
+        path: 'expand-cluster',
         component: CreateClusterComponent,
         canActivate: [ModuleStatusGuardService],
         data: {
@@ -98,18 +98,18 @@ const routes: Routes = [
             redirectTo: 'dashboard',
             backend: 'cephadm'
           },
-          breadcrumbs: 'Create Cluster'
+          breadcrumbs: 'Expand Cluster'
         }
       },
       {
         path: 'hosts',
+        component: HostsComponent,
         data: { breadcrumbs: 'Cluster/Hosts' },
         children: [
-          { path: '', component: HostsComponent },
           {
-            path: URLVerbs.CREATE,
+            path: URLVerbs.ADD,
             component: HostFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },
