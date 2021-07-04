@@ -72,6 +72,7 @@ describe('HostsComponent', () => {
     showForceMaintenanceModal = new MockShowForceMaintenanceModal();
     fixture = TestBed.createComponent(HostsComponent);
     component = fixture.componentInstance;
+    component.clusterCreation = false;
     hostListSpy = spyOn(TestBed.inject(HostService), 'list');
     orchService = TestBed.inject(OrchestratorService);
   });
@@ -182,7 +183,7 @@ describe('HostsComponent', () => {
       const tests = [
         {
           expectResults: {
-            Create: { disabled: false, disableDesc: '' },
+            Add: { disabled: false, disableDesc: '' },
             Edit: { disabled: true, disableDesc: '' },
             Delete: { disabled: true, disableDesc: '' }
           }
@@ -190,7 +191,7 @@ describe('HostsComponent', () => {
         {
           selectRow: fakeHosts[0], // non-orchestrator host
           expectResults: {
-            Create: { disabled: false, disableDesc: '' },
+            Add: { disabled: false, disableDesc: '' },
             Edit: { disabled: true, disableDesc: component.messages.nonOrchHost },
             Delete: { disabled: true, disableDesc: component.messages.nonOrchHost }
           }
@@ -198,7 +199,7 @@ describe('HostsComponent', () => {
         {
           selectRow: fakeHosts[1], // orchestrator host
           expectResults: {
-            Create: { disabled: false, disableDesc: '' },
+            Add: { disabled: false, disableDesc: '' },
             Edit: { disabled: false, disableDesc: '' },
             Delete: { disabled: false, disableDesc: '' }
           }
@@ -222,7 +223,7 @@ describe('HostsComponent', () => {
       const tests = [
         {
           expectResults: {
-            Create: resultNoOrchestrator,
+            Add: resultNoOrchestrator,
             Edit: { disabled: true, disableDesc: '' },
             Delete: { disabled: true, disableDesc: '' }
           }
@@ -230,7 +231,7 @@ describe('HostsComponent', () => {
         {
           selectRow: fakeHosts[0], // non-orchestrator host
           expectResults: {
-            Create: resultNoOrchestrator,
+            Add: resultNoOrchestrator,
             Edit: { disabled: true, disableDesc: component.messages.nonOrchHost },
             Delete: { disabled: true, disableDesc: component.messages.nonOrchHost }
           }
@@ -238,7 +239,7 @@ describe('HostsComponent', () => {
         {
           selectRow: fakeHosts[1], // orchestrator host
           expectResults: {
-            Create: resultNoOrchestrator,
+            Add: resultNoOrchestrator,
             Edit: resultNoOrchestrator,
             Delete: resultNoOrchestrator
           }
@@ -255,7 +256,7 @@ describe('HostsComponent', () => {
       const tests = [
         {
           expectResults: {
-            Create: resultMissingFeatures,
+            Add: resultMissingFeatures,
             Edit: { disabled: true, disableDesc: '' },
             Delete: { disabled: true, disableDesc: '' }
           }
@@ -263,7 +264,7 @@ describe('HostsComponent', () => {
         {
           selectRow: fakeHosts[0], // non-orchestrator host
           expectResults: {
-            Create: resultMissingFeatures,
+            Add: resultMissingFeatures,
             Edit: { disabled: true, disableDesc: component.messages.nonOrchHost },
             Delete: { disabled: true, disableDesc: component.messages.nonOrchHost }
           }
@@ -271,7 +272,7 @@ describe('HostsComponent', () => {
         {
           selectRow: fakeHosts[1], // orchestrator host
           expectResults: {
-            Create: resultMissingFeatures,
+            Add: resultMissingFeatures,
             Edit: resultMissingFeatures,
             Delete: resultMissingFeatures
           }

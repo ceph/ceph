@@ -1,4 +1,5 @@
-<div class="container h-75">
+<div class="container h-75"
+     *ngIf="!startClusterCreation">
   <div class="row h-100 justify-content-center align-items-center">
     <div class="blank-page">
       <!-- htmllint img-req-src="false" -->
@@ -10,16 +11,14 @@
 
       <div class="m-4">
         <h4 class="text-center"
-            i18n>Please proceed to complete the cluster creation</h4>
-        <div class="offset-md-3">
-          <button class="btn btn-accent m-3"
-                  name="create-cluster"
-                  [routerLink]="'/dashboard'"
+            i18n>Please expand your cluster first</h4>
+        <div class="offset-md-2">
+          <button class="btn btn-accent m-2"
+                  name="expand-cluster"
                   (click)="createCluster()"
-                  i18n>Create Cluster</button>
+                  i18n>Expand Cluster</button>
           <button class="btn btn-light"
                   name="skip-cluster-creation"
-                  [routerLink]="'/dashboard'"
                   (click)="skipClusterCreation()"
                   i18n>Skip</button>
         </div>
@@ -27,3 +26,48 @@
     </div>
   </div>
 </div>
+
+<div class="card"
+     *ngIf="startClusterCreation">
+  <div class="card-header"
+       i18n>Expand Cluster</div>
+  <div class="container-fluid">
+    <cd-wizard [stepsTitle]="stepTitles"></cd-wizard>
+    <div class="card-body vertical-line">
+      <ng-container [ngSwitch]="currentStep?.stepIndex">
+        <div *ngSwitchCase="'1'"
+             class="ml-5">
+          <h4 class="title"
+              i18n>Add Hosts</h4>
+          <br>
+          <cd-hosts [clusterCreation]="true"></cd-hosts>
+        </div>
+        <div *ngSwitchCase="'2'"
+             class="ml-5">
+          <h4 class="title"
+              i18n>Review</h4>
+          <br>
+          <p>To be implemented</p>
+        </div>
+      </ng-container>
+    </div>
+  </div>
+  <div class="card-footer">
+    <button class="btn btn-accent m-2 float-right"
+            (click)="onNextStep()"
+            aria-label="Next"
+            i18n>{{ showSubmitButtonLabel() }}</button>
+    <cd-back-button class="m-2 float-right"
+                    aria-label="Close"
+                    (backAction)="onPreviousStep()"
+                    [name]="showCancelButtonLabel()"></cd-back-button>
+  </div>
+</div>
+
+<ng-template #skipConfirmTpl>
+  <span i18n>You are about to skip the cluster expansion process.
+             You’ll need to <strong>navigate through the menu to add hosts and services.</strong></span>
+
+  <div class="mt-4"
+       i18n>Are you sure you want to continue?</div>
+</ng-template>

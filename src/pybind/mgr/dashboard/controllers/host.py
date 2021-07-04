@@ -286,7 +286,7 @@ class Host(RESTController):
 
     @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_CREATE])
     @handle_orchestrator_error('host')
-    @host_task('create', {'hostname': '{hostname}'})
+    @host_task('add', {'hostname': '{hostname}'})
     @EndpointDoc('',
                  parameters={
                      'hostname': (str, 'Hostname'),

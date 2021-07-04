@@ -1,4 +1,4 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
@@ -11,7 +11,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -30,6 +30,7 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { HostFormComponent } from './host-form/host-form.component';
 
 const BASE_URL = 'hosts';
 
@@ -46,6 +47,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   public servicesTpl: TemplateRef<any>;
   @ViewChild('maintenanceConfirmTpl', { static: true })
   maintenanceConfirmTpl: TemplateRef<any>;
+  @Input()
+  clusterCreation = false;
 
   permissions: Permissions;
   columns: Array<CdTableColumn> = [];
@@ -58,6 +61,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   isExecuting = false;
   errorMessage: string;
   enableButton: boolean;
+  pageURL: string;
+  bsModalRef: NgbModalRef;
 
   icons = Icons;
 
@@ -67,7 +72,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
-    create: [OrchestratorFeature.HOST_CREATE],
+    add: [OrchestratorFeature.HOST_CREATE],
     edit: [OrchestratorFeature.HOST_LABEL_ADD, OrchestratorFeature.HOST_LABEL_REMOVE],
     delete: [OrchestratorFeature.HOST_DELETE],
     maintenance: [
@@ -80,7 +85,6 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private authStorageService: AuthStorageService,
     private hostService: HostService,
     private cephShortVersionPipe: CephShortVersionPipe,
-    private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
@@ -91,13 +95,6 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     super();
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
-      {
-        name: this.actionLabels.CREATE,
-        permission: 'create',
-        icon: Icons.add,
-        click: () => this.router.navigate([this.urlBuilder.getCreate()]),
-        disable: (selection: CdTableSelection) => this.getDisable('create', selection)
-      },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
@@ -118,7 +115,10 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.enter,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) || this.isExecuting || this.enableButton
+          this.getDisable('maintenance', selection) ||
+          this.isExecuting ||
+          this.enableButton ||
+          this.clusterCreation
       },
       {
         name: this.actionLabels.EXIT_MAINTENANCE,
@@ -126,12 +126,25 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.exit,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) || this.isExecuting || !this.enableButton
+          this.getDisable('maintenance', selection) ||
+          this.isExecuting ||
+          !this.enableButton ||
+          this.clusterCreation
       }
     ];
   }
 
   ngOnInit() {
+    this.tableActions.unshift({
+      name: this.actionLabels.ADD,
+      permission: 'create',
+      icon: Icons.add,
+      click: () =>
+        this.clusterCreation
+          ? (this.bsModalRef = this.modalService.show(HostFormComponent))
+          : this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }]),
+      disable: (selection: CdTableSelection) => this.getDisable('add', selection)
+    });
     this.columns = [
       {
         name: $localize`Hostname`,
@@ -141,6 +154,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Services`,
         prop: 'services',
+        isHidden: this.clusterCreation,
         flexGrow: 3,
         cellTemplate: this.servicesTpl
       },
@@ -167,6 +181,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Version`,
         prop: 'ceph_version',
+        isHidden: this.clusterCreation,
         flexGrow: 1,
         pipe: this.cephShortVersionPipe
       }
@@ -287,7 +302,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   }
 
   getDisable(
-    action: 'create' | 'edit' | 'delete' | 'maintenance',
+    action: 'add' | 'edit' | 'delete' | 'maintenance',
     selection: CdTableSelection
   ): boolean | string {
     if (action === 'delete' || action === 'edit' || action === 'maintenance') {
