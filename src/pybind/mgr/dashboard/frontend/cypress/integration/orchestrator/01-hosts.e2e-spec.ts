@@ -17,7 +17,7 @@ describe('Hosts page', () => {
 
     it('should not add an exsiting host', function () {
       const hostname = Cypress._.sample(this.hosts).name;
-      hosts.navigateTo('create');
+      hosts.navigateTo('add');
       hosts.add(hostname, true);
     });
 
@@ -26,7 +26,7 @@ describe('Hosts page', () => {
       hosts.delete(host);
 
       // add it back
-      hosts.navigateTo('create');
+      hosts.navigateTo('add');
       hosts.add(host);
       hosts.checkExist(host, true);
     });

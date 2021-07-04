@@ -11,7 +11,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -67,7 +67,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
-    create: [OrchestratorFeature.HOST_CREATE],
+    add: [OrchestratorFeature.HOST_CREATE],
     edit: [OrchestratorFeature.HOST_LABEL_ADD, OrchestratorFeature.HOST_LABEL_REMOVE],
     delete: [OrchestratorFeature.HOST_DELETE],
     maintenance: [
@@ -80,7 +80,6 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private authStorageService: AuthStorageService,
     private hostService: HostService,
     private cephShortVersionPipe: CephShortVersionPipe,
-    private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
@@ -92,11 +91,11 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
-        name: this.actionLabels.CREATE,
+        name: this.actionLabels.ADD,
         permission: 'create',
         icon: Icons.add,
-        click: () => this.router.navigate([this.urlBuilder.getCreate()]),
-        disable: (selection: CdTableSelection) => this.getDisable('create', selection)
+        click: () => this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }]),
+        disable: (selection: CdTableSelection) => this.getDisable('add', selection)
       },
       {
         name: this.actionLabels.EDIT,
@@ -287,7 +286,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   }
 
   getDisable(
-    action: 'create' | 'edit' | 'delete' | 'maintenance',
+    action: 'add' | 'edit' | 'delete' | 'maintenance',
     selection: CdTableSelection
   ): boolean | string {
     if (action === 'delete' || action === 'edit' || action === 'maintenance') {
