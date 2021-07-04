@@ -11,6 +11,13 @@ target_include_directories(store_test_fixture PRIVATE
 add_executable(ceph_test_objectstore
   store_test.cc
   $<TARGET_OBJECTS:store_test_fixture>)
+
+if(WITH_JAEGER)
+  add_dependencies(store_test_fixture jaegertracing::libjaegertracing)
+else()
+  add_dependencies(store_test_fixture opentracing::libopentracing)
+endif()
+
 target_link_libraries(ceph_test_objectstore
   os
   ceph-common

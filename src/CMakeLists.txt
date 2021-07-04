@@ -459,6 +459,22 @@ if(WITH_JAEGER)
     ${CMAKE_BINARY_DIR}/external/lib/libthrift.so.0.13.0)
   install(FILES ${jaeger_libs}
     DESTINATION ${CMAKE_INSTALL_LIBDIR})
+else()
+  include(BuildOpenTracing)
+  build_opentracing()
+  add_library(opentracing::libopentracing SHARED IMPORTED)
+  add_dependencies(opentracing::libopentracing opentracing)
+
+  include(ExternalProjectHelper)
+  set_library_properties_for_external_project(opentracing::libopentracing
+    opentracing)
+
+  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
+  list(APPEND opentracing_libs
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0)
+  install(FILES ${opentracing_libs}
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
@@ -523,6 +539,8 @@ endif()
 
 if(WITH_JAEGER)
   list(APPEND ceph_common_deps jaeger-base)
+else()
+  list(APPEND ceph_common_deps opentracing::libopentracing)
 endif()
 
 if(WIN32)

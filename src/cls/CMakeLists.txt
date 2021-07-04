@@ -229,6 +229,12 @@ if (WITH_CEPHFS)
     cephfs/cls_cephfs_client.cc)
   add_library(cls_cephfs_client STATIC ${cls_cephfs_client_srcs})
 
+  if(WITH_JAEGER)
+    add_dependencies(cls_cephfs_client jaegertracing::libjaegertracing)
+  else()
+    add_dependencies(cls_cephfs_client opentracing::libopentracing)
+  endif()
+
 endif (WITH_CEPHFS)
 
 if (NOT WIN32)

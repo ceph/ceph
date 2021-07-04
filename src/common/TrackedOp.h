@@ -24,6 +24,9 @@
 
 #ifdef HAVE_JAEGER
 #include "common/tracer.h"
+#else
+/* opentracing::Value and opentracing::string_view */
+#include <opentracing/tracer.h>
 #endif
 
 #define OPTRACKER_PREALLOC_EVENTS 20
@@ -312,13 +315,13 @@ public:
   }
 
   void mark_tracepoint(std::string_view name,
-                       std::map<const char*, int64_t> kvs) {
+                       std::initializer_list<
+                         std::pair<opentracing::string_view,
+                         opentracing::Value>> kvs) {
 #ifdef HAVE_JAEGER
       if (osd_parent_span) {
         auto sp = jaeger_tracing::child_span(name.data(), osd_parent_span);
-        for (auto i : kvs) {
-          sp->Log({{i.first, i.second}});
-        }
+        sp->Log(kvs);
       }
 #endif
   }
