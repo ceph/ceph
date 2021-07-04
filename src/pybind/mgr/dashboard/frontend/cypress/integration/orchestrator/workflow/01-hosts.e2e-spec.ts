@@ -4,7 +4,7 @@ describe('Hosts page', () => {
   const hosts = new HostsPageHelper();
   const hostnames = ['ceph-node-00.cephlab.com', 'ceph-node-01.cephlab.com'];
   const addHost = (hostname: string, exist?: boolean, maintenance?: boolean) => {
-    hosts.navigateTo('create');
+    hosts.navigateTo('add');
     hosts.add(hostname, exist, maintenance);
     hosts.checkExist(hostname, true);
   };
@@ -37,7 +37,7 @@ describe('Hosts page', () => {
     });
 
     it('should not add an existing host', function () {
-      hosts.navigateTo('create');
+      hosts.navigateTo('add');
       hosts.add(hostnames[0], true);
     });
 

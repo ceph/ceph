@@ -39,7 +39,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.resource = $localize`host`;
-    this.action = this.actionLabels.CREATE;
+    this.action = this.actionLabels.ADD;
     this.createForm();
   }
 
