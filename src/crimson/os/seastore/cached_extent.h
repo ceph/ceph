@@ -694,15 +694,13 @@ inline void retired_extent_gate_t::token_t::drop_self() {
 /**
  * RetiredExtentPlaceholder
  *
- * Cache::retire_extent(Transaction&, paddr_t, extent_len_t) can retire
- * an extent not currently in cache.  In that case, we need to add a
- * placeholder to the cache until transactions that might reference
- * the extent complete as in the case where the extent is already cached.
- * Cache::complete_commit thus creates a RetiredExtentPlaceholder to
- * serve that purpose.  ptr is not populated, and state is set to
- * RETIRED.  Cache interfaces check for RETIRED and return EAGAIN if
- * encountered, so references to these placeholder extents should not
- * escape the Cache interface boundary.
+ * Cache::retire_extent_addr(Transaction&, paddr_t, extent_len_t) can retire an
+ * extent not currently in cache. In that case, in order to detect transaction
+ * invalidation, we need to add a placeholder to the cache to create the
+ * mapping back to the transaction. And whenever there is a transaction tries
+ * to read the placeholder extent out, Cache is responsible to replace the
+ * placeholder by the real one. Anyway, No placeholder extents should escape
+ * the Cache interface boundary.
  */
 class RetiredExtentPlaceholder : public CachedExtent {
   extent_len_t length;

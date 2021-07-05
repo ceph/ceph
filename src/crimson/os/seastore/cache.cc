@@ -43,34 +43,31 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   }
 
   // absent from transaction
-  result = query_cache_for_extent(addr, &ext);
+  result = query_cache_with_placeholders(addr, &ext);
   if (result == Transaction::get_extent_ret::PRESENT) {
-    t.add_to_read_set(ext);
-    return trans_intr::make_interruptible(
-      ext->wait_io()
-    ).then_interruptible([&t, ext=std::move(ext)]() mutable {
-      t.add_to_retired_set(ext);
-      return retire_extent_iertr::now();
-    });
+    if (ext->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
+      t.add_to_read_set(ext);
+      return trans_intr::make_interruptible(
+        ext->wait_io()
+      ).then_interruptible([&t, ext=std::move(ext)]() mutable {
+        t.add_to_retired_set(ext);
+        return retire_extent_iertr::now();
+      });
+    }
+    // the retired-placeholder exists
   } else { // result == get_extent_ret::ABSENT
-    // FIXME this will cause incorrect transaction invalidation because t
-    // will not be notified if other transactions that modify the extent at
-    // this addr are committed.
-    //
-    // Say that we have transaction A and B, conflicting on extent E at laddr
-    // L:
-    //   A: dec_ref(L) // cause uncached retirement
-    //   B: read(L) -> E
-    //   B: mutate(E)
-    //   B: submit_transaction() // assume successful
-    //   A: about to submit...
-    //
-    // A cannot be invalidated because E is not in A's read-set
-    //
-    // TODO: leverage RetiredExtentPlaceholder to fix the issue.
-    t.add_to_retired_uncached(addr, length);
-    return retire_extent_iertr::now();
+    // add a new placeholder to Cache
+    ext = CachedExtent::make_cached_extent_ref<
+      RetiredExtentPlaceholder>(length);
+    ext->set_paddr(addr);
+    ext->state = CachedExtent::extent_state_t::CLEAN;
+    add_extent(ext);
   }
+
+  // add the retired-placeholder to transaction
+  t.add_to_read_set(ext);
+  t.add_to_retired_set(ext);
+  return retire_extent_iertr::now();
 }
 
 void Cache::dump_contents()
@@ -319,21 +316,6 @@ record_t Cache::prepare_record(Transaction &t)
 
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
-  for (auto &&i : t.retired_uncached) {
-    CachedExtentRef to_retire;
-    if (query_cache_for_extent(i.first, &to_retire) ==
-	Transaction::get_extent_ret::ABSENT) {
-      to_retire = CachedExtent::make_cached_extent_ref<
-	RetiredExtentPlaceholder
-	>(i.second);
-      to_retire->set_paddr(i.first);
-      to_retire->state = CachedExtent::extent_state_t::CLEAN;
-    }
-
-    t.retired_set.insert(to_retire);
-    extents.insert(*to_retire);
-  }
-
   for (auto &i: t.retired_set) {
     DEBUGT("retiring {}", t, *i);
     retire_extent(i);
@@ -485,8 +467,11 @@ Cache::replay_delta(
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
       CachedExtentRef ret;
-      auto result = query_cache_for_extent(addr, &ret);
+      auto result = query_cache_with_placeholders(addr, &ret);
       if (result == Transaction::get_extent_ret::PRESENT) {
+        // no retired-placeholder should be exist yet because no transaction
+        // has been created.
+        assert(ret->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
         return ret->wait_io().then([ret] {
           return ret;
         });
