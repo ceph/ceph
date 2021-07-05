@@ -1,5 +1,6 @@
 import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
 
+import * as _ from 'lodash';
 import { Subscription } from 'rxjs';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -9,6 +10,7 @@ import {
   FeatureTogglesMap$,
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
+import { MotdNotificationService } from '~/app/shared/services/motd-notification.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TelemetryNotificationService } from '~/app/shared/services/telemetry-notification.service';
@@ -43,7 +45,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private summaryService: SummaryService,
     private featureToggles: FeatureTogglesService,
     private telemetryNotificationService: TelemetryNotificationService,
-    public prometheusAlertService: PrometheusAlertService
+    public prometheusAlertService: PrometheusAlertService,
+    private motdNotificationService: MotdNotificationService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -68,6 +71,11 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.telemetryNotificationService.update.subscribe((visible: boolean) => {
         this.showTopNotification('telemetryNotificationEnabled', visible);
+      })
+    );
+    this.subs.add(
+      this.motdNotificationService.motd$.subscribe((motd: any) => {
+        this.showTopNotification('motdNotificationEnabled', _.isPlainObject(motd));
       })
     );
   }
