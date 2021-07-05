@@ -124,9 +124,10 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
                                nullptr, nullptr, nullptr);
     int r = bdev->open(this->m_log_pool_name);
     if (r < 0) {
+      lderr(m_image_ctx.cct) << "fail to open block device." << dendl;
       delete bdev;
-      on_finish->complete(-1);
-      return;
+      on_finish->complete(r);
+      return false;
     }
     m_cache_state->present = true;
     m_cache_state->clean = true;
@@ -153,7 +154,10 @@ void WriteLog<I>::initialize_pool(Context *on_finish,
     if (r != 0) {
       lderr(m_image_ctx.cct) << "failed to initialize pool ("
                              << this->m_log_pool_name << ")" << dendl;
+      bdev->close();
+      delete bdev;
       on_finish->complete(r);
+      return false;
     }
   } else {
     m_cache_state->present = true;
