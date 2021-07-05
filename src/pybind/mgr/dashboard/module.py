@@ -46,7 +46,7 @@ from .settings import options_command_list, options_schema_list, \
                       handle_option_command
 
 from .plugins import PLUGIN_MANAGER
-from .plugins import feature_toggles, debug  # noqa # pylint: disable=unused-import
+from .plugins import feature_toggles, debug, motd  # noqa # pylint: disable=unused-import
 
 
 PLUGIN_MANAGER.hook.init()

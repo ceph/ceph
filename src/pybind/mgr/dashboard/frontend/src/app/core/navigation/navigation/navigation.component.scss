@@ -9,10 +9,6 @@
     background: $color-navbar-bg;
     border-top: 4px solid $color-nav-top-bar;
 
-    &.isPwdDisplayed {
-      top: $top-notification-height;
-    }
-
     .navbar-brand,
     .navbar-brand:hover {
       color: $color-navbar-brand;

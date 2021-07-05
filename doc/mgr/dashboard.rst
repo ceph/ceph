@@ -1189,6 +1189,7 @@ and loosely coupled fashion.
 
 .. include:: dashboard_plugins/feature_toggles.inc.rst
 .. include:: dashboard_plugins/debug.inc.rst
+.. include:: dashboard_plugins/motd.inc.rst
 
 
 Troubleshooting the Dashboard

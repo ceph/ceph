@@ -56,3 +56,4 @@ tasks:
         - tasks.mgr.dashboard.test_summary
         - tasks.mgr.dashboard.test_telemetry
         - tasks.mgr.dashboard.test_user
+        - tasks.mgr.dashboard.test_motd
