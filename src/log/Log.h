@@ -18,6 +18,8 @@
 
 #include "log/Entry.h"
 
+struct uuid_d;
+
 namespace ceph {
 namespace logging {
 
@@ -107,7 +109,8 @@ public:
   void set_stderr_level(int log, int crash);
   void set_graylog_level(int log, int crash);
 
-  void start_graylog();
+  void start_graylog(const std::string& host,
+		     const uuid_d& fsid);
   void stop_graylog();
 
   void set_journald_level(int log, int crash);

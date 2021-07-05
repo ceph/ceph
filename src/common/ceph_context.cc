@@ -31,6 +31,7 @@
 #include "common/debug.h"
 #include "common/config.h"
 #include "common/ceph_crypto.h"
+#include "common/hostname.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/Graylog.h"
@@ -346,7 +347,7 @@ public:
       log->set_graylog_level(l, l);
 
       if (conf->log_to_graylog || conf->err_to_graylog) {
-	log->start_graylog();
+	log->start_graylog(conf->host, conf.get_val<uuid_d>("fsid"));
       } else if (! (conf->log_to_graylog && conf->err_to_graylog)) {
 	log->stop_graylog();
       }
