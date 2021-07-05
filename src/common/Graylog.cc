@@ -58,6 +58,7 @@ void Graylog::set_destination(const std::string& host, int port)
 
 void Graylog::set_hostname(const std::string& host)
 {
+  assert(!host.empty());
   m_hostname = host;
 }
 
