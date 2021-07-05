@@ -641,6 +641,11 @@ private:
       });
     }
 
+    _future<::crimson::errorated_future_marker<void>>
+    discard_result() noexcept {
+      return safe_then([](auto&&) {});
+    }
+
     // taking ErrorFuncOne and ErrorFuncTwo separately from ErrorFuncTail
     // to avoid SFINAE
     template <class ValueFunc,
