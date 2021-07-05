@@ -42,6 +42,9 @@ public:
     } else if (
       auto iter = read_set.find(addr);
       iter != read_set.end()) {
+      // placeholder in read-set should be in the retired-set
+      // at the same time.
+      assert(iter->ref->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
       if (out)
 	*out = iter->ref;
       return get_extent_ret::PRESENT;
@@ -88,6 +91,29 @@ public:
     ceph_assert(!is_weak());
     mutated_block_list.push_back(ref);
     write_set.insert(*ref);
+  }
+
+  void replace_placeholder(CachedExtent& placeholder, CachedExtent& extent) {
+    ceph_assert(!is_weak());
+
+    assert(placeholder.get_type() == extent_types_t::RETIRED_PLACEHOLDER);
+    assert(extent.get_type() != extent_types_t::RETIRED_PLACEHOLDER);
+    assert(extent.get_type() != extent_types_t::ROOT);
+    assert(extent.get_paddr() == placeholder.get_paddr());
+    {
+      auto where = read_set.find(placeholder.get_paddr());
+      assert(where != read_set.end());
+      assert(where->ref.get() == &placeholder);
+      where = read_set.erase(where);
+      read_set.emplace_hint(where, this, &extent);
+    }
+    {
+      auto where = retired_set.find(&placeholder);
+      assert(where != retired_set.end());
+      assert(where->get() == &placeholder);
+      where = retired_set.erase(where);
+      retired_set.emplace_hint(where, &extent);
+    }
   }
 
   void mark_segment_to_release(segment_id_t segment) {
