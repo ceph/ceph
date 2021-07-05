@@ -218,6 +218,15 @@ class TestBatch(object):
                                               'block_db', 2, 2, args)
         assert len(fast) == 2
 
+    def test_batch_fast_allocations_one_block_db_length(self, factory, conf_ceph_stub,
+                                                  mock_lv_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+
+        b = batch.Batch([])
+        db_lv_devices = [mock_lv_device_generator()]
+        fast = b.fast_allocations(db_lv_devices, 1, 0, 'block_db')
+        assert len(fast) == 1
+
     @pytest.mark.parametrize('occupied_prior', range(7))
     @pytest.mark.parametrize('slots,num_devs',
                              [l for sub in [list(zip([x]*x, range(1, x + 1))) for x in range(1,7)] for l in sub])
