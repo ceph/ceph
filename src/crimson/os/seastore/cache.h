@@ -181,9 +181,8 @@ public:
     paddr_t offset,       ///< [in] starting addr
     segment_off_t length  ///< [in] length
   ) {
-    CachedExtentRef cached;
-    auto result = query_cache_with_placeholders(offset, &cached);
-    if (result == Transaction::get_extent_ret::ABSENT) {
+    auto cached = query_cache(offset);
+    if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->set_paddr(offset);
@@ -240,15 +239,15 @@ public:
     }
 
     // get_extent_ret::ABSENT from transaction
-    result = query_cache_with_placeholders(offset, &ret);
-    if (result == Transaction::get_extent_ret::ABSENT ||
+    ret = query_cache(offset);
+    if (!ret ||
         // retired_placeholder is not really cached yet
         ret->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>();
     }
 
-    // get_extent_ret::PRESENT from cache and is not placeholder
+    // present in cache and is not a retired_placeholder
     t.add_to_read_set(ret);
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
@@ -617,16 +616,13 @@ private:
     );
   }
 
-  Transaction::get_extent_ret query_cache_with_placeholders(
-    paddr_t offset,
-    CachedExtentRef *out) {
+  // Extents in cache may contain placeholders
+  CachedExtentRef query_cache(paddr_t offset) {
     if (auto iter = extents.find_offset(offset);
-	iter != extents.end()) {
-      if (out)
-	*out = &*iter;
-      return Transaction::get_extent_ret::PRESENT;
+        iter != extents.end()) {
+      return CachedExtentRef(&*iter);
     } else {
-      return Transaction::get_extent_ret::ABSENT;
+      return CachedExtentRef();
     }
   }
 

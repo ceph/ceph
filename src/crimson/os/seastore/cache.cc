@@ -43,8 +43,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   }
 
   // absent from transaction
-  result = query_cache_with_placeholders(addr, &ext);
-  if (result == Transaction::get_extent_ret::PRESENT) {
+  ext = query_cache(addr);
+  if (ext) {
     if (ext->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
       t.add_to_read_set(ext);
       return trans_intr::make_interruptible(
@@ -55,7 +55,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
       });
     }
     // the retired-placeholder exists
-  } else { // result == get_extent_ret::ABSENT
+  } else {
     // add a new placeholder to Cache
     ext = CachedExtent::make_cached_extent_ref<
       RetiredExtentPlaceholder>(length);
@@ -466,16 +466,15 @@ Cache::replay_delta(
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
-      CachedExtentRef ret;
-      auto result = query_cache_with_placeholders(addr, &ret);
-      if (result == Transaction::get_extent_ret::PRESENT) {
+      auto ret = query_cache(addr);
+      if (ret) {
         // no retired-placeholder should be exist yet because no transaction
         // has been created.
         assert(ret->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
         return ret->wait_io().then([ret] {
           return ret;
         });
-      } else { // get_extent_ret::ABSENT
+      } else {
         return seastar::make_ready_future<CachedExtentRef>();
       }
     };
