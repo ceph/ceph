@@ -1,4 +1,6 @@
 import fnmatch
+import asyncio
+import tempfile
 from contextlib import contextmanager
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
@@ -61,6 +63,13 @@ def with_cephadm_module(module_options=None, store=None):
 
         m.__init__('cephadm', 0, 0)
         m._cluster_fsid = "fsid"
+
+        try:
+            m.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            m.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(m.loop)
+
         yield m
 
 

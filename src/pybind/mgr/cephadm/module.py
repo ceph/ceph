@@ -4,6 +4,7 @@ import logging
 import re
 import shlex
 import asyncio
+import tempfile
 from collections import defaultdict
 from configparser import ConfigParser
 from functools import wraps
@@ -385,6 +386,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
+            self.ssh_user: Optional[str] = None
+            self._ssh_options: Optional[str] = None
+            self.tkey = tempfile.NamedTemporaryFile(prefix='cephadm-identity-')
+            self.ssh_config_fname: Optional[str] = None
+            self.ssh_config: Optional[str] = None
+            self._temp_files: List = []
+            self.ssh_key: Optional[str] = None
+            self.ssh_pub: Optional[str] = None
 
         self.notify('mon_map', None)
         self.config_notify()

@@ -6,8 +6,6 @@ pyyaml
 prettytable
 pyOpenSSL
 execnet
-remoto
 Jinja2
 pyfakefs
 asyncssh
-pytest-asyncio

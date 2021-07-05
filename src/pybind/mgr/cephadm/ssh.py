@@ -1,13 +1,17 @@
-import asyncssh
-import asyncssh.logging
 import logging
 import os
 import tempfile
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
-from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Any
+from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Any, Iterator
 from orchestrator import OrchestratorError
+
+try:
+    import asyncssh
+    import asyncssh.logging
+except ImportError:
+    asyncssh = None
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -61,7 +65,7 @@ class SSHManager:
         return conn
 
     @contextmanager
-    def redirect_log(self, host, addr):
+    def redirect_log(self, host: str, addr: str) -> Iterator[None]:
         ssh_logger = logging.getLogger()
         asyncssh.logging.set_log_level(logging.DEBUG)
         log_string = StringIO()
@@ -97,7 +101,7 @@ class SSHManager:
                                **kwargs: Any,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
-        cmd = " ".join(quote(x) for x in cmd)
+        cmd = "sudo " + " ".join(quote(x) for x in cmd)
         r = await conn.run(cmd, input=stdin.decode() if stdin else None)
         out = r.stdout.rstrip('\n')
         err = r.stderr.rstrip('\n')
@@ -138,8 +142,8 @@ class SSHManager:
             await self._check_execute_command(host, ['touch', tmp_path], addr=addr)
             if uid is not None and gid is not None and mode is not None:
                 # shlex quote takes str or byte object, not int
-                await self._check_execute_command(host, ['sudo', 'chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
-                await self._check_execute_command(host, ['sudo', 'chmod', oct(mode)[2:], tmp_path], addr=addr)
+                await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
+                await self._check_execute_command(host, ['chmod', oct(mode)[2:], tmp_path], addr=addr)
             await self._check_execute_command(host, ['tee', '-', tmp_path], stdin=content, addr=addr)
             await self._check_execute_command(host, ['mv', tmp_path, path], addr=addr)
         except Exception as e:
@@ -150,19 +154,17 @@ class SSHManager:
     def write_remote_file(self, *args: Any, **kwargs: Any) -> None:
         return self.mgr.loop.run_until_complete(self._write_remote_file(*args, **kwargs))
 
-    async def _reset_con(self, host: str) -> None:
+    def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
         if conn:
             logger.debug(f'_reset_con close {host}')
             conn.close()
-            await conn.wait_closed()
             del self.cons[host]
 
-    async def _reset_cons(self) -> None:
+    def _reset_cons(self) -> None:
         for host, conn in self.cons.items():
             logger.debug(f'_reset_cons close {host}')
             conn.close()
-            await conn.wait_closed()
         self.cons = {}
 
     def _reconfig_ssh(self) -> None:
@@ -205,7 +207,7 @@ class SSHManager:
 
         self.mgr._temp_files = temp_files
         if ssh_options:
-            self.mgr._ssh_options = ' '.join(ssh_options)  # type: Optional[str]
+            self.mgr._ssh_options = ' '.join(ssh_options)
         else:
             self.mgr._ssh_options = None
 

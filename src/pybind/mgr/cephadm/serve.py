@@ -1203,7 +1203,7 @@ class CephadmServe:
 
         elif self.mgr.mode == 'cephadm-package':
             try:
-                cmd = ['sudo', '/usr/bin/cephadm'] + final_args
+                cmd = ['/usr/bin/cephadm'] + final_args
                 out, err, code = self.mgr.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
             except Exception as e:
                 self.mgr.ssh._reset_con(host)
