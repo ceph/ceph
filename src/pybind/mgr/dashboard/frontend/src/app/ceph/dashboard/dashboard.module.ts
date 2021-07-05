@@ -15,6 +15,7 @@ import { InfoGroupComponent } from './info-group/info-group.component';
 import { MdsSummaryPipe } from './mds-summary.pipe';
 import { MgrSummaryPipe } from './mgr-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
+import { MotdComponent } from './motd/motd.component';
 import { OsdSummaryPipe } from './osd-summary.pipe';
 
 @NgModule({
@@ -37,7 +38,8 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     MdsSummaryPipe,
     HealthPieComponent,
     InfoCardComponent,
-    InfoGroupComponent
+    InfoGroupComponent,
+    MotdComponent
   ]
 })
 export class DashboardModule {}

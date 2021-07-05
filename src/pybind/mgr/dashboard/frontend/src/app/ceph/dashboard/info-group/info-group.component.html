@@ -19,7 +19,7 @@
 <ng-template #popInfoTemplate>
   <div class="text-center"
        i18n>For an overview of {{ groupTitle|lowercase }} widgets click
-    <cd-doc section="dashboard-landing-page-{{ groupTitle|lowercase }}"
+    <cd-doc section="dashboard-landing-page-{{ groupTitle|snakeCase }}"
             docText="here"
             i18n-docText></cd-doc>
   </div>

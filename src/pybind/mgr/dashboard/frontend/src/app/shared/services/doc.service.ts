@@ -41,6 +41,7 @@ export class DocService {
       help: `${domainCeph}help/`,
       security: `${domainCeph}security/`,
       trademarks: `${domainCeph}legal-page/trademarks/`,
+      'dashboard-landing-page-message_of_the_day': `${domain}mgr/dashboard/#dashboard-landing-page-motd`,
       'dashboard-landing-page-status': `${domain}mgr/dashboard/#dashboard-landing-page-status`,
       'dashboard-landing-page-performance': `${domain}mgr/dashboard/#dashboard-landing-page-performance`,
       'dashboard-landing-page-capacity': `${domain}mgr/dashboard/#dashboard-landing-page-capacity`
