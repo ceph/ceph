@@ -1,6 +1,8 @@
 import datetime
 import re
 
+from typing import Optional
+
 
 def datetime_now() -> datetime.datetime:
     """
@@ -66,3 +68,40 @@ def str_to_datetime(string: str) -> datetime.datetime:
 
     raise ValueError("Time data {} does not match one of the formats {}".format(
         string, str(fmts)))
+
+
+def parse_timedelta(delta: str) -> Optional[datetime.timedelta]:
+    """
+    Returns a timedelta object represents a duration, the difference
+    between two dates or times.
+
+    >>> parse_timedelta('foo')
+
+    >>> parse_timedelta('2d')
+    datetime.timedelta(days=2)
+
+    >>> parse_timedelta("4w")
+    datetime.timedelta(days=28)
+
+    >>> parse_timedelta("5s")
+    datetime.timedelta(seconds=5)
+
+    >>> parse_timedelta("-5s")
+    datetime.timedelta(days=-1, seconds=86395)
+
+    :param delta: The string to process, e.g. '2h', '10d', '30s'.
+    :return: The `datetime.timedelta` object or `None` in case of
+        a parsing error.
+    """
+    parts = re.match(r'(?P<seconds>-?\d+)s|'
+                     r'(?P<minutes>-?\d+)m|'
+                     r'(?P<hours>-?\d+)h|'
+                     r'(?P<days>-?\d+)d|'
+                     r'(?P<weeks>-?\d+)w$',
+                     delta,
+                     re.IGNORECASE)
+    if not parts:
+        return None
+    parts = parts.groupdict()
+    args = {name: int(param) for name, param in parts.items() if param}
+    return datetime.timedelta(**args)

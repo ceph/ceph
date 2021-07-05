@@ -48,7 +48,7 @@ if cherrypy is not None:
     patch_cherrypy(cherrypy.__version__)
 
 # pylint: disable=wrong-import-position
-from .plugins import PLUGIN_MANAGER, debug, feature_toggles  # noqa # pylint: disable=unused-import
+from .plugins import PLUGIN_MANAGER, debug, feature_toggles, motd  # isort:skip # noqa E501 # pylint: disable=unused-import
 
 PLUGIN_MANAGER.hook.init()
 
