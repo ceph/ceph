@@ -58,7 +58,7 @@ class LanguageMixin(object):
 class HomeController(BaseController, LanguageMixin):
     LANG_TAG_SEQ_RE = re.compile(r'\s*([^,]+)\s*,?\s*')
     LANG_TAG_RE = re.compile(
-        r'^(?P<locale>[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})?)(;q=(?P<weight>[01]\.\d{0,3}))?$')
+        r'^(?P<locale>[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*|\*)(;q=(?P<weight>[01]\.\d{0,3}))?$')
     MAX_ACCEPTED_LANGS = 10
 
     @lru_cache()
