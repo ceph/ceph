@@ -59,7 +59,7 @@ class Graylog
  private:
   SubsystemMap const * const m_subs;
 
-  bool m_log_dst_valid;
+  bool m_log_dst_valid = false;
 
   std::string m_hostname;
   std::string m_fsid;
