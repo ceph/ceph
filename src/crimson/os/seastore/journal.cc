@@ -648,18 +648,18 @@ Journal::scan_extents_ret Journal::scan_extents(
   extent_len_t bytes_to_read)
 {
   auto ret = std::make_unique<scan_extents_ret_bare>();
-  auto &retref = *ret;
+  auto* extents = ret.get();
   return read_segment_header(cursor.get_offset().segment
   ).handle_error(
     scan_extents_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error in Journal::scan_extents"
     }
-  ).safe_then([&, bytes_to_read](auto segment_header) {
+  ).safe_then([bytes_to_read, extents, &cursor, this](auto segment_header) {
     auto segment_nonce = segment_header.segment_nonce;
     return seastar::do_with(
       found_record_handler_t(
-	[&, bytes_to_read](
+	[extents, this](
 	  paddr_t base,
 	  const record_header_t &header,
 	  const bufferlist &mdbuf) mutable {
@@ -677,7 +677,7 @@ Journal::scan_extents_ret Journal::scan_extents(
 
 	  paddr_t extent_offset = base.add_offset(header.mdlength);
 	  for (const auto &i : *infos) {
-	    retref.emplace_back(extent_offset, i);
+	    extents->emplace_back(extent_offset, i);
 	    extent_offset.offset += i.len;
 	  }
 	  return scan_extents_ertr::now();
