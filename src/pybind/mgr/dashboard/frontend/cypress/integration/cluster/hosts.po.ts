@@ -50,9 +50,12 @@ export class HostsPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.create.url)
-  add(hostname: string, exist?: boolean) {
+  add(hostname: string, exist?: boolean, maintenance?: boolean) {
     cy.get(`${this.pages.create.id}`).within(() => {
       cy.get('#hostname').type(hostname);
+      if (maintenance) {
+        cy.get('label[for=maintenance]').click();
+      }
       cy.get('cd-submit-button').click();
     });
     if (exist) {
