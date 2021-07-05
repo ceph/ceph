@@ -141,6 +141,7 @@ public:
     const auto post_data = json_format_pubsub_event(event);
     request.set_post_data(post_data);
     request.set_send_length(post_data.length());
+    request.append_header("Content-Type", "application/json");
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
     const auto rc = RGWHTTP::process(&request, y);
     if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
