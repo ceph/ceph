@@ -29,6 +29,7 @@ describe('TelemetryComponent', () => {
     'channel_crash',
     'channel_device',
     'channel_ident',
+    'channel_perf',
     'contact',
     'description',
     'device_url',
