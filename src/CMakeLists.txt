@@ -509,6 +509,12 @@ if(HAVE_RDMACM)
   list(APPEND ceph_common_deps RDMA::RDMAcm)
 endif()
 
+if(HAVE_UCX)
+  list(APPEND ceph_common_deps
+       UCX::UCXlibucp
+       UCX::UCXlibucs)
+endif()
+
 if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
