@@ -122,9 +122,10 @@ TEST_F(collection_manager_test_t, basic)
     checking_mappings(coll_root);
     {
       auto t = tm->create_transaction();
-      for (auto& ite : test_coll_mappings) {
-        remove(coll_root, *t, ite.first);
-        test_coll_mappings.erase(ite.first);
+      for (auto iter = test_coll_mappings.begin();
+           iter != test_coll_mappings.end();) {
+        remove(coll_root, *t, iter->first);
+        iter = test_coll_mappings.erase(iter);
       }
       submit_transaction(std::move(t));
     }
