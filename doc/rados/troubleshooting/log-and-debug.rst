@@ -69,7 +69,9 @@ To activate Ceph's debugging output (*i.e.*, ``dout()``) at boot time, you must
 add settings to your Ceph configuration file. Subsystems common to each daemon
 may be set under ``[global]`` in your configuration file. Subsystems for
 particular daemons are set under the daemon section in your configuration file
-(*e.g.*, ``[mon]``, ``[osd]``, ``[mds]``). For example::
+(*e.g.*, ``[mon]``, ``[osd]``, ``[mds]``). For example
+
+.. code-block:: ini
 
 	[global]
 		debug ms = 1/5
