@@ -655,11 +655,11 @@ Journal::scan_extents_ret Journal::scan_extents(
     crimson::ct_error::assert_all{
       "Invalid error in Journal::scan_extents"
     }
-  ).safe_then([&](auto segment_header) {
+  ).safe_then([&, bytes_to_read](auto segment_header) {
     auto segment_nonce = segment_header.segment_nonce;
     return seastar::do_with(
       found_record_handler_t(
-	[&](
+	[&, bytes_to_read](
 	  paddr_t base,
 	  const record_header_t &header,
 	  const bufferlist &mdbuf) mutable {
