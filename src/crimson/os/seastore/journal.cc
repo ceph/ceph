@@ -687,7 +687,7 @@ Journal::scan_extents_ret Journal::scan_extents(
 	  cursor,
 	  segment_nonce,
 	  bytes_to_read,
-	  dhandler).safe_then([](auto){});
+	  dhandler).discard_result();
       });
   }).safe_then([ret=std::move(ret)] {
     return std::move(*ret);
