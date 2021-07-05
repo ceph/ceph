@@ -15,7 +15,7 @@ osd
      active -> prestop [label = "stop()"];
      active -> preboot [label = "recv(osdmap<down>)"];
      active -> end [label = "kill(SIGINT)"];
-     active -> waiting_for_healthy [label = "i am unleathy!"]
+     active -> waiting_for_healthy [label = "i am unhealthy!"]
      prestop -> end [label = "recv(osdmap<down>)"];
    }
 
