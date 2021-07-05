@@ -368,7 +368,7 @@ class Module(MgrModule):
 
     def gather_perf_counters(self) -> Dict[str, dict]:
         # Initialize 'perf schema' dict
-        perf_schema = defaultdict(dict)
+        perf_schema: Dict[str, dict] = defaultdict(dict)
 
         # Get initial info, condense among like daemons (i.e. 'osd' = 'osd.0'
         # + 'osd.1' + 'osd.2') and put results into 'perf schema'
@@ -385,7 +385,7 @@ class Module(MgrModule):
                                     initial_info[daemon][collection][field]
 
         # Initialize 'result' dict
-        result = defaultdict(dict) # type: Dict[str, dict]
+        result: Dict[str, dict] = defaultdict(dict)
         for daemon in perf_schema:
             result[daemon] = {}
             for collection in perf_schema[daemon]:
