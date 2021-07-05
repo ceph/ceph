@@ -708,7 +708,6 @@ class RetiredExtentPlaceholder : public CachedExtent {
   extent_len_t length;
 
 public:
-  template <typename... T>
   RetiredExtentPlaceholder(extent_len_t length)
     : CachedExtent(CachedExtent::retired_placeholder_t{}),
       length(length) {}
