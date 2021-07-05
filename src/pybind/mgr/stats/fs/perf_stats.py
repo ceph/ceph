@@ -4,13 +4,14 @@ import time
 import uuid
 import errno
 import traceback
+import logging
 from collections import OrderedDict
 from typing import List, Dict, Set
 
 from mgr_module import CommandResult
 
 from datetime import datetime, timedelta
-from threading import Lock, Condition, Thread
+from threading import Lock, Condition, Thread, Timer
 
 PERF_STATS_VERSION = 1
 
@@ -44,6 +45,8 @@ CLIENT_METADATA_SUBKEYS = ["hostname", "root"]
 CLIENT_METADATA_SUBKEYS_OPTIONAL = ["mount_point"]
 
 NON_EXISTENT_KEY_STR = "N/A"
+
+logger = logging.getLogger(__name__)
 
 class FilterSpec(object):
     """
@@ -114,6 +117,7 @@ class FSPerfStats(object):
     def __init__(self, module):
         self.module = module
         self.log = module.log
+        self.prev_rank0_name = None
         # report processor thread
         self.report_processor = Thread(target=self.run)
         self.report_processor.start()
@@ -123,7 +127,7 @@ class FSPerfStats(object):
         if not key in result or not result[key] == meta:
             result[key] = meta
 
-    def notify(self, cmdtag):
+    def notify_cmd(self, cmdtag):
         self.log.debug("cmdtag={0}".format(cmdtag))
         with self.meta_lock:
             result = self.client_metadata['in_progress'].pop(cmdtag)
@@ -159,13 +163,31 @@ class FSPerfStats(object):
             self.log.debug("client_metadata={0}, to_purge={1}".format(
                 self.client_metadata['metadata'], self.client_metadata['to_purge']))
 
+    def notify_fsmap(self):
+        rank0_name = FSPerfStats.get_rank0_mds_name(self.module.get('fs_map'))
+        if (rank0_name and (rank0_name != self.prev_rank0_name)):
+            Timer(0, self.re_register_queries).start()
+            self.prev_rank0_name = rank0_name
+
     def re_register_queries(self):
-        #re-register user queries
+        self.log.debug("reregistering queries...")
         for filter_spec in list(self.user_queries.keys()):
-            user_query = self.user_queries[filter_spec]
-            user_query[QUERY_IDS] = self.register_mds_perf_query(filter_spec)
-            user_query[GLOBAL_QUERY_ID] = self.register_global_perf_query(filter_spec)
-            user_query[QUERY_LAST_REQUEST] = datetime.now()
+            with self.lock:
+                user_query = self.user_queries[filter_spec]
+                self.log.debug("reregistering query: {}".format(user_query))
+                user_query[QUERY_IDS] = self.register_mds_perf_query(filter_spec)
+                user_query[GLOBAL_QUERY_ID] = self.register_global_perf_query(filter_spec)
+                user_query[QUERY_LAST_REQUEST] = datetime.now()
+
+    @staticmethod
+    def get_rank0_mds_name(fsmap):
+        for fs in fsmap['filesystems']:
+            mds_map = fs['mdsmap']
+            if mds_map is not None:
+                for mds_id, mds_status in mds_map['info'].items():
+                    if mds_status['rank'] == 0:
+                        return mds_status['name']
+        logger.warn("Failed to find a rank0 mds in fsmap")
 
     def update_client_meta(self, rank_set):
         new_updates = {}
