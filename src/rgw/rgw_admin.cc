@@ -2521,7 +2521,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     auto& m = status[shard_id];
     if (m.state == BucketSyncState::StateFullSync) {
       num_full++;
-      full_complete += m.full_marker.count;
+      full_complete += m.full_marker->count;
     } else if (m.state == BucketSyncState::StateIncrementalSync) {
       num_inc++;
     }
@@ -2547,7 +2547,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     if (r.second.empty()) {
       continue; // empty bucket index shard
     }
-    auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
+    auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker->position);
     if (m.state != BucketSyncState::StateIncrementalSync || pos != r.second) {
       shards_behind.insert(shard_id);
     }

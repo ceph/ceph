@@ -255,7 +255,7 @@ public:
   class Action {
   public:
     virtual ~Action() {}
-    virtual int operate() = 0;
+    virtual int operate(const DoutPrefixProvider *dpp) = 0;
   };
 
 private:
@@ -268,7 +268,7 @@ private:
       if (!action) {
 	return 0;
       }
-      return action->operate();
+      return action->operate(dpp);
     }
   public:
     Request(const DoutPrefixProvider *dpp,

@@ -264,7 +264,7 @@ int RGWSI_MetaBackend_SObj::list_next(const DoutPrefixProvider *dpp,
 
   for (int i = 0; truncated && i < max; ++i) {
     vector<string> oids;
-    int ret = ctx->list.op->get_next(1, &oids, &truncated);
+    int ret = ctx->list.op->get_next(dpp, 1, &oids, &truncated);
     if (ret < 0 && ret != -ENOENT)
       return ret;
     if (ret == -ENOENT) {

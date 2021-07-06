@@ -1226,7 +1226,7 @@ public:
                                                                 sync_marker(_marker),
                                                                 tn(_tn){}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
+  RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     if (index_pos > 0) {
       sync_marker.pos = index_pos;
@@ -1236,7 +1236,7 @@ public:
       sync_marker.timestamp = timestamp;
     }
 
-    ldpp_dout(sync_env->dpp, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " realm_epoch=" << sync_marker.realm_epoch << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " realm_epoch=" << sync_marker.realm_epoch << dendl;
     tn->log(20, SSTR("new marker=" << new_marker));
     rgw::sal::RadosStore* store = sync_env->store;
     return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->dpp, sync_env->async_rados,
@@ -1274,7 +1274,7 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
 
     if (op_status != MDLOG_STATUS_COMPLETE) {
       tn->log(20, "skipping pending operation");
-      yield call(marker_tracker->finish(entry_marker));
+      yield call(marker_tracker->finish(dpp, entry_marker));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -1333,7 +1333,7 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
 
     if (sync_status == 0 && marker_tracker) {
       /* update marker */
-      yield call(marker_tracker->finish(entry_marker));
+      yield call(marker_tracker->finish(dpp, entry_marker));
       sync_status = retcode;
     }
     if (sync_status < 0) {

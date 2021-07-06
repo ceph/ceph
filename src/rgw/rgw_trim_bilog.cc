@@ -371,8 +371,8 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
         continue;
       }
       // always take the first marker, or any later marker that's smaller
-      if (peer == first || marker > shard.inc_marker.position) {
-        marker = std::move(shard.inc_marker.position);
+      if (peer == first || marker > shard.inc_marker->position) {
+        marker = std::move(shard.inc_marker.raw().position);
       }
     }
   }

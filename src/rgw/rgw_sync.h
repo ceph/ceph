@@ -358,7 +358,7 @@ class RGWSyncShardMarkerTrack {
 protected:
   typename std::set<K> need_retry_set;
 
-  virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const real_time& timestamp) = 0;
+  virtual RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const T& new_marker, uint64_t index_pos, const real_time& timestamp) = 0;
   virtual RGWOrderCallCR *allocate_order_control_cr() = 0;
   virtual void handle_finish(const T& marker) { }
 
@@ -382,7 +382,7 @@ public:
     finish_markers[pos] = marker_entry(index_pos, timestamp);
   }
 
-  RGWCoroutine *finish(const T& pos) {
+  RGWCoroutine *finish(const DoutPrefixProvider *dpp, const T& pos) {
     if (pending.empty()) {
       /* can happen, due to a bug that ended up with multiple objects with the same name and version
        * -- which can happen when versioning is enabled an the version is 'null'.
@@ -409,12 +409,12 @@ public:
     updates_since_flush++;
 
     if (is_first && (updates_since_flush >= window_size || pending.empty())) {
-      return flush();
+      return flush(dpp);
     }
     return NULL;
   }
 
-  RGWCoroutine *flush() {
+  RGWCoroutine *flush(const DoutPrefixProvider *dpp) {
     if (finish_markers.empty()) {
       return NULL;
     }
@@ -435,7 +435,7 @@ public:
     --i;
     const T& high_marker = i->first;
     marker_entry& high_entry = i->second;
-    RGWCoroutine *cr = order(store_marker(high_marker, high_entry.pos, high_entry.timestamp));
+    RGWCoroutine *cr = order(store_marker(dpp, high_marker, high_entry.pos, high_entry.timestamp));
     finish_markers.erase(finish_markers.begin(), last);
     return cr;
   }

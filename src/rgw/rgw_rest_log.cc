@@ -929,7 +929,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       for (auto& cur_shard_status : current_status) {
         auto& result_shard_status = *m++;
         // always take the first marker, or any later marker that's smaller
-        if (cur_shard_status.inc_marker.position < result_shard_status.inc_marker.position) {
+        if (cur_shard_status.inc_marker->position < result_shard_status.inc_marker->position) {
           result_shard_status = std::move(cur_shard_status);
         }
       }
