@@ -10256,6 +10256,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   }
   if (!mds->mdsmap->allows_snaps()) {
     // you can't make snapshots until you set an option right now
+    dout(5) << "new snapshots are disabled for this fs" << dendl;
     respond_to_request(mdr, -CEPHFS_EPERM);
     return;
   }
@@ -10271,6 +10272,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   }
   if (diri->is_system() && !diri->is_root()) {
     // no snaps in system dirs (root is ok)
+    dout(5) << "is an internal system dir" << dendl;
     respond_to_request(mdr, -CEPHFS_EPERM);
     return;
   }
@@ -10304,6 +10306,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
 
   if (inodeno_t subvol_ino = diri->find_snaprealm()->get_subvolume_ino();
       (subvol_ino && subvol_ino != diri->ino())) {
+    dout(5) << "is a descendent of a subvolume dir" << dendl;
     respond_to_request(mdr, -CEPHFS_EPERM);
     return;
   }
