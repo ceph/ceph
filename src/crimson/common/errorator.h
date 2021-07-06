@@ -372,7 +372,7 @@ private:
     // any `seastar::futurize` specialization must be able to access the base.
     // see : `satisfy_with_result_of()` far below.
     template <typename>
-    friend class seastar::futurize;
+    friend struct seastar::futurize;
 
     template <typename T1, typename T2, typename... More>
     friend auto seastar::internal::do_with_impl(T1&& rv1, T2&& rv2, More&&... more);
@@ -639,6 +639,11 @@ private:
           return std::move(result);
         }
       });
+    }
+
+    _future<::crimson::errorated_future_marker<void>>
+    discard_result() noexcept {
+      return safe_then([](auto&&) {});
     }
 
     // taking ErrorFuncOne and ErrorFuncTwo separately from ErrorFuncTail
