@@ -37,6 +37,8 @@ using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler
 class RGWDataSyncStatusManager;
 class RGWSyncModuleInstance;
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
+class RGWCompressionInfo;
+
 namespace rgw {
   class Aio;
   namespace IAM { struct Policy; }
@@ -99,6 +101,7 @@ class User;
 class Bucket;
 class Object;
 class BucketList;
+class MultipartUpload;
 struct MPSerializer;
 class Lifecycle;
 class Notification;
@@ -228,6 +231,7 @@ class Store {
     virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
 				   vector<std::unique_ptr<RGWOIDCProvider>>& providers) = 0;
+    virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id=std::nullopt, ceph::real_time mtime=real_clock::now()) = 0;
 
     virtual void finalize(void) = 0;
 
@@ -437,6 +441,18 @@ class Bucket {
 
     static bool empty(Bucket* b) { return (!b || b->empty()); }
     virtual std::unique_ptr<Bucket> clone() = 0;
+
+    virtual int list_multiparts(const DoutPrefixProvider *dpp,
+				const string& prefix,
+				string& marker,
+				const string& delim,
+				const int& max_uploads,
+				vector<std::unique_ptr<MultipartUpload>>& uploads,
+				map<string, bool> *common_prefixes,
+				bool *is_truncated) = 0;
+    virtual int abort_multiparts(const DoutPrefixProvider *dpp,
+				 CephContext *cct,
+				 string& prefix, string& delim) = 0;
 
     /* dang - This is temporary, until the API is completed */
     rgw_bucket& get_key() { return info.bucket; }
@@ -782,6 +798,74 @@ class Object {
       out << p.get();
       return out;
     }
+};
+
+class MultipartPart {
+protected:
+  std::string oid;
+
+public:
+  MultipartPart() = default;
+  virtual ~MultipartPart() = default;
+
+  virtual uint32_t get_num() = 0;
+  virtual uint64_t get_size() = 0;
+  virtual const std::string& get_etag() = 0;
+  virtual ceph::real_time& get_mtime() = 0;
+};
+
+class MultipartUpload {
+protected:
+  Bucket* bucket;
+  std::map<uint32_t, std::unique_ptr<MultipartPart>> parts;
+
+public:
+  MultipartUpload(Bucket* _bucket) : bucket(_bucket) {}
+  virtual ~MultipartUpload() = default;
+
+  virtual const std::string& get_meta() const = 0;
+  virtual const std::string& get_key() const = 0;
+  virtual const std::string& get_upload_id() const = 0;
+  virtual ceph::real_time& get_mtime() = 0;
+
+  std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() { return parts; }
+
+  virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() = 0;
+
+  virtual int init(const DoutPrefixProvider* dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) = 0;
+  virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			 int num_parts, int marker,
+			 int* next_marker, bool* truncated,
+			 bool assume_unsorted = false) = 0;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct,
+		    RGWObjectCtx* obj_ctx) = 0;
+  virtual int complete(const DoutPrefixProvider* dpp, CephContext* cct,
+		       std::string& etag, RGWObjManifest& manifest,
+		       map<int, string>& part_etags,
+		       list<rgw_obj_index_key>& remove_objs,
+		       uint64_t& accounted_size, bool& compressed,
+		       RGWCompressionInfo& cs_info, off_t& ofs) = 0;
+
+  virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;
+
+  friend inline ostream& operator<<(ostream& out, const MultipartUpload& u) {
+    out << u.get_meta();
+    if (!u.get_upload_id().empty())
+      out << ":" << u.get_upload_id();
+    return out;
+  }
+  friend inline ostream& operator<<(ostream& out, const MultipartUpload* u) {
+    if (!u)
+      out << "<NULL>";
+    else
+      out << *u;
+    return out;
+  }
+  friend inline ostream& operator<<(ostream& out, const
+				    std::unique_ptr<MultipartUpload>& p) {
+    out << p.get();
+    return out;
+  }
 };
 
 struct Serializer {

@@ -109,38 +109,4 @@ public:
 
 extern bool is_v2_upload_id(const string& upload_id);
 
-extern int list_multipart_parts(const DoutPrefixProvider *dpp,
-                                rgw::sal::Bucket* bucket,
-				CephContext *cct,
-                                const string& upload_id,
-                                const string& meta_oid, int num_parts,
-                                int marker, map<uint32_t, RGWUploadPartInfo>& parts,
-                                int *next_marker, bool *truncated,
-                                bool assume_unsorted = false);
-
-extern int list_multipart_parts(const DoutPrefixProvider *dpp,
-                                struct req_state *s,
-                                const string& upload_id,
-                                const string& meta_oid, int num_parts,
-                                int marker, map<uint32_t, RGWUploadPartInfo>& parts,
-                                int *next_marker, bool *truncated,
-                                bool assume_unsorted = false);
-
-extern int abort_multipart_upload(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-				  CephContext *cct, RGWObjectCtx *obj_ctx,
-				  rgw::sal::Bucket* bucket, RGWMPObj& mp_obj);
-
-extern int list_bucket_multiparts(const DoutPrefixProvider *dpp,
-				  rgw::sal::Bucket* bucket,
-				  const string& prefix,
-				  const string& marker,
-				  const string& delim,
-				  const int& max_uploads,
-				  vector<rgw_bucket_dir_entry> *objs,
-				  map<string, bool> *common_prefixes, bool *is_truncated);
-
-extern int abort_bucket_multiparts(const DoutPrefixProvider *dpp,
-				   rgw::sal::Store* store, CephContext *cct,
-				   rgw::sal::Bucket* bucket,
-				   string& prefix, string& delim);
 #endif
