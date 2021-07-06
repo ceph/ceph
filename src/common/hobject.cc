@@ -211,13 +211,14 @@ void hobject_t::generate_test_instances(list<hobject_t*>& o)
 static void append_out_escaped(const string &in, string *out)
 {
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i == '%' || *i == ':' || *i == '/' || *i < 32 || *i >= 127) {
+    int k = (int)(unsigned char)(*i);
+    if (k == '%' || k == ':' || k == '/' || k < 32 || k >= 127) {
       out->push_back('%');
       char buf[3];
-      snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)*i);
+      snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)k);
       out->append(buf);
     } else {
-      out->push_back(*i);
+      out->push_back(k);
     }
   }
 }
