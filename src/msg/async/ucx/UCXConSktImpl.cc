@@ -69,6 +69,7 @@ ssize_t UCXConSktImpl::read(char* buf, size_t len)
   auto bl_len = recv_pending_bl.length();
   len = len > bl_len ? bl_len : len;
   if (len == 0) {
+    return -EAGAIN;
     return 0;
   }
   memcpy(buf, recv_pending_bl.c_str(), len);
@@ -76,7 +77,7 @@ ssize_t UCXConSktImpl::read(char* buf, size_t len)
   if (recv_pending_bl.length() || queue_bl.size()) {
       data_notify();
   }
-  return len;
+  return len == 0 ? -EAGAIN : len;
 }
 
 ssize_t UCXConSktImpl::send_segments()
