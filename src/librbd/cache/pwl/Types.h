@@ -176,6 +176,7 @@ const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
 constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
 const uint8_t RWL_POOL_VERSION = 1;
+const uint64_t SSD_POOL_VERSION = 1;
 const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
 const double AGGRESSIVE_RETIRE_HIGH_WATER = 0.75;
 const double RETIRE_HIGH_WATER = 0.50;
