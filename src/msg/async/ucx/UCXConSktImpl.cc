@@ -193,14 +193,14 @@ void UCXConSktImpl::set_conn_request(const conn_req_t &conn_request)
 
 void UCXConSktImpl::handle_connection_error(ucs_status_t status)
 {
-  lderr(cct) << "detected error: " << ucs_status_string(status)
-             << dendl;
+//  lderr(cct) << "detected error: " << ucs_status_string(status)
+//             << dendl;
 }
 
 void UCXConSktImpl::ep_error_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
   UCXConSktImpl *self_this = reinterpret_cast<UCXConSktImpl*>(arg);
-  lderr(self_this->cct) << dendl;
+//  lderr(self_this->cct) << dendl;
   self_this->handle_connection_error(status);
 }
 
