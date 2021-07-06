@@ -336,6 +336,7 @@ int RadosBucket::get_bucket_info(const DoutPrefixProvider* dpp, optional_yield y
   if (ret == 0) {
     bucket_version = ep_ot.read_version;
     ent.placement_rule = info.placement_rule;
+    ent.bucket = info.bucket; // we looked up bucket_id
   }
   return ret;
 }
