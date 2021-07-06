@@ -2786,12 +2786,15 @@ void RGWSetBucketWebsite::execute()
   if (op_ret < 0)
     return;
 
-  if (!store->svc()->zone->is_meta_master()) {
-    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
-      return;
-    }
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
+  op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
@@ -2821,6 +2824,12 @@ void RGWDeleteBucketWebsite::pre_exec()
 
 void RGWDeleteBucketWebsite::execute()
 {
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
+  bufferlist in_data;
 
   if (!store->svc()->zone->is_meta_master()) {
     bufferlist in_data;
