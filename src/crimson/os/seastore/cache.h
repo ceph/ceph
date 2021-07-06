@@ -181,42 +181,41 @@ public:
     paddr_t offset,       ///< [in] starting addr
     segment_off_t length  ///< [in] length
   ) {
-    if (auto iter = extents.find_offset(offset);
-	       iter != extents.end()) {
-      auto ret = TCachedExtentRef<T>(static_cast<T*>(&*iter));
+    auto cached = query_cache(offset);
+    if (!cached) {
+      auto ret = CachedExtent::make_cached_extent_ref<T>(
+        alloc_cache_buf(length));
+      ret->set_paddr(offset);
+      ret->state = CachedExtent::extent_state_t::CLEAN;
+      add_extent(ret);
+      return read_extent<T>(std::move(ret));
+    }
+
+    // extent PRESENT in cache
+    if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
+      auto ret = CachedExtent::make_cached_extent_ref<T>(
+        alloc_cache_buf(length));
+      ret->set_paddr(offset);
+      ret->state = CachedExtent::extent_state_t::CLEAN;
+      extents.replace(*ret, *cached);
+
+      // replace placeholder in transactions
+      while (!cached->transactions.empty()) {
+        auto t = cached->transactions.begin()->t;
+        t->replace_placeholder(*cached, *ret);
+      }
+
+      cached->state = CachedExtent::extent_state_t::INVALID;
+      return read_extent<T>(std::move(ret));
+    } else {
+      auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
       return ret->wait_io(
       ).then([ret=std::move(ret)]() mutable -> get_extent_ret<T> {
-	// ret may be invalid, caller must check
-	return get_extent_ret<T>(
-	  get_extent_ertr::ready_future_marker{},
-	  std::move(ret));
+        // ret may be invalid, caller must check
+        return get_extent_ret<T>(
+          get_extent_ertr::ready_future_marker{},
+          std::move(ret));
       });
-    } else {
-      auto ref = CachedExtent::make_cached_extent_ref<T>(
-	alloc_cache_buf(length));
-      ref->set_io_wait();
-      ref->set_paddr(offset);
-      ref->state = CachedExtent::extent_state_t::CLEAN;
-      add_extent(ref);
-
-      return segment_manager.read(
-	offset,
-	length,
-	ref->get_bptr()).safe_then(
-	  [ref=std::move(ref)]() mutable {
-	    /* TODO: crc should be checked against LBA manager */
-	    ref->last_committed_crc = ref->get_crc32c();
-
-	    ref->on_clean_read();
-	    ref->complete_io();
-	    return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
-	      std::move(ref));
-	  },
-	  get_extent_ertr::pass_further{},
-	  crimson::ct_error::assert_all{
-	    "Cache::get_extent: invalid error"
-	  }
-	);
     }
   }
 
@@ -239,14 +238,16 @@ public:
         CachedExtentRef>(ret);
     }
 
-    // get_extent_ret::PRESENT from transaction
-    result = query_cache_for_extent(offset, &ret);
-    if (result == Transaction::get_extent_ret::ABSENT) {
+    // get_extent_ret::ABSENT from transaction
+    ret = query_cache(offset);
+    if (!ret ||
+        // retired_placeholder is not really cached yet
+        ret->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>();
     }
 
-    // get_extent_ret::PRESENT from cache
+    // present in cache and is not a retired_placeholder
     t.add_to_read_set(ret);
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
@@ -589,16 +590,39 @@ private:
   /// Invalidate extent and mark affected transactions
   void invalidate(CachedExtent &extent);
 
-  Transaction::get_extent_ret query_cache_for_extent(
-    paddr_t offset,
-    CachedExtentRef *out) {
+  template <typename T>
+  get_extent_ret<T> read_extent(
+    TCachedExtentRef<T>&& extent
+  ) {
+    extent->set_io_wait();
+    return segment_manager.read(
+      extent->get_paddr(),
+      extent->get_length(),
+      extent->get_bptr()
+    ).safe_then(
+      [extent=std::move(extent)]() mutable {
+        /* TODO: crc should be checked against LBA manager */
+        extent->last_committed_crc = extent->get_crc32c();
+
+        extent->on_clean_read();
+        extent->complete_io();
+        return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
+          std::move(extent));
+      },
+      get_extent_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+        "Cache::get_extent: invalid error"
+      }
+    );
+  }
+
+  // Extents in cache may contain placeholders
+  CachedExtentRef query_cache(paddr_t offset) {
     if (auto iter = extents.find_offset(offset);
-	iter != extents.end()) {
-      if (out)
-	*out = &*iter;
-      return Transaction::get_extent_ret::PRESENT;
+        iter != extents.end()) {
+      return CachedExtentRef(&*iter);
     } else {
-      return Transaction::get_extent_ret::ABSENT;
+      return CachedExtentRef();
     }
   }
 
