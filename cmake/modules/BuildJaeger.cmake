@@ -22,9 +22,10 @@ function(build_jaeger)
 			-DCMAKE_INSTALL_RPATH_USE_LINK_PATH=TRUE
 			-DOpenTracing_DIR=${CMAKE_SOURCE_DIR}/src/jaegertracing/opentracing-cpp
 			-Dnlohmann_json_DIR=/usr/lib
+			-DCMAKE_FIND_ROOT_PATH=${CMAKE_BINARY_DIR}/external\;${CMAKE_BINARY_DIR}/boost\;${CMAKE_BINARY_DIR}/boost/include
 			-DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/boost\;${CMAKE_BINARY_DIR}/boost/include\;${CMAKE_BINARY_DIR}/external
-                       -DCMAKE_FIND_ROOT_PATH=${CMAKE_BINARY_DIR}/boost\;${CMAKE_BINARY_DIR}/boost/include\;${CMAKE_BINARY_DIR}/external
 			-DCMAKE_INSTALL_LIBDIR=${CMAKE_BINARY_DIR}/external/lib
+			-DBOOST_INCLUDEDIR=${CMAKE_BINARY_DIR}/boost/include
 			-Dthrift_HOME=${CMAKE_BINARY_DIR}/external
 			-DOpenTracing_HOME=${CMAKE_BINARY_DIR}/external)
 
@@ -44,11 +45,11 @@ function(build_jaeger)
 
   if(CMAKE_MAKE_PROGRAM MATCHES "make")
     # try to inherit command line arguments passed by parent "make" job
-    set(make_cmd $(MAKE))
+    set(make_cmd $(MAKE) Jaeger)
   else()
-    set(make_cmd ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target Jaeger)
+    set(make_cmd ${CMAKE_COMMAND} --build <BINARY_DIR> --target Jaeger)
   endif()
-  set(install_cmd $(MAKE) install DESTDIR=)
+  set(install_cmd ${CMAKE_MAKE_PROGRAM} install)
 
   include(ExternalProject)
   ExternalProject_Add(Jaeger
@@ -61,5 +62,6 @@ function(build_jaeger)
     BUILD_COMMAND ${make_cmd}
     INSTALL_COMMAND ${install_cmd}
     DEPENDS "${dependencies}"
+    BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so
     )
 endfunction()
