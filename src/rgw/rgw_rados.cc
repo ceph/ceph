@@ -5861,7 +5861,16 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
+  bool versioned_op = false;
   if (state) {
+    versioned_op = state->is_olh || bucket_info.versioning_enabled() ||
+                   !obj.key.instance.empty();
+    if (versioned_op) {
+      index_op.set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP);
+    }
+    if (state->is_olh) {
+      op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
+    }
     string tag;
     append_rand_alpha(cct, tag, tag, 32);
     state->write_tag = tag;
@@ -5897,6 +5906,9 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, &acl_bl,
                             RGWObjCategory::Main, NULL);
+      if (r == 0 && versioned_op) {
+        r = set_olh(dpp, obj_ctx, bucket_info, obj, false, NULL, 0, real_time(), false, y);
+      }
     } else {
       int ret = index_op.cancel(dpp);
       if (ret < 0) {
