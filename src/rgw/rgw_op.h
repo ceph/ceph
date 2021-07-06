@@ -1884,7 +1884,7 @@ public:
 class RGWListMultipart : public RGWOp {
 protected:
   string upload_id;
-  map<uint32_t, RGWUploadPartInfo> parts;
+  std::unique_ptr<rgw::sal::MultipartUpload> upload;
   int max_parts;
   int marker;
   RGWAccessControlPolicy policy;
@@ -1912,26 +1912,17 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
-struct RGWMultipartUploadEntry {
-  rgw_bucket_dir_entry obj;
-  RGWMPObj mp;
-
-  friend std::ostream& operator<<(std::ostream& out,
-				  const RGWMultipartUploadEntry& e) {
-    constexpr char quote = '"';
-    return out << "RGWMultipartUploadEntry{ obj.key=" <<
-      quote << e.obj.key << quote << " mp=" << e.mp << " }";
-  }
-};
-
 class RGWListBucketMultiparts : public RGWOp {
 protected:
   string prefix;
-  RGWMPObj marker; 
-  RGWMultipartUploadEntry next_marker; 
+  string marker_meta;
+  string marker_key;
+  string marker_upload_id;
+  string next_marker_key;
+  string next_marker_upload_id;
   int max_uploads;
   string delimiter;
-  vector<RGWMultipartUploadEntry> uploads;
+  vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
   map<string, bool> common_prefixes;
   bool is_truncated;
   int default_max;
