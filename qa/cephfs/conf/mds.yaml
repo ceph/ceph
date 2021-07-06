@@ -4,6 +4,10 @@ overrides:
       mds:
         debug mds: 20
         debug ms: 1
+        mds bal fragment size max: 10000
+        mds bal merge size: 5
+        mds bal split bits: 3
+        mds bal split size: 100
         mds debug frag: true
         mds debug scatterstat: true
         mds op complaint time: 180
