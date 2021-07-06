@@ -34,12 +34,11 @@ function(build_thrift)
 
   if(CMAKE_MAKE_PROGRAM MATCHES "make")
     # try to inherit command line arguments passed by parent "make" job
-    set(make_cmd $(MAKE))
+    set(make_cmd $(MAKE) thrift)
   else()
     set(make_cmd ${CMAKE_COMMAND} --build <BINARY_DIR> --target thrift)
   endif()
-
-  set(install_cmd $(MAKE) install DESTDIR=)
+  set(install_cmd ${CMAKE_MAKE_PROGRAM} install)
 
   include(ExternalProject)
   ExternalProject_Add(thrift
@@ -50,5 +49,6 @@ function(build_thrift)
     BUILD_COMMAND ${make_cmd}
     INSTALL_COMMAND ${install_cmd}
     DEPENDS ${dependencies}
+    BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/external/lib/libthrift.so
     )
 endfunction()
