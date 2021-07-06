@@ -330,6 +330,8 @@ BuildRequires:  rdma-core-devel
 BuildRequires:	liblz4-devel >= 1.7
 # for prometheus-alerts
 BuildRequires:  golang-github-prometheus-prometheus
+# for grafana dashboards
+BuildRequires:  jsonnet
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
@@ -353,6 +355,7 @@ BuildRequires:	lz4-devel >= 1.7
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	golang-github-prometheus
+BuildRequires:	golang-github-google-jsonnet
 BuildRequires:	libtool-ltdl-devel
 BuildRequires:	ninja-build
 BuildRequires:	xmlsec1
@@ -371,6 +374,7 @@ BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 %endif
 %if 0%{?suse_version}
 BuildRequires:	golang-github-prometheus-prometheus
+BuildRequires:	jsonnet
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
