@@ -16067,7 +16067,8 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
 
-  if (!spurious_read_errors_alert.empty()) {
+  if (!spurious_read_errors_alert.empty() &&
+      cct->_conf->bluestore_warn_on_spurious_read_errors) {
     alerts.emplace(
       "BLUESTORE_SPURIOUS_READ_ERRORS",
       spurious_read_errors_alert);
