@@ -7888,6 +7888,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
       }
       db->submit_transaction_sync(txn);
       repairer->inc_repaired();
+      repairer->request_compaction();
     }
   }
 }
@@ -16374,6 +16375,10 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
     auto ok = db->submit_transaction_sync(fix_statfs_txn) == 0;
     ceph_assert(ok);
     fix_statfs_txn = nullptr;
+  }
+  if (need_compact) {
+    db->compact();
+    need_compact = false;
   }
   unsigned repaired = to_repair_cnt;
   to_repair_cnt = 0;
