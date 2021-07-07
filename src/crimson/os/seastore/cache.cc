@@ -96,6 +96,22 @@ void Cache::register_metrics()
     {src_t::CLEANER, src_label("CLEANER")},
   };
 
+  auto ext_label = sm::label("ext");
+  std::map<extent_types_t, sm::label_instance> labels_by_ext {
+    {extent_types_t::ROOT,                ext_label("ROOT")},
+    {extent_types_t::LADDR_INTERNAL,      ext_label("LADDR_INTERNAL")},
+    {extent_types_t::LADDR_LEAF,          ext_label("LADDR_LEAF")},
+    {extent_types_t::OMAP_INNER,          ext_label("OMAP_INNER")},
+    {extent_types_t::OMAP_LEAF,           ext_label("OMAP_LEAF")},
+    {extent_types_t::ONODE_BLOCK_STAGED,  ext_label("ONODE_BLOCK_STAGED")},
+    {extent_types_t::COLL_BLOCK,          ext_label("COLL_BLOCK")},
+    {extent_types_t::OBJECT_DATA_BLOCK,   ext_label("OBJECT_DATA_BLOCK")},
+    {extent_types_t::RETIRED_PLACEHOLDER, ext_label("RETIRED_PLACEHOLDER")},
+    {extent_types_t::RBM_ALLOC_INFO,      ext_label("RBM_ALLOC_INFO")},
+    {extent_types_t::TEST_BLOCK,          ext_label("TEST_BLOCK")},
+    {extent_types_t::TEST_BLOCK_PHYSICAL, ext_label("TEST_BLOCK_PHYSICAL")}
+  };
+
   /*
    * trans_created
    */
@@ -177,6 +193,54 @@ void Cache::register_metrics()
           return total;
         },
         sm::description("total number of transaction committed"),
+        {src_label("ALL")}
+      ),
+    }
+  );
+
+  /*
+   * trans_invalidated
+   */
+  auto register_trans_invalidated =
+    [this, &labels_by_src, &labels_by_ext](src_t src, extent_types_t ext) {
+      auto m_key = std::make_pair(src, ext);
+      stats.trans_invalidated[m_key] = 0;
+      std::ostringstream oss_desc;
+      oss_desc << "total number of transaction invalidated (src="
+               << src << ", ext="
+               << ext << ")";
+      metrics.add_group(
+        "cache",
+        {
+          sm::make_counter(
+            "trans_invalidated",
+            stats.trans_invalidated.find(m_key)->second,
+            sm::description(oss_desc.str()),
+            {labels_by_src.find(src)->second,
+             labels_by_ext.find(ext)->second}
+          ),
+        }
+      );
+    };
+  for (auto& [src, label] : labels_by_src) {
+    for (auto& [ext, _label] : labels_by_ext) {
+      register_trans_invalidated(src, ext);
+    }
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "trans_invalidated",
+        [this] {
+          uint64_t total = 0;
+          for (auto& [k, v] : stats.trans_invalidated) {
+            total += v;
+          }
+          return total;
+        },
+        sm::description("total number of transaction invalidated"),
         {src_label("ALL")}
       ),
     }
@@ -283,9 +347,19 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
 }
 
 void Cache::invalidate(CachedExtent &extent) {
+  LOG_PREFIX(Cache::invalidate);
+  DEBUG("invalidate begin -- extent {}", extent);
   for (auto &&i: extent.transactions) {
-    i.t->conflicted = true;
+    if (!i.t->conflicted) {
+      DEBUGT("", i.t);
+      i.t->conflicted = true;
+      assert(!i.t->is_weak());
+      auto m_key = std::make_pair(i.t->get_src(), extent.get_type());
+      assert(stats.trans_invalidated.count(m_key));
+      ++(stats.trans_invalidated[m_key]);
+    }
   }
+  DEBUG("invalidate end");
   extent.state = CachedExtent::extent_state_t::INVALID;
 }
 

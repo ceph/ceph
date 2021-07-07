@@ -296,9 +296,14 @@ public:
       return trans_intr::make_interruptible(
 	get_extent<T>(offset, length)
       ).si_then(
-	[&t](auto ref) mutable {
+	[&t, this](auto ref) {
 	  if (!ref->is_valid()) {
+	    LOG_PREFIX(Cache::get_extent);
+	    DEBUGT("got invalid extent: {}", t, ref);
 	    t.conflicted = true;
+	    auto m_key = std::make_pair(t.get_src(), T::TYPE);
+	    assert(stats.trans_invalidated.count(m_key));
+	    ++(stats.trans_invalidated[m_key]);
 	    return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	  } else {
 	    t.add_to_read_set(ref);
@@ -343,7 +348,12 @@ public:
 	get_extent_by_type(type, offset, laddr, length)
       ).si_then([=, &t](CachedExtentRef ret) {
         if (!ret->is_valid()) {
+          LOG_PREFIX(Cache::get_extent_by_type);
+          DEBUGT("got invalid extent: {}", t, ret);
           t.conflicted = true;
+          auto m_key = std::make_pair(t.get_src(), type);
+          assert(stats.trans_invalidated.count(m_key));
+          ++(stats.trans_invalidated[m_key]);
           return get_extent_ertr::make_ready_future<CachedExtentRef>();
         } else {
           t.add_to_read_set(ret);
@@ -572,9 +582,12 @@ private:
    */
   CachedExtent::list dirty;
 
+  using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
   struct {
     std::array<uint64_t, Transaction::SRC_MAX> trans_created_by_src;
     std::array<uint64_t, Transaction::SRC_MAX> trans_committed_by_src;
+    std::unordered_map<src_ext_t, uint64_t,
+                       boost::hash<src_ext_t>> trans_invalidated;
   } stats;
   uint64_t& get_counter(
       std::array<uint64_t, Transaction::SRC_MAX>& counters_by_src,
