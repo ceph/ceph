@@ -5,6 +5,7 @@
 #include "include/Context.h"
 #include "common/errno.h"
 
+#include "rgw/rgw_cache.h"
 #include "svc_notify.h"
 #include "svc_finisher.h"
 #include "svc_zone.h"
@@ -33,6 +34,7 @@ class RGWWatcher : public librados::WatchCtx2 {
         watcher->reinit();
       }
   };
+
 public:
   RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, RGWSI_RADOS::Obj& o) : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
   void handle_notify(uint64_t notify_id,
@@ -358,8 +360,8 @@ void RGWSI_Notify::_set_enabled(bool status)
   }
 }
 
-int RGWSI_Notify::distribute(const string& key, bufferlist& bl,
-                             optional_yield y)
+int RGWSI_Notify::distribute(const string& key, const RGWCacheNotifyInfo& cni,
+			     optional_yield y)
 {
   /* The RGW uses the control pool to store the watch notify objects.
     The precedence in RGWSI_Notify::do_start is to call to zone_svc->start and later to init_watch().
@@ -371,18 +373,20 @@ int RGWSI_Notify::distribute(const string& key, bufferlist& bl,
     RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
 
     ldout(cct, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
-        << " bl.length()=" << bl.length() << dendl;
-    return robust_notify(notify_obj, bl, y);
+		       << " cni=" << cni << dendl;
+    return robust_notify(notify_obj, cni, y);
   }
   return 0;
 }
 
-int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
+int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj,
+				const RGWCacheNotifyInfo& cni,
                                 optional_yield y)
 {
   // The reply of every machine that acks goes in here.
   boost::container::flat_set<std::pair<uint64_t, uint64_t>> acks;
-  bufferlist rbl;
+  bufferlist bl, rbl;
+  encode(cni, bl);
 
   // First, try to send, without being fancy about it.
   auto r = notify_obj.notify(bl, 0, &rbl, y);
