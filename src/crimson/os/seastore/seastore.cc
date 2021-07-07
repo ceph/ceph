@@ -83,7 +83,8 @@ seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
     return transaction_manager->mount();
   }).safe_then([this] {
     return seastar::do_with(
-      transaction_manager->create_transaction(),
+      transaction_manager->create_transaction(
+        Transaction::src_t::MUTATE),
       [this](auto &t) {
 	return onode_manager->mkfs(*t
 	).safe_then([this, &t] {
@@ -130,7 +131,8 @@ SeaStore::list_objects(CollectionRef ch,
       [this, start, end, limit] (auto& ret) {
     return repeat_eagain2([this, start, end, limit, &ret] {
       return seastar::do_with(
-          transaction_manager->create_transaction(),
+          transaction_manager->create_transaction(
+            Transaction::src_t::READ),
           [this, start, end, limit, &ret] (auto& t) {
         return onode_manager->list_onodes(*t, start, end, limit
         ).safe_then([&ret] (auto&& _ret) {
@@ -172,7 +174,8 @@ seastar::future<std::vector<coll_t>> SeaStore::list_collections()
       return repeat_eagain([this, &ret] {
 
 	return seastar::do_with(
-	  transaction_manager->create_transaction(),
+	  transaction_manager->create_transaction(
+            Transaction::src_t::READ),
 	  [this, &ret](auto &t) {
 	    return transaction_manager->read_collection_root(*t
 	    ).safe_then([this, &t](auto coll_root) {
@@ -212,6 +215,7 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
   return repeat_with_onode<ceph::bufferlist>(
     ch,
     oid,
+    Transaction::src_t::READ,
     [=](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
       size_t size = onode.get_layout().size;
 
@@ -254,24 +258,27 @@ SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
   LOG_PREFIX(SeaStore::get_attr);
   DEBUG("{} {}", c->get_cid(), oid);
   return repeat_with_onode<ceph::bufferlist>(
-    c, oid, [=](auto &t, auto& onode)
-    -> _omap_get_value_ertr::future<ceph::bufferlist> {
-    auto& layout = onode.get_layout();
-    if (name == OI_ATTR && layout.oi_size) {
-      ceph::bufferlist bl;
-      bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
-      return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+    c,
+    oid,
+    Transaction::src_t::READ,
+    [=](auto &t, auto& onode) -> _omap_get_value_ertr::future<ceph::bufferlist> {
+      auto& layout = onode.get_layout();
+      if (name == OI_ATTR && layout.oi_size) {
+        ceph::bufferlist bl;
+        bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
+        return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+      }
+      if (name == SS_ATTR && layout.ss_size) {
+        ceph::bufferlist bl;
+        bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
+        return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+      }
+      return _omap_get_value(
+        t,
+        layout.xattr_root.get(),
+        name);
     }
-    if (name == SS_ATTR && layout.ss_size) {
-      ceph::bufferlist bl;
-      bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
-      return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
-    }
-    return _omap_get_value(
-      t,
-      layout.xattr_root.get(),
-      name);
-  }).handle_error(crimson::ct_error::input_output_error::handle([FNAME] {
+  ).handle_error(crimson::ct_error::input_output_error::handle([FNAME] {
     ERROR("EIO when getting attrs");
     abort();
   }), crimson::ct_error::pass_further_all{});
@@ -285,25 +292,29 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
   auto c = static_cast<SeastoreCollection*>(ch.get());
   DEBUG("{} {}", c->get_cid(), oid);
   return repeat_with_onode<attrs_t>(
-    c, oid, [=](auto &t, auto& onode) {
-    auto& layout = onode.get_layout();
-    return _omap_list(layout.xattr_root, t, std::nullopt,
-      OMapManager::omap_list_config_t::with_inclusive(false)
-    ).safe_then([&layout](auto p) {
-      auto& attrs = std::get<1>(p);
-      ceph::bufferlist bl;
-      if (layout.oi_size) {
-        bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
-        attrs.emplace(OI_ATTR, std::move(bl));
-      }
-      if (layout.ss_size) {
-        bl.clear();
-        bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
-        attrs.emplace(SS_ATTR, std::move(bl));
-      }
-      return seastar::make_ready_future<omap_values_t>(std::move(attrs));
-    });
-  }).handle_error(crimson::ct_error::input_output_error::handle([FNAME] {
+    c,
+    oid,
+    Transaction::src_t::READ,
+    [=](auto &t, auto& onode) {
+      auto& layout = onode.get_layout();
+      return _omap_list(layout.xattr_root, t, std::nullopt,
+        OMapManager::omap_list_config_t::with_inclusive(false)
+      ).safe_then([&layout](auto p) {
+        auto& attrs = std::get<1>(p);
+        ceph::bufferlist bl;
+        if (layout.oi_size) {
+          bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
+          attrs.emplace(OI_ATTR, std::move(bl));
+        }
+        if (layout.ss_size) {
+          bl.clear();
+          bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
+          attrs.emplace(SS_ATTR, std::move(bl));
+        }
+        return seastar::make_ready_future<omap_values_t>(std::move(attrs));
+      });
+    }
+  ).handle_error(crimson::ct_error::input_output_error::handle([FNAME] {
     ERROR("EIO when getting attrs");
     abort();
   }), crimson::ct_error::pass_further_all{});
@@ -317,6 +328,7 @@ seastar::future<struct stat> SeaStore::stat(
   return repeat_with_onode<struct stat>(
     c,
     oid,
+    Transaction::src_t::READ,
     [=, &oid](auto &t, auto &onode) {
       struct stat st;
       auto &olayout = onode.get_layout();
@@ -326,11 +338,12 @@ seastar::future<struct stat> SeaStore::stat(
       st.st_nlink = 1;
       DEBUGT("cid {}, oid {}, return size {}", t, c->get_cid(), oid, st.st_size);
       return seastar::make_ready_future<struct stat>(st);
-    }).handle_error(
-      crimson::ct_error::assert_all{
-	"Invalid error in SeaStore::stat"
-       }
-    );
+    }
+  ).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::stat"
+    }
+  );
 }
 
 auto
@@ -352,6 +365,7 @@ SeaStore::omap_get_values(
   return repeat_with_onode<omap_values_t>(
     c,
     oid,
+    Transaction::src_t::READ,
     [this, keys](auto &t, auto &onode) {
       omap_root_t omap_root = onode.get_layout().omap_root.get();
       return _omap_get_values(
@@ -468,6 +482,7 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_list(
   return repeat_with_onode<ret_bare_t>(
     c,
     oid,
+    Transaction::src_t::READ,
     [this, config, &start](auto &t, auto &onode) {
       return _omap_list(
 	onode.get_layout().omap_root,
@@ -617,6 +632,7 @@ seastar::future<> SeaStore::do_transaction(
   return repeat_with_internal_context(
     _ch,
     std::move(_t),
+    Transaction::src_t::MUTATE,
     [this](auto &ctx) {
       return onode_manager->get_or_create_onodes(
 	*ctx.transaction, ctx.iter.get_objects()
@@ -1082,7 +1098,8 @@ seastar::future<> SeaStore::write_meta(const std::string& key,
     value,
     [this, FNAME](auto &t, auto& key, auto& value) {
       return repeat_eagain([this, FNAME, &t, &key, &value] {
-	t = transaction_manager->create_transaction();
+	t = transaction_manager->create_transaction(
+            Transaction::src_t::MUTATE);
 	DEBUGT("Have transaction, key: {}; value: {}", *t, key, value);
         return transaction_manager->update_root_meta(
 	  *t, key, value
@@ -1105,7 +1122,8 @@ seastar::future<std::tuple<int, std::string>> SeaStore::read_meta(const std::str
     key,
     [this](auto &ret, auto &t, auto& key) {
       return repeat_eagain([this, &ret, &t, &key] {
-	t = transaction_manager->create_transaction();
+	t = transaction_manager->create_transaction(
+            Transaction::src_t::READ);
 	return transaction_manager->read_root_meta(
 	  *t, key
 	).safe_then([&ret](auto v) {

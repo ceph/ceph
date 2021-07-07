@@ -141,6 +141,20 @@ public:
     return retired_set;
   }
 
+  enum class src_t : uint8_t {
+    // normal IO operations at seastore boundary or within a test
+    MUTATE = 0,
+    READ,
+    // transaction manager level operations
+    INIT,
+    CLEANER,
+    MAX
+  };
+  static constexpr auto SRC_MAX = static_cast<std::size_t>(src_t::MAX);
+  src_t get_src() const {
+    return src;
+  }
+
   bool is_weak() const {
     return weak;
   }
@@ -156,10 +170,12 @@ public:
   Transaction(
     OrderingHandle &&handle,
     bool weak,
+    src_t src,
     journal_seq_t initiated_after
   ) : weak(weak),
       retired_gate_token(initiated_after),
-      handle(std::move(handle))
+      handle(std::move(handle)),
+      src(src)
   {}
 
 
@@ -217,14 +233,33 @@ private:
   bool conflicted = false;
 
   OrderingHandle handle;
+
+  const src_t src;
 };
 using TransactionRef = Transaction::Ref;
+
+inline std::ostream& operator<<(std::ostream& os,
+                                const Transaction::src_t& src) {
+  switch (src) {
+  case Transaction::src_t::MUTATE:
+    return os << "MUTATE";
+  case Transaction::src_t::READ:
+    return os << "READ";
+  case Transaction::src_t::INIT:
+    return os << "INIT";
+  case Transaction::src_t::CLEANER:
+    return os << "CLEANER";
+  default:
+    ceph_abort("impossible");
+  }
+}
 
 /// Should only be used with dummy staged-fltree node extent manager
 inline TransactionRef make_test_transaction() {
   return std::make_unique<Transaction>(
     get_dummy_ordering_handle(),
     false,
+    Transaction::src_t::MUTATE,
     journal_seq_t{}
   );
 }
