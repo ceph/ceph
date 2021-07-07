@@ -574,6 +574,7 @@ private:
 
   struct {
     std::array<uint64_t, Transaction::SRC_MAX> trans_created_by_src;
+    std::array<uint64_t, Transaction::SRC_MAX> trans_committed_by_src;
   } stats;
   uint64_t& get_counter(
       std::array<uint64_t, Transaction::SRC_MAX>& counters_by_src,
