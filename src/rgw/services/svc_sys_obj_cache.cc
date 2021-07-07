@@ -396,9 +396,7 @@ int RGWSI_SysObj_Cache::distribute_cache(const string& normal_name, const rgw_ra
 
   info.obj_info = obj_info;
   info.obj = obj;
-  bufferlist bl;
-  encode(info, bl);
-  return notify_svc->distribute(normal_name, bl);
+  return notify_svc->distribute(normal_name, info);
 }
 
 int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
