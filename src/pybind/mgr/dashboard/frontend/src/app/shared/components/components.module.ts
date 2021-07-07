@@ -44,6 +44,7 @@ import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
+import { WizardComponent } from './wizard/wizard.component';
 
 @NgModule({
   imports: [
@@ -91,7 +92,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     DocComponent,
     Copy2ClipboardButtonComponent,
     DownloadButtonComponent,
-    FormButtonPanelComponent
+    FormButtonPanelComponent,
+    WizardComponent
   ],
   providers: [],
   exports: [
@@ -117,7 +119,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     DocComponent,
     Copy2ClipboardButtonComponent,
     DownloadButtonComponent,
-    FormButtonPanelComponent
+    FormButtonPanelComponent,
+    WizardComponent
   ]
 })
 export class ComponentsModule {}

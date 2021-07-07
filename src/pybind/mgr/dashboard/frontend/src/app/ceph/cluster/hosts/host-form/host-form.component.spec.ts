@@ -32,12 +32,18 @@ describe('HostFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HostFormComponent);
     component = fixture.componentInstance;
+    component.ngOnInit();
     formHelper = new FormHelper(component.hostForm);
     fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should open the form in a modal', () => {
+    const nativeEl = fixture.debugElement.nativeElement;
+    expect(nativeEl.querySelector('cd-modal')).not.toBe(null);
   });
 
   it('should validate the network address is valid', fakeAsync(() => {

@@ -94,6 +94,13 @@ const routes: Routes = [
         path: 'create-cluster',
         component: CreateClusterComponent,
         canActivate: [ModuleStatusGuardService],
+        children: [
+          {
+            path: URLVerbs.ADD,
+            component: HostFormComponent,
+            outlet: 'modal'
+          }
+        ],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'orchestrator',
@@ -105,13 +112,13 @@ const routes: Routes = [
       },
       {
         path: 'hosts',
+        component: HostsComponent,
         data: { breadcrumbs: 'Cluster/Hosts' },
         children: [
-          { path: '', component: HostsComponent },
           {
-            path: URLVerbs.CREATE,
+            path: URLVerbs.ADD,
             component: HostFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },
