@@ -345,6 +345,7 @@ void LastEpochClean::Lec::report(unsigned pg_num, ps_t ps,
 				 epoch_t last_epoch_clean)
 {
   epoch_by_pg.resize(pg_num, 0);
+  ceph_assert(ps < pg_num);
   const auto old_lec = epoch_by_pg[ps];
   if (old_lec >= last_epoch_clean) {
     // stale lec
