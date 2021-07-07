@@ -100,7 +100,7 @@ OSD_STATUS = ['weight', 'up', 'in']
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
-POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode')
+POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode', 'crush_rule')
 
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
@@ -858,7 +858,8 @@ class Module(MgrModule):
                     pool['pool_name'],
                     pool_type,
                     pool_description,
-                    compression_mode)
+                    compression_mode,
+                    pool['crush_rule'])
             )
 
         # Populate other servers metadata
