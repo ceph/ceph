@@ -102,6 +102,8 @@ OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode', 'crush_rule')
 
+CRUSH_RULE_METADATA = ('rule_id', 'name', 'type', 'take_step')
+
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
@@ -409,6 +411,13 @@ class Module(MgrModule):
             'pool_metadata',
             'POOL Metadata',
             POOL_METADATA
+        )
+
+        metrics['crush_rule_metadata'] = Metric(
+            'untyped',
+            'crush_rule_metadata',
+            'CRUSH RULE Metadata',
+            CRUSH_RULE_METADATA
         )
 
         metrics['rgw_metadata'] = Metric(
@@ -725,7 +734,8 @@ class Module(MgrModule):
                 int(flag in osd_flags)
             )
 
-        osd_devices = self.get('osd_map_crush')['devices']
+        osd_map_crush = self.get('osd_map_crush')
+        osd_devices = osd_map_crush['devices']
         servers = self.get_service_list()
         for osd in osd_map['osds']:
             # id can be used to link osd metrics and metadata
@@ -860,6 +870,24 @@ class Module(MgrModule):
                     pool_description,
                     compression_mode,
                     pool['crush_rule'])
+            )
+
+        def _get_crush_rule_take_step(rule: Dict[str, Any]) -> str:
+            for step in rule['steps']:
+                if step['op'] == 'take':
+                    return step['item_name']
+            self.log.error('failed to find take step for rule_id: %s' % str(rule['rule_id']))
+            return ''
+
+        for rule in osd_map_crush['rules']:
+            rule_take_step = _get_crush_rule_take_step(rule)
+            self.metrics['crush_rule_metadata'].set(
+                1, (
+                    rule['rule_id'],
+                    rule['rule_name'],
+                    rule['type'],
+                    rule_take_step,
+                )
             )
 
         # Populate other servers metadata
