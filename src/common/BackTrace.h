@@ -31,7 +31,7 @@ inline std::ostream& operator<<(std::ostream& out, const BackTrace& bt) {
 
 
 struct ClibBackTrace : public BackTrace {
-  const static int max = 32;
+  static constexpr std::size_t max = 256;
 
   int skip;
   void *array[max]{};
