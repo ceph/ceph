@@ -517,26 +517,21 @@ class LocalDaemon(object):
         return self._get_pid() is not None
 
     def check_status(self):
-        if self.proc:
-            return self.proc.poll()
+        if self._get_pid() is None:
+            return 0  # LIE!
+        return None
 
     def _get_pid(self):
         """
         Return PID as an integer or None if not found
         """
-        ps_txt = self.controller.run(args=["ps", "ww", "-u"+str(os.getuid())],
-                                     stdout=StringIO()).\
-            stdout.getvalue().strip()
-        lines = ps_txt.split("\n")[1:]
-
-        for line in lines:
-            if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
-                log.debug("Found ps line for daemon: {0}".format(line))
-                return int(line.split()[0])
-        if not opt_log_ps_output:
-            ps_txt = '(omitted)'
-        log.debug("No match for {0} {1}: {2}".format(
-            self.daemon_type, self.daemon_id, ps_txt))
+        pid_text = self.controller.run(
+            args=['cat', f'out/{self.daemon_type}.{self.daemon_id}.pid'],
+            check_status=False,
+            stdout=StringIO(),
+        ).stdout.getvalue().strip()
+        if pid_text:
+            return int(pid_text)
         return None
 
     def wait(self, timeout):
@@ -552,45 +547,25 @@ class LocalDaemon(object):
             log.error('tried to stop a non-running daemon')
             return
 
-        pid = self._get_pid()
-        if pid is None:
-            return
-        log.debug("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
-        os.kill(pid, signal.SIGTERM)
-
-        waited = 0
-        while pid is not None:
-            new_pid = self._get_pid()
-            if new_pid is not None and new_pid != pid:
-                log.debug("Killing new PID {0}".format(new_pid))
-                pid = new_pid
-                os.kill(pid, signal.SIGTERM)
-
-            if new_pid is None:
-                break
-            else:
-                if waited > timeout:
-                    raise MaxWhileTries(
-                        "Timed out waiting for daemon {0}.{1}".format(
-                            self.daemon_type, self.daemon_id))
-                time.sleep(1)
-                waited += 1
-
-        self.wait(timeout=timeout)
+        self.controller.run(args=[
+            'bin/init-ceph', 'stop', f'{self.daemon_type}.{self.daemon_id}'
+        ])
 
     def restart(self):
         if self._get_pid() is not None:
             self.stop()
 
-        self.proc = self.controller.run(args=[
-            os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)),
-            "-i", self.daemon_id])
+        self.controller.run(
+            args=['bin/init-ceph', 'start', f'{self.daemon_type}.{self.daemon_id}']
+        )
 
     def signal(self, sig, silent=False):
-        if not self.running():
+        pid = self._get_pid()
+        if pid is None:
             raise RuntimeError("Can't send signal to non-running daemon")
-
-        os.kill(self._get_pid(), sig)
+        self.controller.run(
+            args=['kill', f'-{sig}', self._get_pid()]
+        )
         if not silent:
             log.debug("Sent signal {0} to {1}.{2}".format(sig, self.daemon_type, self.daemon_id))
 
