@@ -560,7 +560,7 @@ public:
                                                              max_concurrent(_max_concurrent),
                                                              status(0) {}
 
-  virtual bool spawn_next() = 0;
+  virtual bool spawn_next(const DoutPrefixProvider *dpp) = 0;
   int operate(const DoutPrefixProvider *dpp) override;
 };
 

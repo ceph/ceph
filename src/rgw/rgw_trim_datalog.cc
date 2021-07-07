@@ -103,8 +103,6 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
 
 
 class DataLogTrimCR : public RGWCoroutine {
-  const DoutPrefixProvider *dpp;
-
   using TrimCR = DatalogTrimImplCR;
   const DoutPrefixProvider *dpp;
   rgw::sal::RadosStore* store;
@@ -222,7 +220,7 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
             << " last_trim=" << last_trim[i] << dendl;
         spawn(new RGWSerialCR(cct,
                               { new TrimCR(dpp, store, i, *m, nullptr),
-                                sip_mgr->set_min_source_pos_cr(i, *m)
+                                sip_mgr->set_min_source_pos_cr(dpp, i, *m)
                               }),
               true);
       }

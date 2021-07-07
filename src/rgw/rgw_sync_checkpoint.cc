@@ -126,7 +126,7 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int source_bilog_markers((const DoutPrefixProvider *dpp,
+int source_bilog_markers(const DoutPrefixProvider *dpp,
                           RGWRemoteCtl *remote_ctl,
                          const rgw_sync_bucket_pipe& pipe,
                          BucketIndexShardsManager& remote_markers,

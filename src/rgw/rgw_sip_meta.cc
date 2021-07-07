@@ -73,7 +73,7 @@ void SIProvider_MetaFull::rearrange_sections() {
 int SIProvider_MetaFull::get_all_sections(const DoutPrefixProvider *dpp) {
   void *handle;
 
-  int ret = meta.mgr->list_keys_init(string(), string(), &handle); /* iterate top handler */
+  int ret = meta.mgr->list_keys_init(dpp, string(), string(), &handle); /* iterate top handler */
   if (ret < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): list_keys_init() returned ret=" << ret << dendl;
     return ret;
@@ -84,7 +84,7 @@ int SIProvider_MetaFull::get_all_sections(const DoutPrefixProvider *dpp) {
   int max = 32;
 
   do {
-    ret = meta.mgr->list_keys_next(handle, max, result,
+    ret = meta.mgr->list_keys_next(dpp, handle, max, result,
                                    &truncated);
     if (ret < 0) {
       lderr(cct) << "ERROR: " << __func__ << "(): list_keys_init() returned ret=" << ret << dendl;
@@ -154,7 +154,7 @@ int SIProvider_MetaFull::do_fetch(const DoutPrefixProvider *dpp,
   while (max > 0) {
     int ret;
     if (new_section) {
-      ret = meta.mgr->list_keys_init(section, m, &handle);
+      ret = meta.mgr->list_keys_init(dpp, section, m, &handle);
       if (ret < 0) {
         lderr(cct) << "ERROR: " << __func__ << "(): list_keys_init() returned ret=" << ret << dendl;
         return ret;
@@ -165,7 +165,7 @@ int SIProvider_MetaFull::do_fetch(const DoutPrefixProvider *dpp,
     std::list<RGWMetadataHandler::KeyInfo> entries;
     bool truncated;
 
-    ret = meta.mgr->list_keys_next(handle, max, entries,
+    ret = meta.mgr->list_keys_next(dpp, handle, max, entries,
                                    &truncated);
     if (ret < 0) {
       lderr(cct) << "ERROR: " << __func__ << "(): list_keys_init() returned ret=" << ret << dendl;
@@ -239,7 +239,7 @@ int SIProvider_MetaInc::do_fetch(const DoutPrefixProvider *dpp,
   bool truncated;
   do {
     list<cls_log_entry> entries;
-    int ret = meta_log->list_entries(handle, max, entries, NULL, &truncated);
+    int ret = meta_log->list_entries(dpp, handle, max, entries, NULL, &truncated);
     if (ret < 0) {
       lderr(cct) << "ERROR: meta_log->list_entries() failed: ret=" << ret << dendl;
       return -ret;
@@ -280,7 +280,7 @@ int SIProvider_MetaInc::do_get_cur_state(const DoutPrefixProvider *dpp,
 {
   RGWMetadataLogInfo info;
 
-  int ret = meta_log->get_info(shard_id, &info);
+  int ret = meta_log->get_info(dpp, shard_id, &info);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to get meta log info for shard_id=" << shard_id << ": ret=" << ret << dendl;
     return ret;
@@ -300,7 +300,7 @@ int SIProvider_MetaInc::do_trim(const DoutPrefixProvider *dpp,
   int ret;
   // trim until -ENODATA
   do {
-    ret = meta_log->trim(shard_id, start_time.to_real_time(),
+    ret = meta_log->trim(dpp, shard_id, start_time.to_real_time(),
                          end_time.to_real_time(), string(), marker);
   } while (ret == 0);
   if (ret < 0 && ret != -ENODATA) {

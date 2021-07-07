@@ -1111,13 +1111,13 @@ public:
     bool same_zonegroup_semantics{false};
     void (*progress_cb)(off_t, void *){nullptr};
     void *progress_data{nullptr};
-    const DoutPrefixProvider *dpp{nullptr};
     RGWFetchObjFilter *filter{nullptr};
     rgw_zone_set *zones_trace{nullptr};
     std::optional<uint64_t> *bytes_transferred{nullptr};
   };
 
-  int fetch_remote_obj(RGWObjectCtx& obj_ctx,
+  int fetch_remote_obj(const DoutPrefixProvider *dpp,
+                       RGWObjectCtx& obj_ctx,
                        const rgw_zone_id& source_zone,
                        const rgw_user& user_id,
                        rgw::sal::Object* dest_obj,
@@ -1126,7 +1126,8 @@ public:
 		       rgw::sal::Bucket* src_bucket,
                        const FetchRemoteObjParams& params);
 
-  int fetch_remote_obj(RGWObjectCtx& obj_ctx,
+  int fetch_remote_obj(const DoutPrefixProvider *dpp,
+                       RGWObjectCtx& obj_ctx,
                        RGWRESTConn *conn,
                        bool foreign_source,
                        const rgw_user& user_id,

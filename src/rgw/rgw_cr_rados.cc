@@ -657,12 +657,11 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   params.pattrs = &attrs;
   params.category = RGWObjCategory::Main;
   params.olh_epoch = versioned_epoch;
-  params.dpp = dpp;
   params.filter = filter.get();
   params.zones_trace = &zones_trace;
   params.bytes_transferred = &bytes_transferred;
 
-  int r = store->getRados()->fetch_remote_obj(obj_ctx,
+  int r = store->getRados()->fetch_remote_obj(dpp, obj_ctx,
                        source_zone,
                        user_id.value_or(rgw_user()),
                        &dest_obj,

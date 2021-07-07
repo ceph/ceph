@@ -20,7 +20,7 @@
 
 using namespace std;
 
-int RGWSerialCR::operate()
+int RGWSerialCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     for (iter = crs.begin();

@@ -18,7 +18,7 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
   friend class InitCR;
   friend class RGWTrimGetSIPTargetsInfo;
 
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
   string sip_data_type;
   SIProvider::StageType sip_stage_type;
   std::optional<string> sip_instance;
@@ -34,7 +34,7 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
   class InitCR : public RGWCoroutine {
     const DoutPrefixProvider *dpp;
     RGWTrimSIPMgrImpl *mgr;
-    rgw::sal::RGWRadosStore *store;
+    rgw::sal::RadosStore *store;
   public:
     InitCR(const DoutPrefixProvider *_dpp,
            RGWTrimSIPMgrImpl *_mgr) : RGWCoroutine(_mgr->ctx()),
@@ -42,13 +42,13 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
                                       mgr(_mgr),
                                       store(mgr->store) {}
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         mgr->sip = store->ctl()->si.mgr->find_sip_by_type(dpp, mgr->sip_data_type, mgr->sip_stage_type, mgr->sip_instance);
         if (!mgr->sip) {
           return set_cr_error(-ENOENT);
         }
-        mgr->sip_cr_mgr.emplace(dpp,
+        mgr->sip_cr_mgr.emplace(dpp->get_cct(),
                                 store->svc()->sip_marker,
                                 store->ctl()->si.mgr,
                                 store->svc()->rados->get_async_processor());
@@ -69,7 +69,7 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
           }
         }
 
-        yield call(mgr->sip_cr->get_stage_info_cr(mgr->sid, &mgr->stage_info));
+        yield call(mgr->sip_cr->get_stage_info_cr(dpp, mgr->sid, &mgr->stage_info));
         if (retcode < 0) {
           ldout(cct, 0) << "ERROR: could not get stage info for sid=" << mgr->sid << ": ret=" << retcode << dendl;
           return set_cr_error(retcode);
@@ -89,7 +89,7 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
   };
 
 public:
-  RGWTrimSIPMgrImpl(rgw::sal::RGWRadosStore *_store,
+  RGWTrimSIPMgrImpl(rgw::sal::RadosStore *_store,
                     const string& _sip_data_type,
                     SIProvider::StageType _sip_stage_type,
                     std::optional<string> _sip_instance) : store(_store),
@@ -110,8 +110,8 @@ public:
                                     std::set<string> *sip_targets,
                                     std::set<rgw_zone_id> *target_zones) override;
 
-  RGWCoroutine *set_min_source_pos_cr(int shard_id, const string& pos) override {
-    return sip_cr->set_min_source_pos_cr(sid, shard_id, pos);
+  RGWCoroutine *set_min_source_pos_cr(const DoutPrefixProvider *dpp, int shard_id, const string& pos) override {
+    return sip_cr->set_min_source_pos_cr(dpp, sid, shard_id, pos);
   }
 
   string sip_id() const {
@@ -122,7 +122,7 @@ public:
 class RGWTrimGetSIPTargetsInfo : public RGWCoroutine
 {
   RGWTrimSIPMgrImpl *mgr;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
 
   std::vector<RGWSI_SIP_Marker::stage_shard_info> sip_shards_info;
 
@@ -146,10 +146,10 @@ public:
                                                                    sip_targets(_sip_targets),
                                                                    target_zones(_target_zones) {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int RGWTrimGetSIPTargetsInfo::operate()
+int RGWTrimGetSIPTargetsInfo::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     if (!mgr->sip_cr) {
@@ -165,9 +165,10 @@ int RGWTrimGetSIPTargetsInfo::operate()
 
 #define TRIM_SPAWN_WINDOW 16
     for (i = 0; i < mgr->stage_info.num_shards; ++i) {
-      yield_spawn_window(mgr->sip_cr->get_marker_info_cr(mgr->marker_handler,
-                                                    mgr->sid, i,
-                                                    &sip_shards_info[i]),
+      yield_spawn_window(mgr->sip_cr->get_marker_info_cr(dpp,
+                                                         mgr->marker_handler,
+                                                         mgr->sid, i,
+                                                         &sip_shards_info[i]),
                          TRIM_SPAWN_WINDOW,
                          [&](uint64_t stack_id, int ret) {
                          if (ret < 0 &&
@@ -231,7 +232,7 @@ RGWCoroutine *RGWTrimSIPMgrImpl::get_targets_info_cr(std::vector<std::optional<s
                                       target_zones);
 }
 
-RGWTrimSIPMgr *RGWTrimTools::get_trim_sip_mgr(rgw::sal::RGWRadosStore *store,
+RGWTrimSIPMgr *RGWTrimTools::get_trim_sip_mgr(rgw::sal::RadosStore *store,
                                               const string& sip_data_type,
                                               SIProvider::StageType sip_stage_type,
                                               std::optional<std::string> sip_instance)

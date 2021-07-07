@@ -17,7 +17,7 @@ public:
   RGWSerialCR(CephContext *_cct,
               std::vector<RGWCoroutine *> _crs) : RGWCoroutine(_cct),
                                                   crs(std::move(_crs)) {}
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
 struct rgw_user_create_params {

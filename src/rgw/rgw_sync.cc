@@ -160,7 +160,7 @@ void rgw_mdlog_shard_data::decode_json(JSONObj *obj) {
 
 int RGWShardCollectCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
-    while (spawn_next()) {
+    while (spawn_next(dpp)) {
       current_running++;
 
       while (current_running >= max_concurrent) {
@@ -211,7 +211,7 @@ public:
                                                                  sync_env(_sync_env),
                                                                  period(period), num_shards(_num_shards),
                                                                  mdlog_info(_mdlog_info), shard_id(0) {}
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
 class RGWListRemoteMDLogCR : public RGWShardCollectCR {
@@ -236,7 +236,7 @@ public:
     shards.swap(_shards);
     iter = shards.begin();
   }
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
 int RGWRemoteMetaLog::read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info)
@@ -607,7 +607,7 @@ RGWCoroutine* create_list_remote_mdlog_shard_cr(RGWMetaSyncEnv *env,
                                        max_entries, result);
 }
 
-bool RGWReadRemoteMDLogInfoCR::spawn_next() {
+bool RGWReadRemoteMDLogInfoCR::spawn_next(const DoutPrefixProvider *dpp) {
   if (shard_id >= num_shards) {
     return false;
   }
@@ -616,7 +616,7 @@ bool RGWReadRemoteMDLogInfoCR::spawn_next() {
   return true;
 }
 
-bool RGWListRemoteMDLogCR::spawn_next() {
+bool RGWListRemoteMDLogCR::spawn_next(const DoutPrefixProvider *dpp) {
   if (iter == shards.end()) {
     return false;
   }
@@ -745,10 +745,10 @@ class RGWReadSyncStatusMarkersCR : public RGWShardCollectCR {
     : RGWShardCollectCR(env->cct, MAX_CONCURRENT_SHARDS),
       env(env), num_shards(num_shards), markers(markers)
   {}
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
-bool RGWReadSyncStatusMarkersCR::spawn_next()
+bool RGWReadSyncStatusMarkersCR::spawn_next(const DoutPrefixProvider *dpp)
 {
   if (shard_id >= num_shards) {
     return false;

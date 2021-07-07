@@ -1295,9 +1295,9 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
       auto& zid = entry.first;
       auto& zname = entry.second;
 
-      ldpp_dout(dpp, 5) << "starting data sync thread for zone " << source_zone->name << dendl;
+      ldpp_dout(dpp, 5) << "starting data sync thread for zone " << zname << dendl;
       auto *thread = new RGWDataSyncProcessorThread(this->store, svc.rados->get_async_processor(), zid, zname);
-      ret = thread->init();
+      ret = thread->init(dpp);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: failed to initialize data sync thread" << dendl;
         return ret;
@@ -3941,7 +3941,8 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
   return 0;
 }
 
-int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
+int RGWRados::fetch_remote_obj(const DoutPrefixProvider *dpp,
+                               RGWObjectCtx& obj_ctx,
                                const rgw_zone_id& source_zone,
                                const rgw_user& user_id,
                                rgw::sal::Object* dest_obj,
@@ -3973,12 +3974,13 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     conn = opt_conns->data;
   }
 
-  return fetch_remote_obj(obj_ctx, conn, !source_zone.empty(),
+  return fetch_remote_obj(dpp, obj_ctx, conn, !source_zone.empty(),
                           user_id, dest_obj, src_obj,
                           dest_bucket, src_bucket, params);
 }
 
-int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
+int RGWRados::fetch_remote_obj(const DoutPrefixProvider *dpp,
+                               RGWObjectCtx& obj_ctx,
                                RGWRESTConn *conn,
                                bool foreign_source,
                                const rgw_user& user_id,
@@ -4074,7 +4076,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   if (params.copy_if_newer) {
     /* need to get mtime for destination */
-    ret = get_obj_state(params.dpp, &obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), &dest_state, false, null_yield);
+    ret = get_obj_state(dpp, &obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), &dest_state, false, null_yield);
     if (ret < 0)
       goto set_err_state;
 
@@ -4241,7 +4243,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (params.copy_if_newer && canceled) {
       ldpp_dout(dpp, 20) << "raced with another write of obj: " << dest_obj << dendl;
       obj_ctx.invalidate(dest_obj->get_obj()); /* object was overwritten */
-      ret = get_obj_state(params.dpp, &obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), &dest_state, false, null_yield);
+      ret = get_obj_state(dpp, &obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), &dest_state, false, null_yield);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
         goto set_err_state;
@@ -4275,7 +4277,7 @@ set_err_state:
     // for OP_LINK_OLH to call set_olh() with a real olh_epoch
     if (params.olh_epoch && *params.olh_epoch > 0) {
       constexpr bool log_data_change = true;
-      ret = set_olh(params.dpp, obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), false, nullptr,
+      ret = set_olh(dpp, obj_ctx, dest_bucket->get_info(), dest_obj->get_obj(), false, nullptr,
                     *params.olh_epoch, real_time(), false, null_yield, params.zones_trace, log_data_change);
     } else {
       // we already have the latest copy
@@ -4415,9 +4417,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     params.petag = petag;
     params.progress_cb = progress_cb;
     params.progress_data = progress_data;
-    params.dpp = dpp;
 
-    return fetch_remote_obj(obj_ctx, source_zone, user_id,
+    return fetch_remote_obj(dpp, obj_ctx, source_zone, user_id,
                             dest_obj, src_obj, dest_bucket,
                             src_bucket, params);
   }

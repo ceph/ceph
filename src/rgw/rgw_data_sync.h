@@ -378,7 +378,7 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
 
   bool initialized;
 
-  int local_call(std::function<int(RGWCoroutinesManager&, RGWDataSyncCtx&)> f);
+  int local_call(const DoutPrefixProvider *dpp, std::function<int(RGWCoroutinesManager&, RGWDataSyncCtx&)> f);
 
 public:
   RGWRemoteDataLog(const DoutPrefixProvider *dpp,

@@ -13,7 +13,7 @@ namespace ceph {
 }
 
 namespace rgw { namespace sal {
-  class RGWRadosStore;
+  class RadosStore;
 } }
 
 static std::string SIP_BUCKET_OP_CREATE_OBJ    = "create_obj";
@@ -130,12 +130,12 @@ protected:
     return 0;
   }
 
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
   RGWBucketInfo bucket_info;
 
 public:
   SIProvider_BucketFull(CephContext *_cct,
-                        rgw::sal::RGWRadosStore *_store,
+                        rgw::sal::RadosStore *_store,
                         RGWBucketInfo& _bucket_info) : SIProvider_SingleStage(_cct,
 									     "bucket.full",
                                                                              _bucket_info.bucket.get_key(),
@@ -154,7 +154,7 @@ class RGWBucketCtl;
 class RGWSIPGen_BucketFull : public RGWSIPGenerator
 {
   CephContext *cct;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
 
   struct {
     RGWBucketCtl *bucket;
@@ -162,7 +162,7 @@ class RGWSIPGen_BucketFull : public RGWSIPGenerator
 
 public:
   RGWSIPGen_BucketFull(CephContext *_cct,
-                       rgw::sal::RGWRadosStore *_store,
+                       rgw::sal::RadosStore *_store,
                        RGWBucketCtl *_bucket_ctl) : cct(_cct),
                                                     store(_store) {
     ctl.bucket = _bucket_ctl;
@@ -195,13 +195,13 @@ protected:
   int do_trim(const DoutPrefixProvider *dpp,
               int shard_id, const std::string& marker) override;
 
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
 
   RGWBucketInfo bucket_info;
 
 public:
   SIProvider_BucketInc(CephContext *_cct,
-                       rgw::sal::RGWRadosStore *_store,
+                       rgw::sal::RadosStore *_store,
                        RGWBucketInfo& _bucket_info) : SIProvider_SingleStage(_cct,
 									     "bucket.inc",
                                                                              _bucket_info.bucket.get_key(),
@@ -218,7 +218,7 @@ public:
 class RGWSIPGen_BucketInc : public RGWSIPGenerator
 {
   CephContext *cct;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
 
   struct {
     RGWBucketCtl *bucket;
@@ -226,7 +226,7 @@ class RGWSIPGen_BucketInc : public RGWSIPGenerator
 
 public:
   RGWSIPGen_BucketInc(CephContext *_cct,
-                      rgw::sal::RGWRadosStore *_store,
+                      rgw::sal::RadosStore *_store,
                       RGWBucketCtl *_bucket_ctl) : cct(_cct),
                                                    store(_store) {
     ctl.bucket = _bucket_ctl;
@@ -239,7 +239,7 @@ public:
 class RGWSIPGen_BucketContainer : public RGWSIPGenerator
 {
   CephContext *cct;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RadosStore *store;
 
   struct {
     RGWBucketCtl *bucket;
@@ -247,7 +247,7 @@ class RGWSIPGen_BucketContainer : public RGWSIPGenerator
 
 public:
   RGWSIPGen_BucketContainer(CephContext *_cct,
-                            rgw::sal::RGWRadosStore *_store,
+                            rgw::sal::RadosStore *_store,
                             RGWBucketCtl *_bucket_ctl) : cct(_cct),
                                                          store(_store) {
     ctl.bucket = _bucket_ctl;

@@ -75,7 +75,7 @@ int SIProvider_DataFull::do_fetch(const DoutPrefixProvider *dpp,
 
   auto& m = marker;
 
-  int ret = meta.mgr->list_keys_init(section, m, &handle);
+  int ret = meta.mgr->list_keys_init(dpp, section, m, &handle);
   if (ret < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): list_keys_init() returned ret=" << ret << dendl;
     return ret;
@@ -85,7 +85,7 @@ int SIProvider_DataFull::do_fetch(const DoutPrefixProvider *dpp,
     std::list<RGWMetadataHandler::KeyInfo> entries;
     bool truncated;
 
-    ret = meta.mgr->list_keys_next(handle, max, entries,
+    ret = meta.mgr->list_keys_next(dpp, handle, max, entries,
                                    &truncated);
     if (ret < 0) {
       lderr(cct) << "ERROR: " << __func__ << "(): list_keys_init() returned ret=" << ret << dendl;
@@ -157,7 +157,7 @@ int SIProvider_DataInc::do_fetch(const DoutPrefixProvider *dpp,
   bool truncated;
   do {
     vector<rgw_data_change_log_entry> entries;
-    int ret = data_log->list_entries(shard_id, max, entries, m, &m, &truncated);
+    int ret = data_log->list_entries(dpp, shard_id, max, entries, m, &m, &truncated);
     if (ret == -ENOENT) {
       truncated = false;
       break;
@@ -202,7 +202,7 @@ int SIProvider_DataInc::do_get_cur_state(const DoutPrefixProvider *dpp,
                                          bool *disabled, optional_yield y) const
 {
   RGWDataChangesLogInfo info;
-  int ret = data_log->get_info(shard_id, &info);
+  int ret = data_log->get_info(dpp, shard_id, &info);
   if (ret == -ENOENT) {
     ret = 0;
   }
@@ -223,7 +223,7 @@ int SIProvider_DataInc::do_trim(const DoutPrefixProvider *dpp,
   int ret;
   // trim until -ENODATA
   do {
-    ret = data_log->trim_entries(shard_id, marker);
+    ret = data_log->trim_entries(dpp, shard_id, marker);
   } while (ret == 0);
   if (ret < 0 && ret != -ENODATA) {
     ldpp_dout(dpp, 20) << "ERROR: data_log->trim(): returned ret=" << ret << dendl;

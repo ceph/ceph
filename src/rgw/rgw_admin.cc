@@ -3451,10 +3451,10 @@ public:
 
   SIProviderCRMgr *create(std::optional<rgw_zone_id> zid) {
     if (!zid) {
-      return new SIProviderCRMgr_Local(dpp(),
-                                       static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker,
-                                       static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr,
-                                       static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->rados->get_async_processor());
+      return new SIProviderCRMgr_Local(cct,
+                                       static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker,
+                                       static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr,
+                                       static_cast<rgw::sal::RadosStore*>(store)->svc()->rados->get_async_processor());
     }
 
     auto c = ctl.remote->zone_conns(*zid);
@@ -3463,7 +3463,7 @@ public:
       return nullptr;
     }
 
-    return new SIProviderCRMgr_REST(dpp(), c->sip, &http_manager);
+    return new SIProviderCRMgr_REST(cct, c->sip, &http_manager);
   }
 };
 
@@ -3609,9 +3609,9 @@ int find_sip_provider(std::optional<string> opt_sip,
   }
 
   if (opt_zone_id) {
-    sip_rest_mgr.emplace(static_cast<rgw::sal::RGWRadosStore*>(store)->ctx(),
-                         static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->remote,
-                         static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_cr_registry());
+    sip_rest_mgr.emplace(static_cast<rgw::sal::RadosStore*>(store)->ctx(),
+                         static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
+                         static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_cr_registry());
     auto sip_type_handler = get_sip_type_handler(opt_sip, opt_sip_data_type);
     if (!sip_type_handler) {
       cerr << "ERROR: unknown sip type: " << (opt_sip ? *opt_sip : *opt_sip_data_type) << std::endl;
@@ -3625,9 +3625,9 @@ int find_sip_provider(std::optional<string> opt_sip,
                                          sip_type_handler));
   } else {
     if (opt_sip) {
-      *provider = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(dpp(), *opt_sip, opt_sip_instance);
+      *provider = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(dpp(), *opt_sip, opt_sip_instance);
     } else {
-      *provider = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip_by_type(dpp(),
+      *provider = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip_by_type(dpp(),
                                                          *opt_sip_data_type,
                                                          *opt_sip_stage_type,
                                                          opt_sip_instance);
@@ -6460,7 +6460,7 @@ int main(int argc, const char **argv)
         data_access_conf.secret = opt_secret;
 
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj, null_yield);
+	int ret = zonegroup.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -6489,8 +6489,8 @@ int main(int argc, const char **argv)
 
         }
 
-        zonegroup.post_process_params(null_yield);
-        ret = zonegroup.update(null_yield);
+        zonegroup.post_process_params(dpp(), null_yield);
+        ret = zonegroup.update(dpp(), null_yield);
         if (ret < 0) {
           cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -8254,14 +8254,14 @@ next:
       opt_source_object = opt_dest_object;
     }
 
-    std::unique_ptr<rgw::sal::RGWBucket> sal_dest_bucket;
+    std::unique_ptr<rgw::sal::Bucket> sal_dest_bucket;
     int ret = init_bucket(user.get(), *opt_dest_bucket, &sal_dest_bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    unique_ptr<rgw::sal::RGWBucket> sal_source_bucket;
+    unique_ptr<rgw::sal::Bucket> sal_source_bucket;
     ret = init_bucket(user.get(), *opt_source_bucket, &sal_source_bucket);
     if (ret < 0) {
       cerr << "WARNING: could not init source bucket: " << cpp_strerror(-ret) << std::endl;
@@ -8272,7 +8272,7 @@ next:
     rgw_obj dest_object(sal_dest_bucket->get_key(), *opt_dest_object);
 
     auto conn  = get_source_conn(store->ctx(),
-                                 static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->remote,
+                                 static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
                                  opt_source_zone_id,
                                  opt_endpoint,
                                  opt_region,
@@ -8290,13 +8290,13 @@ next:
       }
     }
 
-    rgw::sal::RGWRadosObject sal_source_object(static_cast<rgw::sal::RGWRadosStore*>(store), source_object.key, sal_source_bucket.get());
-    rgw::sal::RGWRadosObject sal_dest_object(static_cast<rgw::sal::RGWRadosStore*>(store), dest_object.key, sal_dest_bucket.get());
+    rgw::sal::RadosObject sal_source_object(static_cast<rgw::sal::RadosStore*>(store), source_object.key, sal_source_bucket.get());
+    rgw::sal::RadosObject sal_dest_object(static_cast<rgw::sal::RadosStore*>(store), dest_object.key, sal_dest_bucket.get());
 
     RGWRados::FetchRemoteObjParams params;
 
     RGWObjectCtx obj_ctx(store);
-    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->fetch_remote_obj(obj_ctx,
+    ret = static_cast<rgw::sal::RadosStore*>(store)->getRados()->fetch_remote_obj(dpp(), obj_ctx,
                                               conn,
                                               false, /* foreign source */
                                               *opt_dest_owner,
@@ -9792,7 +9792,7 @@ next:
       return -ret;
     }
     map<int, RGWSI_BILog_RADOS::Status> markers;
-    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->get_log_status(bucket->get_info(), shard_id,
+    ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->get_log_status(dpp(), bucket->get_info(), shard_id,
 						    &markers, null_yield);
     if (ret < 0) {
       cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
@@ -10631,8 +10631,8 @@ next:
 
  if (opt_cmd == OPT::SI_PROVIDER_LIST) {
    SIPCRMgr sip_cr_mgr(cct.get(),
-                       static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->remote,
-                       static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_cr_registry());
+                       static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
+                       static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_cr_registry());
 
    auto mgr = sip_cr_mgr.create(opt_zone_id);
    if (!mgr) {
@@ -10640,7 +10640,7 @@ next:
    }
 
    std::vector<string> providers;
-   int r = sip_cr_mgr.run(mgr->list_cr(&providers));
+   int r = sip_cr_mgr.run(dpp(), mgr->list_cr(&providers));
    if (r < 0) {
      lderr(cct) << "ERROR: failed to list providers: " << cpp_strerror(-r) << dendl;
      return -r;
@@ -10884,7 +10884,7 @@ next:
        return EINVAL;
      }
    }
-   auto marker_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
    if (!marker_handler) {
      cerr << "ERROR: can't get sip marker handler" << std::endl;
      return EIO;
@@ -10898,13 +10898,13 @@ next:
                                                *opt_marker,
                                                real_clock::now(),
                                                check_exists_flag};
-     r = marker_handler->set_marker(stage_id, shard_id, params, &result);
+     r = marker_handler->set_marker(dpp(), stage_id, shard_id, params, &result);
      if (r < 0) {
        cerr << "ERROR: failed to set target marker info: " << cpp_strerror(-r) << std::endl;
        return -r;
      }
    } else {
-     r = marker_handler->remove_target(*opt_target_id, stage_id, shard_id, &result);
+     r = marker_handler->remove_target(dpp(), *opt_target_id, stage_id, shard_id, &result);
      if (r < 0) {
        cerr << "ERROR: failed to remove target marker info: " << cpp_strerror(-r) << std::endl;
        return -r;
@@ -10958,7 +10958,7 @@ next:
        return EINVAL;
      }
    }
-   auto marker_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
    if (!marker_handler) {
      cerr << "ERROR: can't get sip marker handler" << std::endl;
      return EIO;
@@ -10966,7 +10966,7 @@ next:
 
    RGWSI_SIP_Marker::Handler::modify_result result;
 
-   r = marker_handler->set_min_source_pos(stage_id, shard_id, *opt_marker);
+   r = marker_handler->set_min_source_pos(dpp(), stage_id, shard_id, *opt_marker);
    if (r < 0) {
      cerr << "ERROR: failed to set target marker info: " << cpp_strerror(-r) << std::endl;
      return -r;
@@ -10974,7 +10974,7 @@ next:
 
    RGWSI_SIP_Marker::stage_shard_info sinfo;
 
-   r = marker_handler->get_info(stage_id, shard_id, &sinfo);
+   r = marker_handler->get_info(dpp(), stage_id, shard_id, &sinfo);
    if (r < 0) {
      cerr << "ERROR: failed to fetch marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
      return -r;
@@ -11025,7 +11025,7 @@ next:
        return EINVAL;
      }
    }
-   auto marker_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
    if (!marker_handler) {
      cerr << "ERROR: can't get sip marker handler" << std::endl;
      return EIO;
@@ -11034,7 +11034,7 @@ next:
    if (opt_get) {
      RGWSI_SIP_Marker::stage_shard_info sinfo;
 
-     r = marker_handler->get_info(stage_id, shard_id, &sinfo);
+     r = marker_handler->get_info(dpp(), stage_id, shard_id, &sinfo);
      if (r < 0) {
        cerr << "ERROR: failed to fetch marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
        return -r;
@@ -11052,7 +11052,7 @@ next:
        return EINVAL;
      }
 
-     r = marker_handler->remove_info(stage_id, shard_id);
+     r = marker_handler->remove_info(dpp(), stage_id, shard_id);
      if (r < 0 && r != -ENOENT) {
        cerr << "ERROR: failed to remove marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
        return -r;

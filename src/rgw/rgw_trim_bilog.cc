@@ -392,17 +392,17 @@ class BucketTrimShardCollectCR : public RGWShardCollectCR {
   std::shared_ptr<RGWTrimSIPMgr> sip_mgr;
  public:
   BucketTrimShardCollectCR(const DoutPrefixProvider *dpp,
-                           rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
+                           rgw::sal::RadosStore *store, const RGWBucketInfo& bucket_info,
                            const std::vector<std::optional<std::string> >& markers,
                            std::shared_ptr<RGWTrimSIPMgr> _sip_mgr)
     : RGWShardCollectCR(store->ctx(), MAX_CONCURRENT_SHARDS),
       dpp(dpp), store(store), bucket_info(bucket_info), markers(markers),
       sip_mgr(_sip_mgr)
   {}
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
-bool BucketTrimShardCollectCR::spawn_next()
+bool BucketTrimShardCollectCR::spawn_next(const DoutPrefixProvider *dpp)
 {
   while (i < markers.size()) {
     const auto& opt_marker = markers[i];
@@ -419,9 +419,9 @@ bool BucketTrimShardCollectCR::spawn_next()
     ldout(cct, 10) << "trimming bilog shard " << shard_id
       << " of " << bucket_info.bucket << " at marker " << marker << dendl;
     spawn(new RGWSerialCR(store->ctx(),
-                          { new RGWRadosBILogTrimCR(store, bucket_info, shard_id,
+                          { new RGWRadosBILogTrimCR(dpp, store, bucket_info, shard_id,
                                                     std::string{}, marker),
-                          sip_mgr->set_min_source_pos_cr(shard_id, marker) }),
+                          sip_mgr->set_min_source_pos_cr(dpp, shard_id, marker) }),
           false);
 
     return true;
@@ -646,10 +646,10 @@ class BucketTrimInstanceCollectCR : public RGWShardCollectCR {
       bucket(buckets.begin()), end(buckets.end()),
       dpp(dpp)
   {}
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
-bool BucketTrimInstanceCollectCR::spawn_next()
+bool BucketTrimInstanceCollectCR::spawn_next(const DoutPrefixProvider *dpp)
 {
   if (bucket == end) {
     return false;

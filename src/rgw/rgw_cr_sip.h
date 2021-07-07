@@ -71,7 +71,8 @@ public:
                                            const SIProvider::stage_id_t& sid, int shard_id,
                                            const RGWSI_SIP_Marker::SetParams& params) = 0;
 
-    virtual RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) {
+    virtual RGWCoroutine *get_next_stage_cr(const DoutPrefixProvider *dpp,
+                                            const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) {
       return new GetNextStageCR(this, sid, next_sid);
     }
   };
