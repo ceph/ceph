@@ -94,29 +94,33 @@ public:
 
   retired_extent_gate_t retired_extent_gate;
 
-  /// Creates empty transaction
-  TransactionRef create_transaction() {
+  /// Creates empty transaction by source
+  TransactionRef create_transaction(
+      Transaction::src_t src) {
     LOG_PREFIX(Cache::create_transaction);
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       false,
+      src,
       last_commit
     );
     retired_extent_gate.add_token(ret->retired_gate_token);
-    DEBUGT("created", *ret);
+    DEBUGT("created source={}", *ret, src);
     return ret;
   }
 
-  /// Creates empty weak transaction
-  TransactionRef create_weak_transaction() {
+  /// Creates empty weak transaction by source
+  TransactionRef create_weak_transaction(
+      Transaction::src_t src) {
     LOG_PREFIX(Cache::create_weak_transaction);
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       true,
+      src,
       last_commit
     );
     retired_extent_gate.add_token(ret->retired_gate_token);
-    DEBUGT("created", *ret);
+    DEBUGT("created source={}", *ret, src);
     return ret;
   }
 

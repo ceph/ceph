@@ -107,13 +107,15 @@ public:
   close_ertr::future<> close();
 
   /// Creates empty transaction
-  TransactionRef create_transaction() final {
-    return cache->create_transaction();
+  TransactionRef create_transaction(
+      Transaction::src_t src) final {
+    return cache->create_transaction(src);
   }
 
   /// Creates empty weak transaction
-  TransactionRef create_weak_transaction() {
-    return cache->create_weak_transaction();
+  TransactionRef create_weak_transaction(
+      Transaction::src_t src) {
+    return cache->create_weak_transaction(src);
   }
 
   /// Resets transaction

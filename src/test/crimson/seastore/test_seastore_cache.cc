@@ -62,7 +62,7 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   auto get_transaction() {
-    return cache.create_transaction();
+    return cache.create_transaction(Transaction::src_t::MUTATE);
   }
 
   template <typename T, typename... Args>
@@ -80,7 +80,7 @@ struct cache_test_t : public seastar_test_suite_t {
     ).safe_then(
       [this] {
 	return seastar::do_with(
-	  cache.create_transaction(),
+	  get_transaction(),
 	  [this](auto &transaction) {
 	    cache.init();
 	    return cache.mkfs(*transaction).safe_then(

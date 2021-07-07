@@ -103,7 +103,7 @@ struct rbm_test_t : public  seastar_test_suite_t,
   }
 
   auto alloc_extent(rbm_transaction &t, size_t size) {
-    auto tt = tm->create_transaction(); // dummy transaction
+    auto tt = create_mutate_transaction(); // dummy transaction
     auto extent = rbm_manager->find_free_block(*tt, size).unsafe_get0();
     if (!extent.empty()) {
       rbm_alloc_delta_t alloc_info {

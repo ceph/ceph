@@ -66,7 +66,7 @@ struct object_data_handler_test_t:
       bl).unsafe_get0();
   }
   void write(objaddr_t offset, extent_len_t len, char fill) {
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     write(*t, offset, len, fill);
     return submit_transaction(std::move(t));
   }
@@ -88,7 +88,7 @@ struct object_data_handler_test_t:
     size = offset;
   }
   void truncate(objaddr_t offset) {
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     truncate(*t, offset);
     return submit_transaction(std::move(t));
   }
@@ -112,7 +112,7 @@ struct object_data_handler_test_t:
     EXPECT_EQ(bl, known);
   }
   void read(objaddr_t offset, extent_len_t len) {
-    auto t = tm->create_transaction();
+    auto t = create_read_transaction();
     read(*t, offset, len);
   }
   void read_near(objaddr_t offset, extent_len_t len, extent_len_t fuzz) {

@@ -148,6 +148,18 @@ protected:
     );
   }
 
+  auto create_mutate_transaction() {
+    return tm->create_transaction(Transaction::src_t::MUTATE);
+  }
+
+  auto create_read_transaction() {
+    return tm->create_transaction(Transaction::src_t::READ);
+  }
+
+  auto create_weak_transaction() {
+    return tm->create_weak_transaction(Transaction::src_t::READ);
+  }
+
   auto submit_transaction_fut(Transaction &t) {
     return with_trans_intr(
       t,
