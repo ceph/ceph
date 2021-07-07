@@ -41,176 +41,16 @@ tps://github.com/ceph/ceph/pull/40813>`_, Ernesto Puerta, dependabot[bot])
 ph/pull/41714>`_, Andrew Schoen)
 * ceph_test_rados_api_service: more retries for servicemkap (`pr#41182 <https://github.com/ceph/ceph/pull/
 41182>`_, Sage Weil)
-    * refs/pull/41182/head:
-    ceph_test_rados_api_service: stop threads before asserting
-    ceph_test_rados_api_service: more retries for servicemkap
 * cephadm june final batch (`pr#42117 <https://github.com/ceph/ceph/pull/42117>`_, Kefu Chai, Sage Weil, Z
 ac Dover, Sebastian Wagner, Varsha Rao, Sandro Bonazzola, Juan Miguel Olmo Martínez)
 * cephadm: batch backport for May (2) (`pr#41219 <https://github.com/ceph/ceph/pull/41219>`_, Adam King, S
 age Weil, Zac Dover, Dennis Körner, jianglong01, Avan Thakkar, Juan Miguel Olmo Martínez)
-    * refs/pull/41219/head:
-    mgr/cephadm: misc. autopep8 changes
-    mgr/cephadm: add timeout when removing iscsi gateway.conf
-    mgr/cephadm: mock subprocess calls in tests that remove iscsi daemons
-    qa/tasks/cephadm_cases: longer wait for osd to start
-    mgr/cephadm: apply hostname/addr checks to 'orch host set-addr' too
-    mgr/cephadm: make 'host add' idempotent
-    mgr/cephadm: set host crush location based on HostSpec
-    python-common: add location property to HostSpec, + tests
-    doc/cephadm: rewriting "starting the upgrade"
-    doc/cephadm: rewrite "monitoring the upgrade"
-    doc/cephadm: rewrite "cancelling the upgrade"
-    doc/cephadm: rewrite "potential problems"
-    doc/cephadm: rewrite "using customized con..."
-    Add Rocky Linux to supported DISTRO_NAMES
-    mgr/cephadm: remove haproxy+keepalived container image from service spec
-    mgr/cephadm:  extend disk selector test which disk size may be decimal
-    mgr/cephadm: When device size contains the decimal, it can not match size exactly.
-    mgr/dashboard: fix HAProxy (now called ingress)
-    mgr/cephadm: Purge iscsi configuration from pool and ceph config
 * cephadm: june batch 1 (`pr#41684 <https://github.com/ceph/ceph/pull/41684>`_, Sage Weil, Paul Cuzner, Ju
 an Miguel Olmo Martínez, VasishtaShastry, Zac Dover, Sebastian Wagner, Adam King, Michael Fritch, Daniel
 Pivonka, sunilkumarn417)
-    * refs/pull/41684/head:
-    cephadm: improve is_container_running()
-    mgr/cephadm:fix alerts sent to wrong URL
-    mgr/cephadm: Warn about OSDs to be deleted manually when deleting an OSD service
-    doc: add ceph-nfs link
-    mgr: Fix orch osd rm stop help message
-    mgr/cephadm/inventory: do not try to resolve current mgr host
-    pybind/mgr/mgr_module: make get_mgr_ip() return mgr's IP from mgrmap
-    mgr/restful: use get_mgr_ip() instead of hostname
-    doc/cephadm: s/the the/the
-    doc/cephadm: enriching "daemon status"
-    doc/cephadm: enriching "Service Specification"
-    mgr/cephadm: Don't call _check_host without hosts
-    cephadm: stop passing --no-hosts to podman
-    mgr/nfs: use host.addr for backend IP where possible
-    mgr/cephadm: convert host addr if non-IP to IP
-    mgr/dashboard,prometheus: new method of getting mgr IP
-    doc/cephadm: remove any reference to the use of DNS or /etc/hosts
-    mgr/cephadm: use known host addr
-    mgr/cephadm: resolve IP at 'orch host add' time
-    doc/cephadm: enrich "service status"
-    doc/cephadm: recommend redeploying monitoring stack daemon after changing image
-    cephadm: clean-up error message
-    cephadm: raise an error when `--config` file is not found
-    cephadm: manage cephadm log with logrotated
-    mgr/cephadm: progress item for service apply
-    mgr: expose ceph.conf path to modules
-    common/config: track the path to the conf file we loaded
-    qa/tasks/cephfs/test_nfs: fix info test
-    doc/cephfs/fs-nfs-exports: document --ingress --virtual-ip
-    mgr/nfs: move ingress vs virtual_ip check to cluster interface
-    PendingReleaseNotes: clarify deprecated
-    PendingReleaseNotes: note breaking CLI changes
-    doc/cephadm/nfs: document nfs+ingress
-    qa/suites/rados/cephadm/smoke-roleless: test nfs, nfs + ingress
-    mgr/nfs: take --ingress argument to 'nfs cluster create'
-    mgr/cephadm: adjust debug output for device refresh
-    mgr/cephadm: ingress: fix log msg
-    mgr/cephadm: fix logging of config/placement errors
-    common/options: enable nfs module for new clusters
-    cephadm: --stop-signal=SIGTERM
-    mgr/orchestrator: default nfs pool, namespaces
-    mgr/cephadm: nfs: create pool if it doesn't yet exist
-    doc/cephadm/nfs: update
-    mgr/nfs: change 'nfs cluster info'
-    mgr/nfs: take optional virtual_ip for deploying ingress
-    mgr/nfs: remove 'nfs cluster update'
-    mgr/nfs: factor out ganesha pool creation
-    mgr/nfs: delete -> rm for CLI
-    mgr/nfs: add some type annotations
-    python-common: fix IngressSpec yaml dump
-    mgr/cephadm: ingress: remove eth0 default
-    qa/tasks/cephadm: allow mounting volumes in shell
-    cephadm: add -v arg to shell
-    qa/tasks/vip: add 'vip.exec' task
-    mgr/orchestrator: add --port arg to 'orch apply nfs'
-    mgr/cephadm: nfs: add purge
-    mgr/cephadm: ingress: support nfs
-    mgr/cephadm: do not reconfigure daemons on deleted services
-    mgr/cephadm: nfs: shell out to rados tool for conf creation
-    mgr/cephadm: nfs: add rank to grace file from mgr module
-    mgr/cephadm: nfs: bind ganesha to appropriate ip:port
-    mgr/cephadm: enable ranked daemons for nfs
-    mgr/cephadm: support creation of daemons with ranks
-    mgr/cephadm: make _plan show removed daemon names
-    mgr/cephadm/schedule: assign/map ranks
-    mgr/cephadm: add rank[_generation] properties
-    mgr/cephadm/inventory: store optional rank_map along with specs
-    mgr/cephadm: include service_name is generated DaemonDescription
-    mgr/orchestrator: include service_name in DaemonDescription dump
-    mgr/cephadm/inventory: fix deleted check
-    mgr/cephadm: simplify
-    mgr/cephadm/schedule: make placement shuffle deterministic
-    mgr/cephadm: document CephadmService flags
-    doc/cephadm: fix prompts in service-management.rst
-    qa/tasks/cephadm: Include bootstrap registry options for downstream
-    qa/suites/rados: include rook test in rados
 * cephadm: june batch 2 (`pr#41815 <https://github.com/ceph/ceph/pull/41815>`_, Sebastian Wagner, Daniel Pivonka, Zac Dover, Michael Fritch)
 * cephadm: june batch 3 (`pr#41913 <https://github.com/ceph/ceph/pull/41913>`_, Zac Dover, Adam King, Michael Fritch, Patrick Donnelly, Sage Weil, Juan Miguel Olmo Martínez, jianglong01)
 * cephadm: may batch 1 (`pr#41151 <https://github.com/ceph/ceph/pull/41151>`_, Juan Miguel Olmo Martínez Sage Weil, Zac Dover, Daniel Pivonka, Adam King, Stanislav Datskevych, jianglong01, Kefu Chai, Deepika Upadhyay, Joao Eduardo Luis)
-    * refs/pull/41151/head:
-    mgr/cephadm: ceph-volume verbose only when fails
-    qa/workunits/cephadm/test_cephadm: test zap-osds
-    cephadm: add --zap-osds argument to rm_cluster
-    cephadm: implement zap-osds --fsid ... command
-    doc/cephadm: add podman version note to install
-    mgr/cephadm: check hostname resolution before adding host
-    cephadm: provide a way to checkhost connection without /etc/hosts passed the shell
-    doc/cephadm: remove /etc/hosts from list of hostname resoltion methods
-    qa/suites/rados/cephadm/smoke-roleless: test client-keyring
-    qa/tasks/cephadm.py: adjust client.admin key mode; place on all hosts
-    cephadm: distribute client.admin keyring+conf to label:_admin on bootstrap
-    doc/cephadm: document the default 'admin' label
-    mgr/cephadm: 'ceph orch client-keyring ...' commands to manage keyring files
-    mgr/cephadm: reimplement ceph.conf pushing
-    mgr/cephadm: use _write_remote_file for ceph.conf
-    mgr/cephadm: _write_remote_file helper
-    mgr/cephadm: add placementspec for which hosts get ceph.conf
-    mgr/cephadm: skip ok-to-stop for mons in upgrade if < 3 mons
-    mgr/cephadm: don't allow upgrade start with less than 2 mgrs
-    cephadm: re-assimilate user provided conf after mgr created
-    cephadm: allow several public networks be matched
-    mgr/cephadm: The command of 'ceph orch daemon restart mgr.xxx' may case mgr daemon loop to restart
-    doc/cephadm: add a single word
-    doc/cephadm: adding "device" to a sentence
-    doc/cephadm: rewrite "nfs.rst"
-    mgr/cephadm: s/_hosts_with_daemon_inventory/_schedulable_hosts/
-    mgr/cephadm: don't remove daemons from hosts in maintenance or offline  mode
-    mgr/cephadm: default status for daemons on maintenance hosts to stopped
-    qa/tasks/cephadm: fix ctx archive check for teuthology
-    python-common: use OrderedDict instead of Set to remove duplicates from host labels list
-    mgr/cephadm: less noise about osd specs
-    mgr/cephadm: kick serve loop when adding/removing labels
-    mgr/cephadm: do not place osds on _no_schedule hosts
-    doc/cephadm: document _no_schedule label
-    mgr/cephadm: fix 'orch ls' count to reflect schedulable hosts
-    mgr/cephadm: do not schedule on _no_schedule hosts
-    doc/cephadm: osd.rst -- removing colons
-    doc/cephadm: osd: rewrite "additional opts"
-    doc/cephadm: rewrite "advanced osd s. specs"
-    doc/cephadm: rewrite "delcarative state" in osd.rst
-    mgr/MgrStandby: fix config observer
-    mgr/MgrStandby: respawn if mgr_standby_modules changes
-    qa/tasks/mgr/test_dashboard: skip test_standby if mgr_standby_modules=false
-    qa/suites/rados/cephadm/smoke-*: use cephadm.wait_for_service
-    common/options: add osd_memory_target_autotune
-    mgr/cephadm: report memory usage, request (limit) in 'orch ps'
-    doc/cephadm/host-management: document _admin group
-    mgr/orchestrator: fix help formatting
-    mgr/cephadm/schedule: fix filter message
-    mgr/cephadm: Use `cephfs-mirror` caps profile
-* cephfs-mirror backports (`issue#50266 <http://tracker.ceph.com/issues/50266>`_, `issue#49939 <http://tracker.ceph.com/issues/49939>`_, `issue#50581 <http://tracker.ceph.com/issues/50581>`_, `issue#50224 <http://tracker.ceph.com/issues/50224>`_, `issue#50035 <http://tracker.ceph.com/issues/50035>`_, `issue#50523 <http://tracker.ceph.com/issues/50523>`_, `issue#50298 <http://tracker.ceph.com/issues/50298>`_, `issue#50442 <http://tracker.ceph.com/issues/50442>`_, `issue#50229 <http://tracker.ceph.com/issues/50229>`_, `pr#41475 <https://github.com/ceph/ceph/pull/41475>`_, Venky Shankar, Lucian Petrut)
-* cephfs-mirror: backports (`issue#51204 <http://tracker.ceph.com/issues/51204>`_, `issue#50867 <http://tracker.ceph.com/issues/50867>`_, `issue#50447 <http://tracker.ceph.com/issues/50447>`_, `pr#41947 <https://github.com/ceph/ceph/pull/41947>`_, Venky Shankar)
-* cephfs-mirror: reopen logs on SIGHUP (`issue#51413 <http://tracker.ceph.com/issues/51413>`_, `issue#51318 <http://tracker.ceph.com/issues/51318>`_, `pr#42097 <https://github.com/ceph/ceph/pull/42097>`_, Venky Shankar)
-* cephfs-top: self-adapt the display according the window size (`pr#41053 <https://github.com/ceph/ceph/pull/41053>`_, Xiubo Li)
-    * refs/pull/41053/head:
-    cephfs-top: set the cursor to be invisible
-    cephfs-top: self-adapt the display according the window size
-    cephfs-top: use the default window object from curses.wrapper()
-    cephfs-top: improve the output
 * client: Fix executeable access check for the root user (`pr#41294 <https://github.com/ceph/ceph/pull/41294>`_, Kotresh HR)
 * client: fix the opened inodes counter increasing (`pr#40685 <https://github.com/ceph/ceph/pull/40685>`_, Xiubo Li)
 * client: make Inode to inherit from RefCountedObject (`pr#41052 <https://github.com/ceph/ceph/pull/41052>`_, Xiubo Li)
@@ -234,9 +74,6 @@ Pivonka, sunilkumarn417)
 * mds: MDSLog::journaler pointer maybe crash with use-after-free (`pr#42060 <https://github.com/ceph/ceph/pull/42060>`_, Xiubo Li)
 * mds: avoid journaling overhead for setxattr("ceph.dir.subvolume") for no-op case (`pr#41995 <https://github.com/ceph/ceph/pull/41995>`_, Patrick Donnelly)
 * mds: do not assert when receiving a unknow metric type (`pr#41596 <https://github.com/ceph/ceph/pull/41596>`_, Patrick Donnelly, Xiubo Li)
-    * refs/pull/41596/head:
-    mds: do not infinitely recursively print a metric
-    mds: do not assert when receiving a unknow metric type
 * mds: journal recovery thread is possibly asserting with mds_lock not locked (`pr#42058 <https://github.com/ceph/ceph/pull/42058>`_, Xiubo Li)
 * mds: mkdir on ephemerally pinned directory sometimes blocked on journal flush (`pr#42071 <https://github.com/ceph/ceph/pull/42071>`_, Xiubo Li)
 * mds: scrub error on inode 0x1 (`pr#41685 <https://github.com/ceph/ceph/pull/41685>`_, Milind Changire)
@@ -291,26 +128,6 @@ Pivonka, sunilkumarn417)
 * mon/OSDMonitor: drop stale failure_info even if can_mark_down() (`pr#41982 <https://github.com/ceph/ceph/pull/41982>`_, Kefu Chai)
 * mon: load stashed map before mkfs monmap (`pr#41768 <https://github.com/ceph/ceph/pull/41768>`_, Dan van der Ster)
 * nfs backport May (`pr#41389 <https://github.com/ceph/ceph/pull/41389>`_, Varsha Rao)
-    * refs/pull/41389/head:
-    qa/tasks/nfs: add test to check if cmds fail on not passing required arguments
-    mgr/nfs: fix flake8 missing whitespace around parameter equals error
-    mgr/nfs: annotate _cmd_nfs_* methods return value
-    doc/cephfs/nfs: add section about ganesha logs
-    doc/cephfs/nfs: Replace volume/nfs with nfs
-    doc/cephfs/nfs: add note about export management with volume/nfs interface only
-    spec: add nfs to spec file
-    mgr/nfs: Don't enable nfs module by default
-    mgr/nfs: check for invalid chars in cluster id
-    mgr/nfs: Use CLICommand wrapper
-    mgr/nfs: reorg nfs files
-    mgr/nfs: Check if transport or protocol are list instance
-    mgr/nfs: reorg cluster class and common helper methods
-    mgr/nfs: move common export helper methods to ExportMgr class
-    mgr/nfs: move validate methods into new ValidateExport class
-    mgr/nfs: add custom exception module
-    mgr/nfs: create new module for export utils
-    mgr/nfs: rename fs dir to export
-    mgr/volumes/nfs: Move nfs code out of volumes plugin
 * os/FileStore: fix to handle readdir error correctly (`pr#41236 <https://github.com/ceph/ceph/pull/41236>`_, Misono Tomohiro)
 * os/bluestore: fix unexpected ENOSPC in Avl/Hybrid allocators (`pr#41655 <https://github.com/ceph/ceph/pull/41655>`_, Igor Fedotov, Neha Ojha)
 * os/bluestore: introduce multithreading sync for bluestore's repairer (`pr#41752 <https://github.com/ceph/ceph/pull/41752>`_, Igor Fedotov)
@@ -325,15 +142,11 @@ Pivonka, sunilkumarn417)
 * osd: fix scrub reschedule bug (`pr#41971 <https://github.com/ceph/ceph/pull/41971>`_, wencong wan)
 * pacific: client: abort after MDS blocklist (`issue#50530 <http://tracker.ceph.com/issues/50530>`_, `pr#42070 <https://github.com/ceph/ceph/pull/42070>`_, Venky Shankar)
 * pybind/ceph_volume_client: use cephfs mkdirs api (`pr#42159 <https://github.com/ceph/ceph/pull/42159>`_, Patrick Donnelly)
-    * refs/pull/42159/head:
-    pybind/ceph_volume_client: use cephfs mkdirs api
 * pybind/mgr/devicehealth: scrape-health-metrics command accidentally renamed to scrape-daemon-health-metrics (`pr#41089 <https://github.com/ceph/ceph/pull/41089>`_, Patrick Donnelly)
 * pybind/mgr/progress: Disregard unreported pgs (`pr#41872 <https://github.com/ceph/ceph/pull/41872>`_, Kamoltat)
 * pybind/mgr/snap_schedule: Invalid command: Unexpected argument 'fs=cephfs' (`pr#42064 <https://github.com/ceph/ceph/pull/42064>`_, Patrick Donnelly)
 * qa/config/rados: add dispatch delay testing params (`pr#41136 <https://github.com/ceph/ceph/pull/41136>`_, Deepika Upadhyay)
 * qa/distros/podman: preserve registries.conf (`pr#40729 <https://github.com/ceph/ceph/pull/40729>`_, Sage Weil)
-    * refs/pull/40729/head:
-    qa/distros/podman: preserve registries.conf
 * qa/suites/rados/standalone: remove mon_election symlink (`pr#41212 <https://github.com/ceph/ceph/pull/41212>`_, Neha Ojha)
 * qa/suites/rados: add simultaneous scrubs to the thrasher (`pr#42120 <https://github.com/ceph/ceph/pull/42120>`_, Ronen Friedman)
 * qa/tasks/qemu: precise repos have been archived (`pr#41643 <https://github.com/ceph/ceph/pull/41643>`_, Ilya Dryomov)
@@ -345,12 +158,8 @@ Pivonka, sunilkumarn417)
 * qa: AttributeError: 'RemoteProcess' object has no attribute 'split' (`pr#41811 <https://github.com/ceph/ceph/pull/41811>`_, Patrick Donnelly)
 * qa: add async dirops testing (`pr#41823 <https://github.com/ceph/ceph/pull/41823>`_, Patrick Donnelly)
 * qa: check mounts attribute in ctx (`pr#40634 <https://github.com/ceph/ceph/pull/40634>`_, Jos Collin)
-    * refs/pull/40634/head:
-    qa: check mounts attribute in ctx
 * qa: convert some legacy Filesystem.rados calls (`pr#40996 <https://github.com/ceph/ceph/pull/40996>`_, Patrick Donnelly)
 * qa: drop the distro~HEAD directory from the fs suite (`pr#41169 <https://github.com/ceph/ceph/pull/41169>`_, Radoslaw Zarzynski)
-    * refs/pull/41169/head:
-    pacific: qa: drop the distro~HEAD directory from the fs suite.
 * qa: fs:bugs does not specify distro (`pr#42063 <https://github.com/ceph/ceph/pull/42063>`_, Patrick Donnelly)
 elly)
 * qa: fs:upgrade uses teuthology default distro (`pr#42067 <https://github.com/ceph/ceph/pull/42067>`_, Patrick Donnelly)
@@ -371,8 +180,6 @@ elly)
 * systemd: remove `ProtectClock=true` for `ceph-osd@.service` (`pr#41232 <https://github.com/ceph/ceph/pull/41232>`_, Wong Hoi Sing Edison)
 * test/librbd: use really invalid domain (`pr#42010 <https://github.com/ceph/ceph/pull/42010>`_, Mykola Golub)
 * win32\*.sh: disable libcephsqlite when targeting Windows (`pr#40557 <https://github.com/ceph/ceph/pull/40557>`_, Lucian Petrut)
-    * refs/pull/40557/head:
-    win32*.sh: disable libcephsqlite when targeting Windows
 
 v16.2.4 Pacific
 ===============
