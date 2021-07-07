@@ -16,7 +16,10 @@
 namespace crimson::os::seastore {
 
 Cache::Cache(SegmentManager &segment_manager) :
-  segment_manager(segment_manager) {}
+  segment_manager(segment_manager)
+{
+  register_metrics();
+}
 
 Cache::~Cache()
 {
@@ -78,6 +81,62 @@ void Cache::dump_contents()
     DEBUG("live {}", i);
   }
   DEBUG("exit");
+}
+
+void Cache::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  using src_t = Transaction::src_t;
+
+  auto src_label = sm::label("src");
+  std::map<src_t, sm::label_instance> labels_by_src {
+    {src_t::MUTATE,  src_label("MUTATE")},
+    {src_t::READ,    src_label("READ")},
+    {src_t::INIT,    src_label("INIT")},
+    {src_t::CLEANER, src_label("CLEANER")},
+  };
+
+  /*
+   * trans_created
+   */
+  stats.trans_created_by_src.fill(0);
+  auto register_trans_created = [this, &labels_by_src](src_t src) {
+    std::ostringstream oss_desc;
+    oss_desc << "total number of transaction created (src="
+             << src << ")";
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "trans_created",
+          get_counter(stats.trans_created_by_src, src),
+          sm::description(oss_desc.str()),
+          {labels_by_src.find(src)->second}
+        ),
+      }
+    );
+  };
+  for (auto& [src, label] : labels_by_src) {
+    register_trans_created(src);
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "trans_created",
+        [this] {
+          uint64_t total = 0;
+          for (auto& v : stats.trans_created_by_src) {
+            total += v;
+          }
+          return total;
+        },
+        sm::description("total number of transaction created"),
+        {src_label("ALL")}
+      ),
+    }
+  );
 }
 
 void Cache::add_extent(CachedExtentRef ref)

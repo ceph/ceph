@@ -201,6 +201,13 @@ public:
     to_release = NULL_SEG_ID;
     retired_gate_token.reset(initiated_after);
     conflicted = false;
+    if (!has_reset) {
+      has_reset = true;
+    }
+  }
+
+  bool did_reset() const {
+    return has_reset;
   }
 
 private:
@@ -231,6 +238,8 @@ private:
   retired_extent_gate_t::token_t retired_gate_token;
 
   bool conflicted = false;
+
+  bool has_reset = false;
 
   OrderingHandle handle;
 
@@ -322,5 +331,17 @@ auto with_trans_intr(Transaction &t, F &&f, Args&&... args) {
 
 template <typename T>
 using with_trans_ertr = typename T::base_ertr::template extend<crimson::ct_error::eagain>;
+
+}
+
+namespace std {
+
+template<>
+struct hash<::crimson::os::seastore::Transaction::src_t> {
+  std::size_t operator()(
+      const ::crimson::os::seastore::Transaction::src_t& src) const noexcept {
+    return std::hash<uint8_t>{}((uint8_t)src);
+  }
+};
 
 }
