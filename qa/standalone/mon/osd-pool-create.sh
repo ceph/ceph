@@ -48,30 +48,30 @@ function TEST_erasure_crush_rule() {
     local dir=$1
     run_mon $dir a || return 1
     #
-    # choose the crush ruleset used with an erasure coded pool
+    # choose the crush rule used with an erasure coded pool
     #
-    local crush_ruleset=myruleset
-    ! ceph osd crush rule ls | grep $crush_ruleset || return 1
-    ceph osd crush rule create-erasure $crush_ruleset
-    ceph osd crush rule ls | grep $crush_ruleset
+    local crush_rule=myrule
+    ! ceph osd crush rule ls | grep $crush_rule || return 1
+    ceph osd crush rule create-erasure $crush_rule
+    ceph osd crush rule ls | grep $crush_rule
     local poolname
     poolname=pool_erasure1
     ! ceph --format json osd dump | grep '"crush_rule":1' || return 1
-    ceph osd pool create $poolname 12 12 erasure default $crush_ruleset
+    ceph osd pool create $poolname 12 12 erasure default $crush_rule
     ceph --format json osd dump | grep '"crush_rule":1' || return 1
     #
-    # a crush ruleset by the name of the pool is implicitly created
+    # a crush rule by the name of the pool is implicitly created
     #
     poolname=pool_erasure2
     ceph osd erasure-code-profile set myprofile
     ceph osd pool create $poolname 12 12 erasure myprofile
     ceph osd crush rule ls | grep $poolname || return 1
     #
-    # a non existent crush ruleset given in argument is an error
+    # a non existent crush rule given in argument is an error
     # http://tracker.ceph.com/issues/9304
     #
     poolname=pool_erasure3
-    ! ceph osd pool create $poolname 12 12 erasure myprofile INVALIDRULESET || return 1
+    ! ceph osd pool create $poolname 12 12 erasure myprofile INVALIDRULE || return 1
 }
 
 function TEST_erasure_code_profile_default() {
@@ -131,21 +131,21 @@ function TEST_erasure_code_pool() {
         grep 'cannot change to type replicated' || return 1
 }
 
-function TEST_replicated_pool_with_ruleset() {
+function TEST_replicated_pool_with_rule() {
     local dir=$1
     run_mon $dir a
-    local ruleset=ruleset0
+    local rule=rule0
     local root=host1
     ceph osd crush add-bucket $root host
     local failure_domain=osd
     local poolname=mypool
-    ceph osd crush rule create-simple $ruleset $root $failure_domain || return 1
-    ceph osd crush rule ls | grep $ruleset
-    ceph osd pool create $poolname 12 12 replicated $ruleset || return 1
-    rule_id=`ceph osd crush rule dump $ruleset | grep "rule_id" | awk -F[' ':,] '{print $4}'`
+    ceph osd crush rule create-simple $rule $root $failure_domain || return 1
+    ceph osd crush rule ls | grep $rule
+    ceph osd pool create $poolname 12 12 replicated $rule || return 1
+    rule_id=`ceph osd crush rule dump $rule | grep "rule_id" | awk -F[' ':,] '{print $4}'`
     ceph osd pool get $poolname crush_rule  2>&1 | \
         grep "crush_rule: $rule_id" || return 1
-    #non-existent crush ruleset
+    #non-existent crush rule
     ceph osd pool create newpool 12 12 replicated non-existent 2>&1 | \
         grep "doesn't exist" || return 1
 }
