@@ -306,7 +306,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     auto& zname = ziter.second;
 
     auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(this, sync_modules_svc, bucket_sync_svc, zid);
-    ret = zone_handler->init(y);
+    ret = zone_handler->init(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: could not initialize zone policy handler for zone=" << zname << dendl;
       return ret;

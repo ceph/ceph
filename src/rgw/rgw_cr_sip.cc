@@ -8,10 +8,10 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-int SIProviderCRMgr::Instance::GetNextStageCR::operate()
+int SIProviderCRMgr::Instance::GetNextStageCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
-    yield call(mgri->get_stages_cr(&stages));
+    yield call(mgri->get_stages_cr(dpp, &stages));
     if (retcode < 0) {
       return set_cr_error(retcode);
     }
@@ -51,7 +51,7 @@ class RGWSafeRetAsyncCR : public RGWCoroutine {
 
     Action(RGWSafeRetAsyncCR *_caller) : caller(_caller) {}
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       return caller->cb(&ret);
     }
   };
@@ -66,7 +66,7 @@ public:
                                async_rados(_async_rados),
                                pret(_pret),
                                cb(_cb) {}
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       action = make_shared<Action>(this);
 
@@ -100,7 +100,7 @@ class RGWAsyncLambdaCR : public RGWCoroutine {
 
     Action(RGWAsyncLambdaCR *_caller) : caller(_caller) {}
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       return caller->cb();
     }
   };
@@ -114,7 +114,7 @@ public:
                                async_rados(_async_rados),
                                cb(_cb) {}
 
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       action = make_shared<Action>(this);
 
@@ -147,7 +147,7 @@ class RGWSafeMultiRetAsyncCR : public RGWCoroutine
 
     Action(RGWSafeMultiRetAsyncCR *_caller) : caller(_caller) {}
 
-    int operate() {
+    int operate(const DoutPrefixProvider *dpp) {
       return call_cb(ret,
                      std::index_sequence_for<Ts...>());
     }
@@ -169,7 +169,7 @@ public:
                                                        pret(_pret...),
                                                        cb(_cb) {}
 
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       action = make_shared<Action>(this);
 
@@ -211,7 +211,7 @@ public:
 
 SIProviderCRMgrInstance_Local *SIProviderCRMgr_Local::alloc_instance(SIProviderRef& _provider)
 {
-  return new SIProviderCRMgrInstance_Local(this, _provider);
+  return new SIProviderCRMgrInstance_Local(cct, this, _provider);
 }
 
 RGWCoroutine *SIProviderCRMgr_Local::list_cr(std::vector<std::string> *providers)
@@ -220,13 +220,15 @@ RGWCoroutine *SIProviderCRMgr_Local::list_cr(std::vector<std::string> *providers
    return nullptr;
 }
 
-SIProviderCRMgrInstance_Local::SIProviderCRMgrInstance_Local(SIProviderCRMgr_Local *_mgr,
-                                                             SIProviderRef& _provider) : SIProviderCRMgr::Instance(_mgr->get_dpp()),
+SIProviderCRMgrInstance_Local::SIProviderCRMgrInstance_Local(CephContext *_cct,
+                                                             SIProviderCRMgr_Local *_mgr,
+                                                             SIProviderRef& _provider) : SIProviderCRMgr::Instance(_cct),
                                                                          mgr(_mgr),
                                                                          provider(_provider) {
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
+RGWCoroutine *SIProviderCRMgrInstance_Local::get_stages_cr(const DoutPrefixProvider *dpp,
+                                                           std::vector<SIProvider::stage_id_t> *stages)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<std::vector<SIProvider::stage_id_t> >(cct,
@@ -238,7 +240,8 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::get_stages_cr(std::vector<SIProvide
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info)
+RGWCoroutine *SIProviderCRMgrInstance_Local::get_stage_info_cr(const DoutPrefixProvider *dpp,
+                                                               const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<SIProvider::StageInfo>(cct,
@@ -249,7 +252,7 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::get_stage_info_cr(const SIProvider:
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::init_cr()
+RGWCoroutine *SIProviderCRMgrInstance_Local::init_cr(const DoutPrefixProvider *dpp)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<SIProvider::Info>(cct,
@@ -261,7 +264,8 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::init_cr()
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)
+RGWCoroutine *SIProviderCRMgrInstance_Local::fetch_cr(const DoutPrefixProvider *dpp,
+                                                      const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<SIProvider::fetch_result>(cct,
@@ -272,7 +276,8 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::fetch_cr(const SIProvider::stage_id
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos)
+RGWCoroutine *SIProviderCRMgrInstance_Local::get_start_marker_cr(const DoutPrefixProvider *dpp,
+                                                                 const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeRetAsyncCR<rgw_sip_pos>(cct,
@@ -283,7 +288,8 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::get_start_marker_cr(const SIProvide
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled)
+RGWCoroutine *SIProviderCRMgrInstance_Local::get_cur_state_cr(const DoutPrefixProvider *dpp,
+                                                              const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWSafeMultiRetAsyncCR<rgw_sip_pos, bool>(cct,
@@ -295,7 +301,8 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::get_cur_state_cr(const SIProvider::
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const string& marker)
+RGWCoroutine *SIProviderCRMgrInstance_Local::trim_cr(const DoutPrefixProvider *dpp,
+                                                     const SIProvider::stage_id_t& sid, int shard_id, const string& marker)
 {
   auto pvd = provider; /* capture another reference */
   return new RGWAsyncLambdaCR<void>(cct,
@@ -305,7 +312,8 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::trim_cr(const SIProvider::stage_id_
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+RGWCoroutine *SIProviderCRMgrInstance_Local::update_marker_cr(const DoutPrefixProvider *dpp,
+                                                              const SIProvider::stage_id_t& sid, int shard_id,
                                                       const RGWSI_SIP_Marker::SetParams& params)
 {
   auto pvd = provider; /* capture another reference */
@@ -320,7 +328,7 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::update_marker_cr(const SIProvider::
 
                                  RGWSI_SIP_Marker::Handler::modify_result result;
 
-                                 int r = marker_handler->set_marker(sid, shard_id, params, &result);
+                                 int r = marker_handler->set_marker(dpp, sid, shard_id, params, &result);
                                  if (r < 0) {
                                    ldpp_dout(dpp, 0) << "ERROR: failed to set target marker info: r=" << r << dendl;
                                    return r;
@@ -329,7 +337,8 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::update_marker_cr(const SIProvider::
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::set_min_source_pos_cr(const SIProvider::stage_id_t& sid, int shard_id,
+RGWCoroutine *SIProviderCRMgrInstance_Local::set_min_source_pos_cr(const DoutPrefixProvider *dpp,
+                                                                   const SIProvider::stage_id_t& sid, int shard_id,
                                                            const string& pos)
 {
   auto pvd = provider; /* capture another reference */
@@ -342,7 +351,7 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::set_min_source_pos_cr(const SIProvi
                                    return -EIO;
                                  }
 
-                                 int r = marker_handler->set_min_source_pos(sid, shard_id, pos);
+                                 int r = marker_handler->set_min_source_pos(dpp, sid, shard_id, pos);
                                  if (r < 0) {
                                    ldpp_dout(dpp, 0) << "ERROR: failed to set marker min source pos info: r=" << r << dendl;
                                    return r;
@@ -351,7 +360,8 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::set_min_source_pos_cr(const SIProvi
                                });
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_Local::get_marker_info_cr(RGWSI_SIP_Marker::HandlerRef& marker_handler,
+RGWCoroutine *SIProviderCRMgrInstance_Local::get_marker_info_cr(const DoutPrefixProvider *dpp,
+                                                                RGWSI_SIP_Marker::HandlerRef& marker_handler,
                                                         const SIProvider::stage_id_t& sid, int shard_id,
                                                         RGWSI_SIP_Marker::stage_shard_info *info)
 {
@@ -360,7 +370,7 @@ RGWCoroutine *SIProviderCRMgrInstance_Local::get_marker_info_cr(RGWSI_SIP_Marker
                                mgr->async_rados,
                                info,
                                [=](RGWSI_SIP_Marker::stage_shard_info *_info) {
-                                 return mh->get_info(sid, shard_id, _info);
+                                 return mh->get_info(dpp, sid, shard_id, _info);
                                });
 }
 
@@ -368,7 +378,8 @@ SIProviderCRMgrInstance_REST *SIProviderCRMgr_REST::alloc_instance(const string&
                                                                    SIProvider::TypeHandlerProvider *type_provider,
                                                                    std::optional<string> instance)
 {
-  return new SIProviderCRMgrInstance_REST(this,
+  return new SIProviderCRMgrInstance_REST(cct,
+                                          this,
                                           remote_provider_name,
                                           type_provider,
                                           instance);
@@ -379,7 +390,8 @@ SIProviderCRMgrInstance_REST *SIProviderCRMgr_REST::alloc_instance(const string&
                                                                    SIProvider::TypeHandlerProvider *type_provider,
                                                                    std::optional<string> instance)
 {
-  return new SIProviderCRMgrInstance_REST(this,
+  return new SIProviderCRMgrInstance_REST(cct,
+                                          this,
                                           data_type,
                                           stage_type,
                                           type_provider,
@@ -400,7 +412,7 @@ struct SIProviderRESTCRs {
       path = mgr->path_prefix;
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           rgw_http_param_pair pairs[] = { { nullptr, nullptr } };
@@ -435,7 +447,7 @@ struct SIProviderRESTCRs {
       path = mgri->path_prefix;
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           string stage_type_str;
@@ -486,7 +498,7 @@ struct SIProviderRESTCRs {
                                                                 result(_result) {
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield call(new GetStagesInfoCR(mgri, &info));
         if (retcode < 0) {
@@ -522,7 +534,7 @@ struct SIProviderRESTCRs {
                                                     sinfo(_sinfo) {
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield call(new GetStagesInfoCR(mgri, &info));
         if (retcode < 0) {
@@ -536,7 +548,7 @@ struct SIProviderRESTCRs {
           }
         }
 
-        ldpp_dout(mgri->get_dpp(), 10) << "GetStageInfoCR(): sid not found: provider=" << mgri->remote_provider_name << " sid=" << sid << dendl;
+        ldpp_dout(dpp, 10) << "GetStageInfoCR(): sid not found: provider=" << mgri->remote_provider_name << " sid=" << sid << dendl;
 
         return set_cr_error(-ENOENT);
       }
@@ -573,7 +585,7 @@ struct SIProviderRESTCRs {
       path = mgri->path_prefix;
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           const char *instance_key = (mgri->instance ? "instance" : "");
@@ -603,19 +615,19 @@ struct SIProviderRESTCRs {
 
         JSONParser p;
         if (!p.parse(bl.c_str(), bl.length())) {
-          ldpp_dout(mgri->get_dpp(), 0) << "ERROR: failed to parse fetch result: bl=" << bl.to_str() << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: failed to parse fetch result: bl=" << bl.to_str() << dendl;
           return set_cr_error(-EIO);
         }
 
         auto type_handler = mgri->type_provider->get_type_handler();
         if (!type_handler) {
-          ldpp_dout(mgri->get_dpp(), 0) << "ERROR: " << __func__ << "(): get_type_provider for sid=" << sid << " is null, likely a bug" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): get_type_provider for sid=" << sid << " is null, likely a bug" << dendl;
           return set_cr_error(-EIO);
         }
 
         int r = type_handler->decode_json_results(sid, &p, result);
         if (r < 0) {
-          ldpp_dout(mgri->get_dpp(), 0) << "ERROR: failed to decode fetch result: bl=" << bl.to_str() << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: failed to decode fetch result: bl=" << bl.to_str() << dendl;
           return set_cr_error(r);
         }
 
@@ -672,7 +684,7 @@ struct SIProviderRESTCRs {
       path = mgri->path_prefix;
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           const char *instance_key = (mgri->instance ? "instance" : "");
@@ -735,7 +747,7 @@ struct SIProviderRESTCRs {
       path = mgri->path_prefix;
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           const char *instance_key = (mgri->instance ? "instance" : "");
@@ -786,7 +798,7 @@ struct SIProviderRESTCRs {
       path = mgri->path_prefix;
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           const char *instance_key = (mgri->instance ? "instance" : "");
@@ -824,46 +836,53 @@ RGWCoroutine *SIProviderCRMgr_REST::list_cr(std::vector<std::string> *providers)
    return new SIProviderRESTCRs::ListProvidersCR(this, providers);
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_REST::init_cr()
+RGWCoroutine *SIProviderCRMgrInstance_REST::init_cr(const DoutPrefixProvider *dpp)
 {
   return new SIProviderRESTCRs::GetStagesInfoCR(this, &info);
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_REST::get_stages_cr(std::vector<SIProvider::stage_id_t> *stages)
+RGWCoroutine *SIProviderCRMgrInstance_REST::get_stages_cr(const DoutPrefixProvider *dpp,
+                                                          std::vector<SIProvider::stage_id_t> *stages)
 {
   return new SIProviderRESTCRs::GetStagesCR(this, stages);
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_REST::get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *sinfo)
+RGWCoroutine *SIProviderCRMgrInstance_REST::get_stage_info_cr(const DoutPrefixProvider *dpp,
+                                                              const SIProvider::stage_id_t& sid, SIProvider::StageInfo *sinfo)
 {
   return new SIProviderRESTCRs::GetStageInfoCR(this, sid, sinfo);
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_REST::fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)
+RGWCoroutine *SIProviderCRMgrInstance_REST::fetch_cr(const DoutPrefixProvider *dpp,
+                                                     const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result)
 {
   return new SIProviderRESTCRs::FetchCR(this, sid, shard_id,
                                         marker, max, result);
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_REST::get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos)
+RGWCoroutine *SIProviderCRMgrInstance_REST::get_start_marker_cr(const DoutPrefixProvider *dpp,
+                                                                const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos)
 {
   return new SIProviderRESTCRs::GetStagesStatusCR(this, sid, shard_id,
                                                   pos, nullptr, nullptr);
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_REST::get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled)
+RGWCoroutine *SIProviderCRMgrInstance_REST::get_cur_state_cr(const DoutPrefixProvider *dpp,
+                                                             const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled)
 {
   return new SIProviderRESTCRs::GetStagesStatusCR(this, sid, shard_id,
                                                   nullptr, pos,
                                                   disabled);
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_REST::trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const string& marker)
+RGWCoroutine *SIProviderCRMgrInstance_REST::trim_cr(const DoutPrefixProvider *dpp,
+                                                    const SIProvider::stage_id_t& sid, int shard_id, const string& marker)
 {
   return new SIProviderRESTCRs::TrimCR(this, sid, shard_id, marker);
 }
 
-RGWCoroutine *SIProviderCRMgrInstance_REST::update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+RGWCoroutine *SIProviderCRMgrInstance_REST::update_marker_cr(const DoutPrefixProvider *dpp,
+                                                             const SIProvider::stage_id_t& sid, int shard_id,
                                                      const RGWSI_SIP_Marker::SetParams& params)
 {
   return new SIProviderRESTCRs::UpdateMarkerCR(this, sid, shard_id, params);

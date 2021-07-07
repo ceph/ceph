@@ -8,17 +8,11 @@
 class SIProviderCRMgr
 {
 protected:
-  const DoutPrefixProvider *dpp;
   CephContext *cct;
 
 public:
-  SIProviderCRMgr(const DoutPrefixProvider *_dpp) : dpp(_dpp),
-                                              cct(_dpp->get_cct()) {}
+  SIProviderCRMgr(CephContext *_cct) : cct(_cct) {}
   virtual ~SIProviderCRMgr() {}
-
-  const DoutPrefixProvider *get_dpp() {
-    return dpp;
-  }
 
   CephContext *ctx() {
     return cct;
@@ -26,7 +20,6 @@ public:
 
   class Instance {
   protected:
-    const DoutPrefixProvider *dpp;
     CephContext *cct;
 
     class GetNextStageCR : public RGWCoroutine {
@@ -44,19 +37,14 @@ public:
                                                           sid(_sid),
                                                           next_sid(_next_sid) {}
 
-      int operate() override;
+      int operate(const DoutPrefixProvider *dpp) override;
     };
 
     SIProvider::Info info;
 
   public:
-    Instance(const DoutPrefixProvider *_dpp) : dpp(_dpp),
-                                               cct(_dpp->get_cct()) {}
+    Instance(CephContext *_cct) : cct(_cct) {}
     virtual ~Instance() {}
-
-    const DoutPrefixProvider *get_dpp() {
-      return dpp;
-    }
 
     CephContext *ctx() {
       return cct;
@@ -66,14 +54,21 @@ public:
       return info;
     }
 
-    virtual RGWCoroutine *init_cr() = 0;
-    virtual RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) = 0;
-    virtual RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) = 0;
-    virtual RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) = 0;
-    virtual RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
-    virtual RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) = 0;
-    virtual RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) = 0;
-    virtual RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+    virtual RGWCoroutine *init_cr(const DoutPrefixProvider *dpp) = 0;
+    virtual RGWCoroutine *get_stages_cr(const DoutPrefixProvider *dpp,
+                                        std::vector<SIProvider::stage_id_t> *stages) = 0;
+    virtual RGWCoroutine *get_stage_info_cr(const DoutPrefixProvider *dpp,
+                                            const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) = 0;
+    virtual RGWCoroutine *fetch_cr(const DoutPrefixProvider *dpp,
+                                   const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) = 0;
+    virtual RGWCoroutine *get_start_marker_cr(const DoutPrefixProvider *dpp,
+                                              const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) = 0;
+    virtual RGWCoroutine *get_cur_state_cr(const DoutPrefixProvider *dpp,
+                                           const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) = 0;
+    virtual RGWCoroutine *trim_cr(const DoutPrefixProvider *dpp,
+                                  const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) = 0;
+    virtual RGWCoroutine *update_marker_cr(const DoutPrefixProvider *dpp,
+                                           const SIProvider::stage_id_t& sid, int shard_id,
                                            const RGWSI_SIP_Marker::SetParams& params) = 0;
 
     virtual RGWCoroutine *get_next_stage_cr(const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid) {
@@ -103,10 +98,10 @@ class SIProviderCRMgr_Local : public SIProviderCRMgr
 
   RGWAsyncRadosProcessor *async_rados;
 public:
-  SIProviderCRMgr_Local(const DoutPrefixProvider *_dpp,
+  SIProviderCRMgr_Local(CephContext *_cct,
                         RGWSI_SIP_Marker *_sip_marker_svc,
                         RGWSIPManager *_si_mgr,
-                        RGWAsyncRadosProcessor *_async_rados) : SIProviderCRMgr(_dpp),
+                        RGWAsyncRadosProcessor *_async_rados) : SIProviderCRMgr(_cct),
                                                                 async_rados(_async_rados) {
     svc.sip_marker = _sip_marker_svc;
     ctl.si.mgr = _si_mgr;
@@ -124,26 +119,36 @@ class SIProviderCRMgrInstance_Local : public SIProviderCRMgr::Instance
   SIProviderCRMgr_Local *mgr;
   SIProviderRef provider;
 
-  SIProviderCRMgrInstance_Local(SIProviderCRMgr_Local *_mgr,
+  SIProviderCRMgrInstance_Local(CephContext *_cct,
+                                SIProviderCRMgr_Local *_mgr,
                                 SIProviderRef& _provider);
 
 public:
-  RGWCoroutine *init_cr() override;
-  RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
-  RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
-  RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
-  RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
-  RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) override;
-  RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
-  RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+  RGWCoroutine *init_cr(const DoutPrefixProvider *dpp) override;
+  RGWCoroutine *get_stages_cr(const DoutPrefixProvider *dpp,
+                              std::vector<SIProvider::stage_id_t> *stages) override;
+  RGWCoroutine *get_stage_info_cr(const DoutPrefixProvider *dpp,
+                                  const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
+  RGWCoroutine *fetch_cr(const DoutPrefixProvider *dpp,
+                         const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
+  RGWCoroutine *get_start_marker_cr(const DoutPrefixProvider *dpp,
+                                    const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
+  RGWCoroutine *get_cur_state_cr(const DoutPrefixProvider *dpp,
+                                 const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) override;
+  RGWCoroutine *trim_cr(const DoutPrefixProvider *dpp,
+                        const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
+  RGWCoroutine *update_marker_cr(const DoutPrefixProvider *dpp,
+                                 const SIProvider::stage_id_t& sid, int shard_id,
                                  const RGWSI_SIP_Marker::SetParams& params) override;
 
   /* local only ops */
 
-  RGWCoroutine *get_marker_info_cr(RGWSI_SIP_Marker::HandlerRef& marker_handler,
+  RGWCoroutine *get_marker_info_cr(const DoutPrefixProvider *dpp,
+                                   RGWSI_SIP_Marker::HandlerRef& marker_handler,
                                    const SIProvider::stage_id_t& sid, int shard_id,
                                    RGWSI_SIP_Marker::stage_shard_info *info);
-  RGWCoroutine *set_min_source_pos_cr(const SIProvider::stage_id_t& sid, int shard_id,
+  RGWCoroutine *set_min_source_pos_cr(const DoutPrefixProvider *dpp,
+                                      const SIProvider::stage_id_t& sid, int shard_id,
                                       const string& pos);
 };
 
@@ -161,9 +166,9 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
 
   string path_prefix = "/admin/sip";
 public:
-  SIProviderCRMgr_REST(const DoutPrefixProvider *_dpp,
+  SIProviderCRMgr_REST(CephContext *_cct,
                          RGWRESTConn *_conn,
-                         RGWHTTPManager *_http_manager) : SIProviderCRMgr(_dpp),
+                         RGWHTTPManager *_http_manager) : SIProviderCRMgr(_cct),
                                                           conn(_conn),
                                                           http_manager(_http_manager) {}
 
@@ -198,10 +203,11 @@ class SIProviderCRMgrInstance_REST : public SIProviderCRMgr::Instance
 
   SIProvider::TypeHandlerProvider *type_provider;
 
-  SIProviderCRMgrInstance_REST(SIProviderCRMgr_REST *_mgr,
+  SIProviderCRMgrInstance_REST(CephContext *_cct,
+                               SIProviderCRMgr_REST *_mgr,
                                const string& _remote_provider_name,
                                SIProvider::TypeHandlerProvider *_type_provider,
-                               std::optional<string> _instance) : SIProviderCRMgr::Instance(_mgr->get_dpp()),
+                               std::optional<string> _instance) : SIProviderCRMgr::Instance(_cct),
                                                           mgr(_mgr),
                                                           conn(_mgr->conn),
                                                           http_manager(_mgr->http_manager),
@@ -209,11 +215,12 @@ class SIProviderCRMgrInstance_REST : public SIProviderCRMgr::Instance
                                                           remote_provider_name(_remote_provider_name),
                                                           instance(_instance.value_or(string())),
                                                           type_provider(_type_provider) {}
-  SIProviderCRMgrInstance_REST(SIProviderCRMgr_REST *_mgr,
+  SIProviderCRMgrInstance_REST(CephContext *_cct,
+                               SIProviderCRMgr_REST *_mgr,
                                const string& _data_type,
                                SIProvider::StageType _stage_type,
                                SIProvider::TypeHandlerProvider *_type_provider,
-                               std::optional<string> _instance) : SIProviderCRMgr::Instance(_mgr->dpp),
+                               std::optional<string> _instance) : SIProviderCRMgr::Instance(_cct),
                                                           mgr(_mgr),
                                                           conn(_mgr->conn),
                                                           http_manager(_mgr->http_manager),
@@ -224,14 +231,21 @@ class SIProviderCRMgrInstance_REST : public SIProviderCRMgr::Instance
                                                           type_provider(_type_provider) {}
 
 public:
-  RGWCoroutine *init_cr();
-  RGWCoroutine *get_stages_cr(std::vector<SIProvider::stage_id_t> *stages) override;
-  RGWCoroutine *get_stage_info_cr(const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
-  RGWCoroutine *fetch_cr(const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
-  RGWCoroutine *get_start_marker_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
-  RGWCoroutine *get_cur_state_cr(const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) override;
-  RGWCoroutine *trim_cr(const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
-  RGWCoroutine *update_marker_cr(const SIProvider::stage_id_t& sid, int shard_id,
+  RGWCoroutine *init_cr(const DoutPrefixProvider *dpp);
+  RGWCoroutine *get_stages_cr(const DoutPrefixProvider *dpp,
+                              std::vector<SIProvider::stage_id_t> *stages) override;
+  RGWCoroutine *get_stage_info_cr(const DoutPrefixProvider *dpp,
+                                  const SIProvider::stage_id_t& sid, SIProvider::StageInfo *stage_info) override;
+  RGWCoroutine *fetch_cr(const DoutPrefixProvider *dpp,
+                         const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, SIProvider::fetch_result *result) override;
+  RGWCoroutine *get_start_marker_cr(const DoutPrefixProvider *dpp,
+                                    const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos) override;
+  RGWCoroutine *get_cur_state_cr(const DoutPrefixProvider *dpp,
+                                 const SIProvider::stage_id_t& sid, int shard_id, rgw_sip_pos *pos, bool *disabled) override;
+  RGWCoroutine *trim_cr(const DoutPrefixProvider *dpp,
+                        const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker) override;
+  RGWCoroutine *update_marker_cr(const DoutPrefixProvider *dpp,
+                                 const SIProvider::stage_id_t& sid, int shard_id,
                                  const RGWSI_SIP_Marker::SetParams& params) override;
 
   SIProvider::TypeHandler *get_type_handler();
