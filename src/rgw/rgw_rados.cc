@@ -5642,7 +5642,6 @@ int RGWRados::Object::Stat::finish(const DoutPrefixProvider *dpp)
       result.manifest.emplace();
       decode(*result.manifest, biter);
     } catch (buffer::error& err) {
-      RGWRados *store = source->get_store();
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to decode manifest"  << dendl;
       return -EIO;
     }
