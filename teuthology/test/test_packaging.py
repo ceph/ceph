@@ -478,7 +478,7 @@ class TestBuilderProject(object):
         ('rhel', None, None, 'centos8'),
         ('centos', None, None, 'centos8'),
         ('fedora', None, None, 'fedora25'),
-        ('ubuntu', None, None, 'bionic'),
+        ('ubuntu', None, None, 'focal'),
         ('debian', None, None, 'jessie'),
     ]
 
@@ -508,6 +508,9 @@ class TestBuilderProject(object):
         ('debian', '7.1', None, 'debian'),
         ('ubuntu', '12.04', None, 'ubuntu'),
         ('ubuntu', '14.04', None, 'ubuntu'),
+        ('ubuntu', '16.04', None, 'ubuntu'),
+        ('ubuntu', '18.04', None, 'ubuntu'),
+        ('ubuntu', '20.04', None, 'ubuntu'),
     ]
 
     @pytest.mark.parametrize(
@@ -612,6 +615,9 @@ class TestGitbuilderProject(TestBuilderProject):
         ('debian', '7.1', None, 'wheezy'),
         ('ubuntu', '12.04', None, 'precise'),
         ('ubuntu', '14.04', None, 'trusty'),
+        ('ubuntu', '16.04', None, 'xenial'),
+        ('ubuntu', '18.04', None, 'bionic'),
+        ('ubuntu', '20.04', None, 'focal'),
     ]
 
 
@@ -752,12 +758,15 @@ class TestShamanProject(TestBuilderProject):
         ('debian', '7.1', None, 'debian/7.1'),
         ('ubuntu', '12.04', None, 'ubuntu/12.04'),
         ('ubuntu', '14.04', None, 'ubuntu/14.04'),
+        ('ubuntu', '16.04', None, 'ubuntu/16.04'),
+        ('ubuntu', '18.04', None, 'ubuntu/18.04'),
+        ('ubuntu', '20.04', None, 'ubuntu/20.04'),
     ]
 
     DISTRO_MATRIX_NOVER = [
         ('rhel', None, None, 'centos/8'),
         ('centos', None, None, 'centos/8'),
         ('fedora', None, None, 'fedora/25'),
-        ('ubuntu', None, None, 'ubuntu/18.04'),
+        ('ubuntu', None, None, 'ubuntu/20.04'),
         ('debian', None, None, 'debian/8.0'),
     ]
