@@ -86,29 +86,35 @@ public:
       void dump(Formatter *f) const;
     };
 
-    virtual int set_marker(const stage_id_t& sid,
+    virtual int set_marker(const DoutPrefixProvider *dpp,
+                           const stage_id_t& sid,
                            int shard_id,
                            const RGWSI_SIP_Marker::SetParams& params,
                            modify_result *result) = 0;
 
-    virtual int remove_target(const string& target_id,
+    virtual int remove_target(const DoutPrefixProvider *dpp,
+                              const string& target_id,
                               const stage_id_t& sid,
                               int shard_id,
                               modify_result *result) = 0;
 
-    virtual int set_min_source_pos(const stage_id_t& sid,
+    virtual int set_min_source_pos(const DoutPrefixProvider *dpp,
+                                   const stage_id_t& sid,
                                    int shard_id,
                                    const std::string& pos) = 0;
 
-    virtual int get_min_targets_pos(const stage_id_t& sid,
+    virtual int get_min_targets_pos(const DoutPrefixProvider *dpp,
+                                    const stage_id_t& sid,
                                     int shard_id,
                                     std::optional<std::string> *pos) = 0;
 
-    virtual int get_info(const stage_id_t& sid,
+    virtual int get_info(const DoutPrefixProvider *dpp,
+                         const stage_id_t& sid,
                          int shard_id,
                          stage_shard_info *info) = 0;
 
-    virtual int remove_info(const stage_id_t& sid,
+    virtual int remove_info(const DoutPrefixProvider *dpp,
+                            const stage_id_t& sid,
                             int shard_id) = 0;
   };
 

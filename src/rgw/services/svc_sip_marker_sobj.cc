@@ -46,9 +46,9 @@ class RGWSI_SIP_Marker_SObj_Handler : public RGWSI_SIP_Marker::Handler {
                                         obj(_obj),
                                         sysobj(obj_ctx.get_obj(obj)) {}
 
-    int read(stage_shard_info *result, RGWObjVersionTracker *ot, optional_yield y);
-    int write(const stage_shard_info& info, RGWObjVersionTracker *ot, optional_yield y);
-    int remove(RGWObjVersionTracker *ot, optional_yield y);
+    int read(const DoutPrefixProvider *dpp, stage_shard_info *result, RGWObjVersionTracker *ot, optional_yield y);
+    int write(const DoutPrefixProvider *dpp, const stage_shard_info& info, RGWObjVersionTracker *ot, optional_yield y);
+    int remove(const DoutPrefixProvider *dpp, RGWObjVersionTracker *ot, optional_yield y);
   };
 
   rgw_raw_obj shard_obj(const RGWSI_SIP_Marker::stage_id_t& sid, int shard_id) const {
@@ -72,7 +72,8 @@ public:
   }
 
 
-  int set_marker(const RGWSI_SIP_Marker::stage_id_t& sid,
+  int set_marker(const DoutPrefixProvider *dpp,
+                 const RGWSI_SIP_Marker::stage_id_t& sid,
                  int shard_id,
                  const RGWSI_SIP_Marker::SetParams& params,
                  RGWSI_SIP_Marker::Handler::modify_result *result) override {
@@ -88,9 +89,9 @@ public:
 
     for (i = 0; i < NUM_RACE_RETRY; ++i) {
       RGWObjVersionTracker objv_tracker;
-      int r = sobj.read(&sinfo, &objv_tracker, null_yield);
+      int r = sobj.read(dpp, &sinfo, &objv_tracker, null_yield);
       if (r < 0 && r != -ENOENT) {
-        ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
         return r;
       }
 
@@ -99,7 +100,7 @@ public:
       auto citer = sinfo.targets.find(target_id);
       if (citer == sinfo.targets.end()) {
         if (params.check_exists) {
-          ldout(cct, 20) << __func__ << "(): couldn't find target (target_id=" << target_id << ")" << dendl;
+          ldpp_dout(dpp, 20) << __func__ << "(): couldn't find target (target_id=" << target_id << ")" << dendl;
           return -ENOENT;
         }
         marker_info = &sinfo.targets[target_id];
@@ -108,7 +109,7 @@ public:
       }
 
       if  (marker < sinfo.min_source_pos) {
-        ldout(cct, 20) << __func__ << "(): can't set marker: target is too far behind: min_source_pos=" << sinfo.min_source_pos << " target: id=" << target_id << " marker=" << marker << dendl;
+        ldpp_dout(dpp, 20) << __func__ << "(): can't set marker: target is too far behind: min_source_pos=" << sinfo.min_source_pos << " target: id=" << target_id << " marker=" << marker << dendl;
         return -ERANGE;
       }
 
@@ -133,7 +134,7 @@ public:
         sinfo.min_targets_pos = std::move(marker);
       }
 
-      r = sobj.write(sinfo, &objv_tracker, null_yield);
+      r = sobj.write(dpp, sinfo, &objv_tracker, null_yield);
       if (r >= 0) {
         break;
       }
@@ -144,7 +145,7 @@ public:
     }
 
     if (i == NUM_RACE_RETRY) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to write shard_info (racing writes) for too many times. Likely a bug!" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to write shard_info (racing writes) for too many times. Likely a bug!" << dendl;
       return -EIO;
     }
 
@@ -154,7 +155,8 @@ public:
     return 0;
   }
 
-  int remove_target(const string& target_id,
+  int remove_target(const DoutPrefixProvider *dpp,
+                    const string& target_id,
                     const SIProvider::stage_id_t& sid,
                     int shard_id,
                     RGWSI_SIP_Marker::Handler::modify_result *result) override {
@@ -167,12 +169,12 @@ public:
 
     for (i = 0; i < NUM_RACE_RETRY; ++i) {
       RGWObjVersionTracker objv_tracker;
-      int r = sobj.read(&sinfo, &objv_tracker, null_yield);
+      int r = sobj.read(dpp, &sinfo, &objv_tracker, null_yield);
       if (r == -ENOENT) {
         return 0;
       }
       if (r < 0) {
-        ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
         return r;
       }
 
@@ -209,7 +211,7 @@ public:
         break;
       }
 
-      r = sobj.write(sinfo, &objv_tracker, null_yield);
+      r = sobj.write(dpp, sinfo, &objv_tracker, null_yield);
       if (r >= 0) {
         break;
       }
@@ -220,7 +222,7 @@ public:
     }
 
     if (i == NUM_RACE_RETRY) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to write shard_info (racing writes) for too many times. Likely a bug!" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to write shard_info (racing writes) for too many times. Likely a bug!" << dendl;
       return -EIO;
     }
 
@@ -229,7 +231,8 @@ public:
     return 0;
   }
 
-  int set_min_source_pos(const RGWSI_SIP_Marker::stage_id_t& sid,
+  int set_min_source_pos(const DoutPrefixProvider *dpp,
+                         const RGWSI_SIP_Marker::stage_id_t& sid,
                          int shard_id,
                          const std::string& pos) override {
     ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
@@ -239,9 +242,9 @@ public:
 
     for (i = 0; i < NUM_RACE_RETRY; ++i) {
       RGWObjVersionTracker objv_tracker;
-      int r = sobj.read(&sinfo, &objv_tracker, null_yield);
+      int r = sobj.read(dpp, &sinfo, &objv_tracker, null_yield);
       if (r < 0 && r != -ENOENT) {
-        ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
         return r;
       }
 
@@ -261,7 +264,7 @@ public:
 
           auto& target = prev->second;
           if (target.pos < sinfo.min_source_pos) {
-            ldout(cct, 20) << __func__ << "(): removing target fell behind tracking shard: sip=" << sip->get_id()
+            ldpp_dout(dpp, 20) << __func__ << "(): removing target fell behind tracking shard: sip=" << sip->get_id()
               << " sid=" << sid << " target=" << prev->first << " min_source_pos=" << sinfo.min_source_pos << " target.pos=" << target.pos << dendl;
 
             sinfo.targets.erase(prev);
@@ -273,7 +276,7 @@ public:
         }
       }
 
-      r = sobj.write(sinfo, &objv_tracker, null_yield);
+      r = sobj.write(dpp, sinfo, &objv_tracker, null_yield);
       if (r >= 0) {
         break;
       }
@@ -284,20 +287,21 @@ public:
     }
 
     if (i == NUM_RACE_RETRY) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to write shard_info (racing writes) for too many times. Likely a bug!" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to write shard_info (racing writes) for too many times. Likely a bug!" << dendl;
       return -EIO;
     }
 
     return 0;
   }
 
-  int get_min_targets_pos(const RGWSI_SIP_Marker::stage_id_t& sid,
+  int get_min_targets_pos(const DoutPrefixProvider *dpp,
+                          const RGWSI_SIP_Marker::stage_id_t& sid,
                           int shard_id,
                           std::optional<std::string> *pos) override {
     stage_shard_info sinfo;
-    int r = get_info(sid, shard_id, &sinfo);
+    int r = get_info(dpp, sid, shard_id, &sinfo);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
       return r;
     }
 
@@ -306,27 +310,29 @@ public:
     return 0;
   }
 
-  int get_info(const RGWSI_SIP_Marker::stage_id_t& sid,
+  int get_info(const DoutPrefixProvider *dpp,
+               const RGWSI_SIP_Marker::stage_id_t& sid,
                int shard_id,
                stage_shard_info *info) override {
     ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
 
-    int r = sobj.read(info, nullptr, null_yield);
+    int r = sobj.read(dpp, info, nullptr, null_yield);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to read shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
       return r;
     }
 
     return 0;
   }
 
-  int remove_info(const SIProvider::stage_id_t& sid,
+  int remove_info(const DoutPrefixProvider *dpp,
+                  const SIProvider::stage_id_t& sid,
                   int shard_id) override {
     ShardObj sobj(svc.sysobj, shard_obj(sid, shard_id));
 
-    int r = sobj.remove(nullptr, null_yield);
+    int r = sobj.remove(dpp, nullptr, null_yield);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to remove shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to remove shard info (sid=" << sid << ", shard_id=" << shard_id << "), r=" << r << dendl;
       return r;
     }
 
@@ -334,16 +340,17 @@ public:
   }
 };
 
-int RGWSI_SIP_Marker_SObj_Handler::ShardObj::read(stage_shard_info *result,
+int RGWSI_SIP_Marker_SObj_Handler::ShardObj::read(const DoutPrefixProvider *dpp,
+                                                  stage_shard_info *result,
                                                   RGWObjVersionTracker *ot,
                                                   optional_yield y)
 {
   bufferlist bl;
   int r = sysobj.rop()
     .set_objv_tracker(ot) /* forcing read of current version */
-    .read(&bl, y);
+    .read(dpp, &bl, y);
   if (r < 0 && r != -ENOENT) {
-    ldout(cct, 0) << "ERROR: failed reading stage shard markers data (obj=" << obj << "), r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed reading stage shard markers data (obj=" << obj << "), r=" << r << dendl;
     return r;
   }
 
@@ -352,7 +359,7 @@ int RGWSI_SIP_Marker_SObj_Handler::ShardObj::read(stage_shard_info *result,
     try {
       decode(*result, iter);
     } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to decode entries, ignoring" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to decode entries, ignoring" << dendl;
     }
   } else {
     *result = stage_shard_info();
@@ -361,7 +368,8 @@ int RGWSI_SIP_Marker_SObj_Handler::ShardObj::read(stage_shard_info *result,
   return 0;
 }
 
-int RGWSI_SIP_Marker_SObj_Handler::ShardObj::write(const stage_shard_info& info,
+int RGWSI_SIP_Marker_SObj_Handler::ShardObj::write(const DoutPrefixProvider *dpp,
+                                                   const stage_shard_info& info,
                                                    RGWObjVersionTracker *ot,
                                                    optional_yield y)
 {
@@ -370,22 +378,23 @@ int RGWSI_SIP_Marker_SObj_Handler::ShardObj::write(const stage_shard_info& info,
 
   int r = sysobj.wop()
     .set_objv_tracker(ot) /* forcing read of current version */
-    .write(bl, y);
+    .write(dpp, bl, y);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed writing stage shard markers data (obj=" << obj << "), r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed writing stage shard markers data (obj=" << obj << "), r=" << r << dendl;
     return r;
   }
 
   return 0;
 }
 
-int RGWSI_SIP_Marker_SObj_Handler::ShardObj::remove(RGWObjVersionTracker *ot, optional_yield y)
+int RGWSI_SIP_Marker_SObj_Handler::ShardObj::remove(const DoutPrefixProvider *dpp,
+                                                    RGWObjVersionTracker *ot, optional_yield y)
 {
   int r = sysobj.wop()
     .set_objv_tracker(ot) /* forcing read of current version */
-    .remove(y);
+    .remove(dpp, y);
   if (r < 0 && r != -ENOENT) {
-    ldout(cct, 0) << "ERROR: failed removing stage shard markers data (obj=" << obj << "), r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed removing stage shard markers data (obj=" << obj << "), r=" << r << dendl;
     return r;
   }
 
