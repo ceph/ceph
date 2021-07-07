@@ -13,9 +13,6 @@ namespace ceph::logging {
 
 Graylog::Graylog(const SubsystemMap * const s, const std::string &logger)
     : m_subs(s),
-      m_log_dst_valid(false),
-      m_hostname(""),
-      m_fsid(""),
       m_logger(std::move(logger)),
       m_ostream_compressed(std::stringstream::in |
                            std::stringstream::out |
@@ -26,18 +23,8 @@ Graylog::Graylog(const SubsystemMap * const s, const std::string &logger)
 }
 
 Graylog::Graylog(const std::string &logger)
-    : m_subs(NULL),
-      m_log_dst_valid(false),
-      m_hostname(""),
-      m_fsid(""),
-      m_logger(std::move(logger)),
-      m_ostream_compressed(std::stringstream::in |
-                           std::stringstream::out |
-                           std::stringstream::binary)
-{
-  m_formatter = std::unique_ptr<Formatter>(Formatter::create("json"));
-  m_formatter_section = std::unique_ptr<Formatter>(Formatter::create("json"));
-}
+  : Graylog(nullptr, logger)
+{}
 
 Graylog::~Graylog()
 {
@@ -58,6 +45,7 @@ void Graylog::set_destination(const std::string& host, int port)
 
 void Graylog::set_hostname(const std::string& host)
 {
+  assert(!host.empty());
   m_hostname = host;
 }
 
