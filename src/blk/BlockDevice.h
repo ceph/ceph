@@ -64,6 +64,12 @@
 #define  WRITE_LIFE_MAX  	1
 #endif
 
+enum struct blk_access_mode_t {
+  DIRECT,
+  BUFFERED
+};
+blk_access_mode_t buffermode(bool buffered);
+std::ostream& operator<<(std::ostream& os, const blk_access_mode_t buffered);
 
 /// track in-flight io
 struct IOContext {
