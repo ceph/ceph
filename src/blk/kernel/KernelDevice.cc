@@ -414,9 +414,15 @@ bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
 
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
 {
-assert(write_hint >= WRITE_LIFE_NOT_SET && write_hint < WRITE_LIFE_MAX);
+#if defined(F_SET_FILE_RW_HINT)
   if (!enable_wrt)
     write_hint = WRITE_LIFE_NOT_SET;
+#else
+  // Without WRITE_LIFE capabilities, only one file is used.
+  // And rocksdb sets this value also to > 0, so we need to catch this here
+  // instead of trusting rocksdb to set write_hint.
+  write_hint = WRITE_LIFE_NOT_SET;
+#endif
   return buffered ? fd_buffereds[write_hint] : fd_directs[write_hint];
 }
 
