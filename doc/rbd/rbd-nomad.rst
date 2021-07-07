@@ -102,7 +102,7 @@ Nomad must have `rbd` module loaded, check if it's the case.::
 
 If it's not the case, load it.::
 
-        $ modprobe rbd
+        $ sudo modprobe rbd
 
 And restart Nomad.
 
