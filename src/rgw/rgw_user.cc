@@ -636,8 +636,10 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 
   // don't check for secret key because we may be doing a removal
 
-  check_existing_key(op_state);
-
+  if (check_existing_key(op_state)) {
+    set_err_msg(err_msg, "cannot create existing key");
+    return -ERR_KEY_EXIST;
+  }
   return 0;
 }
 
