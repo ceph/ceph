@@ -283,6 +283,18 @@ def configure_compression(ctx, clients, compression):
     yield
 
 @contextlib.contextmanager
+def configure_datacache(ctx, clients, datacache_path):
+    """ create directory for rgw datacache """
+    log.info('Preparing directory for rgw datacache at %s', datacache_path)
+    for client in clients:
+        if(datacache_path != None):
+            ctx.cluster.only(client).run(args=['mkdir', '-p', datacache_path])
+            ctx.cluster.only(client).run(args=['sudo', 'chmod', 'a+rwx', datacache_path])
+        else:
+            log.info('path for datacache was not provided')
+    yield
+
+@contextlib.contextmanager
 def configure_storage_classes(ctx, clients, storage_classes):
     """ set a compression type in the default zone placement """
 
@@ -373,6 +385,8 @@ def task(ctx, config):
     default_cert = config.pop('ssl certificate', None)
     ctx.rgw.data_pool_pg_size = config.pop('data_pool_pg_size', 64)
     ctx.rgw.index_pool_pg_size = config.pop('index_pool_pg_size', 64)
+    ctx.rgw.datacache = bool(config.pop('datacache', False))
+    ctx.rgw.datacache_path = config.pop('datacache_path', None)
     ctx.rgw.config = config
 
     log.debug("config is {}".format(config))
@@ -387,6 +401,11 @@ def task(ctx, config):
         subtasks.extend([
             lambda: configure_compression(ctx=ctx, clients=clients,
                                           compression=ctx.rgw.compression_type),
+        ])
+    if ctx.rgw.datacache:
+        subtasks.extend([
+            lambda: configure_datacache(ctx=ctx, clients=clients,
+                                        datacache_path=ctx.rgw.datacache_path),
         ])
     if ctx.rgw.storage_classes:
         subtasks.extend([
