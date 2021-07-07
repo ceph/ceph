@@ -3119,6 +3119,7 @@ PartOf=ceph-{fsid}.target
 Before=ceph-{fsid}.target
 
 [Service]
+TasksMax=infinity
 LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
