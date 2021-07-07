@@ -46,7 +46,7 @@ function expect_config_value()
 # note: we need to pass the other args or ceph_argparse.py will take
 # 'invalid' that is not replicated|erasure and assume it is the next
 # argument, which is a string.
-expect_false ceph osd pool create foo 123 123 invalid foo-profile foo-ruleset
+expect_false ceph osd pool create foo 123 123 invalid foo-profile foo-rule
 
 ceph osd pool create foo 123 123 replicated
 ceph osd pool create fooo 123 123 erasure default
