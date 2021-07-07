@@ -76,7 +76,7 @@ struct D3nL1CacheRequest {
       return 0;
     }
 
-    static void libaio_cb_aio_dispatch(sigval_t sigval) {
+    static void libaio_cb_aio_dispatch(sigval sigval) {
       lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
       auto p = std::unique_ptr<Completion>{static_cast<Completion*>(sigval.sival_ptr)};
       auto op = std::move(p->user_data);
