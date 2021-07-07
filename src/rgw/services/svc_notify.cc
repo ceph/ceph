@@ -5,6 +5,7 @@
 #include "include/Context.h"
 #include "common/errno.h"
 
+#include "rgw/rgw_cache.h"
 #include "svc_notify.h"
 #include "svc_finisher.h"
 #include "svc_zone.h"
@@ -34,9 +35,11 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
       }
   };
 
-  CephContext *get_cct() const { return cct; }
-  unsigned get_subsys() const { return dout_subsys; }
-  std::ostream& gen_prefix(std::ostream& out) const { return out << "rgw watcher librados: "; }
+  CephContext *get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return dout_subsys; }
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out << "rgw watcher librados: ";
+  }
 
 public:
   RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, RGWSI_RADOS::Obj& o) : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
@@ -364,7 +367,8 @@ void RGWSI_Notify::_set_enabled(bool status)
   }
 }
 
-int RGWSI_Notify::distribute(const DoutPrefixProvider *dpp, const string& key, bufferlist& bl,
+int RGWSI_Notify::distribute(const DoutPrefixProvider *dpp, const string& key,
+			     const RGWCacheNotifyInfo& cni,
                              optional_yield y)
 {
   /* The RGW uses the control pool to store the watch notify objects.
@@ -377,19 +381,21 @@ int RGWSI_Notify::distribute(const DoutPrefixProvider *dpp, const string& key, b
     RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
 
     ldpp_dout(dpp, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
-        << " bl.length()=" << bl.length() << dendl;
-    return robust_notify(dpp, notify_obj, bl, y);
+		       << " cni=" << cni << dendl;
+    return robust_notify(dpp, notify_obj, cni, y);
   }
   return 0;
 }
 
-int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp, 
-                                RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
+int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp,
+                                RGWSI_RADOS::Obj& notify_obj,
+				const RGWCacheNotifyInfo& cni,
                                 optional_yield y)
 {
   // The reply of every machine that acks goes in here.
   boost::container::flat_set<std::pair<uint64_t, uint64_t>> acks;
-  bufferlist rbl;
+  bufferlist bl, rbl;
+  encode(cni, bl);
 
   // First, try to send, without being fancy about it.
   auto r = notify_obj.notify(dpp, bl, 0, &rbl, y);
@@ -397,7 +403,7 @@ int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp,
   // If that doesn't work, get serious.
   if (r < 0) {
     ldpp_dout(dpp, 1) << "robust_notify: If at first you don't succeed: "
-		  << cpp_strerror(-r) << dendl;
+		      << cpp_strerror(-r) << dendl;
 
 
     auto p = rbl.cbegin();
@@ -469,7 +475,7 @@ int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp,
 	  }
 	} catch (const buffer::error& e) {
 	  ldpp_dout(dpp, 0) << "robust_notify: notify response parse failed: "
-			<< e.what() << dendl;
+			    << e.what() << dendl;
 	  continue;
 	}
 	// If we got a good parse and timeouts is empty, that means

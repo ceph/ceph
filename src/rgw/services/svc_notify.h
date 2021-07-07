@@ -15,6 +15,7 @@ class RGWSI_Finisher;
 
 class RGWWatcher;
 class RGWSI_Notify_ShutdownCB;
+struct RGWCacheNotifyInfo;
 
 class RGWSI_Notify : public RGWServiceInstance
 {
@@ -78,9 +79,8 @@ private:
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(const DoutPrefixProvider *dpp, 
-                    RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
-                    optional_yield y);
+  int robust_notify(const DoutPrefixProvider *dpp, RGWSI_RADOS::Obj& notify_obj,
+		    const RGWCacheNotifyInfo& bl, optional_yield y);
 
   void schedule_context(Context *c);
 public:
@@ -98,7 +98,8 @@ public:
       virtual void set_enabled(bool status) = 0;
   };
 
-  int distribute(const DoutPrefixProvider *dpp, const string& key, bufferlist& bl, optional_yield y);
+  int distribute(const DoutPrefixProvider *dpp, const string& key, const RGWCacheNotifyInfo& bl,
+		 optional_yield y);
 
   void register_watch_cb(CB *cb);
 };
