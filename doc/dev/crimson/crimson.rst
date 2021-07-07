@@ -141,8 +141,39 @@ You could stop the vstart cluster using::
 
   $ ../src/stop.sh --crimson
 
+Metrics and Tracing
+===================
 
-CBT Based Testing
+Crimson offers three ways to report the stats and metrics:
+
+pg stats reported to mgr
+------------------------
+
+Crimson collects the per-pg, per-pool, and per-osd stats in a `MPGStats`
+messsage, and send it over to mgr, so that the mgr modules can query
+them using the `MgrModule.get()` method.
+
+asock command
+-------------
+
+an asock command is offered for dumping the metrics::
+
+  $ ceph tell osd.0 dump_metrics
+  $ ceph tell osd.0 dump_metrics reactor_utilization
+
+Where `reactor_utilization` is an optional string allowing us to filter
+the dumped metrics by prefix.
+
+Prometheus text protocol
+------------------------
+
+the listening port and address can be configured using the command line options of
+`--prometheus_port`
+see `Prometheus`_ for more details.
+
+.. _Prometheus: https://github.com/scylladb/seastar/blob/master/doc/prometheus.md
+
+Profiling Crimson
 =================
 
 We can use `cbt`_ for performing perf tests::
