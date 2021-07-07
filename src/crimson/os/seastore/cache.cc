@@ -137,6 +137,50 @@ void Cache::register_metrics()
       ),
     }
   );
+
+  /*
+   * trans_committed
+   */
+  stats.trans_committed_by_src.fill(0);
+  auto register_trans_committed = [this, &labels_by_src](src_t src) {
+    std::ostringstream oss_desc;
+    oss_desc << "total number of transaction committed (src="
+             << src << ")";
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "trans_committed",
+          get_counter(stats.trans_committed_by_src, src),
+          sm::description(oss_desc.str()),
+          {labels_by_src.find(src)->second}
+        ),
+      }
+    );
+  };
+  for (auto& src : {src_t::MUTATE,
+                    src_t::INIT,
+                    src_t::CLEANER}) {
+    register_trans_committed(src);
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "trans_committed",
+        [this] {
+          uint64_t total = 0;
+          for (auto& v : stats.trans_committed_by_src) {
+            total += v;
+          }
+          return total;
+        },
+        sm::description("total number of transaction committed"),
+        {src_label("ALL")}
+      ),
+    }
+  );
 }
 
 void Cache::add_extent(CachedExtentRef ref)
@@ -312,6 +356,10 @@ record_t Cache::prepare_record(Transaction &t)
 {
   LOG_PREFIX(Cache::prepare_record);
   DEBUGT("enter", t);
+
+  assert(!t.is_weak());
+  assert(t.get_src() != Transaction::src_t::READ);
+  ++(get_counter(stats.trans_committed_by_src, t.get_src()));
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
