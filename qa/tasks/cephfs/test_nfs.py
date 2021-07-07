@@ -254,14 +254,22 @@ class TestNFS(MgrTestCase):
         :param ip: IP of deployed nfs cluster
         :param check: It denotes if i/o testing needs to be done
         '''
-        try:
-            self.ctx.cluster.run(args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
-                                       f'{ip}:{pseudo_path}', '/mnt'])
-        except CommandFailedError as e:
-            # Check if mount failed only when non existing pseudo path is passed
-            if not check and e.exitstatus == 32:
-                return
-            raise
+        tries = 3
+        while True:
+            try:
+                self.ctx.cluster.run(
+                    args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
+                          f'{ip}:{pseudo_path}', '/mnt'])
+                break
+            except CommandFailedError as e:
+                if tries:
+                    tries -= 1
+                    time.sleep(2)
+                    continue
+                # Check if mount failed only when non existing pseudo path is passed
+                if not check and e.exitstatus == 32:
+                    return
+                raise
 
         self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'])
 
