@@ -4385,8 +4385,10 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
   osd_epochs[from] = beacon->version;
 
   for (const auto& pg : beacon->pgs) {
-    auto pg_num = osdmap.get_pg_pool(pg.pool())->get_pg_num();
-    last_epoch_clean.report(pg_num, pg, beacon->min_last_epoch_clean);
+    if (auto* pool = osdmap.get_pg_pool(pg.pool()); pool != nullptr) {
+      unsigned pg_num = pool->get_pg_num();
+      last_epoch_clean.report(pg_num, pg, beacon->min_last_epoch_clean);
+    }
   }
 
   if (osdmap.osd_xinfo[from].last_purged_snaps_scrub <
