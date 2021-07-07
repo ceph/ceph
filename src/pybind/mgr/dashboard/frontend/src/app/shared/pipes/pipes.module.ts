@@ -27,7 +27,6 @@ import { RbdConfigurationSourcePipe } from './rbd-configuration-source.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
 import { RoundPipe } from './round.pipe';
 import { SanitizeHtmlPipe } from './sanitize-html.pipe';
-import { SnakeCasePipe } from './snake-case.pipe';
 import { TruncatePipe } from './truncate.pipe';
 import { UpperFirstPipe } from './upper-first.pipe';
 
@@ -61,7 +60,6 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe,
     MapPipe,
     TruncatePipe,
-    SnakeCasePipe,
     SanitizeHtmlPipe
   ],
   exports: [
@@ -92,7 +90,6 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe,
     MapPipe,
     TruncatePipe,
-    SnakeCasePipe,
     SanitizeHtmlPipe
   ],
   providers: [
@@ -120,7 +117,6 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DurationPipe,
     MapPipe,
     TruncatePipe,
-    SnakeCasePipe,
     SanitizeHtmlPipe
   ]
 })

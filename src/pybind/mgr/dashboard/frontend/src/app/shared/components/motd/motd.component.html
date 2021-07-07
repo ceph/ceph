@@ -1,0 +1,7 @@
+<ngb-alert *ngIf="motd"
+           class="no-margin-bottom"
+           [type]="motd.severity"
+           [dismissible]="motd.severity !== 'danger'"
+           (close)="close()">
+  <span [innerHTML]="motd.message | sanitizeHtml"></span>
+</ngb-alert>

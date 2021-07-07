@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 
 export interface Motd {
   message: string;
+  md5: string;
   severity: 'info' | 'warning' | 'danger';
   // The expiration date in ISO 8601. Does not expire if empty.
   expires: string;

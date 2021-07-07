@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import hashlib
 import json
 from enum import Enum
 from typing import Dict, NamedTuple, Optional
@@ -19,6 +20,7 @@ class MotdSeverity(Enum):
 
 class MotdData(NamedTuple):
     message: str
+    md5: str  # The MD5 of the message.
     severity: MotdSeverity
     expires: str  # The expiration date in ISO 8601. Does not expire if empty.
 
@@ -63,6 +65,7 @@ class Motd(SP):
                 expires = ''
             value: str = json.dumps({
                 'message': message,
+                'md5': hashlib.md5(message.encode()).hexdigest(),
                 'severity': severity.value,
                 'expires': expires
             })

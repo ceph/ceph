@@ -9,7 +9,6 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 })
 export class InfoGroupComponent {
   icons = Icons;
-
   @Input()
   groupTitle: string;
 }

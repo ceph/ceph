@@ -46,16 +46,6 @@ cd-table {
   }
 }
 
-cd-motd {
-  cd-alert-panel {
-    @extend .d-flex;
-    @extend .flex-column;
-    @extend .mb-4;
-
-    @extend .col-12;
-  }
-}
-
 cd-health {
   cd-info-card {
     @extend .d-flex;

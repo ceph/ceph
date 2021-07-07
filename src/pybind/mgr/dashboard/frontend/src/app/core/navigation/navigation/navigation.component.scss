@@ -9,10 +9,6 @@
     background: vv.$secondary;
     border-top: 4px solid vv.$primary;
 
-    &.isPwdDisplayed {
-      top: vv.$top-notification-height;
-    }
-
     .navbar-brand,
     .navbar-brand:hover {
       color: vv.$gray-200;
