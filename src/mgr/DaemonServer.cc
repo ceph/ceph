@@ -2816,7 +2816,7 @@ void DaemonServer::adjust_pgs()
 	    // single adjustment that's more than half of the
 	    // max_misplaced, to somewhat limit the magnitude of
 	    // our potential error here.
-	    int next;
+	    unsigned next;
 	    static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
 	    pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
 	    if (aggro ||
