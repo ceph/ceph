@@ -4,6 +4,8 @@
 #pragma once
 
 #include <iostream>
+#include <unordered_map>
+#include <boost/functional/hash.hpp>
 
 #include "seastar/core/shared_future.hh"
 
@@ -98,6 +100,9 @@ public:
   TransactionRef create_transaction(
       Transaction::src_t src) {
     LOG_PREFIX(Cache::create_transaction);
+
+    ++(get_counter(stats.trans_created_by_src, src));
+
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       false,
@@ -113,6 +118,9 @@ public:
   TransactionRef create_weak_transaction(
       Transaction::src_t src) {
     LOG_PREFIX(Cache::create_weak_transaction);
+
+    ++(get_counter(stats.trans_created_by_src, src));
+
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       true,
@@ -126,6 +134,9 @@ public:
 
   /// Resets transaction preserving
   void reset_transaction_preserve_handle(Transaction &t) {
+    if (t.did_reset()) {
+      ++(get_counter(stats.trans_created_by_src, t.get_src()));
+    }
     t.reset_preserve_handle(last_commit);
   }
 
@@ -560,6 +571,19 @@ private:
    * holds refs to dirty extents.  Ordered by CachedExtent::get_dirty_from().
    */
   CachedExtent::list dirty;
+
+  struct {
+    std::array<uint64_t, Transaction::SRC_MAX> trans_created_by_src;
+  } stats;
+  uint64_t& get_counter(
+      std::array<uint64_t, Transaction::SRC_MAX>& counters_by_src,
+      Transaction::src_t src) {
+    assert(static_cast<std::size_t>(src) < counters_by_src.size());
+    return counters_by_src[static_cast<std::size_t>(src)];
+  }
+
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 
   /// alloc buffer for cached extent
   bufferptr alloc_cache_buf(size_t size) {
