@@ -1,6 +1,6 @@
-==============================
+=========================
  Block Devices and Nomad
-==============================
+=========================
 
 Like Kubernetes, Nomad can use Ceph Block Device thanks to `ceph-csi`_, 
 which allow to dynamically provision RBD images or import existing one.
