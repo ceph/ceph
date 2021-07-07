@@ -238,9 +238,10 @@ private:
       f->dump_float(full_name, v.d());
       break;
     case data_type::COUNTER:
-      [[fallthrough]];
-    case data_type::DERIVE:
       f->dump_unsigned(full_name, v.ui());
+      break;
+    case data_type::DERIVE:
+      f->dump_int(full_name, v.i());
       break;
     case data_type::HISTOGRAM: {
       f->open_object_section(full_name);
