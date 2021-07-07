@@ -430,9 +430,7 @@ int RGWSI_SysObj_Cache::distribute_cache(const DoutPrefixProvider *dpp,
   info.op = op;
   info.obj_info = obj_info;
   info.obj = obj;
-  bufferlist bl;
-  encode(info, bl);
-  return notify_svc->distribute(dpp, normal_name, bl, y);
+  return notify_svc->distribute(dpp, normal_name, info, y);
 }
 
 int RGWSI_SysObj_Cache::watch_cb(const DoutPrefixProvider *dpp,
