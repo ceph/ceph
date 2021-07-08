@@ -115,7 +115,7 @@ TEST(LibRadosService, StatusFormat) {
 
   {
     std::unique_lock<std::mutex> l(lock);
-    cond.wait(l, [nthreads, &threads_started] {
+    cond.wait(l, [&threads_started] {
       return nthreads == threads_started;
     });
   }
