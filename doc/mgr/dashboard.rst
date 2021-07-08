@@ -376,51 +376,14 @@ password.
 Enabling the Object Gateway Management Frontend
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To use the Object Gateway management functionality of the dashboard, you will
-need to provide the login credentials of a user with the ``system`` flag
-enabled. If you do not have a ``system`` user already, you must create one::
+When RGW is deployed with cephadm, the RGW credentials used by the
+dashboard will be automatically created.  You can also manually force the
+credentials to be created with::
 
-  $ radosgw-admin user create --uid=<user_id> --display-name=<display_name> \
-      --system
+  $ ceph dashboard connect-rgw
 
-Take note of the keys ``access_key`` and ``secret_key`` in the output.
-
-To obtain the credentials of an existing user via `radosgw-admin`::
-
-  $ radosgw-admin user info --uid=<user_id>
-
-In case of having several Object Gateways, you will need the required users' credentials
-to connect to each Object Gateway.
-Finally, provide these credentials to the dashboard::
-
-  $ echo -n "{'<daemon1.id>': '<user1-access-key>', '<daemon2.id>': '<user2-access-key>', ...}" > <file-containing-access-key>
-  $ echo -n "{'<daemon1.id>': '<user1-secret-key>', '<daemon2.id>': '<user2-secret-key>', ...}" > <file-containing-secret-key>
-  $ ceph dashboard set-rgw-api-access-key -i <file-containing-access-key>
-  $ ceph dashboard set-rgw-api-secret-key -i <file-containing-secret-key>
-
-.. note::
-
-  Legacy way of providing credentials (connect to single Object Gateway)::
-
-  $ echo -n "<access-key>" > <file-containing-access-key>
-  $ echo -n "<secret-key>" > <file-containing-secret-key>
-
-In a simple configuration with a single RGW endpoint, this is all you
-have to do to get the Object Gateway management functionality working. The
-dashboard will try to automatically determine the host and port
-from the Ceph Manager's service map.
-
-In case of having several Object Gateways, you might want to set
-the default one by setting its host and port manually::
-
-  $ ceph dashboard set-rgw-api-host <host>
-  $ ceph dashboard set-rgw-api-port <port>
-
-In addition to the settings mentioned so far, the following settings do also
-exist and you may find yourself in the situation that you have to use them::
-
-  $ ceph dashboard set-rgw-api-scheme <scheme>  # http or https
-  $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
+This will create an RGW user with uid ``dashboard`` for each realm in
+the system.
 
 If you are using a self-signed certificate in your Object Gateway setup,
 you should disable certificate verification in the dashboard to avoid refused
