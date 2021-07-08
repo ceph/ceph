@@ -275,6 +275,8 @@ mds_load_t MDBalancer::get_load()
   }
 
   uint64_t num_requests = mds->get_num_requests();
+  uint64_t num_traverse = mds->logger->get(l_mds_traverse);
+  uint64_t num_traverse_hit = mds->logger->get(l_mds_traverse_hit);
 
   uint64_t cpu_time = 1;
   {
@@ -306,13 +308,17 @@ mds_load_t MDBalancer::get_load()
 	load.req_rate = (num_requests - last_num_requests) / el;
       if (cpu_time > last_cpu_time)
 	load.cpu_load_avg = (cpu_time - last_cpu_time) / el;
+      if (num_traverse > last_num_traverse && num_traverse_hit > last_num_traverse_hit)
+        load.cache_hit_rate = (double)(num_traverse_hit - last_num_traverse_hit) / (num_traverse - last_num_traverse);
     } else {
       auto p = mds_load.find(mds->get_nodeid());
       if (p != mds_load.end()) {
 	load.req_rate = p->second.req_rate;
 	load.cpu_load_avg = p->second.cpu_load_avg;
+	load.cache_hit_rate = p->second.cache_hit_rate;
       }
-      if (num_requests >= last_num_requests && cpu_time >= last_cpu_time)
+      if (num_requests >= last_num_requests && cpu_time >= last_cpu_time &&
+          num_traverse >= last_num_traverse && num_traverse_hit >= last_num_traverse_hit)
 	update_last = false;
     }
   }
@@ -321,6 +327,8 @@ mds_load_t MDBalancer::get_load()
     last_num_requests = num_requests;
     last_cpu_time = cpu_time;
     last_get_load = now;
+    last_num_traverse = num_traverse;
+    last_num_traverse_hit = num_traverse_hit;
   }
 
   dout(15) << load << dendl;

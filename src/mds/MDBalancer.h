@@ -134,6 +134,8 @@ private:
   time last_get_load = clock::zero();
   uint64_t last_num_requests = 0;
   uint64_t last_cpu_time = 0;
+  uint64_t last_num_traverse = 0;
+  uint64_t last_num_traverse_hit = 0;
 
   // Dirfrags which are marked to be passed on to MDCache::[split|merge]_dir
   // just as soon as a delayed context comes back and triggers it.
