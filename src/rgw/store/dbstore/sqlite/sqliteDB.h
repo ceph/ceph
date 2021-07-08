@@ -23,44 +23,44 @@ class SQLiteDB : public DBStore, public DBOp{
     sqlite3_stmt *stmt = NULL;
     DBOpPrepareParams PrepareParams;
 
-    SQLiteDB(string db_name, CephContext *_cct) : DBStore(db_name, _cct) {
-      cct = _cct;
-      InitPrepareParams(PrepareParams);
+    SQLiteDB(string db_name, CephContext *_cct) : DBStore(db_name, _cct), cct(_cct) {
+      InitPrepareParams(get_def_dpp(), PrepareParams);
     }
-    SQLiteDB(sqlite3 *dbi, CephContext *_cct) : DBStore(_cct) {
+    SQLiteDB(sqlite3 *dbi, CephContext *_cct) : DBStore(_cct), cct(_cct) {
       db = (void*)dbi;
-      cct = _cct;
-      InitPrepareParams(PrepareParams);
+      InitPrepareParams(get_def_dpp(), PrepareParams);
     }
     ~SQLiteDB() {}
 
-    int exec(const char *schema,
+    void *openDB(const DoutPrefixProvider *dpp) override;
+    int closeDB(const DoutPrefixProvider *dpp) override;
+    int InitializeDBOps(const DoutPrefixProvider *dpp) override;
+    int FreeDBOps(const DoutPrefixProvider *dpp) override;
+
+    int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &params) override { return 0; }
+
+    int exec(const DoutPrefixProvider *dpp, const char *schema,
         int (*callback)(void*,int,char**,char**));
-    void *openDB();
-    int closeDB();
-    int Step(DBOpInfo &op, sqlite3_stmt *stmt,
-        int (*cbk)(CephContext *cct, DBOpInfo &op, sqlite3_stmt *stmt));
-    int Reset(sqlite3_stmt *stmt);
-    int InitializeDBOps();
-    int FreeDBOps();
+    int Step(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt,
+        int (*cbk)(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt));
+    int Reset(const DoutPrefixProvider *dpp, sqlite3_stmt *stmt);
     /* default value matches with sqliteDB style */
-    int InitPrepareParams(DBOpPrepareParams &params) { return 0; }
 
-    int createTables();
-    int createBucketTable(DBOpParams *params);
-    int createUserTable(DBOpParams *params);
-    int createObjectTable(DBOpParams *params);
-    int createObjectDataTable(DBOpParams *params);
-    int createQuotaTable(DBOpParams *params);
+    int createTables(const DoutPrefixProvider *dpp);
+    int createBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params);
 
-    int DeleteBucketTable(DBOpParams *params);
-    int DeleteUserTable(DBOpParams *params);
-    int DeleteObjectTable(DBOpParams *params);
-    int DeleteObjectDataTable(DBOpParams *params);
+    int DeleteBucketTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteUserTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int DeleteObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
 
-    int ListAllBuckets(DBOpParams *params);
-    int ListAllUsers(DBOpParams *params);
-    int ListAllObjects(DBOpParams *params);
+    int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override;
+    int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override;
+    int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) override;
 };
 
 class SQLObjectOp : public ObjectOp {
@@ -72,8 +72,8 @@ class SQLObjectOp : public ObjectOp {
     SQLObjectOp(sqlite3 **sdbi, CephContext *_cct) : sdb(sdbi), cct(_cct) {};
     ~SQLObjectOp() {}
 
-    int InitializeObjectOps();
-    int FreeObjectOps();
+    int InitializeObjectOps(const DoutPrefixProvider *dpp);
+    int FreeObjectOps(const DoutPrefixProvider *dpp);
 };
 
 class SQLInsertUser : public SQLiteDB, public InsertUserOp {
@@ -87,9 +87,9 @@ class SQLInsertUser : public SQLiteDB, public InsertUserOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLRemoveUser : public SQLiteDB, public RemoveUserOp {
@@ -103,9 +103,9 @@ class SQLRemoveUser : public SQLiteDB, public RemoveUserOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLGetUser : public SQLiteDB, public GetUserOp {
@@ -128,9 +128,9 @@ class SQLGetUser : public SQLiteDB, public GetUserOp {
       if (userid_stmt)
         sqlite3_finalize(userid_stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLInsertBucket : public SQLiteDB, public InsertBucketOp {
@@ -144,9 +144,9 @@ class SQLInsertBucket : public SQLiteDB, public InsertBucketOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLUpdateBucket : public SQLiteDB, public UpdateBucketOp {
@@ -166,9 +166,9 @@ class SQLUpdateBucket : public SQLiteDB, public UpdateBucketOp {
       if (owner_stmt)
         sqlite3_finalize(owner_stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLRemoveBucket : public SQLiteDB, public RemoveBucketOp {
@@ -182,9 +182,9 @@ class SQLRemoveBucket : public SQLiteDB, public RemoveBucketOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLGetBucket : public SQLiteDB, public GetBucketOp {
@@ -198,9 +198,9 @@ class SQLGetBucket : public SQLiteDB, public GetBucketOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLListUserBuckets : public SQLiteDB, public ListUserBucketsOp {
@@ -214,9 +214,9 @@ class SQLListUserBuckets : public SQLiteDB, public ListUserBucketsOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLInsertObject : public SQLiteDB, public InsertObjectOp {
@@ -232,9 +232,9 @@ class SQLInsertObject : public SQLiteDB, public InsertObjectOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLRemoveObject : public SQLiteDB, public RemoveObjectOp {
@@ -250,9 +250,9 @@ class SQLRemoveObject : public SQLiteDB, public RemoveObjectOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLListObject : public SQLiteDB, public ListObjectOp {
@@ -268,9 +268,9 @@ class SQLListObject : public SQLiteDB, public ListObjectOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLPutObjectData : public SQLiteDB, public PutObjectDataOp {
@@ -286,9 +286,9 @@ class SQLPutObjectData : public SQLiteDB, public PutObjectDataOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLGetObjectData : public SQLiteDB, public GetObjectDataOp {
@@ -304,9 +304,9 @@ class SQLGetObjectData : public SQLiteDB, public GetObjectDataOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLDeleteObjectData : public SQLiteDB, public DeleteObjectDataOp {
@@ -322,8 +322,8 @@ class SQLDeleteObjectData : public SQLiteDB, public DeleteObjectDataOp {
       if (stmt)
         sqlite3_finalize(stmt);
     }
-    int Prepare(DBOpParams *params);
-    int Execute(DBOpParams *params);
-    int Bind(DBOpParams *params);
+    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 #endif

@@ -39,7 +39,7 @@ namespace rgw::sal {
     int ret;
 
     buckets.clear();
-    ret = store->getDBStore()->list_buckets(info.user_id, marker, end_marker, max,
+    ret = store->getDBStore()->list_buckets(dpp, info.user_id, marker, end_marker, max,
         need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
@@ -61,7 +61,7 @@ namespace rgw::sal {
   int DBUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   {
     int ret;
-    ret = store->getDBStore()->get_user(string("user_id"), "", info, &attrs,
+    ret = store->getDBStore()->get_user(dpp, string("user_id"), "", info, &attrs,
         &objv_tracker);
     return ret;
   }
@@ -101,7 +101,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->get_user(string("user_id"), "", info, &attrs,
+    ret = store->getDBStore()->get_user(dpp, string("user_id"), "", info, &attrs,
         &objv_tracker);
 
     return ret;
@@ -111,7 +111,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->store_user(info, exclusive, &attrs, &objv_tracker, old_info);
+    ret = store->getDBStore()->store_user(dpp, info, exclusive, &attrs, &objv_tracker, old_info);
 
     return ret;
   }
@@ -120,7 +120,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->remove_user(info, &objv_tracker);
+    ret = store->getDBStore()->remove_user(dpp, info, &objv_tracker);
 
     return ret;
   }
@@ -140,7 +140,7 @@ namespace rgw::sal {
 
     /* XXX: handle delete_children */
 
-    ret = store->getDBStore()->remove_bucket(info);
+    ret = store->getDBStore()->remove_bucket(dpp, info);
 
     return ret;
   }
@@ -149,7 +149,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->get_bucket_info(string("name"), "", info, &attrs,
+    ret = store->getDBStore()->get_bucket_info(dpp, string("name"), "", info, &attrs,
         &mtime, &bucket_version);
 
     return ret;
@@ -193,7 +193,7 @@ namespace rgw::sal {
   {
     int ret;
 
-    ret = store->getDBStore()->update_bucket("owner", info, false, &(new_user->get_id()), nullptr, nullptr, nullptr);
+    ret = store->getDBStore()->update_bucket(dpp, "owner", info, false, &(new_user->get_id()), nullptr, nullptr, nullptr);
 
     /* XXX: Update policies of all the bucket->objects with new user */
     return ret;
@@ -203,7 +203,7 @@ namespace rgw::sal {
   {
     int ret;
 
-    ret = store->getDBStore()->update_bucket("info", info, exclusive, nullptr, nullptr, &_mtime, &info.objv_tracker);
+    ret = store->getDBStore()->update_bucket(dpp, "info", info, exclusive, nullptr, nullptr, &_mtime, &info.objv_tracker);
 
     return ret;
 
@@ -214,7 +214,7 @@ namespace rgw::sal {
     /* XXX: same as DBBUcket::remove_bucket() but should return error if there are objects
      * in that bucket. */
 
-    int ret = store->getDBStore()->remove_bucket(info);
+    int ret = store->getDBStore()->remove_bucket(dpp, info);
 
     return ret;
   }
@@ -244,7 +244,7 @@ namespace rgw::sal {
 
     /* XXX: handle has_instance_obj like in set_bucket_instance_attrs() */
 
-    ret = store->getDBStore()->update_bucket("attrs", info, false, nullptr, &attrs, nullptr, &get_info().objv_tracker);
+    ret = store->getDBStore()->update_bucket(dpp, "attrs", info, false, nullptr, &attrs, nullptr, &get_info().objv_tracker);
 
     return ret;
   }
@@ -253,7 +253,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->get_bucket_info(string("name"), "", info, &attrs,
+    ret = store->getDBStore()->get_bucket_info(dpp, string("name"), "", info, &attrs,
         pmtime, &bucket_version);
 
     return ret;
@@ -319,7 +319,7 @@ namespace rgw::sal {
     Attrs attrs = get_attrs();
     attrs[RGW_ATTR_ACL] = aclbl;
 
-    ret = store->getDBStore()->update_bucket("attrs", info, false, &(acl.get_owner().get_id()), &attrs, nullptr, nullptr);
+    ret = store->getDBStore()->update_bucket(dpp, "attrs", info, false, &(acl.get_owner().get_id()), &attrs, nullptr, nullptr);
 
     return ret;
   }
@@ -449,7 +449,7 @@ namespace rgw::sal {
     int ret = 0;
     RGWObjVersionTracker objv_tracker;
 
-    ret = getDBStore()->get_user(string("access_key"), key, uinfo, nullptr,
+    ret = getDBStore()->get_user(dpp, string("access_key"), key, uinfo, nullptr,
         &objv_tracker);
 
     if (ret < 0)
@@ -473,7 +473,7 @@ namespace rgw::sal {
     int ret = 0;
     RGWObjVersionTracker objv_tracker;
 
-    ret = getDBStore()->get_user(string("email"), email, uinfo, nullptr,
+    ret = getDBStore()->get_user(dpp, string("email"), email, uinfo, nullptr,
         &objv_tracker);
 
     if (ret < 0)
@@ -618,11 +618,10 @@ namespace rgw::sal {
     } else {
 
       /* XXX: We may not need to send all these params. Cleanup the unused ones */
-      ret = getDBStore()->create_bucket(u->get_info(), bucket->get_key(),
+      ret = getDBStore()->create_bucket(dpp, u->get_info(), bucket->get_key(),
           zid, placement_rule, swift_ver_location, pquota_info,
           attrs, info, pobjv, &ep_objv, creation_time,
-          pmaster_bucket, pmaster_num_shards, y, dpp,
-          exclusive);
+          pmaster_bucket, pmaster_num_shards, y, exclusive);
       if (ret == -EEXIST) {
         *existed = true;
         ret = 0;
@@ -684,7 +683,7 @@ namespace rgw::sal {
 
   std::unique_ptr<Notification> RGWDBStore::get_notification(rgw::sal::Object* obj,
       struct req_state* s,
-      rgw::notify::EventType event_type)
+      rgw::notify::EventType event_type, const std::string* object_name)
   {
     return 0;
   }
@@ -759,7 +758,7 @@ namespace rgw::sal {
 
       RGWBucketInfo info;
       map<string, bufferlist> attrs;
-      int r = getDBStore()->get_bucket_info(string("name"), "", info, &attrs,
+      int r = getDBStore()->get_bucket_info(dpp, string("name"), "", info, &attrs,
           nullptr, nullptr);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
@@ -772,7 +771,7 @@ namespace rgw::sal {
         info.flags |= BUCKET_SUSPENDED;
       }
 
-      r = getDBStore()->update_bucket("info", info, false, nullptr, &attrs, nullptr, &info.objv_tracker);
+      r = getDBStore()->update_bucket(dpp, "info", info, false, nullptr, &attrs, nullptr, &info.objv_tracker);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
         ret = r;

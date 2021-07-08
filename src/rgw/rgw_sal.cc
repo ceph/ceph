@@ -78,7 +78,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
 
   if (svc.compare("dbstore") == 0) {
 #ifdef WITH_RADOSGW_DBSTORE
-    store = newRGWDBStore(cct);
+    rgw::sal::Store* store = newRGWDBStore(cct);
 
     /* Initialize the dbstore with cct & dpp */
     DBStore *db = static_cast<rgw::sal::RGWDBStore *>(store)->getDBStore();

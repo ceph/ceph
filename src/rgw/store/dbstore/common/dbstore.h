@@ -209,8 +209,8 @@ class ObjectOp {
     class GetObjectDataOp *GetObjectData;
     class DeleteObjectDataOp *DeleteObjectData;
 
-    virtual int InitializeObjectOps() { return 0; }
-    virtual int FreeObjectOps() { return 0; }
+    virtual int InitializeObjectOps(const DoutPrefixProvider *dpp) { return 0; }
+    virtual int FreeObjectOps(const DoutPrefixProvider *dpp) { return 0; }
 };
 
 class DBOp {
@@ -370,7 +370,7 @@ class DBOp {
         return fmt::format(CreateQuotaTableQ.c_str(),
             params->quota_table.c_str());
 
-      dbout(params->cct, 0) << "Incorrect table type("<<type<<") specified" << dbendl;
+      ldout(params->cct, 0) << "Incorrect table type("<<type<<") specified" << dendl;
 
       return NULL;
     }
@@ -382,8 +382,8 @@ class DBOp {
       return fmt::format(ListAllQ.c_str(), table.c_str());
     }
 
-    virtual int Prepare(DBOpParams *params) { return 0; }
-    virtual int Execute(DBOpParams *params) { return 0; }
+    virtual int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
+    virtual int Execute(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
 };
 
 class InsertUserOp : public DBOp {
@@ -764,6 +764,7 @@ class DBStore {
   protected:
     void *db;
     CephContext *cct;
+    const DoutPrefix dp;
     uint64_t max_bucket_id = 0;
 
   public:	
@@ -771,7 +772,8 @@ class DBStore {
     user_table(db_name+".user.table"),
     bucket_table(db_name+".bucket.table"),
     quota_table(db_name+".quota.table"),
-    cct(_cct)
+    cct(_cct),
+    dp(_cct, dout_subsys, "rgw DBStore backend: ")
   {}
     /*	DBStore() {}*/
 
@@ -779,7 +781,8 @@ class DBStore {
     user_table("user.table"),
     bucket_table("bucket.table"),
     quota_table("quota.table"),
-    cct(_cct)
+    cct(_cct),
+    dp(_cct, dout_subsys, "rgw DBStore backend: ")
   {}
     virtual	~DBStore() {}
 
@@ -797,41 +800,47 @@ class DBStore {
     }
 
     CephContext *ctx() { return cct; }
+    const DoutPrefixProvider *get_def_dpp() { return &dp; }
+
     int Initialize(string logfile, int loglevel);
-    int Destroy();
-    int LockInit();
-    int LockDestroy();
-    int Lock();
-    int Unlock();
+    int Destroy(const DoutPrefixProvider *dpp);
+    int LockInit(const DoutPrefixProvider *dpp);
+    int LockDestroy(const DoutPrefixProvider *dpp);
+    int Lock(const DoutPrefixProvider *dpp);
+    int Unlock(const DoutPrefixProvider *dpp);
 
-    int InitializeParams(string Op, DBOpParams *params);
-    int ProcessOp(string Op, DBOpParams *params);
-    DBOp* getDBOp(string Op, struct DBOpParams *params);
-    int objectmapInsert(string bucket, void *ptr);
-    int objectmapDelete(string bucket);
+    int InitializeParams(const DoutPrefixProvider *dpp, string Op, DBOpParams *params);
+    int ProcessOp(const DoutPrefixProvider *dpp, string Op, DBOpParams *params);
+    DBOp* getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params);
+    int objectmapInsert(const DoutPrefixProvider *dpp, string bucket, void *ptr);
+    int objectmapDelete(const DoutPrefixProvider *dpp, string bucket);
 
-    virtual void *openDB() { return NULL; }
-    virtual int closeDB() { return 0; }
-    virtual int createTables() { return 0; }
-    virtual int InitializeDBOps() { return 0; }
-    virtual int FreeDBOps() { return 0; }
-    virtual int InitPrepareParams(DBOpPrepareParams &params) = 0;
+    virtual void *openDB(const DoutPrefixProvider *dpp) { return NULL; }
+    virtual int closeDB(const DoutPrefixProvider *dpp) { return 0; }
+    virtual int createTables(const DoutPrefixProvider *dpp) { return 0; }
+    virtual int InitializeDBOps(const DoutPrefixProvider *dpp) { return 0; }
+    virtual int FreeDBOps(const DoutPrefixProvider *dpp) { return 0; }
+    virtual int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &params) = 0;
 
-    virtual int ListAllBuckets(DBOpParams *params) = 0;
-    virtual int ListAllUsers(DBOpParams *params) = 0;
-    virtual int ListAllObjects(DBOpParams *params) = 0;
+    virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
+    virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
+    virtual int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) = 0;
 
-    int get_user(const std::string& query_str, const std::string& query_str_val,
+    int get_user(const DoutPrefixProvider *dpp,
+        const std::string& query_str, const std::string& query_str_val,
         RGWUserInfo& uinfo, map<string, bufferlist> *pattrs,
         RGWObjVersionTracker *pobjv_tracker);
-    int store_user(RGWUserInfo& uinfo, bool exclusive, map<string, bufferlist> *pattrs,
+    int store_user(const DoutPrefixProvider *dpp,
+        RGWUserInfo& uinfo, bool exclusive, map<string, bufferlist> *pattrs,
         RGWObjVersionTracker *pobjv_tracker, RGWUserInfo* pold_info);
-    int remove_user(RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv_tracker);
-    int get_bucket_info(const std::string& query_str,
+    int remove_user(const DoutPrefixProvider *dpp,
+        RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv_tracker);
+    int get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
         const std::string& query_str_val,
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,
         obj_version* pbucket_version);
-    int create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
+    int create_bucket(const DoutPrefixProvider *dpp,
+        const RGWUserInfo& owner, rgw_bucket& bucket,
         const string& zonegroup_id,
         const rgw_placement_rule& placement_rule,
         const string& swift_ver_location,
@@ -844,20 +853,20 @@ class DBStore {
         rgw_bucket *pmaster_bucket,
         uint32_t *pmaster_num_shards,
         optional_yield y,
-        const DoutPrefixProvider *dpp,
         bool exclusive);
 
     int next_bucket_id() { return ++max_bucket_id; };
 
-    int remove_bucket(const RGWBucketInfo info);
-    int list_buckets(const rgw_user& user,
+    int remove_bucket(const DoutPrefixProvider *dpp, const RGWBucketInfo info);
+    int list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
         const string& marker,
         const string& end_marker,
         uint64_t max,
         bool need_stats,
         RGWUserBuckets *buckets,
         bool *is_truncated);
-    int update_bucket(const std::string& query_str, RGWBucketInfo& info, bool exclusive,
+    int update_bucket(const DoutPrefixProvider *dpp, const std::string& query_str,
+        RGWBucketInfo& info, bool exclusive,
         const rgw_user* powner_id, map<std::string, bufferlist>* pattrs,
         ceph::real_time* pmtime, RGWObjVersionTracker* pobjv);
 };
