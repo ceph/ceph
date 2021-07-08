@@ -104,7 +104,7 @@ class RGWMultiXMLParser : public RGWXMLParser
   XMLObj *alloc_obj(const char *el) override;
 public:
   RGWMultiXMLParser() {}
-  ~RGWMultiXMLParser() override {}
+  virtual ~RGWMultiXMLParser() override;
 };
 
 extern bool is_v2_upload_id(const string& upload_id);

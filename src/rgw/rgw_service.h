@@ -34,7 +34,7 @@ protected:
   }
 public:
   RGWServiceInstance(CephContext *_cct) : cct(_cct) {}
-  virtual ~RGWServiceInstance() {}
+  virtual ~RGWServiceInstance();
 
   int start(optional_yield y, const DoutPrefixProvider *dpp);
   bool is_started() {

@@ -215,7 +215,7 @@ public:
       op_ret(0) {
   }
 
-  virtual ~RGWOp() = default;
+  virtual ~RGWOp() override;
 
   int get_ret() const { return op_ret; }
 

@@ -1320,6 +1320,8 @@ public:
     interval(_interval), caller(_caller)
   {}
 
+  virtual ~RGWContinuousLeaseCR() override;
+
   int operate(const DoutPrefixProvider *dpp) override;
 
   bool is_locked() const {
