@@ -6565,6 +6565,9 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   extract_by_tag("RecordDelimiter", m_row_delimiter);
   if (m_row_delimiter.size()==0) {
     m_row_delimiter='\n';
+  }else if(m_row_delimiter.compare("&#10;") == 0)
+  {//presto change
+    m_row_delimiter='\n';
   }
 
   extract_by_tag("QuoteEscapeCharacter", m_escape_char);
