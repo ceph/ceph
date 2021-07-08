@@ -83,7 +83,7 @@ The Ceph Dashboard offers the following monitoring and management capabilities:
   their descriptions, types, default and currently set values.  These may be edited as well.
 * **Pools**: List Ceph pools and their details (e.g. applications,
   pg-autoscaling, placement groups, replication size, EC profile, CRUSH
-  rulesets, quotas etc.)
+  rules, quotas etc.)
 * **OSDs**: List OSDs, their status and usage statistics as well as
   detailed information like attributes (OSD map), metadata, performance
   counters and usage histograms for read/write operations. Mark OSDs
@@ -377,17 +377,13 @@ Enabling the Object Gateway Management Frontend
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 When RGW is deployed with cephadm, the RGW credentials used by the
-dashboard will be automatically configured. You can also manually force the
-credentials to be set up with::
+dashboard will be automatically created.  You can also manually force the
+credentials to be created with::
 
-  $ ceph dashboard set-rgw-credentials
+  $ ceph dashboard connect-rgw
 
 This will create an RGW user with uid ``dashboard`` for each realm in
 the system.
-
-If you've configured a custom 'admin' resource in your RGW admin API, you should set it here also::
-
-  $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
 
 If you are using a self-signed certificate in your Object Gateway setup,
 you should disable certificate verification in the dashboard to avoid refused
