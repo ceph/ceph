@@ -2694,12 +2694,17 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
         # unit file, makes it easier to read and grok.
         file_obj.write('# ' + comment + '\n')
     # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
+    file_obj.write('! ' + ' '.join(container.rm_cmd(old_cname=True)) + ' 2> /dev/null\n')
     file_obj.write('! ' + ' '.join(container.rm_cmd()) + ' 2> /dev/null\n')
     # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
     if isinstance(ctx.container_engine, Podman):
         file_obj.write(
             '! '
             + ' '.join([shlex.quote(a) for a in container.rm_cmd(storage=True)])
+            + ' 2> /dev/null\n')
+        file_obj.write(
+            '! '
+            + ' '.join([shlex.quote(a) for a in container.rm_cmd(old_cname=True, storage=True)])
             + ' 2> /dev/null\n')
 
     # container run command
@@ -3167,7 +3172,7 @@ class CephContainer:
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
-        self.cname = cname
+        self._cname = cname
         self.container_args = container_args
         self.envs = envs
         self.privileged = privileged
@@ -3177,6 +3182,36 @@ class CephContainer:
         self.host_network = host_network
         self.memory_request = memory_request
         self.memory_limit = memory_limit
+
+    @property
+    def cname(self) -> str:
+        """
+        podman adds the current container name to the /etc/hosts
+        file. Turns out, python's `socket.getfqdn()` differs from
+        `hostname -f`, when we have the container names containing
+        dots in it.:
+
+        # podman run --name foo.bar.baz.com ceph/ceph /bin/bash
+        [root@sebastians-laptop /]# cat /etc/hosts
+        127.0.0.1   localhost
+        ::1         localhost
+        127.0.1.1   sebastians-laptop foo.bar.baz.com
+        [root@sebastians-laptop /]# hostname -f
+        sebastians-laptop
+        [root@sebastians-laptop /]# python3 -c 'import socket; print(socket.getfqdn())'
+        foo.bar.baz.com
+
+        Fascinatingly, this doesn't happen when using dashes.
+        """
+        return self._cname.replace('.', '-')
+
+    @cname.setter
+    def cname(self, val: str) -> None:
+        self._cname = val
+
+    @property
+    def old_cname(self) -> str:
+        return self._cname
 
     def run_cmd(self) -> List[str]:
         cmd_args: List[str] = [
@@ -3292,15 +3327,17 @@ class CephContainer:
             self.cname,
         ] + cmd
 
-    def rm_cmd(self, storage=False):
-        # type: (bool) -> List[str]
+    def rm_cmd(self, old_cname: bool = False, storage: bool = False) -> List[str]:
         ret = [
             str(self.ctx.container_engine.path),
             'rm', '-f',
         ]
         if storage:
             ret.append('--storage')
-        ret.append(self.cname)
+        if old_cname:
+            ret.append(self.old_cname)
+        else:
+            ret.append(self.cname)
         return ret
 
     def stop_cmd(self):
