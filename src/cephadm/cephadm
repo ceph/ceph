@@ -631,6 +631,11 @@ class CephIscsi(object):
         # remove extra container args for tcmu container.
         # extra args could cause issue with forking service type
         tcmu_container.container_args = []
+        # Set unlimited pids limit. Othweise the container isn't able run enough
+        # threads
+        pids_unlimited = '0' if not isinstance(self.ctx.container_engine, Docker) else '-1'
+        tcmu_container.container_args.extend(['--pids-limit={}'.format(pids_unlimited)])
+
         return tcmu_container
 
 ##################################
