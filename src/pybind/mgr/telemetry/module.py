@@ -796,7 +796,7 @@ class Module(MgrModule):
             report['crashes'] = self.gather_crashinfo()
 
         if 'perf' in channels:
-            report['perf counters'] = self.gather_perf_counters()
+            report['perf_counters'] = self.gather_perf_counters()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
