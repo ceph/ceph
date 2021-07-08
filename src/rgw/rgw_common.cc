@@ -1077,15 +1077,28 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             perm_state_base * const s,
                             RGWAccessControlPolicy * const user_acl,
                             const vector<rgw::IAM::Policy>& user_policies,
+                            const vector<rgw::IAM::Policy>& session_policies,
                             const rgw::ARN& res,
                             const uint64_t op)
 {
-  auto usr_policy_res = eval_identity_or_session_policies(user_policies, s->env, op, res);
-  if (usr_policy_res == Effect::Deny) {
+  auto identity_policy_res = eval_identity_or_session_policies(user_policies, s->env, op, res);
+  if (identity_policy_res == Effect::Deny) {
     return false;
   }
 
-  if (usr_policy_res == Effect::Allow) {
+  if (! session_policies.empty()) {
+    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, op, res);
+    if (session_policy_res == Effect::Deny) {
+      return false;
+    }
+    //Intersection of identity policies and session policies
+    if (identity_policy_res == Effect::Allow && session_policy_res == Effect::Allow) {
+      return true;
+    }
+    return false;
+  }
+
+  if (identity_policy_res == Effect::Allow) {
     return true;
   }
 
@@ -1122,7 +1135,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             const uint64_t op)
 {
   perm_state_from_req_state ps(s);
-  return verify_user_permission(dpp, &ps, s->user_acl.get(), s->iam_user_policies, res, op);
+  return verify_user_permission(dpp, &ps, s->user_acl.get(), s->iam_user_policies, s->session_policies, res, op);
 }
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, 
