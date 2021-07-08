@@ -107,6 +107,8 @@ class MultipartMetaFilter : public RGWAccessListFilter {
 public:
   MultipartMetaFilter() {}
 
+  virtual ~MultipartMetaFilter() override;
+
   /**
    * @param name [in] The object name as it appears in the bucket index.
    * @param key [out] An output parameter that will contain the bucket

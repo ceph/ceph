@@ -225,7 +225,7 @@ public:
       http_manager(store->ctx(), completion_mgr),
       status_manager(_sm) {}
 
-  ~RGWRemoteMetaLog() override;
+  virtual ~RGWRemoteMetaLog() override;
 
   int init();
   void finish();
@@ -274,6 +274,9 @@ public:
   RGWMetaSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados)
     : store(_store), master_log(this, store, async_rados, this)
   {}
+
+  virtual ~RGWMetaSyncStatusManager() override;
+
   int init(const DoutPrefixProvider *dpp);
 
   int read_sync_status(const DoutPrefixProvider *dpp, rgw_meta_sync_status *sync_status) {

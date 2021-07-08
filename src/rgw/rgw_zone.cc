@@ -43,6 +43,8 @@ std::string default_storage_pool_suffix = "rgw.buckets.data";
 
 using namespace rgw_zone_defaults;
 
+RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}
+
 #define FIRST_EPOCH 1
 
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
@@ -699,6 +701,13 @@ int RGWSystemMetaObj::write(const DoutPrefixProvider *dpp, bool exclusive, optio
   return 0;
 }
 
+
+RGWRealm::~RGWRealm() {}
+
+RGWRemoteMetaLog::~RGWRemoteMetaLog()
+{
+  delete error_logger;
+}
 
 const string& RGWRealm::get_predefined_name(CephContext *cct) const {
   return cct->_conf->rgw_realm;
