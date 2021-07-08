@@ -138,6 +138,7 @@ class filepath {
 
   filepath prefixpath(int s) const {
     filepath t(ino);
+    s = s > bits.size() ? bits.size() : s;
     for (int i=0; i<s; i++)
       t.push_dentry(bits[i]);
     return t;
