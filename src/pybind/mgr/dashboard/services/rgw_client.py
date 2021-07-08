@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import ipaddress
+import json
 import logging
 import re
+import subprocess
 import xml.etree.ElementTree as ET  # noqa: N814
 from distutils.util import strtobool
 
@@ -181,6 +183,86 @@ def _parse_frontend_config(config) -> Tuple[int, bool]:
                 ssl = match.group(3) == 's'
                 return port, ssl
     raise LookupError('Failed to determine RGW port from "{}"'.format(config))
+
+
+def radosgw_admin(args: List[str]) -> Tuple[int, str, str]:
+    try:
+        result = subprocess.run(
+            [
+                'radosgw-admin',
+                '-c', str(mgr.get_ceph_conf_path()),
+                '-k', str(mgr.get_ceph_option('keyring')),
+                '-n', f'mgr.{mgr.get_mgr_id()}',
+            ] + args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+        return result.returncode, result.stdout.decode('utf-8'), result.stderr.decode('utf-8')
+    except subprocess.CalledProcessError as ex:
+        mgr.log.error(f'Error executing radosgw-admin {ex.cmd}: {ex.output}')
+        raise
+    except subprocess.TimeoutExpired as ex:
+        mgr.log.error(f'Timeout (10s) executing radosgw-admin {ex.cmd}')
+        raise
+
+
+def configure_rgw_users():
+    mgr.log.info('Configuring dashboard RGW credentials')
+    user = 'dashboard'
+
+    def parse_secrets(user: str, out: str) -> Tuple[Optional[str], Optional[str]]:
+        r = json.loads(out)
+        for k in r.get('keys', []):
+            if k.get('user') == user and r.get('system') in ['true', True]:
+                access_key = k.get('access_key')
+                secret_key = k.get('secret_key')
+                return access_key, secret_key
+        return None, None
+
+    def get_keys(realm: Optional[str]) -> Tuple[str, str]:
+        cmd = ['user', 'info', '--uid', user]
+        if realm:
+            cmd += ['--rgw-realm', realm]
+        rc, out, _ = radosgw_admin(cmd)
+        access_key = None
+        secret_key = None
+        if not rc:
+            access_key, secret_key = parse_secrets(user, out)
+        if not access_key:
+            rc, out, err = radosgw_admin([
+                'user', 'create',
+                '--uid', user,
+                '--display-name', 'Ceph Dashboard',
+                '--system',
+            ])
+            if not rc:
+                access_key, secret_key = parse_secrets(user, out)
+        if not access_key:
+            mgr.log.error(f'Unable to create rgw {user} user: {err}')
+        assert access_key
+        assert secret_key
+        return access_key, secret_key
+
+    rc, out, err = radosgw_admin(['realm', 'list'])
+    if rc:
+        mgr.log.error(f'Unable to list RGW realms: {err}')
+        return
+    j = json.loads(out)
+    realms = j.get('realms', [])
+    access_key = None
+    secret_key = None
+    if realms:
+        als = {}
+        sls = {}
+        for realm in realms:
+            als[realm], sls[realm] = get_keys(realm)
+        access_key = json.dumps(als)
+        secret_key = json.dumps(sls)
+    else:
+        access_key, secret_key = get_keys(None)
+    Settings.RGW_API_ACCESS_KEY = access_key
+    Settings.RGW_API_SECRET_KEY = secret_key
 
 
 class RgwClient(RestClient):
