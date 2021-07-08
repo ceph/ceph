@@ -12,8 +12,6 @@ using namespace std;
 
 vector<const char*> args;
 
-CephContext *cct;
-
 namespace gtest {
   class Environment* env;
 
@@ -30,7 +28,7 @@ namespace gtest {
 
       void SetUp() override {
         cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-            CODE_ENVIRONMENT_UTILITY, 1)->get();
+            CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
         if (!db_type.compare("SQLite")) {
           db = new SQLiteDB(tenant, cct);
           ASSERT_TRUE(db != nullptr);
@@ -42,7 +40,7 @@ namespace gtest {
       void TearDown() override {
         if (!db)
           return;
-        db->Destroy();
+        db->Destroy(db->get_def_dpp());
         delete db;
       }
 
@@ -52,6 +50,7 @@ namespace gtest {
       int ret;
       string logfile = "rgw_dbstore_tests.log";
       int loglevel = 30;
+      CephContext *cct;
   };
 }
 
@@ -70,11 +69,14 @@ namespace {
       string object1 = "object1";
       string data = "Hello World";
       DBOpParams GlobalParams = {};
+      const DoutPrefixProvider *dpp;
 
       DBStoreBaseTest() {}
       void SetUp() {
         db = gtest::env->db;
         ASSERT_TRUE(db != nullptr);
+        dpp = db->get_def_dpp();
+        ASSERT_TRUE(dpp != nullptr);
 
         GlobalParams.op.user.uinfo.display_name = user1;
         GlobalParams.op.user.uinfo.user_id.id = user_id1;
@@ -88,7 +90,7 @@ namespace {
          * special based on fop. Hence its okay to do
          * global initialization once.
          */
-        ret = db->InitializeParams("", &GlobalParams);
+        ret = db->InitializeParams(dpp, "", &GlobalParams);
         ASSERT_EQ(ret, 0);
       }
 
@@ -114,7 +116,7 @@ TEST_F(DBStoreBaseTest, InsertUser) {
   params.op.user.user_version.ver = 1;    
   params.op.user.user_version.tag = "UserTAG";    
 
-  ret = db->ProcessOp("InsertUser", &params);
+  ret = db->ProcessOp(dpp, "InsertUser", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -122,7 +124,7 @@ TEST_F(DBStoreBaseTest, GetUser) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("GetUser", &params);
+  ret = db->ProcessOp(dpp, "GetUser", &params);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(params.op.user.uinfo.user_id.tenant, "tenant");
   ASSERT_EQ(params.op.user.uinfo.user_email, "user1@dbstore.com");
@@ -150,7 +152,7 @@ TEST_F(DBStoreBaseTest, GetUserQuery) {
   params.op.query_str = "email";
   params.op.user.uinfo.user_email = "user1@dbstore.com";
 
-  ret = db->ProcessOp("GetUser", &params);
+  ret = db->ProcessOp(dpp, "GetUser", &params);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(params.op.user.uinfo.user_id.tenant, "tenant");
   ASSERT_EQ(params.op.user.uinfo.user_email, "user1@dbstore.com");
@@ -178,7 +180,7 @@ TEST_F(DBStoreBaseTest, GetUserQueryByEmail) {
   map<std::string, bufferlist> attrs;
   RGWObjVersionTracker objv;
 
-  ret = db->get_user("email", email, uinfo, &attrs, &objv);
+  ret = db->get_user(dpp, "email", email, uinfo, &attrs, &objv);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(uinfo.user_id.tenant, "tenant");
   ASSERT_EQ(uinfo.user_email, "user1@dbstore.com");
@@ -204,7 +206,7 @@ TEST_F(DBStoreBaseTest, GetUserQueryByAccessKey) {
   RGWUserInfo uinfo;
   string key = "id1";
 
-  ret = db->get_user("access_key", key, uinfo, nullptr, nullptr);
+  ret = db->get_user(dpp, "access_key", key, uinfo, nullptr, nullptr);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(uinfo.user_id.tenant, "tenant");
   ASSERT_EQ(uinfo.user_email, "user1@dbstore.com");
@@ -250,7 +252,7 @@ TEST_F(DBStoreBaseTest, StoreUser) {
   uinfo.access_keys["id2"] = k2;
 
   /* non exclusive create..should create new one */
-  ret = db->store_user(uinfo, true, &attrs, &objv_tracker, &old_uinfo);
+  ret = db->store_user(dpp, uinfo, true, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(old_uinfo.user_email, "");
   ASSERT_EQ(objv_tracker.read_version.ver, 1);
@@ -258,7 +260,7 @@ TEST_F(DBStoreBaseTest, StoreUser) {
 
   /* invalid version number */
   objv_tracker.read_version.ver = 4;
-  ret = db->store_user(uinfo, true, &attrs, &objv_tracker, &old_uinfo);
+  ret = db->store_user(dpp, uinfo, true, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, -125); /* returns ECANCELED */
   ASSERT_EQ(old_uinfo.user_id.id, uinfo.user_id.id);
   ASSERT_EQ(old_uinfo.user_email, uinfo.user_email);
@@ -266,12 +268,12 @@ TEST_F(DBStoreBaseTest, StoreUser) {
   /* exclusive create..should not create new one */
   uinfo.user_email = "user2_new@dbstore.com";
   objv_tracker.read_version.ver = 1;
-  ret = db->store_user(uinfo, true, &attrs, &objv_tracker, &old_uinfo);
+  ret = db->store_user(dpp, uinfo, true, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(old_uinfo.user_email, "user2@dbstore.com");
   ASSERT_EQ(objv_tracker.read_version.ver, 1);
 
-  ret = db->store_user(uinfo, false, &attrs, &objv_tracker, &old_uinfo);
+  ret = db->store_user(dpp, uinfo, false, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(old_uinfo.user_email, "user2@dbstore.com");
   ASSERT_EQ(objv_tracker.read_version.ver, 2);
@@ -287,7 +289,7 @@ TEST_F(DBStoreBaseTest, GetUserQueryByUserID) {
   uinfo.user_id.tenant = "tenant";
   uinfo.user_id.id = "user_id2";
 
-  ret = db->get_user("user_id", "", uinfo, &attrs, &objv);
+  ret = db->get_user(dpp, "user_id", "", uinfo, &attrs, &objv);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(uinfo.user_id.tenant, "tenant");
   ASSERT_EQ(uinfo.user_email, "user2_new@dbstore.com");
@@ -324,7 +326,7 @@ TEST_F(DBStoreBaseTest, ListAllUsers) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ListAllUsers(&params);
+  ret = db->ListAllUsers(dpp, &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -344,7 +346,7 @@ TEST_F(DBStoreBaseTest, InsertBucket) {
 
   params.op.bucket.mtime = bucket_mtime;
 
-  ret = db->ProcessOp("InsertBucket", &params);
+  ret = db->ProcessOp(dpp, "InsertBucket", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -364,12 +366,12 @@ TEST_F(DBStoreBaseTest, UpdateBucketAttrs) {
 
   /* invalid version number */
   objv.read_version.ver = 4;
-  ret = db->update_bucket("attrs", info, false, nullptr, &attrs, &bucket_mtime, &objv);
+  ret = db->update_bucket(dpp, "attrs", info, false, nullptr, &attrs, &bucket_mtime, &objv);
   ASSERT_EQ(ret, -125); /* returns ECANCELED */
 
   /* right version number */
   objv.read_version.ver = 1;
-  ret = db->update_bucket("attrs", info, false, nullptr, &attrs, &bucket_mtime, &objv);
+  ret = db->update_bucket(dpp, "attrs", info, false, nullptr, &attrs, &bucket_mtime, &objv);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(objv.read_version.ver, 2);
 }
@@ -382,7 +384,7 @@ TEST_F(DBStoreBaseTest, BucketChown) {
 
   info.bucket.name = "bucket1";
 
-  ret = db->update_bucket("owner", info, false, &user, nullptr, &bucket_mtime, nullptr);
+  ret = db->update_bucket(dpp, "owner", info, false, &user, nullptr, &bucket_mtime, nullptr);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(info.objv_tracker.read_version.ver, 3);
 }
@@ -394,13 +396,13 @@ TEST_F(DBStoreBaseTest, UpdateBucketInfo) {
 
   params.op.bucket.info.bucket.name = "bucket1";
 
-  ret = db->ProcessOp("GetBucket", &params);
+  ret = db->ProcessOp(dpp, "GetBucket", &params);
   ASSERT_EQ(ret, 0);
 
   info = params.op.bucket.info;
 
   info.bucket.marker = "marker2";
-  ret = db->update_bucket("info", info, false, nullptr, nullptr, &bucket_mtime, nullptr);
+  ret = db->update_bucket(dpp, "info", info, false, nullptr, nullptr, &bucket_mtime, nullptr);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(info.objv_tracker.read_version.ver, 4);
 }
@@ -409,7 +411,7 @@ TEST_F(DBStoreBaseTest, GetBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("GetBucket", &params);
+  ret = db->ProcessOp(dpp, "GetBucket", &params);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(params.op.bucket.info.bucket.name, "bucket1");
   ASSERT_EQ(params.op.bucket.info.bucket.tenant, "tenant");
@@ -440,7 +442,7 @@ TEST_F(DBStoreBaseTest, RemoveBucketAPI) {
 
   info.bucket.name = "bucket1";
 
-  ret = db->remove_bucket(info);
+  ret = db->remove_bucket(dpp, info);
   ASSERT_EQ(ret, 0);
 }
 
@@ -454,12 +456,12 @@ TEST_F(DBStoreBaseTest, RemoveUserAPI) {
 
   /* invalid version number...should fail */
   objv.read_version.ver = 4;
-  ret = db->remove_user(uinfo, &objv);
+  ret = db->remove_user(dpp, uinfo, &objv);
   ASSERT_EQ(ret, -125);
 
   /* invalid version number...should fail */
   objv.read_version.ver = 2;
-  ret = db->remove_user(uinfo, &objv);
+  ret = db->remove_user(dpp, uinfo, &objv);
   ASSERT_EQ(ret, 0);
 }
 
@@ -483,29 +485,29 @@ TEST_F(DBStoreBaseTest, CreateBucket) {
   rule.name = "rule1";
   rule.storage_class = "sc1";
 
-  ret = db->create_bucket(owner, bucket, "zid", rule, "swift_ver", NULL,
+  ret = db->create_bucket(dpp, owner, bucket, "zid", rule, "swift_ver", NULL,
       attrs, info, &objv, NULL, bucket_mtime, NULL, NULL,
-      null_yield, NULL, false);
+      null_yield, false);
   ASSERT_EQ(ret, 0);
   bucket.name = "bucket2";
-  ret = db->create_bucket(owner, bucket, "zid", rule, "swift_ver", NULL,
+  ret = db->create_bucket(dpp, owner, bucket, "zid", rule, "swift_ver", NULL,
       attrs, info, &objv, NULL, bucket_mtime, NULL, NULL,
-      null_yield, NULL, false);
+      null_yield, false);
   ASSERT_EQ(ret, 0);
   bucket.name = "bucket3";
-  ret = db->create_bucket(owner, bucket, "zid", rule, "swift_ver", NULL,
+  ret = db->create_bucket(dpp, owner, bucket, "zid", rule, "swift_ver", NULL,
       attrs, info, &objv, NULL, bucket_mtime, NULL, NULL,
-      null_yield, NULL, false);
+      null_yield, false);
   ASSERT_EQ(ret, 0);
   bucket.name = "bucket4";
-  ret = db->create_bucket(owner, bucket, "zid", rule, "swift_ver", NULL,
+  ret = db->create_bucket(dpp, owner, bucket, "zid", rule, "swift_ver", NULL,
       attrs, info, &objv, NULL, bucket_mtime, NULL, NULL,
-      null_yield, NULL, false);
+      null_yield, false);
   ASSERT_EQ(ret, 0);
   bucket.name = "bucket5";
-  ret = db->create_bucket(owner, bucket, "zid", rule, "swift_ver", NULL,
+  ret = db->create_bucket(dpp, owner, bucket, "zid", rule, "swift_ver", NULL,
       attrs, info, &objv, NULL, bucket_mtime, NULL, NULL,
-      null_yield, NULL, false);
+      null_yield, false);
   ASSERT_EQ(ret, 0);
 }
 
@@ -517,7 +519,7 @@ TEST_F(DBStoreBaseTest, GetBucketQueryByName) {
   ceph::real_time mtime;
   obj_version objv;
 
-  ret = db->get_bucket_info("name", "", binfo, &attrs, &mtime, &objv);
+  ret = db->get_bucket_info(dpp, "name", "", binfo, &attrs, &mtime, &objv);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(binfo.bucket.name, "bucket2");
   ASSERT_EQ(binfo.bucket.tenant, "tenant");
@@ -548,7 +550,7 @@ TEST_F(DBStoreBaseTest, ListUserBuckets) {
   marker1 = "";
   do {
     is_truncated = false;
-    ret = db->list_buckets(owner, marker1, "", max, need_stats, &ulist, &is_truncated);
+    ret = db->list_buckets(dpp, owner, marker1, "", max, need_stats, &ulist, &is_truncated);
     ASSERT_EQ(ret, 0);
 
     cout << "marker1 :" << marker1 << "\n";
@@ -574,7 +576,7 @@ TEST_F(DBStoreBaseTest, ListAllBuckets) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ListAllBuckets(&params);
+  ret = db->ListAllBuckets(dpp, &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -582,7 +584,7 @@ TEST_F(DBStoreBaseTest, InsertObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("InsertObject", &params);
+  ret = db->ProcessOp(dpp, "InsertObject", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -590,7 +592,7 @@ TEST_F(DBStoreBaseTest, ListObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("ListObject", &params);
+  ret = db->ProcessOp(dpp, "ListObject", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -598,7 +600,7 @@ TEST_F(DBStoreBaseTest, ListAllObjects) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ListAllObjects(&params);
+  ret = db->ListAllObjects(dpp, &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -606,7 +608,7 @@ TEST_F(DBStoreBaseTest, PutObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("PutObjectData", &params);
+  ret = db->ProcessOp(dpp, "PutObjectData", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -614,7 +616,7 @@ TEST_F(DBStoreBaseTest, GetObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("GetObjectData", &params);
+  ret = db->ProcessOp(dpp, "GetObjectData", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -622,7 +624,7 @@ TEST_F(DBStoreBaseTest, DeleteObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("DeleteObjectData", &params);
+  ret = db->ProcessOp(dpp, "DeleteObjectData", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -630,7 +632,7 @@ TEST_F(DBStoreBaseTest, RemoveObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("RemoveObject", &params);
+  ret = db->ProcessOp(dpp, "RemoveObject", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -638,7 +640,7 @@ TEST_F(DBStoreBaseTest, RemoveBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("RemoveBucket", &params);
+  ret = db->ProcessOp(dpp, "RemoveBucket", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -646,7 +648,7 @@ TEST_F(DBStoreBaseTest, RemoveUser) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
-  ret = db->ProcessOp("RemoveUser", &params);
+  ret = db->ProcessOp(dpp, "RemoveUser", &params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -663,7 +665,7 @@ TEST_F(DBStoreBaseTest, InsertTestIDUser) {
   params.op.user.user_version.ver = 1;    
   params.op.user.user_version.tag = "UserTAG";    
 
-  ret = db->ProcessOp("InsertUser", &params);
+  ret = db->ProcessOp(dpp, "InsertUser", &params);
   ASSERT_EQ(ret, 0);
 }
 

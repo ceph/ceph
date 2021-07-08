@@ -91,7 +91,7 @@ void DBStoreManager::deleteDBStore(string tenant) {
   dbs = iter->second;
 
   DBStoreHandles.erase(iter);
-  dbs->Destroy();
+  dbs->Destroy(dbs->get_def_dpp());
   delete dbs;
 
   return;
@@ -115,7 +115,7 @@ void DBStoreManager::destroyAllHandles(){
   for (iter = DBStoreHandles.begin(); iter != DBStoreHandles.end();
       ++iter) {
     dbs = iter->second;
-    dbs->Destroy();
+    dbs->Destroy(dbs->get_def_dpp());
     delete dbs;
   }
 

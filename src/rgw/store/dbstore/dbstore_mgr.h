@@ -33,9 +33,10 @@ public:
 	default_dbstore = createDBStore(default_tenant);
   };
   DBStoreManager(string logfile, int loglevel): DBStoreHandles() {
+    /* No ceph context. Create one with log args provided */
     vector<const char*> args;
     cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-                        CODE_ENVIRONMENT_UTILITY, 1)->get();
+                      CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
     cct->_log->set_log_file(logfile);
     cct->_log->reopen_log_file();
     cct->_conf->subsys.set_log_level(dout_subsys, loglevel);

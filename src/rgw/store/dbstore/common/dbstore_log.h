@@ -18,10 +18,4 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix *_dout << "rgw dbstore: "
 
-#define dbout_prefix(cct, v) dout_impl(cct, dout_subsys, v) dout_prefix
-#define dbendl_impl  dendl      
-
-#define dbout(cct, v) dbout_prefix(cct, v)
-#define dbendl dbendl_impl
-
 #endif

@@ -14,6 +14,7 @@ map<string, class ObjectOp*> DBStore::getObjectMap() {
 int DBStore::Initialize(string logfile, int loglevel)
 {
   int ret = -1;
+  const DoutPrefixProvider *dpp = get_def_dpp();
 
   if (!cct) {
     cout << "Failed to Initialize. No ceph Context \n";
@@ -29,100 +30,100 @@ int DBStore::Initialize(string logfile, int loglevel)
   }
 
 
-  db = openDB();
+  db = openDB(dpp);
 
   if (!db) {
-    dbout(cct, 0) <<"Failed to open database " << dbendl;
+    ldpp_dout(dpp, 0) <<"Failed to open database " << dendl;
     return ret;
   }
 
-  ret = LockInit();
+  ret = LockInit(dpp);
 
   if (ret) {
-    dbout(cct, 0) <<"Error: mutex is NULL " << dbendl;
-    closeDB();
+    ldpp_dout(dpp, 0) <<"Error: mutex is NULL " << dendl;
+    closeDB(dpp);
     db = NULL;
     return ret;
   }
 
-  ret = InitializeDBOps();
+  ret = InitializeDBOps(dpp);
 
   if (ret) {
-    dbout(cct, 0) <<"InitializeDBOps failed " << dbendl;
-    LockDestroy();
-    closeDB();
+    ldpp_dout(dpp, 0) <<"InitializeDBOps failed " << dendl;
+    LockDestroy(dpp);
+    closeDB(dpp);
     db = NULL;
     return ret;
   }
 
-  dbout(cct, 0) << "DBStore successfully initialized - name:" \
-    << db_name << "" << dbendl;
+  ldpp_dout(dpp, 0) << "DBStore successfully initialized - name:" \
+    << db_name << "" << dendl;
 
   return ret;
 }
 
-int DBStore::Destroy()
+int DBStore::Destroy(const DoutPrefixProvider *dpp)
 {
   if (!db)
     return 0;
 
-  closeDB();
+  closeDB(dpp);
 
-  LockDestroy();
+  LockDestroy(dpp);
 
-  FreeDBOps();
+  FreeDBOps(dpp);
 
-  dbout(cct, 20)<<"DBStore successfully destroyed - name:" \
-    <<db_name << dbendl;
+  ldpp_dout(dpp, 20)<<"DBStore successfully destroyed - name:" \
+    <<db_name << dendl;
 
   return 0;
 }
 
-int DBStore::LockInit() {
+int DBStore::LockInit(const DoutPrefixProvider *dpp) {
   int ret;
 
   ret = pthread_mutex_init(&mutex, NULL);
 
   if (ret)
-    dbout(cct, 0)<<"pthread_mutex_init failed " << dbendl;
+    ldpp_dout(dpp, 0)<<"pthread_mutex_init failed " << dendl;
 
   return ret;
 }
 
-int DBStore::LockDestroy() {
+int DBStore::LockDestroy(const DoutPrefixProvider *dpp) {
   int ret;
 
   ret = pthread_mutex_destroy(&mutex);
 
   if (ret)
-    dbout(cct, 0)<<"pthread_mutex_destroy failed " << dbendl;
+    ldpp_dout(dpp, 0)<<"pthread_mutex_destroy failed " << dendl;
 
   return ret;
 }
 
-int DBStore::Lock() {
+int DBStore::Lock(const DoutPrefixProvider *dpp) {
   int ret;
 
   ret = pthread_mutex_lock(&mutex);
 
   if (ret)
-    dbout(cct, 0)<<"pthread_mutex_lock failed " << dbendl;
+    ldpp_dout(dpp, 0)<<"pthread_mutex_lock failed " << dendl;
 
   return ret;
 }
 
-int DBStore::Unlock() {
+int DBStore::Unlock(const DoutPrefixProvider *dpp) {
   int ret;
 
   ret = pthread_mutex_unlock(&mutex);
 
   if (ret)
-    dbout(cct, 0)<<"pthread_mutex_unlock failed " << dbendl;
+    ldpp_dout(dpp, 0)<<"pthread_mutex_unlock failed " << dendl;
 
   return ret;
 }
 
-DBOp * DBStore::getDBOp(string Op, struct DBOpParams *params)
+DBOp *DBStore::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params)
 {
   if (!Op.compare("InsertUser"))
     return dbops.InsertUser;
@@ -148,8 +149,8 @@ DBOp * DBStore::getDBOp(string Op, struct DBOpParams *params)
   iter = DBStore::objectmap.find(params->op.bucket.info.bucket.name);
 
   if (iter == DBStore::objectmap.end()) {
-    dbout(cct, 30)<<"No objectmap found for bucket: " \
-      <<params->op.bucket.info.bucket.name << dbendl;
+    ldpp_dout(dpp, 30)<<"No objectmap found for bucket: " \
+      <<params->op.bucket.info.bucket.name << dendl;
     /* not found */
     return NULL;
   }
@@ -172,7 +173,7 @@ DBOp * DBStore::getDBOp(string Op, struct DBOpParams *params)
   return NULL;
 }
 
-int DBStore::objectmapInsert(string bucket, void *ptr)
+int DBStore::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, void *ptr)
 {
   map<string, class ObjectOp*>::iterator iter;
   class ObjectOp *Ob;
@@ -184,20 +185,20 @@ int DBStore::objectmapInsert(string bucket, void *ptr)
     // return success or replace it or
     // return error ?
     // return success for now
-    dbout(cct, 20)<<"Objectmap entry already exists for bucket("\
-      <<bucket<<"). Not inserted " << dbendl;
+    ldpp_dout(dpp, 20)<<"Objectmap entry already exists for bucket("\
+      <<bucket<<"). Not inserted " << dendl;
     return 0;
   }
 
   Ob = (class ObjectOp*) ptr;
-  Ob->InitializeObjectOps();
+  Ob->InitializeObjectOps(dpp);
 
   DBStore::objectmap.insert(pair<string, class ObjectOp*>(bucket, Ob));
 
   return 0;
 }
 
-int DBStore::objectmapDelete(string bucket)
+int DBStore::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
 {
   map<string, class ObjectOp*>::iterator iter;
   class ObjectOp *Ob;
@@ -208,20 +209,20 @@ int DBStore::objectmapDelete(string bucket)
     // entry doesn't exist
     // return success or return error ?
     // return success for now
-    dbout(cct, 20)<<"Objectmap entry for bucket("<<bucket<<") "
-      <<"doesnt exist to delete " << dbendl;
+    ldpp_dout(dpp, 20)<<"Objectmap entry for bucket("<<bucket<<") "
+      <<"doesnt exist to delete " << dendl;
     return 0;
   }
 
   Ob = (class ObjectOp*) (iter->second);
-  Ob->FreeObjectOps();
+  Ob->FreeObjectOps(dpp);
 
   DBStore::objectmap.erase(iter);
 
   return 0;
 }
 
-int DBStore::InitializeParams(string Op, DBOpParams *params)
+int DBStore::InitializeParams(const DoutPrefixProvider *dpp, string Op, DBOpParams *params)
 {
   int ret = -1;
 
@@ -239,33 +240,34 @@ out:
   return ret;
 }
 
-int DBStore::ProcessOp(string Op, struct DBOpParams *params) {
+int DBStore::ProcessOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params) {
   int ret = -1;
   class DBOp *db_op;
 
-  Lock();
-  db_op = getDBOp(Op, params);
+  Lock(dpp);
+  db_op = getDBOp(dpp, Op, params);
 
   if (!db_op) {
-    dbout(cct, 0)<<"No db_op found for Op("<<Op<<")" << dbendl;
-    Unlock();
+    ldpp_dout(dpp, 0)<<"No db_op found for Op("<<Op<<")" << dendl;
+    Unlock(dpp);
     return ret;
   }
-  ret = db_op->Execute(params);
+  ret = db_op->Execute(dpp, params);
 
-  Unlock();
+  Unlock(dpp);
   if (ret) {
-    dbout(cct, 0)<<"In Process op Execute failed for fop(" \
-      <<Op.c_str()<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"In Process op Execute failed for fop(" \
+      <<Op.c_str()<<") " << dendl;
   } else {
-    dbout(cct, 20)<<"Successfully processed fop(" \
-      <<Op.c_str()<<") " << dbendl;
+    ldpp_dout(dpp, 20)<<"Successfully processed fop(" \
+      <<Op.c_str()<<") " << dendl;
   }
 
   return ret;
 }
 
-int DBStore::get_user(const std::string& query_str, const std::string& query_str_val,
+int DBStore::get_user(const DoutPrefixProvider *dpp,
+    const std::string& query_str, const std::string& query_str_val,
     RGWUserInfo& uinfo, map<string, bufferlist> *pattrs,
     RGWObjVersionTracker *pobjv_tracker) {
   int ret = 0;
@@ -277,7 +279,7 @@ int DBStore::get_user(const std::string& query_str, const std::string& query_str
   }
 
   DBOpParams params = {};
-  InitializeParams("GetUser", &params);
+  InitializeParams(dpp, "GetUser", &params);
 
   params.op.query_str = query_str;
 
@@ -294,11 +296,11 @@ int DBStore::get_user(const std::string& query_str, const std::string& query_str
   } else if (query_str == "user_id") {
     params.op.user.uinfo.user_id = uinfo.user_id;
   } else {
-    dbout(cct, 0)<<"In GetUser Invalid query string :" <<query_str.c_str()<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"In GetUser Invalid query string :" <<query_str.c_str()<<") " << dendl;
     return -1;
   }
 
-  ret = ProcessOp("GetUser", &params);
+  ret = ProcessOp(dpp, "GetUser", &params);
 
   if (ret)
     goto out;
@@ -317,11 +319,12 @@ out:
   return ret;
 }
 
-int DBStore::store_user(RGWUserInfo& uinfo, bool exclusive, map<string, bufferlist> *pattrs,
+int DBStore::store_user(const DoutPrefixProvider *dpp,
+    RGWUserInfo& uinfo, bool exclusive, map<string, bufferlist> *pattrs,
     RGWObjVersionTracker *pobjv, RGWUserInfo* pold_info)
 {
   DBOpParams params = {};
-  InitializeParams("CreateUser", &params);
+  InitializeParams(dpp, "CreateUser", &params);
   int ret = 0;
 
   /* Check if the user already exists and return the old info, caller will have a use for it */
@@ -330,7 +333,7 @@ int DBStore::store_user(RGWUserInfo& uinfo, bool exclusive, map<string, bufferli
   obj_version& obj_ver = objv_tracker.read_version;
 
   orig_info.user_id = uinfo.user_id;
-  ret = get_user(string("user_id"), "", orig_info, nullptr, &objv_tracker);
+  ret = get_user(dpp, string("user_id"), "", orig_info, nullptr, &objv_tracker);
 
   if (!ret && obj_ver.ver) {
     /* already exists. */
@@ -342,7 +345,7 @@ int DBStore::store_user(RGWUserInfo& uinfo, bool exclusive, map<string, bufferli
     if (pobjv && (pobjv->read_version.ver != obj_ver.ver)) {
       /* Object version mismatch.. return ECANCELED */
       ret = -ECANCELED;
-      dbout(cct, 0)<<"User Read version mismatch err:(" <<ret<<") " << dbendl;
+      ldpp_dout(dpp, 0)<<"User Read version mismatch err:(" <<ret<<") " << dendl;
       return ret;
     }
 
@@ -363,10 +366,10 @@ int DBStore::store_user(RGWUserInfo& uinfo, bool exclusive, map<string, bufferli
     params.op.user.user_attrs = *pattrs;
   }
 
-  ret = ProcessOp("InsertUser", &params);
+  ret = ProcessOp(dpp, "InsertUser", &params);
 
   if (ret) {
-    dbout(cct, 0)<<"store_user failed with err:(" <<ret<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"store_user failed with err:(" <<ret<<") " << dendl;
     goto out;
   }
 
@@ -379,17 +382,18 @@ out:
   return ret;
 }
 
-int DBStore::remove_user(RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv)
+int DBStore::remove_user(const DoutPrefixProvider *dpp,
+    RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv)
 {
   DBOpParams params = {};
-  InitializeParams("CreateUser", &params);
+  InitializeParams(dpp, "CreateUser", &params);
   int ret = 0;
 
   RGWUserInfo orig_info;
   RGWObjVersionTracker objv_tracker = {};
 
   orig_info.user_id = uinfo.user_id;
-  ret = get_user(string("user_id"), "", orig_info, nullptr, &objv_tracker);
+  ret = get_user(dpp, string("user_id"), "", orig_info, nullptr, &objv_tracker);
 
   if (!ret && objv_tracker.read_version.ver) {
     /* already exists. */
@@ -397,17 +401,17 @@ int DBStore::remove_user(RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv)
     if (pobjv && (pobjv->read_version.ver != objv_tracker.read_version.ver)) {
       /* Object version mismatch.. return ECANCELED */
       ret = -ECANCELED;
-      dbout(cct, 0)<<"User Read version mismatch err:(" <<ret<<") " << dbendl;
+      ldpp_dout(dpp, 0)<<"User Read version mismatch err:(" <<ret<<") " << dendl;
       return ret;
     }
   }
 
   params.op.user.uinfo.user_id = uinfo.user_id;
 
-  ret = ProcessOp("RemoveUser", &params);
+  ret = ProcessOp(dpp, "RemoveUser", &params);
 
   if (ret) {
-    dbout(cct, 0)<<"remove_user failed with err:(" <<ret<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"remove_user failed with err:(" <<ret<<") " << dendl;
     goto out;
   }
 
@@ -415,7 +419,7 @@ out:
   return ret;
 }
 
-int DBStore::get_bucket_info(const std::string& query_str,
+int DBStore::get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
     const std::string& query_str_val,
     RGWBucketInfo& info,
     rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,
@@ -430,19 +434,19 @@ int DBStore::get_bucket_info(const std::string& query_str,
 
   DBOpParams params = {};
   DBOpParams params2 = {};
-  InitializeParams("GetBucket", &params);
+  InitializeParams(dpp, "GetBucket", &params);
 
   if (query_str == "name") {
     params.op.bucket.info.bucket.name = info.bucket.name;
   } else {
-    dbout(cct, 0)<<"In GetBucket Invalid query string :" <<query_str.c_str()<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"In GetBucket Invalid query string :" <<query_str.c_str()<<") " << dendl;
     return -1;
   }
 
-  ret = ProcessOp("GetBucket", &params);
+  ret = ProcessOp(dpp, "GetBucket", &params);
 
   if (ret) {
-    dbout(cct, 0)<<"In GetBucket failed err:(" <<ret<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"In GetBucket failed err:(" <<ret<<") " << dendl;
     goto out;
   }
 
@@ -466,7 +470,8 @@ out:
   return ret;
 }
 
-int DBStore::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
+int DBStore::create_bucket(const DoutPrefixProvider *dpp,
+    const RGWUserInfo& owner, rgw_bucket& bucket,
     const string& zonegroup_id,
     const rgw_placement_rule& placement_rule,
     const string& swift_ver_location,
@@ -479,7 +484,6 @@ int DBStore::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     rgw_bucket *pmaster_bucket,
     uint32_t *pmaster_num_shards,
     optional_yield y,
-    const DoutPrefixProvider *dpp,
     bool exclusive)
 {
   /*
@@ -491,13 +495,13 @@ int DBStore::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
    */
 
   DBOpParams params = {};
-  InitializeParams("CreateBucket", &params);
+  InitializeParams(dpp, "CreateBucket", &params);
   int ret = 0;
 
   /* Check if the bucket already exists and return the old info, caller will have a use for it */
   RGWBucketInfo orig_info;
   orig_info.bucket.name = bucket.name;
-  ret = get_bucket_info(string("name"), "", orig_info, nullptr, nullptr, nullptr);
+  ret = get_bucket_info(dpp, string("name"), "", orig_info, nullptr, nullptr, nullptr);
 
   if (!ret && !orig_info.owner.id.empty() && exclusive) {
     /* already exists. Return the old info */
@@ -544,10 +548,10 @@ int DBStore::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
   params.op.bucket.mtime = ceph::real_time();
   params.op.user.uinfo.user_id.id = owner.user_id.id;
 
-  ret = ProcessOp("InsertBucket", &params);
+  ret = ProcessOp(dpp, "InsertBucket", &params);
 
   if (ret) {
-    dbout(cct, 0)<<"create_bucket failed with err:(" <<ret<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"create_bucket failed with err:(" <<ret<<") " << dendl;
     goto out;
   }
 
@@ -555,18 +559,18 @@ out:
   return ret;
 }
 
-int DBStore::remove_bucket(const RGWBucketInfo info) {
+int DBStore::remove_bucket(const DoutPrefixProvider *dpp, const RGWBucketInfo info) {
   int ret = 0;
 
   DBOpParams params = {};
-  InitializeParams("RemoveBucket", &params);
+  InitializeParams(dpp, "RemoveBucket", &params);
 
   params.op.bucket.info.bucket.name = info.bucket.name;
 
-  ret = ProcessOp("RemoveBucket", &params);
+  ret = ProcessOp(dpp, "RemoveBucket", &params);
 
   if (ret) {
-    dbout(cct, 0)<<"In RemoveBucket failed err:(" <<ret<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"In RemoveBucket failed err:(" <<ret<<") " << dendl;
     goto out;
   }
 
@@ -574,7 +578,7 @@ out:
   return ret;
 }
 
-int DBStore::list_buckets(const rgw_user& user,
+int DBStore::list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
     const string& marker,
     const string& end_marker,
     uint64_t max,
@@ -585,17 +589,17 @@ int DBStore::list_buckets(const rgw_user& user,
   int ret = 0;
 
   DBOpParams params = {};
-  InitializeParams("ListUserBuckets", &params);
+  InitializeParams(dpp, "ListUserBuckets", &params);
 
   params.op.user.uinfo.user_id = user;
   params.op.bucket.min_marker = marker;
   params.op.bucket.max_marker = end_marker;
   params.op.list_max_count = max;
 
-  ret = ProcessOp("ListUserBuckets", &params);
+  ret = ProcessOp(dpp, "ListUserBuckets", &params);
 
   if (ret) {
-    dbout(cct, 0)<<"In ListUserBuckets failed err:(" <<ret<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"In ListUserBuckets failed err:(" <<ret<<") " << dendl;
     goto out;
   }
 
@@ -617,7 +621,7 @@ out:
   return ret;
 }
 
-int DBStore::update_bucket(const std::string& query_str,
+int DBStore::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_str,
     RGWBucketInfo& info,
     bool exclusive,
     const rgw_user* powner_id,
@@ -633,11 +637,11 @@ int DBStore::update_bucket(const std::string& query_str,
   /* Check if the bucket already exists and return the old info, caller will have a use for it */
   orig_info.bucket.name = info.bucket.name;
   params.op.bucket.info.bucket.name = info.bucket.name;
-  ret = get_bucket_info(string("name"), "", orig_info, nullptr, nullptr,
+  ret = get_bucket_info(dpp, string("name"), "", orig_info, nullptr, nullptr,
       &bucket_version);
 
   if (ret) {
-    dbout(cct, 0)<<"Failed to read bucket info err:(" <<ret<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"Failed to read bucket info err:(" <<ret<<") " << dendl;
     goto out;
   }
 
@@ -651,7 +655,7 @@ int DBStore::update_bucket(const std::string& query_str,
   /* Verify if the objv read_ver matches current bucket version */
   if (pobjv) {
     if (pobjv->read_version.ver != bucket_version.ver) {
-      dbout(cct, 0)<<"Read version mismatch err:(" <<ret<<") " << dbendl;
+      ldpp_dout(dpp, 0)<<"Read version mismatch err:(" <<ret<<") " << dendl;
       ret = -ECANCELED;
       goto out;
     }
@@ -659,7 +663,7 @@ int DBStore::update_bucket(const std::string& query_str,
     pobjv = &info.objv_tracker;
   }
 
-  InitializeParams("UpdateBucket", &params);
+  InitializeParams(dpp, "UpdateBucket", &params);
 
   params.op.bucket.info.bucket.name = info.bucket.name;
 
@@ -691,14 +695,14 @@ int DBStore::update_bucket(const std::string& query_str,
     params.op.bucket.info = info;
   } else {
     ret = -1;
-    dbout(cct, 0)<<"In UpdateBucket Invalid query_str : " << query_str << dbendl;
+    ldpp_dout(dpp, 0)<<"In UpdateBucket Invalid query_str : " << query_str << dendl;
     goto out;
   }
 
-  ret = ProcessOp("UpdateBucket", &params);
+  ret = ProcessOp(dpp, "UpdateBucket", &params);
 
   if (ret) {
-    dbout(cct, 0)<<"In UpdateBucket failed err:(" <<ret<<") " << dbendl;
+    ldpp_dout(dpp, 0)<<"In UpdateBucket failed err:(" <<ret<<") " << dendl;
     goto out;
   }
 

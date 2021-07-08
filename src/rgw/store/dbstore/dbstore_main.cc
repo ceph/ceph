@@ -37,8 +37,9 @@ void* process(void *arg)
   string objectc2 = "cns";
 
   struct DBOpParams params = {};
+  const DoutPrefixProvider *dpp = db->get_def_dpp();
 
-  db->InitializeParams("InsertUser", &params);
+  db->InitializeParams(dpp, "InsertUser", &params);
 
   params.op.user.uinfo.display_name = user1;
   params.op.user.uinfo.user_id.tenant = "tenant";
@@ -54,15 +55,15 @@ void* process(void *arg)
   params.op.user.uinfo.access_keys.insert(make_pair("key1", k1));
   params.op.user.uinfo.access_keys.insert(make_pair("key2", k2));
 
-  ret = db->ProcessOp("InsertUser", &params);
+  ret = db->ProcessOp(dpp, "InsertUser", &params);
   cout << "InsertUser return value: " <<  ret << "\n";
 
   struct DBOpParams params2 = {};
   params.op.user.uinfo.user_id.tenant = "tenant2";
 
-  db->InitializeParams("GetUser", &params2);
+  db->InitializeParams(dpp, "GetUser", &params2);
   params2.op.user.uinfo.display_name = user1;
-  ret = db->ProcessOp("GetUser", &params2);
+  ret = db->ProcessOp(dpp, "GetUser", &params2);
 
   cout << "GetUser return value: " <<  ret << "\n";
 
@@ -87,30 +88,30 @@ void* process(void *arg)
   }
 
   params.op.bucket.info.bucket.name = bucketa;
-  db->ProcessOp("InsertBucket", &params);
+  db->ProcessOp(dpp, "InsertBucket", &params);
 
   params.op.user.uinfo.display_name = user2;
   params.op.user.uinfo.user_id.id = user2;
-  db->ProcessOp("InsertUser", &params);
+  db->ProcessOp(dpp, "InsertUser", &params);
 
   params.op.bucket.info.bucket.name = bucketb;
-  db->ProcessOp("InsertBucket", &params);
+  db->ProcessOp(dpp, "InsertBucket", &params);
 
-  db->ProcessOp("GetUser", &params);
-  db->ProcessOp("GetBucket", &params);
+  db->ProcessOp(dpp, "GetUser", &params);
+  db->ProcessOp(dpp, "GetBucket", &params);
 
-  db->ListAllUsers(&params);
-  db->ListAllBuckets(&params);
+  db->ListAllUsers(dpp, &params);
+  db->ListAllBuckets(dpp, &params);
 
   params.op.bucket.info.bucket.name = bucketb;
 
-  db->ProcessOp("RemoveBucket", &params);
+  db->ProcessOp(dpp, "RemoveBucket", &params);
 
   params.op.user.uinfo.user_id.id = user2;
-  db->ProcessOp("RemoveUser", &params);
+  db->ProcessOp(dpp, "RemoveUser", &params);
 
-  db->ListAllUsers(&params);
-  db->ListAllBuckets(&params);
+  db->ListAllUsers(dpp, &params);
+  db->ListAllBuckets(dpp, &params);
   cout<<"Exiting thread:"<<thr_id<<"\n";
 
   return 0;
