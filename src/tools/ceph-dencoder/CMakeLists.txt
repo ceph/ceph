@@ -19,7 +19,7 @@ set_target_properties(ceph-dencoder PROPERTIES
   JOB_POOL_COMPILE heavy_compile_job_pool
   JOB_POOL_LINK heavy_link_job_pool)
 
-set(denc_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/denc)
+set(denc_plugin_dir ${CEPH_INSTALL_FULL_PKGLIBDIR}/denc)
 add_custom_target(ceph-dencoder-modules)
 
 function(add_denc_mod name)
