@@ -19,5 +19,7 @@ Feature: Install a basic Ceph cluster
         """
     Then I get
         """
-        ceph version 16.0.0-428-g7c2a0a4 (7c2a0a455e50b7482f671071c924229c42654ab4) octopus (rc))
+        Using recent ceph image quay.ceph.io/ceph-ci/ceph@sha256:18dd6d0b867457a19108e52ae1cb5676d79d9d4282af6a7d767ba18a8c480bbb
+        ceph version 17.0.0-5858-g7a31ae31 (7a31ae31584fdb967c470974034070ce9e687ac7) quincy (dev)
+
         """

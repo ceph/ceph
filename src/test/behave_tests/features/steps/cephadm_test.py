@@ -1,3 +1,5 @@
+import logging
+
 from behave import *
 from kcli_handler import exec_ssh_cmd
 
@@ -8,6 +10,7 @@ def init_step(context, node):
     commands = context.text.split('\n')
     for command in commands:
         exec_ssh_cmd(context.node, command)
+    
 
 @when('I execute')
 def execute_step(context):
@@ -15,7 +18,11 @@ def execute_step(context):
         context.node,
         context.text
     )
+    logging.info(f"exec output : {context.output}")
 
 @then('I get')
 def validation_step(context):
-    assert context.text == context.output
+    context.output = context.output.replace("\n", "")
+    context.text = context.text.replace("\n", "")
+
+    assert context.output == context.text, "Version is not equal"

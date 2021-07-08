@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 
 from jinja2 import Template
 from kcli_handler import execute_kcli_cmd
@@ -89,6 +90,7 @@ def _parse_feature_specifications(features):
 
 def _handle_kcli_plan(command_type, plan_file_path=None):
     _output = None
+    print(f"Calling before create")
     if command_type == "create":
         _output = execute_kcli_cmd(
             f"create plan -f {plan_file_path} {KCLI_PLAN_NAME}"
@@ -109,15 +111,16 @@ def before_feature(context, feature):
     feature_config = _parse_feature_specifications("".join(features))
     kcli_plan_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
     script_path = os.path.join(kcli_plans_dir_path, "bootstrap_cluster_dev.sh")
-
     loaded_kcli, loaded_script = _loaded_templates()
     gen_kcli = loaded_kcli.render(feature_config)
 
     _write_file(script_path, loaded_script)
     _write_file(kcli_plan_path, gen_kcli)
     logging.info("Calling kcli create command")
+    logging.info(f"Waiting for executing script :{time.ctime()}")
     _handle_kcli_plan("create", kcli_plan_path)
-
+    time.sleep(180)
+    logging.info(f"Completed for executing script :{time.ctime()}")
 
 def after_feature(context, feature):
     if os.path.exists(KCLI_PLANS_DIR):
