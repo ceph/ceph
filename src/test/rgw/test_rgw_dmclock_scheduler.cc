@@ -105,7 +105,7 @@ TEST(Queue, RateLimit)
   EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
   EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
-  context.poll();
+  EXPECT_GT(context.run(), 0);
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -163,7 +163,7 @@ TEST(Queue, AsyncRequest)
   EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
   EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
-  context.poll();
+  EXPECT_GT(context.run(), 0);
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -217,7 +217,7 @@ TEST(Queue, Cancel)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  context.poll();
+  EXPECT_GT(context.run(), 0);
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -265,7 +265,7 @@ TEST(Queue, CancelClient)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  context.poll();
+  EXPECT_GT(context.run(), 0);
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -315,7 +315,7 @@ TEST(Queue, CancelOnDestructor)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  context.poll();
+  EXPECT_GT(context.run(), 0);
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -376,13 +376,13 @@ TEST(Queue, CrossExecutorRequest)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  queue_context.poll();
+  EXPECT_GT(queue_context.run(), 0);
   EXPECT_TRUE(queue_context.stopped());
 
   EXPECT_FALSE(ec1); // no callbacks until callback executor runs
   EXPECT_FALSE(ec2);
 
-  callback_context.poll();
+  EXPECT_GT(callback_context.run(), 0);
   EXPECT_TRUE(callback_context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -421,7 +421,7 @@ TEST(Queue, SpawnAsyncRequest)
     EXPECT_EQ(PhaseType::priority, p2);
   });
 
-  context.poll();
+  EXPECT_GT(context.run(), 0);
   EXPECT_TRUE(context.stopped());
 }
 
