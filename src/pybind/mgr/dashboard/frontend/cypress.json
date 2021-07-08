@@ -1,7 +1,8 @@
 {
   "baseUrl": "http://localhost:4200/",
   "ignoreTestFiles": [
-    "*.po.ts"
+    "*.po.ts",
+    "**/orchestrator/**"
   ],
   "supportFile": "cypress/support/index.ts",
   "video": false,
