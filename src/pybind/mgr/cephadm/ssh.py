@@ -1,6 +1,8 @@
 import logging
 import os
 import tempfile
+import threading
+import asyncio
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
@@ -16,6 +18,7 @@ except ImportError:
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
     from asyncssh.connection import SSHClientConnection
+    from concurrent.futures import Future
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +29,22 @@ Host *
   UserKnownHostsFile /dev/null
   ConnectTimeout=30
 """
+
+
+class EventLoop(threading.Thread):
+
+    def __init__(self, mgr: "CephadmOrchestrator"):
+        self.mgr: "CephadmOrchestrator" = mgr
+
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+
+        super().__init__(target=self._loop.run_forever)
+
+        self.start()
+
+    def create_task(self, coro) -> "Future":  # type: ignore
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
 
 
 class SSHManager:
@@ -60,6 +79,8 @@ class SSHManager:
                     raise
                 except asyncssh.Error:
                     raise
+                except Exception:
+                    raise
 
         conn = self.cons.get(host)
         return conn
@@ -87,11 +108,13 @@ class SSHManager:
             logger.debug(log_content)
             msg = f'Failed to connect to {host} ({addr}). {str(e)}' + '\n' + f'Log: {log_content}'
             raise OrchestratorError(msg)
+        except Exception as e:
+            raise OrchestratorError(str(e))
         finally:
             ssh_logger.removeHandler(ch)
 
     def remote_connection(self, *args: Any) -> "SSHClientConnection":
-        return self.mgr.loop.run_until_complete(self._remote_connection(*args))
+        return self.mgr.event_loop.create_task(self._remote_connection(*args)).result()
 
     async def _execute_command(self,
                                host: str,
@@ -108,7 +131,7 @@ class SSHManager:
         return out, err, r.returncode
 
     def execute_command(self, *args: Any, **kwargs: Any) -> Tuple[str, str, int]:
-        return self.mgr.loop.run_until_complete(self._execute_command(*args, **kwargs))
+        return self.mgr.event_loop.create_task(self._execute_command(*args, **kwargs)).result()
 
     async def _check_execute_command(self,
                                      host: str,
@@ -123,7 +146,7 @@ class SSHManager:
         return out
 
     def check_execute_command(self, *args: Any, **kwargs: Any) -> str:
-        return self.mgr.loop.run_until_complete(self._check_execute_command(*args, **kwargs))
+        return self.mgr.event_loop.create_task(self._check_execute_command(*args, **kwargs)).result()
 
     async def _write_remote_file(self,
                                  host: str,
@@ -152,7 +175,7 @@ class SSHManager:
             raise OrchestratorError(msg)
 
     def write_remote_file(self, *args: Any, **kwargs: Any) -> None:
-        return self.mgr.loop.run_until_complete(self._write_remote_file(*args, **kwargs))
+        return self.mgr.event_loop.create_task(self._write_remote_file(*args, **kwargs)).result()
 
     def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)

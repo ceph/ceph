@@ -22,7 +22,6 @@ from mgr_module import MonCommandFailed
 from mgr_util import format_bytes
 
 from . import utils
-from . import ssh
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator

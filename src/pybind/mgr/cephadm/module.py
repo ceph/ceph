@@ -5,6 +5,7 @@ import re
 import shlex
 import asyncio
 import tempfile
+import threading
 from collections import defaultdict
 from configparser import ConfigParser
 from functools import wraps
@@ -348,6 +349,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.ssh = ssh.SSHManager(self)
 
+        # AttributeError: 'EventLoop' object has no attribute 'mgr'
+        # self.ssh_loop = ssh.EventLoop(threading.currentThread())
+
         if self.get_store('pause'):
             self.paused = True
         else:
@@ -496,8 +500,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         of cephadm. This loop will then attempt to apply this new state.
         """
         # for ssh in serve
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
+        self.loops: Dict[threading.Thread, asyncio.AbstractEventLoop] = {}
+        self.event_loop = ssh.EventLoop(self)
 
         serve = CephadmServe(self)
         serve.serve()
