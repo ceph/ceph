@@ -285,7 +285,6 @@ BuildRequires:  gnutls-devel
 BuildRequires:  hwloc-devel
 BuildRequires:  libpciaccess-devel
 BuildRequires:  lksctp-tools-devel
-BuildRequires:  protobuf-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  yaml-cpp-devel
@@ -407,7 +406,6 @@ BuildRequires:  redhat-rpm-config
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  cryptopp-devel
 BuildRequires:  numactl-devel
-BuildRequires:  protobuf-compiler
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libcryptopp-devel
