@@ -28,6 +28,7 @@
 #include "Locker.h"
 #include "MDLog.h"
 #include "LogSegment.h"
+#include "MDBalancer.h"
 
 #include "common/bloom_filter.hpp"
 #include "include/Context.h"
@@ -1577,6 +1578,8 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
 
   if (mdcache->mds->logger) mdcache->mds->logger->inc(l_mds_dir_fetch);
 
+  mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
+
   std::set<dentry_key_t> empty;
   _omap_fetch(NULL, empty);
 }
@@ -1601,6 +1604,8 @@ void CDir::fetch(MDSContext *c, const std::set<dentry_key_t>& keys)
 
   auth_pin(this);
   if (mdcache->mds->logger) mdcache->mds->logger->inc(l_mds_dir_fetch);
+
+  mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
 
   _omap_fetch(c, keys);
 }
@@ -2551,6 +2556,8 @@ void CDir::_commit(version_t want, int op_prio)
   }
   
   if (mdcache->mds->logger) mdcache->mds->logger->inc(l_mds_dir_commit);
+
+  mdcache->mds->balancer->hit_dir(this, META_POP_STORE);
 
   _omap_commit(op_prio);
 }

@@ -4760,7 +4760,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   mdr->reply_extra_bl = dirbl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(dir, META_POP_IRD, -1, numfiles);
+  mds->balancer->hit_dir(dir, META_POP_READDIR, -1, numfiles);
   
   // reply
   mdr->tracei = diri;
