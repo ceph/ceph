@@ -264,11 +264,8 @@ class RookCluster(object):
                 return True
         matching_sc = [i for i in self.storage_classes.items if self.storage_class == i.metadata.name]
         if len(matching_sc) == 0:
-            log.exception("no storage class exists matching name provided in ceph config at mgr/rook/storage_class")
+            log.error(f"No storage class exists matching configured Rook orchestrator storage class which currently is <{self.storage_class}>. This storage class can be set in ceph config (mgr/rook/storage_class)")
             raise Exception('No storage class exists matching name provided in ceph config at mgr/rook/storage_class')
-        if len(matching_sc) > 1:
-            log.exception("too many storage classes matching name provided in ceph config at mgr/rook/storage_class")
-            raise Exception('Too many storage classes matching name provided in ceph config at mgr/rook/storage_class')
         storage_class = matching_sc[0]
 
         lso_discovery_results = []
@@ -277,7 +274,7 @@ class RookCluster(object):
             try:
                 lso_discovery_results = [i for i in self.discovery_results.items if predicate(i)]
             except ApiException as dummy_e:
-                log.exception("Failed to fetch device metadata")
+                log.error("Failed to fetch device metadata")
                 raise
 
         lso_devices = {}
@@ -293,7 +290,7 @@ class RookCluster(object):
             try:
                 factor = units.index(unit)
             except ValueError:
-                log.exception("PV size format invalid")
+                log.error("PV size format invalid")
                 raise
             coeff = int(size_str[:-2])
             size = coeff * (2 ** (10 * factor))
