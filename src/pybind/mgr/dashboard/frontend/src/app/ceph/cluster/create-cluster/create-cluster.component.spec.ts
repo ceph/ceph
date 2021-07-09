@@ -87,7 +87,7 @@ describe('CreateClusterComponent', () => {
     fixture.detectChanges();
     const heading = fixture.debugElement.query(By.css('.title')).nativeElement;
     expect(wizardStepServiceSpy).toHaveBeenCalledTimes(1);
-    expect(hostServiceSpy).toBeCalledTimes(1);
+    expect(hostServiceSpy).toBeCalledTimes(2);
     expect(heading.innerHTML).toBe('Review');
   });
 
