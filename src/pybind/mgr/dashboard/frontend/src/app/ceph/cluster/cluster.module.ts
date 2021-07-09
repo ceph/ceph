@@ -22,6 +22,7 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
 import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';
 import { ConfigurationFormComponent } from './configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './configuration/configuration.component';
+import { CreateClusterReviewComponent } from './create-cluster/create-cluster-review.component';
 import { CreateClusterComponent } from './create-cluster/create-cluster.component';
 import { CrushmapComponent } from './crushmap/crushmap.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
@@ -114,7 +115,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     ServiceFormComponent,
     OsdFlagsIndivModalComponent,
     PlacementPipe,
-    CreateClusterComponent
+    CreateClusterComponent,
+    CreateClusterReviewComponent
   ],
   providers: [NgbActiveModal]
 })
