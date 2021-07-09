@@ -47,8 +47,6 @@ root default {
 rule replicated_rule {
 	id 0
 	type replicated
-	min_size 1
-	max_size 10
 	step take default
 	step choose firstn 0 type osd
 	step emit
