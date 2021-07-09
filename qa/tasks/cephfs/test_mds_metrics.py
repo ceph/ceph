@@ -5,7 +5,7 @@ import random
 import logging
 import errno
 
-from teuthology.contextutil import safe_while
+from teuthology.contextutil import safe_while, MaxWhileTries
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
@@ -454,3 +454,58 @@ class TestMDSMetrics(CephFSTestCase):
             if not (client_metadata[i]['valid_metrics']):
                 raise RuntimeError("valid_metrics not found!")
 
+    def test_perf_stats_stale_metrics(self):
+        """
+        That `ceph fs perf stats` doesn't output stale metrics after the rank0 MDS failover
+        """
+        # validate
+        valid, metrics = self._get_metrics(self.verify_mds_metrics(
+            active_mds_count=1, client_count=TestMDSMetrics.CLIENTS_REQUIRED), 30)
+        log.debug("metrics={0}".format(metrics))
+        self.assertTrue(valid)
+
+        global_metrics = metrics['global_metrics']
+
+        #TestMDSMetrics.CLIENTS_REQUIRED clients are mounted here. So they should be
+        #the first two entries in the global_metrics and won't be culled later on.
+        gm_keys_list = list(global_metrics.keys())
+        client1_metrics = global_metrics[gm_keys_list[0]]
+        client2_metrics = global_metrics[gm_keys_list[1]]
+
+        #fail rank0 mds
+        self.fs.rank_fail(rank=0)
+
+        # Wait for 10 seconds for the failover to complete and
+        # the mgr to get initial metrics from the new rank0 mds.
+        time.sleep(10)
+
+        fscid = self.fs.id
+
+        # spread directory per rank
+        self._spread_directory_on_all_ranks(fscid)
+
+        # spread some I/O
+        self._do_spread_io_all_clients(fscid)
+
+        # wait a bit for mgr to get updated metrics
+        time.sleep(5)
+
+        # validate
+        try:
+            valid, metrics_new = self._get_metrics(self.verify_mds_metrics(
+                active_mds_count=1, client_count=TestMDSMetrics.CLIENTS_REQUIRED), 30)
+            log.debug("metrics={0}".format(metrics_new))
+            self.assertTrue(valid)
+
+            global_metrics = metrics_new['global_metrics']
+            client1_metrics_new = global_metrics[gm_keys_list[0]]
+            client2_metrics_new = global_metrics[gm_keys_list[1]]
+
+            #the metrics should be different for the test to succeed.
+            self.assertNotEqual(client1_metrics, client1_metrics_new)
+            self.assertNotEqual(client2_metrics, client2_metrics_new)
+        except MaxWhileTries:
+            raise RuntimeError("Failed to fetch `ceph fs perf stats` metrics")
+        finally:
+            # cleanup test directories
+            self._cleanup_test_dirs()
