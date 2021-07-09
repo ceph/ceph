@@ -4,6 +4,7 @@ Telemetry module for ceph-mgr
 Collect statistics from Ceph cluster and send this back to the Ceph project
 when user has opted-in
 """
+import numbers
 import errno
 import hashlib
 import json
@@ -367,106 +368,51 @@ class Module(MgrModule):
         return crashlist
 
     def gather_perf_counters(self) -> Dict[str, dict]:
-        # Initialize 'perf schema' dict
-        perf_schema: Dict[str, dict] = defaultdict(dict)
-
-        # Get initial info, condense among like daemons (i.e. 'osd' = 'osd.0'
-        # + 'osd.1' + 'osd.2') and put results into 'perf schema'
-        initial_info = self.get_all_perf_counters()
-        for daemon in initial_info:
-            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
-            if daemon_type not in perf_schema:
-                perf_schema[daemon_type] = initial_info[daemon]
-            else:
-                for collection in perf_schema[daemon_type]:
-                    for field in perf_schema[daemon_type][collection]:
-                        if type(perf_schema[daemon_type][collection][field]) != str:
-                            perf_schema[daemon_type][collection][field] += \
-                                    initial_info[daemon][collection][field]
+        # Extract perf counter data with get_all_perf_counters(), a method
+        # from mgr/mgr_module.py. This method returns a nested dictionary that
+        # looks a lot like perf schema, except with some additional fields.
+        #
+        # Example of output, a snapshot of a mon daemon:
+        #   "mon.b": {
+        #       "bluestore.kv_flush_lat": {
+        #           "count": 2431,
+        #           "description": "Average kv_thread flush latency",
+        #           "nick": "fl_l",
+        #           "priority": 8,
+        #           "type": 5,
+        #           "units": 1,
+        #           "value": 88814109
+        #       },
+        #   },
+        all_perf_counters = self.get_all_perf_counters()
 
         # Initialize 'result' dict
-        result: Dict[str, dict] = defaultdict(dict)
-        for daemon in perf_schema:
-            result[daemon] = {}
-            for collection in perf_schema[daemon]:
-                col_split = collection.split('.')
-                result[daemon][col_split[0]] = {}
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
+            lambda: defaultdict(lambda: defaultdict(int))))
 
-        # Derive 'perf dump' from the output of 'perf schema'
-        for daemon in perf_schema:
-            for collection in perf_schema[daemon]:
+        # Condense metrics among like daemons (i.e. 'osd' = 'osd.0' +
+        # 'osd.1' + 'osd.2'), and update the 'result' dict.
+        for daemon in all_perf_counters:
+            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
+            for collection in all_perf_counters[daemon]:
 
-                # Split the collection to avoid redundancy in json report; i.e.:
+                # Split the collection to avoid redundancy in final report; i.e.:
                 #   bluestore.kv_flush_lat, bluestore.kv_final_lat --> 
                 #   bluestore: kv_flush_lat, kv_final_lat
-                col_split = collection.split('.')
+                col_0, col_1 = collection.split('.')
 
-                # Initialize the collection dictionary; i.e.:
-                #   "bluestore": {
-                #       "kv_flush_lat": {
-                #       },
-                #   },
-                result[daemon][col_split[0]][col_split[1]] = \
-                        result[daemon][col_split[0]].get(col_split[1], {})
-
-                # Derive sum from perf_schema output; applies in all situations.
-                #   'sum' = the perf_schema 'value' field
-                # (see https://docs.ceph.com/en/latest/dev/perf_counters/)
-                _sum = perf_schema[daemon][collection]['value']
-
-                # In the case that there is a 'count' field in perf_schema, derive 
-                # 'avgcount' and 'avgtime' from perf_schema output.
-                #
-                #   'avgcount' = the perf_schema 'count' field
-                #   'avgtime' = 'sum' / 'avgcount'
-                # (see https://docs.ceph.com/en/latest/dev/perf_counters/)
-                #
-                # Example of perf_schema output:
-                #   "mon.b": {
-                #       "bluestore.kv_flush_lat": {
-                #           "count": 2431,
-                #           "description": "Average kv_thread flush latency",
-                #           "nick": "fl_l",
-                #           "priority": 8,
-                #           "type": 5,
-                #           "units": 1,
-                #           "value": 88814109
-                #       },
-                #   },
-                if 'count' in perf_schema[daemon][collection]:
-                    avgcount = perf_schema[daemon][collection]['count']
-
-                    # Check for divide by 0
-                    if avgcount != 0:
-                        _sum = _sum / 1000000000
-                        avgtime = _sum / avgcount
-                    else:
-                        avgtime = 0
-
-                    # Add to result; i.e.:
-                    #   "mon.b": {
-                    #       "bluestore": {
-                    #           "kv_flush_lat": {
-                    #               "avgcount": 2516,
-                    #               "sum": 0.081231401,
-                    #               "avgtime": 0.000032285
-                    #           },
-                    #       },
-                    #   },
-                    result[daemon][col_split[0]][col_split[1]]['avgcount'] = avgcount
-                    result[daemon][col_split[0]][col_split[1]]['sum'] = _sum
-                    result[daemon][col_split[0]][col_split[1]]['avgtime'] = avgtime
-
-                # In the case that there is no 'count' field in perf_schema, just include 
-                # the sum; i.e.:
-
-                    #   "mon.b": {
-                    #       "bluefs": {
-                    #           "db_total_bytes": 1073733632,
-                    #       },
-                    #   },
-                else:
-                    result[daemon][col_split[0]][col_split[1]] = _sum
+                # Check that the value can be incremented. In some cases,
+                # the files are of type 'pair' (real-integer-pair, integer-integer pair).
+                # In those cases, the value is a dictionary, and not a number.
+                #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
+                if isinstance(all_perf_counters[daemon][collection]['value'], numbers.Number):
+                    result[daemon_type][col_0][col_1]['value'] += \
+                            all_perf_counters[daemon][collection]['value']
+                
+                # Check that 'count' exists, as not all counters have a count field. 
+                if 'count' in all_perf_counters[daemon][collection]:
+                    result[daemon_type][col_0][col_1]['count'] += \
+                            all_perf_counters[daemon][collection]['count']
 
         return result
 
