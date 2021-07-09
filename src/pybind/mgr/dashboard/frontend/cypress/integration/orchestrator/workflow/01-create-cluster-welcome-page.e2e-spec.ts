@@ -1,4 +1,4 @@
-import { CreateClusterWelcomePageHelper } from '../cluster/cluster-welcome-page.po';
+import { CreateClusterWelcomePageHelper } from 'cypress/integration/cluster/cluster-welcome-page.po';
 
 describe('Create cluster page', () => {
   const createCluster = new CreateClusterWelcomePageHelper();
