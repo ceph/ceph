@@ -90,10 +90,8 @@ describe('CreateClusterComponent', () => {
     fixture.detectChanges();
     component.onNextStep();
     fixture.detectChanges();
-    const heading = fixture.debugElement.query(By.css('.title')).nativeElement;
     expect(wizardStepServiceSpy).toHaveBeenCalledTimes(1);
-    expect(hostServiceSpy).toBeCalledTimes(1);
-    expect(heading.innerHTML).toBe('Review');
+    expect(hostServiceSpy).toBeCalledTimes(2);
   });
 
   it('should show the button labels correctly', () => {
