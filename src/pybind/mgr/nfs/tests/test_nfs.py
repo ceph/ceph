@@ -768,6 +768,97 @@ NFS_CORE_PARAM {
         r = conf.apply_export(cluster_id, self.export_3)
         assert r[0] == 0
 
+    def test_update_export_with_list(self):
+        with self._mock_orchestrator(True):
+            for cluster_id, info in self.clusters.items():
+                self._do_test_update_export_with_list(cluster_id, info['exports'])
+                self._reset_temp_store()
+
+    def _do_test_update_export_with_list(self, cluster_id, expected_exports):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        r = conf.apply_export(cluster_id, json.dumps([
+            {
+                'path': 'bucket',
+                'pseudo': '/rgw/bucket',
+                'cluster_id': cluster_id,
+                'tag': 'bucket_tag',
+                'access_type': 'RW',
+                'squash': 'root',
+                'security_label': False,
+                'protocols': [4],
+                'transports': ['TCP'],
+                'clients': [{
+                    'addresses': ["192.168.0.0/16"],
+                    'access_type': None,
+                    'squash': None
+                }],
+                'fsal': {
+                    'name': 'RGW',
+                    'user_id': 'nfs.foo.bucket',
+                    'access_key_id': 'the_access_key',
+                    'secret_access_key': 'the_secret_key',
+                }
+            },
+            {
+                'path': 'bucket2',
+                'pseudo': '/rgw/bucket2',
+                'cluster_id': cluster_id,
+                'tag': 'bucket_tag',
+                'access_type': 'RO',
+                'squash': 'root',
+                'security_label': False,
+                'protocols': [4],
+                'transports': ['TCP'],
+                'clients': [{
+                    'addresses': ["192.168.0.0/16"],
+                    'access_type': None,
+                    'squash': None
+                }],
+                'fsal': {
+                    'name': 'RGW',
+                    'user_id': 'nfs.foo.bucket2',
+                    'access_key_id': 'the_access_key',
+                    'secret_access_key': 'the_secret_key',
+                }
+            },
+        ]))
+        assert r[0] == 0
+
+        export = conf._fetch_export('foo', '/rgw/bucket')
+        assert export.export_id == 3
+        assert export.path == "bucket"
+        assert export.pseudo == "/rgw/bucket"
+        assert export.access_type == "RW"
+        assert export.squash == "root"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP"]
+        assert export.fsal.name == "RGW"
+        assert export.fsal.user_id == "nfs.foo.bucket"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
+        assert len(export.clients) == 1
+        assert export.clients[0].squash is None
+        assert export.clients[0].access_type is None
+        assert export.cluster_id == cluster_id
+
+        export = conf._fetch_export('foo', '/rgw/bucket2')
+        assert export.export_id == 4
+        assert export.path == "bucket2"
+        assert export.pseudo == "/rgw/bucket2"
+        assert export.access_type == "RO"
+        assert export.squash == "root"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP"]
+        assert export.fsal.name == "RGW"
+        assert export.fsal.user_id == "nfs.foo.bucket2"
+        assert export.fsal.access_key_id == "the_access_key"
+        assert export.fsal.secret_access_key == "the_secret_key"
+        assert len(export.clients) == 1
+        assert export.clients[0].squash is None
+        assert export.clients[0].access_type is None
+        assert export.cluster_id == cluster_id
+
     def test_remove_export(self) -> None:
         with self._mock_orchestrator(True), mock.patch('nfs.module.ExportMgr._exec'):
             for cluster_id, info in self.clusters.items():
