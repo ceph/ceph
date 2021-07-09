@@ -3,7 +3,7 @@ Feature: Install a basic Ceph cluster
   Order to be able to provide storage services
   As an system administrator
   I want to install a Ceph cluster in the following server infraestructure:
-          - s3 nodes with 8Gb RAM, 4 CPUs, and 3 storage devices of 20Gb each.
+          - 3 nodes with 8Gb RAM, 4 CPUs, and 3 storage devices of 20Gb each.
           - Using Fedora32 image in each node
 
 
@@ -19,7 +19,7 @@ Feature: Install a basic Ceph cluster
         """
     Then I get
         """
-        Using recent ceph image quay.ceph.io/ceph-ci/ceph@sha256:18dd6d0b867457a19108e52ae1cb5676d79d9d4282af6a7d767ba18a8c480bbb
-        ceph version 17.0.0-5858-g7a31ae31 (7a31ae31584fdb967c470974034070ce9e687ac7) quincy (dev)
+        Using recent ceph image quay.ceph.io/ceph-ci/ceph@sha256:3de12b528d96767fae5adb4acdd773618b5e0ee7e2b197ae1c174419ddcec7bc
+        ceph version 17.0.0-5873-g0509deb6 (0509deb6a895a98e3e582cbb849606bc559b963c) quincy (dev)
 
         """

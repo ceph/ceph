@@ -23,6 +23,8 @@ def execute_kcli_cmd(command):
     cmd = _create_kcli_cmd(command)
     logging.info(f"Executing cmd : {command}")
     proc = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"stdout : {proc.stdout}")
+    print(f"stderr : {proc.stderr}")
     if proc.stdout:
         return proc.stdout
     return proc.stderr

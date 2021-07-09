@@ -90,7 +90,7 @@ def _parse_feature_specifications(features):
 
 def _handle_kcli_plan(command_type, plan_file_path=None):
     _output = None
-    print(f"Calling before create")
+    print(f"Calling create vm command")
     if command_type == "create":
         _output = execute_kcli_cmd(
             f"create plan -f {plan_file_path} {KCLI_PLAN_NAME}"
@@ -118,7 +118,8 @@ def before_feature(context, feature):
     _write_file(kcli_plan_path, gen_kcli)
     logging.info("Calling kcli create command")
     logging.info(f"Waiting for executing script :{time.ctime()}")
-    _handle_kcli_plan("create", kcli_plan_path)
+    _handle_kcli_plan("create", os.path.relpath(kcli_plan_path))
+    print(f"Waiting for bootstrap_cluster script...")
     time.sleep(180)
     logging.info(f"Completed for executing script :{time.ctime()}")
 
