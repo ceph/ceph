@@ -289,7 +289,6 @@ struct WriteLogPoolRoot {
   #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t layout_version = 0;
-  uint64_t cur_sync_gen = 0;
   #endif
   uint64_t pool_size;
   uint64_t flushed_sync_gen;     /* All writing entries with this or a lower
@@ -303,7 +302,6 @@ struct WriteLogPoolRoot {
   DENC(WriteLogPoolRoot, v, p) {
     DENC_START(1, 1, p);
     denc(v.layout_version, p);
-    denc(v.cur_sync_gen, p);
     denc(v.pool_size, p);
     denc(v.flushed_sync_gen, p);
     denc(v.block_size, p);

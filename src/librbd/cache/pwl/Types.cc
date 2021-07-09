@@ -90,7 +90,6 @@ void WriteLogCacheEntry::generate_test_instances(list<WriteLogCacheEntry*>& ls) 
 
 void WriteLogPoolRoot::dump(Formatter *f) const {
   f->dump_unsigned("layout_version", layout_version);
-  f->dump_unsigned("cur_sync_gen", cur_sync_gen);
   f->dump_unsigned("pool_size", pool_size);
   f->dump_unsigned("flushed_sync_gen", flushed_sync_gen);
   f->dump_unsigned("block_size", block_size);
@@ -102,7 +101,6 @@ void WriteLogPoolRoot::generate_test_instances(list<WriteLogPoolRoot*>& ls) {
   ls.push_back(new WriteLogPoolRoot);
   ls.push_back(new WriteLogPoolRoot);
   ls.back()->layout_version = 2;
-  ls.back()->cur_sync_gen = 1;
   ls.back()->pool_size = 1024;
   ls.back()->flushed_sync_gen = 1;
   ls.back()->block_size = 4096;
