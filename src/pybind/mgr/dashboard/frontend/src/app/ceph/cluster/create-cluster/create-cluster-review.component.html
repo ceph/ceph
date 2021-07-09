@@ -1,0 +1,31 @@
+<div class="row">
+  <div class="col-lg-4">
+    <fieldset>
+      <legend class="cd-header"
+              i18n>Cluster Resources</legend>
+      <table class="table table-striped">
+        <tr>
+          <td i18n
+              class="bold">Hosts</td>
+          <td>{{ hostsCount }}</td>
+        </tr>
+      </table>
+    </fieldset>
+  </div>
+
+  <div class="col-lg-8">
+    <legend i18n
+            class="cd-header">Hosts by Label</legend>
+    <cd-table [data]="hostsByLabel['data']"
+              [columns]="hostsByLabel['columns']"
+              [toolHeader]="false">
+    </cd-table>
+
+    <legend i18n
+            class="cd-header">Host Details</legend>
+    <cd-table [data]="hostsDetails['data']"
+              [columns]="hostsDetails['columns']"
+              [toolHeader]="false">
+    </cd-table>
+  </div>
+</div>
