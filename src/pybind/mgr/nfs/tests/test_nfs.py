@@ -6,6 +6,7 @@ from typing import Optional, Tuple, Iterator, List, Any, Dict
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import MagicMock
+from mgr_module import NFS_POOL_NAME
 
 from ceph.deployment.service_spec import NFSServiceSpec
 from nfs import Module
@@ -101,14 +102,14 @@ EXPORT {
 
     conf_nodeb = '%url "rados://ganesha/ns/export-1"'
 
-    conf_nfs_foo = '''
-%url "rados://.nfs/foo/export-1"
+    conf_nfs_foo = f'''
+%url "rados://{NFS_POOL_NAME}/foo/export-1"
 
-%url "rados://.nfs/foo/export-2"'''
+%url "rados://{NFS_POOL_NAME}/foo/export-2"'''
 
     clusters = {
         'foo': {
-            'pool': '.nfs',
+            'pool': NFS_POOL_NAME,
             'namespace': 'foo',
             'type': "ORCHESTRATOR",
             'daemon_conf': 'conf-nfs.foo',
@@ -288,17 +289,17 @@ EXPORT {
                 "minor_versions": [1, 2]
             }),
             RawBlock('RADOS_KV', values={
-                "pool": ".nfs",
+                "pool": NFS_POOL_NAME,
                 "namespace": "vstart",
                 "userid": "vstart",
                 "nodeid": "a"
             }),
             RawBlock('RADOS_URLS', values={
                 "userid": "vstart",
-                "watch_url": "'rados://.nfs/vstart/conf-nfs.vstart'"
+                "watch_url": f"'rados://{NFS_POOL_NAME}/vstart/conf-nfs.vstart'"
             }),
             RawBlock('%url', values={
-                "value": "rados://.nfs/vstart/conf-nfs.vstart"
+                "value": f"rados://{NFS_POOL_NAME}/vstart/conf-nfs.vstart"
             })
         ]
         daemon_raw_config = """
@@ -319,7 +320,7 @@ NFS_CORE_PARAM {
         }
 
         RADOS_KV {
-           pool = .nfs;
+           pool = {};
            namespace = vstart;
            UserId = vstart;
            nodeid = a;
@@ -327,11 +328,11 @@ NFS_CORE_PARAM {
 
         RADOS_URLS {
        Userid = vstart;
-       watch_url = 'rados://.nfs/vstart/conf-nfs.vstart';
+       watch_url = 'rados://{}/vstart/conf-nfs.vstart';
         }
 
-    %url rados://.nfs/vstart/conf-nfs.vstart
-"""
+    %url rados://{}/vstart/conf-nfs.vstart
+""".replace('{}', NFS_POOL_NAME)
         daemon_config = GaneshaConfParser(daemon_raw_config).parse()
         assert daemon_config == expected_daemon_config
 
