@@ -54,7 +54,6 @@ set(librgw_common_srcs
   rgw_bucket_layout.cc
   rgw_bucket_sync.cc
   rgw_cache.cc
-  rgw_d3n_datacache.cc
   rgw_common.cc
   rgw_compression.cc
   rgw_etag_verifier.cc
@@ -156,7 +155,9 @@ set(librgw_common_srcs
   rgw_lua_utils.cc
   rgw_lua.cc
   rgw_lua_request.cc)
-
+if(HAVE_LIBAIO)
+  list(APPEND librgw_common_srcs rgw_d3n_datacache.cc)
+endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()

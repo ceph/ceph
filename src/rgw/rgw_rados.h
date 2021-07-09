@@ -27,7 +27,9 @@
 #include "rgw_service.h"
 #include "rgw_sal.h"
 #include "rgw_aio.h"
+#if defined(HAVE_LIBAIO)
 #include "rgw_d3n_cacherequest.h"
+#endif
 
 #include "services/svc_rados.h"
 #include "services/svc_bi_rados.h"
@@ -1102,7 +1104,9 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
+#if defined(HAVE_LIBAIO)
   D3nDataCache* d3n_data_cache{nullptr};
+#endif
 
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw::sal::Object* obj, const DoutPrefixProvider *dpp, optional_yield y);
 
@@ -1595,13 +1599,17 @@ struct get_obj_data {
                uint64_t offset, optional_yield yield)
                : rgwrados(rgwrados), client_cb(cb), aio(aio), offset(offset), yield(yield) {}
   ~get_obj_data() {
+#if defined(HAVE_LIBAIO)
     if (rgwrados->get_use_datacache()) {
       const std::lock_guard l(d3n_get_data.d3n_lock);
     }
+#endif
   }
 
+#if defined(HAVE_LIBAIO)
   D3nGetObjData d3n_get_data;
   atomic_bool d3n_bypass_cache_write{false};
+#endif
 
   int flush(rgw::AioResultList&& results);
 
