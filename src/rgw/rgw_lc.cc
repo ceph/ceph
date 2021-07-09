@@ -1414,10 +1414,6 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
 
     int r = (*selected)->process(ctx);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " 
-			<< env.bucket << ":" << o.key
-			<< " " << cpp_strerror(r)
-			<< " " << wq->thr_name() << dendl;
       return r;
     }
     ldpp_dout(dpp, 20) << "processed:" << env.bucket << ":"
