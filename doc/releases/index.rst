@@ -59,6 +59,7 @@ Release timeline
 
 
 .. _Pacific: pacific
+.. _16.2.5: pacific#v16-2-5-pacific
 .. _16.2.4: pacific#v16-2-4-pacific
 .. _16.2.3: pacific#v16-2-3-pacific
 .. _16.2.2: pacific#v16-2-2-pacific
