@@ -190,15 +190,17 @@ public:
    * - extent_set if already in cache
    * - disk
    */
+  using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
   using get_extent_ertr = base_ertr;
   template <typename T>
   using get_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
   template <typename T>
   get_extent_ret<T> get_extent(
-    paddr_t offset,       ///< [in] starting addr
-    segment_off_t length  ///< [in] length
+    paddr_t offset,                ///< [in] starting addr
+    segment_off_t length,          ///< [in] length
+    const src_ext_t* p_metric_key  ///< [in] cache query metric key
   ) {
-    auto cached = query_cache(offset);
+    auto cached = query_cache(offset, p_metric_key);
     if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
@@ -246,7 +248,8 @@ public:
     get_extent_if_cached_iertr::future<CachedExtentRef>;
   get_extent_if_cached_ret get_extent_if_cached(
     Transaction &t,
-    paddr_t offset) {
+    paddr_t offset,
+    extent_types_t type) {
     CachedExtentRef ret;
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
@@ -256,7 +259,8 @@ public:
     }
 
     // get_extent_ret::ABSENT from transaction
-    ret = query_cache(offset);
+    auto metric_key = std::make_pair(t.get_src(), type);
+    ret = query_cache(offset, &metric_key);
     if (!ret ||
         // retired_placeholder is not really cached yet
         ret->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
@@ -295,8 +299,9 @@ public:
       return seastar::make_ready_future<TCachedExtentRef<T>>(
 	ret->cast<T>());
     } else {
+      auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
-	get_extent<T>(offset, length)
+	get_extent<T>(offset, length, &metric_key)
       ).si_then(
 	[&t, this](auto ref) {
 	  if (!ref->is_valid()) {
@@ -324,10 +329,11 @@ public:
    * and read in the extent at location offset~length.
    */
   get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
-    extent_types_t type,  ///< [in] type tag
-    paddr_t offset,       ///< [in] starting addr
-    laddr_t laddr,        ///< [in] logical address if logical
-    segment_off_t length  ///< [in] length
+    extent_types_t type,             ///< [in] type tag
+    paddr_t offset,                  ///< [in] starting addr
+    laddr_t laddr,                   ///< [in] logical address if logical
+    segment_off_t length,            ///< [in] length
+    const Transaction::src_t* p_src  ///< [in] src tag for cache query metric
   );
 
   using get_extent_by_type_iertr = get_extent_iertr;
@@ -346,8 +352,9 @@ public:
     } else if (status == Transaction::get_extent_ret::PRESENT) {
       return seastar::make_ready_future<CachedExtentRef>(ret);
     } else {
+      auto src = t.get_src();
       return trans_intr::make_interruptible(
-	get_extent_by_type(type, offset, laddr, length)
+	get_extent_by_type(type, offset, laddr, length, &src)
       ).si_then([=, &t](CachedExtentRef ret) {
         if (!ret->is_valid()) {
           LOG_PREFIX(Cache::get_extent_by_type);
@@ -584,12 +591,18 @@ private:
    */
   CachedExtent::list dirty;
 
-  using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
+  struct query_counters_t {
+    uint64_t access;
+    uint64_t hit;
+  };
+
   struct {
     std::array<uint64_t, Transaction::SRC_MAX> trans_created_by_src;
     std::array<uint64_t, Transaction::SRC_MAX> trans_committed_by_src;
     std::unordered_map<src_ext_t, uint64_t,
                        boost::hash<src_ext_t>> trans_invalidated;
+    std::unordered_map<src_ext_t, query_counters_t,
+                       boost::hash<src_ext_t>> cache_query;
   } stats;
   uint64_t& get_counter(
       std::array<uint64_t, Transaction::SRC_MAX>& counters_by_src,
@@ -661,9 +674,22 @@ private:
   }
 
   // Extents in cache may contain placeholders
-  CachedExtentRef query_cache(paddr_t offset) {
+  CachedExtentRef query_cache(
+      paddr_t offset,
+      const src_ext_t* p_metric_key) {
+    query_counters_t* p_counters = nullptr;
+    if (p_metric_key) {
+      assert(stats.cache_query.count(*p_metric_key));
+      p_counters = &stats.cache_query[*p_metric_key];
+      ++p_counters->access;
+    }
     if (auto iter = extents.find_offset(offset);
         iter != extents.end()) {
+      if (p_metric_key &&
+          // retired_placeholder is not really cached yet
+          iter->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
+        ++p_counters->hit;
+      }
       return CachedExtentRef(&*iter);
     } else {
       return CachedExtentRef();
