@@ -46,7 +46,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   }
 
   // absent from transaction
-  ext = query_cache(addr);
+  // retiring is not included by the cache hit metrics
+  ext = query_cache(addr, nullptr);
   if (ext) {
     if (ext->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
       t.add_to_read_set(ext);
@@ -241,6 +242,76 @@ void Cache::register_metrics()
           return total;
         },
         sm::description("total number of transaction invalidated"),
+        {src_label("ALL")}
+      ),
+    }
+  );
+
+  /*
+   * cache_query: cache_access and cache_hit
+   */
+  auto register_cache_access =
+    [this, &labels_by_src, &labels_by_ext]
+    (src_t src, const sm::label_instance& src_label,
+     extent_types_t ext, const sm::label_instance& ext_label) {
+      auto m_key = std::make_pair(src, ext);
+      stats.cache_query[m_key] = {0, 0};
+      {
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              "cache_access",
+              stats.cache_query.find(m_key)->second.access,
+              sm::description("total number of cache accesses labeled by "
+                              "transaction source and extent type"),
+              {src_label, ext_label}
+            ),
+            sm::make_counter(
+              "cache_hit",
+              stats.cache_query.find(m_key)->second.hit,
+              sm::description("total number of cache hits labeled by "
+                              "transaction source and extent type"),
+              {src_label, ext_label}
+            ),
+          }
+        );
+      }
+    };
+
+  for (auto& [src, src_label] : labels_by_src) {
+    for (auto& [ext, ext_label] : labels_by_ext) {
+      if (ext != extent_types_t::RETIRED_PLACEHOLDER) {
+        register_cache_access(src, src_label, ext, ext_label);
+      }
+    }
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "cache_access",
+        [this] {
+          uint64_t total = 0;
+          for (auto& [k, v] : stats.cache_query) {
+            total += v.access;
+          }
+          return total;
+        },
+        sm::description("total number of cache accesses"),
+        {src_label("ALL")}
+      ),
+      sm::make_counter(
+        "cache_hit",
+        [this] {
+          uint64_t total = 0;
+          for (auto& [k, v] : stats.cache_query) {
+            total += v.hit;
+          }
+          return total;
+        },
+        sm::description("total number of cache hits"),
         {src_label("ALL")}
       ),
     }
@@ -649,7 +720,8 @@ Cache::replay_delta(
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
-      auto ret = query_cache(addr);
+      // replay is not included by the cache hit metrics
+      auto ret = query_cache(addr, nullptr);
       if (ret) {
         // no retired-placeholder should be exist yet because no transaction
         // has been created.
@@ -662,11 +734,13 @@ Cache::replay_delta(
       }
     };
     auto extent_fut = (delta.pversion == 0 ?
+      // replay is not included by the cache hit metrics
       get_extent_by_type(
-	delta.type,
-	delta.paddr,
-	delta.laddr,
-	delta.length) :
+        delta.type,
+        delta.paddr,
+        delta.laddr,
+        delta.length,
+        nullptr) :
       _get_extent_if_cached(
 	delta.paddr)
     ).handle_error(
@@ -764,45 +838,60 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
   laddr_t laddr,
-  segment_off_t length)
+  segment_off_t length,
+  const Transaction::src_t* p_src)
 {
   return [=] {
+    src_ext_t* p_metric_key = nullptr;
+    src_ext_t metric_key;
+    if (p_src) {
+      metric_key = std::make_pair(*p_src, type);
+      p_metric_key = &metric_key;
+    }
+
     switch (type) {
     case extent_types_t::ROOT:
       assert(0 == "ROOT is never directly read");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::LADDR_INTERNAL:
-      return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
+      return get_extent<lba_manager::btree::LBAInternalNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::LADDR_LEAF:
-      return get_extent<lba_manager::btree::LBALeafNode>(offset, length
+      return get_extent<lba_manager::btree::LBALeafNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_INNER:
-      return get_extent<omap_manager::OMapInnerNode>(offset, length
+      return get_extent<omap_manager::OMapInnerNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_LEAF:
-      return get_extent<omap_manager::OMapLeafNode>(offset, length
+      return get_extent<omap_manager::OMapLeafNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::COLL_BLOCK:
-      return get_extent<collection_manager::CollectionNode>(offset, length
+      return get_extent<collection_manager::CollectionNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::ONODE_BLOCK_STAGED:
-      return get_extent<onode::SeastoreNodeExtent>(offset, length
+      return get_extent<onode::SeastoreNodeExtent>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OBJECT_DATA_BLOCK:
-      return get_extent<ObjectDataBlock>(offset, length
+      return get_extent<ObjectDataBlock>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
@@ -810,12 +899,14 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       ceph_assert(0 == "impossible");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::TEST_BLOCK:
-      return get_extent<TestBlock>(offset, length
+      return get_extent<TestBlock>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::TEST_BLOCK_PHYSICAL:
-      return get_extent<TestBlockPhysical>(offset, length
+      return get_extent<TestBlockPhysical>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
