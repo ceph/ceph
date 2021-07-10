@@ -46,6 +46,41 @@ static write_ertr::future<> do_write(
   });
 }
 
+static write_ertr::future<> do_writev(
+  seastar::file &device,
+  uint64_t offset,
+  bufferlist&& bl,
+  size_t block_size)
+{
+  logger().debug(
+    "block: do_writev offset {} len {}",
+    offset,
+    bl.length());
+
+  // writev requires each buffer to be aligned to the disks' block
+  // size, we need to rebuild here
+  bl.rebuild_aligned(block_size);
+
+  std::vector<iovec> iov;
+  bl.prepare_iov(&iov);
+  return device.dma_write(
+    offset,
+    std::move(iov)
+  ).handle_exception([](auto e) -> write_ertr::future<size_t> {
+      logger().error(
+	"do_writev: dma_write got error {}",
+	e);
+      return crimson::ct_error::input_output_error::make();
+  }).then(
+    [bl=std::move(bl)/* hold the buf until the end of io */](size_t written)
+	       -> write_ertr::future<> {
+    if (written != bl.length()) {
+      return crimson::ct_error::input_output_error::make();
+    }
+    return write_ertr::now();
+  });
+}
+
 static read_ertr::future<> do_read(
   seastar::file &device,
   uint64_t offset,
@@ -310,30 +345,7 @@ Segment::write_ertr::future<> BlockSegmentManager::segment_write(
     addr.offset,
     get_offset(addr),
     bl.length());
-
-  bufferptr bptr;
-  try {
-    bptr = bufferptr(ceph::buffer::create_page_aligned(bl.length()));
-    auto iter = bl.cbegin();
-    iter.copy(bl.length(), bptr.c_str());
-  } catch (const std::exception &e) {
-    logger().error(
-      "BlockSegmentManager::segment_write: "
-      "exception creating aligned buffer {}",
-      e
-    );
-    throw e;
-  }
-
-  
-  // TODO send an iovec and avoid the copy -- bl should have aligned
-  // constituent buffers and they will remain unmodified until the write
-  // completes
-  return seastar::do_with(
-    std::move(bptr),
-    [&](auto &bp) {
-      return do_write(device, get_offset(addr), bp);
-    });
+  return do_writev(device, get_offset(addr), std::move(bl), superblock.block_size);
 }
 
 BlockSegmentManager::~BlockSegmentManager()
