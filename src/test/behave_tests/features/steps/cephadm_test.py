@@ -28,7 +28,4 @@ def execute_step(context):
 def validation_step(context):
     expected_keywords = context.text.split(" ")
     for key in expected_keywords:
-        assert (
-            key in context.output,
-            f"{key} not found in output \n {context.output}"
-        )
+        assert key in context.output, f"{key} not found in output \n {context.output}"
