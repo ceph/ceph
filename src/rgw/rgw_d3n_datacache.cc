@@ -144,7 +144,7 @@ int D3nDataCache::d3n_io_write(bufferlist& bl, unsigned int len, std::string oid
   return r;
 }
 
-void d3n_libaio_write_cb(sigval_t sigval)
+void d3n_libaio_write_cb(sigval sigval)
 {
   lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "()" << dendl;
   D3nCacheAioWriteRequest* c = static_cast<D3nCacheAioWriteRequest*>(sigval.sival_ptr);
