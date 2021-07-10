@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import time
 
 from jinja2 import Template
 from kcli_handler import check_cephadm_status, execute_kcli_cmd
@@ -90,7 +89,7 @@ def _parse_feature_specifications(features):
 
 def _handle_kcli_plan(command_type, plan_file_path=None):
     _output = None
-    print(f"Calling create vm command")
+    print("Creating kcli plans...")
     if command_type == "create":
         _output = execute_kcli_cmd(
             f"create plan -f {plan_file_path} {KCLI_PLAN_NAME}"
@@ -106,7 +105,7 @@ def before_feature(context, feature):
         os.mkdir(kcli_plans_dir_path)
 
     features = " ".join(
-        [line for line in feature.description if line.startswith('-')]
+        [line for line in feature.description if line.startswith("-")]
     )
     feature_config = _parse_feature_specifications("".join(features))
     kcli_plan_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
@@ -116,11 +115,9 @@ def before_feature(context, feature):
 
     _write_file(script_path, loaded_script)
     _write_file(kcli_plan_path, gen_kcli)
-    logging.info("Calling kcli create command")
-    logging.info(f"Waiting for executing script :{time.ctime()}")
     _handle_kcli_plan("create", os.path.relpath(kcli_plan_path))
-    return_code = check_cephadm_status()
-    logging.info(f"Completed for executing script :{time.ctime()}")
+    check_cephadm_status()
+
 
 def after_feature(context, feature):
     if os.path.exists(KCLI_PLANS_DIR):

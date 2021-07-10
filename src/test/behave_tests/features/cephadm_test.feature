@@ -19,5 +19,5 @@ Feature: Install a basic Ceph cluster
         """
     Then I get
         """
-        ceph version 17.0.0-5873-g0509deb6 quincy (dev)
+        ceph version quincy (dev)
         """
