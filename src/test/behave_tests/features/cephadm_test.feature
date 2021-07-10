@@ -17,7 +17,7 @@ Feature: Install a basic Ceph cluster
         """
         cephadm version
         """
-    Then I get
+    Then I get results which contain
         """
         ceph version quincy (dev)
         """

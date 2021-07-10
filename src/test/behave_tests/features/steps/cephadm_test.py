@@ -21,7 +21,7 @@ def execute_step(context):
     logging.info(f"exec output : {context.output}")
 
 
-@then("I get")
+@then("I get results which contain")
 def validation_step(context):
     expected_keywords = context.text.split(" ")
     for key in expected_keywords:
