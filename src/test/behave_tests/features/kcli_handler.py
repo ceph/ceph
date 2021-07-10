@@ -1,6 +1,7 @@
 import subprocess
 import logging
 import os
+import time
 
  
 kcli_exec = r"""
@@ -17,6 +18,26 @@ def _create_kcli_cmd(command):
     cmd = cmd.replace("$PWD", os.getenv("PWD"))
     kcli = cmd.replace('\n', '').split(" ")
     return kcli + command.split(" ")
+
+
+def check_cephadm_status():
+    timeout = 0
+    command = " ".join(
+        [ f'"{cmd}"' for cmd in 
+        'journalctl --no-tail --no-pager -t cloud-init'.split(" ")
+        ]
+    )
+    cmd = _create_kcli_cmd(
+        f'ssh ceph-node-00 {command} | grep "Bootstrap complete."'
+    )
+    while timeout < 3:
+        print(f"Waiting for bootstrap_cluster script...")
+        time.sleep(60)
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if "Bootstrap complete." in proc.stdout:
+            return 0
+        timeout += 1        
+    return -1
 
 
 def execute_kcli_cmd(command):
@@ -39,5 +60,5 @@ def exec_ssh_cmd(vm_name, command):
     logging.info(f"Executing ssh cmd : {cmd}")
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.stdout:
-        return proc.stdout
-    return proc.stderr
+        return (proc.stdout, proc.returncode)
+    return (proc.stderr, proc.returncode)

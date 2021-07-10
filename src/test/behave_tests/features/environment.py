@@ -4,7 +4,7 @@ import re
 import time
 
 from jinja2 import Template
-from kcli_handler import execute_kcli_cmd
+from kcli_handler import check_cephadm_status, execute_kcli_cmd
 
 KCLI_PLANS_DIR = "generated_plans"
 KCLI_PLAN_NAME = "behave_test_plan"
@@ -119,8 +119,7 @@ def before_feature(context, feature):
     logging.info("Calling kcli create command")
     logging.info(f"Waiting for executing script :{time.ctime()}")
     _handle_kcli_plan("create", os.path.relpath(kcli_plan_path))
-    print(f"Waiting for bootstrap_cluster script...")
-    time.sleep(180)
+    return_code = check_cephadm_status()
     logging.info(f"Completed for executing script :{time.ctime()}")
 
 def after_feature(context, feature):
