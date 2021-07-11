@@ -6,16 +6,22 @@ set(mgr_module_install_excludes
   PATTERN "constraints*.txt" EXCLUDE
   PATTERN "tests/*" EXCLUDE)
 
-if(WITH_MGR_DASHBOARD_FRONTEND)
-  add_subdirectory(dashboard)
-endif()
-
 install(DIRECTORY dashboard
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr
   ${mgr_module_install_excludes}
-  REGEX "cypress.*" EXCLUDE
-  PATTERN "frontend/node_modules" EXCLUDE
+  PATTERN "frontend/*" EXCLUDE
   PATTERN ".*" EXCLUDE)
+
+if(WITH_MGR_DASHBOARD_FRONTEND)
+  # build from source
+  add_subdirectory(dashboard)
+else()
+  # prebuilt
+  install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/dashboard/frontend/dist
+    DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
+  install(FILES dashboard/frontend/package.json
+    DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
+endif()
 
 if(WITH_MGR_ROOK_CLIENT)
   add_subdirectory(rook)

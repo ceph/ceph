@@ -102,26 +102,44 @@ execute_process(
     OUTPUT_VARIABLE default_lang
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
+set(frontend_dist_dir "${CMAKE_CURRENT_BINARY_DIR}/frontend/dist")
+set(npm_args "--output-path ${frontend_dist_dir}")
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(npm_args "--prod --progress=false")
+  string(APPEND npm_args " --prod --progress=false")
 else()
-  set(npm_args "--progress=false")
+  string(APPEND npm_args " --progress=false")
 endif()
 
 add_npm_command(
-  OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/dist"
+  OUTPUT "${frontend_dist_dir}"
   COMMAND DASHBOARD_FRONTEND_LANGS="${DASHBOARD_FRONTEND_LANGS}" npm run build:localize -- ${npm_args}
   DEPENDS ${frontend_src} frontend/node_modules
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend is being created"
   ${nodeenv}
 )
+
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/frontend/package.json
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/frontend/package.json
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_CURRENT_SOURCE_DIR}/frontend/package.json
+    ${CMAKE_CURRENT_BINARY_DIR}/frontend/package.json)
+
 add_custom_target(mgr-dashboard-frontend-build
   ALL
-  DEPENDS frontend/dist mgr-dashboard-frontend-deps
+  DEPENDS
+    ${frontend_dist_dir}
+    ${CMAKE_CURRENT_BINARY_DIR}/frontend/package.json
+    mgr-dashboard-frontend-deps
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend)
 
 add_dependencies(tests mgr-dashboard-frontend-build)
+
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/frontend/dist
+  DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/frontend/package.json
+  DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
 
 if(WITH_TESTS)
   include(AddCephTest)
