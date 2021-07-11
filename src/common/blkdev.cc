@@ -506,12 +506,6 @@ std::string get_device_id(const std::string& devname,
   udev_device_unref(dev);
   udev_unref(udev);
 
-  cout << " vendor '" << id_vendor << "'" << std::endl;
-  cout << " model '" << id_model << "'" << std::endl;
-  cout << " serial_short '" << id_serial_short << "'" << std::endl;
-  cout << " scsi_serial '" << id_scsi_serial << "'" << std::endl;
-  cout << " serial '" << id_serial << "'" << std::endl;
-
   // ID_SERIAL is usually $vendor_$model_$serial, but not always
   // ID_SERIAL_SHORT is mostly always just the serial
   // ID_MODEL is sometimes $vendor_$model, but
