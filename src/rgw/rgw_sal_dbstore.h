@@ -24,16 +24,16 @@
 
 namespace rgw { namespace sal {
 
-  class RGWDBStore;
+  class DBStore;
 
   class DBUser : public User {
     private:
-      RGWDBStore *store;
+      DBStore *store;
 
     public:
-      DBUser(RGWDBStore *_st, const rgw_user& _u) : User(_u), store(_st) { }
-      DBUser(RGWDBStore *_st, const RGWUserInfo& _i) : User(_i), store(_st) { }
-      DBUser(RGWDBStore *_st) : store(_st) { }
+      DBUser(DBStore *_st, const rgw_user& _u) : User(_u), store(_st) { }
+      DBUser(DBStore *_st, const RGWUserInfo& _i) : User(_i), store(_st) { }
+      DBUser(DBStore *_st) : store(_st) { }
       DBUser(DBUser& _o) = default;
       DBUser() {}
 
@@ -65,52 +65,52 @@ namespace rgw { namespace sal {
 
   class DBBucket : public Bucket {
     private:
-      RGWDBStore *store;
+      DBStore *store;
       RGWAccessControlPolicy acls;
 
     public:
-      DBBucket(RGWDBStore *_st)
+      DBBucket(DBStore *_st)
         : store(_st),
         acls() {
         }
 
-      DBBucket(RGWDBStore *_st, User* _u)
+      DBBucket(DBStore *_st, User* _u)
         : Bucket(_u),
         store(_st),
         acls() {
         }
 
-      DBBucket(RGWDBStore *_st, const rgw_bucket& _b)
+      DBBucket(DBStore *_st, const rgw_bucket& _b)
         : Bucket(_b),
         store(_st),
         acls() {
         }
 
-      DBBucket(RGWDBStore *_st, const RGWBucketEnt& _e)
+      DBBucket(DBStore *_st, const RGWBucketEnt& _e)
         : Bucket(_e),
         store(_st),
         acls() {
         }
 
-      DBBucket(RGWDBStore *_st, const RGWBucketInfo& _i)
+      DBBucket(DBStore *_st, const RGWBucketInfo& _i)
         : Bucket(_i),
         store(_st),
         acls() {
         }
 
-      DBBucket(RGWDBStore *_st, const rgw_bucket& _b, User* _u)
+      DBBucket(DBStore *_st, const rgw_bucket& _b, User* _u)
         : Bucket(_b, _u),
         store(_st),
         acls() {
         }
 
-      DBBucket(RGWDBStore *_st, const RGWBucketEnt& _e, User* _u)
+      DBBucket(DBStore *_st, const RGWBucketEnt& _e, User* _u)
         : Bucket(_e, _u),
         store(_st),
         acls() {
         }
 
-      DBBucket(RGWDBStore *_st, const RGWBucketInfo& _i, User* _u)
+      DBBucket(DBStore *_st, const RGWBucketInfo& _i, User* _u)
         : Bucket(_i, _u),
         store(_st),
         acls() {
@@ -156,12 +156,12 @@ namespace rgw { namespace sal {
         return std::make_unique<DBBucket>(*this);
       }
 
-      friend class RGWDBStore;
+      friend class DBStore;
   };
 
   class DBZone : public Zone {
     protected:
-      RGWDBStore* store;
+      DBStore* store;
       RGWRealm *realm{nullptr};
       RGWZoneGroup *zonegroup{nullptr};
       RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */  
@@ -170,7 +170,7 @@ namespace rgw { namespace sal {
       rgw_zone_id cur_zone_id;
 
     public:
-      DBZone(RGWDBStore* _store) : store(_store) {
+      DBZone(DBStore* _store) : store(_store) {
         realm = new RGWRealm();
         zonegroup = new RGWZoneGroup();
         zone_public_config = new RGWZone();
@@ -200,10 +200,10 @@ namespace rgw { namespace sal {
   };
 
   class DBLuaScriptManager : public LuaScriptManager {
-    RGWDBStore* store;
+    DBStore* store;
 
     public:
-    DBLuaScriptManager(RGWDBStore* _s) : store(_s)
+    DBLuaScriptManager(DBStore* _s) : store(_s)
     {
     }
     virtual ~DBLuaScriptManager() = default;
@@ -214,9 +214,9 @@ namespace rgw { namespace sal {
   };
 
   class DBOIDCProvider : public RGWOIDCProvider {
-    RGWDBStore* store;
+    DBStore* store;
     public:
-    DBOIDCProvider(RGWDBStore* _store) : store(_store) {}
+    DBOIDCProvider(DBStore* _store) : store(_store) {}
     ~DBOIDCProvider() = default;
 
     virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) override { return 0; }
@@ -231,23 +231,23 @@ namespace rgw { namespace sal {
     }
   };
 
-  class RGWDBStore : public Store {
+  class DBStore : public Store {
     private:
       /* DBStoreManager is used in case multiple
        * connections are needed one for each tenant.
        */
       DBStoreManager *dbsm;
-      /* default dbstore (single connection). If needed
+      /* default db (single connection). If needed
        * multiple db handles (for eg., one for each tenant),
-       * use dbsm->getDBStore(tenant) */
-      DBStore *dbstore;
+       * use dbsm->getDB(tenant) */
+      DB *db;
       string luarocks_path;
       DBZone zone;
       RGWSyncModuleInstanceRef sync_module;
 
     public:
-      RGWDBStore(): dbsm(nullptr), zone(this) {}
-      ~RGWDBStore() { delete dbsm; }
+      DBStore(): dbsm(nullptr), zone(this) {}
+      ~DBStore() { delete dbsm; }
 
       virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
       virtual int get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) override;
@@ -350,7 +350,7 @@ namespace rgw { namespace sal {
       virtual void finalize(void) override;
 
       virtual CephContext *ctx(void) override {
-        return dbstore->ctx();
+        return db->ctx();
       }
 
       virtual const std::string& get_luarocks_path() const override {
@@ -365,10 +365,10 @@ namespace rgw { namespace sal {
       void setDBStoreManager(DBStoreManager *stm) { dbsm = stm; }
       DBStoreManager *getDBStoreManager(void) { return dbsm; }
 
-      void setDBStore(DBStore * st) { dbstore = st; }
-      DBStore *getDBStore(void) { return dbstore; }
+      void setDB(DB * st) { db = st; }
+      DB *getDB(void) { return db; }
 
-      DBStore *getDBStore(string tenant) { return dbsm->getDBStore(tenant, false); }
+      DB *getDB(string tenant) { return dbsm->getDB(tenant, false); }
   };
 
 } } // namespace rgw::sal

@@ -17,6 +17,7 @@
 #include <map>
 #include "dbstore_log.h"
 #include "rgw/rgw_sal.h"
+#include "rgw/rgw_common.h"
 #include "rgw/rgw_bucket.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -24,7 +25,9 @@
 
 using namespace std;
 
-class DBStore;
+namespace rgw { namespace store {
+
+class DB;
 
 struct DBOpUserInfo {
   RGWUserInfo uinfo = {};
@@ -747,7 +750,7 @@ class DeleteObjectDataOp: public DBOp {
     }
 };
 
-class DBStore {
+class DB {
   private:
     const string db_name;
     const string user_table;
@@ -768,23 +771,23 @@ class DBStore {
     uint64_t max_bucket_id = 0;
 
   public:	
-    DBStore(string db_name, CephContext *_cct) : db_name(db_name),
+    DB(string db_name, CephContext *_cct) : db_name(db_name),
     user_table(db_name+".user.table"),
     bucket_table(db_name+".bucket.table"),
     quota_table(db_name+".quota.table"),
     cct(_cct),
     dp(_cct, dout_subsys, "rgw DBStore backend: ")
   {}
-    /*	DBStore() {}*/
+    /*	DB() {}*/
 
-    DBStore(CephContext *_cct) : db_name("default_db"),
+    DB(CephContext *_cct) : db_name("default_db"),
     user_table("user.table"),
     bucket_table("bucket.table"),
     quota_table("quota.table"),
     cct(_cct),
     dp(_cct, dout_subsys, "rgw DBStore backend: ")
   {}
-    virtual	~DBStore() {}
+    virtual	~DB() {}
 
     const string getDBname() { return db_name + ".db"; }
     const string getUserTable() { return user_table; }
@@ -870,4 +873,7 @@ class DBStore {
         const rgw_user* powner_id, map<std::string, bufferlist>* pattrs,
         ceph::real_time* pmtime, RGWObjVersionTracker* pobjv);
 };
+
+} } // namespace rgw::store
+
 #endif

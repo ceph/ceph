@@ -39,7 +39,7 @@ namespace rgw::sal {
     int ret;
 
     buckets.clear();
-    ret = store->getDBStore()->list_buckets(dpp, info.user_id, marker, end_marker, max,
+    ret = store->getDB()->list_buckets(dpp, info.user_id, marker, end_marker, max,
         need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
@@ -61,7 +61,7 @@ namespace rgw::sal {
   int DBUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   {
     int ret;
-    ret = store->getDBStore()->get_user(dpp, string("user_id"), "", info, &attrs,
+    ret = store->getDB()->get_user(dpp, string("user_id"), "", info, &attrs,
         &objv_tracker);
     return ret;
   }
@@ -101,7 +101,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->get_user(dpp, string("user_id"), "", info, &attrs,
+    ret = store->getDB()->get_user(dpp, string("user_id"), "", info, &attrs,
         &objv_tracker);
 
     return ret;
@@ -111,7 +111,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->store_user(dpp, info, exclusive, &attrs, &objv_tracker, old_info);
+    ret = store->getDB()->store_user(dpp, info, exclusive, &attrs, &objv_tracker, old_info);
 
     return ret;
   }
@@ -120,7 +120,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->remove_user(dpp, info, &objv_tracker);
+    ret = store->getDB()->remove_user(dpp, info, &objv_tracker);
 
     return ret;
   }
@@ -140,7 +140,7 @@ namespace rgw::sal {
 
     /* XXX: handle delete_children */
 
-    ret = store->getDBStore()->remove_bucket(dpp, info);
+    ret = store->getDB()->remove_bucket(dpp, info);
 
     return ret;
   }
@@ -149,7 +149,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->get_bucket_info(dpp, string("name"), "", info, &attrs,
+    ret = store->getDB()->get_bucket_info(dpp, string("name"), "", info, &attrs,
         &mtime, &bucket_version);
 
     return ret;
@@ -193,7 +193,7 @@ namespace rgw::sal {
   {
     int ret;
 
-    ret = store->getDBStore()->update_bucket(dpp, "owner", info, false, &(new_user->get_id()), nullptr, nullptr, nullptr);
+    ret = store->getDB()->update_bucket(dpp, "owner", info, false, &(new_user->get_id()), nullptr, nullptr, nullptr);
 
     /* XXX: Update policies of all the bucket->objects with new user */
     return ret;
@@ -203,7 +203,7 @@ namespace rgw::sal {
   {
     int ret;
 
-    ret = store->getDBStore()->update_bucket(dpp, "info", info, exclusive, nullptr, nullptr, &_mtime, &info.objv_tracker);
+    ret = store->getDB()->update_bucket(dpp, "info", info, exclusive, nullptr, nullptr, &_mtime, &info.objv_tracker);
 
     return ret;
 
@@ -214,7 +214,7 @@ namespace rgw::sal {
     /* XXX: same as DBBUcket::remove_bucket() but should return error if there are objects
      * in that bucket. */
 
-    int ret = store->getDBStore()->remove_bucket(dpp, info);
+    int ret = store->getDB()->remove_bucket(dpp, info);
 
     return ret;
   }
@@ -244,7 +244,7 @@ namespace rgw::sal {
 
     /* XXX: handle has_instance_obj like in set_bucket_instance_attrs() */
 
-    ret = store->getDBStore()->update_bucket(dpp, "attrs", info, false, nullptr, &attrs, nullptr, &get_info().objv_tracker);
+    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, nullptr, &attrs, nullptr, &get_info().objv_tracker);
 
     return ret;
   }
@@ -253,7 +253,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDBStore()->get_bucket_info(dpp, string("name"), "", info, &attrs,
+    ret = store->getDB()->get_bucket_info(dpp, string("name"), "", info, &attrs,
         pmtime, &bucket_version);
 
     return ret;
@@ -319,7 +319,7 @@ namespace rgw::sal {
     Attrs attrs = get_attrs();
     attrs[RGW_ATTR_ACL] = aclbl;
 
-    ret = store->getDBStore()->update_bucket(dpp, "attrs", info, false, &(acl.get_owner().get_id()), &attrs, nullptr, nullptr);
+    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, &(acl.get_owner().get_id()), &attrs, nullptr, nullptr);
 
     return ret;
   }
@@ -335,7 +335,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  void RGWDBStore::finalize(void)
+  void DBStore::finalize(void)
   {
     if (dbsm)
       dbsm->destroyAllHandles();
@@ -393,13 +393,13 @@ namespace rgw::sal {
     return current_period->get_id();
   }
 
-  std::unique_ptr<LuaScriptManager> RGWDBStore::get_lua_script_manager()
+  std::unique_ptr<LuaScriptManager> DBStore::get_lua_script_manager()
   {
     return std::unique_ptr<LuaScriptManager>(new DBLuaScriptManager(this));
   }
 
 
-  std::unique_ptr<RGWRole> RGWDBStore::get_role(std::string name,
+  std::unique_ptr<RGWRole> DBStore::get_role(std::string name,
       std::string tenant,
       std::string path,
       std::string trust_policy,
@@ -409,13 +409,13 @@ namespace rgw::sal {
     return std::unique_ptr<RGWRole>(p);
   }
 
-  std::unique_ptr<RGWRole> RGWDBStore::get_role(std::string id)
+  std::unique_ptr<RGWRole> DBStore::get_role(std::string id)
   {
     RGWRole* p = nullptr;
     return std::unique_ptr<RGWRole>(p);
   }
 
-  int RGWDBStore::get_roles(const DoutPrefixProvider *dpp,
+  int DBStore::get_roles(const DoutPrefixProvider *dpp,
       optional_yield y,
       const std::string& path_prefix,
       const std::string& tenant,
@@ -424,32 +424,32 @@ namespace rgw::sal {
     return 0;
   }
 
-  std::unique_ptr<RGWOIDCProvider> RGWDBStore::get_oidc_provider()
+  std::unique_ptr<RGWOIDCProvider> DBStore::get_oidc_provider()
   {
     RGWOIDCProvider* p = nullptr;
     return std::unique_ptr<RGWOIDCProvider>(p);
   }
 
-  int RGWDBStore::get_oidc_providers(const DoutPrefixProvider *dpp,
+  int DBStore::get_oidc_providers(const DoutPrefixProvider *dpp,
       const std::string& tenant,
       vector<std::unique_ptr<RGWOIDCProvider>>& providers)
   {
     return 0;
   }
 
-  std::unique_ptr<User> RGWDBStore::get_user(const rgw_user &u)
+  std::unique_ptr<User> DBStore::get_user(const rgw_user &u)
   {
     return std::unique_ptr<User>(new DBUser(this, u));
   }
 
-  int RGWDBStore::get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
+  int DBStore::get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
   {
     RGWUserInfo uinfo;
     User *u;
     int ret = 0;
     RGWObjVersionTracker objv_tracker;
 
-    ret = getDBStore()->get_user(dpp, string("access_key"), key, uinfo, nullptr,
+    ret = getDB()->get_user(dpp, string("access_key"), key, uinfo, nullptr,
         &objv_tracker);
 
     if (ret < 0)
@@ -466,14 +466,14 @@ namespace rgw::sal {
     return 0;
   }
 
-  int RGWDBStore::get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user)
+  int DBStore::get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user)
   {
     RGWUserInfo uinfo;
     User *u;
     int ret = 0;
     RGWObjVersionTracker objv_tracker;
 
-    ret = getDBStore()->get_user(dpp, string("email"), email, uinfo, nullptr,
+    ret = getDB()->get_user(dpp, string("email"), email, uinfo, nullptr,
         &objv_tracker);
 
     if (ret < 0)
@@ -490,19 +490,19 @@ namespace rgw::sal {
     return ret;
   }
 
-  int RGWDBStore::get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
+  int DBStore::get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
   {
     /* Swift keys and subusers are not supported for now */
     return 0;
   }
 
-  std::unique_ptr<Object> RGWDBStore::get_object(const rgw_obj_key& k)
+  std::unique_ptr<Object> DBStore::get_object(const rgw_obj_key& k)
   {
     return NULL;
   }
 
 
-  int RGWDBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+  int DBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
   {
     int ret;
     Bucket* bp;
@@ -518,7 +518,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int RGWDBStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
+  int DBStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
   {
     Bucket* bp;
 
@@ -529,7 +529,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int RGWDBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+  int DBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
   {
     rgw_bucket b;
 
@@ -539,7 +539,7 @@ namespace rgw::sal {
     return get_bucket(dpp, u, b, bucket, y);
   }
 
-  int RGWDBStore::create_bucket(const DoutPrefixProvider *dpp,
+  int DBStore::create_bucket(const DoutPrefixProvider *dpp,
       User* u, const rgw_bucket& b,
       const string& zonegroup_id,
       rgw_placement_rule& placement_rule,
@@ -618,7 +618,7 @@ namespace rgw::sal {
     } else {
 
       /* XXX: We may not need to send all these params. Cleanup the unused ones */
-      ret = getDBStore()->create_bucket(dpp, u->get_info(), bucket->get_key(),
+      ret = getDB()->create_bucket(dpp, u->get_info(), bucket->get_key(),
           zid, placement_rule, swift_ver_location, pquota_info,
           attrs, info, pobjv, &ep_objv, creation_time,
           pmaster_bucket, pmaster_num_shards, y, exclusive);
@@ -638,12 +638,12 @@ namespace rgw::sal {
     return ret;
   }
 
-  bool RGWDBStore::is_meta_master()
+  bool DBStore::is_meta_master()
   {
     return true;
   }
 
-  int RGWDBStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version *objv,
+  int DBStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version *objv,
       bufferlist& in_data,
       JSONParser *jp, req_info& info,
       optional_yield y)
@@ -651,98 +651,98 @@ namespace rgw::sal {
     return 0;
   }
 
-  int RGWDBStore::defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, Bucket* bucket, Object* obj, optional_yield y)
+  int DBStore::defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, Bucket* bucket, Object* obj, optional_yield y)
   {
     return 0;
   }
 
-  std::string RGWDBStore::zone_unique_id(uint64_t unique_num)
+  std::string DBStore::zone_unique_id(uint64_t unique_num)
   {
     return "";
   }
 
-  std::string RGWDBStore::zone_unique_trans_id(const uint64_t unique_num)
+  std::string DBStore::zone_unique_trans_id(const uint64_t unique_num)
   {
     return "";
   }
 
-  int RGWDBStore::cluster_stat(RGWClusterStat& stats)
+  int DBStore::cluster_stat(RGWClusterStat& stats)
   {
     return 0;
   }
 
-  std::unique_ptr<Lifecycle> RGWDBStore::get_lifecycle(void)
+  std::unique_ptr<Lifecycle> DBStore::get_lifecycle(void)
   {
     return 0;
   }
 
-  std::unique_ptr<Completions> RGWDBStore::get_completions(void)
+  std::unique_ptr<Completions> DBStore::get_completions(void)
   {
     return 0;
   }
 
-  std::unique_ptr<Notification> RGWDBStore::get_notification(rgw::sal::Object* obj,
+  std::unique_ptr<Notification> DBStore::get_notification(rgw::sal::Object* obj,
       struct req_state* s,
       rgw::notify::EventType event_type, const std::string* object_name)
   {
     return 0;
   }
 
-  std::unique_ptr<GCChain> RGWDBStore::get_gc_chain(rgw::sal::Object* obj)
+  std::unique_ptr<GCChain> DBStore::get_gc_chain(rgw::sal::Object* obj)
   {
     return 0;
   }
 
-  std::unique_ptr<Writer> RGWDBStore::get_writer(Aio *aio, rgw::sal::Bucket* bucket,
+  std::unique_ptr<Writer> DBStore::get_writer(Aio *aio, rgw::sal::Bucket* bucket,
       RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
       const DoutPrefixProvider *dpp, optional_yield y)
   {
     return 0;
   }
 
-  int RGWDBStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
+  int DBStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
   {
     return 0;
   }
 
-  int RGWDBStore::delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio)
+  int DBStore::delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio)
   {
     return 0;
   }
 
-  void RGWDBStore::get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj)
+  void DBStore::get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj)
   {
     return;
   }
 
-  int RGWDBStore::get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t* chunk_size)
+  int DBStore::get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t* chunk_size)
   {
     return 0;
   }
 
-  int RGWDBStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
+  int DBStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
   {
     return 0;
   }
 
-  int RGWDBStore::log_op(const DoutPrefixProvider *dpp, string& oid, bufferlist& bl)
+  int DBStore::log_op(const DoutPrefixProvider *dpp, string& oid, bufferlist& bl)
   {
     return 0;
   }
 
-  int RGWDBStore::register_to_service_map(const DoutPrefixProvider *dpp, const string& daemon_type,
+  int DBStore::register_to_service_map(const DoutPrefixProvider *dpp, const string& daemon_type,
       const map<string, string>& meta)
   {
     return 0;
   }
 
-  void RGWDBStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
+  void DBStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
   {
     // XXX: Not handled for the first pass 
     return;
   }
 
-  int RGWDBStore::set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled)
+  int DBStore::set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled)
   {
     int ret = 0;
 
@@ -758,7 +758,7 @@ namespace rgw::sal {
 
       RGWBucketInfo info;
       map<string, bufferlist> attrs;
-      int r = getDBStore()->get_bucket_info(dpp, string("name"), "", info, &attrs,
+      int r = getDB()->get_bucket_info(dpp, string("name"), "", info, &attrs,
           nullptr, nullptr);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
@@ -771,7 +771,7 @@ namespace rgw::sal {
         info.flags |= BUCKET_SUSPENDED;
       }
 
-      r = getDBStore()->update_bucket(dpp, "info", info, false, nullptr, &attrs, nullptr, &info.objv_tracker);
+      r = getDB()->update_bucket(dpp, "info", info, false, nullptr, &attrs, nullptr, &info.objv_tracker);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
         ret = r;
@@ -781,7 +781,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int RGWDBStore::get_sync_policy_handler(const DoutPrefixProvider *dpp,
+  int DBStore::get_sync_policy_handler(const DoutPrefixProvider *dpp,
       std::optional<rgw_zone_id> zone,
       std::optional<rgw_bucket> bucket,
       RGWBucketSyncPolicyHandlerRef *phandler,
@@ -790,12 +790,12 @@ namespace rgw::sal {
     return 0;
   }
 
-  RGWDataSyncStatusManager* RGWDBStore::get_data_sync_manager(const rgw_zone_id& source_zone)
+  RGWDataSyncStatusManager* DBStore::get_data_sync_manager(const rgw_zone_id& source_zone)
   {
     return 0;
   }
 
-  int RGWDBStore::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, 
+  int DBStore::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, 
       uint32_t max_entries, bool *is_truncated,
       RGWUsageIter& usage_iter,
       map<rgw_user_bucket, rgw_usage_log_entry>& usage)
@@ -803,37 +803,37 @@ namespace rgw::sal {
     return 0;
   }
 
-  int RGWDBStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+  int DBStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
   {
     return 0;
   }
 
-  int RGWDBStore::get_config_key_val(string name, bufferlist *bl)
+  int DBStore::get_config_key_val(string name, bufferlist *bl)
   {
     return 0;
   }
 
-  int RGWDBStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void** phandle)
+  int DBStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void** phandle)
   {
     return 0;
   }
 
-  int RGWDBStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<string>& keys, bool* truncated)
+  int DBStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<string>& keys, bool* truncated)
   {
     return 0;
   }
 
-  void RGWDBStore::meta_list_keys_complete(void* handle)
+  void DBStore::meta_list_keys_complete(void* handle)
   {
     return;
   }
 
-  std::string RGWDBStore::meta_get_marker(void* handle)
+  std::string DBStore::meta_get_marker(void* handle)
   {
     return "";
   }
 
-  int RGWDBStore::meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y)
+  int DBStore::meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y)
   {
     return 0;
   }
@@ -842,9 +842,9 @@ namespace rgw::sal {
 
 extern "C" {
 
-  void *newRGWDBStore(CephContext *cct)
+  void *newDBStore(CephContext *cct)
   {
-    rgw::sal::RGWDBStore *store = new rgw::sal::RGWDBStore();
+    rgw::sal::DBStore *store = new rgw::sal::DBStore();
     if (store) {
       DBStoreManager *dbsm = new DBStoreManager(cct);
 
@@ -852,14 +852,14 @@ extern "C" {
         delete store; store = nullptr;
       }
 
-      DBStore *dbstore = dbsm->getDBStore();
-      if (!dbstore ) {
+      DB *db = dbsm->getDB();
+      if (!db) {
         delete dbsm;
         delete store; store = nullptr;
       }
 
       store->setDBStoreManager(dbsm);
-      store->setDBStore(dbstore);
+      store->setDB(db);
     }
 
     return store;

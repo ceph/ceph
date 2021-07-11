@@ -34,7 +34,7 @@
 extern "C" {
 extern rgw::sal::Store* newStore(void);
 #ifdef WITH_RADOSGW_DBSTORE
-extern rgw::sal::Store* newRGWDBStore(CephContext *cct);
+extern rgw::sal::Store* newDBStore(CephContext *cct);
 #endif
 }
 
@@ -78,10 +78,10 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
 
   if (svc.compare("dbstore") == 0) {
 #ifdef WITH_RADOSGW_DBSTORE
-    rgw::sal::Store* store = newRGWDBStore(cct);
+    rgw::sal::Store* store = newDBStore(cct);
 
     /* Initialize the dbstore with cct & dpp */
-    DBStore *db = static_cast<rgw::sal::RGWDBStore *>(store)->getDBStore();
+    DB *db = static_cast<rgw::sal::DBStore *>(store)->getDB();
     db->set_context(cct);
     return store;
 #endif
@@ -113,7 +113,7 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
 
   if (svc.compare("dbstore") == 0) {
 #ifdef WITH_RADOSGW_DBSTORE
-    store = newRGWDBStore(cct);
+    store = newDBStore(cct);
 #else
     store = nullptr;
 #endif

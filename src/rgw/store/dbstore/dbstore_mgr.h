@@ -14,23 +14,24 @@
 #include "sqlite/sqliteDB.h"
 
 using namespace std;
+using namespace rgw::store;
+using DB = rgw::store::DB;
 
 /* XXX: Should be a dbstore config option */
 const static string default_tenant = "default_ns";
 
 using namespace std;
-class DBStore;
 
 class DBStoreManager {
 private:
-  map<string, DBStore*> DBStoreHandles;
-  DBStore *default_dbstore = NULL;
+  map<string, DB*> DBStoreHandles;
+  DB *default_db = NULL;
   CephContext *cct;
 
 public:
   DBStoreManager(CephContext *_cct): DBStoreHandles() {
     cct = _cct;
-	default_dbstore = createDBStore(default_tenant);
+	default_db = createDB(default_tenant);
   };
   DBStoreManager(string logfile, int loglevel): DBStoreHandles() {
     /* No ceph context. Create one with log args provided */
@@ -48,10 +49,10 @@ public:
    * 2) Refcount of each DBStore to protect from
    * being deleted while using it.
    */
-  DBStore* getDBStore () { return default_dbstore; };
-  DBStore* getDBStore (string tenant, bool create);
-  DBStore* createDBStore (string tenant);
-  void deleteDBStore (string tenant);
-  void deleteDBStore (DBStore* db);
+  DB* getDB () { return default_db; };
+  DB* getDB (string tenant, bool create);
+  DB* createDB (string tenant);
+  void deleteDB (string tenant);
+  void deleteDB (DB* db);
   void destroyAllHandles();
 };

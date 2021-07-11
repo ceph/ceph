@@ -144,7 +144,6 @@ static int list_callback(void *None, int argc, char **argv, char **aname)
   int i;
   for(i=0; i<argc; i++) {
     string arg = argv[i] ? argv[i] : "NULL";
-   // cout<<aname[i]<<" = "<<arg<<"\n";
   }
   return 0;
 }
@@ -216,35 +215,6 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
   if (!stmt)
     return -1;
 
-  //cout<<sqlite3_column_text(stmt, 0) << dendl;
-  /* Ensure the column names match with the user table defined in dbstore.h                     
-     UserID TEXT ,		\ - 0
-     Tenant TEXT ,		\ - 1
-     NS TEXT ,		\ - 2
-     DisplayName TEXT , \ - 3
-     UserEmail TEXT ,	\ - 4
-     AccessKeysID TEXT ,	\ - 5
-     AccessKeysSecret TEXT ,	\ - 6
-     AccessKeys BLOB ,	\ - 7
-     SwiftKeys BLOB ,	\ - 8
-     SubUsers BLOB ,		\ - 9
-     Suspended INTEGER ,	\ - 10
-     MaxBuckets INTEGER ,	\ - 11
-     OpMask	INTEGER ,	\ - 12
-     UserCaps BLOB ,		\ - 13
-     Admin	INTEGER ,	\ - 14
-     System INTEGER , 	\ - 15
-     PlacementName TEXT , 	\ - 16
-     PlacementStorageClass TEXT , 	\ - 17
-     PlacementTags BLOB ,	\ - 18
-     BucketQuota BLOB ,	\ - 19
-     TempURLKeys BLOB ,	\ - 20
-     UserQuota BLOB ,	\ - 21
-     TYPE INTEGER ,		\ - 22
-     MfaIDs INTEGER ,	\ - 23
-     AssumedRoleARN TEXT \n);"; - 24
-     */
-
   op.user.uinfo.user_id.tenant = (const char*)sqlite3_column_text(stmt, Tenant);
   op.user.uinfo.user_id.id = (const char*)sqlite3_column_text(stmt, UserID);
   op.user.uinfo.user_id.ns = (const char*)sqlite3_column_text(stmt, NS);
@@ -290,9 +260,6 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
 static int list_bucket(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *stmt) {
   if (!stmt)
     return -1;
-
- // cout<<sqlite3_column_text(stmt, 0)<<", ";
- // cout<<sqlite3_column_text(stmt, 1) << dendl;
 
   op.bucket.ent.bucket.name = (const char*)sqlite3_column_text(stmt, BucketName);
   op.bucket.ent.bucket.tenant = (const char*)sqlite3_column_text(stmt, Bucket_Tenant);
@@ -351,9 +318,6 @@ static int list_object(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt
   if (!stmt)
     return -1;
 
- // cout<<sqlite3_column_text(stmt, 0)<<", ";
- // cout<<sqlite3_column_text(stmt, 1) << dendl;
-
   return 0;
 }
 
@@ -367,14 +331,9 @@ static int get_objectdata(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_s
   blob = sqlite3_column_blob(stmt, 3);
   datalen = sqlite3_column_bytes(stmt, 3);
 
- /* cout<<sqlite3_column_text(stmt, 0)<<", ";
-  cout<<sqlite3_column_text(stmt, 1)<<",";
-  cout<<sqlite3_column_int(stmt, 2)<<",";*/
   char data[datalen+1] = {};
   if (blob)
     strncpy(data, (const char *)blob, datalen);
-
-//  cout<<data<<","<<datalen << dendl;
 
   return 0;
 }
@@ -695,7 +654,6 @@ int SQLiteDB::ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params)
   string schema;
 
   schema = ListTableSchema(params->user_table);
- // cout<<"########### Listing all Users #############" << dendl;
   ret = exec(dpp, schema.c_str(), &list_callback);
   if (ret)
     ldpp_dout(dpp, 0)<<"GetUsertable failed " << dendl;
@@ -712,7 +670,6 @@ int SQLiteDB::ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params)
 
   schema = ListTableSchema(params->bucket_table);
 
-//  cout<<"########### Listing all Buckets #############" << dendl;
   ret = exec(dpp, schema.c_str(), &list_callback);
   if (ret)
     ldpp_dout(dpp, 0)<<"Listbuckettable failed " << dendl;
@@ -729,8 +686,6 @@ int SQLiteDB::ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params)
   map<string, class ObjectOp*>::iterator iter;
   map<string, class ObjectOp*> objectmap;
   string bucket;
-
-  //cout<<"########### Listing all Objects #############" << dendl;
 
   objectmap = getObjectMap();
 

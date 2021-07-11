@@ -5,13 +5,15 @@
 
 using namespace std;
 
-map<string, class ObjectOp*> DBStore::objectmap = {};
+namespace rgw { namespace store {
 
-map<string, class ObjectOp*> DBStore::getObjectMap() {
-  return DBStore::objectmap;
+map<string, class ObjectOp*> DB::objectmap = {};
+
+map<string, class ObjectOp*> DB::getObjectMap() {
+  return DB::objectmap;
 }
 
-int DBStore::Initialize(string logfile, int loglevel)
+int DB::Initialize(string logfile, int loglevel)
 {
   int ret = -1;
   const DoutPrefixProvider *dpp = get_def_dpp();
@@ -56,13 +58,13 @@ int DBStore::Initialize(string logfile, int loglevel)
     return ret;
   }
 
-  ldpp_dout(dpp, 0) << "DBStore successfully initialized - name:" \
+  ldpp_dout(dpp, 0) << "DB successfully initialized - name:" \
     << db_name << "" << dendl;
 
   return ret;
 }
 
-int DBStore::Destroy(const DoutPrefixProvider *dpp)
+int DB::Destroy(const DoutPrefixProvider *dpp)
 {
   if (!db)
     return 0;
@@ -73,13 +75,13 @@ int DBStore::Destroy(const DoutPrefixProvider *dpp)
 
   FreeDBOps(dpp);
 
-  ldpp_dout(dpp, 20)<<"DBStore successfully destroyed - name:" \
+  ldpp_dout(dpp, 20)<<"DB successfully destroyed - name:" \
     <<db_name << dendl;
 
   return 0;
 }
 
-int DBStore::LockInit(const DoutPrefixProvider *dpp) {
+int DB::LockInit(const DoutPrefixProvider *dpp) {
   int ret;
 
   ret = pthread_mutex_init(&mutex, NULL);
@@ -90,7 +92,7 @@ int DBStore::LockInit(const DoutPrefixProvider *dpp) {
   return ret;
 }
 
-int DBStore::LockDestroy(const DoutPrefixProvider *dpp) {
+int DB::LockDestroy(const DoutPrefixProvider *dpp) {
   int ret;
 
   ret = pthread_mutex_destroy(&mutex);
@@ -101,7 +103,7 @@ int DBStore::LockDestroy(const DoutPrefixProvider *dpp) {
   return ret;
 }
 
-int DBStore::Lock(const DoutPrefixProvider *dpp) {
+int DB::Lock(const DoutPrefixProvider *dpp) {
   int ret;
 
   ret = pthread_mutex_lock(&mutex);
@@ -112,7 +114,7 @@ int DBStore::Lock(const DoutPrefixProvider *dpp) {
   return ret;
 }
 
-int DBStore::Unlock(const DoutPrefixProvider *dpp) {
+int DB::Unlock(const DoutPrefixProvider *dpp) {
   int ret;
 
   ret = pthread_mutex_unlock(&mutex);
@@ -123,7 +125,7 @@ int DBStore::Unlock(const DoutPrefixProvider *dpp) {
   return ret;
 }
 
-DBOp *DBStore::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params)
+DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params)
 {
   if (!Op.compare("InsertUser"))
     return dbops.InsertUser;
@@ -146,9 +148,9 @@ DBOp *DBStore::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpPara
   map<string, class ObjectOp*>::iterator iter;
   class ObjectOp* Ob;
 
-  iter = DBStore::objectmap.find(params->op.bucket.info.bucket.name);
+  iter = DB::objectmap.find(params->op.bucket.info.bucket.name);
 
-  if (iter == DBStore::objectmap.end()) {
+  if (iter == DB::objectmap.end()) {
     ldpp_dout(dpp, 30)<<"No objectmap found for bucket: " \
       <<params->op.bucket.info.bucket.name << dendl;
     /* not found */
@@ -173,14 +175,14 @@ DBOp *DBStore::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpPara
   return NULL;
 }
 
-int DBStore::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, void *ptr)
+int DB::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, void *ptr)
 {
   map<string, class ObjectOp*>::iterator iter;
   class ObjectOp *Ob;
 
-  iter = DBStore::objectmap.find(bucket);
+  iter = DB::objectmap.find(bucket);
 
-  if (iter != DBStore::objectmap.end()) {
+  if (iter != DB::objectmap.end()) {
     // entry already exists
     // return success or replace it or
     // return error ?
@@ -193,19 +195,19 @@ int DBStore::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, void 
   Ob = (class ObjectOp*) ptr;
   Ob->InitializeObjectOps(dpp);
 
-  DBStore::objectmap.insert(pair<string, class ObjectOp*>(bucket, Ob));
+  DB::objectmap.insert(pair<string, class ObjectOp*>(bucket, Ob));
 
   return 0;
 }
 
-int DBStore::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
+int DB::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
 {
   map<string, class ObjectOp*>::iterator iter;
   class ObjectOp *Ob;
 
-  iter = DBStore::objectmap.find(bucket);
+  iter = DB::objectmap.find(bucket);
 
-  if (iter == DBStore::objectmap.end()) {
+  if (iter == DB::objectmap.end()) {
     // entry doesn't exist
     // return success or return error ?
     // return success for now
@@ -217,12 +219,12 @@ int DBStore::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
   Ob = (class ObjectOp*) (iter->second);
   Ob->FreeObjectOps(dpp);
 
-  DBStore::objectmap.erase(iter);
+  DB::objectmap.erase(iter);
 
   return 0;
 }
 
-int DBStore::InitializeParams(const DoutPrefixProvider *dpp, string Op, DBOpParams *params)
+int DB::InitializeParams(const DoutPrefixProvider *dpp, string Op, DBOpParams *params)
 {
   int ret = -1;
 
@@ -240,7 +242,7 @@ out:
   return ret;
 }
 
-int DBStore::ProcessOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params) {
+int DB::ProcessOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params) {
   int ret = -1;
   class DBOp *db_op;
 
@@ -266,7 +268,7 @@ int DBStore::ProcessOp(const DoutPrefixProvider *dpp, string Op, struct DBOpPara
   return ret;
 }
 
-int DBStore::get_user(const DoutPrefixProvider *dpp,
+int DB::get_user(const DoutPrefixProvider *dpp,
     const std::string& query_str, const std::string& query_str_val,
     RGWUserInfo& uinfo, map<string, bufferlist> *pattrs,
     RGWObjVersionTracker *pobjv_tracker) {
@@ -319,7 +321,7 @@ out:
   return ret;
 }
 
-int DBStore::store_user(const DoutPrefixProvider *dpp,
+int DB::store_user(const DoutPrefixProvider *dpp,
     RGWUserInfo& uinfo, bool exclusive, map<string, bufferlist> *pattrs,
     RGWObjVersionTracker *pobjv, RGWUserInfo* pold_info)
 {
@@ -382,7 +384,7 @@ out:
   return ret;
 }
 
-int DBStore::remove_user(const DoutPrefixProvider *dpp,
+int DB::remove_user(const DoutPrefixProvider *dpp,
     RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv)
 {
   DBOpParams params = {};
@@ -419,7 +421,7 @@ out:
   return ret;
 }
 
-int DBStore::get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
+int DB::get_bucket_info(const DoutPrefixProvider *dpp, const std::string& query_str,
     const std::string& query_str_val,
     RGWBucketInfo& info,
     rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,
@@ -470,7 +472,7 @@ out:
   return ret;
 }
 
-int DBStore::create_bucket(const DoutPrefixProvider *dpp,
+int DB::create_bucket(const DoutPrefixProvider *dpp,
     const RGWUserInfo& owner, rgw_bucket& bucket,
     const string& zonegroup_id,
     const rgw_placement_rule& placement_rule,
@@ -559,7 +561,7 @@ out:
   return ret;
 }
 
-int DBStore::remove_bucket(const DoutPrefixProvider *dpp, const RGWBucketInfo info) {
+int DB::remove_bucket(const DoutPrefixProvider *dpp, const RGWBucketInfo info) {
   int ret = 0;
 
   DBOpParams params = {};
@@ -578,7 +580,7 @@ out:
   return ret;
 }
 
-int DBStore::list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
+int DB::list_buckets(const DoutPrefixProvider *dpp, const rgw_user& user,
     const string& marker,
     const string& end_marker,
     uint64_t max,
@@ -621,7 +623,7 @@ out:
   return ret;
 }
 
-int DBStore::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_str,
+int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_str,
     RGWBucketInfo& info,
     bool exclusive,
     const rgw_user* powner_id,
@@ -714,3 +716,6 @@ int DBStore::update_bucket(const DoutPrefixProvider *dpp, const std::string& que
 out:
   return ret;
 }
+
+} } // namespace rgw::store
+
