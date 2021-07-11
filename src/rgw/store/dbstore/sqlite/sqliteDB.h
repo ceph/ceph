@@ -11,8 +11,9 @@
 #include "rgw/store/dbstore/common/dbstore.h"
 
 using namespace std;
+using namespace rgw::store;
 
-class SQLiteDB : public DBStore, public DBOp{
+class SQLiteDB : public DB, public DBOp{
   private:
     sqlite3_mutex *mutex = NULL;
 
@@ -23,10 +24,10 @@ class SQLiteDB : public DBStore, public DBOp{
     sqlite3_stmt *stmt = NULL;
     DBOpPrepareParams PrepareParams;
 
-    SQLiteDB(string db_name, CephContext *_cct) : DBStore(db_name, _cct), cct(_cct) {
+    SQLiteDB(string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
       InitPrepareParams(get_def_dpp(), PrepareParams);
     }
-    SQLiteDB(sqlite3 *dbi, CephContext *_cct) : DBStore(_cct), cct(_cct) {
+    SQLiteDB(sqlite3 *dbi, CephContext *_cct) : DB(_cct), cct(_cct) {
       db = (void*)dbi;
       InitPrepareParams(get_def_dpp(), PrepareParams);
     }

@@ -7,14 +7,14 @@
  * If not found and 'create' set to true, create one
  * and return
  */
-DBStore* DBStoreManager::getDBStore (string tenant, bool create)
+DB *DBStoreManager::getDB (string tenant, bool create)
 {
-  map<string, DBStore*>::iterator iter;
-  DBStore *dbs = nullptr;
-  pair<map<string, DBStore*>::iterator,bool> ret;
+  map<string, DB*>::iterator iter;
+  DB *dbs = nullptr;
+  pair<map<string, DB*>::iterator,bool> ret;
 
   if (tenant.empty())
-    return default_dbstore;
+    return default_db;
 
   if (DBStoreHandles.empty())
     goto not_found;
@@ -28,30 +28,30 @@ not_found:
   if (!create)
     return NULL;
 
-  dbs = createDBStore(tenant);
+  dbs = createDB(tenant);
 
   return dbs;
 }
 
 /* Create DBStore instance */
-DBStore* DBStoreManager::createDBStore(string tenant) {
-  DBStore *dbs = nullptr;
-  pair<map<string, DBStore*>::iterator,bool> ret;
+DB *DBStoreManager::createDB(string tenant) {
+  DB *dbs = nullptr;
+  pair<map<string, DB*>::iterator,bool> ret;
 
   /* Create the handle */
 #ifdef SQLITE_ENABLED
   dbs = new SQLiteDB(tenant, cct);
 #else
-  dbs = new DBStore(tenant, cct);
+  dbs = new DB(tenant, cct);
 #endif
 
-  /* API is DBStore::Initialize(string logfile, int loglevel);
+  /* API is DB::Initialize(string logfile, int loglevel);
    * If none provided, by default write in to dbstore.log file
    * created in current working directory with loglevel L_EVENT.
    * XXX: need to align these logs to ceph location
    */
   if (dbs->Initialize("", -1) < 0) {
-    cout<<"^^^^^^^^^^^^DB initialization failed for tenant("<<tenant<<")^^^^^^^^^^^^^^^^^^^^^^^^^^ \n";
+    ldout(cct, 0) << "DB initialization failed for tenant("<<tenant<<")" << dendl;
 
     delete dbs;
     return NULL;
@@ -59,7 +59,7 @@ DBStore* DBStoreManager::createDBStore(string tenant) {
 
   /* XXX: Do we need lock to protect this map?
   */
-  ret = DBStoreHandles.insert(pair<string, DBStore*>(tenant, dbs));
+  ret = DBStoreHandles.insert(pair<string, DB*>(tenant, dbs));
 
   /*
    * Its safe to check for already existing entry (just
@@ -75,9 +75,9 @@ DBStore* DBStoreManager::createDBStore(string tenant) {
   return dbs;
 }
 
-void DBStoreManager::deleteDBStore(string tenant) {
-  map<string, DBStore*>::iterator iter;
-  DBStore *dbs = nullptr;
+void DBStoreManager::deleteDB(string tenant) {
+  map<string, DB*>::iterator iter;
+  DB *dbs = nullptr;
 
   if (tenant.empty() || DBStoreHandles.empty())
     return;
@@ -97,17 +97,17 @@ void DBStoreManager::deleteDBStore(string tenant) {
   return;
 }
 
-void DBStoreManager::deleteDBStore(DBStore *dbs) {
+void DBStoreManager::deleteDB(DB *dbs) {
   if (!dbs)
     return;
 
-  (void)deleteDBStore(dbs->getDBname());
+  (void)deleteDB(dbs->getDBname());
 }
 
 
 void DBStoreManager::destroyAllHandles(){
-  map<string, DBStore*>::iterator iter;
-  DBStore *dbs = nullptr;
+  map<string, DB*>::iterator iter;
+  DB *dbs = nullptr;
 
   if (DBStoreHandles.empty())
     return;

@@ -9,6 +9,7 @@
 #include "rgw_common.h"
 
 using namespace std;
+using DB = rgw::store::DB;
 
 vector<const char*> args;
 
@@ -45,7 +46,7 @@ namespace gtest {
       }
 
       string tenant;
-      class DBStore *db;
+      DB *db;
       string db_type;
       int ret;
       string logfile = "rgw_dbstore_tests.log";
@@ -59,10 +60,10 @@ string marker1;
 
 namespace {
 
-  class DBStoreBaseTest : public ::testing::Test {
+  class DBStoreTest : public ::testing::Test {
     protected:
       int ret;
-      DBStore *db = nullptr;
+      DB *db = nullptr;
       string user1 = "user1";
       string user_id1 = "user_id1";
       string bucket1 = "bucket1";
@@ -71,7 +72,7 @@ namespace {
       DBOpParams GlobalParams = {};
       const DoutPrefixProvider *dpp;
 
-      DBStoreBaseTest() {}
+      DBStoreTest() {}
       void SetUp() {
         db = gtest::env->db;
         ASSERT_TRUE(db != nullptr);
@@ -99,7 +100,7 @@ namespace {
   };
 }
 
-TEST_F(DBStoreBaseTest, InsertUser) {
+TEST_F(DBStoreTest, InsertUser) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -120,7 +121,7 @@ TEST_F(DBStoreBaseTest, InsertUser) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, GetUser) {
+TEST_F(DBStoreTest, GetUser) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -145,7 +146,7 @@ TEST_F(DBStoreBaseTest, GetUser) {
 
 }
 
-TEST_F(DBStoreBaseTest, GetUserQuery) {
+TEST_F(DBStoreTest, GetUserQuery) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -173,7 +174,7 @@ TEST_F(DBStoreBaseTest, GetUserQuery) {
 
 }
 
-TEST_F(DBStoreBaseTest, GetUserQueryByEmail) {
+TEST_F(DBStoreTest, GetUserQueryByEmail) {
   int ret = -1;
   RGWUserInfo uinfo;
   string email = "user1@dbstore.com";
@@ -201,7 +202,7 @@ TEST_F(DBStoreBaseTest, GetUserQueryByEmail) {
   ASSERT_EQ(objv.read_version.ver, 1);
 }
 
-TEST_F(DBStoreBaseTest, GetUserQueryByAccessKey) {
+TEST_F(DBStoreTest, GetUserQueryByAccessKey) {
   int ret = -1;
   RGWUserInfo uinfo;
   string key = "id1";
@@ -226,7 +227,7 @@ TEST_F(DBStoreBaseTest, GetUserQueryByAccessKey) {
   ASSERT_EQ(k.key, "key2");
 }
 
-TEST_F(DBStoreBaseTest, StoreUser) {
+TEST_F(DBStoreTest, StoreUser) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
   RGWUserInfo uinfo, old_uinfo;
@@ -280,7 +281,7 @@ TEST_F(DBStoreBaseTest, StoreUser) {
   ASSERT_EQ(objv_tracker.read_version.tag, "UserTAG");
 }
 
-TEST_F(DBStoreBaseTest, GetUserQueryByUserID) {
+TEST_F(DBStoreTest, GetUserQueryByUserID) {
   int ret = -1;
   RGWUserInfo uinfo;
   map<std::string, bufferlist> attrs;
@@ -322,7 +323,7 @@ TEST_F(DBStoreBaseTest, GetUserQueryByUserID) {
   ASSERT_EQ(attr, "attrs2");
 }
 
-TEST_F(DBStoreBaseTest, ListAllUsers) {
+TEST_F(DBStoreTest, ListAllUsers) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -330,7 +331,7 @@ TEST_F(DBStoreBaseTest, ListAllUsers) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, InsertBucket) {
+TEST_F(DBStoreTest, InsertBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -350,7 +351,7 @@ TEST_F(DBStoreBaseTest, InsertBucket) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, UpdateBucketAttrs) {
+TEST_F(DBStoreTest, UpdateBucketAttrs) {
   int ret = -1;
   RGWBucketInfo info;
   map<std::string, bufferlist> attrs;
@@ -376,7 +377,7 @@ TEST_F(DBStoreBaseTest, UpdateBucketAttrs) {
   ASSERT_EQ(objv.read_version.ver, 2);
 }
 
-TEST_F(DBStoreBaseTest, BucketChown) {
+TEST_F(DBStoreTest, BucketChown) {
   int ret = -1;
   RGWBucketInfo info;
   rgw_user user;
@@ -389,7 +390,7 @@ TEST_F(DBStoreBaseTest, BucketChown) {
   ASSERT_EQ(info.objv_tracker.read_version.ver, 3);
 }
 
-TEST_F(DBStoreBaseTest, UpdateBucketInfo) {
+TEST_F(DBStoreTest, UpdateBucketInfo) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
   RGWBucketInfo info;
@@ -407,7 +408,7 @@ TEST_F(DBStoreBaseTest, UpdateBucketInfo) {
   ASSERT_EQ(info.objv_tracker.read_version.ver, 4);
 }
 
-TEST_F(DBStoreBaseTest, GetBucket) {
+TEST_F(DBStoreTest, GetBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -436,7 +437,7 @@ TEST_F(DBStoreBaseTest, GetBucket) {
   ASSERT_EQ(acl, "attrs2");
 }
 
-TEST_F(DBStoreBaseTest, RemoveBucketAPI) {
+TEST_F(DBStoreTest, RemoveBucketAPI) {
   int ret = -1;
   RGWBucketInfo info;
 
@@ -446,7 +447,7 @@ TEST_F(DBStoreBaseTest, RemoveBucketAPI) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, RemoveUserAPI) {
+TEST_F(DBStoreTest, RemoveUserAPI) {
   int ret = -1;
   RGWUserInfo uinfo;
   RGWObjVersionTracker objv;
@@ -465,7 +466,7 @@ TEST_F(DBStoreBaseTest, RemoveUserAPI) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, CreateBucket) {
+TEST_F(DBStoreTest, CreateBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
   RGWBucketInfo info;
@@ -511,7 +512,7 @@ TEST_F(DBStoreBaseTest, CreateBucket) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, GetBucketQueryByName) {
+TEST_F(DBStoreTest, GetBucketQueryByName) {
   int ret = -1;
   RGWBucketInfo binfo;
   binfo.bucket.name = "bucket2";
@@ -536,7 +537,7 @@ TEST_F(DBStoreBaseTest, GetBucketQueryByName) {
   marker1 = binfo.bucket.marker;
 }
 
-TEST_F(DBStoreBaseTest, ListUserBuckets) {
+TEST_F(DBStoreTest, ListUserBuckets) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
   rgw_user owner;
@@ -572,7 +573,7 @@ TEST_F(DBStoreBaseTest, ListUserBuckets) {
   } while(is_truncated);
 }
 
-TEST_F(DBStoreBaseTest, ListAllBuckets) {
+TEST_F(DBStoreTest, ListAllBuckets) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -580,7 +581,7 @@ TEST_F(DBStoreBaseTest, ListAllBuckets) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, InsertObject) {
+TEST_F(DBStoreTest, InsertObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -588,7 +589,7 @@ TEST_F(DBStoreBaseTest, InsertObject) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, ListObject) {
+TEST_F(DBStoreTest, ListObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -596,7 +597,7 @@ TEST_F(DBStoreBaseTest, ListObject) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, ListAllObjects) {
+TEST_F(DBStoreTest, ListAllObjects) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -604,7 +605,7 @@ TEST_F(DBStoreBaseTest, ListAllObjects) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, PutObjectData) {
+TEST_F(DBStoreTest, PutObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -612,7 +613,7 @@ TEST_F(DBStoreBaseTest, PutObjectData) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, GetObjectData) {
+TEST_F(DBStoreTest, GetObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -620,7 +621,7 @@ TEST_F(DBStoreBaseTest, GetObjectData) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, DeleteObjectData) {
+TEST_F(DBStoreTest, DeleteObjectData) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -628,7 +629,7 @@ TEST_F(DBStoreBaseTest, DeleteObjectData) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, RemoveObject) {
+TEST_F(DBStoreTest, RemoveObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -636,7 +637,7 @@ TEST_F(DBStoreBaseTest, RemoveObject) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, RemoveBucket) {
+TEST_F(DBStoreTest, RemoveBucket) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -644,7 +645,7 @@ TEST_F(DBStoreBaseTest, RemoveBucket) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, RemoveUser) {
+TEST_F(DBStoreTest, RemoveUser) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 
@@ -652,7 +653,7 @@ TEST_F(DBStoreBaseTest, RemoveUser) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST_F(DBStoreBaseTest, InsertTestIDUser) {
+TEST_F(DBStoreTest, InsertTestIDUser) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
 

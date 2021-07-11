@@ -8,8 +8,11 @@
 #include <dbstore.h>
 #include <dbstore_log.h>
 
+using namespace rgw::store;
+using DB = rgw::store::DB;
+
 struct thr_args {
-  class DBStore *dbs;
+  DB *dbs;
   int thr_id;
 };
 
@@ -17,7 +20,7 @@ void* process(void *arg)
 {
   struct thr_args *t_args = (struct thr_args*)arg;
 
-  class DBStore *db = t_args->dbs;
+  DB *db = t_args->dbs;
   int thr_id = t_args->thr_id;
   int ret = -1;
 
@@ -36,7 +39,7 @@ void* process(void *arg)
   string objectc1 = "rhhi";
   string objectc2 = "cns";
 
-  struct DBOpParams params = {};
+  DBOpParams params = {};
   const DoutPrefixProvider *dpp = db->get_def_dpp();
 
   db->InitializeParams(dpp, "InsertUser", &params);
@@ -58,7 +61,7 @@ void* process(void *arg)
   ret = db->ProcessOp(dpp, "InsertUser", &params);
   cout << "InsertUser return value: " <<  ret << "\n";
 
-  struct DBOpParams params2 = {};
+  DBOpParams params2 = {};
   params.op.user.uinfo.user_id.tenant = "tenant2";
 
   db->InitializeParams(dpp, "GetUser", &params2);
@@ -123,8 +126,8 @@ int main(int argc, char *argv[])
   string logfile = "rgw_dbstore_bin.log";
   int loglevel = 20;
 
-  class DBStoreManager *dbsm;
-  class DBStore *dbs;
+  DBStoreManager *dbsm;
+  DB *dbs;
   int rc = 0, tnum = 0;
   void *res;
 
@@ -143,7 +146,7 @@ int main(int argc, char *argv[])
   }
 
   dbsm = new DBStoreManager(logfile, loglevel);
-  dbs = dbsm->getDBStore(tenant, true);
+  dbs = dbsm->getDB(tenant, true);
 
   cout<<"No. of threads being created = "<<num_thr<<"\n";
 
