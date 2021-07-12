@@ -125,6 +125,11 @@ struct RGWCacheNotifyInfo {
   static void generate_test_instances(list<RGWCacheNotifyInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
+inline std::ostream& operator <<(std::ostream& m, const RGWCacheNotifyInfo& cni) {
+  return m << "[op: " << cni.op << ", obj: " << cni.obj
+	   << ", ofs" << cni.ofs << ", ns" << cni.ns << "]";
+}
+
 
 class RGWChainedCache {
 public:
