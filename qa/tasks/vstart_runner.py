@@ -532,13 +532,11 @@ class LocalDaemon(object):
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.debug("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[0])
-        if opt_log_ps_output:
-            log.debug("No match for {0} {1}: {2}".format(
-                self.daemon_type, self.daemon_id, ps_txt))
-        else:
-            log.debug("No match for {0} {1}".format(self.daemon_type,
-                     self.daemon_id))
-            return None
+        if not opt_log_ps_output:
+            ps_txt = '(omitted)'
+        log.debug("No match for {0} {1}: {2}".format(
+            self.daemon_type, self.daemon_id, ps_txt))
+        return None
 
     def wait(self, timeout):
         waited = 0
@@ -554,6 +552,8 @@ class LocalDaemon(object):
             return
 
         pid = self._get_pid()
+        if pid is None:
+            return
         log.debug("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
         os.kill(pid, signal.SIGTERM)
 
