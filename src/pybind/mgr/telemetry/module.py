@@ -4,6 +4,7 @@ Telemetry module for ceph-mgr
 Collect statistics from Ceph cluster and send this back to the Ceph project
 when user has opted-in
 """
+import logging
 import numbers
 import errno
 import hashlib
@@ -400,6 +401,25 @@ class Module(MgrModule):
                 #   bluestore.kv_flush_lat, bluestore.kv_final_lat --> 
                 #   bluestore: kv_flush_lat, kv_final_lat
                 col_0, col_1 = collection.split('.')
+
+                # Debug log for empty keys. This initially was a problem for prioritycache
+                # perf counters, where the col_0 was empty for certain mon counters:
+                #
+                # "mon.a": {                  instead of    "mon.a": {
+                #      "": {                                     "prioritycache": {
+                #        "cache_bytes": {...},                          "cache_bytes": {...},
+                #
+                # This log is here to detect any future instances of a similar issue.
+                if (daemon == "") or (col_0 == "") or (col_1 == ""):
+                    self.log.debug("Instance of an empty key: {}{}".format(daemon, collection))
+
+                # Not every rgw daemon has the same schema. Specifically, each rgw daemon
+                # has a uniquely-named collection that starts off identically (i.e.
+                # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
+                # This bit of code combines these unique counters all under one rgw instance.
+                # Without this check, the schema would remain separeted out in the final report.
+                if (col_0[0:11] == "objecter-0x"):
+                    col_0 = "objecter-0x"
 
                 # Check that the value can be incremented. In some cases,
                 # the files are of type 'pair' (real-integer-pair, integer-integer pair).
