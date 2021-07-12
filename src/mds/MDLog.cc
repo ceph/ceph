@@ -1088,9 +1088,9 @@ void MDLog::_recovery_thread(MDSContext *completion)
      * tolerate replaying old journals until we have to go active. Use front_journal as
      * our journaler attribute and complete */
     dout(4) << "Recovered journal " << jp.front << " in format " << front_journal->get_stream_format() << dendl;
-    journaler->set_write_error_handler(new C_MDL_WriteError(this));
     {
       std::lock_guard l(mds->mds_lock);
+      journaler->set_write_error_handler(new C_MDL_WriteError(this));
       if (mds->is_daemon_stopping()) {
         return;
       }
@@ -1273,17 +1273,14 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
     ceph_assert(journaler == old_journal);
     journaler = NULL;
     delete old_journal;
-  }
 
-  /* Update the pointer to reflect we're back in clean single journal state. */
-  jp.back = 0;
-  write_result = jp.save(mds->objecter);
-  ceph_assert(write_result == 0);
+    /* Update the pointer to reflect we're back in clean single journal state. */
+    jp.back = 0;
+    write_result = jp.save(mds->objecter);
+    ceph_assert(write_result == 0);
 
-  /* Reset the Journaler object to its default state */
-  dout(1) << "Journal rewrite complete, continuing with normal startup" << dendl;
-  {
-    std::lock_guard l(mds->mds_lock);
+    /* Reset the Journaler object to its default state */
+    dout(1) << "Journal rewrite complete, continuing with normal startup" << dendl;
     if (mds->is_daemon_stopping()) {
       delete new_journal;
       return;
@@ -1291,11 +1288,8 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
     journaler = new_journal;
     journaler->set_readonly();
     journaler->set_write_error_handler(new C_MDL_WriteError(this));
-  }
 
-  /* Trigger completion */
-  {
-    std::lock_guard l(mds->mds_lock);
+    /* Trigger completion */
     if (mds->is_daemon_stopping()) {
       return;
     }
