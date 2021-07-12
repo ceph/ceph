@@ -6,6 +6,7 @@
 
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include "tools/rbd_mirror/Types.h"
 #include <string>
 
@@ -20,14 +21,16 @@ namespace pool_watcher {
 template <typename ImageCtxT = librbd::ImageCtx>
 class RefreshImagesRequest {
 public:
-  static RefreshImagesRequest *create(librados::IoCtx &remote_io_ctx,
-                                      ImageIds *image_ids, Context *on_finish) {
-    return new RefreshImagesRequest(remote_io_ctx, image_ids, on_finish);
+  static RefreshImagesRequest *create(
+      librados::IoCtx &remote_io_ctx,
+      std::map<MirrorEntity, std::string> *entities, Context *on_finish) {
+    return new RefreshImagesRequest(remote_io_ctx, entities, on_finish);
   }
 
-  RefreshImagesRequest(librados::IoCtx &remote_io_ctx, ImageIds *image_ids,
+  RefreshImagesRequest(librados::IoCtx &remote_io_ctx,
+                       std::map<MirrorEntity, std::string> *entities,
                        Context *on_finish)
-    : m_remote_io_ctx(remote_io_ctx), m_image_ids(image_ids),
+    : m_remote_io_ctx(remote_io_ctx), m_entities(entities),
       m_on_finish(on_finish) {
   }
 
@@ -44,6 +47,16 @@ private:
    *    v   v             | (more images)
    * MIRROR_IMAGE_LIST ---/
    *    |
+   *    |   /-------------\
+   *    |   |             |
+   *    v   v             | (more group)
+   * MIRROR_GROUP_LIST ---/
+   *    |
+   *    |   /-------------\
+   *    |   |             |
+   *    v   v             | (for every group)
+   * GROUP_IMAGE_LIST ----/
+   *    |
    *    v
    * <finish>
    *
@@ -51,14 +64,24 @@ private:
    */
 
   librados::IoCtx &m_remote_io_ctx;
-  ImageIds *m_image_ids;
+  std::map<MirrorEntity, std::string> *m_entities;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
   std::string m_start_after;
 
+  std::map<std::string, cls::rbd::MirrorGroup> m_groups;
+  cls::rbd::GroupImageSpec m_start_group_image_list_after;
+  size_t m_group_size = 0;
+
   void mirror_image_list();
   void handle_mirror_image_list(int r);
+
+  void mirror_group_list();
+  void handle_mirror_group_list(int r);
+
+  void group_image_list();
+  void handle_group_image_list(int r);
 
   void finish(int r);
 

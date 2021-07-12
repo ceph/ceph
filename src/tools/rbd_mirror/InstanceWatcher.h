@@ -78,6 +78,17 @@ public:
                                  const std::string &peer_mirror_uuid,
                                  Context *on_notify_ack);
 
+  void notify_group_acquire(const std::string &instance_id,
+                            const std::string &global_group_id,
+                            Context *on_notify_ack);
+  void notify_group_release(const std::string &instance_id,
+                            const std::string &global_group_id,
+			    Context *on_notify_ack);
+  void notify_peer_group_removed(const std::string &instance_id,
+                                 const std::string &global_group_id,
+                                 const std::string &peer_mirror_uuid,
+                                 Context *on_notify_ack);
+
   void notify_sync_request(const std::string &sync_id, Context *on_sync_start);
   bool cancel_sync_request(const std::string &sync_id);
   void notify_sync_complete(const std::string &sync_id);
@@ -238,6 +249,14 @@ private:
                                  const std::string &peer_mirror_uuid,
                                  Context *on_finish);
 
+  void handle_group_acquire(const std::string &global_group_id,
+                            Context *on_finish);
+  void handle_group_release(const std::string &global_group_id,
+                            Context *on_finish);
+  void handle_peer_group_removed(const std::string &global_group_id,
+                                 const std::string &peer_mirror_uuid,
+                                 Context *on_finish);
+
   void handle_sync_request(const std::string &instance_id,
                            const std::string &sync_id, Context *on_finish);
   void handle_sync_start(const std::string &instance_id,
@@ -251,6 +270,15 @@ private:
                       C_NotifyAck *on_notify_ack);
   void handle_payload(const std::string &instance_id,
                       const instance_watcher::PeerImageRemovedPayload &payload,
+                      C_NotifyAck *on_notify_ack);
+  void handle_payload(const std::string &instance_id,
+                      const instance_watcher::GroupAcquirePayload &payload,
+                      C_NotifyAck *on_notify_ack);
+  void handle_payload(const std::string &instance_id,
+                      const instance_watcher::GroupReleasePayload &payload,
+                      C_NotifyAck *on_notify_ack);
+  void handle_payload(const std::string &instance_id,
+                      const instance_watcher::PeerGroupRemovedPayload &payload,
                       C_NotifyAck *on_notify_ack);
   void handle_payload(const std::string &instance_id,
                       const instance_watcher::SyncRequestPayload &payload,

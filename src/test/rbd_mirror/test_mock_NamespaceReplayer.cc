@@ -75,11 +75,11 @@ struct ImageMap<librbd::MockTestImageCtx> {
   MOCK_METHOD1(update_instances_removed, void(const std::vector<std::string>&));
 
   MOCK_METHOD3(update_images_mock, void(const std::string&,
-                                        const std::set<std::string>&,
-                                        const std::set<std::string>&));
+                                        const MirrorEntities&,
+                                        const MirrorEntities&));
   void update_images(const std::string& mirror_uuid,
-                     std::set<std::string>&& added,
-                     std::set<std::string>&& removed) {
+                     MirrorEntities &&added,
+                     MirrorEntities &&removed) {
     update_images_mock(mirror_uuid, added, removed);
   }
 
@@ -156,6 +156,16 @@ struct InstanceWatcher<librbd::MockTestImageCtx> {
                                           const std::string&,
                                           Context*));
   MOCK_METHOD4(notify_peer_image_removed, void(const std::string&,
+                                               const std::string&,
+                                               const std::string&,
+                                               Context*));
+  MOCK_METHOD3(notify_group_acquire, void(const std::string&,
+                                          const std::string&,
+                                          Context*));
+  MOCK_METHOD3(notify_group_release, void(const std::string&,
+                                          const std::string&,
+                                          Context*));
+  MOCK_METHOD4(notify_peer_group_removed, void(const std::string&,
                                                const std::string&,
                                                const std::string&,
                                                Context*));

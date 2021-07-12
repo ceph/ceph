@@ -1,10 +1,12 @@
 add_library(rbd_mirror_types STATIC
+  Types.cc
   image_map/Types.cc
   instance_watcher/Types.cc
   leader_watcher/Types.cc)
 
 set(rbd_mirror_internal
   ClusterWatcher.cc
+  GroupReplayer.cc
   ImageDeleter.cc
   ImageMap.cc
   ImageReplayer.cc
@@ -25,6 +27,7 @@ set(rbd_mirror_internal
   Threads.cc
   Throttler.cc
   Types.cc
+  group_replayer/BootstrapRequest.cc
   image_deleter/SnapshotPurgeRequest.cc
   image_deleter/TrashMoveRequest.cc
   image_deleter/TrashRemoveRequest.cc
