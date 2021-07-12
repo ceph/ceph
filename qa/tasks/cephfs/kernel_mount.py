@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 
 from io import StringIO
@@ -165,63 +166,75 @@ class KernelMount(CephFSMount):
         if self.mounted:
             self.umount()
 
-    def _find_debug_dir(self):
+    def _get_debug_dir(self):
         """
-        Find the debugfs folder for this mount
+        Get the debugfs folder for this mount
         """
-        pyscript = dedent("""
-            import glob
-            import os
-            import json
 
-            def get_id_to_dir():
-                result = {}
-                for dir in glob.glob("/sys/kernel/debug/ceph/*"):
-                    mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
-                    client_id = mds_sessions_lines[1].split()[1].strip('"')
+        cluster_name = 'ceph'
+        fsid = self.ctx.ceph[cluster_name].fsid
 
-                    result[client_id] = dir
-                return result
+        global_id = self._get_global_id()
 
-            print(json.dumps(get_id_to_dir()))
-            """)
-
-        output = self.client_remote.sh([
-            'sudo', 'python3', '-c', pyscript
-        ], timeout=(5*60))
-        client_id_to_dir = json.loads(output)
-
-        try:
-            return client_id_to_dir[self.client_id]
-        except KeyError:
-            log.error("Client id '{0}' debug dir not found (clients seen were: {1})".format(
-                self.client_id, ",".join(client_id_to_dir.keys())
-            ))
-            raise
+        return os.path.join("/sys/kernel/debug/ceph/", f"{fsid}.client{global_id}")
 
     def read_debug_file(self, filename):
         """
         Read the debug file "filename", return None if the file doesn't exist.
         """
-        debug_dir = self._find_debug_dir()
 
-        pyscript = dedent("""
-            import os
+        path = os.path.join(self._get_debug_dir(), filename)
 
-            print(open(os.path.join("{debug_dir}", "{filename}")).read())
-            """).format(debug_dir=debug_dir, filename=filename)
-
+        stdout = StringIO()
         stderr = StringIO()
         try:
-            output = self.client_remote.sh([
-                'sudo', 'python3', '-c', pyscript
-            ], stderr=stderr, timeout=(5*60))
-
-            return output
+            self.run_shell_payload(f"sudo dd if={path}", timeout=(5*60),
+                stdout=stdout, stderr=stderr)
+            return stdout.getvalue()
         except CommandFailedError:
             if 'no such file or directory' in stderr.getvalue().lower():
                 return None
             raise
+
+    def _get_global_id(self):
+        try:
+            p = self.run_shell_payload("getfattr --only-values -n ceph.client_id .", stdout=StringIO())
+            v = p.stdout.getvalue()
+            prefix = "client"
+            assert v.startswith(prefix)
+            return int(v[len(prefix):])
+        except CommandFailedError:
+            # Probably this fallback can be deleted in a few releases when the kernel xattr is widely available.
+            log.debug("Falling back to messy global_id lookup via /sys...")
+
+            pyscript = dedent("""
+                import glob
+                import os
+                import json
+
+                def get_id_to_dir():
+                    result = {}
+                    for dir in glob.glob("/sys/kernel/debug/ceph/*"):
+                        mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
+                        global_id = mds_sessions_lines[0].split()[1].strip('"')
+                        client_id = mds_sessions_lines[1].split()[1].strip('"')
+                        result[client_id] = global_id
+                    return result
+                print(json.dumps(get_id_to_dir()))
+            """)
+
+            output = self.client_remote.sh([
+                'sudo', 'python3', '-c', pyscript
+            ], timeout=(5*60))
+            client_id_to_global_id = json.loads(output)
+
+            try:
+                return client_id_to_global_id[self.client_id]
+            except KeyError:
+                log.error("Client id '{0}' debug dir not found (clients seen were: {1})".format(
+                    self.client_id, ",".join(client_id_to_global_id.keys())
+                ))
+                raise
 
     def get_global_id(self):
         """
@@ -230,11 +243,7 @@ class KernelMount(CephFSMount):
 
         assert self.mounted
 
-        mds_sessions = self.read_debug_file("mds_sessions")
-        assert mds_sessions 
-
-        lines = mds_sessions.split("\n")
-        return int(lines[0].split()[1])
+        return self._get_global_id()
 
     @property
     def _global_addr(self):
