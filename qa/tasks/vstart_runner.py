@@ -362,11 +362,6 @@ class LocalRemote(object):
         self.write_file(path, data, sudo=True, **kwargs)
 
     def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
-        # Since Python's shell simulation can only work when commands are
-        # provided as a list of argumensts...
-        if isinstance(args, str):
-            args = args.split()
-
         # We'll let sudo be a part of command even omit flag says otherwise in
         # cases of commands which can normally be ran only by root.
         try:
@@ -405,10 +400,46 @@ class LocalRemote(object):
 
         return args
 
+    @staticmethod
+    def split_cmds(cmds):
+        """
+        We might've received a sequence of commands instead of a single
+        command. It might be in form of str where each command is separated
+        by a newline or it might be in form of list. This method separate
+        each command into a separate list and each command is split into list
+        of arguments.
+
+        Returns list of lists in which each list contains command arguments in
+        str form.
+        """
+        if isinstance(cmds , str):
+            cmds = [cmd.split() for cmd in cmds.split('\n')]
+        else:
+            assert isinstance(cmds, list)
+            # TODO: should've we expect/allow of list of lists as well?
+            assert all(isinstance(arg, str) for arg in cmds)
+            cmds = [cmds]
+
+        # guard against empty list. 'ls /usr\n' will produce list containing
+        # empty list, for example.
+        while [] in cmds:
+            cmds.remove([])
+
+        return cmds
+
     # Wrapper to keep the interface exactly same as that of
     # teuthology.remote.run.
     def run(self, **kwargs):
-        return self._do_run(**kwargs)
+        """
+        Prepare arguments and get them executed.
+
+        We might have multiple commands in kwargs['args'] as list within list
+        or as string with newlines.
+        """
+        for cmd in self.split_cmds(kwargs['args']):
+            kwargs['args'] = cmd
+            retval = self._do_run(**kwargs)
+        return retval
 
     # XXX: omit_sudo is set to True since using sudo can change the ownership
     # of files which becomes problematic for following executions of
