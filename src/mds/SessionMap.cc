@@ -590,7 +590,8 @@ void Session::dump(Formatter *f, bool cap_dump) const
   }
   f->dump_float("uptime", get_session_uptime());
   f->dump_unsigned("requests_in_flight", get_request_count());
-  f->dump_unsigned("completed_requests", get_num_completed_requests());
+  f->dump_unsigned("num_completed_requests", get_num_completed_requests());
+  f->dump_unsigned("num_completed_flushes", get_num_completed_flushes());
   f->dump_bool("reconnecting", reconnecting);
   f->dump_object("recall_caps", recall_caps);
   f->dump_object("release_caps", release_caps);
