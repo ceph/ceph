@@ -528,6 +528,7 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
              (access(m_log_pool_name.c_str(), F_OK) != 0)) {
     ldout(cct, 5) << "Can't find the existed pool file " << m_log_pool_name << dendl;
     on_finish->complete(-errno);
+    return;
   }
 
   bool succeeded = initialize_pool(on_finish, later);
@@ -1510,7 +1511,8 @@ bool AbstractWriteLog<I>::check_allocation(
     /* We need one free log entry per extent (each is a separate entry), and
      * one free "lane" for remote replication. */
     if ((m_free_lanes >= num_lanes) &&
-        (m_free_log_entries >= num_log_entries)) {
+        (m_free_log_entries >= num_log_entries) &&
+        (m_bytes_allocated_cap >= m_bytes_allocated + bytes_allocated)) {
       m_free_lanes -= num_lanes;
       m_free_log_entries -= num_log_entries;
       m_unpublished_reserves += num_unpublished_reserves;
@@ -1520,7 +1522,6 @@ bool AbstractWriteLog<I>::check_allocation(
       if (req->has_io_waited_for_buffers()) {
         req->set_io_waited_for_buffers(false);
       }
-
     } else {
       alloc_succeeds = false;
     }

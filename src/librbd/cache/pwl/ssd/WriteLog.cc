@@ -124,8 +124,21 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
                                nullptr, nullptr, nullptr);
     int r = bdev->open(this->m_log_pool_name);
     if (r < 0) {
+      lderr(m_image_ctx.cct) << "fail to open block device." << dendl;
       delete bdev;
-      on_finish->complete(-1);
+      on_finish->complete(r);
+      return false;
+    }
+    if (this->m_log_pool_size % MIN_WRITE_ALLOC_SSD_SIZE != 0 ||
+        this->m_log_pool_size != bdev->get_size()) {
+      lderr(m_image_ctx.cct) << "rbd_persistent_cache_size is not align to "
+                             << "bdev block size: " << bdev->get_block_size()
+                             << ". Please set an aligned cache size in ssd"
+                             << " mode. The closest aligned size is "
+                             << bdev->get_size() << dendl;
+      bdev->close();
+      delete bdev;
+      on_finish->complete(-EINVAL);
       return false;
     }
     m_cache_state->present = true;
@@ -133,9 +146,12 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     m_cache_state->empty = true;
     /* new pool, calculate and store metadata */
 
-    /* Size of ring buffer */
-    this->m_bytes_allocated_cap =
-        this->m_log_pool_size - DATA_RING_BUFFER_OFFSET;
+    /* Keep ring buffer at least MIN_WRITE_ALLOC_SSD_SIZE bytes free.
+     * In this way, when all ring buffer spaces are allocated,
+     * m_first_free_entry and m_first_valid_entry will not be equal.
+     * Equal only means the cache is empty. */
+    this->m_bytes_allocated_cap = this->m_log_pool_size -
+        DATA_RING_BUFFER_OFFSET - MIN_WRITE_ALLOC_SSD_SIZE;
     /* Log ring empty */
     m_first_free_entry = DATA_RING_BUFFER_OFFSET;
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
@@ -153,7 +169,10 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     if (r != 0) {
       lderr(m_image_ctx.cct) << "failed to initialize pool ("
                              << this->m_log_pool_name << ")" << dendl;
+      bdev->close();
+      delete bdev;
       on_finish->complete(r);
+      return false;
     }
   } else {
     m_cache_state->present = true;
@@ -216,8 +235,8 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
   this->m_first_valid_entry = pool_root.first_valid_entry;
   this->m_first_free_entry = pool_root.first_free_entry;
 
-  this->m_bytes_allocated_cap =
-      this->m_log_pool_size - DATA_RING_BUFFER_OFFSET;
+  this->m_bytes_allocated_cap = this->m_log_pool_size -
+      DATA_RING_BUFFER_OFFSET - MIN_WRITE_ALLOC_SSD_SIZE;
 
   std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> sync_point_entries;
 
