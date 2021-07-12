@@ -747,6 +747,10 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
   }
+  
+  if(obj.key.instance.empty()){
+    obj.key.instance = "null";
+  }
 
   /* has there been any racing object write? */
   if (del_if_older && (state->mtime > timestamp)) {
