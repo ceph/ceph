@@ -134,10 +134,12 @@ public:
 
   /// Resets transaction preserving
   void reset_transaction_preserve_handle(Transaction &t) {
+    LOG_PREFIX(Cache::reset_transaction_preserve_handle);
     if (t.did_reset()) {
       ++(get_counter(stats.trans_created_by_src, t.get_src()));
     }
     t.reset_preserve_handle(last_commit);
+    DEBUGT("reset", t);
   }
 
   /**
