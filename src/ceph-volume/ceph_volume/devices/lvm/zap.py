@@ -254,8 +254,8 @@ class Zap(object):
             )
 
         # look for partitions and zap those
-        for part_name in device.sys_api.get('partitions', {}).keys():
-            self.zap_partition(Device('/dev/%s' % part_name))
+        #for part_name in device.sys_api.get('partitions', {}).keys():
+        #    self.zap_partition(Device('/dev/%s' % part_name))
 
         wipefs(device.abspath)
         zap_data(device.abspath)
