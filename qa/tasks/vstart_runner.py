@@ -552,6 +552,8 @@ class LocalDaemon(object):
             return
 
         pid = self._get_pid()
+        if pid is None:
+            return
         log.debug("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
         os.kill(pid, signal.SIGTERM)
 
