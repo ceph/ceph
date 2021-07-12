@@ -165,8 +165,7 @@ void ObjectDispatcher<I>::extent_overwritten(
 
   std::shared_lock locker{this->m_lock};
   for (auto it : this->m_dispatches) {
-    auto& object_dispatch_meta = it.second;
-    auto object_dispatch = object_dispatch_meta.dispatch;
+    auto object_dispatch = it.second;
     object_dispatch->extent_overwritten(object_no, object_off, object_len,
                                         journal_tid, new_journal_tid);
   }
@@ -181,8 +180,7 @@ int ObjectDispatcher<I>::prepare_copyup(
 
   std::shared_lock locker{this->m_lock};
   for (auto it : this->m_dispatches) {
-    auto& object_dispatch_meta = it.second;
-    auto object_dispatch = object_dispatch_meta.dispatch;
+    auto object_dispatch = it.second;
     auto r = object_dispatch->prepare_copyup(
             object_no, snapshot_sparse_bufferlist);
     if (r < 0) {
