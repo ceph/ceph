@@ -259,6 +259,10 @@ void Inode::try_touch_cap(mds_rank_t mds)
  */
 bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
 {
+  
+  // HACK: We always return true now.
+  return true;
+
   int c = snap_caps;
   int i = 0;
 
