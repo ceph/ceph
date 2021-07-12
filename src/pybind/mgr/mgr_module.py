@@ -1036,7 +1036,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             All these structures have their own JSON representations: experiment
             or look at the C++ ``dump()`` methods to learn about them.
         """
-        return self._ceph_get(data_name)
+        obj =  self._ceph_get(data_name)
+        return json.loads(obj)
 
     def _stattype_to_str(self, stattype: int) -> str:
 
