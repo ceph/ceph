@@ -3248,6 +3248,18 @@ void FileStore::_do_transaction(
         tracepoint(objectstore, setallochint_exit, r);
       }
       break;
+    case Transaction::OP_RECLAIM_SPACE:
+      {
+        const coll_t &_cid = i.get_cid(op->cid);
+        const ghobject_t &oid = i.get_oid(op->oid);
+        const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
+          _cid : _cid.get_temp();
+        tracepoint(objectstore, truncate_enter, osr_name, 0);
+        if (_check_replay_guard(cid, oid, spos) > 0)
+          r = _truncate(cid, oid, 0);
+        tracepoint(objectstore, truncate_exit, r);
+      }
+      break;
 
     default:
       derr << "bad op " << op->op << dendl;

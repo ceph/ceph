@@ -6645,6 +6645,7 @@ PeeringState::Deleting::Deleting(my_context ctx)
   ps->dirty_info = true;
 
   pl->on_removal(t);
+  do_reclaim = pl->can_do_reclaim();
 }
 
 boost::statechart::result PeeringState::Deleting::react(
@@ -6652,8 +6653,13 @@ boost::statechart::result PeeringState::Deleting::react(
 {
   DECLARE_LOCALS;
   std::pair<ghobject_t, bool> p;
-  p = pl->do_delete_work(context<PeeringMachine>().get_cur_transaction(),
-    next);
+  if (do_reclaim) {
+    p = pl->do_reclaim_work(context<PeeringMachine>().get_cur_transaction(),
+      next);
+  } else {
+    p = pl->do_delete_work(context<PeeringMachine>().get_cur_transaction(),
+      next);
+  }
   next = p.first;
   return p.second ? discard_event() : terminate();
 }
@@ -6664,6 +6670,10 @@ void PeeringState::Deleting::exit()
   DECLARE_LOCALS;
   ps->deleting = false;
   pl->cancel_local_background_io_reservation();
+  if (do_reclaim) {
+    pl->get_perf_logger().tinc(l_osd_pg_reclaim_lat, mono_clock::now() - start);
+  } else {
+  }
 }
 
 /*--------GetInfo---------*/

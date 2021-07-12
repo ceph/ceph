@@ -118,6 +118,13 @@ enum {
   l_osd_pg_fastinfo,
   l_osd_pg_biginfo,
 
+  l_osd_deleting_submit_lat,
+  l_osd_reclaiming_submit_lat,
+  l_osd_deleting_commit_lat,
+  l_osd_reclaiming_commit_lat,
+  l_osd_pg_remove_lat,
+  l_osd_pg_reclaim_lat,
+
   l_osd_last,
 };
 

@@ -24,6 +24,7 @@
 #include <boost/random/binomial_distribution.hpp>
 #include <gtest/gtest.h>
 
+#include "kv/RocksDBStore.h"
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
 #if defined(WITH_BLUESTORE)
@@ -9221,6 +9222,121 @@ TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
 
   r = store->read(ch, hoid, 0xb000, 0x10000, bl);
   ASSERT_EQ(r, 0x10000);
+}
+
+TEST_P(StoreTestSpecificAUSize, BlueStoreRemoveViaReclaimTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // reclaim doesn't work on spinners hence enforcing ssd mode
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
+
+  g_conf().apply_changes(nullptr);
+  StartDeferred(0x1000);
+
+  int r;
+
+  const uint64_t pool = 555;
+
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid2 = make_object("Object 2", pool);
+  ghobject_t hoid3 = make_object("Object 3", pool);
+  ghobject_t hoid4 = make_object("Object 4", pool);
+  ghobject_t hoid_empty = make_object("Object empty", pool);
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("abcde");
+
+    t.touch(cid, hoid_empty);
+    t.write(cid, hoid, 0, 5, bl);
+    t.write(cid, hoid2, 0, 5, bl);
+    t.write(cid, hoid3, 100000, 5, bl);
+    cerr << "write objects" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    // read one object to put it in cache
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 5, in);
+    ASSERT_EQ(5, r);
+  }
+  {
+    bufferlist val, val2;
+    val.append("value");
+    val.append("value2");
+    ObjectStore::Transaction t;
+    t.setattr(cid, hoid, "foo", val);
+    t.setattr(cid, hoid, "bar", val2);
+    t.setattr(cid, hoid_empty, "empty_attr", val);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("abcde");
+    t.write(cid, hoid2, 5, 5, bl);
+    t.write(cid, hoid4, 0, 5, bl);
+    cerr << "Append" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  if (rand() & 1) {
+    cerr << "Waiting for deferred ops..."
+      << g_conf().get_val<double>("bluestore_max_defer_interval") + 1
+      << std::endl;
+    sleep(g_conf().get_val<double>("bluestore_max_defer_interval") + 1);
+  }
+  {
+    auto r = store->collection_bulk_remove_lock(ch);
+    ASSERT_EQ(r, 0);
+
+    cerr << "Reclaiming..." << std::endl;
+    ObjectStore::Transaction t;
+    t.reclaim(cid, hoid2);
+    t.reclaim(cid, hoid3);
+    t.reclaim(cid, hoid_empty);
+    t.reclaim(cid, hoid);
+    t.reclaim(cid, hoid4);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 5, in);
+    ASSERT_EQ(-ENOENT, r);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    cerr << "Cleaning..." << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  cerr << "Waiting for final cleanup..." << std::endl;
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  const PerfCounters* logger = bstore->get_kv()->get_perf_counters();
+  while (logger->get(l_rocksdb_compact_queue_placed) == 0 ||
+	   (logger->get(l_rocksdb_compact_queue_placed) !=
+	      logger->get(l_rocksdb_compact_queue_processed))) {
+    sleep(1);
+    cerr << "Compact queue countes: placed="
+         << logger->get(l_rocksdb_compact_queue_placed)
+	 << " processed=" << logger->get(l_rocksdb_compact_queue_processed)
+	 << std::endl;
+  }
 }
 
 #endif  // WITH_BLUESTORE

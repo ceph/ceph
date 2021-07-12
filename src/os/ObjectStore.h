@@ -684,6 +684,16 @@ public:
     return collection_list(c, start, end, max, ls, next);
   }
 
+  /**
+   * Locks collection in a preparation for bulk removal.
+   * All updates on associated onodes other than truncate/remove/zero/reclaim are prohibited.
+   *
+   * @param c collection
+   */
+  virtual int collection_bulk_remove_lock(CollectionHandle& c) {
+    return -ENOTSUP;
+  }
+
   /// OMAP
   /// Get omap contents
   virtual int omap_get(

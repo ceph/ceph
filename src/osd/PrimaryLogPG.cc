@@ -12817,7 +12817,7 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction &t)
 
   on_shutdown();
 
-  t.register_on_commit(new C_DeleteMore(this, get_osdmap_epoch()));
+  t.register_on_commit(new C_DeleteMore(this, get_osdmap_epoch(), 0));
 }
 
 void PrimaryLogPG::clear_async_reads()

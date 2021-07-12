@@ -962,6 +962,13 @@ void MemStore::_do_transaction(Transaction& t)
         r = 0;
       }
       break;
+    case Transaction::OP_RECLAIM_SPACE:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+	r = _truncate(cid, oid, 0);
+      }
+      break;
 
     default:
       derr << "bad op " << op->op << dendl;

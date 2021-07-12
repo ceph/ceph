@@ -512,6 +512,15 @@ void Transaction::dump(ceph::Formatter *f)
         f->dump_string("alloc_hint_flags", ceph_osd_alloc_hint_flag_string(alloc_hint_flags));
       }
       break;
+    case Transaction::OP_RECLAIM_SPACE:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+	f->dump_string("op_name", "reclaim");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+      }
+      break;
 
     default:
       f->dump_string("op_name", "unknown");

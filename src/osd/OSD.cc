@@ -3494,6 +3494,11 @@ float OSD::get_osd_delete_sleep()
   return cct->_conf.get_val<double>("osd_delete_sleep_hdd");
 }
 
+float OSD::get_osd_reclaim_sleep()
+{
+  return cct->_conf.get_val<double>("osd_reclaim_sleep");
+}
+
 int OSD::get_recovery_max_active()
 {
   if (cct->_conf->osd_recovery_max_active)

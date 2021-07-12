@@ -1240,3 +1240,19 @@ options:
   default: 1
   flags:
   - runtime
+- name: osd_reclaim_sleep
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next reclaiming
+  fmt_desc: Time in seconds to sleep before the next reclaiming transaction. This
+    throttles the PG deletion process.
+  default: 0
+  flags:
+  - runtime
+- name: osd_delete_via_reclaim
+  type: bool
+  level: advanced
+  default: true
+  desc: Enables dual-stage PG removal mode - allocated space reclamation is followed by metadata removal
+  fmt_desc: Enables dual-stage PG removal mode - allocated space reclamation is followed by metadata removal. This
+    makes bulk PG removal less intrusive and hopefully faster for BlueStore.

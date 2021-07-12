@@ -35,10 +35,12 @@ enum {
   l_rocksdb_get_latency,
   l_rocksdb_submit_latency,
   l_rocksdb_submit_sync_latency,
-  l_rocksdb_compact,
-  l_rocksdb_compact_range,
+  l_rocksdb_compact_time,
+  l_rocksdb_compact_range_time,
   l_rocksdb_compact_queue_merge,
-  l_rocksdb_compact_queue_len,
+  l_rocksdb_delete_ranges,
+  l_rocksdb_compact_queue_placed,
+  l_rocksdb_compact_queue_processed,
   l_rocksdb_write_wal_time,
   l_rocksdb_write_memtable_time,
   l_rocksdb_write_delay_time,
@@ -158,7 +160,10 @@ private:
   ceph::mutex compact_queue_lock =
     ceph::make_mutex("RocksDBStore::compact_thread_lock");
   ceph::condition_variable compact_queue_cond;
-  std::list<std::pair<std::string,std::string>> compact_queue;
+  // start key, end key, do remove flag, prefix if remove flag set
+  // start & end keys have prefix embedded if 'do_remove' flag is clear
+  typedef std::list<std::tuple<std::string, std::string, bool, std::string>> compact_queue_t;
+  compact_queue_t compact_queue;
   bool compact_queue_stop;
   class CompactThread : public Thread {
     RocksDBStore *db;
@@ -175,6 +180,7 @@ private:
 
   void compact_range(const std::string& start, const std::string& end);
   void compact_range_async(const std::string& start, const std::string& end);
+
   int tryInterpret(const std::string& key, const std::string& val,
 		   rocksdb::Options& opt);
 
@@ -213,6 +219,13 @@ public:
 			   const std::string& end) override {
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
+  // whether remove_compact_range_async & remove_async are supported
+  bool is_async_remove_supported() override {
+    return true;
+  }
+  void remove_compact_range_async(const std::string& prefix, const std::string& start,
+                                  const std::string& end) override;
+  void remove_key_async(const std::string& prefix, const std::string& key) override;
 
   RocksDBStore(CephContext *c, const std::string &path, std::map<std::string,std::string> opt, void *p) :
     cct(c),
@@ -303,6 +316,10 @@ public:
       const std::string &prefix,
       const std::string &start,
       const std::string &end) override;
+    void rm_range_keys_unconditionally(
+      const std::string& prefix,
+      const std::string& start,
+      const std::string& end) override;
     void merge(
       const std::string& prefix,
       const std::string& k,

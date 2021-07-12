@@ -52,12 +52,16 @@ std::ostream& operator<<(std::ostream& out, const bluestore_bdev_label_t& l);
 /// collection metadata
 struct bluestore_cnode_t {
   uint32_t bits;   ///< how many bits of coll pgid are significant
+  bool pending_removal = false;
 
   explicit bluestore_cnode_t(int b=0) : bits(b) {}
 
   DENC(bluestore_cnode_t, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.bits, p);
+    if (struct_v >= 2) {
+      denc(v.pending_removal, p);
+    }
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
@@ -965,6 +969,7 @@ struct bluestore_onode_t {
     FLAG_PGMETA_OMAP = 2,  ///< omap data is in meta omap prefix
     FLAG_PERPOOL_OMAP = 4, ///< omap data is in per-pool prefix; per-pool keys
     FLAG_PERPG_OMAP = 8,   ///< omap data is in per-pg prefix; per-pg keys
+    FLAG_NON_EXISTENT = 16,///< onode was marked for removal
   };
 
   std::string get_flags_string() const {
@@ -980,6 +985,9 @@ struct bluestore_onode_t {
     }
     if (flags & FLAG_PERPG_OMAP) {
       s += "+per_pg_omap";
+    }
+    if (flags & FLAG_NON_EXISTENT) {
+      s += "+non_existent";
     }
     return s;
   }
@@ -1007,6 +1015,9 @@ struct bluestore_onode_t {
   }
   bool is_perpg_omap() const {
     return has_flag(FLAG_PERPG_OMAP);
+  }
+  bool exists() const {
+    return !has_flag(FLAG_NON_EXISTENT);
   }
 
   void set_omap_flags() {
