@@ -344,6 +344,9 @@ public:
   const std::string& get_conf_path() const {
     return config.get_conf_path();
   }
+  std::optional<std::string> get_val_default(std::string_view key) {
+    return config.get_val_default(key);
+  }
 };
 
 }

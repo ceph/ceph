@@ -28,6 +28,8 @@ function run() {
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     # so we will not force auth_log_shard to be acting_primary
     CEPH_ARGS+="--osd_force_auth_primary_missing_objects=1000000 "
+    # Use "high_recovery_ops" profile if mclock_scheduler is enabled.
+    CEPH_ARGS+="--osd-mclock-profile=high_recovery_ops "
     export margin=10
     export objects=200
     export poolname=test
@@ -347,13 +349,13 @@ function TEST_recovery_undersized() {
     # Wait for recovery to finish
     # Can't use wait_for_clean() because state goes from active+recovering+undersized+degraded
     # to  active+undersized+degraded
-    for i in $(seq 1 60)
+    for i in $(seq 1 300)
     do
       if ceph pg dump pgs | grep ^$PG | grep -qv recovering
       then
           break
       fi
-      if [ $i = "60" ];
+      if [ $i = "300" ];
       then
           echo "Timeout waiting for recovery to finish"
           return 1

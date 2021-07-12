@@ -1024,6 +1024,16 @@ void md_config_t::get_config_bl(
   }
 }
 
+std::optional<std::string> md_config_t::get_val_default(std::string_view key)
+{
+  std::string val;
+  const Option *opt = find_option(key);
+  if (opt && (conf_stringify(_get_val_default(*opt), &val) == 0)) {
+    return std::make_optional(std::move(val));
+  }
+  return std::nullopt;
+}
+
 int md_config_t::get_val(const ConfigValues& values,
 			 const std::string_view key, char **buf, int len) const
 {

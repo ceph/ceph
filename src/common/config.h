@@ -192,6 +192,9 @@ public:
   /// get encoded map<string,string> of compiled-in defaults
   void get_defaults_bl(const ConfigValues& values, ceph::buffer::list *bl);
 
+  /// Get the default value of a configuration option
+  std::optional<std::string> get_val_default(std::string_view key);
+
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const ConfigValues& values, const std::string_view key, char **buf, int len) const;

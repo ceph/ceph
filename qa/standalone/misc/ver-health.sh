@@ -38,7 +38,7 @@ function run() {
 
 function wait_for_health_string() {
     local grep_string=$1
-    local seconds=${2:-10}
+    local seconds=${2:-20}
 
     # Allow mon to notice version difference
     set -o pipefail
