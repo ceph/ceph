@@ -1137,6 +1137,43 @@ def cluster(ctx, config):
                             )
                         break
 
+        def first_in_kern_log(pattern, excludes):
+            """
+            Find the first occurrence of the pattern specified in the kern log,
+            Returns None if none found.
+
+            :param pattern: Pattern scanned for.
+            :param excludes: Patterns to ignore.
+            :return: First line of text (or None if not found)
+            """
+            args = [
+                'sudo',
+                'journalctl', '-k', '--since', 'today', '|', 'egrep', pattern,
+            ]
+            for exclude in excludes:
+                args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+            args.extend([
+                run.Raw('|'), 'head', '-n', '1',
+            ])
+            stdout = mon0_remote.sh(args)
+            return stdout or None
+
+        patterns = ['Oops:', 'BUG:', 'INFO: task .+ blocked for more than .+ seconds', 'KASAN', 'WARNING:']
+
+        if first_in_kern_log('|'.join(patterns), config['log_ignorelist']) is not None:
+            log.warning('Found errors (Oops|BUG|blocked|KASAN) in kernel log')
+            ctx.summary['success'] = False
+            # use the most severe problem as the failure reason
+            if 'failure_reason' not in ctx.summary:
+                for pattern in patterns:
+                    match = first_in_ceph_log(pattern, config['log_ignorelist'])
+                    if match is not None:
+                        ctx.summary['failure_reason'] = \
+                            '"{match}" in kernel log'.format(
+                                match=match.rstrip('\n'),
+                            )
+                        break
+
         for remote, dirs in devs_to_clean.items():
             for dir_ in dirs:
                 log.info('Unmounting %s on %s' % (dir_, remote))
