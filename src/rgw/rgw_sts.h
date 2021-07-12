@@ -39,7 +39,7 @@ public:
   static const uint64_t& getMaxPolicySize() { return MAX_POLICY_SIZE; }
   void setMaxDuration(const uint64_t& maxDuration) { MAX_DURATION_IN_SECS = maxDuration; }
   const uint64_t& getDuration() const { return duration; }
-  int validate_input() const;
+  int validate_input(const DoutPrefixProvider *dpp) const;
 };
 
 class AssumeRoleWithWebIdentityRequest : public AssumeRoleRequestBase {
@@ -66,7 +66,7 @@ public:
   const string& getIss() const { return iss; }
   const string& getAud() const { return aud; }
   const string& getSub() const { return sub; }
-  int validate_input() const;
+  int validate_input(const DoutPrefixProvider *dpp) const;
 };
 
 class AssumeRoleRequest : public AssumeRoleRequestBase {
@@ -89,7 +89,7 @@ public:
                     const string& tokenCode)
     : AssumeRoleRequestBase(cct, duration, iamPolicy, roleArn, roleSessionName),
       externalId(externalId), serialNumber(serialNumber), tokenCode(tokenCode){}
-  int validate_input() const;
+  int validate_input(const DoutPrefixProvider *dpp) const;
 };
 
 class GetSessionTokenRequest {
@@ -190,7 +190,8 @@ class Credentials {
   string secretAccessKey;
   string sessionToken;
 public:
-  int generateCredentials(CephContext* cct,
+  int generateCredentials(const DoutPrefixProvider *dpp,
+                          CephContext* cct,
                           const uint64_t& duration,
                           const boost::optional<string>& policy,
                           const boost::optional<string>& roleId,
@@ -237,8 +238,8 @@ public:
     : cct(cct), store(store), user_id(user_id), identity(identity) {}
   std::tuple<int, rgw::sal::RGWRole*> getRoleInfo(const DoutPrefixProvider *dpp, const string& arn, optional_yield y);
   AssumeRoleResponse assumeRole(const DoutPrefixProvider *dpp, AssumeRoleRequest& req, optional_yield y);
-  GetSessionTokenResponse getSessionToken(GetSessionTokenRequest& req);
-  AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(AssumeRoleWithWebIdentityRequest& req);
+  GetSessionTokenResponse getSessionToken(const DoutPrefixProvider *dpp, GetSessionTokenRequest& req);
+  AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(const DoutPrefixProvider *dpp, AssumeRoleWithWebIdentityRequest& req);
 };
 }
 #endif /* CEPH_RGW_STS_H */
