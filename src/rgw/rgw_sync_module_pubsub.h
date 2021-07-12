@@ -15,7 +15,7 @@ public:
   bool supports_writes() override {
     return true;
   }
-  int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
 class RGWPSDataSyncModule;
@@ -25,7 +25,7 @@ class RGWPSSyncModuleInstance : public RGWSyncModuleInstance {
   std::unique_ptr<RGWPSDataSyncModule> data_handler;
   JSONFormattable effective_conf;
 public:
-  RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config);
+  RGWPSSyncModuleInstance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config);
   ~RGWPSSyncModuleInstance() = default;
   RGWDataSyncModule *get_data_handler() override;
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
