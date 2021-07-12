@@ -53,6 +53,7 @@ first-half-sequence:
     env: [sha1]
     mon.a:
       - ceph config set mgr mgr/cephadm/daemon_cache_timeout 60
+      - ceph config set global log_to_journald false --force
 
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
       - ceph orch ps
