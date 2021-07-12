@@ -417,7 +417,8 @@ private:
            xattr_name == "ceph.dir.subvolume"sv ||
            xattr_name == "ceph.dir.pin"sv ||
            xattr_name == "ceph.dir.pin.random"sv ||
-           xattr_name == "ceph.dir.pin.distributed"sv;
+           xattr_name == "ceph.dir.pin.distributed"sv ||
+           xattr_name == "ceph.dir.rctime"sv;
   }
 
   static bool is_allowed_ceph_xattr(std::string_view xattr_name) {

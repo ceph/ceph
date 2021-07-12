@@ -5821,6 +5821,34 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     auto pi = cur->project_inode(mdr);
     cur->setxattr_ephemeral_dist(val);
     pip = pi.inode.get();
+  } else if (name == "ceph.dir.rctime") {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    uint64_t sec, nsec = 0;
+    try {
+      if (auto pos = value.find('.', 0); pos != string::npos) {
+	sec  = boost::lexical_cast<uint64_t>(value.substr(0, pos));
+	nsec = boost::lexical_cast<uint64_t>(value.substr(pos+1));
+      } else {
+	sec = boost::lexical_cast<uint64_t>(value);
+      }
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse utime_t for " << name << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+    utime_t val(sec, nsec);
+
+    if (!xlock_policylock(mdr, cur))
+      return;
+
+    auto pi = cur->project_inode(mdr);
+    pi.inode->rstat.rctime = val;
+    mdr->no_early_reply = true;
+    pip = pi.inode.get();
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -CEPHFS_EINVAL);

@@ -75,6 +75,11 @@ touch d1/d2/f3 # create new file
 wait_until_changed rctime
 check_rctime
 
+old_value=`getfattr --only-value -n ceph.dir.rctime .`
+setfattr -n "ceph.dir.rctime" -v `date -d 'now+1hour' +%s` .
+wait_until_changed rctime
+check_rctime
+
 cd ..
 rm -rf rstats_testdir
 echo OK
