@@ -219,7 +219,9 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
 
-  op_ret = store->get_bucket(s, nullptr, string(), bucket_name, &bucket, y);
+  /* FIXME We're abusing the owner of the bucket to pass the user, so that it can be forwarded to
+   * the master.  This user is actually the OP caller, not the bucket owner. */
+  op_ret = store->get_bucket(s, s->user.get(), string(), bucket_name, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
     return;
