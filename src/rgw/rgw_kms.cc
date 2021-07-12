@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include "include/str_map.h"
 #include "common/safe_io.h"
+#include "rgw/rgw_common.h"
 #include "rgw/rgw_crypt.h"
 #include "rgw/rgw_keystone.h"
 #include "rgw/rgw_b64.h"
@@ -795,7 +796,7 @@ static int request_key_from_barbican(CephContext *cct,
     return -EINVAL;
   }
   concat_url(secret_url, "/v1/secrets/");
-  concat_url(secret_url, std::string(key_id));
+  concat_url(secret_url, url_encode(key_id));
 
   bufferlist secret_bl;
   RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
