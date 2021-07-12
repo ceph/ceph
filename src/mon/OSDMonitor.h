@@ -757,6 +757,7 @@ public:
 
   void check_osdmap_sub(Subscription *sub);
   void check_pg_creates_sub(Subscription *sub);
+  void check_for_filestore_osds(health_check_map_t *checks);
 
   void do_application_enable(int64_t pool_id, const std::string &app_name,
 			     const std::string &app_key="",

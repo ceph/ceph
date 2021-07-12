@@ -2095,6 +2095,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   health_check_map_t next;
   tmp.check_health(cct, &next);
+  // OSD_FILESTORE
+  check_for_filestore_osds(&next);
   encode_health(next, t);
 }
 
@@ -4863,6 +4865,31 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
     sub->next = send_pg_creates(sub->session->name.num(),
 				sub->session->con.get(),
 				sub->next);
+  }
+}
+
+void OSDMonitor::check_for_filestore_osds(health_check_map_t *checks)
+{
+  set<int32_t> filestore_osds;
+  for (int i = 0; i < (int)osdmap.get_num_osds(); ++i) {
+    string objectstore_type;
+    int r = get_osd_objectstore_type(i, &objectstore_type);
+    if (r == 0 && objectstore_type == "filestore") {
+      filestore_osds.insert(i);
+    }
+  }
+
+  if (filestore_osds.size() > 0) {
+    ostringstream ss;
+    ss << filestore_osds.size() << " osds on filestore";
+    auto& d = checks->add("OSD_FILESTORE", HEALTH_WARN, ss.str(),
+                          filestore_osds.size());
+
+    for (auto it = filestore_osds.begin(); it != filestore_osds.end(); ++it) {
+      ostringstream ss;
+      ss << " osd." << *it << " is on filestore";
+      d.detail.push_back(ss.str());
+    }
   }
 }
 
