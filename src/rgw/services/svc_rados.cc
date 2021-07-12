@@ -50,6 +50,13 @@ librados::Rados* RGWSI_RADOS::get_rados_handle()
   return &rados;
 }
 
+std::string RGWSI_RADOS::cluster_fsid()
+{
+  std::string fsid;
+  (void) get_rados_handle()->cluster_fsid(&fsid);
+  return fsid;
+}
+
 uint64_t RGWSI_RADOS::instance_id()
 {
   return get_rados_handle()->get_instance_id();

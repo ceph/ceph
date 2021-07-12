@@ -134,7 +134,8 @@ class Store {
 
     /* This one does not query the cluster for info */
     virtual std::unique_ptr<User> get_user(const rgw_user& u) = 0;
-    /* These three do query the cluster for info */
+    /* These do query the cluster for info */
+    virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) = 0;
     virtual int get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) = 0;
     virtual int get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) = 0;
     virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) = 0;
