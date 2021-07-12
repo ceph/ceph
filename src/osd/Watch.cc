@@ -310,7 +310,6 @@ Watch::Watch(
     timeout(timeout),
     cookie(cookie),
     addr(addr),
-    will_ping(false),
     entity(entity),
     discarded(false) {
   dout(10) << "Watch()" << dendl;
@@ -368,40 +367,29 @@ void Watch::got_ping(utime_t t)
   }
 }
 
-void Watch::connect(ConnectionRef con, bool _will_ping)
+void Watch::connect(ConnectionRef con)
 {
-  if (is_connected(con.get())) {
-    dout(10) << __func__ << " con " << con << " - already connected" << dendl;
-    return;
-  }
   dout(10) << __func__ << " con " << con << dendl;
   conn = con;
-  will_ping = _will_ping;
   auto priv = con->get_priv();
   if (priv) {
-    auto sessionref = static_cast<Session*>(priv.get());
-    sessionref->wstate.addWatch(self.lock());
-    priv.reset();
     for (auto i = in_progress_notifies.begin();
 	 i != in_progress_notifies.end();
 	 ++i) {
+      // try to send regardless whether we were already connected or not.
+      // this can lead to duplicating the `MWatchNotify` which should be
+      // harmless.
       send_notify(i->second);
     }
   }
-  if (will_ping) {
-    last_ping = ceph_clock_now();
-    register_cb();
-  } else {
-    unregister_cb();
-  }
+  last_ping = ceph_clock_now();
+  register_cb();
 }
 
 void Watch::disconnect()
 {
   dout(10) << "disconnect (con was " << conn << ")" << dendl;
   conn = ConnectionRef();
-  if (!will_ping)
-    register_cb();
 }
 
 void Watch::discard()
@@ -424,10 +412,6 @@ void Watch::discard_state()
   unregister_cb();
   discarded = true;
   if (is_connected()) {
-    if (auto priv = conn->get_priv(); priv) {
-      auto session = static_cast<Session*>(priv.get());
-      session->wstate.removeWatch(self.lock());
-    }
     conn = ConnectionRef();
   }
   obc = ObjectContextRef();
@@ -459,16 +443,14 @@ void Watch::start_notify(NotifyRef notif)
 {
   ceph_assert(in_progress_notifies.find(notif->notify_id) ==
 	 in_progress_notifies.end());
-  if (will_ping) {
-    utime_t cutoff = ceph_clock_now();
-    cutoff.sec_ref() -= timeout;
-    if (last_ping < cutoff) {
-      dout(10) << __func__ << " " << notif->notify_id
-	       << " last_ping " << last_ping << " < cutoff " << cutoff
-	       << ", disconnecting" << dendl;
-      disconnect();
-      return;
-    }
+  utime_t cutoff = ceph_clock_now();
+  cutoff.sec_ref() -= timeout;
+  if (last_ping < cutoff) {
+    dout(10) << __func__ << " " << notif->notify_id
+             << " last_ping " << last_ping << " < cutoff " << cutoff
+             << ", disconnecting" << dendl;
+    disconnect();
+    return;
   }
   dout(10) << "start_notify " << notif->notify_id << dendl;
   in_progress_notifies[notif->notify_id] = notif;
@@ -513,39 +495,4 @@ WatchRef Watch::makeWatchRef(
   WatchRef ret(new Watch(pg, osd, obc, timeout, cookie, entity, addr));
   ret->set_self(ret);
   return ret;
-}
-
-void WatchConState::addWatch(WatchRef watch)
-{
-  std::lock_guard l(lock);
-  watches.insert(watch);
-}
-
-void WatchConState::removeWatch(WatchRef watch)
-{
-  std::lock_guard l(lock);
-  watches.erase(watch);
-}
-
-void WatchConState::reset(Connection *con)
-{
-  set<WatchRef> _watches;
-  {
-    std::lock_guard l(lock);
-    _watches.swap(watches);
-  }
-  for (set<WatchRef>::iterator i = _watches.begin();
-       i != _watches.end();
-       ++i) {
-    boost::intrusive_ptr<PrimaryLogPG> pg((*i)->get_pg());
-    pg->lock();
-    if (!(*i)->is_discarded()) {
-      if ((*i)->is_connected(con)) {
-	(*i)->disconnect();
-      } else {
-	lgeneric_derr(cct) << __func__ << " not still connected to " << (*i) << dendl;
-      }
-    }
-    pg->unlock();
-  }
 }

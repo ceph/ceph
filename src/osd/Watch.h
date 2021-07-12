@@ -162,7 +162,6 @@ class Watch {
   uint64_t cookie;
   entity_addr_t addr;
 
-  bool will_ping;    ///< is client new enough to ping the watch
   utime_t last_ping; ///< last client ping
 
   entity_name_t entity;
@@ -227,8 +226,7 @@ public:
 
   /// Transitions Watch to connected, unregister_cb, resends pending Notifies
   void connect(
-    ConnectionRef con, ///< [in] Reference to new connection
-    bool will_ping     ///< [in] client is new and will send pings
+    ConnectionRef con ///< [in] Reference to new connection
     );
 
   /// Transitions watch to disconnected, register_cb
@@ -258,31 +256,6 @@ public:
     uint64_t notify_id, ///< [in] id of acked notify
     ceph::buffer::list& reply_bl ///< [in] notify reply buffer
     );
-};
-
-/**
- * Holds weak refs to Watch structures corresponding to a connection
- * Lives in the Session object of an OSD connection
- */
-class WatchConState {
-  ceph::mutex lock = ceph::make_mutex("WatchConState");
-  std::set<WatchRef> watches;
-public:
-  CephContext* cct;
-  explicit WatchConState(CephContext* cct) : cct(cct) {}
-
-  /// Add a watch
-  void addWatch(
-    WatchRef watch ///< [in] Ref to new watch object
-    );
-
-  /// Remove a watch
-  void removeWatch(
-    WatchRef watch ///< [in] Ref to watch object to remove
-    );
-
-  /// Called on session reset, disconnects watchers
-  void reset(Connection *con);
 };
 
 #endif

@@ -20,7 +20,6 @@
 #include "global/global_context.h"
 #include "include/spinlock.h"
 #include "OSDCap.h"
-#include "Watch.h"
 #include "OSDMap.h"
 #include "PeeringState.h"
 
@@ -131,7 +130,6 @@ struct Session : public RefCountedObject {
   OSDCap caps;
   ConnectionRef con;
   entity_addr_t socket_addr;
-  WatchConState wstate;
 
   ceph::mutex session_dispatch_lock =
     ceph::make_mutex("Session::session_dispatch_lock");
@@ -232,8 +230,7 @@ private:
   explicit Session(CephContext *cct, Connection *con_) :
     RefCountedObject(cct),
     con(con_),
-    socket_addr(con_->get_peer_socket_addr()),
-    wstate(cct)
+    socket_addr(con_->get_peer_socket_addr())
     {}
 };
 
