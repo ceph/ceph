@@ -761,35 +761,36 @@ class FSSnapshotMirror:
                 sm = self.mgr.get('service_map')
                 daemon_entry = sm['services'].get('cephfs-mirror', None)
                 log.debug(f'daemon_entry: {daemon_entry}')
-                for daemon_key in daemon_entry.get('daemons', []):
-                    try:
-                        daemon_id = int(daemon_key)
-                    except ValueError:
-                        continue
-                    daemon = {
-                        'daemon_id'   : daemon_id,
-                        'filesystems' : []
-                    } # type: Dict[str, Any]
-                    daemon_status = self.mgr.get_daemon_status('cephfs-mirror', daemon_key)
-                    if not daemon_status:
-                        log.debug(f'daemon status not yet availble for cephfs-mirror daemon: {daemon_key}')
-                        continue
-                    status = json.loads(daemon_status['status_json'])
-                    for fs_id, fs_desc in status.items():
-                        fs = {'filesystem_id'   : int(fs_id),
-                              'name'            : fs_desc['name'],
-                              'directory_count' : fs_desc['directory_count'],
-                              'peers'           : []
+                if daemon_entry is not None:
+                    for daemon_key in daemon_entry.get('daemons', []):
+                        try:
+                            daemon_id = int(daemon_key)
+                        except ValueError:
+                            continue
+                        daemon = {
+                            'daemon_id'   : daemon_id,
+                            'filesystems' : []
                         } # type: Dict[str, Any]
-                        for peer_uuid, peer_desc in fs_desc['peers'].items():
-                            peer = {
-                                'uuid'   : peer_uuid,
-                                'remote' : peer_desc['remote'],
-                                'stats'  : peer_desc['stats']
-                            }
-                            fs['peers'].append(peer)
-                        daemon['filesystems'].append(fs)
-                    daemons.append(daemon)
+                        daemon_status = self.mgr.get_daemon_status('cephfs-mirror', daemon_key)
+                        if not daemon_status:
+                            log.debug(f'daemon status not yet availble for cephfs-mirror daemon: {daemon_key}')
+                            continue
+                        status = json.loads(daemon_status['status_json'])
+                        for fs_id, fs_desc in status.items():
+                            fs = {'filesystem_id'   : int(fs_id),
+                                'name'            : fs_desc['name'],
+                                'directory_count' : fs_desc['directory_count'],
+                                'peers'           : []
+                            } # type: Dict[str, Any]
+                            for peer_uuid, peer_desc in fs_desc['peers'].items():
+                                peer = {
+                                    'uuid'   : peer_uuid,
+                                    'remote' : peer_desc['remote'],
+                                    'stats'  : peer_desc['stats']
+                                }
+                                fs['peers'].append(peer)
+                            daemon['filesystems'].append(fs)
+                        daemons.append(daemon)
                 return 0, json.dumps(daemons), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
