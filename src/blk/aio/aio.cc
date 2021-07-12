@@ -25,11 +25,15 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
   int r;
 
   aio_iter cur = begin;
-  struct aio_t *piocb[aios_size];
+  // in general, we don't submit large batch of requests down to store, but
+  // when an object being read is very scattered, or the OSD is being
+  // backfilled, aios_size could be very large. here, we assume that the batch
+  // size is under 1k under most circumstances.
+  boost::container::small_vector<aio_t*, 1024> piocb{aios_size};
   int left = 0;
   while (cur != end) {
     cur->priv = priv;
-    *(piocb+left) = &(*cur);
+    piocb[left] = &(*cur);
     ++left;
     ++cur;
   }
@@ -37,7 +41,8 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
   int done = 0;
   while (left > 0) {
 #if defined(HAVE_LIBAIO)
-    r = io_submit(ctx, std::min(left, max_iodepth), (struct iocb**)(piocb + done));
+    r = io_submit(ctx, std::min(left, max_iodepth),
+		  reinterpret_cast<iocb**>(&piocb[done]));
 #elif defined(HAVE_POSIXAIO)
     if (piocb[done]->n_aiocb == 1) {
       // TODO: consider batching multiple reads together with lio_listio
