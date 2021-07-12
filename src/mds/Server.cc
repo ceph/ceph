@@ -3863,6 +3863,19 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     return _lookup_snap_ino(mdr);
 
   inodeno_t ino = req->get_filepath().get_ino();
+  auto _ino = ino.val;
+
+  /* It's been observed [1] that a client may lookup a private ~mdsdir inode.
+   * I do not have an explanation for how that happened organically but this
+   * check will ensure that the client can no longer do that.
+   *
+   * [1] https://tracker.ceph.com/issues/49922
+   */
+  if (MDS_IS_PRIVATE_INO(_ino)) {
+    respond_to_request(mdr, -ESTALE);
+    return;
+  }
+
   CInode *in = mdcache->get_inode(ino);
   if (in && in->state_test(CInode::STATE_PURGING)) {
     respond_to_request(mdr, -ESTALE);
