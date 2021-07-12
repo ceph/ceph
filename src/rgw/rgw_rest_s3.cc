@@ -4237,10 +4237,6 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
   int ret;
   bufferlist data;
   std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
-  if (ret < 0) {
-      return nullptr;
-  }
-
   const auto post_body = data.to_str();
 
   if (isSTSEnabled) {
@@ -4262,6 +4258,9 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
   }
 
   if (isPSEnabled) {
+    if (ret < 0) {
+	return nullptr;
+    }
     RGWHandler_REST_PSTopic_AWS topic_handler(auth_registry, post_body);
     topic_handler.init(store, s, s->cio);
     auto op = topic_handler.get_op();
