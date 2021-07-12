@@ -423,7 +423,7 @@
       },
       "yaxes": [
         {
-          "format": "ms",
+          "format": "s",
           "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
