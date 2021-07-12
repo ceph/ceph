@@ -577,7 +577,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	session->is_open() ||
 	session->is_stale() ||
 	session->is_killing() ||
-	terminating_sessions) {
+	terminating_sessions && !session->is_forced_open()) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
       return;
     }
@@ -1002,6 +1002,7 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
         metrics_handler->add_session(session);
+	session->set_forced_open(true);
 
 	auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
@@ -1545,6 +1546,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
     // remove from gather set
     client_reconnect_gather.erase(from);
     session->set_reconnecting(false);
+    session->set_client_not_open(false);
     if (client_reconnect_gather.empty())
       reconnect_gather_finish();
   }
@@ -1701,7 +1703,7 @@ void Server::reconnect_tick()
     // make _session_logged() purge orphan objects of lost async/unsafe requests
     session->delegated_inos.swap(session->free_prealloc_inos);
 
-    if (g_conf()->mds_session_blocklist_on_timeout) {
+    if (g_conf()->mds_session_blocklist_on_timeout && !session->is_client_not_open()) {
       CachedStackStringStream css;
       mds->evict_client(session->get_client().v, false, true, *css,
 			gather.new_sub());

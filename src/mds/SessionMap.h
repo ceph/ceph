@@ -242,6 +242,14 @@ public:
   }
   bool is_importing() const { return importing_count > 0; }
 
+  void set_client_not_open(bool s) { client_not_open = s; }
+
+  bool is_client_not_open() { return client_not_open; }
+
+  void set_forced_open(bool s) { forced_open = s; }
+
+  bool is_forced_open() { return forced_open; }
+
   void set_load_avg_decay_rate(double rate) {
     ceph_assert(is_open() || is_stale());
     load_avg = DecayCounter(rate);
@@ -448,6 +456,9 @@ private:
   bool reconnecting = false;
   uint64_t state_seq = 0;
   int importing_count = 0;
+
+  bool client_not_open = false;
+  bool forced_open = false;
 
   std::string human_name;
 
@@ -782,7 +793,8 @@ public:
    */
   void replay_open_sessions(version_t event_cmapv,
 			    std::map<client_t,entity_inst_t>& client_map,
-			    std::map<client_t,client_metadata_t>& client_metadata_map);
+			    std::map<client_t,client_metadata_t>& client_metadata_map,
+			    bool client_not_open = false);
 
   /**
    * For these session IDs, if a session exists with this ID, and it has
