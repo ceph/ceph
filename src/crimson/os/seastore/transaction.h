@@ -7,6 +7,7 @@
 
 #include <boost/intrusive/list.hpp>
 
+#include "crimson/common/log.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cached_extent.h"
@@ -17,6 +18,8 @@ namespace crimson::os::seastore {
 struct retired_extent_gate_t;
 class SeaStore;
 class Transaction;
+
+class ExtentRewriter;
 
 /**
  * Transaction
@@ -80,7 +83,13 @@ public:
     if (is_weak()) return;
 
     auto [iter, inserted] = read_set.emplace(this, ref);
-    ceph_assert(inserted);
+    if (!inserted) {
+      ::crimson::get_logger(ceph_subsys_seastore).debug(
+	"{} {} {} already in read_set",
+	__func__,
+	(void*)this,
+	*ref);
+    }
   }
 
   void add_fresh_extent(CachedExtentRef ref) {
@@ -88,6 +97,13 @@ public:
     fresh_block_list.push_back(ref);
     ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
+    write_set.insert(*ref);
+  }
+
+  void add_rewrite_extent(CachedExtentRef ref) {
+    assert(ref->is_logical());
+    auto lref = ref->cast<LogicalCachedExtent>();
+    rewrite_block_list[lref->extent_writer].emplace_back(lref);
     write_set.insert(*ref);
   }
 
@@ -135,6 +151,10 @@ public:
 
   const auto &get_mutated_block_list() {
     return mutated_block_list;
+  }
+
+  auto &get_rewrite_block_list() {
+    return rewrite_block_list;
   }
 
   const auto &get_retired_set() {
@@ -206,6 +226,8 @@ private:
 
   std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
   std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
+  std::map<ExtentRewriter*, std::list<LogicalCachedExtentRef>>
+    rewrite_block_list; ///< list of rewriten blocks
 
   pextent_set_t retired_set; ///< list of extents mutated by this transaction
 

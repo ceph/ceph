@@ -23,6 +23,9 @@
 
 namespace crimson::os::seastore {
 
+class ExtentPlacementManager;
+using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
+
 /**
  * Abstract interface for managing the logical to physical mapping
  */
@@ -189,9 +192,18 @@ public:
    */
   using rewrite_extent_iertr = base_iertr;
   using rewrite_extent_ret = rewrite_extent_iertr::future<>;
-  virtual rewrite_extent_ret rewrite_extent(
+  virtual rewrite_extent_ret rewrite_physical_extent(
     Transaction &t,
     CachedExtentRef extent) = 0;
+
+  virtual rewrite_extent_ret rewrite_logical_extent_p1(
+    Transaction &t,
+    LogicalCachedExtentRef& lextent) = 0;
+
+  virtual rewrite_extent_ret rewrite_logical_extent_p2(
+    Transaction &t,
+    LogicalCachedExtentRef lextent,
+    LogicalCachedExtentRef nextent) = 0;
 
   /**
    * get_physical_extent_if_live
@@ -214,6 +226,8 @@ public:
 
   virtual void add_pin(LBAPin &pin) = 0;
 
+  virtual ExtentPlacementManager& get_extent_placement_manager() = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;
@@ -222,7 +236,8 @@ class Cache;
 namespace lba_manager {
 LBAManagerRef create_lba_manager(
   SegmentManager &segment_manager,
-  Cache &cache);
+  Cache &cache,
+  ExtentPlacementManagerRef&& epm);
 }
 
 }

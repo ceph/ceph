@@ -373,55 +373,78 @@ BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
     });
 }
 
-BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
+BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_logical_extent_p1(
+  Transaction &t,
+  LogicalCachedExtentRef& lextent)
+{
+  assert(!lextent->has_been_invalidated());
+
+  logger().debug(
+    "{}: rewriting {}", 
+    __func__,
+    *lextent);
+
+  cache.retire_extent(t, lextent);
+  auto nextent = epm->alloc_new_extent_by_type(
+    lextent->get_type(),
+    lextent,
+    lextent->get_length());
+  auto nlextent = nextent->cast<LogicalCachedExtent>();
+  lextent->get_bptr().copy_out(
+    0,
+    lextent->get_length(),
+    nlextent->get_bptr().c_str());
+  nlextent->set_laddr(lextent->get_laddr());
+  nlextent->set_pin(lextent->get_pin().duplicate());
+  nlextent->old_extent = lextent;
+  t.add_rewrite_extent(nlextent);
+
+  logger().debug(
+    "{}: rewriting {} into {}",
+    __func__,
+    *lextent,
+    *nlextent);
+  return rewrite_extent_iertr::now();
+}
+
+BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_logical_extent_p2(
+  Transaction &t,
+  LogicalCachedExtentRef lextent,
+  LogicalCachedExtentRef nlextent)
+{
+  logger().debug("{} {} -> {}", __func__, *lextent, *nlextent);
+  return update_mapping(
+    t,
+    lextent->get_laddr(),
+    [prev_addr = lextent->get_paddr(), addr = nlextent->get_rewriting_paddr()](
+      const lba_map_val_t &in) {
+      assert(!addr.is_null());
+      lba_map_val_t ret = in;
+      ceph_assert(in.paddr == prev_addr);
+      ret.paddr = addr;
+      return ret;
+    }).si_then(
+      [nlextent](auto) {},
+      rewrite_extent_iertr::pass_further{},
+      /* ENOENT in particular should be impossible */
+      crimson::ct_error::assert_all{
+	"Invalid error in BtreeLBAManager::rewrite_extent after update_mapping"
+      }
+    );
+}
+
+BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_physical_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
   assert(!extent->has_been_invalidated());
 
   logger().debug(
-    "{}: rewriting {}", 
+    "{}: rewriting {}",
     __func__,
     *extent);
-
-  if (extent->is_logical()) {
-    auto lextent = extent->cast<LogicalCachedExtent>();
-    cache.retire_extent(t, extent);
-    auto nlextent = cache.alloc_new_extent_by_type(
-      t,
-      lextent->get_type(),
-      lextent->get_length())->cast<LogicalCachedExtent>();
-    lextent->get_bptr().copy_out(
-      0,
-      lextent->get_length(),
-      nlextent->get_bptr().c_str());
-    nlextent->set_laddr(lextent->get_laddr());
-    nlextent->set_pin(lextent->get_pin().duplicate());
-
-    logger().debug(
-      "{}: rewriting {} into {}",
-      __func__,
-      *lextent,
-      *nlextent);
-
-    return update_mapping(
-      t,
-      lextent->get_laddr(),
-      [prev_addr = lextent->get_paddr(), addr = nlextent->get_paddr()](
-	const lba_map_val_t &in) {
-	lba_map_val_t ret = in;
-	ceph_assert(in.paddr == prev_addr);
-	ret.paddr = addr;
-	return ret;
-      }).si_then(
-	[nlextent](auto) {},
-	rewrite_extent_iertr::pass_further{},
-        /* ENOENT in particular should be impossible */
-	crimson::ct_error::assert_all{
-	  "Invalid error in BtreeLBAManager::rewrite_extent after update_mapping"
-	}
-      );
-  } else if (is_lba_node(*extent)) {
+  assert(!extent->is_logical());
+  if (is_lba_node(*extent)) {
     auto lba_extent = extent->cast<LBANode>();
     cache.retire_extent(t, extent);
     auto nlba_extent = cache.alloc_new_extent_by_type(
@@ -506,9 +529,11 @@ BtreeLBAManager::get_physical_extent_if_live(
 
 BtreeLBAManager::BtreeLBAManager(
   SegmentManager &segment_manager,
-  Cache &cache)
+  Cache &cache,
+  ExtentPlacementManagerRef&& epm)
   : segment_manager(segment_manager),
-    cache(cache) {}
+    cache(cache),
+    epm(std::move(epm)) {}
 
 BtreeLBAManager::insert_mapping_ret BtreeLBAManager::insert_mapping(
   Transaction &t,

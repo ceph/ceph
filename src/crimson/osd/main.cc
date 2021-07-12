@@ -224,7 +224,7 @@ int main(int argc, char* argv[])
           seastar_apps_lib::stop_signal should_stop;
           if (config.count("debug")) {
             seastar::global_logger_registry().set_all_loggers_level(
-              seastar::log_level::debug
+              seastar::log_level::trace
             );
           }
           sharded_conf().start(init_params.name, cluster_name).get();

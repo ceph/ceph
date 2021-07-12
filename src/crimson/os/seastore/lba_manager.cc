@@ -10,8 +10,10 @@ namespace crimson::os::seastore::lba_manager {
 
 LBAManagerRef create_lba_manager(
   SegmentManager &segment_manager,
-  Cache &cache) {
-  return LBAManagerRef(new btree::BtreeLBAManager(segment_manager, cache));
+  Cache &cache,
+  ExtentPlacementManagerRef&& epm) {
+  return LBAManagerRef(
+      new btree::BtreeLBAManager(segment_manager, cache, std::move(epm)));
 }
 
 }

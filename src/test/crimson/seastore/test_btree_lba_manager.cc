@@ -7,6 +7,7 @@
 
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 #include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 
@@ -25,7 +26,7 @@ using namespace crimson::os::seastore::lba_manager;
 using namespace crimson::os::seastore::lba_manager::btree;
 
 struct btree_lba_manager_test :
-  public seastar_test_suite_t, JournalSegmentProvider {
+  public seastar_test_suite_t, SegmentProvider {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   Journal journal;
   Cache cache;
@@ -39,11 +40,22 @@ struct btree_lba_manager_test :
     : segment_manager(segment_manager::create_test_ephemeral()),
       journal(*segment_manager),
       cache(*segment_manager),
-      lba_manager(new BtreeLBAManager(*segment_manager, cache)),
+      lba_manager(
+	new BtreeLBAManager(
+	  *segment_manager,
+	  cache,
+	  std::make_unique<ExtentPlacementManager>(
+	    cache))),
       block_size(segment_manager->get_block_size())
   {
     journal.set_segment_provider(this);
     journal.set_write_pipeline(&pipeline);
+    lba_manager->get_extent_placement_manager().add_allocator(
+      0,
+      std::make_unique<SegmentedAllocator>(
+	*this,
+	*segment_manager,
+	cache));
   }
 
   segment_id_t next = 0;

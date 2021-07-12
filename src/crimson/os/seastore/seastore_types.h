@@ -36,7 +36,7 @@ struct seastore_meta_t {
 };
 
 // Identifies segment location on disk, see SegmentManager,
-using segment_id_t = uint32_t;
+using segment_id_t = uint64_t;
 constexpr segment_id_t MAX_SEG_ID =
   std::numeric_limits<segment_id_t>::max();
 constexpr segment_id_t NULL_SEG_ID =
@@ -58,9 +58,11 @@ constexpr segment_id_t ZERO_SEG_ID =
 
 std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
+#define device_id(id) (id >> 60)
+
 // Offset within a segment on disk, see SegmentManager
 // may be negative for relative offsets
-using segment_off_t = int32_t;
+using segment_off_t = int64_t;
 constexpr segment_off_t NULL_SEG_OFF =
   std::numeric_limits<segment_off_t>::max();
 constexpr segment_off_t MAX_SEG_OFF =
@@ -217,14 +219,14 @@ constexpr paddr_t zero_paddr() {
 }
 
 struct __attribute((packed)) paddr_le_t {
-  ceph_le32 segment = ceph_le32(NULL_SEG_ID);
-  ceph_les32 offset = ceph_les32(NULL_SEG_OFF);
+  ceph_le64 segment = ceph_le64(NULL_SEG_ID);
+  ceph_les64 offset = ceph_les64(NULL_SEG_OFF);
 
   paddr_le_t() = default;
-  paddr_le_t(ceph_le32 segment, ceph_les32 offset)
+  paddr_le_t(ceph_le64 segment, ceph_les64 offset)
     : segment(segment), offset(offset) {}
   paddr_le_t(segment_id_t segment, segment_off_t offset)
-    : segment(ceph_le32(segment)), offset(ceph_les32(offset)) {}
+    : segment(ceph_le64(segment)), offset(ceph_les64(offset)) {}
   paddr_le_t(const paddr_t &addr) : paddr_le_t(addr.segment, addr.offset) {}
 
   operator paddr_t() const {

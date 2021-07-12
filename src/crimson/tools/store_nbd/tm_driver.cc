@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tm_driver.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -137,7 +138,14 @@ void TMDriver::init()
   segment_cleaner->mount(*segment_manager);
   auto journal = std::make_unique<Journal>(*segment_manager);
   auto cache = std::make_unique<Cache>(*segment_manager);
-  auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
+  auto epm = std::make_unique<ExtentPlacementManager>(*cache);
+  epm->add_allocator(
+    0,
+    std::make_unique<SegmentedAllocator>(
+      *segment_cleaner,
+      *segment_manager,
+      *cache));
+  auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache, std::move(epm));
 
   journal->set_segment_provider(&*segment_cleaner);
 

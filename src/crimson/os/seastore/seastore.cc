@@ -15,9 +15,11 @@
 #include "os/Transaction.h"
 
 #include "crimson/common/buffer_io.h"
+#include "crimson/common/config_proxy.h"
 
 #include "crimson/os/futurized_collection.h"
 
+#include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager/block.h"
 #include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
@@ -1142,7 +1144,19 @@ std::unique_ptr<SeaStore> make_seastore(
 
   auto journal = std::make_unique<Journal>(*sm);
   auto cache = std::make_unique<Cache>(*sm);
-  auto lba_manager = lba_manager::create_lba_manager(*sm, *cache);
+  auto epm = std::make_unique<ExtentPlacementManager>(*cache);
+  using crimson::common::get_conf;
+  for (uint64_t i = 0;
+       i < get_conf<uint64_t>("seastore_init_rewrite_segment_num_per_device");
+       i++) {
+    epm->add_allocator(
+      i,
+      std::make_unique<SegmentedAllocator>(
+	*segment_cleaner,
+	*sm,
+	*cache));
+  }
+  auto lba_manager = lba_manager::create_lba_manager(*sm, *cache, std::move(epm));
 
   journal->set_segment_provider(&*segment_cleaner);
 
