@@ -1,108 +1,56 @@
+#!/usr/bin/python3
 """
-This file is used only by systemd units that are passing their instance suffix
-as arguments to this script so that it can parse the suffix into arguments that
-``ceph-volume <sub command>`` can consume
+This script is used by systemd to activate/deactivating a specific OSD by id
+All it does is figure out the complete osd uuid and then runs the correct ceph-volume command
+to mount the osd state directory
 """
-import os
 import sys
-import time
-import logging
-from ceph_volume import log, process
-from ceph_volume.exceptions import SuffixParsingError
+import argparse
+from ceph_volume import terminal, process
+from ceph_volume.api import lvm
 
+# NOTE: everything is just logged to stdout/stderr to let systemd take care of logging
 
-def parse_subcommand(string):
-    subcommand = string.split('-', 1)[0]
-    if not subcommand:
-        raise SuffixParsingError('subcommand', string)
-    return subcommand
+def main():
+    parser = argparse.ArgumentParser(prog='ceph-volume-systemd2')
+    parser.add_argument(
+        'action',
+        default = 'activate',
+        choices = [ 'activate', 'deactivate' ],
+    )
+    parser.add_argument(
+        '--cluster',
+        default = 'ceph',
+        help = 'Cluster name (defaults to "ceph")',
+    )
+    parser.add_argument(
+        '--osd-id',
+        help = 'OSD ID',
+        required = True,
+    )
+    args = parser.parse_args()
 
+    lvs = lvm.get_lvs(tags={'ceph.osd_id': args.osd_id, 'ceph.cluster_name': args.cluster})
+    if len(lvs) == 0:
+        terminal.error('No LVS found for OSD ID {}'.format(args.osd_id))
+        sys.exit(1)
+    elif len(lvs) > 1:
+        terminal.error('Multiple LVS found for OSD ID {}'.format(args.osd_id))
+        sys.exit(1)
 
-def parse_extra_data(string):
-    # get the subcommand to split on that
-    sub_command = parse_subcommand(string)
+    osd_uuid = lvs[0].tags['ceph.osd_fsid']
 
-    # the split will leave data with a dash, so remove that
-    data = string.split(sub_command)[-1]
-    if not data:
-        raise SuffixParsingError('data', string)
-    return data.lstrip('-')
+    if args.action == 'activate':
+        command = ['ceph-volume', '--cluster', args.cluster, 'lvm', 'activate', '--no-systemd', args.osd_id, osd_uuid]
+        terminal.info("Activating OSD {} {}: {}".format(args.osd_id, osd_uuid, " ".join(command)))
+        process.run(command, terminal_logging=True)
+    elif args.action == 'deactivate':
+        command = ['ceph-volume', '--cluster', args.cluster, 'lvm', 'deactivate', args.osd_id, osd_uuid]
+        terminal.info("Deactivating OSD {} {}: {}".format(args.osd_id, osd_uuid, " ".join(command)))
+        process.run(command, terminal_logging=True)
+    else:
+        sys.exit(1)
 
+if __name__ == '__main__':
+    main()
 
-def parse_osd_id(string):
-    osd_id = string.split('-', 1)[0]
-    if not osd_id:
-        raise SuffixParsingError('OSD id', string)
-    if osd_id.isdigit():
-        return osd_id
-    raise SuffixParsingError('OSD id', string)
-
-
-def parse_osd_uuid(string):
-    osd_id = '%s-' % parse_osd_id(string)
-    osd_subcommand = '-%s' % parse_subcommand(string)
-    # remove the id first
-    trimmed_suffix = string.split(osd_id)[-1]
-    # now remove the sub command
-    osd_uuid = trimmed_suffix.split(osd_subcommand)[0]
-    if not osd_uuid:
-        raise SuffixParsingError('OSD uuid', string)
-    return osd_uuid
-
-
-def main(args=None):
-    """
-    Main entry point for the ``ceph-volume-systemd`` executable. ``args`` are
-    optional for easier testing of arguments.
-
-    Expected input is similar to::
-
-        ['/path/to/ceph-volume-systemd', '<type>-<extra metadata>']
-
-    For example::
-
-        [
-            '/usr/bin/ceph-volume-systemd',
-            'lvm-0-8715BEB4-15C5-49DE-BA6F-401086EC7B41'
-        ]
-
-    The first part of the argument is the only interesting bit, which contains
-    the metadata needed to proxy the call to ``ceph-volume`` itself.
-
-    Reusing the example, the proxy call to ``ceph-volume`` would look like::
-
-        ceph-volume lvm trigger 0-8715BEB4-15C5-49DE-BA6F-401086EC7B41
-
-    That means that ``lvm`` is used as the subcommand and it is **expected**
-    that a ``trigger`` sub-commmand will be present to make sense of the extra
-    piece of the string.
-
-    """
-    log.setup(name='ceph-volume-systemd.log', log_path='/var/log/ceph/ceph-volume-systemd.log')
-    logger = logging.getLogger('systemd')
-
-    args = args if args is not None else sys.argv
-    try:
-        suffix = args[-1]
-    except IndexError:
-        raise RuntimeError('no arguments supplied')
-    sub_command = parse_subcommand(suffix)
-    extra_data = parse_extra_data(suffix)
-    logger.info('raw systemd input received: %s', suffix)
-    logger.info('parsed sub-command: %s, extra data: %s', sub_command, extra_data)
-    command = ['ceph-volume', sub_command, 'trigger', extra_data]
-
-    tries = int(os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 30))
-    interval = int(os.environ.get('CEPH_VOLUME_SYSTEMD_INTERVAL', 5))
-    while tries > 0:
-        try:
-            # don't log any output to the terminal, just rely on stderr/stdout
-            # going to logging
-            process.run(command, terminal_logging=False)
-            logger.info('successfully triggered activation for: %s', extra_data)
-            break
-        except RuntimeError as error:
-            logger.warning(error)
-            logger.warning('failed activating OSD, retries left: %s', tries)
-            tries -= 1
-            time.sleep(interval)
