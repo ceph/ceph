@@ -2,8 +2,10 @@
 NFS
 ===
 
-CephFS namespaces can be exported over NFS protocol using the
-`NFS-Ganesha NFS server`_.
+CephFS namespaces can be exported over NFS protocol using the `NFS-Ganesha NFS
+server`_. The simplest and preferred way of managing nfs-ganesha clusters and
+cephfs exports is using ``ceph nfs ...`` commands. See :doc:`/mgr/nfs` for more
+details.
 
 Requirements
 ============
