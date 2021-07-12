@@ -65,6 +65,9 @@ bool LCRule::valid() const
 	   !mp_expiration.valid()) {
     return false;
   }
+  if (dm_expiration && filter.has_tags()) {
+    return false;
+  }
   if (!transitions.empty()) {
     bool using_days = expiration.has_days();
     bool using_date = expiration.has_date();
