@@ -222,7 +222,9 @@ void DiffRequest<I>::handle_load_object_map(int r) {
       uint8_t object_map_state = *it;
       if (object_map_state == OBJECT_NONEXISTENT) {
         *diff_it = DIFF_STATE_HOLE;
-      } else if (diff_from_start || object_map_state != OBJECT_EXISTS_CLEAN) {
+      } else if (diff_from_start ||
+                 (m_object_diff_state_valid &&
+                  object_map_state != OBJECT_EXISTS_CLEAN)) {
         *diff_it = DIFF_STATE_DATA_UPDATED;
       } else {
         *diff_it = DIFF_STATE_DATA;
