@@ -3226,6 +3226,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
 
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
+
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
 
@@ -3272,6 +3275,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
 
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
+
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
 
@@ -3316,6 +3322,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
@@ -3801,6 +3810,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
 
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
+
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
 
@@ -4200,6 +4212,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # ensure metadata file is in legacy location, with required version v1
         self._assert_meta_location_and_version(self.volname, subvolume, version=1, legacy=True)
 
+        # Insert delay at the beginning of snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
+
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
 
@@ -4243,6 +4258,25 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 6)
         max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
         self.assertEqual(max_concurrent_clones, 6)
+
+        # Decrease number of cloner threads
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 2)
+        max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(max_concurrent_clones, 2)
+
+    def test_subvolume_snapshot_config_snapshot_clone_delay(self):
+        """
+        Validate 'snapshot_clone_delay' config option
+        """
+
+        # get the default delay before starting the clone
+        default_timeout = int(self.config_get('mgr', 'mgr/volumes/snapshot_clone_delay'))
+        self.assertEqual(default_timeout, 0)
+
+        # Insert delay of 2 seconds at the beginning of the snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 2)
+        default_timeout = int(self.config_get('mgr', 'mgr/volumes/snapshot_clone_delay'))
+        self.assertEqual(default_timeout, 2)
 
         # Decrease number of cloner threads
         self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 2)
