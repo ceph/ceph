@@ -792,8 +792,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   
   // for giving to clients
   int encode_inodestat(ceph::buffer::list& bl, Session *session, SnapRealm *realm,
-		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0,
-		       int getattr_wants=0);
+		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0, 
+		       int getattr_wants=0, file_layout_t inherit_layout=file_layout_t());
   void encode_cap_message(const ceph::ref_t<MClientCaps> &m, Capability *cap);
 
   SimpleLock* get_lock(int type) override;
