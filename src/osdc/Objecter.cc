@@ -2764,9 +2764,9 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   pg_mapping_t pg_mapping;
   pg_mapping.epoch = osdmap->get_epoch();
   if (lookup_pg_mapping(actual_pgid, &pg_mapping)) {
-    up = pg_mapping.up;
+    up = std::move(pg_mapping.up);
     up_primary = pg_mapping.up_primary;
-    acting = pg_mapping.acting;
+    acting = std::move(pg_mapping.acting);
     acting_primary = pg_mapping.acting_primary;
   } else {
     osdmap->pg_to_up_acting_osds(actual_pgid, &up, &up_primary,
@@ -2838,10 +2838,9 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 
   if (legacy_change || split_or_merge || force_resend) {
     t->pgid = pgid;
-    t->acting = acting;
     t->acting_primary = acting_primary;
     t->up_primary = up_primary;
-    t->up = up;
+    t->up = std::move(up);
     t->size = size;
     t->min_size = min_size;
     t->pg_num = pg_num;
@@ -2909,6 +2908,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       t->osd = acting_primary;
     }
   }
+  t->acting = std::move(acting);
   if (legacy_change || unpaused || force_resend) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
