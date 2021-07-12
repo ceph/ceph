@@ -386,8 +386,11 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
   Context *ctx = new LambdaContext([this, ops](int r) {
     assert(r == 0);
     ldout(m_image_ctx.cct, 20) << "Finished root update " << dendl;
-    this->m_async_update_superblock--;
-    this->m_async_op_tracker.finish_op();
+    {
+      std::lock_guard locker(m_lock);
+      this->m_async_update_superblock--;
+      this->m_async_op_tracker.finish_op();
+    }
 
     auto captured_ops = std::move(ops);
     this->complete_op_log_entries(std::move(captured_ops), r);
@@ -419,11 +422,11 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
         for (auto &operation : ops) {
           operation->log_append_comp_time = now;
         }
+        std::lock_guard locker1(m_lock);
         this->m_async_append_ops--;
         this->m_async_op_tracker.finish_op();
 
         std::lock_guard locker(this->m_log_append_lock);
-        std::lock_guard locker1(m_lock);
         assert(this->m_appending);
         this->m_appending = false;
         new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
@@ -651,13 +654,17 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     if (first_valid_entry >= this->m_log_pool_size) {
       first_valid_entry = first_valid_entry % this->m_log_pool_size +
           DATA_RING_BUFFER_OFFSET;
-    }
+   }
     ceph_assert(first_valid_entry != initial_first_valid_entry);
-    auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
-    new_root->flushed_sync_gen = flushed_sync_gen;
-    new_root->first_valid_entry = first_valid_entry;
-    pool_root.flushed_sync_gen = flushed_sync_gen;
-    pool_root.first_valid_entry = first_valid_entry;
+    std::shared_ptr<pwl::WriteLogPoolRoot> new_root;
+    {
+      std::lock_guard locker(m_lock);
+      new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
+      new_root->flushed_sync_gen = flushed_sync_gen;
+      new_root->first_valid_entry = first_valid_entry;
+      pool_root.flushed_sync_gen = flushed_sync_gen;
+      pool_root.first_valid_entry = first_valid_entry;
+    }
 
     Context *ctx = new LambdaContext(
       [this, flushed_sync_gen, first_valid_entry,
@@ -725,6 +732,10 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
   bytes_allocated = 0;
   ldout(cct, 20) << "Appending " << ops.size() << " log entries." << dendl;
 
+  {
+    std::lock_guard locker1(m_lock);
+    *new_first_free_entry = pool_root.first_free_entry;
+  }
   AioTransContext* aio = new AioTransContext(cct, ctx);
 
   utime_t now = ceph_clock_now();
