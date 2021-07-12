@@ -1,7 +1,7 @@
 # see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
 os_type: centos
 
-overrides:
+overrides: 
   install:
     ceph:
       debuginfo: true

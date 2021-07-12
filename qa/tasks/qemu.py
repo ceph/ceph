@@ -260,7 +260,7 @@ def generate_iso(ctx, config):
                 'user-data={userdata}'.format(userdata=userdata_path),
                 'meta-data={metadata}'.format(metadata=metadata_path),
                 'ceph.conf=/etc/ceph/ceph.conf',
-                'ceph.keyring=/etc/ceph/ceph.keyring',
+                'ceph.keyring=/etc/ceph/ceph.client.admin.keyring',
                 'test.sh={file}'.format(file=test_file),
                 ],
             )

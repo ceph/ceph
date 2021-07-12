@@ -1,6 +1,9 @@
 tasks:
 - install:
-- ceph:
+- cephadm:
     conf:
       client:
         rbd cache: false
+overrides:
+  ceph:
+    create_rbd_pool: true  

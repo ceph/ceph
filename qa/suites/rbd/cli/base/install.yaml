@@ -1,3 +1,6 @@
 tasks:
 - install:
-- ceph:
+- cephadm:
+overrides:
+  ceph:
+    create_rbd_pool: true 
