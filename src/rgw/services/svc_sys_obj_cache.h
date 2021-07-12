@@ -21,7 +21,7 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
   friend class ASocketHandler;
 
   RGWSI_Notify *notify_svc{nullptr};
-  ObjectCache cache;
+  ShardedObjectCache cache;
 
   std::shared_ptr<RGWSI_SysObj_Cache_CB> cb;
 
@@ -106,7 +106,7 @@ public:
 
   bool chain_cache_entry(const DoutPrefixProvider *dpp,
                          std::initializer_list<rgw_cache_entry_info *> cache_info_entries,
-                         RGWChainedCache::Entry *chained_entry);
+                         RGWChainedCache::Entry *chained_entry, const string& key);
   void register_chained_cache(RGWChainedCache *cc);
   void unregister_chained_cache(RGWChainedCache *cc);
 
@@ -198,7 +198,7 @@ public:
     Entry chain_entry(this, key, entry);
 
     /* we need the svc cache to call us under its lock to maintain lock ordering */
-    return svc->chain_cache_entry(dpp, cache_info_entries, &chain_entry);
+    return svc->chain_cache_entry(dpp, cache_info_entries, &chain_entry, key);
   }
 
   void chain_cb(const string& key, void *data) override {
