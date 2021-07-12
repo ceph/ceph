@@ -30,7 +30,7 @@ void WriteLogEntry::writeback(
 void WriteLogEntry::init_cache_bp() {
   ceph_assert(!this->cache_bp.have_raw());
   cache_bp = buffer::ptr(buffer::create_static(this->write_bytes(),
-                                               (char*)this->cache_buffer));
+                                               this->cache_buffer));
 }
 
 void WriteLogEntry::init_bl(buffer::ptr &bp, buffer::list &bl) {
@@ -49,9 +49,10 @@ void WriteLogEntry::init_bl(buffer::ptr &bp, buffer::list &bl) {
 
 void WriteLogEntry::init_cache_buffer(
     std::vector<WriteBufferAllocation>::iterator allocation) {
-  this->ram_entry.write_data = allocation->buffer_oid;
-  ceph_assert(!TOID_IS_NULL(this->ram_entry.write_data));
-  cache_buffer = D_RW(this->ram_entry.write_data);
+  this->ram_entry.write_data = allocation->buffer_id;
+  ceph_assert(this->ram_entry.write_data);
+  cache_buffer = allocation->pmem_head_addr + this->ram_entry.write_data *
+                 MIN_WRITE_ALLOC_SIZE;
 }
 
 buffer::list& WriteLogEntry::get_cache_bl() {

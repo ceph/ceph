@@ -168,7 +168,7 @@ protected:
 
   virtual void init_bl(buffer::ptr &bp, buffer::list &bl) {}
 public:
-  uint8_t *cache_buffer = nullptr;
+  char *cache_buffer = nullptr;   // runtime addr for pmem write
   WriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
                 uint64_t image_offset_bytes, uint64_t write_bytes)
     : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),

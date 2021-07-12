@@ -526,8 +526,10 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
     }
   } else if ((m_cache_state->present) &&
              (access(m_log_pool_name.c_str(), F_OK) != 0)) {
-    ldout(cct, 5) << "Can't find the existed pool file " << m_log_pool_name << dendl;
+    lderr(cct) << "Can't find the existed pool file "
+                  << m_log_pool_name << dendl;
     on_finish->complete(-errno);
+    return;
   }
 
   bool succeeded = initialize_pool(on_finish, later);
@@ -822,12 +824,6 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
 
   ceph_assert(m_initialized);
 
-  /* Split images because PMDK's space management is not perfect, there are
-   * fragment problems. The larger the block size difference of the block,
-   * the easier the fragmentation problem will occur, resulting in the
-   * remaining space can not be allocated in large size. We plan to manage
-   * pmem space and allocation by ourselves in the future.
-   */
   Extents split_image_extents;
   uint64_t max_extent_size = get_max_extent();
   if (max_extent_size != 0) {
@@ -1467,8 +1463,8 @@ bool AbstractWriteLog<I>::check_allocation(
     uint32_t num_unpublished_reserves) {
   bool alloc_succeeds = true;
   bool no_space = false;
+  std::lock_guard locker(m_lock);
   {
-    std::lock_guard locker(m_lock);
     if (m_free_lanes < num_lanes) {
       req->set_io_waited_for_lanes(true);
       ldout(m_image_ctx.cct, 20) << "not enough free lanes (need "
@@ -1506,29 +1502,21 @@ bool AbstractWriteLog<I>::check_allocation(
   }
 
   if (alloc_succeeds) {
-    std::lock_guard locker(m_lock);
     /* We need one free log entry per extent (each is a separate entry), and
      * one free "lane" for remote replication. */
-    if ((m_free_lanes >= num_lanes) &&
-        (m_free_log_entries >= num_log_entries)) {
-      m_free_lanes -= num_lanes;
-      m_free_log_entries -= num_log_entries;
-      m_unpublished_reserves += num_unpublished_reserves;
-      m_bytes_allocated += bytes_allocated;
-      m_bytes_cached += bytes_cached;
-      m_bytes_dirty += bytes_dirtied;
-      if (req->has_io_waited_for_buffers()) {
-        req->set_io_waited_for_buffers(false);
-      }
-
-    } else {
-      alloc_succeeds = false;
+    m_free_lanes -= num_lanes;
+    m_free_log_entries -= num_log_entries;
+    m_unpublished_reserves += num_unpublished_reserves;
+    m_bytes_allocated += bytes_allocated;
+    m_bytes_cached += bytes_cached;
+    m_bytes_dirty += bytes_dirtied;
+    if (req->has_io_waited_for_buffers()) {
+      req->set_io_waited_for_buffers(false);
     }
   }
 
   if (!alloc_succeeds && no_space) {
     /* Expedite flushing and/or retiring */
-    std::lock_guard locker(m_lock);
     m_alloc_failed_since_retire = true;
     m_last_alloc_fail = ceph_clock_now();
   }

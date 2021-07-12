@@ -291,7 +291,8 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
         cache/pwl/rwl/LogEntry.cc
         cache/pwl/rwl/LogOperation.cc
         cache/pwl/rwl/ReadRequest.cc
-        cache/pwl/rwl/Request.cc)
+        cache/pwl/rwl/Request.cc
+        cache/pwl/rwl/PmemManager.cc)
     endif()
 
   add_library(librbd_plugin_pwl_cache SHARED

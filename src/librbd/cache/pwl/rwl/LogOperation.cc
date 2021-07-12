@@ -21,7 +21,7 @@ void WriteLogOperation::copy_bl_to_cache_buffer(
   m_perfcounter->inc(l_librbd_pwl_log_op_bytes, log_entry->write_bytes());
   ldout(m_cct, 20) << bl << dendl;
   log_entry->init_cache_buffer(allocation);
-  i.copy((unsigned)log_entry->write_bytes(), (char*)log_entry->cache_buffer);
+  i.copy((unsigned)log_entry->write_bytes(), log_entry->cache_buffer);
 }
 
 void DiscardLogOperation::init_op(

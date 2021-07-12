@@ -34,6 +34,50 @@ namespace rwl {
 
 const unsigned long int OPS_APPENDED_TOGETHER = MAX_ALLOC_PER_TRANSACTION;
 
+static inline unsigned get_root_crc_len(struct WriteLogPoolRoot *pool_root) {
+  return (char *)&pool_root->first_valid_entry -
+          (char *)&pool_root->write_num +
+          sizeof(pool_root->first_valid_entry);
+}
+
+/* Persit runtime metada to pool_root in pmem All values that may be changed
+ * will be persisted
+ * Constant value, which has been assigned when initializing the pool.
+ * Lock: acquires m_log_append_lock before call
+ */
+template <typename I>
+void WriteLog<I>::persist_pmem_root() {
+  struct WriteLogPoolRoot *pool_root;
+  pool_root = (struct WriteLogPoolRoot *)m_log_pool->get_head_addr();
+  uint32_t crc = 0;
+  uint64_t flushed_sync_gen;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(this->m_log_append_lock));
+  {
+    std::lock_guard locker(m_lock);
+    flushed_sync_gen = this->m_flushed_sync_gen;
+  }
+  if (m_write_num % 2) {
+    pool_root = (struct WriteLogPoolRoot *)((char *)pool_root +
+                SECOND_ROOT_OFFSET);
+  }
+  /* Don't move the flushed sync gen num backwards. */
+  if (pool_root->flushed_sync_gen < flushed_sync_gen) {
+    ldout(m_image_ctx.cct, 20) << "flushed_sync_gen in log updated from "
+                               << pool_root->flushed_sync_gen << " to "
+                               << flushed_sync_gen << dendl;
+    pool_root->flushed_sync_gen = flushed_sync_gen;
+  }
+  pool_root->write_num = m_write_num;
+  pool_root->first_free_entry = this->m_first_free_entry;
+  pool_root->first_valid_entry = this->m_first_valid_entry;
+  crc = ceph_crc32c(crc, (unsigned char*)&pool_root->write_num,
+                    get_root_crc_len(pool_root));
+  pool_root->crc = crc;
+  pmem_persist(pool_root, MAX_ROOT_LEN);
+  ++m_write_num;
+}
+
 template <typename I>
 Builder<AbstractWriteLog<I>>* WriteLog<I>::create_builder() {
   m_builderobj = new Builder<This>();
@@ -45,9 +89,8 @@ WriteLog<I>::WriteLog(
     I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state,
     ImageWritebackInterface& image_writeback,
     plugin::Api<I>& plugin_api)
-: AbstractWriteLog<I>(image_ctx, cache_state, create_builder(), image_writeback,
-                      plugin_api),
-  m_pwl_pool_layout_name(POBJ_LAYOUT_NAME(rbd_pwl))
+: AbstractWriteLog<I>(image_ctx, cache_state, create_builder(),
+                      image_writeback, plugin_api)
 {
 }
 
@@ -96,9 +139,11 @@ void WriteLog<I>::complete_read(
 template <typename I>
 void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
 {
-  TOID(struct WriteLogPoolRoot) pool_root;
-  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
-  struct WriteLogCacheEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
+  struct WriteLogPoolRoot *pool_root;
+  pool_root = (struct WriteLogPoolRoot *)m_log_pool->get_head_addr();
+  struct WriteLogCacheEntry *pmem_log_entries;
+  pmem_log_entries = (struct WriteLogCacheEntry *)((char *)pool_root +
+                FIRST_ENTRY_OFFSET);
 
   ceph_assert(ceph_mutex_is_locked_by_me(this->m_log_append_lock));
 
@@ -126,14 +171,10 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
 template <typename I>
 int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
 {
-  CephContext *cct = m_image_ctx.cct;
   GenericLogOperationsVector entries_to_flush;
-  TOID(struct WriteLogPoolRoot) pool_root;
-  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
   int ret = 0;
 
   ceph_assert(ceph_mutex_is_locked_by_me(this->m_log_append_lock));
-
   if (ops.empty()) {
     return 0;
   }
@@ -173,36 +214,18 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
   flush_op_log_entries(entries_to_flush);
 
   /* Drain once for all */
-  pmemobj_drain(m_log_pool);
+  pmem_drain();
 
   /*
    * Atomically advance the log head pointer and publish the
    * allocations for all the data buffers they refer to.
    */
   utime_t tx_start = ceph_clock_now();
-  TX_BEGIN(m_log_pool) {
-    D_RW(pool_root)->first_free_entry = this->m_first_free_entry;
-    for (auto &operation : ops) {
-      if (operation->reserved_allocated()) {
-        auto write_op = (std::shared_ptr<WriteLogOperation>&) operation;
-        pmemobj_tx_publish(&write_op->buffer_alloc->buffer_alloc_action, 1);
-      } else {
-        ldout(m_image_ctx.cct, 20) << "skipping non-write op: " << *operation << dendl;
-      }
-    }
-  } TX_ONCOMMIT {
-  } TX_ONABORT {
-    lderr(cct) << "failed to commit " << ops.size()
-               << " log entries (" << this->m_log_pool_name << ")" << dendl;
-    ceph_assert(false);
-    ret = -EIO;
-  } TX_FINALLY {
-  } TX_END;
-
+  persist_pmem_root();
   utime_t tx_end = ceph_clock_now();
   m_perfcounter->tinc(l_librbd_pwl_append_tx_t, tx_end - tx_start);
-  m_perfcounter->hinc(
-    l_librbd_pwl_append_tx_t_hist, utime_t(tx_end - tx_start).to_nsec(), ops.size());
+  m_perfcounter->hinc(l_librbd_pwl_append_tx_t_hist,
+                      utime_t(tx_end - tx_start).to_nsec(), ops.size());
   for (auto &operation : ops) {
     operation->log_append_comp_time = tx_end;
   }
@@ -231,22 +254,22 @@ void WriteLog<I>::flush_op_log_entries(GenericLogOperationsVector &ops)
                              << "bytes="
                              << ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry))
                              << dendl;
-  pmemobj_flush(m_log_pool,
-                ops.front()->get_log_entry()->cache_entry,
-                ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry)));
+  pmem_flush(ops.front()->get_log_entry()->cache_entry,
+             ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry)));
 }
 
 template <typename I>
 void WriteLog<I>::remove_pool_file() {
   if (m_log_pool) {
     ldout(m_image_ctx.cct, 6) << "closing pmem pool" << dendl;
-    pmemobj_close(m_log_pool);
+    m_log_pool->close_dev();
   }
   if (m_cache_state->clean) {
       ldout(m_image_ctx.cct, 5) << "Removing empty pool file: " << this->m_log_pool_name << dendl;
       if (remove(this->m_log_pool_name.c_str()) != 0) {
-        lderr(m_image_ctx.cct) << "failed to remove empty pool \"" << this->m_log_pool_name << "\": "
-          << pmemobj_errormsg() << dendl;
+        lderr(m_image_ctx.cct) << "failed to remove empty pool \""
+                               << this->m_log_pool_name << "\": "
+                               << dendl;
       } else {
         m_cache_state->clean = true;
         m_cache_state->empty = true;
@@ -260,16 +283,14 @@ void WriteLog<I>::remove_pool_file() {
 template <typename I>
 bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &later) {
   CephContext *cct = m_image_ctx.cct;
-  TOID(struct WriteLogPoolRoot) pool_root;
+  uint32_t crc = 0;
+  struct WriteLogPoolRoot *pool_root = nullptr;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   if (access(this->m_log_pool_name.c_str(), F_OK) != 0) {
-    if ((m_log_pool =
-         pmemobj_create(this->m_log_pool_name.c_str(),
-                        this->m_pwl_pool_layout_name,
-                        this->m_log_pool_size,
-                        (S_IWUSR | S_IRUSR))) == NULL) {
-      lderr(cct) << "failed to create pool (" << this->m_log_pool_name << ")"
-                 << pmemobj_errormsg() << dendl;
+    if (!(m_log_pool = PmemDev::pmem_create_dev(this->m_log_pool_name.c_str(),
+                                                this->m_log_pool_size, cct))) {
+      lderr(cct) << "failed to create pool ("
+                 << this->m_log_pool_name << ")" << dendl;
       m_cache_state->present = false;
       m_cache_state->clean = true;
       m_cache_state->empty = true;
@@ -280,11 +301,12 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     m_cache_state->present = true;
     m_cache_state->clean = true;
     m_cache_state->empty = true;
-    pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
 
     /* new pool, calculate and store metadata */
+    this->m_log_pool_size = m_log_pool->get_mapped_len(); // actual mapped size
     size_t effective_pool_size = (size_t)(this->m_log_pool_size * USABLE_SIZE);
-    size_t small_write_size = MIN_WRITE_ALLOC_SIZE + BLOCK_ALLOC_OVERHEAD_BYTES + sizeof(struct WriteLogCacheEntry);
+    size_t small_write_size = MIN_WRITE_ALLOC_SIZE +
+        BLOCK_ALLOC_OVERHEAD_BYTES + sizeof(struct WriteLogCacheEntry);
     uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
     if (num_small_writes > MAX_LOG_ENTRIES) {
       num_small_writes = MAX_LOG_ENTRIES;
@@ -298,70 +320,108 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     /* Log ring empty */
     m_first_free_entry = 0;
     m_first_valid_entry = 0;
-    TX_BEGIN(m_log_pool) {
-      TX_ADD(pool_root);
-      D_RW(pool_root)->header.layout_version = RWL_POOL_VERSION;
-      D_RW(pool_root)->log_entries =
-        TX_ZALLOC(struct WriteLogCacheEntry,
-                  sizeof(struct WriteLogCacheEntry) * num_small_writes);
-      D_RW(pool_root)->pool_size = this->m_log_pool_size;
-      D_RW(pool_root)->flushed_sync_gen = this->m_flushed_sync_gen;
-      D_RW(pool_root)->block_size = MIN_WRITE_ALLOC_SIZE;
-      D_RW(pool_root)->num_log_entries = num_small_writes;
-      D_RW(pool_root)->first_free_entry = m_first_free_entry;
-      D_RW(pool_root)->first_valid_entry = m_first_valid_entry;
-    } TX_ONCOMMIT {
-      this->m_total_log_entries = D_RO(pool_root)->num_log_entries;
-      this->m_free_log_entries = D_RO(pool_root)->num_log_entries - 1; // leave one free
-    } TX_ONABORT {
-      this->m_total_log_entries = 0;
-      this->m_free_log_entries = 0;
-      lderr(cct) << "failed to initialize pool (" << this->m_log_pool_name << ")" << dendl;
-      on_finish->complete(-pmemobj_tx_errno());
-      return false;
-    } TX_FINALLY {
-    } TX_END;
+    m_write_num = 0;
+
+    {
+      pool_root = (struct WriteLogPoolRoot *)m_log_pool->get_head_addr();
+      pool_root->write_num = m_write_num;
+      pool_root->header.layout_version = RWL_POOL_VERSION;
+      pool_root->pool_size = this->m_log_pool_size;
+      pool_root->flushed_sync_gen = this->m_flushed_sync_gen;
+      pool_root->block_size = MIN_WRITE_ALLOC_SIZE;
+      pool_root->num_log_entries = num_small_writes;
+      pool_root->first_free_entry = m_first_free_entry;
+      pool_root->first_valid_entry = m_first_valid_entry;
+      crc = ceph_crc32c(crc, (unsigned char*)&pool_root->write_num,
+                        get_root_crc_len(pool_root));
+      pool_root->crc = crc;
+      pmem_flush(pool_root, MAX_ROOT_LEN);
+      /* copy initialized root1 to root2
+       * Next time, just update the values that might be changed */
+      pmem_memcpy_nodrain((char *)pool_root + SECOND_ROOT_OFFSET,
+                          pool_root, MAX_ROOT_LEN);
+      pmem_memset_nodrain(m_log_pool->get_head_addr() + FIRST_ENTRY_OFFSET, 0,
+          sizeof(struct WriteLogCacheEntry) * num_small_writes);
+      m_log_pool->init_data_bit(FIRST_ENTRY_OFFSET +
+          sizeof(struct WriteLogCacheEntry) * num_small_writes);
+      /* update other run time metadata */
+      this->m_total_log_entries = num_small_writes;
+      this->m_free_log_entries = num_small_writes - 1;
+      ++m_write_num;
+      pmem_drain();
+    }
   } else {
     m_cache_state->present = true;
     /* Open existing pool */
-    if ((m_log_pool =
-         pmemobj_open(this->m_log_pool_name.c_str(),
-                      this->m_pwl_pool_layout_name)) == NULL) {
-      lderr(cct) << "failed to open pool (" << this->m_log_pool_name << "): "
-                 << pmemobj_errormsg() << dendl;
+    if (!(m_log_pool = PmemDev::pmem_open_dev(this->m_log_pool_name.c_str(),
+                                              cct))) {
+      lderr(cct) << "failed to open pool ("
+                 << this->m_log_pool_name << "): " << dendl;
       on_finish->complete(-errno);
       return false;
     }
-    pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
-    if (D_RO(pool_root)->header.layout_version != RWL_POOL_VERSION) {
-      // TODO: will handle upgrading version in the future
+    uint32_t second_root_crc = 0;
+    struct WriteLogPoolRoot *second_pool_root = nullptr;
+    pool_root = (struct WriteLogPoolRoot *)m_log_pool->get_head_addr();
+    second_pool_root= (struct WriteLogPoolRoot *)(m_log_pool->get_head_addr() +
+                      SECOND_ROOT_OFFSET);
+    crc = ceph_crc32c(crc, (unsigned char*)&pool_root->write_num,
+                      get_root_crc_len(pool_root));
+    second_root_crc = ceph_crc32c(second_root_crc,
+                      (unsigned char*)&second_pool_root->write_num,
+                      get_root_crc_len(pool_root));
+    if (pool_root->crc != crc && second_pool_root->crc == crc) {
+        pool_root = second_pool_root;
+    } else if (pool_root->crc == crc &&
+               second_pool_root->crc == second_root_crc) {
+      if (pool_root->write_num < second_pool_root->write_num) {
+        pool_root = second_pool_root;
+      } else {
+        // do nothing
+      }
+    } else if (pool_root->crc != crc &&
+               second_pool_root->crc != second_root_crc) {
+      ldout(cct, 5) << "No valid root exist." << dendl;
+      on_finish->complete(-EINVAL);
+      return false;
+    } else {
+      // do nothing
+      // case: pool_root->crc == crc && second_root_crc->crc != crc
+    }
+
+    if (pool_root->header.layout_version != RWL_POOL_VERSION) {
+      /* Different versions are not compatible */
       lderr(cct) << "Pool layout version is "
-                 << D_RO(pool_root)->header.layout_version
+                 << pool_root->header.layout_version
                  << " expected " << RWL_POOL_VERSION << dendl;
       on_finish->complete(-EINVAL);
       return false;
     }
-    if (D_RO(pool_root)->block_size != MIN_WRITE_ALLOC_SIZE) {
-      lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size
+    if (pool_root->block_size != MIN_WRITE_ALLOC_SIZE) {
+      lderr(cct) << "Pool block size is " << pool_root->block_size
                  << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
       on_finish->complete(-EINVAL);
       return false;
     }
-    this->m_log_pool_size = D_RO(pool_root)->pool_size;
-    this->m_flushed_sync_gen = D_RO(pool_root)->flushed_sync_gen;
-    this->m_total_log_entries = D_RO(pool_root)->num_log_entries;
-    m_first_free_entry = D_RO(pool_root)->first_free_entry;
-    m_first_valid_entry = D_RO(pool_root)->first_valid_entry;
+    this->m_log_pool_size = pool_root->pool_size;
+    this->m_flushed_sync_gen = pool_root->flushed_sync_gen;
+    this->m_total_log_entries = pool_root->num_log_entries;
+    m_first_free_entry = pool_root->first_free_entry;
+    m_first_valid_entry = pool_root->first_valid_entry;
+    /* run time write num is next write operation */
+    m_write_num = pool_root->write_num + 1;
     if (m_first_free_entry < m_first_valid_entry) {
       /* Valid entries wrap around the end of the ring, so first_free is lower
        * than first_valid.  If first_valid was == first_free+1, the entry at
        * first_free would be empty. The last entry is never used, so in
        * that case there would be zero free log entries. */
-     this->m_free_log_entries = this->m_total_log_entries - (m_first_valid_entry - m_first_free_entry) -1;
+     this->m_free_log_entries = this->m_total_log_entries -
+                                (m_first_valid_entry - m_first_free_entry) -1;
     } else {
       /* first_valid is <= first_free. If they are == we have zero valid log
        * entries, and n-1 free log entries */
-      this->m_free_log_entries = this->m_total_log_entries - (m_first_free_entry - m_first_valid_entry) -1;
+      this->m_free_log_entries = this->m_total_log_entries -
+                                 (m_first_free_entry - m_first_valid_entry) -1;
     }
     size_t effective_pool_size = (size_t)(this->m_log_pool_size * USABLE_SIZE);
     this->m_bytes_allocated_cap = effective_pool_size;
@@ -393,9 +453,9 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
 
 template <typename I>
 void WriteLog<I>::load_existing_entries(DeferredContexts &later) {
-  TOID(struct WriteLogPoolRoot) pool_root;
-  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
-  struct WriteLogCacheEntry *pmem_log_entries = D_RW(D_RW(pool_root)->log_entries);
+  struct WriteLogCacheEntry *pmem_log_entries;
+  pmem_log_entries = (struct WriteLogCacheEntry *)(m_log_pool->get_head_addr() +
+                      FIRST_ENTRY_OFFSET);
   uint64_t entry_index = m_first_valid_entry;
   /* The map below allows us to find sync point log entries by sync
    * gen number, which is necessary so write entries can be linked to
@@ -434,7 +494,16 @@ void WriteLog<I>::load_existing_entries(DeferredContexts &later) {
 
     entry_index = (entry_index + 1) % this->m_total_log_entries;
   }
-
+  if (m_log_entries.empty()) {
+    m_log_pool->init_data_bit(FIRST_ENTRY_OFFSET +
+        sizeof(struct WriteLogCacheEntry) * this->m_total_log_entries);
+  } else {
+    m_log_pool->set_data_bit(FIRST_ENTRY_OFFSET +
+        sizeof(struct WriteLogCacheEntry) * this->m_total_log_entries,
+        m_log_entries.front()->ram_entry.write_data,
+        m_log_entries.back()->ram_entry.write_data,
+        m_log_entries.back()->ram_entry.write_bytes);
+  }
   this->update_sync_points(missing_sync_points, sync_point_entries, later, MIN_WRITE_ALLOC_SIZE);
 }
 
@@ -442,7 +511,8 @@ template <typename I>
 void WriteLog<I>::write_data_to_buffer(
     std::shared_ptr<pwl::WriteLogEntry> ws_entry,
     WriteLogCacheEntry *pmem_entry) {
-  ws_entry->cache_buffer = D_RW(pmem_entry->write_data);
+  ws_entry->cache_buffer = m_log_pool->get_head_addr() +
+                           pmem_entry->write_data * MIN_WRITE_ALLOC_SIZE;
 }
 
 /**
@@ -465,7 +535,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     std::lock_guard locker(m_lock);
     initial_first_valid_entry = this->m_first_valid_entry;
     first_valid_entry = this->m_first_valid_entry;
-    auto entry = m_log_entries.front();
+    auto entry = m_log_entries.empty() ? nullptr : m_log_entries.front();
     while (!m_log_entries.empty() &&
            retiring_entries.size() < frees_per_tx &&
            this->can_retire_entry(entry)) {
@@ -491,50 +561,36 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
 
   if (retiring_entries.size()) {
     ldout(cct, 20) << "Retiring " << retiring_entries.size() << " entries" << dendl;
-    TOID(struct WriteLogPoolRoot) pool_root;
-    pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
-
     utime_t tx_start;
     utime_t tx_end;
     /* Advance first valid entry and release buffers */
     {
-      uint64_t flushed_sync_gen;
       std::lock_guard append_locker(this->m_log_append_lock);
-      {
-        std::lock_guard locker(m_lock);
-        flushed_sync_gen = this->m_flushed_sync_gen;
-      }
-
       tx_start = ceph_clock_now();
-      TX_BEGIN(m_log_pool) {
-        if (D_RO(pool_root)->flushed_sync_gen < flushed_sync_gen) {
-          ldout(m_image_ctx.cct, 20) << "flushed_sync_gen in log updated from "
-                                     << D_RO(pool_root)->flushed_sync_gen << " to "
-                                     << flushed_sync_gen << dendl;
-          D_RW(pool_root)->flushed_sync_gen = flushed_sync_gen;
-        }
-        D_RW(pool_root)->first_valid_entry = first_valid_entry;
-        for (auto &entry: retiring_entries) {
-          if (entry->write_bytes()) {
-            ldout(cct, 20) << "Freeing " << entry->ram_entry.write_data.oid.pool_uuid_lo
-                           << "." << entry->ram_entry.write_data.oid.off << dendl;
-            TX_FREE(entry->ram_entry.write_data);
-          } else {
-            ldout(cct, 20) << "Retiring non-write: " << *entry << dendl;
+      {
+        /* Find the first entry that points to a valid address through
+         * the reverse iterator */
+        GenericLogEntriesVector::reverse_iterator entry_iter;
+        for(entry_iter = retiring_entries.rbegin();
+            entry_iter != retiring_entries.rend(); ++entry_iter) {
+          if ((*entry_iter)->ram_entry.write_bytes != 0) {
+            m_log_pool->release_to_here((*entry_iter)->ram_entry.write_data,
+                                        (*entry_iter)->ram_entry.write_bytes);
+            ldout(cct, 20) << "Retire to entry index: "
+                           << (*entry_iter)->log_entry_index << dendl;
+            break;
           }
         }
-      } TX_ONCOMMIT {
-      } TX_ONABORT {
-        lderr(cct) << "failed to commit free of" << retiring_entries.size()
-                   << " log entries (" << this->m_log_pool_name << ")" << dendl;
-        ceph_assert(false);
-      } TX_FINALLY {
-      } TX_END;
+        if (entry_iter == retiring_entries.rend()) {
+          ldout(cct, 20) << "Only retiring non-write entries" << dendl;
+        }
+        persist_pmem_root();
+      }
       tx_end = ceph_clock_now();
     }
     m_perfcounter->tinc(l_librbd_pwl_retire_tx_t, tx_end - tx_start);
-    m_perfcounter->hinc(l_librbd_pwl_retire_tx_t_hist, utime_t(tx_end - tx_start).to_nsec(),
-        retiring_entries.size());
+    m_perfcounter->hinc(l_librbd_pwl_retire_tx_t_hist,
+        utime_t(tx_end - tx_start).to_nsec(), retiring_entries.size());
 
     /* Update runtime copy of first_valid, and free entries counts */
     {
@@ -828,12 +884,12 @@ void WriteLog<I>::flush_pmem_buffer(V& ops)
   for (auto &operation : ops) {
     if(operation->is_writing_op()) {
       auto log_entry = static_pointer_cast<WriteLogEntry>(operation->get_log_entry());
-      pmemobj_flush(m_log_pool, log_entry->cache_buffer, log_entry->write_bytes());
+      pmem_flush(log_entry->cache_buffer, log_entry->write_bytes());
     }
   }
 
   /* Drain once for all */
-  pmemobj_drain(m_log_pool);
+  pmem_drain();
 
   utime_t now = ceph_clock_now();
   for (auto &operation : ops) {
@@ -851,29 +907,8 @@ void WriteLog<I>::flush_pmem_buffer(V& ops)
 template <typename I>
 void WriteLog<I>::persist_last_flushed_sync_gen()
 {
-  TOID(struct WriteLogPoolRoot) pool_root;
-  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
-  uint64_t flushed_sync_gen;
-
   std::lock_guard append_locker(this->m_log_append_lock);
-  {
-    std::lock_guard locker(m_lock);
-    flushed_sync_gen = this->m_flushed_sync_gen;
-  }
-
-  if (D_RO(pool_root)->flushed_sync_gen < flushed_sync_gen) {
-    ldout(m_image_ctx.cct, 15) << "flushed_sync_gen in log updated from "
-                               << D_RO(pool_root)->flushed_sync_gen << " to "
-                               << flushed_sync_gen << dendl;
-    TX_BEGIN(m_log_pool) {
-      D_RW(pool_root)->flushed_sync_gen = flushed_sync_gen;
-    } TX_ONCOMMIT {
-    } TX_ONABORT {
-      lderr(m_image_ctx.cct) << "failed to commit update of flushed sync point" << dendl;
-      ceph_assert(false);
-    } TX_FINALLY {
-    } TX_END;
-  }
+  persist_pmem_root();
 }
 
 template <typename I>
@@ -881,33 +916,21 @@ void WriteLog<I>::reserve_cache(C_BlockIORequestT *req,
                                          bool &alloc_succeeds, bool &no_space) {
   std::vector<WriteBufferAllocation>& buffers = req->get_resources_buffers();
   for (auto &buffer : buffers) {
-    utime_t before_reserve = ceph_clock_now();
-    buffer.buffer_oid = pmemobj_reserve(m_log_pool,
-                                        &buffer.buffer_alloc_action,
-                                        buffer.allocation_size,
-                                        0 /* Object type */);
-    buffer.allocation_lat = ceph_clock_now() - before_reserve;
-    if (TOID_IS_NULL(buffer.buffer_oid)) {
+    buffer.buffer_id = m_log_pool->alloc(buffer.allocation_size);
+    buffer.pmem_head_addr = m_log_pool->get_head_addr();
+    if (!buffer.buffer_id) {
       if (!req->has_io_waited_for_buffers()) {
         req->set_io_waited_for_buffers(true);
       }
-      ldout(m_image_ctx.cct, 5) << "can't allocate all data buffers: "
-                                << pmemobj_errormsg() << ". "
-                                << *req << dendl;
+      ldout(m_image_ctx.cct, 20) << "can't allocate all data buffers: "
+                                << ". " << *req << dendl;
       alloc_succeeds = false;
       no_space = true; /* Entries need to be retired */
-
-      if (this->m_free_log_entries == this->m_total_log_entries - 1) {
-        /* When the cache is empty, there is still no space to allocate.
-         * Defragment. */
-        pmemobj_defrag(m_log_pool, NULL, 0, NULL);
-      }
       break;
     } else {
       buffer.allocated = true;
     }
-    ldout(m_image_ctx.cct, 20) << "Allocated " << buffer.buffer_oid.oid.pool_uuid_lo
-                               << "." << buffer.buffer_oid.oid.off
+    ldout(m_image_ctx.cct, 20) << "Allocated " << buffer.buffer_id
                                << ", size=" << buffer.allocation_size << dendl;
   }
 }
@@ -936,20 +959,9 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   // Setup buffer, and get all the number of required resources
   req->setup_buffer_resources(&bytes_cached, &bytes_dirtied, &bytes_allocated,
                               &num_lanes, &num_log_entries, &num_unpublished_reserves);
-
   alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
                                           bytes_allocated, num_lanes, num_log_entries,
                                           num_unpublished_reserves);
-
-  std::vector<WriteBufferAllocation>& buffers = req->get_resources_buffers();
-  if (!alloc_succeeds) {
-    /* On alloc failure, free any buffers we did allocate */
-    for (auto &buffer : buffers) {
-      if (buffer.allocated) {
-        pmemobj_cancel(m_log_pool, &buffer.buffer_alloc_action, 1);
-      }
-    }
-  }
 
   req->set_allocated(alloc_succeeds);
   return alloc_succeeds;
