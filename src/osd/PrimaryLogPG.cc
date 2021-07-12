@@ -3462,7 +3462,18 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
 
 bool PrimaryLogPG::recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op)
 {
-  if (!obc->obs.oi.manifest.is_chunked() || !obc->ssc || !obc->ssc->snapset.clones.size()) {
+  bool has_manifest_op = false;
+  if (!obc->ssc || !obc->ssc->snapset.clones.size()) {
+    return false;
+  }
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  for (auto p = m->ops.begin(); p != m->ops.end(); ++p) {
+    OSDOp& osd_op = *p;
+    if (osd_op.op.op == CEPH_OSD_OP_SET_CHUNK) {
+      has_manifest_op = true;
+    }
+  }
+  if (!obc->obs.oi.manifest.is_chunked() && !has_manifest_op) {
     return false;
   }
   ceph_assert(op);
