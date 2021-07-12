@@ -172,6 +172,11 @@ Scheduler arguments:
                               in the output of teuthology-suite command. -1
                               for a random seed [default: -1].
  --force-priority             Skip the priority check.
+ --disable-num-jobs-check     Skip the number of jobs check. By default,
+                              teuthology will not allow you to schedule more
+                              than JOBS_TO_SCHEDULE_THRESHOLD=500 jobs, because
+                              it is too high. Use this if you need to schedule
+                              more than 500 jobs.
 
 """.format(
     default_machine_type=config.default_machine_type,
