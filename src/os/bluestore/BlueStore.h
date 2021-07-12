@@ -1075,10 +1075,6 @@ public:
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
     bool cached;              ///< Onode is logically in the cache
-                              /// (it can be pinned and hence physically out
-                              /// of it at the moment though)
-    std::atomic_bool pinned;  ///< Onode is pinned
-                              /// (or should be pinned when cached)
     ExtentMap extent_map;
 
     // track txc's that have not been committed to kv store (and whose
@@ -1097,7 +1093,6 @@ public:
 	key(k),
 	exists(false),
         cached(false),
-        pinned(false),
 	extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
@@ -1108,7 +1103,6 @@ public:
       key(k),
       exists(false),
       cached(false),
-      pinned(false),
       extent_map(this) {
     }
     Onode(Collection* c, const ghobject_t& o,
@@ -1119,7 +1113,6 @@ public:
       key(k),
       exists(false),
       cached(false),
-      pinned(false),
       extent_map(this) {
     }
 
@@ -1134,16 +1127,8 @@ public:
     void flush();
     void get();
     void put();
-
-    inline bool put_cache() {
-      ceph_assert(!cached);
-      cached = true;
-      return !pinned;
-    }
-    inline bool pop_cache() {
-      ceph_assert(cached);
-      cached = false;
-      return !pinned;
+    inline bool is_pinned() const {
+      return nref > 1;
     }
 
     const std::string& get_omap_prefix();
@@ -1220,12 +1205,8 @@ public:
 
   /// A Generic onode Cache Shard
   struct OnodeCacheShard : public CacheShard {
-    std::atomic<uint64_t> num_pinned = {0};
 
     std::array<std::pair<ghobject_t, ceph::mono_clock::time_point>, 64> dumped_onodes;
-
-    virtual void _pin(Onode* o) = 0;
-    virtual void _unpin(Onode* o) = 0;
 
   public:
     OnodeCacheShard(CephContext* cct) : CacheShard(cct) {}
@@ -1233,10 +1214,14 @@ public:
                                    PerfCounters *logger);
     virtual void _add(Onode* o, int level) = 0;
     virtual void _rm(Onode* o) = 0;
-    virtual void _unpin_and_rm(Onode* o) = 0;
+    virtual void _touch(Onode* o) = 0;
 
-    virtual void move_pinned(OnodeCacheShard *to, Onode *o) = 0;
+    virtual void move_cached(OnodeCacheShard *to, Onode *o) = 0;
     virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
+    void touch(Onode* o){
+      std::lock_guard l(lock);
+      _touch(o);
+    }
     bool empty() {
       return _get_num() == 0;
     }
