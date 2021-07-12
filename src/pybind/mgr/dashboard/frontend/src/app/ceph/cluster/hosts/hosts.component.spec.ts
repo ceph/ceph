@@ -31,7 +31,7 @@ class MockShowForceMaintenanceModal {
       msg.includes('WARNING') &&
       !msg.includes('It is NOT safe to stop') &&
       !msg.includes('ALERT') &&
-      !msg.includes('unable to stop')
+      !msg.includes('unsafe to stop')
     ) {
       this.showModal = true;
     }
@@ -143,8 +143,8 @@ describe('HostsComponent', () => {
     expect(showForceMaintenanceModal.showModal).toBeFalsy();
   });
 
-  it('should not show force maintenance modal when it is unable to stop host', () => {
-    const errorMsg = 'unable to stop osd.0 because of some unknown reason';
+  it('should not show force maintenance modal when it is unsafe to stop host', () => {
+    const errorMsg = 'unsafe to stop osd.0 because of some unknown reason';
     showForceMaintenanceModal.showModalDialog(errorMsg);
     expect(showForceMaintenanceModal.showModal).toBeFalsy();
   });

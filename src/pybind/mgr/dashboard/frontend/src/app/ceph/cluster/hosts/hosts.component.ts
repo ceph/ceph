@@ -247,7 +247,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
             error.error['detail'].includes('WARNING') &&
             !error.error['detail'].includes('It is NOT safe to stop') &&
             !error.error['detail'].includes('ALERT') &&
-            !error.error['detail'].includes('unable to stop')
+            !error.error['detail'].includes('unsafe to stop')
           ) {
             const modalVarialbes = {
               titleText: $localize`Warning`,
