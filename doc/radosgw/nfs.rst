@@ -11,6 +11,9 @@ protocols (S3 and Swift).
 In particular, the Ceph Object Gateway can now be configured to
 provide file-based access when embedded in the NFS-Ganesha NFS server.
 
+The simplest and preferred way of managing nfs-ganesha clusters and rgw exports
+is using ``ceph nfs ...`` commands. See :doc:`/mgr/nfs` for more details.
+
 librgw
 ======
 
@@ -97,50 +100,6 @@ following characteristics:
   + all RGW object operations performed via the NFS server will be performed by the RGW user associated with the credentials stored in the export being accessed (currently only RGW and RGW LDAP credentials are supported)
 
     * additional RGW authentication types such as Keystone are not currently supported
-
-
-Enabling a bucket export
-========================
-
-.. note: If you do not already have NFS service deployed, see
-   :ref:`deploy-cephadm-nfs-ganesha`.
-
-To export a bucket,
-
-  .. prompt:: bash #
-
-    ceph nfs export create rgw *<bucket-name>* *<cluster-id>* *<pseudo>* [--readonly] [--addr *<client-ip-or-cidr>*
-
-For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network,
-
-  .. prompt:: bash #
-
-    ceph nfs export create rgw mybucket mynfs /bucketdata --addr 192.168.10.0/24
-
-Listing exports
-===============
-
-You can list current exports with:
-
-  .. prompt:: bash #
-
-    ceph nfs export ls *<cluster-id>* [--detailed]
-
-Disabling a bucket export
-=========================
-
-To disable an existing export,
-
-  .. prompt:: bash #
-
-    ceph nfs export rm *<cluster-id>* *<pseudo>*
-
-For example, to disable an export from cluster *mynfs* on ``/my-export``,
-
-  .. prompt:: bash #
-
-    ceph nfs export rm mynfs /my-export
-
 
 Manually configuring an NFS-Ganesha Instance
 ============================================
