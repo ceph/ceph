@@ -2398,13 +2398,21 @@ if diff ${FILE_CONTEXT} ${FILE_CONTEXT}.pre > /dev/null 2>&1; then
    exit 0
 fi
 
+# Stop ceph.target while relabeling if CEPH_AUTO_RESTART_ON_UPGRADE=yes
+SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
+if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+fi
+
 # Check whether the daemons are running
 /usr/bin/systemctl status ceph.target > /dev/null 2>&1
 STATUS=$?
 
 # Stop the daemons if they were running
 if test $STATUS -eq 0; then
-    /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
+    if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+        /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
+    fi
 fi
 
 # Relabel the files fix for first package install
@@ -2416,7 +2424,9 @@ rm -f ${FILE_CONTEXT}.pre
 
 # Start the daemons iff they were running before
 if test $STATUS -eq 0; then
-    /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
+    if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+        /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
+    fi
 fi
 exit 0
 
@@ -2436,13 +2446,21 @@ if [ $1 -eq 0 ]; then
         exit 0
     fi
 
+    # Stop ceph.target while relabeling if CEPH_AUTO_RESTART_ON_UPGRADE=yes
+    SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
+    if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+        source $SYSCONF_CEPH
+    fi
+
     # Check whether the daemons are running
     /usr/bin/systemctl status ceph.target > /dev/null 2>&1
     STATUS=$?
 
     # Stop the daemons if they were running
     if test $STATUS -eq 0; then
-        /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
+        if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+            /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
+        fi
     fi
 
     /usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
@@ -2452,7 +2470,9 @@ if [ $1 -eq 0 ]; then
 
     # Start the daemons if they were running before
     if test $STATUS -eq 0; then
-	/usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
+        if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+	    /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
+        fi
     fi
 fi
 exit 0
