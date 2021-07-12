@@ -795,6 +795,7 @@ class RgwService(CephService):
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
+        self.mgr.trigger_connect_dashboard_rgw()
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -874,6 +875,7 @@ class RgwService(CephService):
             'prefix': 'config-key rm',
             'key': f'rgw/cert/{service_name}',
         })
+        self.mgr.trigger_connect_dashboard_rgw()
 
     def post_remove(self, daemon: DaemonDescription) -> None:
         super().post_remove(daemon)
@@ -917,6 +919,9 @@ class RgwService(CephService):
         # Provide warning
         warn_message = "WARNING: Removing RGW daemons can cause clients to lose connectivity. "
         return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
+        self.mgr.trigger_connect_dashboard_rgw()
 
 
 class RbdMirrorService(CephService):

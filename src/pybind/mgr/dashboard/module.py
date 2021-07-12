@@ -29,6 +29,7 @@ from .controllers import generate_routes, json_error_page
 from .grafana import push_local_dashboards
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
+from .services.rgw_client import configure_rgw_users
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
@@ -397,6 +398,11 @@ class Module(MgrModule, CherryPyConfig):
         if result.retval != 0:
             return result
         return 0, 'Self-signed certificate created', ''
+
+    @CLIWriteCommand("dashboard connect-rgw")
+    def connect_rgw(self):
+        configure_rgw_users()
+        return 0, '', ''
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements

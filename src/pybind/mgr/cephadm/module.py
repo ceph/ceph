@@ -466,6 +466,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.template = TemplateMgr(self)
 
         self.requires_post_actions: Set[str] = set()
+        self.need_connect_dashboard_rgw = False
 
         self.config_checker = CephadmConfigChecks(self)
 
@@ -2602,3 +2603,7 @@ Then run the following:
             daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
 
         return "Scheduled to remove the following daemons from host '{}'\n{}".format(hostname, daemons_table)
+
+    def trigger_connect_dashboard_rgw(self) -> None:
+        self.need_connect_dashboard_rgw = True
+        self.event.set()
