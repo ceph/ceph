@@ -369,6 +369,9 @@
 /* Define if libcephsqlite is enabled */
 #cmakedefine WITH_LIBCEPHSQLITE
 
+/* Define if libcephfssqlite is enabled */
+#cmakedefine WITH_LIBCEPHFSSQLITE
+
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL
 

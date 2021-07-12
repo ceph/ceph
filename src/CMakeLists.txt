@@ -829,6 +829,20 @@ if(WITH_LIBCEPHSQLITE)
   install(TARGETS cephsqlite DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif(WITH_LIBCEPHSQLITE)
 
+if(WITH_LIBCEPHFSSQLITE)
+  set(cephfssqlite_srcs libcephfssqlite.cc)
+  add_library(cephfssqlite ${CEPH_SHARED} ${cephfssqlite_srcs})
+  target_link_libraries(cephfssqlite PRIVATE client ceph-common SQLite3::SQLite3 ${EXTRALIBS})
+  set_target_properties(cephfssqlite PROPERTIES
+          CXX_VISIBILITY_PRESET hidden
+          VISIBILITY_INLINES_HIDDEN ON)
+  if(NOT APPLE AND NOT WIN32)
+    set_property(TARGET cephfssqlite APPEND_STRING PROPERTY
+            LINK_FLAGS " -Wl,--exclude-libs,ALL")
+  endif()
+  install(TARGETS cephfssqlite DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif(WITH_LIBCEPHFSSQLITE)
+
 if(WITH_FUSE)
   set(ceph_fuse_srcs
     ceph_fuse.cc

@@ -36,6 +36,9 @@ if(WITH_MGR)
   if(WITH_LIBCEPHSQLITE)
     target_link_libraries(ceph-mgr cephsqlite SQLite3::SQLite3)
   endif()
+  if(WITH_LIBCEPHFSSQLITE)
+    target_link_libraries(ceph-mgr cephfssqlite SQLite3::SQLite3)
+  endif()
   target_link_libraries(ceph-mgr
     osdc client heap_profiler
     global-static ceph-common
