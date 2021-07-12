@@ -51,13 +51,13 @@ import shlex
 
 from unittest import suite, loader
 
-from teuthology.orchestra.run import Raw, quote
+from teuthology.orchestra.run_helper import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
 from teuthology.contextutil import safe_while
 from teuthology.contextutil import MaxWhileTries
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 try:
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

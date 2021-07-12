@@ -8,7 +8,7 @@ from os.path import join as os_path_join
 # CapsHelper is subclassed from CephFSTestCase
 from tasks.cephfs.caps_helper import CapsHelper
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 
 
 log = logging.getLogger(__name__)

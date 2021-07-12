@@ -5,7 +5,7 @@ import contextlib
 import logging
 
 from teuthology.misc import deep_merge
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
 from tasks.cephfs.kernel_mount import KernelMount
