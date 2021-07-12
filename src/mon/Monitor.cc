@@ -3690,7 +3690,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = ss2.str();
     r = 0;
   } else if (prefix == "osd last-stat-seq") {
-    int64_t osd;
+    int64_t osd = 0;
     cmd_getval(cmdmap, "id", osd);
     uint64_t seq = mgrstatmon()->get_last_osd_stat_seq(osd);
     if (f) {
