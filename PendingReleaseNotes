@@ -351,3 +351,28 @@
   zone are provided, the user is now responsible for setting up the
   multisite configuration beforehand--cephadm no longer attempts to
   create missing realms or zones.
+
+* The cephadm NFS support has been simplified to no longer allow the
+  pool and namespace where configuration is stored to be customized.
+  As a result, the ``ceph orch apply nfs`` command no longer has
+  ``--pool`` or ``--namespace`` arguments.
+  
+  You can check whether your existing NFS services have non-default
+  pools by examining the output of ``ceph orch ls --export`` and
+  checking whether any ``service_type: nfs`` services have a ``pool``
+  property that is not set to ``nfs-ganesha`` or a ``namespace``
+  property that does not match the ``service_id``.
+
+  If you have an NFS service that does use a non-default pool or
+  namespace, you should remove the service prior to upgrading and
+  then recreate it.  You will need to re-import any exports.
+
+  For example, if your NFS service is called
+  ``mynfs``,::
+
+    ceph nfs export ls mynfs --detailed > mynfs.json
+    ceph nfs cluster rm mynfs
+    ceph orch upgrade --start --ceph-version 16.2.6
+    # wait for upgrade to complete...
+    ceph nfs cluster create mynfs
+    ceph nfs export apply -i mynfs.json

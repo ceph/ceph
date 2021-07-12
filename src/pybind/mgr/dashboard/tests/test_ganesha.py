@@ -111,16 +111,16 @@ EXPORT
 """
 
     conf_nodea = '''
-%url "rados://ganesha/ns/export-2"
+%url "rados://nfs-ganesha/bar/export-2"
 
-%url "rados://ganesha/ns/export-1"'''
+%url "rados://nfs-ganesha/bar/export-1"'''
 
-    conf_nodeb = '%url "rados://ganesha/ns/export-1"'
+    conf_nodeb = '%url "rados://nfs-ganesha/bar/export-1"'
 
     conf_nfs_foo = '''
-%url "rados://ganesha2/ns2/export-1"
+%url "rados://nfs-ganesha/foo/export-1"
 
-%url "rados://ganesha2/ns2/export-2"'''
+%url "rados://nfs-ganesha/foo/export-2"'''
 
     class RObject(object):
         def __init__(self, key, raw):
@@ -156,7 +156,7 @@ EXPORT
         self.temp_store_namespace = namespace
 
     @staticmethod
-    def _set_user_defined_clusters_location(clusters_pool_namespace='ganesha/ns'):
+    def _set_user_defined_clusters_location(clusters_pool_namespace='nfs-ganesha/bar'):
         Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = clusters_pool_namespace
 
     def setUp(self):
@@ -164,8 +164,8 @@ EXPORT
 
         self.clusters = {
             'foo': {
-                'pool': 'ganesha2',
-                'namespace': 'ns2',
+                'pool': 'nfs-ganesha',
+                'namespace': 'foo',
                 'type': ClusterType.ORCHESTRATOR,
                 'daemon_conf': 'conf-nfs.foo',
                 'daemons': ['foo.host_a', 'foo.host_b'],
@@ -209,13 +209,13 @@ EXPORT
     def _reset_temp_store(self):
         self.temp_store_namespace = None
         self.temp_store = {
-            'ns': {
+            'bar': {
                 'export-1': GaneshaConfTest.RObject("export-1", self.export_1),
                 'export-2': GaneshaConfTest.RObject("export-2", self.export_2),
                 'conf-nodea': GaneshaConfTest.RObject("conf-nodea", self.conf_nodea),
                 'conf-nodeb': GaneshaConfTest.RObject("conf-nodeb", self.conf_nodeb),
             },
-            'ns2': {
+            'foo': {
                 'export-1': GaneshaConfTest.RObject("export-1", self.export_1),
                 'export-2': GaneshaConfTest.RObject("export-2", self.export_2),
                 'conf-nfs.foo': GaneshaConfTest.RObject("conf-nfs.foo", self.conf_nfs_foo)
@@ -224,11 +224,8 @@ EXPORT
 
     def _mock_orchestrator(self, enable):
         # mock nfs services
-        cluster_info = self.clusters['foo']
         orch_nfs_services = [
-            ServiceDescription(spec=NFSServiceSpec(service_id='foo',
-                                                   pool=cluster_info['pool'],
-                                                   namespace=cluster_info['namespace']))
+            ServiceDescription(spec=NFSServiceSpec(service_id='foo'))
         ] if enable else []
         # pylint: disable=protected-access
         ganesha.Ganesha._get_orch_nfs_services = Mock(return_value=orch_nfs_services)
@@ -351,16 +348,16 @@ EXPORT
         self.assertIsInstance(blocks, list)
         self.assertEqual(len(blocks), 2)
         self.assertEqual(blocks[0]['block_name'], "%url")
-        self.assertEqual(blocks[0]['value'], "rados://ganesha/ns/export-2")
+        self.assertEqual(blocks[0]['value'], "rados://nfs-ganesha/bar/export-2")
         self.assertEqual(blocks[1]['block_name'], "%url")
-        self.assertEqual(blocks[1]['value'], "rados://ganesha/ns/export-1")
+        self.assertEqual(blocks[1]['value'], "rados://nfs-ganesha/bar/export-1")
 
     def test_daemon_conf_parser_b(self):
         blocks = GaneshaConfParser(self.conf_nodeb).parse()
         self.assertIsInstance(blocks, list)
         self.assertEqual(len(blocks), 1)
         self.assertEqual(blocks[0]['block_name'], "%url")
-        self.assertEqual(blocks[0]['value'], "rados://ganesha/ns/export-1")
+        self.assertEqual(blocks[0]['value'], "rados://nfs-ganesha/bar/export-1")
 
     def test_ganesha_conf(self):
         for cluster_id, info in self.clusters.items():
@@ -945,19 +942,21 @@ EXPORT
         # pylint: disable=protected-access
 
         # Pool/namespace collision.
-        self._set_user_defined_clusters_location('ganesha2/ns2')
+        self._set_user_defined_clusters_location('nfs-ganesha/foo')
         with self.assertRaises(NFSException) as ctx:
             ganesha.Ganesha._get_clusters_locations()
         self.assertIn('already in use', str(ctx.exception))
 
         # Cluster name collision with orch. cluster.
-        self._set_user_defined_clusters_location('foo:ganesha/ns')
+        self._set_user_defined_clusters_location('foo:nfs-ganesha/bar')
         with self.assertRaises(NFSException) as ctx:
             ganesha.Ganesha._get_clusters_locations()
         self.assertIn('Detected a conflicting NFS-Ganesha cluster', str(ctx.exception))
 
         # Cluster name collision with user-defined cluster.
-        self._set_user_defined_clusters_location('cluster1:ganesha/ns,cluster1:fake-pool/fake-ns')
+        self._set_user_defined_clusters_location(
+            'cluster1:nfs-ganesha/bar,cluster1:fake-pool/fake-ns'
+        )
         with self.assertRaises(NFSException) as ctx:
             ganesha.Ganesha._get_clusters_locations()
         self.assertIn('Duplicate Ganesha cluster definition', str(ctx.exception))

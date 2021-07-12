@@ -315,6 +315,9 @@ For example,::
      "clients": []
    }
 
+The imported JSON can be a single dict describing a single export, or a JSON list
+containing multiple export dicts.
+
 The exported JSON can be modified and then reapplied.  Below, *pseudo*
 and *access_type* are modified.  When modifying an export, the
 provided JSON should fully describe the new state of the export (just
@@ -324,7 +327,7 @@ previous state of the export where possible.
 
 ::
 
-   $ ceph nfs export apply -i update_cephfs_export.json
+   $ ceph nfs export apply mynfs -i update_cephfs_export.json
    $ cat update_cephfs_export.json
    {
      "export_id": 1,
@@ -347,6 +350,27 @@ previous state of the export where possible.
        "sec_label_xattr": ""
      },
      "clients": []
+   }
+
+An export can also be created or updated by injecting a Ganesha NFS EXPORT config
+fragment.  For example,::
+
+   $ ceph nfs export apply mynfs -i update_cephfs_export.conf
+   $ cat update_cephfs_export.conf
+   EXPORT {
+       FSAL {
+           name = "CEPH";
+           filesystem = "a";
+       }
+       export_id = 1;
+       path = "/";
+       pseudo = "/a";
+       access_type = "RW";
+       squash = "none";
+       attr_expiration_time = 0;
+       security_label = true;
+       protocols = 4;
+       transports = "TCP";
    }
 
 

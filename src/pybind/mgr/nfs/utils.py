@@ -5,8 +5,6 @@ import orchestrator
 if TYPE_CHECKING:
     from nfs.module import Module
 
-POOL_NAME = 'nfs-ganesha'
-
 
 def available_clusters(mgr: 'Module') -> List[str]:
     '''

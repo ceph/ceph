@@ -1,0 +1,31 @@
+tasks:
+
+# stop kernel nfs server, if running
+- vip.exec:
+    all-hosts:
+      - systemctl stop nfs-server
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create foofs
+
+- cephadm.wait_for_service:
+    service: mds.foofs
+
+- cephadm.shell:
+    host.a:
+      - ceph nfs cluster create cephfs foo --placement=2
+      - ceph nfs export create cephfs foofs foo --binding /fake
+
+#- cephadm.wait_for_service:
+#    service: nfs.foo
+
+- vip.exec:
+    host.a:
+      - sleep 90
+      - mkdir /mnt/foo
+      - sleep 15
+      - mount -t nfs $(hostname):/fake /mnt/foo
+      - echo test > /mnt/foo/testfile
+      - sync
+

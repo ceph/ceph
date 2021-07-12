@@ -1,0 +1,6 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph nfs cluster ls | grep foo
+      - ceph nfs export ls foo --detailed
+      - rados -p .nfs --all ls -

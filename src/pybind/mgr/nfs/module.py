@@ -84,11 +84,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
     @CLICommand('nfs export apply', perm='rw')
-    @CLICheckNonemptyFileInput(desc='Export JSON specification')
+    @CLICheckNonemptyFileInput(desc='Export JSON or Ganesha EXPORT specification')
     def _cmd_nfs_export_apply(self, cluster_id: str, inbuf: str) -> Tuple[int, str, str]:
-        """Create or update an export by `-i <json_file>`"""
-        # The export <json_file> is passed to -i and it's processing
-        # is handled by the Ceph CLI.
+        """Create or update an export by `-i <json_or_ganesha_export_file>`"""
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf)
 
     @CLICommand('nfs cluster create', perm='rw')
