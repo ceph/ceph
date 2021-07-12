@@ -1067,10 +1067,13 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       }
     });
   }).then([m, this] {
-    if (osdmap->is_up(whoami) &&
-        osdmap->get_addrs(whoami) == public_msgr->get_myaddrs() &&
-        bind_epoch < osdmap->get_up_from(whoami)) {
-      if (state.is_booting()) {
+    if (osdmap->is_up(whoami)) {
+      const auto up_from = osdmap->get_up_from(whoami);
+      logger().info("osd.{}: map e {} marked me up: up_from {}, bind_epoch {}, state {}",
+                    whoami, osdmap->get_epoch(), up_from, bind_epoch, state);
+      if (bind_epoch < up_from &&
+          osdmap->get_addrs(whoami) == public_msgr->get_myaddrs() &&
+          state.is_booting()) {
         logger().info("osd.{}: activating...", whoami);
         state.set_active();
         beacon_timer.arm_periodic(
@@ -1078,7 +1081,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
         tick_timer.arm_periodic(
           std::chrono::seconds(TICK_INTERVAL));
       }
-    } else if (!osdmap->is_up(whoami)) {
+    } else {
       if (state.is_prestop()) {
 	got_stop_ack();
 	return seastar::now();
