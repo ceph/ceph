@@ -33,7 +33,7 @@ class TestOSDIDAvailable(object):
         stdout = ['', json.dumps(stdout)]
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
         result = prepare.osd_id_available(1)
-        assert not result
+        assert result
 
     def test_invalid_osd_id(self, monkeypatch):
         stdout = dict(nodes=[
