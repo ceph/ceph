@@ -42,6 +42,9 @@ static std::string bucket_index_prefixes[] = { "", /* special handling for the o
                                           /* this must be the last index */
                                           "9999_",};
 
+static const std::string BI_PREFIX_END = string(1, BI_PREFIX_CHAR) +
+    bucket_index_prefixes[BI_BUCKET_LAST_INDEX];
+
 static bool bi_is_objs_index(const string& s) {
   return ((unsigned char)s[0] != BI_PREFIX_CHAR);
 }
@@ -2425,18 +2428,14 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 }
 
 static int list_plain_entries(cls_method_context_t hctx,
-			      const string& name,
-			      const string& marker,
-			      uint32_t max,
+                              const string& filter,
+                              const string& start_after_key,
+                              const string& end_key,
+                              uint32_t max,
                               list<rgw_cls_bi_entry> *entries,
-			      bool *pmore)
+                              bool *end_key_reached,
+                              bool *pmore)
 {
-  string filter = name;
-  string start_after_key = marker;
-
-  string end_key; // stop listing at bi_log_prefix
-  bi_log_prefix(end_key);
-
   int count = 0;
   map<string, bufferlist> keys;
   int ret = cls_cxx_map_get_vals(hctx, start_after_key, filter, max,
@@ -2445,13 +2444,12 @@ static int list_plain_entries(cls_method_context_t hctx,
     return ret;
   }
 
-  map<string, bufferlist>::iterator iter;
-  for (iter = keys.begin(); iter != keys.end(); ++iter) {
-    if (iter->first >= end_key) {
-      /* past the end of plain namespace */
-      if (pmore) {
-	*pmore = false;
-      }
+  *end_key_reached = false;
+
+  for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
+    if (!end_key.empty() && iter->first >= end_key) {
+      *end_key_reached = true;
+      *pmore = true;
       return count;
     }
 
@@ -2470,13 +2468,12 @@ static int list_plain_entries(cls_method_context_t hctx,
       return -EIO;
     }
 
-    CLS_LOG(20, "%s(): entry.idx=%s e.key.name=%s", __func__, escape_str(entry.idx).c_str(), escape_str(e.key.name).c_str());
+    CLS_LOG(20, "%s(): entry.idx=%s e.key.name=%s", __func__,
+            escape_str(entry.idx).c_str(), escape_str(e.key.name).c_str());
 
-    if (!name.empty() && e.key.name != name) {
+    if (!filter.empty() && e.key.name != filter) {
       /* we are skipping the rest of the entries */
-      if (pmore) {
-	*pmore = false;
-      }
+      *pmore = false;
       return count;
     }
 
@@ -2485,10 +2482,52 @@ static int list_plain_entries(cls_method_context_t hctx,
     if (count >= (int)max) {
       return count;
     }
-    start_after_key = entry.idx;
   }
 
   return count;
+}
+
+static int list_plain_entries(cls_method_context_t hctx,
+                              const string& name,
+                              const string& marker,
+                              uint32_t max,
+                              list<rgw_cls_bi_entry> *entries,
+                              bool *pmore) {
+  string start_after_key = marker;
+  string end_key;
+  bi_log_prefix(end_key);
+  int r;
+  bool end_key_reached;
+  bool more;
+
+  if (start_after_key < end_key) {
+    // listing ascii plain namespace
+    int r = list_plain_entries(hctx, name, start_after_key, end_key, max,
+                               entries, &end_key_reached, &more);
+    if (r < 0) {
+      return r;
+    }
+    if (r >= (int)max || !end_key_reached || !more) {
+      if (pmore) {
+	*pmore = more;
+      }
+      return r;
+    }
+    start_after_key = BI_PREFIX_END;
+    max = max - r;
+  }
+
+  // listing non-ascii plain namespace
+  r = list_plain_entries(hctx, name, start_after_key, {}, max, entries,
+                         &end_key_reached, &more);
+  if (r < 0) {
+    return r;
+  }
+  if (pmore) {
+    *pmore = more;
+  }
+
+  return r;
 }
 
 static int list_instance_entries(cls_method_context_t hctx,
