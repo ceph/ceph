@@ -150,6 +150,16 @@ find_first(const std::string& name)
   return nullptr;
 }
 
+int XMLObj::count(const string& name)
+{
+  int count = 0;
+  auto iter = XMLObj::find(name);
+  while (iter.get_next()) {
+    ++count;
+  }
+  return count;
+}
+
 RGWXMLParser::
 RGWXMLParser() : buf(nullptr), buf_len(0), cur_obj(nullptr), success(true), init_called(false)
 {
