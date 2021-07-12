@@ -92,6 +92,14 @@ namespace PriorityCache
               "aggregate bytes in use by the heap", "h",
               PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
 
+    b.add_u64(MallocStats::M_MAX_THREADCACHE_BYTES, "max_threadcache_bytes",
+              "current tcmalloc.max_total_thread_cache_bytes", "m_tc",
+              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+
+    b.add_u64(MallocStats::M_CURR_THREADCACHE_BYTES, "current_threadcache_bytes",
+              "current tcmalloc.current_total_thread_cache_bytes", "c_tc",
+              PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
+
     b.add_u64(MallocStats::M_CACHE_BYTES, "cache_bytes",
               "current memory available for caches.", "c",
               PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
@@ -114,10 +122,13 @@ namespace PriorityCache
     size_t heap_size = 0;
     size_t unmapped = 0;
     uint64_t mapped = 0;
-
+    size_t max_threadcache_size = 0;
+    size_t curr_threadcache_size = 0;
     ceph_heap_release_free_memory();
     ceph_heap_get_numeric_property("generic.heap_size", &heap_size);
     ceph_heap_get_numeric_property("tcmalloc.pageheap_unmapped_bytes", &unmapped);
+    ceph_heap_get_numeric_property("tcmalloc.max_total_thread_cache_bytes", &max_threadcache_size);
+    ceph_heap_get_numeric_property("tcmalloc.current_total_thread_cache_bytes", &curr_threadcache_size);
     mapped = heap_size - unmapped;
 
     uint64_t new_size = tuned_mem;
@@ -147,6 +158,8 @@ namespace PriorityCache
     logger->set(MallocStats::M_MAPPED_BYTES, mapped);
     logger->set(MallocStats::M_UNMAPPED_BYTES, unmapped);
     logger->set(MallocStats::M_HEAP_BYTES, heap_size);
+    logger->set(MallocStats::M_MAX_THREADCACHE_BYTES, max_threadcache_size);
+    logger->set(MallocStats::M_CURR_THREADCACHE_BYTES, curr_threadcache_size);
     logger->set(MallocStats::M_CACHE_BYTES, new_size);
   }
 
