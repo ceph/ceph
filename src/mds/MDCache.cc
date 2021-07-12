@@ -254,9 +254,9 @@ bool MDCache::shutdown()
 // ====================================================================
 // some inode functions
 
-void MDCache::add_inode(CInode *in) 
+void MDCache::add_inode(CInode *in)
 {
-  // add to lru, inode map
+  // add to inode map
   if (in->last == CEPH_NOSNAP) {
     auto &p = inode_map[in->ino()];
     ceph_assert(!p); // should be no dup inos!
@@ -513,6 +513,11 @@ void MDCache::_create_system_file(CDir *dir, std::string_view name, CInode *in, 
   dout(10) << "_create_system_file " << name << " in " << *dir << dendl;
   CDentry *dn = dir->add_null_dentry(name);
 
+  // Pin the dentries until finish populating "mydir" to
+  // prevent the dentries to be trimmed before it's pinned
+  // in the _create_system_file_finish().
+  dn->get(CDentry::PIN_POPULATEMYDIR);
+
   dn->push_projected_linkage(in);
   version_t dpv = dn->pre_dirty();
   
@@ -576,6 +581,11 @@ void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_
     dir->mark_dirty(mut->ls);
     dir->mark_new(mut->ls);
   }
+
+  // The dentries have been pinned in pop_projected_linkage(),
+  // no need to pin it with populate mydir ref any more, more
+  // detail please see _create_system_file().
+  dn->put(CDentry::PIN_POPULATEMYDIR);
 
   mut->apply();
   mds->locker->drop_locks(mut.get());

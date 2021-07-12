@@ -91,10 +91,11 @@ public:
   static const int MASK_STATE_IMPORT_KEPT = STATE_BOTTOMLRU;
 
   // -- pins --
-  static const int PIN_INODEPIN =     1;  // linked inode is pinned
-  static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
-  static const int PIN_PURGING =      3;
-  static const int PIN_SCRUBPARENT =  4;
+  static const int PIN_INODEPIN =      1;  // linked inode is pinned
+  static const int PIN_FRAGMENTING =  -2;  // containing dir is refragmenting
+  static const int PIN_PURGING =       3;
+  static const int PIN_SCRUBPARENT =   4;
+  static const int PIN_POPULATEMYDIR = 5;  // pin the dentries while populating mydir
 
   static const unsigned EXPORT_NONCE = 1;
 
@@ -136,6 +137,7 @@ public:
     case PIN_FRAGMENTING: return "fragmenting";
     case PIN_PURGING: return "purging";
     case PIN_SCRUBPARENT: return "scrubparent";
+    case PIN_POPULATEMYDIR: return "populatemydir";
     default: return generic_pin_name(p);
     }
   }
