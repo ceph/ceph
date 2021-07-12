@@ -1,10 +1,12 @@
 .. _mgr-nfs:
 
-=======================
-CephFS Exports over NFS
-=======================
 
-CephFS namespaces can be exported over NFS protocol using the `NFS-Ganesha NFS server`_
+=============================
+CephFS & RGW Exports over NFS
+=============================
+
+CephFS namespaces and RGW buckets can be exported over NFS protocol using the
+`NFS-Ganesha NFS server`_
 
 Requirements
 ============
@@ -239,8 +241,25 @@ permissible values.
 
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
-Delete CephFS Export
-====================
+Create RGW Export
+=================
+
+To export a bucket
+
+.. code::
+
+   $ ceph nfs export create rgw <bucket_name> <cluster_id> <pseudo_path> [--readonly] [--client_addr <value>...] [--realm <value>]
+
+For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network
+
+.. code::
+
+   $ ceph nfs export create rgw mybucket mynfs /bucketdata --client_addr 192.168.10.0/24
+
+.. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
+
+Delete Export
+=============
 
 .. code:: bash
 
@@ -252,8 +271,8 @@ This deletes an export in an NFS Ganesha cluster, where:
 
 ``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
-List CephFS Exports
-===================
+List Exports
+============
 
 .. code:: bash
 
@@ -265,8 +284,8 @@ It lists exports for a cluster, where:
 
 With the ``--detailed`` option enabled it shows entire export block.
 
-Get CephFS Export
-=================
+Get Export
+==========
 
 .. code:: bash
 
@@ -280,8 +299,8 @@ where:
 ``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
 
-Create or update CephFS Export via JSON specification
-=====================================================
+Create or update Export via JSON specification
+==============================================
 
 An existing export can be dumped in JSON format with:
 
