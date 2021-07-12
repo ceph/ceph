@@ -182,3 +182,36 @@ def test_migrate_nfs_initial(cephadm_module: CephadmOrchestrator):
 
         cephadm_module.migration.migrate()
         assert cephadm_module.migration_current == 3
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_nfs_initial_octopus(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.set_store(
+            SPEC_STORE_PREFIX + 'mds',
+            json.dumps({
+                'spec': {
+                    'service_type': 'nfs',
+                    'service_id': 'ganesha-foo',
+                    'placement': {
+                        'hosts': ['host1']
+                    },
+                    'spec': {
+                        'pool': 'mypool',
+                        'namespace': 'foons',
+                    },
+                },
+                'created': datetime_to_str(datetime_now()),
+            }, sort_keys=True),
+        )
+        cephadm_module.migration_current = 1
+        cephadm_module.spec_store.load()
+
+        ls = json.loads(cephadm_module.get_store('nfs_migration_queue'))
+        assert ls == [['ganesha-foo', 'mypool', 'foons']]
+
+        cephadm_module.migration.migrate(True)
+        assert cephadm_module.migration_current == 2
+
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == 3
