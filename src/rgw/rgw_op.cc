@@ -8219,12 +8219,13 @@ void RGWPutObjRetention::execute(optional_yield y)
       op_ret = -EIO;
       return;
     }
-    if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph::real_clock::to_time_t(old_obj_retention.get_retain_until_date())) {
-      if (old_obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
-	s->err.message = "proposed retain-until date shortens an existing retention period and governance bypass check failed";
-        op_ret = -EACCES;
-        return;
-      }
+    if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph::real_clock::to_time_t(old_obj_retention.get_retain_until_date()) ?
+        old_obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode :
+        old_obj_retention.get_mode().compare("GOVERNANCE") != 0 ? obj_retention.get_mode().compare("GOVERNANCE") == 0 :
+        (!bypass_perm || !bypass_governance_mode) && obj_retention.get_mode().compare("GOVERNANCE") != 0) {
+      s->err.message = "proposed retain-until date shortens an existing retention period and governance bypass check failed";
+      op_ret = -EACCES;
+      return;
     }
   }
 
