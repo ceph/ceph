@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+CEPHADM_PATH=/usr/local/sbin/cephadm
+
+curl --silent \
+  --location "https://github.com/ceph/ceph/raw/${CEPH_BRANCH:-master}/src/cephadm/cephadm" \
+  --output $CEPHADM_PATH \
+  && chmod +x $CEPHADM_PATH
+
+tail -f /var/log/ceph/cephadm.log 1>&2 &
+
+EXTRA_ARGS=()
+if [[ -n "${SHARED_CEPH_FOLDER-}" ]]; then
+    EXTRA_ARGS+=(--shared_ceph_folder "$SHARED_CEPH_FOLDER")
+fi
+
+$CEPHADM_PATH bootstrap \
+  --mon-ip "$(hostname -i)" \
+  --allow-fqdn-hostname \
+  --initial-dashboard-password admin \
+  --dashboard-password-noupdate \
+  "${EXTRA_ARGS[@]}"
