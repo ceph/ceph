@@ -139,6 +139,7 @@ int main(int argc, const char **argv)
     args, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
+  ceph_heap_track_thread_cache("osd_memory_thread_cache_bytes");
 
   Preforker forker;
 

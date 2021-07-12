@@ -186,3 +186,52 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     out << "unknown command " << cmd;
   }
 }
+
+namespace ceph {
+  class tcmalloc_thread_cache_tracker : public md_config_obs_t
+  {
+    // mutable, so it can be returned from "get_tracked_conf_keys() const"
+    mutable const char* conf_option_name[2] = {nullptr, nullptr};
+
+  public:
+    tcmalloc_thread_cache_tracker(const char* conf_option_name)
+    {
+      this->conf_option_name[0] = conf_option_name;
+      set();
+    }
+
+    const char** get_tracked_conf_keys() const override
+    {
+      return conf_option_name;
+    }
+
+    void handle_conf_change(const ConfigProxy& conf,
+			    const std::set<std::string> &changed) override
+    {
+      ceph_assert(changed.count(conf_option_name[0]) > 0);
+      update();
+    }
+  private:
+    void set()
+    {
+      uint64_t max_threadcache_bytes = g_conf().get_val<Option::size_t>(conf_option_name[0]);
+      ceph_heap_set_numeric_property("tcmalloc.max_total_thread_cache_bytes", max_threadcache_bytes);
+    }
+
+    void update()
+    {
+      uint64_t max_threadcache_bytes = g_conf().get_val<Option::size_t>(conf_option_name[0]);
+      if (max_threadcache_bytes != 0) {
+	ceph_heap_set_numeric_property("tcmalloc.max_total_thread_cache_bytes", max_threadcache_bytes);
+      }
+    }
+  };
+}
+
+void ceph_heap_track_thread_cache(const char* conf_option_name)
+{
+  static ceph::tcmalloc_thread_cache_tracker *tracker = nullptr;
+  ceph_assert(tracker == nullptr);
+  tracker = new ceph::tcmalloc_thread_cache_tracker(conf_option_name);
+  g_ceph_context->_conf.add_observer(tracker);
+}
