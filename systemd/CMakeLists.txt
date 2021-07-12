@@ -1,5 +1,14 @@
-set(CMAKE_INSTALL_SYSTEMD_SERVICEDIR "${CMAKE_INSTALL_LIBEXECDIR}/systemd/system"
-  CACHE PATH "Location for systemd service files")
+find_package(PkgConfig QUIET REQUIRED)
+pkg_get_variable(SYSTEMD_SYSTEM_UNIT_DIR "systemd" "systemd_system_unit_dir")
+if(NOT SYSTEMD_SYSTEM_UNIT_DIR)
+  pkg_get_variable(SYSTEMD_SYSTEM_UNIT_DIR "systemd" "systemdsystemunitdir")
+  if(NOT SYSTEMD_SYSTEM_UNIT_DIR)
+    set(SYSTEMD_SYSTEM_UNIT_DIR "${CMAKE_INSTALL_LIBDIR}/systemd/system")
+  endif()
+endif()
+set(SYSTEMD_SYSTEM_UNIT_DIR "${SYSTEMD_SYSTEM_UNIT_DIR}"
+  CACHE PATH "Location for systemd system unit files")
+
 set(CEPH_SYSTEMD_ENV_DIR "/etc/sysconfig"
   CACHE PATH "Location for systemd service environmental variable settings files")
 set(SYSTEMD_ENV_FILE "${CEPH_SYSTEMD_ENV_DIR}/ceph")
@@ -13,15 +22,14 @@ foreach(service
     ceph-radosgw@
     ceph-rbd-mirror@
     ceph-immutable-object-cache@
-    cephfs-mirror@
-    rbdmap)
+    cephfs-mirror@)
   configure_file(
     ${service}.service.in
     ${service}.service
     @ONLY)
   install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/${service}.service
-    DESTINATION ${CMAKE_INSTALL_SYSTEMD_SERVICEDIR})
+    DESTINATION ${SYSTEMD_SYSTEM_UNIT_DIR})
 endforeach()
 
 install(FILES
@@ -36,4 +44,6 @@ install(FILES
   ceph-immutable-object-cache.target
   ceph-volume@.service
   cephfs-mirror.target
-  DESTINATION ${CMAKE_INSTALL_SYSTEMD_SERVICEDIR})
+  rbdmap-pre.target
+  rbdmap.target
+  DESTINATION ${SYSTEMD_SYSTEM_UNIT_DIR})
