@@ -264,6 +264,7 @@ seastar::future<> OSD::start()
     shard_services.update_map(map);
     osdmap_gate.got_map(map->get_epoch());
     osdmap = std::move(map);
+    bind_epoch = osdmap->get_epoch();
     return load_pgs();
   }).then([this] {
 
