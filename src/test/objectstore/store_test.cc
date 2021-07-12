@@ -3414,6 +3414,215 @@ TEST_P(StoreTest, OmapSimple) {
   }
 }
 
+TEST_P(StoreTest, OmapBench) {
+  // Random dictionary generation
+  static const std::string dict =
+      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  mt19937 gen{random_device{}()};
+  uniform_int_distribution<> dist(0, dict.size() - 1);
+
+  // options
+  int obj_count = 100000; // number of objects
+  int keys_per_object = 100; // number of keys per object
+  int key_batch_size = 100; // number of keys to batch at once
+  int klen = 64; // omap key size in bytes
+  int vlen = 256; // omap value size in bytes
+  int hash_count = 100;  // number of unique hashes to use for hobject_t hash. (simulates PGs)
+  bool obj_sort = true; // sort the ghobject_t vector using std::sort (helps rosckdb avoid random io for example).
+
+  int r;
+  vector<ghobject_t> objects;
+  float min = std::numeric_limits<float>::max();
+  float max = 0, avg = 0, total = 0;
+
+  // Make the collection
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  cout << "[OMAPBENCH] *** Setting up objects ***" << std::endl;
+  std::unordered_map<size_t, size_t> hashes;
+
+  for (int obj = 0; obj < obj_count; obj++) {
+    string name("object");
+    name += stringify(obj);
+
+    // Make a hash to simulate PGs
+    auto hhash = std::hash<string>{}(name) % hash_count;
+
+    objects.push_back(ghobject_t(hobject_t(sobject_t(name, CEPH_NOSNAP),
+                                "key", hhash, -1, "")));
+    auto hash = std::hash<ghobject_t>{}(objects.back());
+    hashes[hash]+=1;
+  }
+  cout << "[OMAPBENCH] objects: " << obj_count << ", unique object hashes: " << hashes.size() << std::endl;
+
+  // Sort the objects?
+  if (obj_sort) {
+    std::sort(objects.begin(), objects.end());
+  }
+
+  // Make headers
+  cout << "[OMAPBENCH] *** Creating object headers ***" << std::endl;
+  for (int obj = 0; obj < obj_count; obj++) {
+    string name("header");
+    name += stringify(obj);
+    bufferlist header;
+    header.append(name);
+    {
+      ObjectStore::Transaction t;
+      t.touch(cid, objects[obj]);
+      t.omap_setheader(cid, objects[obj], header);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+
+  // Bench omap_setkeys
+  cout << "[OMAPBENCH] *** Running omap_setkeys test ***" << std::endl;
+  for (int obj = 0; obj < obj_count; obj++) {
+    int k = 0;
+    float dur = 0;
+    while (k < keys_per_object) {
+      // build our map
+      int b = 0;
+      map<string,bufferlist> km;
+      while (k < keys_per_object && b < key_batch_size) {
+        string key = "";
+        for (int i = 0; i < klen; i++) {
+          key += dict[dist(gen)];
+        }
+        string val = "";
+        for (int i = 0; i < vlen; i++) {
+          val += dict[dist(gen)];
+        }
+        km[key].append(val);
+        b++;
+        k++;
+      }
+      ObjectStore::Transaction t;
+
+      // time omap_setkeys and queue_transaction
+      const utime_t start = ceph_clock_now();
+      t.omap_setkeys(cid, objects[obj], km);
+      r = queue_transaction(store, ch, std::move(t));
+      dur += ceph_clock_now() - start;
+
+      ASSERT_EQ(r, 0);
+    }
+    min = std::min(dur, min);
+    max = std::max(dur, max);
+    total += dur;
+  }
+  avg = total / obj_count;
+  cout << "[OMAPBENCH] omap_setkeys - min: " << min << " avg: " << avg
+       << " max: " << max << " total: " << total << std::endl;
+
+  // Bench omap_get
+  min = std::numeric_limits<float>::max();
+  max = 0, avg = 0, total = 0;
+
+  cout << "[OMAPBENCH] *** Running omap_get test ***" << std::endl;
+  for (int obj = 0; obj < obj_count; obj++) {
+    bufferlist h;
+    map<string,bufferlist> rm;
+    const utime_t start = ceph_clock_now();
+    store->omap_get(ch, objects[obj], &h, &rm);
+    float dur = ceph_clock_now() - start;
+    min = std::min(dur, min);
+    max = std::max(dur, max);
+    total += dur;
+
+    ASSERT_EQ(rm.size(), keys_per_object);
+  }
+  avg = total / obj_count;
+  cout << "[OMAPBENCH] omap_get - min: " << min << " avg: " << avg
+       << " max: " << max << " total: " << total << std::endl;
+
+
+  // Bench seek_to_first
+  min = std::numeric_limits<float>::max();
+  max = 0, avg = 0, total = 0;
+
+  cout << "[OMAPBENCH] *** Running seek_to_first iteration test ***" << std::endl;
+  for (int obj = 0; obj < obj_count; obj++) {
+    map<string,bufferlist> r;
+    ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, objects[obj]);
+    const utime_t start = ceph_clock_now();
+    for (iter->seek_to_first(); iter->valid(); iter->next()) {
+      r[iter->key()] = iter->value();
+    }
+    float dur = ceph_clock_now() - start;
+    min = std::min(dur, min);
+    max = std::max(dur, max);
+    total += dur;
+
+    ASSERT_EQ(r.size(), keys_per_object);
+  }
+  avg = total / obj_count;
+  cout << "[OMAPBENCH] seek_to_first - min: " << min << " avg: " << avg
+       << " max: " << max << " total: " << total << std::endl;
+
+  // Bench lower_bound
+  min = std::numeric_limits<float>::max();
+  max = 0, avg = 0, total = 0;
+
+  cout << "[OMAPBENCH] *** Running lower_bound iteration test ***" << std::endl;
+  for (int obj = 0; obj < obj_count; obj++) {
+    map<string,bufferlist> r;
+    ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, objects[obj]);
+    const utime_t start = ceph_clock_now();
+    for (iter->lower_bound(string()); iter->valid(); iter->next()) {
+      r[iter->key()] = iter->value();
+    }
+    float dur = ceph_clock_now() - start;
+    min = std::min(dur, min);
+    max = std::max(dur, max);
+    total += dur;
+
+    ASSERT_EQ(r.size(), keys_per_object);
+  }
+  avg = total / obj_count;
+  cout << "[OMAPBENCH] lower_bound - min: " << min << " avg: " << avg
+       << " max: " << max << " total: " << total << std::endl;
+
+  // Bench remove objects
+  min = std::numeric_limits<float>::max();
+  max = 0, avg = 0, total = 0;
+
+  cout << "[OMAPBENCH] *** Running remove test ***" << std::endl;
+  for (int obj = 0; obj < obj_count; obj++) {
+    ObjectStore::Transaction t;
+    t.remove(cid, objects[obj]);
+    const utime_t start = ceph_clock_now();
+    r = queue_transaction(store, ch, std::move(t));
+    float dur = ceph_clock_now() - start;
+    min = (dur < min) ? dur : min;
+    max = (dur > max) ? dur : max;
+    total += dur;
+
+    ASSERT_EQ(r, 0);
+  }
+  avg = total / obj_count;
+  cout << "[OMAPBENCH] remove - min: " << min << " avg: " << avg
+       << " max: " << max << " total: " << total << std::endl;
+
+
+  // Remove collection
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, OmapCloneTest) {
   int r;
   coll_t cid;
