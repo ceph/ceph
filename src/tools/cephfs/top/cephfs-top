@@ -66,6 +66,7 @@ MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
 MGR_STATS_COUNTERS = list(MAIN_WINDOW_TOP_LINE_METRICS.keys())
 
 FS_TOP_VERSION_HEADER_FMT = '{prog_name} - {now}'
+FS_TOP_MDS_INFO = 'Delayed ranks : {delayed_ranks_OP}'
 FS_TOP_CLIENT_HEADER_FMT = 'Client(s): {num_clients} - {num_mounts} FUSE, '\
     '{num_kclients} kclient, {num_libs} libcephfs'
 
@@ -78,6 +79,10 @@ CLIENT_METADATA_VALID_METRICS_KEY = "valid_metrics"
 
 GLOBAL_METRICS_KEY = "global_metrics"
 GLOBAL_COUNTERS_KEY = "global_counters"
+
+DELAYED_RANKS_METRICS = "metrics"
+DELAYED_RANKS = "delayed_ranks"
+MAX_DELAYED_RANKS = 5
 
 
 def calc_perc(c):
@@ -360,6 +365,10 @@ class FSTop(object):
                             "kernel_version" in metadata])
         num_libs = num_clients - (num_mounts + num_kclients)
         now = datetime.now().ctime()
+        delayed_ranks_list = stats_json[DELAYED_RANKS_METRICS][DELAYED_RANKS]
+        delayed_ranks_OP = ",".join(map(str, delayed_ranks_list[:MAX_DELAYED_RANKS]))
+        if len(delayed_ranks_list) > MAX_DELAYED_RANKS:
+            delayed_ranks_OP += " and " + str(len(delayed_ranks_list) - MAX_DELAYED_RANKS) + " more"
         self.header.addnstr(0, 0,
                             FS_TOP_VERSION_HEADER_FMT.format(prog_name=FS_TOP_PROG_STR, now=now),
                             hlen, curses.A_STANDOUT | curses.A_BOLD)
@@ -367,6 +376,7 @@ class FSTop(object):
                                                                   num_mounts=num_mounts,
                                                                   num_kclients=num_kclients,
                                                                   num_libs=num_libs), hlen)
+        self.header.addstr(2, 0, FS_TOP_MDS_INFO.format(delayed_ranks_OP=delayed_ranks_OP))
         self.header.refresh()
         return True
 
@@ -383,15 +393,15 @@ class FSTop(object):
             # coordinate constants for windowing -- (height, width, y, x)
             # NOTE: requires initscr() call before accessing COLS, LINES.
             try:
-                HEADER_WINDOW_COORD = (2, self.width - 1, 0, 0)
+                HEADER_WINDOW_COORD = (3, self.width - 1, 0, 0)
                 self.header = curses.newwin(*HEADER_WINDOW_COORD)
                 if self.height >= 3:
-                    TOPLINE_WINDOW_COORD = (1, self.width - 1, 3, 0)
+                    TOPLINE_WINDOW_COORD = (1, self.width - 1, 4, 0)
                     self.topl = curses.newwin(*TOPLINE_WINDOW_COORD)
                 else:
                     self.topl = None
                 if self.height >= 5:
-                    MAIN_WINDOW_COORD = (self.height - 4, self.width - 1, 4, 0)
+                    MAIN_WINDOW_COORD = (self.height - 4, self.width - 1, 5, 0)
                     self.mainw = curses.newwin(*MAIN_WINDOW_COORD)
                 else:
                     self.mainw = None
