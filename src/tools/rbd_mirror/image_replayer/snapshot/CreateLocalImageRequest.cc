@@ -9,6 +9,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/image_replayer/CreateImageRequest.h"
@@ -80,15 +81,12 @@ void CreateLocalImageRequest<I>::remove_mirror_image() {
   dout(10) << dendl;
   update_progress("REMOVE_MIRROR_IMAGE");
 
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::mirror_image_remove(&op, m_state_builder->local_image_id);
-
-  auto aio_comp = create_rados_callback<
+  auto ctx = create_context_callback<
     CreateLocalImageRequest<I>,
     &CreateLocalImageRequest<I>::handle_remove_mirror_image>(this);
-  int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
-  ceph_assert(r == 0);
-  aio_comp->release();
+  auto req = librbd::mirror::ImageRemoveRequest<I>::create(
+    m_local_io_ctx, m_global_image_id, m_state_builder->local_image_id, ctx);
+  req->send();
 }
 
 template <typename I>

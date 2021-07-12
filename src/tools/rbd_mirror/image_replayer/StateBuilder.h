@@ -81,13 +81,13 @@ public:
 
   std::string global_image_id;
 
-  std::string local_image_id;
+  std::string local_image_id{};
   librbd::mirror::PromotionState local_promotion_state =
     librbd::mirror::PROMOTION_STATE_PRIMARY;
   ImageCtxT* local_image_ctx = nullptr;
 
   std::string remote_mirror_uuid;
-  std::string remote_image_id;
+  std::string remote_image_id{};
   librbd::mirror::PromotionState remote_promotion_state =
     librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
   ImageCtxT* remote_image_ctx = nullptr;

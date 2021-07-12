@@ -5,6 +5,7 @@
 #include "librbd/internal.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
+#include "librbd/mirror/ImageRemoveRequest.h"
 #include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/CreateImageRequest.h"
@@ -39,6 +40,40 @@ std::string generate_image_id<MockTestImageCtx>(librados::IoCtx&) {
 }
 
 } // namespace util
+
+namespace mirror {
+
+template<>
+struct ImageRemoveRequest<librbd::MockTestImageCtx> {
+  static ImageRemoveRequest* s_instance;
+  Context* on_finish;
+
+  static ImageRemoveRequest *create(librados::IoCtx& io_ctx,
+                                    const std::string& global_image_id,
+                                    const std::string& image_id,
+                                    Context* on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->construct(global_image_id, image_id);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  MOCK_METHOD2(construct, void(const std::string&, const std::string&));
+
+  ImageRemoveRequest() {
+    ceph_assert(s_instance == nullptr);
+    s_instance = this;
+  }
+  ~ImageRemoveRequest() {
+    s_instance = nullptr;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+ImageRemoveRequest<librbd::MockTestImageCtx>* ImageRemoveRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+} // namespace mirror
 } // namespace librbd
 
 namespace rbd {
@@ -125,6 +160,7 @@ public:
   typedef CreateLocalImageRequest<librbd::MockTestImageCtx> MockCreateLocalImageRequest;
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
   typedef CreateImageRequest<librbd::MockTestImageCtx> MockCreateImageRequest;
+  typedef librbd::mirror::ImageRemoveRequest<librbd::MockTestImageCtx> MockImageRemoveRequest;
   typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
 
   void SetUp() override {
@@ -174,15 +210,15 @@ public:
       .WillOnce(Return(r));
   }
 
-  void expect_mirror_image_remove(const std::string& image_id, int r) {
-    bufferlist bl;
-    encode(image_id, bl);
-
-    EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
-                exec(StrEq("rbd_mirroring"), _, StrEq("rbd"),
-                     StrEq("mirror_image_remove"),
-                     ContentsEqual(bl), _, _, _))
-      .WillOnce(Return(r));
+  void expect_mirror_image_remove_request(
+      MockImageRemoveRequest& mock_image_remove_request,
+      const std::string& global_image_id, const std::string& image_id, int r) {
+    EXPECT_CALL(mock_image_remove_request,
+                construct(global_image_id, image_id));
+    EXPECT_CALL(mock_image_remove_request, send())
+      .WillOnce(Invoke([this, &mock_image_remove_request, r]() {
+                  m_threads->work_queue->queue(mock_image_remove_request.on_finish, r);
+                }));
   }
 
   void expect_create_image(MockCreateImageRequest& mock_create_image_request,
@@ -290,7 +326,9 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, CreateImageDuplicat
                            "global image id",
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
-  expect_mirror_image_remove("local image id", 0);
+  MockImageRemoveRequest mock_image_remove_request;
+  expect_mirror_image_remove_request(mock_image_remove_request,
+                                     "global image id", "local image id", 0);
 
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
@@ -338,7 +376,10 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, RemoveMirrorImageEr
                            "global image id",
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
-  expect_mirror_image_remove("local image id", -EINVAL);
+  MockImageRemoveRequest mock_image_remove_request;
+  expect_mirror_image_remove_request(mock_image_remove_request,
+                                     "global image id", "local image id",
+                                     -EINVAL);
 
   C_SaferCond ctx;
   MockThreads mock_threads(m_threads);

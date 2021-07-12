@@ -1096,6 +1096,20 @@ unprotect_snapshot()
     rbd --cluster ${cluster} snap unprotect ${pool}/${image}@${snap}
 }
 
+unprotect_snapshot_retry()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap=$4
+
+    for s in 0 1 2 4 8 16 32; do
+        sleep ${s}
+        unprotect_snapshot ${cluster} ${pool} ${image} ${snap} && return 0
+    done
+    return 1
+}
+
 wait_for_snap_present()
 {
     local cluster=$1
@@ -1387,6 +1401,58 @@ get_clone_format()
                if (!parent) exit 1
                print format
              }'
+}
+
+list_omap_keys()
+{
+    local cluster=$1
+    local pool=$2
+    local obj_name=$3
+
+    rados --cluster ${cluster} -p ${pool} listomapkeys ${obj_name}
+}
+
+count_omap_keys_with_filter()
+{
+    local cluster=$1
+    local pool=$2
+    local obj_name=$3
+    local filter=$4
+
+    list_omap_keys ${cluster} ${pool} ${obj_name} | grep -c ${filter}
+}
+
+expect_no_omap_keys()
+{
+    local cluster=$1
+    local pool=$2
+    local obj_name=$3
+    local filter=$4
+
+    for s in 0 1 2 2 4 4 8 8 8 16 16 32; do
+        sleep $s
+
+        set +e
+        test "$(count_omap_keys_with_filter ${cluster} ${pool} ${obj_name} ${filter})" = 0
+        error_code=$?
+        set -e
+
+        if [ $error_code -eq 0 ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+expect_no_image_in_omap()
+{
+    local cluster=$1
+    local pool=$2
+
+    expect_no_omap_keys ${cluster} ${pool} rbd_mirroring status_global
+    expect_no_omap_keys ${cluster} ${pool} rbd_mirroring image_
+    expect_no_omap_keys ${cluster} ${pool} rbd_mirror_leader image_map
 }
 
 #

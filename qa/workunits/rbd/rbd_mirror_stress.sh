@@ -214,3 +214,8 @@ do
   purge_snapshots ${CLUSTER2} ${POOL} ${image}
   remove_image_retry ${CLUSTER2} ${POOL} ${image}
 done
+
+testlog "TEST: check if removed images' OMAP are removed"
+
+expect_no_image_in_omap ${CLUSTER1} ${POOL}
+expect_no_image_in_omap ${CLUSTER2} ${POOL}
