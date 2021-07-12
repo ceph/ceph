@@ -1006,6 +1006,7 @@ protected:
 			     waiting_for_blocked_object;
 
   std::set<hobject_t> objects_blocked_on_cache_full;
+  std::set<pair<hobject_t,version_t> > objects_repairing;
   std::map<hobject_t,snapid_t> objects_blocked_on_degraded_snap;
   std::map<hobject_t,ObjectContextRef> objects_blocked_on_snap_promotion;
 
@@ -1214,6 +1215,7 @@ protected:
   bool is_remapped() const { return recovery_state.is_remapped(); }
   bool is_peered() const { return recovery_state.is_peered(); }
   bool is_recovering() const { return recovery_state.is_recovering(); }
+  bool is_backfilling() const { return recovery_state.is_backfilling(); }
   bool is_premerge() const { return recovery_state.is_premerge(); }
   bool is_repair() const { return recovery_state.is_repair(); }
   bool is_laggy() const { return state_test(PG_STATE_LAGGY); }
