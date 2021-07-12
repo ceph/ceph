@@ -53,57 +53,57 @@ class InvalidCredentialsError(DashboardException):
 
 # access control module exceptions
 class RoleAlreadyExists(Exception):
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         super(RoleAlreadyExists, self).__init__(
             "Role '{}' already exists".format(name))
 
 
 class RoleDoesNotExist(Exception):
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         super(RoleDoesNotExist, self).__init__(
             "Role '{}' does not exist".format(name))
 
 
 class ScopeNotValid(Exception):
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         super(ScopeNotValid, self).__init__(
             "Scope '{}' is not valid".format(name))
 
 
 class PermissionNotValid(Exception):
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         super(PermissionNotValid, self).__init__(
             "Permission '{}' is not valid".format(name))
 
 
 class RoleIsAssociatedWithUser(Exception):
-    def __init__(self, rolename, username):
+    def __init__(self, rolename: str, username: str) -> None:
         super(RoleIsAssociatedWithUser, self).__init__(
             "Role '{}' is still associated with user '{}'"
             .format(rolename, username))
 
 
 class UserAlreadyExists(Exception):
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         super(UserAlreadyExists, self).__init__(
             "User '{}' already exists".format(name))
 
 
 class UserDoesNotExist(Exception):
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         super(UserDoesNotExist, self).__init__(
             "User '{}' does not exist".format(name))
 
 
 class ScopeNotInRole(Exception):
-    def __init__(self, scopename, rolename):
+    def __init__(self, scopename: str, rolename: str) -> None:
         super(ScopeNotInRole, self).__init__(
             "There are no permissions for scope '{}' in role '{}'"
             .format(scopename, rolename))
 
 
 class RoleNotInUser(Exception):
-    def __init__(self, rolename, username):
+    def __init__(self, rolename: str, username: str) -> None:
         super(RoleNotInUser, self).__init__(
             "Role '{}' is not associated with user '{}'"
             .format(rolename, username))
