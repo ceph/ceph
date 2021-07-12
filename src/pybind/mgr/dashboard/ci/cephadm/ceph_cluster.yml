@@ -1,7 +1,7 @@
 parameters:
  nodes: 3
- pool: default
- network: default
+ pool: dashboard
+ network: dashboard
  domain: cephlab.com
  prefix: ceph
  numcpus: 1
