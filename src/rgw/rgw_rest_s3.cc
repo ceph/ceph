@@ -6356,10 +6356,6 @@ int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string tag_name, std::string& 
 
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
-  if (len == 0) {
-    return 0;
-  }
-
   if (chunk_number == 0) {
     if (op_ret < 0) {
       set_req_state_err(s, op_ret);
@@ -6395,8 +6391,10 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
     }
     i++;
   }
-
-  chunk_number++;
+  
+  if (len != 0) {
+    chunk_number++;
+  }
 
   return status;
 }
