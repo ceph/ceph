@@ -701,18 +701,11 @@ def is_locked_raw_device(disk_path):
     A device can be locked by a third party software like a database.
     To detect that case, the device is opened in Read/Write and exclusive mode
     """
-    open_flags = (os.O_RDWR | os.O_EXCL)
-    open_mode = 0
-    fd = None
 
-    try:
-        fd = os.open(disk_path, open_flags, open_mode)
-    except OSError:
-        return 1
+    cmd = ['lslocks', '--raw', '--noheadings', '--output', 'path']
+    out, err, rc = process.call(cmd)
 
-    try:
-        os.close(fd)
-    except OSError:
+    if disk_path in out:
         return 1
 
     return 0
