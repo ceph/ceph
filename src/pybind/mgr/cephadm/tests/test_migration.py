@@ -15,10 +15,14 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'host2', refresh_hosts=False):
 
             # emulate the old scheduler:
-            c = cephadm_module.apply_rgw(
-                ServiceSpec('rgw', 'r.z', placement=PlacementSpec(host_pattern='*', count=2))
-            )
-            assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
+            spec = ServiceSpec('rgw',
+                               'r.z',
+                               placement=PlacementSpec(host_pattern='*', count=2))
+            c = cephadm_module.apply_rgw(spec)
+            expected_result = f'Saving service rgw.r.z spec with placement ' \
+                              f'<{spec.placement.pretty_str()}>\nScheduled ' \
+                              'rgw.r.z update...'
+            assert wait(cephadm_module, c) == expected_result
 
             # with pytest.raises(OrchestratorError, match="cephadm migration still ongoing. Please wait, until the migration is complete."):
             CephadmServe(cephadm_module)._apply_all_services()
@@ -36,10 +40,12 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             out = {o.hostname for o in wait(cephadm_module, cephadm_module.list_daemons())}
             assert out == {'host1', 'host2'}
 
-            c = cephadm_module.apply_rgw(
-                ServiceSpec('rgw', 'r.z', placement=PlacementSpec(host_pattern='host1', count=2))
-            )
-            assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
+            spec = ServiceSpec('rgw', 'r.z', placement=PlacementSpec(host_pattern='host1', count=2))
+            c = cephadm_module.apply_rgw(spec)
+            expected_result = f'Saving service rgw.r.z spec with placement ' \
+                              f'<{spec.placement.pretty_str()}>\nScheduled ' \
+                              'rgw.r.z update...'
+            assert wait(cephadm_module, c) == expected_result
 
             # Sorry, for this hack, but I need to make sure, Migration thinks,
             # we have updated all daemons already.
