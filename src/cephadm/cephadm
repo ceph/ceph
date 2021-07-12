@@ -6335,7 +6335,6 @@ def read_file(path_list, file_name=''):
 class HostFacts():
     _dmi_path_list = ['/sys/class/dmi/id']
     _nic_path_list = ['/sys/class/net']
-    _selinux_path_list = ['/etc/selinux/config']
     _apparmor_path_list = ['/etc/apparmor']
     _disk_vendor_workarounds = {
         '0x1af4': 'Virtio Block Device'
@@ -6692,23 +6691,30 @@ class HostFacts():
         # type: () -> Dict[str, str]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
         def _fetch_selinux() -> Dict[str, str]:
-            """Read the selinux config file to determine state"""
+            """Get the selinux status"""
             security = {}
-            for selinux_path in HostFacts._selinux_path_list:
-                if os.path.exists(selinux_path):
-                    selinux_config = read_file([selinux_path]).splitlines()
-                    security['type'] = 'SELinux'
-                    for line in selinux_config:
-                        if line.strip().startswith('#'):
-                            continue
-                        k, v = line.split('=')
-                        security[k] = v
-                    if security['SELINUX'].lower() == 'disabled':
-                        security['description'] = 'SELinux: Disabled'
-                    else:
-                        security['description'] = 'SELinux: Enabled({}, {})'.format(security['SELINUX'], security['SELINUXTYPE'])
-                    return security
-            return {}
+            try:
+                out, err, code = call(self.ctx, ['sestatus'],
+                                      verbosity=CallVerbosity.DEBUG)
+                security['type'] = 'SELinux'
+                status, mode, policy = '', '', ''
+                for line in out.split('\n'):
+                    if line.startswith('SELinux status:'):
+                        k, v = line.split(':')
+                        status = v.strip()
+                    elif line.startswith('Current mode:'):
+                        k, v = line.split(':')
+                        mode = v.strip()
+                    elif line.startswith('Loaded policy name:'):
+                        k, v = line.split(':')
+                        policy = v.strip()
+                if status == 'disabled':
+                    security['description'] = 'SELinux: Disabled'
+                else:
+                    security['description'] = 'SELinux: Enabled({}, {})'.format(mode, policy)
+            except Exception as e:
+                logger.info('unable to get selinux status: %s' % e)
+            return security
 
         def _fetch_apparmor() -> Dict[str, str]:
             """Read the apparmor profiles directly, returning an overview of AppArmor status"""
