@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import Literal
 
-from mgr_module import CLIWriteCommand, HandleCommandResult, MgrModule, \
+from mgr_module import CLIWriteCommand, CLICommand, HandleCommandResult, MgrModule, \
     MgrStandbyModule, Option, _get_localized_key
 from mgr_util import ServerConfigException, create_self_signed_cert, \
     get_default_addr, verify_tls_files
@@ -29,6 +29,7 @@ from .controllers import generate_routes, json_error_page
 from .grafana import push_local_dashboards
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
+from .services.feedback import CephTrackerClient
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
@@ -397,6 +398,12 @@ class Module(MgrModule, CherryPyConfig):
         if result.retval != 0:
             return result
         return 0, 'Self-signed certificate created', ''
+    
+    @CLICommand("dashboard feedback get")
+    def get_issues_cli(self, issue_number: str):
+        cephTrackerClient = CephTrackerClient()
+        response = cephTrackerClient.get_issues(issue_number)
+        return 0,str(response["issue"]), ''
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
