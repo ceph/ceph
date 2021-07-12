@@ -13,17 +13,20 @@ class Inode;
 
 struct Fh {
   InodeRef  inode;
-  int	    _ref;
-  loff_t    pos;
-  int       mds;        // have to talk to mds we opened with (for now)
-  int       mode;       // the mode i opened the file with
+  int       flags;
   uint64_t  gen;
+  UserPerm  actor_perms; // perms I opened the file with
 
-  int flags;
-  bool pos_locked;           // pos is currently in use
+  // the members above once ininitalized in the constructor
+  // they won't change, and putting them under the client_lock
+  // makes no sense.
+
+  int       _ref = 1;
+  loff_t    pos = 0;
+  int       mode;       // the mode i opened the file with
+
+  bool pos_locked = false;           // pos is currently in use
   std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
-
-  UserPerm actor_perms; // perms I opened the file with
 
   Readahead readahead;
 
