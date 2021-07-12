@@ -210,7 +210,7 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs <fsname> <cluster_id> <pseudo_path> [--readonly] [--path=/path/in/cephfs]
+    $ ceph nfs export create cephfs <fsname> <cluster_id> <pseudo_path> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>]
 
 This creates export RADOS objects containing the export block, where
 
@@ -219,7 +219,7 @@ that will serve this export.
 
 ``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server.  It must be an absolute path and unique.
+``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server. It must be an absolute path and unique.
 
 ``<path>`` is the path within cephfs. Valid path should be given and default
 path is '/'. It need not be unique. Subvolume path can be fetched using:
@@ -227,6 +227,15 @@ path is '/'. It need not be unique. Subvolume path can be fetched using:
 .. code::
 
    $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+``<client_addr>`` is the list of client address for which these export
+permissions will be applicable. By default all clients can access the export
+according to specified export permissions. See the `NFS-Ganesha Export Sample`_
+for permissible values.
+
+``<squash>`` defines the kind of user id squashing to be performed. The default
+value is `no_root_squash`. See the `NFS-Ganesha Export Sample`_ for
+permissible values.
 
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
@@ -381,3 +390,4 @@ Checking NFS-Ganesha logs with
 Log level can be changed using `nfs cluster config set` command.
 
 .. _NFS-Ganesha NFS Server: https://github.com/nfs-ganesha/nfs-ganesha/wiki
+.. _NFS-Ganesha Export Sample: https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/config_samples/export.txt
