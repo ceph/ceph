@@ -93,6 +93,7 @@
 #define MSG_OSD_PG_NOTIFY2    130
 #define MSG_OSD_PG_QUERY       81
 #define MSG_OSD_PG_QUERY2     131
+#define MSG_OSD_PG_DISC_RES    82
 #define MSG_OSD_PG_LOG         83
 #define MSG_OSD_PG_REMOVE      84
 #define MSG_OSD_PG_INFO        85

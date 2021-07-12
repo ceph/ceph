@@ -1252,6 +1252,8 @@ protected:
   // pg on-disk content
   void check_local() override;
 
+  void discover_local_objects(pg_shard_t from, map<hobject_t, eversion_t> in, epoch_t query_epoch) override;
+
   void _clear_recovery_state() override;
 
   bool start_recovery_ops(

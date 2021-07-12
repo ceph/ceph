@@ -4286,24 +4286,30 @@ ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i)
 // -- pg_query_t --
 
 void pg_query_t::encode(ceph::buffer::list &bl, uint64_t features) const {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   encode(type, bl);
   encode(since, bl);
   history.encode(bl);
   encode(epoch_sent, bl);
   encode(to, bl);
   encode(from, bl);
+  if (type == OBJECTS) {
+    encode(needs, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_query_t::decode(ceph::buffer::list::const_iterator &bl) {
-  DECODE_START(3, bl);
+  DECODE_START(4, bl);
   decode(type, bl);
   decode(since, bl);
   history.decode(bl);
   decode(epoch_sent, bl);
   decode(to, bl);
   decode(from, bl);
+  if (struct_v >= 4 && type == OBJECTS) {
+    decode(needs, bl);
+  }
   DECODE_FINISH(bl);
 }
 

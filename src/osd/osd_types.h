@@ -3684,6 +3684,30 @@ PastIntervals::PriorSet::PriorSet(
 	   << dendl;
 }
 
+struct pg_discover_res_t {
+  epoch_t query_epoch;
+  epoch_t epoch_sent;
+  vector<hobject_t> found;
+  shard_id_t to;
+  shard_id_t from;
+
+  pg_discover_res_t(
+    shard_id_t to,
+    shard_id_t from,
+    epoch_t query_epoch,
+    epoch_t epoch_sent,
+    const vector<hobject_t> &found)
+    : query_epoch(query_epoch),
+      epoch_sent(epoch_sent),
+      found(found), to(to), from(from)
+  { }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_discover_res_t*> &o);
+};
+
+
 struct pg_notify_t {
   epoch_t query_epoch;
   epoch_t epoch_sent;
@@ -3727,6 +3751,7 @@ struct pg_query_t {
     LOG = 1,
     MISSING = 4,
     FULLLOG = 5,
+    OBJECTS = 6,
   };
   std::string_view get_type_name() const {
     switch (type) {
@@ -3734,6 +3759,7 @@ struct pg_query_t {
     case LOG: return "log";
     case MISSING: return "missing";
     case FULLLOG: return "fulllog";
+    case OBJECTS: return "objects";
     default: return "???";
     }
   }
@@ -3744,6 +3770,8 @@ struct pg_query_t {
   epoch_t epoch_sent;
   shard_id_t to;
   shard_id_t from;
+
+  map<hobject_t, eversion_t> needs;
 
   pg_query_t() : type(-1), epoch_sent(0), to(shard_id_t::NO_SHARD),
 		 from(shard_id_t::NO_SHARD) {}
@@ -3769,6 +3797,17 @@ struct pg_query_t {
     : type(t), since(s), history(h),
       epoch_sent(epoch_sent), to(to), from(from) {
     ceph_assert(t == LOG);
+  }
+  pg_query_t(
+    int t,
+    shard_id_t to,
+    shard_id_t from,
+    map<hobject_t, eversion_t> needs,
+    epoch_t epoch_sent)
+    : type(t),
+      epoch_sent(epoch_sent), to(to), from(from),
+      needs(needs) {
+    assert(t == OBJECTS);
   }
   
   void encode(ceph::buffer::list &bl, uint64_t features) const;
