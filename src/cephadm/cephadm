@@ -6710,21 +6710,31 @@ class HostFacts():
         # type: () -> Dict[str, str]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
         def _fetch_selinux() -> Dict[str, str]:
-            """Read the selinux config file to determine state"""
+            """Get the selinux status"""
             security = {}
             for selinux_path in HostFacts._selinux_path_list:
                 if os.path.exists(selinux_path):
-                    selinux_config = read_file([selinux_path]).splitlines()
                     security['type'] = 'SELinux'
-                    for line in selinux_config:
-                        if line.strip().startswith('#'):
-                            continue
-                        k, v = line.split('=')
-                        security[k] = v
-                    if security['SELINUX'].lower() == 'disabled':
-                        security['description'] = 'SELinux: Disabled'
-                    else:
-                        security['description'] = 'SELinux: Enabled({}, {})'.format(security['SELINUX'], security['SELINUXTYPE'])
+                    try:
+                        out, err, code = call(self.ctx, ['sestatus'],
+                                              verbosity=CallVerbosity.DEBUG)
+                        status, mode, policy = '', '', ''
+                        for line in out.split('\n'):
+                            if line.startswith('SELinux status:'):
+                                k, v = line.split(':')
+                                status = v.strip()
+                            elif line.startswith('Current mode:'):
+                                k, v = line.split(':')
+                                mode = v.strip()
+                            elif line.startswith('Loaded policy name:'):
+                                k, v = line.split(':')
+                                policy = v.strip()
+                        if status == 'disabled':
+                            security['description'] = 'SELinux: Disabled'
+                        else:
+                            security['description'] = 'SELinux: Enabled({}, {})'.format(mode, policy)
+                    except Exception as e:
+                        logger.warning('unable to get selinux status: %s' % e)
                     return security
             return {}
 
