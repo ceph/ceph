@@ -22,8 +22,12 @@ class Create(object):
     def create(self, args):
         if not args.osd_fsid:
             args.osd_fsid = system.generate_uuid()
+
         prepare_step = Prepare([])
-        prepare_step.safe_prepare(args)
+        prepared = prepare_step.safe_prepare(args)
+        if not prepared:
+            return
+
         osd_id = prepare_step.osd_id
         try:
             # we try this for activate only when 'creating' an OSD, because a rollback should not
