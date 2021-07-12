@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class OSDService(CephService):
     TYPE = 'osd'
 
-    def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
+    def create_from_spec(self, drive_group: DriveGroupSpec) -> Dict:
         logger.debug(f"Processing DriveGroup {drive_group}")
         osd_id_claims = OsdIdClaims(self.mgr)
         if osd_id_claims.get():
@@ -36,15 +36,15 @@ class OSDService(CephService):
                 f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims.get()}")
 
         @forall_hosts
-        def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
+        def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Dict[str, int]:
             # skip this host if there has been no change in inventory
             if not self.mgr.cache.osdspec_needs_apply(host, drive_group):
                 self.mgr.log.debug("skipping apply of %s on %s (no change)" % (
                     host, drive_group))
-                return None
+                return {}
             # skip this host if we cannot schedule here
             if self.mgr.inventory.has_label(host, '_no_schedule'):
-                return None
+                return {}
 
             osd_id_claims_for_host = osd_id_claims.filtered_by_host(host)
 
@@ -53,30 +53,39 @@ class OSDService(CephService):
             if not cmd:
                 logger.debug("No data_devices, skipping DriveGroup: {}".format(
                     drive_group.service_id))
-                return None
+                return {}
 
             logger.debug('Applying service osd.%s on host %s...' % (
                 drive_group.service_id, host
             ))
+
             start_ts = datetime_now()
             env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
-            ret_msg = self.create_single_host(
+            osds_size = self.create_single_host(
                 drive_group, host, cmd,
                 replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars
             )
+
             self.mgr.cache.update_osdspec_last_applied(
                 host, drive_group.service_name(), start_ts
             )
             self.mgr.cache.save_host(host)
-            return ret_msg
+            return dict([(host, osds_size)])
 
         ret = create_from_spec_one(self.prepare_drivegroup(drive_group))
-        return ", ".join(filter(None, ret))
+
+        # return only the information of hosts with changes
+        host_list = list(filter(lambda osd_info: osd_info, ret))
+        osds_in_hosts = {}
+        if host_list:
+            osds_in_hosts = {k: v for d in host_list for k, v in d.items()}
+
+        return osds_in_hosts
 
     def create_single_host(self,
                            drive_group: DriveGroupSpec,
                            host: str, cmd: str, replace_osd_ids: List[str],
-                           env_vars: Optional[List[str]] = None) -> str:
+                           env_vars: Optional[List[str]] = None) -> int:
         out, err, code = self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
 
         if code == 1 and ', it is already prepared' in '\n'.join(err):
@@ -93,7 +102,7 @@ class OSDService(CephService):
                                                          replace_osd_ids)
 
     def deploy_osd_daemons_for_existing_osds(self, host: str, service_name: str,
-                                             replace_osd_ids: Optional[List[str]] = None) -> str:
+                                             replace_osd_ids: Optional[List[str]] = None) -> int:
 
         if replace_osd_ids is None:
             replace_osd_ids = OsdIdClaims(self.mgr).filtered_by_host(host)
@@ -110,6 +119,7 @@ class OSDService(CephService):
         fsid = self.mgr._cluster_fsid
         osd_uuid_map = self.mgr.get_osd_uuid_map()
         created = []
+        size = 0
         for osd_id, osds in osds_elems.items():
             for osd in osds:
                 if osd['type'] == 'db':
@@ -117,6 +127,11 @@ class OSDService(CephService):
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
                     logger.debug('mismatched fsid, skipping %s' % osd)
                     continue
+                osdspec_affinity = osd['tags'].get('ceph.osdspec_affinity', "")
+                if (osdspec_affinity == service_name[4:]) or \
+                   ((osdspec_affinity == "" or osdspec_affinity is None) and (service_name[4:] == 'unmanaged' or service_name[4:] == '')):
+                    size += 1
+
                 if osd_id in before_osd_uuid_map and osd_id not in replace_osd_ids:
                     # if it exists but is part of the replacement operation, don't skip
                     continue
@@ -145,9 +160,10 @@ class OSDService(CephService):
         if created:
             self.mgr.cache.invalidate_host_devices(host)
             self.mgr.cache.invalidate_autotune(host)
-            return "Created osd(s) %s on host '%s'" % (','.join(created), host)
+            logger.info(f"Created osd(s) {','.join(created)} on host '{host}'")
         else:
-            return "Created no osd(s) on host %s; already created?" % host
+            logger.info(f"Created no osd(s) on host {host}; already created?")
+        return size
 
     def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[Tuple[str, DriveSelection]]:
         # 1) use fn_filter to determine matching_hosts
