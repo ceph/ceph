@@ -20,7 +20,6 @@ from enum import IntEnum
 import rados
 import re
 import socket
-import pickle
 import sys
 import time
 from ceph_argparse import CephArgtype
@@ -1038,9 +1037,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             or look at the C++ ``dump()`` methods to learn about them.
         """
         obj =  self._ceph_get(data_name)
-        if data_name == "mgr_ips":
-            return obj
-        return pickle.loads(pickle.dumps(obj))
+        return json.loads(obj)
 
     def _stattype_to_str(self, stattype: int) -> str:
 
