@@ -133,6 +133,14 @@ on ``mon.a``).
    For example::
 
 	ceph-mon -i {mon-id} --public-addr {ip:port}
+	
+
+#. add the entry in the ceph.conf configuration file.
+   For example::
+   
+   	[mon.d]
+		host = host04
+		addr = 10.0.0.4
 
 .. _removing-monitors:
 
