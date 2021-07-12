@@ -6492,6 +6492,39 @@ bool OSD::ms_handle_refused(Connection *con)
   return true;
 }
 
+bool OSD::ms_handle_throttle(ms_throttle_t ttype, const std::map<string, int64_t>& tinfo) {
+  switch (ttype) {
+  case ms_throttle_t::MESSAGE:
+    break; // TODO
+  case ms_throttle_t::BYTES:
+    break; // TODO
+  case ms_throttle_t::DISPATCH_QUEUE:
+    {
+      //save the latest throttled time, save the number of messages throttled.
+      last_throttled.store(ceph::coarse_mono_clock::now());
+      messages_throttled.store(tinfo.at("failedrequests"));
+    }
+    break;
+  case ms_throttle_t::NONE:
+    {
+      //No Throttling
+      if (last_throttled.load() != ceph::coarse_mono_clock::zero()) {
+        //Don't be hurry to reset last_throttled. Give get_health_metrics()
+        //THROTTLE_STATUS_INTERVAL seconds to read and display the previous status.
+        if (std::chrono::duration_cast<std::chrono::seconds>
+            (ceph::coarse_mono_clock::now() - last_throttled) >= THROTTLE_STATUS_INTERVAL) {
+          last_throttled.store(ceph::coarse_mono_clock::zero());
+	  messages_throttled.store(0);
+        }
+      }
+    }
+    break;
+  default:
+    return false;
+  }
+  return true;
+}
+
 struct CB_OSD_GetVersion {
   OSD *osd;
   explicit CB_OSD_GetVersion(OSD *o) : osd(o) {}
@@ -7936,6 +7969,11 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
       }
     }
     metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
+  }
+  {
+    if (last_throttled.load() != ceph::coarse_mono_clock::zero()) {
+      metrics.emplace_back(daemon_metric::DISPATCH_QUEUE_THROTTLE, messages_throttled.load());
+    }
   }
   return metrics;
 }

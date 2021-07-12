@@ -106,6 +106,9 @@ protected:
   AsyncConnection *connection;
   AsyncMessenger *messenger;
   CephContext *cct;
+  ceph::coarse_mono_time throttle_prev {ceph::coarse_mono_clock::zero()};
+  ceph::coarse_mono_time throttle_prev_clog {ceph::coarse_mono_clock::zero()};
+  const std::chrono::seconds THROTTLE_DELIVER_INTERVAL {std::chrono::seconds(120)};
 public:
   std::shared_ptr<AuthConnectionMeta> auth_meta;
 
