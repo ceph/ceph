@@ -43,6 +43,102 @@ integration with `Barbican`_, `Vault`_, and `KMIP`_ are implemented.
 See `OpenStack Barbican Integration`_, `HashiCorp Vault Integration`_,
 and `KMIP Integration`_.
 
+Bucket Encryption Subresource
+=============================
+
+Amazon S3 supports APIs to manage the encryption subresource to
+configure default encryption. Default encryption for a bucket can use
+server-side encryption with Amazon S3-managed keys (SSE-S3) or AWS KMS customer
+master keys (SSE-KMS). SSE-KMS implementation via BucketEncryption APIs is not
+supported yet.
+
+Details for 3 APIs can be found here: `PutBucketEncryption`_,
+`GetBucketEncryption`_, and `DeleteBucketEncryption`_
+
+PutBucketEncryption
+-------------------
+
+Places encryption configuration on the bucket. Rules specified in the Server
+Side Encryption Configuration will be applied to every new object placed inside
+the bucket unless otherwise specific headers are passed to bypass this.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /?encryption HTTP/1.1
+
+Request Entities
+~~~~~~~~~~~~~~~~
+
++----------------------------------------+-------------+-------------------------------------------------------------------------------------------------------+----------+
+| Name                                   | Type        | Description                                                                                           | Required |
++========================================+=============+=======================================================================================================+==========+
+| ``ServerSideEncryptionConfiguration``  | Container   | A container for the request.                                                                          |   Yes    |
++----------------------------------------+-------------+-------------------------------------------------------------------------------------------------------+----------+
+| ``Rule``                               | Container   | The Encryption rule in place for the specified bucket.                                                |   No     |
++----------------------------------------+-------------+-------------------------------------------------------------------------------------------------------+----------+
+| ``ApplyServerSideEncryptionByDefault`` | Container   | Apply this by default if put object call doesn't specify encryption.                                  |   Yes    |
++----------------------------------------+-------------+-------------------------------------------------------------------------------------------------------+----------+
+| ``SSEAlgorithm``                       | String      | Server-side encryption algorithm to use for the default encryption.                                   |   Yes    |
++----------------------------------------+-------------+-------------------------------------------------------------------------------------------------------+----------+
+| ``KMSMasterKeyID``                     | String      | AWS KMS key ID to use for the default encryption. Allow this only when SSEAlgorithm is set to aws:kms |   No     |
++----------------------------------------+-------------+-------------------------------------------------------------------------------------------------------+----------+
+| ``BucketKeyEnabled``                   | Boolean     | If enabled it forces use of S3 Bucket Key using SSE-KMS.                                              |   No     |
++----------------------------------------+-------------+-------------------------------------------------------------------------------------------------------+----------+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+--------------------------------------------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                                                                |
++===============+=======================+============================================================================================+
+| ``400``       | MalformedXML          | The XML is not well-formed / SSEAlgorithm other than AES256 / KMSMasterKeyID field is sent |
++---------------+-----------------------+--------------------------------------------------------------------------------------------+
+
+GetBucketEncryption
+-------------------
+
+Gets the encryption configuration present for the bucket. Key Id is not displayed to the user as it is not to be managed by a user.
+
+Syntax
+~~~~~~
+
+::
+
+    GET /?encryption HTTP/1.1
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+------------------------------------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code                                    | Description                                              |
++===============+================================================+==========================================================+
+| ``400``       | ServerSideEncryptionConfigurationNotFoundError | When encryption config not present for the bucket        |
++---------------+------------------------------------------------+----------------------------------------------------------+
+
+DeleteBucketEncryption
+----------------------
+
+Deletes the encryption configuration present for the bucket.
+
+Syntax
+~~~~~~
+
+::
+
+    DELETE /?encryption HTTP/1.1
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+--------------+-----------------------------------------------------------------------------------------------------+
+| HTTP Status   | Status Code  | Description                                                                                         |
++===============+==============+=====================================================================================================+
+| ``204``       | NoContent    | Bucket encryption config is present and successfully removed / Bukcet encryption config not present |
++---------------+--------------+-----------------------------------------------------------------------------------------------------+
+
 Automatic Encryption (for testing only)
 =======================================
 
@@ -63,6 +159,9 @@ The configuration expects a base64-encoded 256 bit key. For example::
 .. _Barbican: https://wiki.openstack.org/wiki/Barbican
 .. _Vault: https://www.vaultproject.io/docs/
 .. _KMIP: http://www.oasis-open.org/committees/kmip/
+.. _PutBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html
+.. _GetBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html
+.. _DeleteBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html
 .. _OpenStack Barbican Integration: ../barbican
 .. _HashiCorp Vault Integration: ../vault
 .. _KMIP Integration: ../kmip

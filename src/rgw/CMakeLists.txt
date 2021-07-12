@@ -155,7 +155,8 @@ set(librgw_common_srcs
   cls_fifo_legacy.cc
   rgw_lua_utils.cc
   rgw_lua.cc
-  rgw_lua_request.cc)
+  rgw_lua_request.cc
+  rgw_bucket_encryption.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
