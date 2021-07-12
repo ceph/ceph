@@ -639,7 +639,11 @@ int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& 
   when_need_full_sync += make_timespan(store->ctx()->_conf->rgw_user_quota_sync_wait_time);
   
   // check if enough time passed since last full sync
-  /* FIXME: missing check? */
+  if (ceph_clock_now() < ceph::real_clock::to_time_t(when_need_full_sync)) {
+    ldout(store->ctx(), 20) << "user(user=" << user << ") doesn't need full sync now" << dendl;
+    return 0;
+  }
+
 
   ret = rgw_user_sync_all_stats(dpp, store, user.get(), y);
   if (ret < 0) {
