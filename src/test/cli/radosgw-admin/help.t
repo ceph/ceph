@@ -252,6 +252,9 @@
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
      --compression=<type>      placement target compression type (plugin name or empty/none)
+     --enable-alloc-hint=<type>
+                               placement target enable allocation hint type (true or false)
+     --compression-hint=<type> placement target compression hint type (compressible, incompressible or none)
      --tier-type=<type>        zone tier type
      --tier-config=<k>=<v>[,...]
                                set zone tier config keys, values

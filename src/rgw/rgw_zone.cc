@@ -1685,7 +1685,7 @@ int RGWZoneParams::create(const DoutPrefixProvider *dpp, optional_yield y, bool 
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
     rgw_pool pool = name + "." + default_storage_pool_suffix;
-    default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
+    default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr, nullptr, nullptr);
     default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
     placement_pools["default-placement"] = default_placement;
   }
@@ -1796,6 +1796,27 @@ const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& plac
     return NONE;
   }
   const auto& type = p->second.get_compression_type(placement_rule.get_storage_class());
+  return !type.empty() ? type : NONE;
+}
+
+const bool RGWZoneParams::get_enable_alloc_hint(const rgw_placement_rule& placement_rule) const
+{
+  const bool enable_alloc_hint{false};
+  auto p = placement_pools.find(placement_rule.name);
+  if (p == placement_pools.end()) {
+    return enable_alloc_hint;
+  }
+  return p->second.get_enable_alloc_hint(placement_rule.get_storage_class());
+}
+
+const string& RGWZoneParams::get_compression_hint(const rgw_placement_rule& placement_rule) const
+{
+  static const std::string NONE{"none"};
+  auto p = placement_pools.find(placement_rule.name);
+  if (p == placement_pools.end()) {
+    return NONE;
+  }
+  const auto& type = p->second.get_compression_hint(placement_rule.get_storage_class());
   return !type.empty() ? type : NONE;
 }
 

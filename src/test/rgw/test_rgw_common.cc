@@ -8,7 +8,7 @@ void test_rgw_add_placement(RGWZoneGroup *zonegroup, RGWZoneParams *zone_params,
   pinfo.index_pool = rgw_pool(name + ".index").to_str();
 
   rgw_pool data_pool(name + ".data");
-  pinfo.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &data_pool, nullptr);
+  pinfo.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &data_pool, nullptr, nullptr, nullptr);
   pinfo.data_extra_pool = rgw_pool(name + ".extra").to_str();
 
   if (is_default) {

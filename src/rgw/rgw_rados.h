@@ -183,6 +183,8 @@ struct RGWObjState {
   bufferlist olh_tag;
   uint64_t pg_ver{false};
   uint32_t zone_short_id{0};
+  bool enable_alloc_hint{false};
+  uint32_t alloc_hint_flags{0U};
 
   /* important! don't forget to update copy constructor */
 

@@ -233,6 +233,8 @@ RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
   is_olh = rhs.is_olh;
   objv_tracker = rhs.objv_tracker;
   pg_ver = rhs.pg_ver;
+  enable_alloc_hint = rhs.enable_alloc_hint;
+  alloc_hint_flags = rhs.alloc_hint_flags;
 }
 
 RGWObjState *RGWObjectCtx::get_state(const rgw_obj& obj) {
@@ -3090,6 +3092,12 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     /* if we want to overwrite the data, we also want to overwrite the
        xattrs, so just remove the object */
     op.write_full(*meta.data);
+    const uint64_t cost = (*meta.data).length();
+    if (state->enable_alloc_hint) {
+      op.set_alloc_hint2(cost, cost, state->alloc_hint_flags);
+    } else if (state->alloc_hint_flags != 0U) {
+      op.set_alloc_hint2(0, 0, state->alloc_hint_flags);
+    }
   }
 
   string etag;

@@ -1274,12 +1274,20 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   if (compression_type) {
     encode_json("compression_type", compression_type.get(), f);
   }
+  if (enable_alloc_hint) {
+    encode_json("enable_alloc_hint", enable_alloc_hint.get(), f);
+  }
+  if (compression_hint) {
+    encode_json("compression_hint", compression_hint.get(), f);
+  }
 }
 
 void RGWZoneStorageClass::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("data_pool", data_pool, obj);
   JSONDecoder::decode_json("compression_type", compression_type, obj);
+  JSONDecoder::decode_json("enable_alloc_hint", enable_alloc_hint, obj);
+  JSONDecoder::decode_json("compression_hint", compression_hint, obj);
 }
 
 void RGWZoneStorageClasses::dump(Formatter *f) const
@@ -1335,7 +1343,7 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
     ppool = &standard_data_pool;
   }
   if (ppool || pcompression) {
-    storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, ppool, pcompression);
+    storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, ppool, pcompression, nullptr, nullptr);
   }
 }
 

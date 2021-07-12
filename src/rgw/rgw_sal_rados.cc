@@ -1944,6 +1944,19 @@ int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
   return stripe_obj.open(dpp);
 }
 
+void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op, const uint64_t cost) {
+  const rgw_obj obj = head_obj->get_obj();
+  const RGWObjState *obj_state = obj_ctx.get_state(obj);
+  const auto alloc_hint_flags = obj_state->alloc_hint_flags;
+  const auto enable_alloc_hint = obj_state->enable_alloc_hint;
+
+  if (enable_alloc_hint) {
+    op.set_alloc_hint2(cost, cost, alloc_hint_flags);
+  } else if (alloc_hint_flags != 0U) {
+    op.set_alloc_hint2(0, 0, alloc_hint_flags);
+  }
+}
+
 int RadosWriter::process(bufferlist&& bl, uint64_t offset)
 {
   bufferlist data = std::move(bl);
@@ -1952,6 +1965,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     return 0;
   }
   librados::ObjectWriteOperation op;
+  add_write_hint(op, cost);
   if (offset == 0) {
     op.write_full(data);
   } else {
@@ -1967,6 +1981,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   const uint64_t cost = data.length();
 
   librados::ObjectWriteOperation op;
+  add_write_hint(op, cost);
   op.create(true); // exclusive create
   op.write_full(data);
 
