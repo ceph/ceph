@@ -1,0 +1,27 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+#pragma once
+
+/**
+ * \file fmtlib formatters for some types.h classes
+ */
+
+#include <fmt/format.h>
+
+#include "include/types.h"
+
+template <class A, class B, class Comp, class Alloc>
+struct fmt::formatter<std::map<A, B, Comp, Alloc>> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const std::map<A, B, Comp, Alloc>& m, FormatContext& ctx)
+  {
+    auto sep = "{"sv;
+    for (const auto& [k, v] : m) {
+      fmt::format_to(ctx.out(), "{}{}={}", sep, k, v);
+      sep = ","sv;
+    }
+    return fmt::format_to(ctx.out(), "}}");
+  }
+};
