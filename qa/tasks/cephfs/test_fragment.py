@@ -297,7 +297,7 @@ class TestFragmentation(CephFSTestCase):
             self.mount_a.run_shell(["ln", "testdir1/{0}".format(i), "testdir2/"])
 
         self.mount_a.umount_wait()
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         self.mount_a.wait_until_mounted()
 
         # flush journal and restart mds. after restart, testdir2 is not in mds' cache

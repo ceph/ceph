@@ -264,9 +264,11 @@ class TestNFS(MgrTestCase):
                 return
             raise
 
+        self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'])
+
         try:
-            self.ctx.cluster.run(args=['sudo', 'touch', '/mnt/test'])
-            out_mnt = self._sys_cmd(['sudo', 'ls', '/mnt'])
+            self.ctx.cluster.run(args=['touch', '/mnt/test'])
+            out_mnt = self._sys_cmd(['ls', '/mnt'])
             self.assertEqual(out_mnt,  b'test\n')
         finally:
             self.ctx.cluster.run(args=['sudo', 'umount', '/mnt'])

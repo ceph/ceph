@@ -508,9 +508,8 @@ class TestClientRecovery(CephFSTestCase):
         self.assertEqual(current_readdirs, initial_readdirs);
 
         mount_b_gid = self.mount_b.get_global_id()
-        mount_b_pid = self.mount_b.get_client_pid()
         # stop ceph-fuse process of mount_b
-        self.mount_b.client_remote.run(args=["sudo", "kill", "-STOP", mount_b_pid])
+        self.mount_b.suspend_netns()
 
         self.assert_session_state(mount_b_gid, "open")
         time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
@@ -519,7 +518,7 @@ class TestClientRecovery(CephFSTestCase):
         self.assert_session_state(mount_b_gid, "stale")
 
         # resume ceph-fuse process of mount_b
-        self.mount_b.client_remote.run(args=["sudo", "kill", "-CONT", mount_b_pid])
+        self.mount_b.resume_netns()
         # Is the new file visible from mount_b? (caps become invalid after session stale)
         self.mount_b.run_shell(["ls", "testdir/file2"])
 
@@ -615,10 +614,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.umount_wait()
 
         if isinstance(self.mount_a, FuseMount):
-            self.mount_a.mount(mntopts=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
+            self.mount_a.mount_wait(mntopts=['--client_reconnect_stale=1', '--fuse_disable_pagecache=1'])
         else:
             try:
-                self.mount_a.mount(mntopts=['recover_session=clean'])
+                self.mount_a.mount_wait(mntopts=['recover_session=clean'])
             except CommandFailedError:
                 self.mount_a.kill_cleanup()
                 self.skipTest("Not implemented in current kernel")
@@ -682,7 +681,7 @@ class TestClientRecovery(CephFSTestCase):
                 raise RuntimeError("read() failed to raise error")
             """).format(path=path)
         rproc = self.mount_a.client_remote.run(
-                    args=['sudo', 'python3', '-c', pyscript],
+                    args=['python3', '-c', pyscript],
                     wait=False, stdin=run.PIPE, stdout=run.PIPE)
 
         rproc.stdout.readline()
