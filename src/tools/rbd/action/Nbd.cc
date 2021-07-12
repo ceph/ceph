@@ -125,6 +125,10 @@ int execute_list(const po::variables_map &vm,
 
   args.push_back("list-mapped");
 
+  if (vm["all"].as<bool>()) {
+    args.push_back("--all");
+  }
+
   if (vm.count("format")) {
     args.push_back("--format");
     args.push_back(vm["format"].as<at::Format>().value);
@@ -163,10 +167,13 @@ int execute_attach(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  if (!vm["force"].as<bool>()) {
+  if (vm.count("cookie")) {
+    args.push_back("--cookie");
+    args.push_back(vm["cookie"].as<std::string>());
+  } else if (!vm["force"].as<bool>()) {
     std::cerr << "rbd: could not validate attach request\n";
     std::cerr << "rbd: mismatching the image and the device may lead to data corruption\n";
-    std::cerr << "rbd: must specify --force to proceed" << std::endl;
+    std::cerr << "rbd: must specify --cookie <arg> or --force to proceed" << std::endl;
     return -EINVAL;
   }
 

@@ -106,6 +106,7 @@ struct Config {
   bool readonly = false;
   bool set_max_part = false;
   bool try_netlink = false;
+  bool show_cookie = false;
 
   std::string poolname;
   std::string nsname;
@@ -116,12 +117,14 @@ struct Config {
 
   std::string format;
   bool pretty_format = false;
+  bool show_all = false;
 
   std::optional<librbd::encryption_format_t> encryption_format;
   std::optional<std::string> encryption_passphrase_file;
 
   Command command = None;
   int pid = 0;
+  std::string cookie;
 
   std::string image_spec() const {
     std::string spec = poolname + "/";
@@ -163,8 +166,11 @@ static void usage()
             << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
             << "                                (default: " << Config().reattach_timeout << ")\n"
             << "  --try-netlink                 Use the nbd netlink interface\n"
+            << "  --show-cookie                 Show device cookie\n"
+            << "  --cookie                      Specify device cookie for attach\n"
             << "\n"
             << "List options:\n"
+            << "  --all                   Show all the options (eg: cookie)\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
             << "  --pretty-format         Pretty formatting (json and xml)\n"
             << std::endl;
@@ -188,6 +194,8 @@ static int netlink_resize(int nbd_index, uint64_t size);
 static int run_quiesce_hook(const std::string &quiesce_hook,
                             const std::string &devpath,
                             const std::string &command);
+
+static std::string get_cookie(const std::string devpath);
 
 class NBDServer
 {
@@ -788,6 +796,7 @@ public:
 
       *cfg = Config();
       cfg->devpath = "/dev/nbd" + stringify(m_index++);
+      cfg->cookie = get_cookie(cfg->devpath);
 
       int pid;
       std::ifstream ifs;
@@ -796,6 +805,7 @@ public:
         continue;
       }
       ifs >> pid;
+      ifs.close();
 
       // If the rbd-nbd is re-attached the pid may store garbage
       // here. We are sure this is the case when it is negative or
@@ -805,7 +815,7 @@ public:
       // attached process.
       do {
         if (pid <= 0) {
-          pid = find_attached(cfg->devpath);
+          pid = find_attached(cfg->devpath, cfg->cookie);
           if (pid <= 0) {
             break;
           }
@@ -890,6 +900,7 @@ private:
     }
 
     c.pid = pid;
+    c.cookie = cfg->cookie;
     m_mapped_info_cache.erase(pid);
     if (!c.devpath.empty()) {
       m_mapped_info_cache[pid] = c;
@@ -904,7 +915,7 @@ private:
     return 0;
   }
 
-  int find_attached(const std::string &devpath) {
+  int find_attached(const std::string &devpath, const std::string &cookie) {
     for (auto &entry : fs::directory_iterator("/proc")) {
       if (!fs::is_directory(entry.status())) {
         continue;
@@ -919,6 +930,7 @@ private:
 
       Config cfg;
       cfg.devpath = devpath;
+      cfg.cookie = cookie;
       if (get_mapped_info(pid, &cfg) >=0 && cfg.command == Attach) {
         return cfg.pid;
       }
@@ -927,6 +939,27 @@ private:
     return -1;
   }
 };
+
+static std::string get_cookie(const std::string devpath)
+{
+  std::string cookie;
+
+  if (devpath.empty()) {
+    return std::string();
+  }
+
+  std::string path = "/sys/block/" + devpath.substr(devpath.rfind("/")+1) + "/backend";
+  if (access(path.c_str(), F_OK) == 0) {
+    std::ifstream ifs;
+    ifs.open(path, std::ifstream::in);
+    if (ifs.is_open()) {
+      ifs >> cookie;
+      ifs.close();
+      return cookie;
+    }
+  }
+  return std::string();
+}
 
 static int load_module(Config *cfg)
 {
@@ -984,6 +1017,17 @@ static int check_device_size(int nbd_index, unsigned long expected_size)
   }
 
   return 0;
+}
+
+static bool is_valid_uuid(const std::string &uuid)
+{
+  std::regex pattern("^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
+                       std::regex::icase);
+  std::smatch match;
+  if (!std::regex_match(uuid, match, pattern)) {
+    return false;
+  }
+  return true;
 }
 
 static int parse_nbd_index(const std::string& devpath)
@@ -1324,6 +1368,8 @@ static int netlink_connect(Config *cfg, struct nl_sock *sock, int nl_id, int fd,
   NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES, RBD_NBD_BLKSIZE);
   NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
   NLA_PUT_U64(msg, NBD_ATTR_DEAD_CONN_TIMEOUT, cfg->reattach_timeout);
+  if (!cfg->cookie.empty())
+    NLA_PUT_STRING(msg, NBD_ATTR_BACKEND_IDENTIFIER, cfg->cookie.c_str());
 
   sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
   if (!sock_attr) {
@@ -1557,6 +1603,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   unsigned long size;
   unsigned long blksize = RBD_NBD_BLKSIZE;
   bool use_netlink;
+  uuid_d uuid_gen;
 
   int fd[2];
 
@@ -1719,6 +1766,10 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 
   use_netlink = cfg->try_netlink || reconnect;
   if (use_netlink) {
+    if (!reconnect) {
+      uuid_gen.generate_random();
+      cfg->cookie = uuid_gen.to_string();
+    }
     r = try_netlink_setup(cfg, fd[0], size, flags, reconnect);
     if (r < 0) {
       goto free_server;
@@ -1761,7 +1812,10 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     if (r < 0)
       goto close_nbd;
 
-    cout << cfg->devpath << std::endl;
+    if (use_netlink && cfg->show_cookie && !cfg->cookie.empty())
+      cout << cfg->devpath << " " << get_cookie(cfg->devpath) << std::endl;
+    else
+      cout << cfg->devpath << std::endl;
 
     run_server(forker, server, use_netlink);
 
@@ -1875,7 +1929,8 @@ static int parse_imgpath(const std::string &imgpath, Config *cfg,
   return 0;
 }
 
-static int do_list_mapped_devices(const std::string &format, bool pretty_format)
+static int do_list_mapped_devices(const std::string &format,
+                                  bool pretty_format, bool show_all)
 {
   bool should_print = false;
   std::unique_ptr<ceph::Formatter> f;
@@ -1899,6 +1954,8 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
+    if (show_all)
+      tbl.define_column("cookie", TextTable::LEFT, TextTable::LEFT);
   }
 
   Config cfg;
@@ -1912,14 +1969,23 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->dump_string("image", cfg.imgname);
       f->dump_string("snap", cfg.snapname);
       f->dump_string("device", cfg.devpath);
+      if (show_all)
+        f->dump_string("cookie", cfg.cookie);
       f->close_section();
     } else {
       should_print = true;
       if (cfg.snapname.empty()) {
         cfg.snapname = "-";
       }
-      tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
-          << cfg.snapname << cfg.devpath << TextTable::endrow;
+      if (cfg.cookie.empty()) {
+        cfg.cookie = "-";
+      }
+      if (show_all)
+        tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
+            << cfg.snapname << cfg.devpath << cfg.cookie << TextTable::endrow;
+      else
+        tbl << cfg.pid << cfg.poolname << cfg.nsname << cfg.imgname
+            << cfg.snapname << cfg.devpath << TextTable::endrow;
     }
   }
 
@@ -2052,10 +2118,19 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       *err_msg << "rbd-nbd: --timeout is deprecated (use --io-timeout)";
     } else if (ceph_argparse_witharg(args, i, &cfg->format, err, "--format",
                                      (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--all", (char *)NULL)) {
+      cfg->show_all = true;
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
       cfg->try_netlink = true;
+    } else if (ceph_argparse_flag(args, i, "--show-cookie", (char *)NULL)) {
+      cfg->show_cookie = true;
+    } else if (ceph_argparse_witharg(args, i, &cfg->cookie, "--cookie", (char *)NULL)) {
+      if (!is_valid_uuid(cfg->cookie)) {
+        *err_msg << "rbd-nbd: --cookie expects a valid device uuid cookie";
+        return -EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &arg_value,
                                      "--encryption-format", (char *)NULL)) {
       if (arg_value == "luks1") {
@@ -2101,11 +2176,24 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     return -EINVAL;
   }
 
+  std::string cookie;
   switch (cmd) {
     case Attach:
       if (cfg->devpath.empty()) {
         *err_msg << "rbd-nbd: must specify device to attach";
         return -EINVAL;
+      }
+      // Allowing attach without --cookie option for kernel without
+      // NBD_ATTR_BACKEND_IDENTIFIER support for compatibility
+      cookie = get_cookie(cfg->devpath);
+      if (!cookie.empty()) {
+        if (cfg->cookie.empty()) {
+          *err_msg << "rbd-nbd: must specify cookie to attach";
+          return -EINVAL;
+        } else if (cookie.compare(cfg->cookie) != 0) {
+          *err_msg << "rbd-nbd: cookie mismatch";
+          return -EINVAL;
+        }
       }
       [[fallthrough]];
     case Map:
@@ -2221,7 +2309,7 @@ static int rbd_nbd(int argc, const char *argv[])
         return -EINVAL;
       break;
     case List:
-      r = do_list_mapped_devices(cfg.format, cfg.pretty_format);
+      r = do_list_mapped_devices(cfg.format, cfg.pretty_format, cfg.show_all);
       if (r < 0)
         return -EINVAL;
       break;

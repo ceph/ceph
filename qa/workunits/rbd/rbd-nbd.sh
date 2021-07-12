@@ -365,22 +365,31 @@ cat ${LOG_FILE}
 expect_false grep 'quiesce failed' ${LOG_FILE}
 
 # test detach/attach
-DEV=`_sudo rbd device --device-type nbd --options try-netlink map ${POOL}/${IMAGE}`
+OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map ${POOL}/${IMAGE}`
+read -a DEV <<< "${OUT}"
 get_pid ${POOL}
-_sudo mount ${DEV} ${TEMPDIR}/mnt
+_sudo mount ${DEV[0]} ${TEMPDIR}/mnt
 _sudo rbd device detach ${POOL}/${IMAGE} --device-type nbd
 expect_false get_pid ${POOL}
-expect_false _sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd
-_sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd --force
+expect_false _sudo rbd device attach --device ${DEV[0]} ${POOL}/${IMAGE} --device-type nbd
+if [ -n "${DEV[1]}" ]; then
+    _sudo rbd device attach --device ${DEV[0]} --cookie ${DEV[1]} ${POOL}/${IMAGE} --device-type nbd
+else
+    _sudo rbd device attach --device ${DEV[0]} ${POOL}/${IMAGE} --device-type nbd --force
+fi
 get_pid ${POOL}
-_sudo rbd device detach ${DEV} --device-type nbd
+_sudo rbd device detach ${DEV[0]} --device-type nbd
 expect_false get_pid ${POOL}
-_sudo rbd device attach --device ${DEV} ${POOL}/${IMAGE} --device-type nbd --force
+if [ -n "${DEV[1]}" ]; then
+    _sudo rbd device attach --device ${DEV[0]} --cookie ${DEV[1]} ${POOL}/${IMAGE} --device-type nbd
+else
+    _sudo rbd device attach --device ${DEV[0]} ${POOL}/${IMAGE} --device-type nbd --force
+fi
 get_pid ${POOL}
 ls ${TEMPDIR}/mnt/
 dd if=${TEMPDIR}/mnt/test of=/dev/null bs=1M count=1
 _sudo dd if=${DATA} of=${TEMPDIR}/mnt/test1 bs=1M count=1 oflag=direct
 _sudo umount ${TEMPDIR}/mnt
-unmap_device ${DEV} ${PID}
+unmap_device ${DEV[0]} ${PID}
 
 echo OK

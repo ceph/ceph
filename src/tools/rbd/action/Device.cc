@@ -161,6 +161,8 @@ const DeviceOperations *get_device_operations(const po::variables_map &vm) {
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   add_device_type_option(options);
+  options->add_options()
+    ("all", po::bool_switch(), "show more device specific details");
   at::add_format_options(options);
 }
 
@@ -212,6 +214,7 @@ void get_attach_arguments(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
     ("device", po::value<std::string>()->required(), "specify device path")
+    ("cookie", po::value<std::string>(), "device cookie")
     ("read-only", po::bool_switch(), "attach read-only")
     ("force", po::bool_switch(), "force attach")
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")

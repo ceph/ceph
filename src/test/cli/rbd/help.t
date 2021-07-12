@@ -576,8 +576,8 @@
   rbd help device attach
   usage: rbd device attach [--device-type <device-type>] [--pool <pool>] 
                            [--namespace <namespace>] [--image <image>] 
-                           [--snap <snap>] --device <device> [--read-only] 
-                           [--force] [--exclusive] [--quiesce] 
+                           [--snap <snap>] --device <device> [--cookie <cookie>] 
+                           [--read-only] [--force] [--exclusive] [--quiesce] 
                            [--quiesce-hook <quiesce-hook>] [--options <options>] 
                            <image-or-snap-spec> 
   
@@ -596,6 +596,7 @@
     --image arg              image name
     --snap arg               snapshot name
     --device arg             specify device path
+    --cookie arg             device cookie
     --read-only              attach read-only
     --force                  force attach
     --exclusive              disable automatic exclusive lock transitions
@@ -624,13 +625,14 @@
     -o [ --options ] arg            device specific options
   
   rbd help device list
-  usage: rbd device list [--device-type <device-type>] [--format <format>] 
-                         [--pretty-format] 
+  usage: rbd device list [--device-type <device-type>] [--all] 
+                         [--format <format>] [--pretty-format] 
   
   List mapped rbd images.
   
   Optional arguments
     -t [ --device-type ] arg device type [ggate, krbd (default), nbd]
+    --all                    show more device specific details
     --format arg             output format (plain, json, or xml) [default: plain]
     --pretty-format          pretty formatting (json and xml)
   
