@@ -118,6 +118,10 @@ class C_MDL_WriteError : public MDSIOContextBase {
   void print(ostream& out) const override {
     out << "mdlog_write_error";
   }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "C_MDL_WriteError");
+  }
 };
 
 

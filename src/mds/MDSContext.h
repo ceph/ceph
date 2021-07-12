@@ -104,10 +104,11 @@ public:
   void complete(int r) override;
 
   virtual void print(std::ostream& out) const = 0;
-
+  virtual void dump(Formatter *f) const = 0;
   static bool check_ios_in_flight(ceph::coarse_mono_time cutoff,
 				  std::string& slow_count,
-				  ceph::coarse_mono_time& oldest);
+				  ceph::coarse_mono_time& oldest,
+				  Formatter *f);
 private:
   ceph::coarse_mono_time created_at;
   elist<MDSIOContextBase*>::item list_item;
@@ -131,6 +132,11 @@ public:
   virtual void pre_finish(int r) {}
   void print(std::ostream& out) const override {
     out << "log_event(" << write_pos << ")";
+  }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "MDSLogContextBase");
+    f->dump_unsigned("write_pos", write_pos);
   }
 };
 
@@ -157,6 +163,10 @@ public:
   void finish(int r) override;
   void print(std::ostream& out) const override {
     out << "io_context_wrapper(" << fin << ")";
+  }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "MDSIOContextWrapper");
   }
 };
 
@@ -201,6 +211,10 @@ public:
   void complete(int r) final;
   void print(std::ostream& out) const override {
     out << "io_wrapper(" << wrapped << ")";
+  }
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "C_IO_Wrapper");
   }
 };
 

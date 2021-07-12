@@ -62,10 +62,15 @@ MDSIOContextBase::~MDSIOContextBase()
 
 bool MDSIOContextBase::check_ios_in_flight(ceph::coarse_mono_time cutoff,
 					   std::string& slow_count,
-					   ceph::coarse_mono_time& oldest)
+					   ceph::coarse_mono_time& oldest,
+					   Formatter *f)
 {
   static const unsigned MAX_COUNT = 100;
   unsigned slow = 0;
+  if (f){
+    f->open_object_section("slow_meta_ios");
+    f->open_array_section("ios");
+  }
 
   ioctx_list.lock.lock();
   for (elist<MDSIOContextBase*>::iterator p = ioctx_list.list.begin(); !p.end(); ++p) {
@@ -73,12 +78,22 @@ bool MDSIOContextBase::check_ios_in_flight(ceph::coarse_mono_time cutoff,
     if (c->created_at >= cutoff)
       break;
     ++slow;
+    if (f) {
+      f->open_object_section("io");
+      c->dump(f);
+      f->close_section();
+    }
+
     if (slow > MAX_COUNT)
       break;
     if (slow == 1)
       oldest = c->created_at;
   }
   ioctx_list.lock.unlock();
+  if (f) {
+    f->close_section();
+    f->close_section();
+  }
 
   if (slow > 0) {
     if (slow > MAX_COUNT)

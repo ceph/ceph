@@ -43,6 +43,10 @@ class MDSTableIOContext : public MDSIOContextBase
     explicit MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
       ceph_assert(ida != NULL);
     }
+    virtual void dump(Formatter *f) const {
+      ceph_assert(f != NULL);
+      f->dump_string("io_type", "MDSTableIOContext");
+    }
 };
 
 

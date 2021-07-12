@@ -42,6 +42,10 @@ protected:
   }
 public:
   explicit StrayManagerIOContext(StrayManager *sm_) : sm(sm_) {}
+  virtual void dump(Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_string("io_type", "StrayManagerIOContext");
+  }
 };
 
 class StrayManagerLogContext : public virtual MDSLogContextBase {
