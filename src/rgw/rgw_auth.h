@@ -364,12 +364,19 @@ protected:
 class StrategyRegistry;
 
 class WebIdentityApplier : public IdentityApplier {
+  string sub;
+  string iss;
+  string aud;
+  string client_id;
+  string user_name;
 protected:
   CephContext* const cct;
   rgw::sal::Store* store;
   string role_session;
   string role_tenant;
-  rgw::web_idp::WebTokenClaims token_claims;
+  std::unordered_multimap<string, string> token_claims;
+  boost::optional<multimap<string,string>> role_tags;
+  boost::optional<std::set<std::pair<string, string>>> principal_tags;
 
   string get_idp_url() const;
 
@@ -382,12 +389,50 @@ public:
                       rgw::sal::Store* store,
                       const string& role_session,
                       const string& role_tenant,
-                      const rgw::web_idp::WebTokenClaims& token_claims)
-    : cct(cct),
+                      const std::unordered_multimap<string, string>& token_claims,
+                      boost::optional<multimap<string,string>> role_tags,
+                      boost::optional<std::set<std::pair<string, string>>> principal_tags)
+      : cct(cct),
       store(store),
       role_session(role_session),
       role_tenant(role_tenant),
-      token_claims(token_claims) {
+      token_claims(token_claims),
+      role_tags(role_tags),
+      principal_tags(principal_tags) {
+      const auto& sub = token_claims.find("sub");
+      if(sub != token_claims.end()) {
+        this->sub = sub->second;
+      }
+
+      const auto& iss = token_claims.find("iss");
+      if(iss != token_claims.end()) {
+        this->iss = iss->second;
+      }
+
+      const auto& aud = token_claims.find("aud");
+      if(aud != token_claims.end()) {
+        this->aud = aud->second;
+      }
+
+      const auto& client_id = token_claims.find("client_id");
+      if(client_id != token_claims.end()) {
+        this->client_id = client_id->second;
+      } else {
+        const auto& azp = token_claims.find("azp");
+        if (azp != token_claims.end()) {
+          this->client_id = azp->second;
+        }
+      }
+
+      const auto& user_name = token_claims.find("username");
+      if(user_name != token_claims.end()) {
+        this->user_name = user_name->second;
+      } else {
+        const auto& given_username = token_claims.find("given_username");
+        if (given_username != token_claims.end()) {
+          this->user_name = given_username->second;
+        }
+      }
   }
 
   void modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const override;
@@ -401,7 +446,7 @@ public:
   }
 
   bool is_owner_of(const rgw_user& uid) const override {
-    if (uid.id == token_claims.sub && uid.tenant == role_tenant && uid.ns == "oidc") {
+    if (uid.id == this->sub && uid.tenant == role_tenant && uid.ns == "oidc") {
       return true;
     }
     return false;
@@ -422,7 +467,7 @@ public:
   }
 
   string get_acct_name() const override {
-    return token_claims.user_name;
+    return this->user_name;
   }
 
   string get_subuser() const override {
@@ -436,7 +481,9 @@ public:
                                               const req_state* s,
                                               const string& role_session,
                                               const string& role_tenant,
-                                              const rgw::web_idp::WebTokenClaims& token) const = 0;
+                                              const std::unordered_multimap<string, string>& token,
+                                              boost::optional<multimap<string, string>>,
+                                              boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const = 0;
   };
 };
 
@@ -643,29 +690,26 @@ public:
     string name;
     string tenant;
     vector<string> role_policies;
-  } role;
+  };
+  struct TokenAttrs {
+    rgw_user user_id;
+    string token_policy;
+    string role_session_name;
+    std::vector<string> token_claims;
+    string token_issued_at;
+    vector<std::pair<string, string>> principal_tags;
+  };
 protected:
-  const rgw_user user_id;
-  string token_policy;
-  string role_session_name;
-  std::vector<string> token_claims;
-  string token_issued_at;
+  Role role;
+  TokenAttrs token_attrs;
 
 public:
 
   RoleApplier(CephContext* const cct,
                const Role& role,
-               const rgw_user& user_id,
-               const string& token_policy,
-               const string& role_session_name,
-               const std::vector<string>& token_claims,
-               const string& token_issued_at)
+               const TokenAttrs& token_attrs)
     : role(role),
-      user_id(user_id),
-      token_policy(token_policy),
-      role_session_name(role_session_name),
-      token_claims(token_claims),
-      token_issued_at(token_issued_at) {}
+      token_attrs(token_attrs) {}
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
@@ -674,7 +718,7 @@ public:
     return false;
   }
   bool is_owner_of(const rgw_user& uid) const override {
-    return (this->user_id.id == uid.id && this->user_id.tenant == uid.tenant && this->user_id.ns == uid.ns);
+    return (this->token_attrs.user_id.id == uid.id && this->token_attrs.user_id.tenant == uid.tenant && this->token_attrs.user_id.ns == uid.ns);
   }
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
@@ -693,11 +737,7 @@ public:
     virtual aplptr_t create_apl_role( CephContext* cct,
                                       const req_state* s,
                                       const rgw::auth::RoleApplier::Role& role,
-                                      const rgw_user& user_id,
-                                      const std::string& token_policy,
-                                      const std::string& role_session,
-                                      const std::vector<string>& token_claims,
-                                      const std::string& token_issued_at) const = 0;
+                                      const rgw::auth::RoleApplier::TokenAttrs& token_attrs) const = 0;
     };
 };
 

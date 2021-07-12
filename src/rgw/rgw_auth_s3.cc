@@ -448,6 +448,40 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   return 0;
 }
 
+bool is_non_s3_op(RGWOpType op_type)
+{
+  if (op_type == RGW_STS_GET_SESSION_TOKEN ||
+      op_type == RGW_STS_ASSUME_ROLE ||
+      op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY ||
+      op_type == RGW_OP_CREATE_ROLE ||
+      op_type == RGW_OP_DELETE_ROLE ||
+      op_type == RGW_OP_GET_ROLE ||
+      op_type == RGW_OP_MODIFY_ROLE ||
+      op_type == RGW_OP_LIST_ROLES ||
+      op_type == RGW_OP_PUT_ROLE_POLICY ||
+      op_type == RGW_OP_GET_ROLE_POLICY ||
+      op_type == RGW_OP_LIST_ROLE_POLICIES ||
+      op_type == RGW_OP_DELETE_ROLE_POLICY ||
+      op_type == RGW_OP_PUT_USER_POLICY ||
+      op_type == RGW_OP_GET_USER_POLICY ||
+      op_type == RGW_OP_LIST_USER_POLICIES ||
+      op_type == RGW_OP_DELETE_USER_POLICY ||
+      op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
+      op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
+      op_type == RGW_OP_GET_OIDC_PROVIDER ||
+      op_type == RGW_OP_LIST_OIDC_PROVIDERS ||
+      op_type == RGW_OP_PUBSUB_TOPIC_CREATE ||
+      op_type == RGW_OP_PUBSUB_TOPICS_LIST ||
+      op_type == RGW_OP_PUBSUB_TOPIC_GET ||
+      op_type == RGW_OP_PUBSUB_TOPIC_DELETE ||
+      op_type == RGW_OP_TAG_ROLE ||
+      op_type == RGW_OP_LIST_ROLE_TAGS ||
+      op_type == RGW_OP_UNTAG_ROLE) {
+    return true;
+  }
+  return false;
+}
+
 int parse_v4_credentials(const req_info& info,                     /* in */
 			 std::string_view& access_key_id,        /* out */
 			 std::string_view& credential_scope,     /* out */
