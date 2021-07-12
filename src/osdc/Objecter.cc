@@ -1951,6 +1951,9 @@ void Objecter::_maybe_request_map()
     flag = CEPH_SUBSCRIBE_ONETIME;
   }
   epoch_t epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
+  if (cct->_conf.get_val<bool>("objecter_want_latest")) {
+    flag |= CEPH_SUBSCRIBE_LATEST;
+  }
   if (monc->sub_want("osdmap", epoch, flag)) {
     monc->renew_subs();
   }

@@ -38,10 +38,11 @@ struct Subscription {
   xlist<Subscription*>::item type_item;
   version_t next;
   bool onetime;
+  bool want_latest;
   bool incremental_onetime;  // has CEPH_FEATURE_INCSUBOSDMAP
   
   Subscription(MonSession *s, const std::string& t) : session(s), type(t), type_item(this),
-						 next(0), onetime(false), incremental_onetime(false) {}
+						      next(0), onetime(false), want_latest(false), incremental_onetime(false) {}
 };
 
 struct MonSession : public RefCountedObject {
@@ -257,7 +258,7 @@ struct MonSessionMap {
     return s;
   }
 
-  void add_update_sub(MonSession *s, const std::string& what, version_t start, bool onetime, bool incremental_onetime) {
+  void add_update_sub(MonSession *s, const std::string& what, version_t start, uint8_t flags, bool incremental_onetime) {
     Subscription *sub = 0;
     if (s->sub_map.count(what)) {
       sub = s->sub_map[what];
@@ -270,8 +271,9 @@ struct MonSessionMap {
       subs[what]->push_back(&sub->type_item);
     }
     sub->next = start;
-    sub->onetime = onetime;
-    sub->incremental_onetime = onetime && incremental_onetime;
+    sub->onetime = flags & CEPH_SUBSCRIBE_ONETIME,
+    sub->want_latest = flags & CEPH_SUBSCRIBE_LATEST,
+    sub->incremental_onetime = sub->onetime && incremental_onetime;
   }
 
   void remove_sub(Subscription *sub) {

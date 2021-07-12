@@ -801,7 +801,7 @@ class OSDStub : public TestStub
       if ((m->oldest_map < first && osdmap.get_epoch() == 0) ||
 	  m->oldest_map <= osdmap.get_epoch()) {
 	monc.sub_want("osdmap", osdmap.get_epoch()+1,
-		       CEPH_SUBSCRIBE_ONETIME);
+		       CEPH_SUBSCRIBE_ONETIME | CEPH_SUBSCRIBE_LATEST);
 	monc.renew_subs();
 	m->put();
 	return;
@@ -860,7 +860,7 @@ class OSDStub : public TestStub
     if (m->newest_map && m->newest_map > last) {
       dout(1) << __func__
 	      << " they have more maps; requesting them!" << dendl;
-      monc.sub_want("osdmap", osdmap.get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
+      monc.sub_want("osdmap", osdmap.get_epoch()+1, CEPH_SUBSCRIBE_ONETIME | CEPH_SUBSCRIBE_LATEST);
       monc.renew_subs();
     }
 
