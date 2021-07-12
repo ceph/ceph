@@ -450,6 +450,8 @@ public:
       if (!crypto_accel)
         failed_to_get_crypto = true;
     }
+
+    CryptoEngine *engine = crypto_accel->get_engine(key);
     bool result = true;
     unsigned char iv[AES_256_IVSIZE];
     for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
@@ -457,11 +459,11 @@ public:
       prepare_iv(iv, stream_offset + offset);
       if (crypto_accel != nullptr) {
         if (encrypt) {
-          result = crypto_accel->cbc_encrypt(out + offset, in + offset,
-                                             process_size, iv, key);
+          result = crypto_accel->cbc_encrypt_mb(engine, out + offset, in + offset,
+                                             process_size, iv);
         } else {
-          result = crypto_accel->cbc_decrypt(out + offset, in + offset,
-                                             process_size, iv, key);
+          result = crypto_accel->cbc_decrypt_mb(engine, out + offset, in + offset,
+                                             process_size, iv);
         }
       } else {
         result = cbc_transform(
@@ -469,6 +471,8 @@ public:
             iv, key, encrypt);
       }
     }
+    crypto_accel->flush(engine);
+    crypto_accel->put_engine(engine);
     return result;
   }
 
