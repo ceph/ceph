@@ -3644,10 +3644,15 @@ public:
       ++to_repair_cnt;
     }
   }
-  // In fact this is the only repairer's method which is thread-safe!!
+  //////////////////////
+  //In fact two methods below are the only ones in this class which are thread-safe!!
   void inc_repaired() {
     ++to_repair_cnt;
   }
+  void request_compaction() {
+    need_compact = true;
+  }
+  //////////////////////
 
   void init_space_usage_tracker(
     uint64_t total_space, uint64_t lres_tracking_unit_size)
@@ -3680,6 +3685,7 @@ public:
 
 private:
   std::atomic<unsigned> to_repair_cnt = { 0 };
+  std::atomic<bool> need_compact = { false };
   KeyValueDB::Transaction fix_per_pool_omap_txn;
   KeyValueDB::Transaction fix_fm_leaked_txn;
   KeyValueDB::Transaction fix_fm_false_free_txn;
