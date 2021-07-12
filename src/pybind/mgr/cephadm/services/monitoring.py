@@ -3,7 +3,7 @@ import logging
 import os
 from typing import List, Any, Tuple, Dict, Optional, cast
 
-from mgr_module import HandleCommandResult
+from mgr_module import HandleCommandResult, MonCommandFailed
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec
@@ -54,10 +54,24 @@ class GrafanaService(CephadmService):
                 'value': 'false',
             })
 
+        user, password = '', ''
+        try:
+            user = self.mgr.check_mon_command({
+                'prefix': 'dashboard get-grafana-api-username'
+            }).stdout
+            password = self.mgr.check_mon_command({
+                'prefix': 'dashboard get-grafana-api-password'
+            }).stdout
+        except MonCommandFailed:
+            pass
+
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
                 'http_port': daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
-                'http_addr': daemon_spec.ip if daemon_spec.ip else ''
+                'http_addr': daemon_spec.ip if daemon_spec.ip else '',
+                'user': user,
+                'password': password,
+
             })
 
         config_file = {
