@@ -3329,6 +3329,11 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   _inode->change_attr = 0;
 
   const cref_t<MClientRequest> &req = mdr->client_request;
+
+  dout(10) << "copying fscrypt_auth len " << req->fscrypt_auth.size() << dendl;
+  _inode->fscrypt_auth = req->fscrypt_auth;
+  _inode->fscrypt_file = req->fscrypt_file;
+
   if (req->get_data().length()) {
     auto p = req->get_data().cbegin();
 
@@ -3336,9 +3341,6 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     auto _xattrs = CInode::allocate_xattr_map();
     decode_noshare(*_xattrs, p);
     dout(10) << "prepare_new_inode setting xattrs " << *_xattrs << dendl;
-    if (_xattrs->count("encryption.ctx")) {
-      _inode->fscrypt = true;
-    }
     in->reset_xattrs(std::move(_xattrs));
   }
 
@@ -4989,10 +4991,24 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   __u32 mask = req->head.args.setattr.mask;
   __u32 access_mask = MAY_WRITE;
 
+  if (req->get_header().version < 6) {
+    // No changes to fscrypted inodes by downrevved clients
+    if (!cur->get_inode()->fscrypt_auth.empty()) {
+      respond_to_request(mdr, -CEPHFS_EPERM);
+      return;
+    }
+
+    // Only allow fscrypt field changes by capable clients
+    if (mask & (CEPH_SETATTR_FSCRYPT_FILE|CEPH_SETATTR_FSCRYPT_AUTH)) {
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+  }
+
   // xlock inode
-  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_BTIME|CEPH_SETATTR_KILL_SGUID))
+  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_BTIME|CEPH_SETATTR_KILL_SGUID|CEPH_SETATTR_FSCRYPT_AUTH))
     lov.add_xlock(&cur->authlock);
-  if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
+  if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE|CEPH_SETATTR_FSCRYPT_FILE))
     lov.add_xlock(&cur->filelock);
   if (mask & CEPH_SETATTR_CTIME)
     lov.add_wrlock(&cur->versionlock);
@@ -5069,6 +5085,8 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
       pi.inode->truncate(old_size, req->head.args.setattr.size);
       le->metablob.add_truncate_start(cur->ino());
     } else {
+      if (mask & CEPH_SETATTR_FSCRYPT_FILE)
+	pi.inode->truncate_seq++;
       pi.inode->size = req->head.args.setattr.size;
       pi.inode->rstat.rbytes = pi.inode->size;
     }
@@ -5081,6 +5099,11 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
       changed_ranges = true;
     }
   }
+
+  if (mask & CEPH_SETATTR_FSCRYPT_AUTH)
+    pi.inode->fscrypt_file = req->fscrypt_auth;
+  if (mask & CEPH_SETATTR_FSCRYPT_FILE)
+    pi.inode->fscrypt_file = req->fscrypt_file;
 
   pi.inode->version = cur->pre_dirty();
   pi.inode->ctime = mdr->get_op_stamp();
@@ -6160,8 +6183,6 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   pi.inode->ctime = mdr->get_op_stamp();
   if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
     pi.inode->rstat.rctime = mdr->get_op_stamp();
-  if (name == "encryption.ctx"sv)
-    pi.inode->fscrypt = true;
   pi.inode->change_attr++;
   pi.inode->xattr_version++;
 
