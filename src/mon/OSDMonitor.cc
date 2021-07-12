@@ -7825,7 +7825,9 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
 
 int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
 {
-  auto max_pgs_per_osd = g_conf().get_val<uint64_t>("mon_max_pg_per_osd");
+  auto max_pgs_per_osd =
+      (g_conf().get_val<uint64_t>("mon_max_pg_per_osd") *
+       g_conf().get_val<double>("osd_max_pg_per_osd_hard_ratio"));
   auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);   // assume min cluster size 3
   auto max_pgs = max_pgs_per_osd * num_osds;
   uint64_t projected = 0;
