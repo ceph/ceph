@@ -32,6 +32,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
     'channel_crash',
     'channel_device',
     'channel_ident',
+    'channel_perf',
     'interval',
     'proxy',
     'contact',

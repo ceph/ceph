@@ -73,8 +73,7 @@ namespace PriorityCache
       reserve_extra(reserve_extra),
       name(name.empty() ? "prioritycache" : name)
   {
-    PerfCountersBuilder b(cct, name,
-                          MallocStats::M_FIRST, MallocStats::M_LAST);
+    PerfCountersBuilder b(cct, this->name, MallocStats::M_FIRST, MallocStats::M_LAST);
 
     b.add_u64(MallocStats::M_TARGET_BYTES, "target_bytes",
               "target process memory usage in bytes", "t",
