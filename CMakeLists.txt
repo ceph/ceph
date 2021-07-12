@@ -146,6 +146,15 @@ if(WITH_RDMA)
   set(HAVE_RDMA TRUE)
 endif()
 
+option(WITH_UCX "Enable UCX in async messenger" OFF)
+if(WITH_UCX)
+  find_package(ucx REQUIRED)
+  set(HAVE_UCXLIB ${UCX_FOUND})
+  if(HAVE_UCXLIB)
+    set(HAVE_UCX true)
+  endif()
+endif()
+
 find_package(Backtrace)
 
 option(WITH_RBD "Enable RADOS Block Device related targets" ON)

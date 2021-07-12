@@ -130,6 +130,9 @@
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA
 
+/* AsyncMesenger UCX conditional compilation */
+#cmakedefine HAVE_UCX
+
 /* ibverbs experimental conditional compilation */
 #cmakedefine HAVE_IBV_EXP
 

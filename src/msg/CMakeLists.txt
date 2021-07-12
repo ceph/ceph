@@ -37,6 +37,13 @@ if(HAVE_RDMA)
     async/rdma/RDMAStack.cc)
 endif()
 
+if(HAVE_UCX)
+  list(APPEND msg_srcs
+    async/ucx/UCXStack.cc
+    async/ucx/UCXSerSktImpl.cc
+    async/ucx/UCXConSktImpl.cc)
+endif()
+
 add_library(common-msg-objs OBJECT ${msg_srcs})
 target_include_directories(common-msg-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 
