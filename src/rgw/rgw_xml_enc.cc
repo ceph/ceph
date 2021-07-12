@@ -43,8 +43,14 @@ void RGWBWRedirectInfo::dump_xml(Formatter *f) const
 #define WEBSITE_HTTP_REDIRECT_CODE_MIN      300
 #define WEBSITE_HTTP_REDIRECT_CODE_MAX      400
 void RGWBWRedirectInfo::decode_xml(XMLObj *obj) {
-  RGWXMLDecoder::decode_xml("Protocol", redirect.protocol, obj);
-  RGWXMLDecoder::decode_xml("HostName", redirect.hostname, obj);
+  bool have_protocol = RGWXMLDecoder::decode_xml("Protocol", redirect.protocol, obj);
+  if (have_protocol && redirect.protocol != "http" && redirect.protocol != "https") {
+    throw RGWXMLDecoder::err("Invalid protocol, protocol can be http or https. If not defined the protocol will be selected automatically.");
+  }
+  bool have_host_name = RGWXMLDecoder::decode_xml("HostName", redirect.hostname, obj);
+  if (have_host_name && redirect.hostname.empty()) {
+    throw RGWXMLDecoder::err("The HostName cannot be blank. To redirect within the same domain, the element should not be present.");
+  }
   int code = 0;
   bool has_http_redirect_code = RGWXMLDecoder::decode_xml("HttpRedirectCode", code, obj);
   if (has_http_redirect_code &&
@@ -73,13 +79,16 @@ void RGWBWRoutingRuleCondition::dump_xml(Formatter *f) const
 #define WEBSITE_HTTP_ERROR_CODE_RETURNED_EQUALS_MIN      400
 #define WEBSITE_HTTP_ERROR_CODE_RETURNED_EQUALS_MAX      600
 void RGWBWRoutingRuleCondition::decode_xml(XMLObj *obj) {
-  RGWXMLDecoder::decode_xml("KeyPrefixEquals", key_prefix_equals, obj);
+  bool have_key_prefix_equals = RGWXMLDecoder::decode_xml("KeyPrefixEquals", key_prefix_equals, obj);
   int code = 0;
   bool has_http_error_code_returned_equals = RGWXMLDecoder::decode_xml("HttpErrorCodeReturnedEquals", code, obj);
   if (has_http_error_code_returned_equals &&
       !(code >= WEBSITE_HTTP_ERROR_CODE_RETURNED_EQUALS_MIN &&
         code < WEBSITE_HTTP_ERROR_CODE_RETURNED_EQUALS_MAX)) {
     throw RGWXMLDecoder::err("The provided HTTP redirect code is not valid. Valid codes are 4XX or 5XX.");
+  }
+  if (!have_key_prefix_equals && !has_http_error_code_returned_equals) {
+    throw RGWXMLDecoder::err("Condition cannot be empty. To redirect all requests without a condition, the condition element should not be present.");
   }
   http_error_code_returned_equals = code;
 }
