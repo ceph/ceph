@@ -1020,8 +1020,10 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   uint64_t last_journal = 0;	// log event seq for the last time i was added to log event
   utime_t last_dirstat_prop;
 
+  elist<CInode*>::item item_dir_inode;
+
   // list item node for when we have unpropagated rstat data
-  elist<CInode*>::item dirty_rstat_item;
+  elist<CInode*>::item item_dirty_rstat;
 
   mempool::mds_co::set<client_t> client_snap_caps;
   mempool::mds_co::compact_map<snapid_t, mempool::mds_co::set<client_t> > client_need_snapflush;

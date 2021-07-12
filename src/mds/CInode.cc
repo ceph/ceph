@@ -400,7 +400,7 @@ void CInode::mark_dirty_rstat()
     CDentry *pdn = get_projected_parent_dn();
     if (pdn->is_auth()) {
       CDir *pdir = pdn->dir;
-      pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
+      pdir->dirty_rstat_inodes.push_back(&item_dirty_rstat);
       mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
     } else {
       // under cross-MDS rename.
@@ -415,7 +415,7 @@ void CInode::clear_dirty_rstat()
     dout(10) << __func__ << dendl;
     state_clear(STATE_DIRTYRSTAT);
     put(PIN_DIRTYRSTAT);
-    dirty_rstat_item.remove_myself();
+    item_dirty_rstat.remove_myself();
   }
 }
 

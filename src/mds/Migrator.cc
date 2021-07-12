@@ -827,16 +827,10 @@ int Migrator::export_dir(CDir *dir, mds_rank_t dest, bool recursive)
   if (unlikely(g_conf()->mds_thrash_exports)) {
     // create random subtree bound (which will not be exported)
     std::vector<CDir*> ls;
-    for (auto p = dir->begin(); p != dir->end(); ++p) {
-      auto dn = p->second;
-      CDentry::linkage_t *dnl= dn->get_linkage();
-      if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
-	if (in->is_dir()) {
-          auto&& dirs = in->get_nested_dirfrags();
-          ls.insert(std::end(ls), std::begin(dirs), std::end(dirs));
-        }
-      }
+    for (auto p = dir->dir_inodes.begin(); !p.end(); ++p) {
+      CInode *in = *p;
+      auto&& dirs = in->get_nested_dirfrags();
+      ls.insert(std::end(ls), std::begin(dirs), std::end(dirs));
     }
     if (ls.size() > 0) {
       int n = rand() % ls.size();
@@ -1121,13 +1115,9 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
       for (auto& in : bound_inodes)
 	lov.add_rdlock(&in->dirfragtreelock);
     } else {
-      for (auto p = dir->begin(); p != dir->end(); ++p) {
-	CDentry::linkage_t *dnl = p->second->get_projected_linkage();
-	if (dnl->is_primary()) {
-	  CInode *in = dnl->get_inode();
-	  if (in->is_dir())
-	    lov.add_rdlock(&in->dirfragtreelock);
-	}
+      for (auto p = dir->dir_inodes.begin(); !p.end(); ++p) {
+	CInode *in = *p;
+	lov.add_rdlock(&in->dirfragtreelock);
       }
     }
 
@@ -1478,7 +1468,10 @@ void Migrator::get_export_client_set(CDir *dir, set<client_t>& client_set)
 	for (auto& q : ls) {
 	  if (!q->state_test(CDir::STATE_EXPORTBOUND)) {
 	    // include nested dirfrag
-	    ceph_assert(q->get_dir_auth().first == CDIR_AUTH_PARENT);
+	    if (q->get_dir_auth().first != CDIR_AUTH_PARENT) {
+	      dout(7) << __func__ << " bad " << *dir << " " << *q << dendl;
+	      ceph_assert(0);
+	    }
 	    dfs.push_back(q); // it's ours, recurse (later)
 	  }
 	}

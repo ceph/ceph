@@ -198,9 +198,10 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth) :
   mdcache(mdc), inode(in), frag(fg),
-  dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
+  dirty_rstat_inodes(member_offset(CInode, item_dirty_rstat)),
   dirty_dentries(member_offset(CDentry, item_dir_dirty)),
   item_dirty(this), item_new(this),
+  dir_inodes(member_offset(CInode, item_dir_inode)),
   lock_caches_with_auth_pins(member_offset(MDLockCache::DirItem, item_dir)),
   freezing_inodes(member_offset(CInode, item_freezing_inode)),
   dir_rep(REP_NONE),
@@ -584,6 +585,8 @@ void CDir::link_inode_work(CDentry *dn, CInode *in)
 {
   ceph_assert(dn->get_linkage()->get_inode() == in);
   in->set_primary_parent(dn);
+  if (in->is_dir())
+    dir_inodes.push_back(&in->item_dir_inode);
 
   // set inode version
   //in->inode.version = dn->get_version();
@@ -697,8 +700,10 @@ void CDir::unlink_inode_work(CDentry *dn)
 
     // detach inode
     in->remove_primary_parent(dn);
-    if (in->is_dir())
+    if (in->is_dir()) {
+      in->item_dir_inode.remove_myself();
       in->item_pop_lru.remove_myself();
+    }
     dn->get_linkage()->inode = 0;
   } else {
     ceph_assert(!dn->get_linkage()->is_null());
@@ -881,6 +886,8 @@ void CDir::steal_dentry(CDentry *dn)
       CInode *in = dn->get_linkage()->get_inode();
       const auto& pi = in->get_projected_inode();
       if (in->is_dir()) {
+	dir_inodes.push_back(&in->item_dir_inode);
+
 	_fnode->fragstat.nsubdirs++;
 	if (in->item_pop_lru.is_on_list())
 	  pop_lru_subdirs.push_back(&in->item_pop_lru);
@@ -899,7 +906,7 @@ void CDir::steal_dentry(CDentry *dn)
 
       // move dirty inode rstat to new dirfrag
       if (in->is_dirty_rstat())
-	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
+	dirty_rstat_inodes.push_back(&in->item_dirty_rstat);
     } else if (dn->get_linkage()->is_remote()) {
       if (dn->get_linkage()->get_remote_d_type() == DT_DIR)
 	_fnode->fragstat.nsubdirs++;
@@ -911,7 +918,7 @@ void CDir::steal_dentry(CDentry *dn)
     if (dn->get_linkage()->is_primary()) {
       CInode *in = dn->get_linkage()->get_inode();
       if (in->is_dirty_rstat())
-	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
+	dirty_rstat_inodes.push_back(&in->item_dirty_rstat);
     }
   }
 
@@ -1927,7 +1934,12 @@ CDentry *CDir::_load_dentry(
 
 	if (in->is_unconnected()) {
           dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last); // link
-	} else if (!undef_inode) {
+	} else if (undef_inode) {
+	  if (in->is_dir())
+	    dir_inodes.push_back(&in->item_dir_inode);
+	  else
+	    in->item_dir_inode.remove_myself();
+	} else {
 	  mdcache->add_inode(in);
           dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last); // link
 	}
@@ -3084,15 +3096,9 @@ void CDir::_walk_tree(std::function<bool(CDir*)> callback)
     CDir *dir = dfq.front();
     dfq.pop_front();
 
-    for (auto& p : *dir) {
-      CDentry *dn = p.second;
-      if (!dn->get_linkage()->is_primary())
-	continue;
-      CInode *in = dn->get_linkage()->get_inode();
-      if (!in->is_dir())
-	continue;
-
-      auto&& dfv = in->get_nested_dirfrags();
+    for (auto it = dir->dir_inodes.begin(); !it.end(); ++it) {
+      CInode *in = *it;
+      auto&& dfv = in->get_dirfrags();
       for (auto& dir : dfv) {
 	auto ret = callback(dir);
 	if (ret)
@@ -3121,6 +3127,8 @@ bool CDir::freeze_tree(bool recursive)
 
   if (recursive) {
     _walk_tree([this](CDir *dir) {
+	if (dir->is_subtree_root())
+	  return false;
 	if (dir->freeze_tree_state)
 	  return false;
 	if (dir->state_test(STATE_AUXBOUND) && dir != freeze_tree_state->dir)
@@ -3172,6 +3180,8 @@ void CDir::_freeze_tree()
     }
 
     _walk_tree([this, &auth] (CDir *dir) {
+	if (dir->is_subtree_root())
+	  return false;
 	if (dir->freeze_tree_state != freeze_tree_state) {
 	  mdcache->adjust_subtree_auth(dir, auth);
 	  return false;
@@ -3189,6 +3199,8 @@ void CDir::_freeze_tree()
   } else {
     // importing subtree ?
     _walk_tree([this] (CDir *dir) {
+	if (dir->is_subtree_root())
+	  return false;
 	ceph_assert(!dir->freeze_tree_state);
 	dir->freeze_tree_state = freeze_tree_state;
 	return true;
@@ -3216,6 +3228,8 @@ void CDir::unfreeze_tree()
 
   if (freeze_tree_state) {
     _walk_tree([this, &unfreeze_waiters](CDir *dir) {
+	if (dir->is_subtree_root())
+	  return false;
 	if (dir->freeze_tree_state != freeze_tree_state)
 	  return false;
 	dir->freeze_tree_state.reset();
@@ -3272,6 +3286,8 @@ void CDir::adjust_freeze_after_rename(CDir *dir)
   MDSContext::vec unfreeze_waiters;
 
   auto unfreeze = [this, &unfreeze_waiters](CDir *dir) {
+    if (dir->is_subtree_root())
+      return false;
     if (dir->freeze_tree_state != freeze_tree_state)
       return false;
     int dec = dir->get_auth_pins() + dir->get_dir_auth_pins();
@@ -3287,6 +3303,20 @@ void CDir::adjust_freeze_after_rename(CDir *dir)
   dir->_walk_tree(unfreeze);
 
   mdcache->mds->queue_waiters(unfreeze_waiters);
+}
+
+std::vector<CDir*> CDir::get_subtrees_under()
+{
+  std::vector<CDir*> results;
+  _walk_tree([&results] (CDir *dir) {
+      if (dir->is_subtree_root()) {
+	results.push_back(dir);
+	return false;
+      }
+      return true;
+    }
+  );
+  return results;
 }
 
 bool CDir::can_auth_pin(int *err_ret) const

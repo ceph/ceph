@@ -1037,16 +1037,25 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
 
     auto& root_bounds = subtrees.at(root);
     // move items nested beneath me, under me.
-    for (auto p = root_bounds.begin(); p != root_bounds.end(); ) {
-      auto next = p;
-      ++next;
-      if (get_subtree_root((*p)->get_parent_dir()) == dir) {
-	// move under me
-	dout(10) << "  claiming child bound " << **p << dendl;
-	dir_bounds.insert(*p);
-	root_bounds.erase(p);
+    if (root_bounds.size() < 100) {
+      for (auto p = root_bounds.begin(); p != root_bounds.end(); ) {
+	auto next = p;
+	++next;
+	if (get_subtree_root((*p)->get_parent_dir()) == dir) {
+	  // move under me
+	  dout(10) << "  claiming child bound " << **p << dendl;
+	  dir_bounds.insert(*p);
+	  root_bounds.erase(p);
+	}
+	p = next;
       }
-      p = next;
+    } else {
+      auto&& bounds = dir->get_subtrees_under();
+      for (CDir *bound : bounds) {
+	dout(10) << "  claiming child bound " << *bound << dendl;
+	dir_bounds.insert(bound);
+	root_bounds.erase(bound);
+      }
     }
     
     // i am a bound of the parent subtree.
@@ -3533,8 +3542,7 @@ void MDCache::remove_inode_recursive(CInode *in)
   auto&& ls = in->get_dirfrags();
   for (const auto& subdir : ls) {
     dout(10) << " removing dirfrag " << *subdir << dendl;
-    auto it = subdir->items.begin();
-    while (it != subdir->items.end()) {
+    for (auto it = subdir->begin(); it != subdir->end(); ) {
       CDentry *dn = it->second;
       ++it;
       CDentry::linkage_t *dnl = dn->get_linkage();
@@ -3953,7 +3961,7 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
     rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce(), dir->get_dir_rep());
     dir->state_set(CDir::STATE_REJOINING);
 
-    for (auto it = dir->items.begin(); it != dir->items.end(); ) {
+    for (auto it = dir->begin(); it != dir->end(); ) {
       CDentry *dn = it->second;
       ++it;
       dn->state_set(CDentry::STATE_REJOINING);
@@ -5948,7 +5956,8 @@ void MDCache::opened_undef_inode(CInode *in)
   dout(10) << "opened_undef_inode " << *in << dendl;
 
   rejoin_undef_inodes.erase(in);
-  if (in->is_dir() && in->get_num_dirfrags()) {
+  if (in->get_num_dirfrags()) {
+    ceph_assert(in->is_dir());
     // FIXME: re-hash dentries if necessary
     ceph_assert(in->get_inode()->dir_layout.dl_dir_hash == g_conf()->mds_default_dir_hash);
     if (in->get_num_dirfrags() && !in->dirfragtree.is_leaf(frag_t()))
