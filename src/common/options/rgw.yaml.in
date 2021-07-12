@@ -1180,6 +1180,16 @@ options:
   - rgw_zonegroup
   - rgw_realm
   with_legacy: true
+- name: rgw_zone_id
+  type: str
+  level: advanced
+  desc: Zone ID
+  services:
+  - rgw
+  see_also:
+  - rgw_zone
+  - rgw_zonegroup
+  - rgw_realm
 - name: rgw_zone_root_pool
   type: str
   level: advanced
@@ -1248,6 +1258,16 @@ options:
   - rgw_zone
   - rgw_realm
   with_legacy: true
+- name: rgw_zonegroup_id
+  type: str
+  level: advanced
+  desc: Zonegroup ID
+  services:
+  - rgw
+  see_also:
+  - rgw_zone
+  - rgw_zonegroup
+  - rgw_realm
 - name: rgw_zonegroup_root_pool
   type: str
   level: advanced
@@ -1278,6 +1298,11 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_realm_id
+  type: str
+  level: advanced
+  services:
+  - rgw
 - name: rgw_realm_root_pool
   type: str
   level: advanced
