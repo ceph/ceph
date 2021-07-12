@@ -19,6 +19,12 @@ namespace librbd {
 namespace crypto {
 namespace luks {
 
+namespace {
+
+static constexpr uint64_t MAGIC_LENGTH = 6;
+
+} // anonymous namespace
+
 Header::Header(CephContext* cct) : m_cct(cct), m_fd(-1), m_cd(nullptr) {
 }
 
@@ -92,20 +98,27 @@ int Header::write(const ceph::bufferlist& bl) {
   return r;
 }
 
-ssize_t Header::read(ceph::bufferlist* bl) {
+ssize_t Header::read(ceph::bufferlist* bl, size_t length) {
   ceph_assert(m_fd != -1);
 
-  // get current header size
-  struct stat st;
-  ssize_t r = fstat(m_fd, &st);
-  if (r < 0) {
-    r = -errno;
-    lderr(m_cct) << "failed to stat anonymous file: " << cpp_strerror(r)
-                 << dendl;
-    return r;
+  // seek to start
+  lseek(m_fd, 0, SEEK_SET);
+
+  if (length == 0) {
+    // get current header size
+    struct stat st;
+    ssize_t r = fstat(m_fd, &st);
+    if (r < 0) {
+      r = -errno;
+      lderr(m_cct) << "failed to stat anonymous file: " << cpp_strerror(r)
+                   << dendl;
+      return r;
+    }
+
+    length = st.st_size;
   }
 
-  r = bl->read_fd(m_fd, st.st_size);
+  auto r = bl->read_fd(m_fd, length);
   if (r < 0) {
     lderr(m_cct) << "error reading header: " << cpp_strerror(r) << dendl;
   }
@@ -229,6 +242,127 @@ int Header::read_volume_key(const char* passphrase, size_t passphrase_size,
   }
 
   return 0;
+}
+
+// returns maximal offset of change
+int Header::replace_magic(const std::string old_magic,
+                          const std::string new_magic, bool silent) {
+  ceph_assert(old_magic.size() == MAGIC_LENGTH &&
+              new_magic.size() == MAGIC_LENGTH);
+
+  // this will be restored only upon success
+  auto saved_offset = lseek(m_fd, 0, SEEK_CUR);
+  lseek(m_fd, 0, SEEK_SET);
+
+  // read magic
+  char magic[MAGIC_LENGTH];
+  if (::read(m_fd, magic, MAGIC_LENGTH) != MAGIC_LENGTH) {
+    lderr(m_cct) << "cannot read header magic: " << cpp_strerror(-errno)
+                 << dendl;
+    return -errno;
+  }
+
+  // check if already replaced
+  if (memcmp(new_magic.c_str(), magic, MAGIC_LENGTH)) {
+    // compare to expected magic
+    if (memcmp(old_magic.c_str(), magic, MAGIC_LENGTH)) {
+      if (!silent) {
+        lderr(m_cct) << "expected magic: " << old_magic << ", got: "
+                     << std::string(magic, MAGIC_LENGTH) << dendl;
+      }
+      return -EINVAL;
+    }
+
+    // write new magic
+    lseek(m_fd, 0, SEEK_SET);
+    if (::write(m_fd, new_magic.c_str(), MAGIC_LENGTH) != MAGIC_LENGTH) {
+      lderr(m_cct) << "cannot write header magic: " << cpp_strerror(-errno)
+                   << dendl;
+      return -errno;
+    }
+  }
+
+  // read version
+  uint16_t version;
+  if (::read(m_fd, &version, sizeof(version)) != sizeof(version)) {
+    lderr(m_cct) << "cannot read header version: " << cpp_strerror(-errno)
+                 << dendl;
+    return -errno;
+  }
+  boost::endian::big_to_native_inplace(version);
+
+  switch (version) {
+    case 1: {
+      // LUKS1, we're done
+      lseek(m_fd, saved_offset, SEEK_SET);
+      return MAGIC_LENGTH;
+    }
+    case 2: {
+      break;
+    }
+    default: {
+      lderr(m_cct) << "bad header version: " << version << dendl;
+      return -EINVAL;
+    }
+  }
+
+  // LUKS2
+
+  // read header size
+  uint64_t hdr_size;
+  if (::read(m_fd, &hdr_size, sizeof(hdr_size)) != sizeof(hdr_size)) {
+    lderr(m_cct) << "cannot read header size: " << cpp_strerror(-errno)
+                 << dendl;
+    return -errno;
+  }
+  boost::endian::big_to_native_inplace(hdr_size);
+
+  // seek to secondary header
+  if (lseek(m_fd, hdr_size, SEEK_SET) < (int64_t)hdr_size) {
+    lderr(m_cct) << "cannot seek to secondary header at offset: " << hdr_size
+                 << " (errno: " << cpp_strerror(-errno) << ")" << dendl;
+    return -errno;
+  }
+
+  // read secondary header magic
+  if (::read(m_fd, magic, MAGIC_LENGTH) != MAGIC_LENGTH) {
+    lderr(m_cct) << "cannot read secondary header magic: "
+                 << cpp_strerror(-errno) << dendl;
+    return -errno;
+  }
+
+  // secondary header magic transformation
+  std::swap(magic[0], magic[3]);
+  std::swap(magic[1], magic[2]);
+
+  if (!memcmp(new_magic.c_str(), magic, MAGIC_LENGTH)) {
+    // already replaced
+    return 0;
+  }
+
+  // compare to expected magic
+  if (memcmp(old_magic.c_str(), magic, MAGIC_LENGTH)) {
+    lderr(m_cct) << "expected secondary magic: " << old_magic << ", got: "
+                 << std::string(magic, MAGIC_LENGTH) << dendl;
+    return -EINVAL;
+  }
+
+  // secondary header magic transformation
+  memcpy(magic, new_magic.c_str(), MAGIC_LENGTH);
+  std::swap(magic[0], magic[3]);
+  std::swap(magic[1], magic[2]);
+
+  // write new magic to secondary header
+  lseek(m_fd, hdr_size, SEEK_SET);
+  if (::write(m_fd, magic, MAGIC_LENGTH) != MAGIC_LENGTH) {
+    lderr(m_cct) << "cannot write secondary header magic: "
+                 << cpp_strerror(-errno) << dendl;
+    return -errno;
+  }
+
+  lseek(m_fd, saved_offset, SEEK_SET);
+
+  return (int)(hdr_size + MAGIC_LENGTH);
 }
 
 int Header::get_sector_size() {

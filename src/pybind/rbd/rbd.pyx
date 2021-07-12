@@ -5199,6 +5199,44 @@ written." % (self.name, ret, length))
             raise make_ex(-errno.ENOTSUP, 'Unsupported encryption format')
 
     @requires_not_closed
+    def encryption_format_thin(self, format, passphrase,
+                               cipher_alg=RBD_ENCRYPTION_ALGORITHM_AES256):
+        passphrase = cstr(passphrase, "passphrase")
+        cdef rbd_encryption_format_t _format = format
+        cdef rbd_encryption_luks1_format_options_t _luks1_opts
+        cdef rbd_encryption_luks1_format_options_t _luks2_opts
+        cdef char* _passphrase = passphrase
+
+        if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
+            _luks1_opts.alg = cipher_alg
+            _luks1_opts.passphrase = _passphrase
+            _luks1_opts.passphrase_size = len(passphrase)
+            with nogil:
+                ret = rbd_encryption_format_thin(self.image, _format,
+                                                 &_luks1_opts,
+                                                 sizeof(_luks1_opts))
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    'error thin formatting image %s with format luks1' % (
+                        self.name))
+        elif (format == RBD_ENCRYPTION_FORMAT_LUKS2):
+            _luks2_opts.alg = cipher_alg
+            _luks2_opts.passphrase = _passphrase
+            _luks2_opts.passphrase_size = len(passphrase)
+            with nogil:
+                ret = rbd_encryption_format_thin(self.image, _format,
+                                                 &_luks2_opts,
+                                                 sizeof(_luks2_opts))
+            if ret != 0:
+                raise make_ex(
+                    ret,
+                    'error thin formatting image %s with format luks2' % (
+                        self.name))
+        else:
+            raise make_ex(-errno.ENOTSUP, 'Unsupported encryption format')
+
+    @requires_not_closed
     def encryption_load(self, format, passphrase):
         passphrase = cstr(passphrase, "passphrase")
         cdef rbd_encryption_format_t _format = format

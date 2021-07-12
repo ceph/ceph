@@ -8,6 +8,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/crypto/FlattenRequest.h"
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
@@ -110,6 +111,36 @@ struct DiffRequest<MockTestImageCtx> {
 DiffRequest<MockTestImageCtx>* DiffRequest<MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace object_map
+
+namespace crypto {
+
+template <>
+class FlattenRequest<MockTestImageCtx> {
+public:
+  crypto::EncryptionFormat<MockImageCtx>* format;
+  Context* on_finish = nullptr;
+  static FlattenRequest* s_instance;
+  static FlattenRequest* create(
+          MockTestImageCtx *image_ctx,
+          crypto::EncryptionFormat<MockImageCtx>* format,
+          Context* on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->format = format;
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  FlattenRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+FlattenRequest<MockTestImageCtx>* FlattenRequest<
+        MockTestImageCtx>::s_instance = nullptr;
+
+} // namespace crypto
 } // namespace librbd
 
 // template definitions

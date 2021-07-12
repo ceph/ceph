@@ -5,6 +5,7 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/crypto/FlattenRequest.h"
 #include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/DetachParentRequest.h"
 #include "librbd/Types.h"
@@ -120,6 +121,30 @@ void FlattenRequest<I>::handle_flatten_objects(int r) {
     return;
   } else if (r < 0) {
     lderr(cct) << "flatten encountered an error: " << cpp_strerror(r) << dendl;
+    this->complete(r);
+    return;
+  }
+
+  crypto_flatten();
+}
+
+template <typename I>
+void FlattenRequest<I>::crypto_flatten() {
+  auto ctx = create_context_callback<
+    FlattenRequest<I>,
+    &FlattenRequest<I>::handle_crypto_flatten>(this);
+  auto req = crypto::FlattenRequest<I>::create(
+          &this->m_image_ctx, this->m_image_ctx.get_encryption_format(), ctx);
+  req->send();
+}
+
+template <typename I>
+void FlattenRequest<I>::handle_crypto_flatten(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+
+  if (r < 0) {
+    lderr(cct) << "error flattening crypto: " << cpp_strerror(r) << dendl;
     this->complete(r);
     return;
   }

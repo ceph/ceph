@@ -23,6 +23,7 @@ public:
 
     void format(ImageCtxT* ictx, Context* on_finish) override;
     void load(ImageCtxT* ictx, Context* on_finish) override;
+    void flatten(ImageCtxT* ictx, Context* on_finish) override;
 
     ceph::ref_t<CryptoInterface> get_crypto() override {
       return m_crypto;

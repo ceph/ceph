@@ -13,6 +13,7 @@
 #include "common/escape.h"
 #include "common/safe_io.h"
 #include "global/global_context.h"
+#include <fstream>
 #include <iostream>
 #include <regex>
 #include <boost/algorithm/string.hpp>
@@ -666,6 +667,87 @@ int get_snap_create_flags(const po::variables_map &vm, uint32_t *flags) {
   return 0;
 }
 
+int get_encryption_options(const boost::program_options::variables_map &vm,
+                           at::ArgumentModifier modifier,
+                           bool with_format_options,
+                           EncryptionOptions* opts) {
+  auto& spec = opts->spec;
+  std::string prefix = at::get_name_prefix(modifier) + at::ENCRYPTION_PREFIX;
+
+  librbd::encryption_algorithm_t alg = RBD_ENCRYPTION_ALGORITHM_AES256;
+  if (vm.count(prefix + at::ENCRYPTION_CIPHER_ALG)) {
+    alg = vm[prefix + at::ENCRYPTION_PASSPHRASE_FILE].as<
+            librbd::encryption_algorithm_t>();
+  }
+
+  bool has_passphrase = false;
+  std::string passphrase;
+
+  if (vm.count(prefix + at::ENCRYPTION_PASSPHRASE_FILE)) {
+    has_passphrase = true;
+    std::string passphrase_file =
+            vm[prefix + at::ENCRYPTION_PASSPHRASE_FILE].as<std::string>();
+
+    std::ifstream file(passphrase_file.c_str());
+    if (file.fail()) {
+      std::cerr << "rbd: unable to open passphrase file " << passphrase_file
+                << ": " << cpp_strerror(errno) << std::endl;
+      return -errno;
+    }
+    passphrase = std::string((std::istreambuf_iterator<char>(file)),
+                             (std::istreambuf_iterator<char>()));
+    file.close();
+    if (!passphrase.empty() && passphrase[passphrase.length() - 1] == '\n') {
+      passphrase.erase(passphrase.length() - 1);
+    }
+  }
+
+  if (vm.count(prefix + at::ENCRYPTION_FORMAT)) {
+    std::string format_str =
+            vm[prefix + at::ENCRYPTION_FORMAT].as<std::string>();
+    if (format_str == "none") {
+      spec.encrypted = false;
+    } else if (format_str == "luks1") {
+      if (!has_passphrase) {
+        std::cerr << "rbd: missing " << prefix + at::ENCRYPTION_PASSPHRASE_FILE
+                  << std::endl;
+        return -EINVAL;
+      }
+      spec.encrypted = true;
+      spec.format = RBD_ENCRYPTION_FORMAT_LUKS1;
+      spec.opts_size = sizeof(librbd::encryption_luks1_format_options_t);
+      spec.opts = malloc(spec.opts_size);
+      auto luks1_opts =
+              new(spec.opts) librbd::encryption_luks1_format_options_t;
+      luks1_opts->passphrase = std::move(passphrase);
+      luks1_opts->alg = alg;
+    } else if (format_str == "luks2") {
+      if (!has_passphrase) {
+        std::cerr << "rbd: missing " << prefix + at::ENCRYPTION_PASSPHRASE_FILE
+                  << std::endl;
+        return -EINVAL;
+      }
+      spec.encrypted = true;
+      spec.format = RBD_ENCRYPTION_FORMAT_LUKS2;
+      spec.opts_size = sizeof(librbd::encryption_luks2_format_options_t);
+      spec.opts = malloc(spec.opts_size);
+      memset(spec.opts, 0, spec.opts_size);
+      auto luks2_opts =
+              new(spec.opts) librbd::encryption_luks2_format_options_t;
+      luks2_opts->passphrase = std::move(passphrase);
+      luks2_opts->alg = alg;
+    } else {
+      std::cerr << "rbd: unsupported encryption format: " << format_str
+                << std::endl;
+      return -ENOTSUP;
+    }
+
+    opts->is_initialized = true;
+  }
+
+  return 0;
+}
+
 void init_context() {
   g_conf().set_val_or_die("rbd_cache_writethrough_until_flush", "false");
   g_conf().apply_changes(nullptr);
@@ -813,6 +895,7 @@ int init_and_open_image(const std::string &pool_name,
       return r;
     }
   }
+
   return 0;
 }
 

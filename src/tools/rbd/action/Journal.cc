@@ -41,6 +41,8 @@ void add_journal_option(po::options_description *opt,
                             "journal name";
   switch (modifier) {
   case at::ARGUMENT_MODIFIER_NONE:
+  case at::ARGUMENT_MODIFIER_PARENT:
+  case at::ARGUMENT_MODIFIER_CHILD:
   case at::ARGUMENT_MODIFIER_SOURCE:
     break;
   case at::ARGUMENT_MODIFIER_DEST:

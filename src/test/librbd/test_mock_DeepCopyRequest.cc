@@ -77,6 +77,7 @@ public:
 
   static MetadataCopyRequest* create(librbd::MockTestImageCtx *src_image_ctx,
                                      librbd::MockTestImageCtx *dst_image_ctx,
+                                     bool include_encryption_keys,
                                      Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;

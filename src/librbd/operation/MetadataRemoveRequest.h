@@ -19,6 +19,10 @@ namespace operation {
 template <typename ImageCtxT = ImageCtx>
 class MetadataRemoveRequest : public Request<ImageCtxT> {
 public:
+  static MetadataRemoveRequest* create(
+        ImageCtxT &image_ctx, Context *on_finish, const std::string &key) {
+    return new MetadataRemoveRequest(image_ctx, on_finish, key);
+  }
   MetadataRemoveRequest(ImageCtxT &image_ctx, Context *on_finish,
                         const std::string &key);
 

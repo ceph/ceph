@@ -91,6 +91,8 @@ EVP_CIPHER_CTX* DataCryptor::get_context(CipherMode mode) {
     return nullptr;
   }
 
+  EVP_CIPHER_CTX_set_flags(ctx, EVP_CIPHER_CTX_FLAG_WRAP_ALLOW);
+
   if (1 != EVP_CipherInit_ex(ctx, m_cipher, nullptr, m_key, nullptr, enc)) {
     lderr(m_cct) << "EVP_CipherInit_ex failed" << dendl;
     log_errors();

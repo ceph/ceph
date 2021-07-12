@@ -15,14 +15,21 @@ struct CryptoInterface;
 
 template <typename ImageCtxT>
 struct EncryptionFormat {
+  static const std::string PARENT_CRYPTOR_METADATA_KEY;
+
   virtual ~EncryptionFormat() {
   }
 
   virtual void format(ImageCtxT* ictx, Context* on_finish) = 0;
   virtual void load(ImageCtxT* ictx, Context* on_finish) = 0;
+  virtual void flatten(ImageCtxT* ictx, Context* on_finish) = 0;
 
   virtual ceph::ref_t<CryptoInterface> get_crypto() = 0;
 };
+
+template <typename I>
+const std::string EncryptionFormat<I>::PARENT_CRYPTOR_METADATA_KEY =
+        ".rbd_encryption_parent_cryptor";
 
 } // namespace crypto
 } // namespace librbd

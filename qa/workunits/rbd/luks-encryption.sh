@@ -22,6 +22,7 @@ _sudo()
 }
 
 function drop_caches {
+  sudo sync
   echo 3 | sudo tee /proc/sys/vm/drop_caches
 }
 
@@ -42,16 +43,61 @@ function test_encryption_format() {
   # write via librbd && compare
   sudo dd if=/tmp/testdata1 of=$LIBRBD_DEV conv=fdatasync
   drop_caches
-  sudo cmp -n 16MB $LIBRBD_DEV /dev/mapper/cryptsetupdev
+  sudo cmp -n 16MB /tmp/testdata1 /dev/mapper/cryptsetupdev
 
   # write via cryptsetup && compare
   sudo dd if=/tmp/testdata2 of=/dev/mapper/cryptsetupdev conv=fdatasync
   drop_caches
-  sudo cmp -n 16MB $LIBRBD_DEV /dev/mapper/cryptsetupdev
+  sudo cmp -n 16MB $LIBRBD_DEV /tmp/testdata2
+}
+
+function test_clone_encryption() {
+  clean_up_cryptsetup
+
+  # write 1MB plaintext
+  sudo dd if=/tmp/testdata1 of=$RAW_DEV conv=fdatasync bs=1M count=1
+  drop_caches
+
+  # clone (luks1)
+  rbd snap create testimg@snap
+  rbd snap protect testimg@snap
+  rbd clone testimg@snap testimg1 --child-encryption-format luks1 --child-encryption-passphrase-file /tmp/passphrase
+
+  # open encryption with librbd, write one more MB, close
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg1 -t nbd -o encryption-format=luks1,encryption-passphrase-file=/tmp/passphrase)
+  sudo cmp -n 1MB $LIBRBD_DEV /tmp/testdata1
+  sudo dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=1 skip=1 conv=fdatasync bs=1M count=1
+  sudo rbd device unmap -t nbd $LIBRBD_DEV
+
+  # second clone (luks2)
+  rbd snap create testimg1@snap
+  rbd snap protect testimg1@snap
+  rbd clone testimg1@snap testimg2 --parent-encryption-format luks1 --parent-encryption-passphrase-file /tmp/passphrase \
+    --child-encryption-format luks2 --child-encryption-passphrase-file /tmp/passphrase
+
+  # open encryption with librbd, write one more MB, close
+  LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-format=luks2,encryption-passphrase-file=/tmp/passphrase)
+  sudo cmp -n 2MB $LIBRBD_DEV /tmp/testdata1
+  sudo dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=2 skip=2 conv=fdatasync bs=1M count=1
+  sudo rbd device unmap -t nbd $LIBRBD_DEV
+
+  # verify flattening without specifying encryption fails
+  rbd deep copy testimg2 testimg3 --flatten && exit 1 || true
+  rbd migration prepare testimg2 testimg3 --flatten && exit 1 || true
+  rbd flatten testimg2 && exit 1 || true
+
+  # flatten
+  rbd flatten testimg2 --encryption-format luks2 --encryption-passphrase-file /tmp/passphrase
+
+  # verify with cryptsetup
+  RAW_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd)
+  sudo cryptsetup open $RAW_DEV --type luks2 cryptsetupdev -d /tmp/passphrase
+  sudo cmp -n 3MB /dev/mapper/cryptsetupdev /tmp/testdata1
+  sudo rbd device unmap -t nbd $RAW_DEV
 }
 
 function get_nbd_device_paths {
-	rbd device list -t nbd | tail -n +2 | egrep "\s+rbd\s+testimg\s+" | awk '{print $5;}'
+	rbd device list -t nbd | tail -n +2 | egrep "\s+rbd\s+testimg" | awk '{print $5;}'
 }
 
 function clean_up_cryptsetup() {
@@ -64,7 +110,15 @@ function clean_up {
 	for device in $(get_nbd_device_paths); do
 	  _sudo rbd device unmap -t nbd $device
   done
-	rbd ls | grep testimg > /dev/null && rbd rm testimg || true
+
+  rbd remove testimg3 || true
+  rbd remove testimg2 || true
+  rbd snap unprotect testimg1@snap || true
+  rbd snap remove testimg1@snap || true
+  rbd remove testimg1 || true
+  rbd snap unprotect testimg@snap || true
+  rbd snap remove testimg@snap || true
+  rbd remove testimg || true
 }
 
 if [[ $(uname) != "Linux" ]]; then
@@ -97,5 +151,7 @@ RAW_DEV=$(_sudo rbd -p rbd map testimg -t nbd)
 
 test_encryption_format luks1
 test_encryption_format luks2
+
+test_clone_encryption
 
 echo OK

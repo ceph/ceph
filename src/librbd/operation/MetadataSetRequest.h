@@ -20,6 +20,11 @@ namespace operation {
 template <typename ImageCtxT = ImageCtx>
 class MetadataSetRequest : public Request<ImageCtxT> {
 public:
+  static MetadataSetRequest* create(
+          ImageCtxT &image_ctx, Context *on_finish, const std::string &key,
+          const std::string &value) {
+    return new MetadataSetRequest(image_ctx, on_finish, key, value);
+  }
   MetadataSetRequest(ImageCtxT &image_ctx, Context *on_finish,
                      const std::string &key, const std::string &value);
 

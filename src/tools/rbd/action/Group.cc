@@ -34,6 +34,8 @@ void add_group_option(po::options_description *opt,
   std::string description = at::get_description_prefix(modifier) + "group name";
   switch (modifier) {
   case at::ARGUMENT_MODIFIER_NONE:
+  case at::ARGUMENT_MODIFIER_PARENT:
+  case at::ARGUMENT_MODIFIER_CHILD:
   case at::ARGUMENT_MODIFIER_SOURCE:
     break;
   case at::ARGUMENT_MODIFIER_DEST:

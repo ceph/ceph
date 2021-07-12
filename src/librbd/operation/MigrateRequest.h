@@ -46,6 +46,9 @@ private:
    * MIGRATE_OBJECTS
    *    |
    *    v
+   * CRYPTO_FLATTEN (OPTIONAL)
+   *    |
+   *    v
    * <finish>
    *
    * @endverbatim
@@ -56,6 +59,9 @@ private:
 
   void migrate_objects();
   void handle_migrate_objects(int r);
+
+  void crypto_flatten();
+  void handle_crypto_flatten(int r);
 
   uint64_t get_num_overlap_objects();
 };

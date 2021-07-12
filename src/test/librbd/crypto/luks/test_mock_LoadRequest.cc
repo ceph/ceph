@@ -63,14 +63,19 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
 
   // returns data offset in bytes
   void generate_header(const char* type, const char* alg, size_t key_size,
-                       const char* cipher_mode, uint32_t sector_size) {
+                       const char* cipher_mode, uint32_t sector_size,
+                       bool magic_switched) {
     Header header(mock_image_ctx->cct);
 
     ASSERT_EQ(0, header.init());
     ASSERT_EQ(0, header.format(type, alg, nullptr, key_size, cipher_mode,
                                sector_size, OBJECT_SIZE, true));
     ASSERT_EQ(0, header.add_keyslot(passphrase_cstr, strlen(passphrase_cstr)));
-    ASSERT_LE(0, header.read(&header_bl));
+    if (magic_switched) {
+      ASSERT_LE(0, header.replace_magic(
+              Header::LUKS_MAGIC, Header::RBD_CLONE_MAGIC));
+    }
+    ASSERT_LE(0, header.read(&header_bl, 0));
 
     data_offset = header.get_data_offset();
   }
@@ -104,7 +109,7 @@ struct TestMockCryptoLuksLoadRequest : public TestMockFixture {
 };
 
 TEST_F(TestMockCryptoLuksLoadRequest, AES128) {
-  generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096);
+  generate_header(CRYPT_LUKS2, "aes", 32, "xts-plain64", 4096, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -113,7 +118,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, AES128) {
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, AES256) {
-  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096);
+  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -126,7 +131,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, LUKS1) {
   mock_load_request = MockLoadRequest::create(
           mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1, {passphrase_cstr},
           &crypto, on_finish);
-  generate_header(CRYPT_LUKS1, "aes", 32, "xts-plain64", 512);
+  generate_header(CRYPT_LUKS1, "aes", 32, "xts-plain64", 512, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -135,7 +140,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, LUKS1) {
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, WrongFormat) {
-  generate_header(CRYPT_LUKS1, "aes", 32, "xts-plain64", 512);
+  generate_header(CRYPT_LUKS1, "aes", 32, "xts-plain64", 512, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
 
@@ -150,7 +155,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, WrongFormat) {
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedAlgorithm) {
-  generate_header(CRYPT_LUKS2, "twofish", 32, "xts-plain64", 4096);
+  generate_header(CRYPT_LUKS2, "twofish", 32, "xts-plain64", 4096, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -159,7 +164,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedAlgorithm) {
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedCipherMode) {
-  generate_header(CRYPT_LUKS2, "aes", 32, "cbc-essiv:sha256", 4096);
+  generate_header(CRYPT_LUKS2, "aes", 32, "cbc-essiv:sha256", 4096, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
   image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
@@ -168,7 +173,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, UnsupportedCipherMode) {
 }
 
 TEST_F(TestMockCryptoLuksLoadRequest, HeaderBiggerThanInitialRead) {
-  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096);
+  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096, false);
   mock_load_request->set_initial_read_size(4096);
   expect_image_read(0, 4096);
   mock_load_request->send();
@@ -181,8 +186,32 @@ TEST_F(TestMockCryptoLuksLoadRequest, HeaderBiggerThanInitialRead) {
   ASSERT_NE(crypto, nullptr);
 }
 
+TEST_F(TestMockCryptoLuksLoadRequest, LUKS1FormattedClone) {
+  mock_image_ctx->parent = mock_image_ctx;
+  delete mock_load_request;
+  mock_load_request = MockLoadRequest::create(
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1, {passphrase_cstr},
+          &crypto, on_finish);
+  generate_header(CRYPT_LUKS1, "aes", 64, "xts-plain64", 512, true);
+  expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
+  mock_load_request->send();
+  image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
+  ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_NE(crypto, nullptr);
+}
+
+TEST_F(TestMockCryptoLuksLoadRequest, LUKS2FormattedClone) {
+  mock_image_ctx->parent = mock_image_ctx;
+  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096, true);
+  expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
+  mock_load_request->send();
+  image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
+  ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_NE(crypto, nullptr);
+}
+
 TEST_F(TestMockCryptoLuksLoadRequest, KeyslotsBiggerThanInitialRead) {
-  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096);
+  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096, false);
   mock_load_request->set_initial_read_size(16384);
   expect_image_read(0, 16384);
   mock_load_request->send();
@@ -201,7 +230,7 @@ TEST_F(TestMockCryptoLuksLoadRequest, WrongPassphrase) {
         mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2, "wrong", &crypto,
         on_finish);
 
-  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096);
+  generate_header(CRYPT_LUKS2, "aes", 64, "xts-plain64", 4096, false);
   expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
   mock_load_request->send();
 

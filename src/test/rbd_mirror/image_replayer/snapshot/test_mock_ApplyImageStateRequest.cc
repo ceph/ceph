@@ -33,6 +33,7 @@ struct GetMetadataRequest<MockTestImageCtx> {
   static GetMetadataRequest* create(librados::IoCtx& io_ctx,
                                     const std::string& oid,
                                     bool filter_internal,
+                                    bool include_encryption_keys,
                                     const std::string& filter_key_prefix,
                                     const std::string& last_key,
                                     size_t max_results,

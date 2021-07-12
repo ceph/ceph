@@ -6,6 +6,7 @@
 
 #include "include/Context.h"
 #include "librbd/crypto/CryptoInterface.h"
+#include "librbd/crypto/Types.h"
 
 namespace librbd {
 
@@ -16,6 +17,10 @@ namespace util {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 void set_crypto(ImageCtxT *image_ctx, ceph::ref_t<CryptoInterface> crypto);
+
+int key_wrap(CephContext* cct, CipherMode mode,
+             const unsigned char* wrapping_key, uint32_t wrapping_key_length,
+             const unsigned char* in, uint32_t in_length, std::string* out);
 
 int build_crypto(
         CephContext* cct, const unsigned char* key, uint32_t key_length,

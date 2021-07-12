@@ -62,6 +62,7 @@ struct MockObjectMap {
   MOCK_METHOD2(rollback, void(uint64_t snap_id, Context *on_finish));
 
   MOCK_CONST_METHOD1(object_may_exist, bool(uint64_t));
+  MOCK_CONST_METHOD1(object_may_not_exist, bool(uint64_t));
 
 };
 

@@ -5,6 +5,7 @@
 #include "ObjectCopyRequest.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
+#include "librbd/crypto/FlattenRequest.h"
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/Utils.h"
 #include "librbd/object_map/DiffRequest.h"
@@ -269,8 +270,31 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
   }
 
   if (complete) {
-    finish(m_ret_val);
+    if (m_ret_val == 0 && m_flatten) {
+      crypto_flatten();
+    } else {
+      finish(m_ret_val);
+    }
   }
+}
+
+template <typename I>
+void ImageCopyRequest<I>::crypto_flatten() {
+  auto ctx = create_context_callback<
+    ImageCopyRequest<I>,
+    &ImageCopyRequest<I>::handle_crypto_flatten>(this);
+  auto req = crypto::FlattenRequest<I>::create(
+          m_dst_image_ctx, m_src_image_ctx->get_encryption_format(), ctx);
+  req->send();
+}
+
+template <typename I>
+void ImageCopyRequest<I>::handle_crypto_flatten(int r) {
+  if (r < 0) {
+    lderr(m_cct) << "error flattening crypto: " << cpp_strerror(r) << dendl;
+  }
+
+  finish(r);
 }
 
 template <typename I>

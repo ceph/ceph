@@ -939,8 +939,34 @@ int Image<I>::encryption_format(I* ictx, encryption_format_t format,
                                 encryption_options_t opts, size_t opts_size,
                                 bool c_api) {
   if (ictx->parent != nullptr) {
-    lderr(ictx->cct) << "cannot format a cloned image" << dendl;
-    return -ENOTSUP;
+    lderr(ictx->cct) << "cannot format a cloned image. "
+                     << "use encryption_format_thin instead" << dendl;
+    return -EINVAL;
+  }
+
+  crypto::EncryptionFormat<I>* result_format;
+  auto r = util::create_encryption_format(
+          ictx->cct, format, opts, opts_size, c_api, &result_format);
+  if (r != 0) {
+    return r;
+  }
+
+  C_SaferCond cond;
+  auto req = librbd::crypto::FormatRequest<I>::create(
+          ictx, std::unique_ptr<crypto::EncryptionFormat<I>>(result_format),
+          &cond);
+  req->send();
+  return cond.wait();
+}
+
+template <typename I>
+int Image<I>::encryption_format_thin(I* ictx, encryption_format_t format,
+                                     encryption_options_t opts,
+                                     size_t opts_size, bool c_api) {
+  if (ictx->parent == nullptr) {
+    lderr(ictx->cct) << "cannot thin format a flat image. "
+                     << "use encryption_format instead" << dendl;
+    return -EINVAL;
   }
 
   crypto::EncryptionFormat<I>* result_format;

@@ -152,6 +152,7 @@ def clone_image(ctx, config):
         images = [(role, None) for role in config]
 
     testdir = teuthology.get_testdir(ctx)
+    passphrase_file = '{tdir}/passphrase'.format(tdir=testdir)
     for role, properties in images:
         if properties is None:
             properties = {}
@@ -165,9 +166,23 @@ def clone_image(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Clone image {parent} to {child}'.format(parent=parent_name,
                                                           child=name))
+
+        encryption_format = properties.get('encryption_format', 'none')
+        if encryption_format != 'none':
+            remote.run(
+                args=[
+                    'echo',
+                    ENCRYPTION_PASSPHRASE,
+                    run.Raw('>'),
+                    passphrase_file
+                    ]
+                )
+
         for cmd in [('snap', 'create', parent_spec),
                     ('snap', 'protect', parent_spec),
-                    ('clone', parent_spec, name)]:
+                    ('clone', parent_spec, name, "--child-encryption-format",
+                     encryption_format, "--child-encryption-passphrase-file",
+                     passphrase_file)]:
             args = [
                     'adjust-ulimits',
                     'ceph-coverage',
@@ -181,6 +196,7 @@ def clone_image(ctx, config):
         yield
     finally:
         log.info('Deleting rbd clones...')
+        remote.run(args=['rm', '-f', passphrase_file])
         for role, properties in images:
             if properties is None:
                 properties = {}

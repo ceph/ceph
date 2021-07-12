@@ -173,7 +173,7 @@ int Config<I>::list(I *image_ctx, std::vector<config_option_t> *options) {
   std::map<std::string, bufferlist> pairs;
   C_SaferCond ctx;
   auto req = image::GetMetadataRequest<I>::create(
-    image_ctx->md_ctx, image_ctx->header_oid, true,
+    image_ctx->md_ctx, image_ctx->header_oid, true, false,
     ImageCtx::METADATA_CONF_PREFIX, ImageCtx::METADATA_CONF_PREFIX, 0U, &pairs,
     &ctx);
   req->send();

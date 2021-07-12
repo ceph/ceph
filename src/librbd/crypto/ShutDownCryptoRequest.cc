@@ -30,9 +30,7 @@ ShutDownCryptoRequest<I>::ShutDownCryptoRequest(
 
 template <typename I>
 void ShutDownCryptoRequest<I>::send() {
-  m_image_ctx->image_lock.lock_shared();
-  m_crypto = m_image_ctx->crypto;
-  m_image_ctx->image_lock.unlock_shared();
+  m_crypto = m_image_ctx->get_crypto();
 
   shut_down_object_dispatch();
 }
@@ -91,8 +89,14 @@ void ShutDownCryptoRequest<I>::handle_shut_down_image_dispatch(int r) {
 template <typename I>
 void ShutDownCryptoRequest<I>::finish(int r) {
   if (r == 0) {
+    m_image_ctx->set_crypto(nullptr);
+
     std::unique_lock image_locker{m_image_ctx->image_lock};
-    m_image_ctx->crypto = nullptr;
+    m_image_ctx->encryption_format.release();
+  }
+
+  if (m_crypto != nullptr) {
+    m_crypto->put();
   }
 
   m_on_finish->complete(r);

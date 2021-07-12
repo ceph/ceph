@@ -494,6 +494,12 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
 
   ldout(cct, 20) << "updated opts=" << opts << dendl;
 
+  if (flatten > 0 && src_image_ctx->has_formatted_clone_ancestor()) {
+    lderr(cct) << "cannot use flatten option on this image (due to crypto)"
+               << dendl;
+    return -EINVAL;
+  }
+
   auto dst_image_ctx = I::create(
     dest_image_name, util::generate_image_id(dest_io_ctx), nullptr,
     dest_io_ctx, false);
@@ -1564,7 +1570,7 @@ int Migration<I>::create_dst_image(I** image_ctx) {
   if (!m_src_image_ctx->header_oid.empty()) {
     C_SaferCond on_metadata_copy;
     auto metadata_copy_req = librbd::deep_copy::MetadataCopyRequest<I>::create(
-        m_src_image_ctx, dst_image_ctx, &on_metadata_copy);
+        m_src_image_ctx, dst_image_ctx, !m_flatten, &on_metadata_copy);
     metadata_copy_req->send();
     r = on_metadata_copy.wait();
     if (r < 0) {

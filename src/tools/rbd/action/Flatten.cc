@@ -31,6 +31,7 @@ void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_no_progress_option(options);
+  at::add_encryption_options(options, at::ARGUMENT_MODIFIER_NONE, false);
 }
 
 int execute(const po::variables_map &vm,
@@ -48,6 +49,13 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
+  utils::EncryptionOptions encryption_options;
+  r = utils::get_encryption_options(
+          vm, at::ARGUMENT_MODIFIER_NONE, false, &encryption_options);
+  if (r < 0) {
+    return r;
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
@@ -55,6 +63,14 @@ int execute(const po::variables_map &vm,
                                  false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
+  }
+
+  if (encryption_options.is_initialized) {
+    auto& spec = encryption_options.spec;
+    r = image.encryption_load(spec.format, spec.opts, spec.opts_size);
+    if (r < 0) {
+      return r;
+    }
   }
 
   r = do_flatten(image, vm[at::NO_PROGRESS].as<bool>());

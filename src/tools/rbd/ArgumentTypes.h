@@ -20,7 +20,9 @@ namespace argument_types {
 enum ArgumentModifier {
   ARGUMENT_MODIFIER_NONE,
   ARGUMENT_MODIFIER_SOURCE,
-  ARGUMENT_MODIFIER_DEST
+  ARGUMENT_MODIFIER_DEST,
+  ARGUMENT_MODIFIER_PARENT,
+  ARGUMENT_MODIFIER_CHILD
 };
 
 enum SpecFormat {
@@ -31,6 +33,8 @@ enum SpecFormat {
 
 static const std::string SOURCE_PREFIX("source-");
 static const std::string DEST_PREFIX("dest-");
+static const std::string PARENT_PREFIX("parent-");
+static const std::string CHILD_PREFIX("child-");
 
 // positional arguments
 static const std::string POSITIONAL_COMMAND_SPEC("positional-command-spec");
@@ -55,6 +59,12 @@ static const std::string DEST_SNAPSHOT_NAME("dest-snap");
 static const std::string PATH("path");
 static const std::string FROM_SNAPSHOT_NAME("from-snap");
 static const std::string WHOLE_OBJECT("whole-object");
+
+// encryption arguments
+static const std::string ENCRYPTION_PREFIX("encryption-");
+static const std::string ENCRYPTION_FORMAT("format");
+static const std::string ENCRYPTION_PASSPHRASE_FILE("passphrase-file");
+static const std::string ENCRYPTION_CIPHER_ALG("cipher-alg");
 
 static const std::string IMAGE_FORMAT("image-format");
 static const std::string IMAGE_NEW_FORMAT("new-format");
@@ -196,6 +206,10 @@ void add_no_error_option(boost::program_options::options_description *opt);
 void add_flatten_option(boost::program_options::options_description *opt);
 
 void add_snap_create_options(boost::program_options::options_description *opt);
+
+void add_encryption_options(boost::program_options::options_description *opt,
+                            ArgumentModifier modifier,
+                            bool add_format_options);
 
 std::string get_short_features_help(bool append_suffix);
 std::string get_long_features_help();

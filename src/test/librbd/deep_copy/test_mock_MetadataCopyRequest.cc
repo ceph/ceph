@@ -35,6 +35,7 @@ struct GetMetadataRequest<MockTestImageCtx> {
   static GetMetadataRequest* create(librados::IoCtx&,
                                     const std::string& oid,
                                     bool filter_internal,
+                                    bool include_encryption_keys,
                                     const std::string& filter_key_prefix,
                                     const std::string& last_key,
                                     uint32_t max_results,
@@ -149,6 +150,7 @@ TEST_F(TestMockDeepCopyMetadataCopyRequest, Success) {
   C_SaferCond ctx;
   auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
                                                  &mock_dst_image_ctx,
+                                                 false,
                                                  &ctx);
   request->send();
 
@@ -168,6 +170,7 @@ TEST_F(TestMockDeepCopyMetadataCopyRequest, Empty) {
   C_SaferCond ctx;
   auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
                                                  &mock_dst_image_ctx,
+                                                 false,
                                                  &ctx);
   request->send();
 
@@ -187,6 +190,7 @@ TEST_F(TestMockDeepCopyMetadataCopyRequest, MetadataListError) {
   C_SaferCond ctx;
   auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
                                                  &mock_dst_image_ctx,
+                                                 false,
                                                  &ctx);
   request->send();
 
@@ -210,6 +214,7 @@ TEST_F(TestMockDeepCopyMetadataCopyRequest, MetadataSetError) {
   C_SaferCond ctx;
   auto request = MockMetadataCopyRequest::create(&mock_src_image_ctx,
                                                  &mock_dst_image_ctx,
+                                                 false,
                                                  &ctx);
   request->send();
 

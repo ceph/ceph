@@ -96,7 +96,7 @@ void FormatRequest<I>::send() {
   // format (create LUKS header)
   r = m_header.format(type, cipher, reinterpret_cast<char*>(key), key_size,
                       "xts-plain64", sector_size,
-                      m_image_ctx->get_object_size(), m_insecure_fast_mode);
+                      m_image_ctx->get_stripe_period(), m_insecure_fast_mode);
   if (r != 0) {
     finish(r);
     return;
@@ -129,9 +129,21 @@ void FormatRequest<I>::send() {
     return;
   }
 
+  if (m_image_ctx->parent != nullptr) {
+    // parent is not encrypted with same key
+    // change LUKS magic to prevent decryption by other LUKS implementations
+    r = m_header.replace_magic(Header::LUKS_MAGIC, Header::RBD_CLONE_MAGIC);
+    if (r < 0) {
+      lderr(m_image_ctx->cct) << "error replacing LUKS magic: "
+                              << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
+  }
+
   // read header from libcryptsetup interface
   ceph::bufferlist bl;
-  r = m_header.read(&bl);
+  r = m_header.read(&bl, 0);
   if (r < 0) {
     finish(r);
     return;
@@ -153,6 +165,8 @@ void FormatRequest<I>::send() {
 
 template <typename I>
 void FormatRequest<I>::handle_write_header(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   if (r < 0) {
     lderr(m_image_ctx->cct) << "error writing header to image: "
                             << cpp_strerror(r) << dendl;
@@ -165,6 +179,8 @@ void FormatRequest<I>::handle_write_header(int r) {
 
 template <typename I>
 void FormatRequest<I>::finish(int r) {
+  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
+
   ceph_memzero_s(
           &m_passphrase[0], m_passphrase.capacity(), m_passphrase.size());
   m_on_finish->complete(r);

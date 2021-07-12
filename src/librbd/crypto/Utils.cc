@@ -23,15 +23,51 @@ namespace util {
 
 template <typename I>
 void set_crypto(I *image_ctx, ceph::ref_t<CryptoInterface> crypto) {
-  {
-    std::unique_lock image_locker{image_ctx->image_lock};
-    ceph_assert(image_ctx->crypto == nullptr);
-    image_ctx->crypto = crypto.get();
+  auto old_crypto = image_ctx->get_crypto();
+  ceph_assert(old_crypto == nullptr || old_crypto == crypto.get());
+  image_ctx->set_crypto(crypto.get());
+  if (old_crypto != nullptr) {
+    old_crypto->put();
   }
   auto object_dispatch = CryptoObjectDispatch<I>::create(image_ctx, crypto);
   auto image_dispatch = CryptoImageDispatch::create(crypto->get_data_offset());
   image_ctx->io_object_dispatcher->register_dispatch(object_dispatch);
   image_ctx->io_image_dispatcher->register_dispatch(image_dispatch);
+}
+
+int key_wrap(CephContext* cct, CipherMode mode,
+             const unsigned char* wrapping_key, uint32_t wrapping_key_length,
+             const unsigned char* in, uint32_t in_length, std::string* out) {
+  if (wrapping_key_length < 32) {
+    lderr(cct) << "need at least 32 bytes key, got: " << wrapping_key_length
+               << dendl;
+    return -EINVAL;
+  }
+
+  if (in_length % 8 != 0) {
+    lderr(cct) << "input length must be a multiple of 8, got: "
+               << in_length << dendl;
+    return -EINVAL;
+  }
+
+  openssl::DataCryptor cryptor(cct);
+  int r = cryptor.init("id-aes256-wrap", wrapping_key, 32);
+  if (r != 0) {
+    lderr(cct) << "error initializing cryptor: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  out->resize(in_length + (mode == CIPHER_MODE_ENC ? 8 : -8));
+
+  auto ctx = cryptor.get_context(mode);
+  r = cryptor.update_context(
+          ctx, in, reinterpret_cast<unsigned char*>(out->data()), in_length);
+  cryptor.return_context(ctx, mode);
+  if (r < 0) {
+    lderr(cct) << "crypt failed: " << cpp_strerror(r) << dendl;
+  }
+
+  return 0;
 }
 
 int build_crypto(

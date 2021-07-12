@@ -386,6 +386,13 @@ typedef enum {
 typedef void *rbd_encryption_options_t;
 
 typedef struct {
+    bool encrypted;
+    rbd_encryption_format_t format;
+    rbd_encryption_options_t opts;
+    size_t opts_size;
+} rbd_encryption_spec_t;
+
+typedef struct {
     rbd_encryption_algorithm_t alg;
     const char* passphrase;
     size_t passphrase_size;
@@ -821,6 +828,10 @@ CEPH_RBD_API int rbd_encryption_format(rbd_image_t image,
                                        rbd_encryption_format_t format,
                                        rbd_encryption_options_t opts,
                                        size_t opts_size);
+CEPH_RBD_API int rbd_encryption_format_thin(rbd_image_t image,
+                                            rbd_encryption_format_t format,
+                                            rbd_encryption_options_t opts,
+                                            size_t opts_size);
 CEPH_RBD_API int rbd_encryption_load(rbd_image_t image,
                                      rbd_encryption_format_t format,
                                      rbd_encryption_options_t opts,

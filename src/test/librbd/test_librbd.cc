@@ -2136,9 +2136,13 @@ TEST_F(TestLibRBD, TestEncryptionLUKS1)
 #ifndef HAVE_LIBCRYPTSETUP
   ASSERT_EQ(-ENOTSUP, rbd_encryption_format(
           image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
+  ASSERT_EQ(-ENOTSUP, rbd_encryption_format_thin(
+          image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
   ASSERT_EQ(-ENOTSUP, rbd_encryption_load(
           image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
 #else
+  ASSERT_EQ(-EINVAL, rbd_encryption_format_thin(
+          image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
   ASSERT_EQ(0, rbd_encryption_format(
           image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
   ASSERT_EQ(-EEXIST, rbd_encryption_load(
@@ -2156,6 +2160,50 @@ TEST_F(TestLibRBD, TestEncryptionLUKS1)
           image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
   read_test_data(image, "test", 0, 4, 0, &passed);
   ASSERT_TRUE(passed);
+
+  if (is_feature_enabled(RBD_FEATURE_LAYERING)) {
+    // create a snapshot, reopen as the parent we're interested in
+    ASSERT_EQ(0, rbd_snap_create(image, "parent_snap"));
+    ASSERT_EQ(0, rbd_close(image));
+    ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, "parent_snap"));
+
+    // clone
+    rbd_image_options_t image_opts;
+    rbd_image_options_create(&image_opts);
+    BOOST_SCOPE_EXIT_ALL( (&image_opts) ) {
+      rbd_image_options_destroy(image_opts);
+    };
+    std::string child_name = get_temp_image_name();
+    ASSERT_EQ(0, rbd_snap_protect(image, "parent_snap"));
+    ASSERT_EQ(0, rbd_clone3(ioctx, name.c_str(), "parent_snap", ioctx,
+                            child_name.c_str(), image_opts));
+    ASSERT_EQ(0, rbd_close(image));
+
+    // thin format child
+    ASSERT_EQ(0, rbd_open(ioctx, child_name.c_str(), &image, NULL));
+    ASSERT_EQ(0, rbd_encryption_load(
+            image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
+    ASSERT_EQ(-EINVAL, rbd_encryption_format(
+            image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
+    ASSERT_EQ(0, rbd_encryption_format_thin(
+            image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
+    write_test_data(image, "very", 4*1024*1024, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+    ASSERT_EQ(0, rbd_close(image));
+
+    // load child
+    ASSERT_EQ(0, rbd_open(ioctx, child_name.c_str(), &image, NULL));
+    ASSERT_EQ(0, rbd_encryption_load(
+            image, RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts)));
+    write_test_data(image, "good", 8*1024*1024, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+    read_test_data(image, "test", 0, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+    read_test_data(image, "very", 4*1024*1024, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+    read_test_data(image, "good", 8*1024*1024, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+  }
 #endif
 
   ASSERT_EQ(0, rbd_close(image));
@@ -2188,9 +2236,13 @@ TEST_F(TestLibRBD, TestEncryptionLUKS2)
 #ifndef HAVE_LIBCRYPTSETUP
   ASSERT_EQ(-ENOTSUP, rbd_encryption_format(
           image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
+  ASSERT_EQ(-ENOTSUP, rbd_encryption_format_thin(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
   ASSERT_EQ(-ENOTSUP, rbd_encryption_load(
           image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
 #else
+  ASSERT_EQ(-EINVAL, rbd_encryption_format_thin(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
   ASSERT_EQ(0, rbd_encryption_format(
           image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
   ASSERT_EQ(-EEXIST, rbd_encryption_load(
@@ -2208,6 +2260,50 @@ TEST_F(TestLibRBD, TestEncryptionLUKS2)
           image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
   read_test_data(image, "test", 0, 4, 0, &passed);
   ASSERT_TRUE(passed);
+
+  if (is_feature_enabled(RBD_FEATURE_LAYERING)) {
+    // create a snapshot, reopen as the parent we're interested in
+    ASSERT_EQ(0, rbd_snap_create(image, "parent_snap"));
+    ASSERT_EQ(0, rbd_close(image));
+    ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, "parent_snap"));
+
+    // clone
+    rbd_image_options_t image_opts;
+    rbd_image_options_create(&image_opts);
+    BOOST_SCOPE_EXIT_ALL( (&image_opts) ) {
+      rbd_image_options_destroy(image_opts);
+    };
+    std::string child_name = get_temp_image_name();
+    ASSERT_EQ(0, rbd_snap_protect(image, "parent_snap"));
+    ASSERT_EQ(0, rbd_clone3(ioctx, name.c_str(), "parent_snap", ioctx,
+                            child_name.c_str(), image_opts));
+    ASSERT_EQ(0, rbd_close(image));
+
+    // thin format child
+    ASSERT_EQ(0, rbd_open(ioctx, child_name.c_str(), &image, NULL));
+    ASSERT_EQ(0, rbd_encryption_load(
+            image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
+    ASSERT_EQ(-EINVAL, rbd_encryption_format(
+            image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
+    ASSERT_EQ(0, rbd_encryption_format_thin(
+            image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
+    write_test_data(image, "very", 4*1024*1024, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+    ASSERT_EQ(0, rbd_close(image));
+
+    // load child
+    ASSERT_EQ(0, rbd_open(ioctx, child_name.c_str(), &image, NULL));
+    ASSERT_EQ(0, rbd_encryption_load(
+            image, RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts)));
+    write_test_data(image, "good", 8*1024*1024, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+    read_test_data(image, "test", 0, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+    read_test_data(image, "very", 4*1024*1024, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+    read_test_data(image, "good", 8*1024*1024, 4, 0, &passed);
+    ASSERT_TRUE(passed);
+  }
 #endif
 
   ASSERT_EQ(0, rbd_close(image));

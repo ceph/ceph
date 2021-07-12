@@ -1282,7 +1282,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond ctx;
     auto req = deep_copy::MetadataCopyRequest<>::create(
-      src, dest, &ctx);
+      src, dest, false, &ctx);
     req->send();
 
     int r = ctx.wait();
@@ -1671,7 +1671,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond ctx;
     auto req = image::GetMetadataRequest<>::create(
-      ictx->md_ctx, ictx->header_oid, false, "", start, max, pairs, &ctx);
+      ictx->md_ctx, ictx->header_oid, false, true, "", start, max, pairs,
+      &ctx);
     req->send();
 
     return ctx.wait();

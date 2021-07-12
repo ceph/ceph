@@ -118,7 +118,7 @@ void SetImageStateRequest<I>::get_metadata() {
      SetImageStateRequest<I>,
      &SetImageStateRequest<I>::handle_get_metadata>(this);
   auto req = image::GetMetadataRequest<I>::create(
-    m_image_ctx->md_ctx, m_image_ctx->header_oid, true, "", "", 0,
+    m_image_ctx->md_ctx, m_image_ctx->header_oid, true, true, "", "", 0,
     &m_image_state.metadata, ctx);
   req->send();
 }

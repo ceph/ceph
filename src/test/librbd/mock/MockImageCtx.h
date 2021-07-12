@@ -6,6 +6,7 @@
 
 #include "include/rados/librados.hpp"
 #include "test/librbd/mock/MockContextWQ.h"
+#include "test/librbd/mock/crypto/MockEncryptionFormat.h"
 #include "test/librbd/mock/MockExclusiveLock.h"
 #include "test/librbd/mock/MockImageState.h"
 #include "test/librbd/mock/MockImageWatcher.h"
@@ -318,6 +319,30 @@ struct MockImageCtx {
   ZTracer::Endpoint trace_endpoint;
 
   crypto::CryptoInterface* crypto = nullptr;
+  std::unique_ptr<crypto::EncryptionFormat<MockImageCtx>> encryption_format;
+  bool is_formatted_clone = false;
+  crypto::CryptoInterface* get_crypto() {
+    if (crypto != nullptr) {
+      crypto->get();
+    }
+    return crypto;
+  }
+  void set_crypto(crypto::CryptoInterface* new_crypto) {
+    crypto = new_crypto;
+  }
+  crypto::EncryptionFormat<MockImageCtx>* get_encryption_format() {
+    return encryption_format.get();
+  }
+  bool has_formatted_clone_ancestor() {
+    auto ictx = this;
+    while (ictx != nullptr) {
+      if (ictx->is_formatted_clone) {
+        return true;
+      }
+      ictx = ictx->parent;
+    }
+    return false;
+  }
 
   uint64_t sparse_read_threshold_bytes;
   uint32_t discard_granularity_bytes;

@@ -2054,6 +2054,15 @@ namespace librbd {
             ictx, format, opts, opts_size, false);
   }
 
+  int Image::encryption_format_thin(encryption_format_t format,
+                                    encryption_options_t opts,
+                                    size_t opts_size)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Image<>::encryption_format_thin(
+            ictx, format, opts, opts_size, false);
+  }
+
   int Image::encryption_load(encryption_format_t format,
                              encryption_options_t opts,
                              size_t opts_size)
@@ -4335,6 +4344,16 @@ extern "C" int rbd_encryption_format(rbd_image_t image,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::api::Image<>::encryption_format(
+          ictx, format, opts, opts_size, true);
+}
+
+extern "C" int rbd_encryption_format_thin(rbd_image_t image,
+                                          rbd_encryption_format_t format,
+                                          rbd_encryption_options_t opts,
+                                          size_t opts_size)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Image<>::encryption_format_thin(
           ictx, format, opts, opts_size, true);
 }
 

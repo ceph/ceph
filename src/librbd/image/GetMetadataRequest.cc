@@ -22,6 +22,7 @@ namespace image {
 namespace {
 
 static const std::string INTERNAL_KEY_PREFIX{".rbd"};
+static const std::string ENCRYPTION_KEY_PREFIX{".rbd_encryption"};
 
 } // anonymous namespace
 
@@ -30,9 +31,11 @@ using util::create_rados_callback;
 template <typename I>
 GetMetadataRequest<I>::GetMetadataRequest(
     IoCtx &io_ctx, const std::string &oid, bool filter_internal,
-    const std::string& filter_key_prefix, const std::string& last_key,
-    uint32_t max_results, KeyValues* key_values, Context *on_finish)
+    bool include_encryption_keys, const std::string& filter_key_prefix,
+    const std::string& last_key, uint32_t max_results, KeyValues* key_values,
+    Context *on_finish)
   : m_io_ctx(io_ctx), m_oid(oid), m_filter_internal(filter_internal),
+    m_include_encryption_keys(include_encryption_keys),
     m_filter_key_prefix(filter_key_prefix), m_last_key(last_key),
     m_max_results(max_results), m_key_values(key_values),
     m_on_finish(on_finish),
@@ -85,7 +88,9 @@ void GetMetadataRequest<I>::handle_metadata_list(int r) {
   }
 
   for (auto it = metadata.begin(); it != metadata.end(); ++it) {
-    if (m_filter_internal &&
+    if (m_include_encryption_keys &&
+        boost::starts_with(it->first, ENCRYPTION_KEY_PREFIX)) {
+    } else if (m_filter_internal &&
         boost::starts_with(it->first, INTERNAL_KEY_PREFIX)) {
       continue;
     } else if (!m_filter_key_prefix.empty() &&

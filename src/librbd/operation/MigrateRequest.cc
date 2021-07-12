@@ -8,6 +8,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/crypto/FlattenRequest.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatcherInterface.h"
@@ -213,6 +214,34 @@ void MigrateRequest<I>::handle_migrate_objects(int r) {
 
   if (r < 0) {
     lderr(cct) << "failed to migrate objects: " << cpp_strerror(r) << dendl;
+    this->complete(r);
+    return;
+  }
+
+  if (image_ctx.migration_info.flatten) {
+    crypto_flatten();
+  } else {
+    this->complete(r);
+  }
+}
+
+template <typename I>
+void MigrateRequest<I>::crypto_flatten() {
+  auto ctx = create_context_callback<
+    MigrateRequest<I>,
+    &MigrateRequest<I>::handle_crypto_flatten>(this);
+  auto req = crypto::FlattenRequest<I>::create(
+          &this->m_image_ctx, this->m_image_ctx.get_encryption_format(), ctx);
+  req->send();
+}
+
+template <typename I>
+void MigrateRequest<I>::handle_crypto_flatten(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+
+  if (r < 0) {
+    lderr(cct) << "error flattening crypto: " << cpp_strerror(r) << dendl;
   }
 
   this->complete(r);

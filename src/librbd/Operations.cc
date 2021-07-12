@@ -524,6 +524,14 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
     return;
   }
 
+  if (m_image_ctx.crypto == nullptr &&
+      m_image_ctx.has_formatted_clone_ancestor()) {
+    lderr(cct) << "flattening this image requires loading its encryption"
+               << dendl;
+    on_finish->complete(-ENOTSUP);
+    return;
+  }
+
   m_image_ctx.image_lock.lock_shared();
 
   // can't flatten a non-clone

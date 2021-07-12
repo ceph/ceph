@@ -1,4 +1,6 @@
 #ifdef WITH_RBD
+#include "librbd/crypto/Types.h"
+TYPE(librbd::crypto::ParentCryptoParams)
 #include "librbd/journal/Types.h"
 TYPE(librbd::journal::EventEntry)
 TYPE(librbd::journal::ClientData)

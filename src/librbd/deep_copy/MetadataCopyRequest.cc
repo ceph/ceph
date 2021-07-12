@@ -27,8 +27,10 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 MetadataCopyRequest<I>::MetadataCopyRequest(I *src_image_ctx, I *dst_image_ctx,
+                                            bool include_encryption_keys,
                                             Context *on_finish)
   : m_src_image_ctx(src_image_ctx), m_dst_image_ctx(dst_image_ctx),
+    m_include_encryption_keys(include_encryption_keys),
     m_on_finish(on_finish), m_cct(dst_image_ctx->cct) {
 }
 
@@ -46,8 +48,9 @@ void MetadataCopyRequest<I>::list_src_metadata() {
     MetadataCopyRequest<I>,
     &MetadataCopyRequest<I>::handle_list_src_metadata>(this);
   auto req = image::GetMetadataRequest<I>::create(
-    m_src_image_ctx->md_ctx, m_src_image_ctx->header_oid, true, "",
-    m_last_metadata_key, MAX_METADATA_ITEMS, &m_metadata, ctx);
+    m_src_image_ctx->md_ctx, m_src_image_ctx->header_oid, true,
+    m_include_encryption_keys, "", m_last_metadata_key, MAX_METADATA_ITEMS,
+    &m_metadata, ctx);
   req->send();
 }
 

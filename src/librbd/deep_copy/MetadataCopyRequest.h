@@ -21,12 +21,14 @@ class MetadataCopyRequest {
 public:
   static MetadataCopyRequest* create(ImageCtxT *src_image_ctx,
                                      ImageCtxT *dst_image_ctx,
+                                     bool include_encryption_keys,
                                      Context *on_finish) {
-    return new MetadataCopyRequest(src_image_ctx, dst_image_ctx, on_finish);
+    return new MetadataCopyRequest(src_image_ctx, dst_image_ctx,
+                                   include_encryption_keys, on_finish);
   }
 
   MetadataCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
-                      Context *on_finish);
+                      bool include_encryption_keys, Context *on_finish);
 
   void send();
 
@@ -51,6 +53,7 @@ private:
 
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
+  bool m_include_encryption_keys;
   Context *m_on_finish;
 
   CephContext *m_cct;

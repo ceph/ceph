@@ -46,6 +46,10 @@ std::string get_name_prefix(ArgumentModifier modifier) {
     return SOURCE_PREFIX;
   case ARGUMENT_MODIFIER_DEST:
     return DEST_PREFIX;
+  case ARGUMENT_MODIFIER_PARENT:
+    return PARENT_PREFIX;
+  case ARGUMENT_MODIFIER_CHILD:
+    return CHILD_PREFIX;
   default:
     return "";
   }
@@ -57,6 +61,10 @@ std::string get_description_prefix(ArgumentModifier modifier) {
     return "source ";
   case ARGUMENT_MODIFIER_DEST:
     return "destination ";
+  case ARGUMENT_MODIFIER_PARENT:
+    return "parent ";
+  case ARGUMENT_MODIFIER_CHILD:
+    return "child ";
   default:
     return "";
   }
@@ -69,6 +77,8 @@ void add_pool_option(po::options_description *opt,
   std::string description = "pool name";
   switch (modifier) {
   case ARGUMENT_MODIFIER_NONE:
+  case ARGUMENT_MODIFIER_PARENT:
+  case ARGUMENT_MODIFIER_CHILD:
     break;
   case ARGUMENT_MODIFIER_SOURCE:
     description = "source " + description;
@@ -91,6 +101,8 @@ void add_namespace_option(boost::program_options::options_description *opt,
   std::string description = "namespace name";
   switch (modifier) {
   case ARGUMENT_MODIFIER_NONE:
+  case ARGUMENT_MODIFIER_PARENT:
+  case ARGUMENT_MODIFIER_CHILD:
     break;
   case ARGUMENT_MODIFIER_SOURCE:
     description = "source " + description;
@@ -113,6 +125,8 @@ void add_image_option(po::options_description *opt,
   std::string description = "image name";
   switch (modifier) {
   case ARGUMENT_MODIFIER_NONE:
+  case ARGUMENT_MODIFIER_PARENT:
+  case ARGUMENT_MODIFIER_CHILD:
     break;
   case ARGUMENT_MODIFIER_SOURCE:
     description = "source " + description;
@@ -147,6 +161,8 @@ void add_snap_option(po::options_description *opt,
   std::string description = "snapshot name";
   switch (modifier) {
   case ARGUMENT_MODIFIER_NONE:
+  case ARGUMENT_MODIFIER_PARENT:
+  case ARGUMENT_MODIFIER_CHILD:
     break;
   case ARGUMENT_MODIFIER_DEST:
     name = DEST_SNAPSHOT_NAME;
@@ -326,6 +342,30 @@ void add_snap_create_options(po::options_description *opt) {
     (SKIP_QUIESCE.c_str(), po::bool_switch(), "do not run quiesce hooks")
     (IGNORE_QUIESCE_ERROR.c_str(), po::bool_switch(),
      "ignore quiesce hook error");
+}
+
+void add_encryption_options(boost::program_options::options_description *opt,
+                            ArgumentModifier modifier,
+                            bool add_format_options) {
+  std::string name_prefix = get_name_prefix(modifier) + ENCRYPTION_PREFIX;
+  std::string description_prefix = get_description_prefix(modifier);
+
+  opt->add_options()
+    ((name_prefix + ENCRYPTION_FORMAT).c_str(), po::value<std::string>(),
+     "encryption format [possible values: luks1, luks2]");
+
+  opt->add_options()
+    ((name_prefix + ENCRYPTION_PASSPHRASE_FILE).c_str(),
+     po::value<std::string>(),
+     ("path of file containing passphrase for unlocking the " +
+      description_prefix + "image").c_str());
+
+  if (add_format_options) {
+    opt->add_options()
+    ((name_prefix + ENCRYPTION_CIPHER_ALG).c_str(),
+     po::value<EncryptionAlgorithm>(),
+     (description_prefix + "image encryption algorithm").c_str());
+  }
 }
 
 std::string get_short_features_help(bool append_suffix) {

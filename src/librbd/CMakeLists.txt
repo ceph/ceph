@@ -1,4 +1,5 @@
 set(librbd_types_srcs
+  crypto/Types.cc
   journal/Types.cc
   mirroring_watcher/Types.cc
   trash_watcher/Types.cc
@@ -60,6 +61,7 @@ set(librbd_internal_srcs
   crypto/CryptoContextPool.cc
   crypto/CryptoImageDispatch.cc
   crypto/CryptoObjectDispatch.cc
+  crypto/FlattenRequest.cc
   crypto/FormatRequest.cc
   crypto/LoadRequest.cc
   crypto/ShutDownCryptoRequest.cc
@@ -213,8 +215,9 @@ endif()
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND librbd_internal_srcs
           crypto/luks/EncryptionFormat.cc
-          crypto/luks/Header.cc
           crypto/luks/FormatRequest.cc
+          crypto/luks/FlattenRequest.cc
+          crypto/luks/Header.cc
           crypto/luks/LoadRequest.cc)
 endif()
 

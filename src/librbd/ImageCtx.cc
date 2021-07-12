@@ -27,6 +27,8 @@
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
+#include "librbd/crypto/CryptoInterface.h"
+#include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/io/AioCompletion.h"
@@ -747,6 +749,10 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
     // extract config overrides
     for (auto meta_pair : meta) {
+      if (meta_pair.first ==
+          crypto::EncryptionFormat<ImageCtx>::PARENT_CRYPTOR_METADATA_KEY) {
+        is_formatted_clone = true;
+      }
       if (!boost::starts_with(meta_pair.first, METADATA_CONF_PREFIX)) {
         continue;
       }
@@ -881,6 +887,35 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
   Journal<ImageCtx> *ImageCtx::create_journal() {
     return new Journal<ImageCtx>(*this);
+  }
+
+  crypto::CryptoInterface* ImageCtx::get_crypto() {
+    std::shared_lock image_locker{image_lock};
+    if (crypto != nullptr) {
+      crypto->get();
+    }
+    return crypto;
+  }
+
+  void ImageCtx::set_crypto(crypto::CryptoInterface* new_crypto) {
+    std::unique_lock image_locker{image_lock};
+    crypto = new_crypto;
+  }
+
+  crypto::EncryptionFormat<ImageCtx>* ImageCtx::get_encryption_format() {
+    std::shared_lock image_locker{image_lock};
+    return encryption_format.get();
+  }
+
+  bool ImageCtx::has_formatted_clone_ancestor() {
+    auto ictx = this;
+    while (ictx != nullptr) {
+      if (ictx->is_formatted_clone) {
+        return true;
+      }
+      ictx = ictx->parent;
+    }
+    return false;
   }
 
   void ImageCtx::set_image_name(const std::string &image_name) {

@@ -108,7 +108,8 @@ def create_clones(ctx, config, managers):
             create_config = {
                 client: {
                     'image_name': disk['image_name'],
-                    'parent_name': disk['parent_name']
+                    'parent_name': disk['parent_name'],
+                    'encryption_format': disk['encryption_format'],
                     }
                 }
             managers.append(

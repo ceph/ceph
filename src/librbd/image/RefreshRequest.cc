@@ -536,9 +536,8 @@ void RefreshRequest<I>::send_v2_get_metadata() {
   auto ctx = create_context_callback<
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_metadata>(this);
   auto req = GetMetadataRequest<I>::create(
-    m_image_ctx.md_ctx, m_image_ctx.header_oid, true,
-    ImageCtx::METADATA_CONF_PREFIX, ImageCtx::METADATA_CONF_PREFIX, 0U,
-    &m_metadata, ctx);
+    m_image_ctx.md_ctx, m_image_ctx.header_oid, true, true,
+    ImageCtx::METADATA_CONF_PREFIX, "", 0U, &m_metadata, ctx);
   req->send();
 }
 
@@ -565,8 +564,9 @@ void RefreshRequest<I>::send_v2_get_pool_metadata() {
   auto ctx = create_context_callback<
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_pool_metadata>(this);
   auto req = GetMetadataRequest<I>::create(
-    m_pool_metadata_io_ctx, RBD_INFO, true, ImageCtx::METADATA_CONF_PREFIX,
-    ImageCtx::METADATA_CONF_PREFIX, 0U, &m_metadata, ctx);
+    m_pool_metadata_io_ctx, RBD_INFO, true, false,
+    ImageCtx::METADATA_CONF_PREFIX, ImageCtx::METADATA_CONF_PREFIX, 0U,
+    &m_metadata, ctx);
   req->send();
 }
 

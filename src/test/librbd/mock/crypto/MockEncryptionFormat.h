@@ -4,17 +4,22 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_CRYPTO_MOCK_ENCRYPTION_FORMAT_H
 #define CEPH_TEST_LIBRBD_MOCK_CRYPTO_MOCK_ENCRYPTION_FORMAT_H
 
+#include "include/rbd/librbd.hpp"
 #include "gmock/gmock.h"
+#include "librbd/crypto/CryptoInterface.h"
 #include "librbd/crypto/EncryptionFormat.h"
-#include "test/librbd/mock/MockImageCtx.h"
 
 namespace librbd {
+
+struct MockImageCtx;
+
 namespace crypto {
 
 struct MockEncryptionFormat : EncryptionFormat<MockImageCtx> {
 
   MOCK_METHOD2(format, void(MockImageCtx* ictx, Context* on_finish));
   MOCK_METHOD2(load, void(MockImageCtx* ictx, Context* on_finish));
+  MOCK_METHOD2(flatten, void(MockImageCtx* ictx, Context* on_finish));
   MOCK_METHOD0(get_crypto, ceph::ref_t<CryptoInterface>());
 };
 

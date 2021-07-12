@@ -903,6 +903,11 @@ cdef nogil:
                               rbd_encryption_format_t format,
                               rbd_encryption_options_t opts, size_t opts_size):
         pass
+    int rbd_encryption_format_thin(rbd_image_t image,
+                                   rbd_encryption_format_t format,
+                                   rbd_encryption_options_t opts,
+                                   size_t opts_size):
+        pass
     int rbd_encryption_load(rbd_image_t image,
                               rbd_encryption_format_t format,
                               rbd_encryption_options_t opts, size_t opts_size):

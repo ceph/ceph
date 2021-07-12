@@ -32,6 +32,8 @@ public:
     void handle_format(int r);
     void flush();
     void handle_flush(int r);
+    void metadata_set();
+    void handle_metadata_set(int r);
     void finish(int r);
 
 private:
@@ -39,6 +41,7 @@ private:
 
     std::unique_ptr<EncryptionFormat<I>> m_format;
     Context* m_on_finish;
+    std::string m_serialized_parent_cryptor;
 };
 
 } // namespace crypto

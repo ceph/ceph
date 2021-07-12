@@ -3,6 +3,7 @@
 
 #include "EncryptionFormat.h"
 #include "include/compat.h"
+#include "librbd/crypto/luks/FlattenRequest.h"
 #include "librbd/crypto/luks/FormatRequest.h"
 #include "librbd/crypto/luks/LoadRequest.h"
 
@@ -36,6 +37,12 @@ void EncryptionFormat<I>::load(I* image_ctx, Context* on_finish) {
   auto req = luks::LoadRequest<I>::create(
           image_ctx, get_format(), std::move(m_passphrase), &m_crypto,
           on_finish);
+  req->send();
+}
+
+template <typename I>
+void EncryptionFormat<I>::flatten(I* image_ctx, Context* on_finish) {
+  auto req = luks::FlattenRequest<I>::create(image_ctx, on_finish);
   req->send();
 }
 

@@ -14,12 +14,15 @@ namespace luks {
 
 class Header {
 public:
+    inline static const std::string LUKS_MAGIC = "LUKS\xba\xbe";
+    inline static const std::string RBD_CLONE_MAGIC = "RBDL\xba\xbe";
+
     Header(CephContext* cct);
     ~Header();
     int init();
 
     int write(const ceph::bufferlist& bl);
-    ssize_t read(ceph::bufferlist* bl);
+    ssize_t read(ceph::bufferlist* bl, size_t length);
 
     int format(const char* type, const char* alg, const char* key,
                size_t key_size, const char* cipher_mode, uint32_t sector_size,
@@ -28,6 +31,8 @@ public:
     int load(const char* type);
     int read_volume_key(const char* passphrase, size_t passphrase_size,
                         char* volume_key, size_t* volume_key_size);
+    int replace_magic(const std::string old_magic,
+                      const std::string new_magic, bool silent = false);
 
     int get_sector_size();
     uint64_t get_data_offset();

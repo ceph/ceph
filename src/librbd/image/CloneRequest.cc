@@ -413,7 +413,7 @@ void CloneRequest<I>::copy_metadata() {
   auto ctx = create_context_callback<
     CloneRequest<I>, &CloneRequest<I>::handle_copy_metadata>(this);
   auto req = deep_copy::MetadataCopyRequest<I>::create(
-    m_parent_image_ctx, m_imctx, ctx);
+    m_parent_image_ctx, m_imctx, false, ctx);
   req->send();
 }
 

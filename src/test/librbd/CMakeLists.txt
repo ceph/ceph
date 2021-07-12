@@ -56,6 +56,7 @@ set(unittest_librbd_srcs
   crypto/test_mock_BlockCrypto.cc
   crypto/test_mock_CryptoContextPool.cc
   crypto/test_mock_CryptoObjectDispatch.cc
+  crypto/test_mock_FlattenRequest.cc
   crypto/test_mock_FormatRequest.cc
   crypto/test_mock_LoadRequest.cc
   crypto/test_mock_ShutDownCryptoRequest.cc
@@ -147,6 +148,7 @@ endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND unittest_librbd_srcs
+          crypto/luks/test_mock_FlattenRequest.cc
           crypto/luks/test_mock_FormatRequest.cc
           crypto/luks/test_mock_LoadRequest.cc)
 endif()
