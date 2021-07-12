@@ -8,10 +8,9 @@
 
 #include <boost/core/demangle.hpp>
 
-#include "OSD.h"
-#include "OpRequest.h"
+#include "osd/OSD.h"
+#include "osd/OpRequest.h"
 #include "ScrubStore.h"
-#include "scrub_machine_lstnr.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
@@ -83,7 +82,17 @@ ReservingReplicas::ReservingReplicas(my_context ctx) : my_base(ctx)
 {
   dout(10) << "-- state -->> ReservingReplicas" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+
+  // prevent the OSD from starting another scrub while we are trying to secure
+  // replicas resources
+  scrbr->set_reserving_now();
   scrbr->reserve_replicas();
+}
+
+ReservingReplicas::~ReservingReplicas()
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  scrbr->clear_reserving_now();
 }
 
 sc::result ReservingReplicas::react(const ReservationFailure&)

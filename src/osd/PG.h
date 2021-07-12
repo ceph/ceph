@@ -68,6 +68,7 @@ namespace Scrub {
   class ReplicaReservations;
   class LocalReservation;
   class ReservedByRemotePrimary;
+  enum class attempt_t;
 }
 
 #ifdef PG_DEBUG_REFS
@@ -482,8 +483,6 @@ public:
     forward_scrub_event(&ScrubPgIF::send_chunk_busy, queued, "ChunkIsBusy"sv);
   }
 
-  void reg_next_scrub();
-
   void queue_want_pg_temp(const std::vector<int> &wanted) override;
   void clear_want_pg_temp() override;
 
@@ -497,6 +496,10 @@ public:
   virtual void plpg_on_pool_change() = 0;
 
   void on_info_history_change() override;
+
+  void on_primary_status_change(bool was_primary, bool now_primary) override;
+
+  void reschedule_scrub() override;
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -621,7 +624,7 @@ public:
   virtual void on_shutdown() = 0;
 
   bool get_must_scrub() const;
-  bool sched_scrub();
+  Scrub::attempt_t sched_scrub();
 
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsigned int suggested_priority) const;
   /// the version that refers to flags_.priority

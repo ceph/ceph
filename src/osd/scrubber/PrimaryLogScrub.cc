@@ -5,8 +5,8 @@
 
 #include "common/scrub_types.h"
 
-#include "PeeringState.h"
-#include "PrimaryLogPG.h"
+#include "osd/PeeringState.h"
+#include "osd/PrimaryLogPG.h"
 #include "scrub_machine.h"
 
 #define dout_context (m_pg->cct)

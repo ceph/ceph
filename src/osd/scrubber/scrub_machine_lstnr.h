@@ -8,7 +8,7 @@
 #include "common/version.h"
 #include "include/Context.h"
 
-#include "osd_types.h"
+#include "osd/osd_types.h"
 
 namespace Scrub {
 
@@ -145,6 +145,15 @@ struct ScrubMachineListener {
   virtual void reserve_replicas() = 0;
 
   virtual void unreserve_replicas() = 0;
+
+  /**
+   * No new scrub session will start while a scrub was initiate on a PG,
+   * and that PG is trying to acquire replica resources.
+   * set_reserving_now()/clear_reserving_now() let's the OSD scrub-queue know
+   * we are busy reserving.
+   */
+  virtual void set_reserving_now() = 0;
+  virtual void clear_reserving_now() = 0;
 
   /**
    * the FSM interface into the "are we waiting for maps, either our own or from

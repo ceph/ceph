@@ -18,7 +18,7 @@
 #include "include/Context.h"
 
 #include "scrub_machine_lstnr.h"
-#include "scrubber_common.h"
+#include "osd/scrubber_common.h"
 
 using namespace std::string_literals;
 
@@ -160,6 +160,7 @@ struct NotActive : sc::state<NotActive, ScrubMachine> {
 struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine> {
 
   explicit ReservingReplicas(my_context ctx);
+  ~ReservingReplicas();
   using reactions = mpl::list<sc::custom_reaction<FullReset>,
 			      // all replicas granted our resources request
 			      sc::transition<RemotesReserved, ActiveScrubbing>,

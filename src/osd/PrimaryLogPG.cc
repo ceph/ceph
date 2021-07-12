@@ -15,51 +15,44 @@
  *
  */
 
-#include <errno.h>
+#include "PrimaryLogPG.h"
 
 #include <charconv>
 #include <sstream>
 #include <utility>
 
 #include <boost/intrusive_ptr.hpp>
-#include <boost/tuple/tuple.hpp>
-
-#include "PG.h"
-#include "pg_scrubber.h"
-#include "PrimaryLogPG.h"
-#include "OSD.h"
-#include "PrimaryLogScrub.h"
-#include "OpRequest.h"
-#include "ScrubStore.h"
-#include "Session.h"
-#include "objclass/objclass.h"
-#include "osd/ClassHandler.h"
 
 #include "cls/cas/cls_cas_ops.h"
+#include "common/CDC.h"
 #include "common/ceph_crypto.h"
 #include "common/config.h"
 #include "common/errno.h"
-#include "common/scrub_types.h"
-#include "common/perf_counters.h"
-#include "common/CDC.h"
 #include "common/EventTrace.h"
-
-#include "messages/MOSDOp.h"
+#include "common/perf_counters.h"
+#include "common/scrub_types.h"
+#include "include/compat.h"
+#include "messages/MCommandReply.h"
 #include "messages/MOSDBackoff.h"
-#include "messages/MOSDPGTrim.h"
-#include "messages/MOSDPGScan.h"
-#include "messages/MOSDRepScrub.h"
+#include "messages/MOSDOp.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGScan.h"
+#include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
-#include "messages/MCommandReply.h"
+#include "messages/MOSDRepScrub.h"
 #include "messages/MOSDScrubReserve.h"
-
-#include "include/compat.h"
 #include "mon/MonClient.h"
+#include "objclass/objclass.h"
+#include "osd/ClassHandler.h"
+#include "osd/OpRequest.h"
+#include "osd/Session.h"
 #include "osdc/Objecter.h"
+#include "scrubber/PrimaryLogScrub.h"
+
+// required includes order:
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 #include "include/ceph_assert.h"  // json_spirit clobbers it
@@ -12847,8 +12840,7 @@ void PrimaryLogPG::on_shutdown()
   }
 
   m_scrubber->scrub_clear_state();
-
-  m_scrubber->unreg_next_scrub();
+  m_scrubber->rm_from_osd_scrubbing();
 
   vector<ceph_tid_t> tids;
   cancel_copy_ops(false, &tids);
