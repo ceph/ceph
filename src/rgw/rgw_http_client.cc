@@ -600,6 +600,10 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
       // TODO: set to size smaller than 1MB should prevent the "Expect" field
       // from being sent. So explicit removal is not needed
       h = curl_slist_append(h, "Expect:");
+      if (!content_type.empty()) {
+        // set content type in case of POST
+        h = curl_slist_append(h, content_type.c_str());
+      }
     }
   }
 

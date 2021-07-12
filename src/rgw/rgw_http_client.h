@@ -58,6 +58,7 @@ protected:
   string protocol;
   string host;
   string resource_prefix;
+  string content_type;
 
   size_t send_len{0};
 
@@ -149,6 +150,10 @@ public:
   // zero (default) mean that request will never timeout
   void set_req_timeout(long timeout) {
     req_timeout = timeout;
+  }
+
+  void set_content_type(const std::string type) {
+    content_type = "Content-Type: " + type;
   }
 
   int process(optional_yield y);
