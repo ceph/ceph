@@ -141,6 +141,28 @@ class Device(object):
     def __hash__(self):
         return hash(self.path)
 
+    def _find_lv(self):
+        for lv_filters in (
+            dict(lv_path=self.path),  # /dev/vg_name/lv_name
+            dict(lv_dm_path=self.path),  # /dev/mapper/vg_name-lv_name
+            dict(lv_full_name=self.path),  # vg_name/lv_name
+        ):
+            lv = lvm.get_single_lv(filters=lv_filters)
+            if lv is not None:
+                return lv
+        try:
+            # Look for /dev/dm-X devices, and symlinks to those other than
+            # /dev/vg_name/lv_name or /dev/mapper/vg_name-lv_name (e.g., the
+            # ones in /dev/disk/by-*).
+            with os.scandir('/dev/mapper') as mapper_device_iter:
+                for mapper_device_entry in mapper_device_iter:
+                    if os.path.samefile(self.path, mapper_device_entry.path):
+                        return lvm.get_single_lv(
+                            filters=dict(lv_dm_path=mapper_device_entry.path))
+        except FileNotFoundError:
+            pass
+        return None
+
     def _parse(self):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
@@ -154,14 +176,7 @@ class Device(object):
                     self.sys_api = part
                     break
 
-        # if the path is not absolute, we have 'vg/lv', let's use LV name
-        # to get the LV.
-        if self.path[0] == '/':
-            lv = lvm.get_single_lv(filters={'lv_path': self.path})
-        else:
-            vgname, lvname = self.path.split('/')
-            lv = lvm.get_single_lv(filters={'lv_name': lvname,
-                                            'vg_name': vgname})
+        lv = self._find_lv()
         if lv:
             self.lv_api = lv
             self.lvs = [lv]
