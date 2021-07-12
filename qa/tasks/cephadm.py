@@ -726,25 +726,41 @@ def ceph_osds(ctx, config):
                 _, _, id_ = teuthology.split_role(osd)
                 id_to_remote[int(id_)] = (osd, remote)
 
+        def get_short_name(dev):
+            if all(_ in dev for _ in ('lv', 'vg')):
+                return dev.replace('/dev/', '')
+            else:
+                return dev
+
+        # cleaning devices
+        for osd_id in sorted(id_to_remote.keys()):
+            osd, remote = id_to_remote[osd_id]
+            devs = devs_by_remote[remote]
+            assert devs   ## FIXME ##
+            for dev in devs:
+                log.info('Cleaning device %s on %s ...' % (
+                    dev, remote.shortname))
+                _shell(ctx, cluster_name, remote, [
+                    'ceph', 'orch', 'device', 'zap', remote.shortname, get_short_name(dev),
+                    '--force',
+                ])
+
+        # refresh the inventory using last remote
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'device', 'ls', '--refresh'])
+
+        # create OSDs
         cur = 0
         for osd_id in sorted(id_to_remote.keys()):
             osd, remote = id_to_remote[osd_id]
             _, _, id_ = teuthology.split_role(osd)
             assert int(id_) == cur
-            devs = devs_by_remote[remote]
-            assert devs   ## FIXME ##
             dev = devs.pop()
-            if all(_ in dev for _ in ('lv', 'vg')):
-                short_dev = dev.replace('/dev/', '')
-            else:
-                short_dev = dev
             log.info('Deploying %s on %s with %s...' % (
-                osd, remote.shortname, dev))
-            _shell(ctx, cluster_name, remote, [
-                'ceph-volume', 'lvm', 'zap', dev])
+                osd, remote.shortname, get_short_name(dev)))
             _shell(ctx, cluster_name, remote, [
                 'ceph', 'orch', 'daemon', 'add', 'osd',
-                remote.shortname + ':' + short_dev
+                remote.shortname + ':' + get_short_name(dev)
             ])
             ctx.daemons.register_daemon(
                 remote, 'osd', id_,
@@ -1042,7 +1058,7 @@ def shell(ctx, config):
 def apply(ctx, config):
     """
     Apply spec
-    
+
       tasks:
         - cephadm.apply:
             specs:
@@ -1480,4 +1496,3 @@ def task(ctx, config):
 
         finally:
             log.info('Teardown begin')
-
