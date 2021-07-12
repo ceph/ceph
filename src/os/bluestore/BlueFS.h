@@ -206,8 +206,13 @@ public:
     }
 
     // note: BlueRocksEnv uses this append exclusively, so it's safe
-    // to use buffer_appender exclusively here (e.g., it's notion of
+    // to use buffer_appender exclusively here (e.g., its notion of
     // offset will remain accurate).
+    void append(const byte *buf, size_t len) {
+      // allow callers to use byte type instead of char* as we simply pass byte array
+      append((const char*)buf, len);
+    }
+    
     void append(const char *buf, size_t len) {
       uint64_t l0 = get_buffer_length();
       ceph_assert(l0 + len <= std::numeric_limits<unsigned>::max());

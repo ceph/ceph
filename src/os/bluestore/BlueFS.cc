@@ -841,7 +841,7 @@ int BlueFS::maybe_verify_layout(const bluefs_layout_t& layout) const
 
 void BlueFS::umount(bool avoid_compact)
 {
-  dout(1) << __func__ << dendl;
+  dout(1) << __func__ << "::NCB" << dendl;
 
   sync_metadata(avoid_compact);
 
@@ -3100,11 +3100,14 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
               << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
 	      << std::dec << dendl;
     }
-
+    else {
+      dout(20) << __func__ << "::NCB::NULL-ALLOCATOR on index="<< (int)id << " unable to allocate 0x" << std::hex << need
+	      << " on bdev " << (int)id << std::dec << dendl;
+    }
     if (id != BDEV_SLOW) {
-      dout(20) << __func__ << " fallback to bdev "
-               << (int)id + 1
-	       << dendl;
+      dout(20) << __func__ << "::NCB:: fallback to bdev "
+	      << (int)id + 1
+	      << dendl;
       return _allocate(id + 1, len, node);
     } else {
       derr << __func__ << " allocation failed, needed 0x" << std::hex << need
