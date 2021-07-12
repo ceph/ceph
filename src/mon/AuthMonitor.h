@@ -164,6 +164,14 @@ private:
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
+  void _print_key(EntityName& entity, EntityAuth& eauth, bufferlist& rdata,
+                  Formatter* fmtr);
+  void _print_auth(EntityName& entity, EntityAuth& eauth, bufferlist& rdata,
+                   Formatter* fmtr, bool just_key=false);
+  int _update_caps(EntityName& entity, vector<string>& caps_vec,
+		   MonOpRequestRef op);
+  bool _gen_wanted_caps(EntityAuth& e_auth, vector<string>& newcaps,
+			string& fs);
 
   bool check_rotate();
 

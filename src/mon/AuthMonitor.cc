@@ -838,12 +838,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
     if (!entity_name.empty()) {
       EntityAuth eauth;
       if (keyring.get_auth(entity, eauth)) {
-	KeyRing kr;
-	kr.add(entity, eauth);
-	if (f)
-	  kr.encode_formatted("auth", f.get(), rdata);
-	else
-	  kr.encode_plaintext(rdata);
+	_print_auth(entity, eauth, rdata, f.get());
 	ss << "export " << eauth;
 	r = 0;
       } else {
@@ -866,11 +861,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       ss << "failed to find " << entity_name << " in keyring";
       r = -ENOENT;
     } else {
-      keyring.add(entity, entity_auth);
-      if (f)
-	keyring.encode_formatted("auth", f.get(), rdata);
-      else
-	keyring.encode_plaintext(rdata);
+      _print_auth(entity, entity_auth, rdata, f.get());
       ss << "exported keyring for " << entity_name;
       r = 0;
     }
@@ -1535,14 +1526,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
           ds << entity_auth.key;
         }
       } else {
-	KeyRing kr;
-	kr.add(entity, entity_auth.key);
-        if (f) {
-          kr.set_caps(entity, entity_auth.caps);
-          kr.encode_formatted("auth", f.get(), rdata);
-        } else {
-          kr.encode_plaintext(rdata);
-        }
+	_print_key(entity, entity_auth, rdata, f.get());
       }
       err = 0;
       goto done;
@@ -1581,14 +1565,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
         ds << auth_inc.auth.key;
       }
     } else {
-      KeyRing kr;
-      kr.add(entity, auth_inc.auth.key);
-      if (f) {
-        kr.set_caps(entity, wanted_caps);
-        kr.encode_formatted("auth", f.get(), rdata);
-      } else {
-        kr.encode_plaintext(rdata);
-      }
+      _print_key(entity, auth_inc.auth, rdata, f.get());
     }
 
     rdata.append(ds);
@@ -1675,6 +1652,28 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       + " tag " + pg_pool_t::APPLICATION_NAME_CEPHFS
       + " data=" + filesystem;
 
+    vector<string> newcaps = {"mon", mon_cap_string, "osd", osd_cap_string,
+			      "mds", mds_cap_string};
+
+    EntityAuth e_auth;
+    if (mon.key_server.get_auth(entity, e_auth)) {
+      bool all_caps_same = _gen_wanted_caps(e_auth, newcaps, filesystem);
+
+      if (all_caps_same) {
+	ss << entity << " already has caps that are same as those supplied.";
+	_print_key(entity, e_auth, rdata, f.get());
+	err = 0;
+	goto done;
+      }
+
+      err = _update_caps(entity, newcaps, op);
+      if (err == 0) {
+	return true;
+      } else {
+	goto done;
+      }
+    }
+
     std::map<string, bufferlist> wanted_caps = {
       { "mon", _encode_cap(mon_cap_string) },
       { "osd", _encode_cap(osd_cap_string) },
@@ -1688,33 +1687,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    EntityAuth entity_auth;
-    if (mon.key_server.get_auth(entity, entity_auth)) {
-      for (const auto &sys_cap : wanted_caps) {
-	if (entity_auth.caps.count(sys_cap.first) == 0 ||
-	    !entity_auth.caps[sys_cap.first].contents_equal(sys_cap.second)) {
-	  ss << entity << " already has fs capabilities that differ from "
-	     << "those supplied. To generate a new auth key for " << entity
-	     << ", first remove " << entity << " from configuration files, "
-	     << "execute 'ceph auth rm " << entity << "', then execute this "
-	     << "command again.";
-	  err = -EINVAL;
-	  goto done;
-	}
-      }
-
-      KeyRing kr;
-      kr.add(entity, entity_auth.key);
-      if (f) {
-	kr.set_caps(entity, entity_auth.caps);
-	kr.encode_formatted("auth", f.get(), rdata);
-      } else {
-	kr.encode_plaintext(rdata);
-      }
-      err = 0;
-      goto done;
-    }
-
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.name = entity;
@@ -1722,48 +1694,19 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
-    KeyRing kr;
-    kr.add(entity, auth_inc.auth.key);
-    if (f) {
-      kr.set_caps(entity, wanted_caps);
-      kr.encode_formatted("auth", f.get(), rdata);
-    } else {
-      kr.encode_plaintext(rdata);
-    }
 
+    _print_key(entity, auth_inc.auth, rdata, f.get());
     rdata.append(ds);
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
 						  get_last_committed() + 1));
     return true;
   } else if (prefix == "auth caps" && !entity_name.empty()) {
-    KeyServerData::Incremental auth_inc;
-    auth_inc.name = entity;
-    if (!mon.key_server.get_auth(auth_inc.name, auth_inc.auth)) {
-      ss << "couldn't find entry " << auth_inc.name;
-      err = -ENOENT;
+    err = _update_caps(entity, caps_vec, op);
+    if (err == 0)
+      return true;
+    else
       goto done;
-    }
-
-    if (!valid_caps(caps_vec, &ss)) {
-      err = -EINVAL;
-      goto done;
-    }
-
-    map<string,bufferlist> newcaps;
-    for (vector<string>::iterator it = caps_vec.begin();
-	 it != caps_vec.end(); it += 2)
-      encode(*(it+1), newcaps[*it]);
-
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    auth_inc.auth.caps = newcaps;
-    push_cephx_inc(auth_inc);
-
-    ss << "updated caps for " << auth_inc.name;
-    getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-					      get_last_committed() + 1));
-    return true;
   } else if ((prefix == "auth del" || prefix == "auth rm") &&
              !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -1787,6 +1730,172 @@ done:
   getline(ss, rs, '\0');
   mon.reply_command(op, err, rs, rdata, get_last_committed());
   return false;
+}
+
+/* Generate the caps that should now be present in the entity's auth keyring
+ * (that is wanted caps) by merging the caps already held in the auth keyring
+ * and the new caps provided by "fs authorize" subcommand.
+ */
+bool AuthMonitor::_gen_wanted_caps(EntityAuth& e_auth, vector<string>& newcaps,
+                                    string& fs)
+{
+  bool all_caps_same = true; // whether all caps passed are same as the
+			     // one present.
+
+  if (e_auth.caps.empty()) {
+    all_caps_same = false;
+    return all_caps_same;
+  }
+
+  for (auto it = newcaps.begin(); it != newcaps.end(); it += 2) {
+    string& cap_entity = *it;
+    string& ncap = *(it + 1);
+
+    if (e_auth.caps.count(cap_entity) == 0) {
+      all_caps_same = false;
+      continue;
+    }
+
+    string ecap; // ecap = entity cap
+    auto i = e_auth.caps[cap_entity].cbegin();
+    decode(ecap, i);
+    if (ecap == ncap) {
+      continue;
+    }
+
+    all_caps_same = false;
+
+    if (cap_entity == "mon") {
+      if (ecap.find("fsname=" + fs) == string::npos) {
+	ncap = ecap + (ecap.empty() ? "" : ", ") + ncap;
+      } else {
+	ncap = ecap;
+      }
+    } else if (cap_entity == "osd") {
+      if (ecap.find("data=" + fs) == string::npos) {
+	ncap = ecap + (ecap.empty() ? "" : ", ") + ncap;
+	continue;
+      }
+
+      string c_fscap;
+      smatch sm;
+      if (ecap.find(",") != string::npos) {
+	string expr = "allow.*data=" + fs;
+	if (regex_search(ecap, sm, regex(expr + ","))) {
+	  for (auto i : sm)
+	    c_fscap = i;
+	  c_fscap.replace(c_fscap.find(","), 1, "");
+	} else {
+	  regex_search(ecap, sm, regex(", " + expr));
+	  for (auto i : sm)
+	    c_fscap = i;
+	  c_fscap.replace(c_fscap.find(", "), 2, "");
+	}
+
+	if (c_fscap == ncap)
+	  continue;
+      } else
+	c_fscap = ecap;
+
+      string c_perm, n_perm;
+      regex_search(c_fscap, sm, regex("allow [rw]* "));
+      for (auto i : sm)
+	      c_perm = i;
+      regex_search(ncap, sm, regex("allow [rw]* "));
+      for (auto i : sm)
+	      n_perm = i;
+
+      ncap = ecap.replace(ecap.find(c_perm), c_perm.size(), n_perm);
+    } else if (cap_entity == "mds") {
+      if (ecap.find("fsname=" + fs) == string::npos) {
+	ncap = ecap + (ecap.empty() ? "" : ", ") + ncap;
+	continue;
+      }
+
+      if (ecap.find(",") == string::npos) {
+	continue;
+      }
+
+      string c_fscap; // current cap for given fs name
+      string expr = "allow.*fsname=" + fs;
+      smatch sm;
+      if (regex_search(ecap, sm, regex(expr + ","))) {
+	for (auto i : sm)
+	  c_fscap = i;
+	c_fscap.replace(c_fscap.find(","), 1, "");
+      } else {
+	regex_search(ecap, sm, regex(", " + expr));
+	for (auto i : sm)
+	  c_fscap = i;
+	c_fscap.replace(c_fscap.find(", "), 2, "");
+      }
+
+      if (c_fscap == ncap) {
+	ncap = ecap;
+	continue;
+      }
+
+      ncap = ecap.replace(ecap.find(c_fscap), c_fscap.size(), ncap);
+    }
+  }
+
+  return all_caps_same;
+}
+
+void AuthMonitor::_print_key(EntityName& entity, EntityAuth& eauth,
+                             bufferlist& rdata, Formatter* fmtr)
+{
+  _print_auth(entity, eauth, rdata, fmtr, true);
+}
+
+void AuthMonitor::_print_auth(EntityName& entity, EntityAuth& eauth,
+                              bufferlist& rdata, Formatter* fmtr,bool just_key)
+{
+  KeyRing kr;
+  if (just_key) {
+    kr.add(entity, eauth.key);
+  } else {
+    kr.add(entity, eauth);
+  }
+
+  if (fmtr) {
+    kr.encode_formatted("auth", fmtr, rdata);
+  } else {
+    kr.encode_plaintext(rdata);
+  }
+}
+
+int AuthMonitor::_update_caps(EntityName& entity, vector<string>& caps_vec,
+			      MonOpRequestRef op)
+{
+  stringstream ss;
+
+  KeyServerData::Incremental auth_inc;
+  auth_inc.name = entity;
+  if (!mon.key_server.get_auth(auth_inc.name, auth_inc.auth)) {
+    ss << "couldn't find entry " << auth_inc.name;
+    return -ENOENT;
+  }
+
+  if (!valid_caps(caps_vec, &ss)) {
+    return -EINVAL;
+  }
+
+  map<string,bufferlist> newcaps;
+  for (vector<string>::iterator it = caps_vec.begin();
+       it != caps_vec.end(); it += 2)
+    encode(*(it+1), newcaps[*it]);
+
+  auth_inc.op = KeyServerData::AUTH_INC_ADD;
+  auth_inc.auth.caps = newcaps;
+  push_cephx_inc(auth_inc);
+
+  ss << "updated caps for " << auth_inc.name;
+  string rs;
+  getline(ss, rs);
+  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					    get_last_committed() + 1));
+  return 0;
 }
 
 bool AuthMonitor::prepare_global_id(MonOpRequestRef op)

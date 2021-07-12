@@ -1,6 +1,7 @@
 import errno
 import json
 import uuid
+import logging
 from io import StringIO
 from os.path import join as os_path_join
 
@@ -10,6 +11,9 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.filesystem import FileLayout, FSMissing
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.caps_helper import CapsHelper
+
+
+log = logging.getLogger(__name__)
 
 
 class TestAdminCommands(CephFSTestCase):
@@ -767,6 +771,202 @@ class TestFsAuthorize(CapsHelper):
         mounts = (self.mount_a, )
 
         return filepaths, filedata, mounts, keyring
+
+
+class TestAuthorizeUpdate(CapsHelper):
+    """
+    Contains tests for the case where "ceph fs authorize" was executed for an
+    entity which is already existing on the Ceph cluster. In this case, the
+    subcommand updates the authorization capabilities for the entity and
+    re-prints the keyring.
+    """
+
+    client_id = 'testuser'
+    client_name = f'client.{client_id}'
+    CLIENTS_REQUIRED = 2
+    MDSS_REQUIRED = 2
+
+    def test_update_for_same_fs_diff_caps(self):
+        """
+        Test that "ceph fs authorize" updates the caps for a FS when the caps
+        for that FS were already present in that keyring.
+        """
+        filepaths, filedata, mounts = self.write_test_files((self.mount_a,))
+        self.mount_a.umount()
+
+        self.fs.authorize(self.client_id, ('/', 'rw',))
+        keyring = self.fs.mon_manager.run_cluster_cmd(
+            args=f'auth get {self.client_name}', stdout=StringIO()).\
+            stdout.getvalue()
+        keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.mount(client_id=self.client_id,
+                           client_keyring_path=keyring_path_a,
+                           cephfs_mntpt='/', cephfs_name=self.fs.name)
+        self.mount_a.umount()
+
+        # testing begins here
+        TEST_PERM = 'r'
+        self.fs.authorize(self.client_id, ('/', TEST_PERM,))
+        keyring = self.fs.mon_manager.run_cluster_cmd(
+            args=f'auth get {self.client_name}', stdout=StringIO()).\
+            stdout.getvalue()
+        mon_cap = f'caps mon = "allow r fsname={self.fs.name}"'
+        osd_cap = f'caps osd = "allow r tag cephfs data={self.fs.name}"'
+        mds_cap = f'caps mds = "allow r fsname={self.fs.name}"'
+        for cap in (mon_cap, osd_cap, mds_cap):
+            self.assertIn(cap, keyring)
+
+        keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.mount(client_id=self.client_id,
+                           client_keyring_path=keyring_path_a,
+                           cephfs_mntpt='/', cephfs_name=self.fs.name)
+        self.run_cap_tests(filepaths, filedata, mounts, TEST_PERM)
+
+    def test_caps_update_for_diff_fs(self):
+        """
+        Test that "ceph fs authorize" adds caps for a second FS to a keyring
+        that already had caps.
+        """
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+        self.mount_b.remount(cephfs_name=self.fs2.name)
+        filepaths, filedata, mounts =  self.write_test_files(
+            (self.mount_a, self.mount_b))
+        self.mount_a.umount()
+        self.mount_b.umount()
+        self.fs1.authorize(self.client_id, ('/', 'rw',))
+
+        # testing begins here.
+        TEST_PERM = 'rw'
+        self.fs2.authorize(self.client_id, ('/', TEST_PERM,))
+
+        keyring = self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth get {self.client_name}', stdout=StringIO()).\
+                stdout.getvalue()
+        mon_cap = (f'caps mon = "allow r fsname={self.fs1.name}, '
+                               f'allow r fsname={self.fs2.name}"')
+        osd_cap = (f'caps osd = "allow rw tag cephfs data={self.fs1.name}, '
+                               f'allow rw tag cephfs data={self.fs2.name}"')
+        mds_cap = (f'caps mds = "allow rw fsname={self.fs1.name}, '
+                               f'allow rw fsname={self.fs2.name}"')
+        for cap in (mon_cap, osd_cap, mds_cap):
+            self.assertIn(cap, keyring)
+
+        keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
+        keyring_path_b = self.mount_b.client_remote.mktemp(data=keyring)
+
+        self.mount_a.mount(client_id=self.client_id,
+                           client_keyring_path=keyring_path_a,
+                           cephfs_mntpt='/', cephfs_name=self.fs1.name)
+        self.mount_b.mount(client_id=self.client_id,
+                           client_keyring_path=keyring_path_b,
+                           cephfs_mntpt='/', cephfs_name=self.fs2.name)
+        self.run_cap_tests(filepaths, filedata, mounts, TEST_PERM)
+
+    def test_for_auth_with_caps_for_multiple_fss(self):
+        """
+        Test that "ceph fs authorize" updates caps for both FSs properly when
+        the keyring is already present and it contains caps for both the FSs
+        as well.
+        """
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+        self.mount_b.remount(cephfs_name=self.fs2.name)
+        filepaths, filedata, mounts = self.write_test_files(
+            (self.mount_a, self.mount_b))
+        self.mount_a.umount()
+        self.mount_b.umount()
+        self.fs1.authorize(self.client_id, ('/', 'rw',))
+        self.fs2.authorize(self.client_id, ('/', 'rw',))
+
+        # testing begins here.
+        TEST_PERM = 'r'
+        self.fs1.authorize(self.client_id, ('/', TEST_PERM,))
+
+        keyring = self.fs1.mon_manager.run_cluster_cmd(
+            args=f'auth get {self.client_name}', stdout=StringIO()).\
+            stdout.getvalue()
+        mon_cap = (f'caps mon = "allow r fsname={self.fs1.name}, '
+                               f'allow r fsname={self.fs2.name}"')
+        osd_cap = (f'caps osd = "allow r tag cephfs data={self.fs1.name}, '
+                               f'allow rw tag cephfs data={self.fs2.name}"')
+        mds_cap = (f'caps mds = "allow r fsname={self.fs1.name}, '
+                               f'allow rw fsname={self.fs2.name}"')
+        for cap in (mon_cap, osd_cap, mds_cap):
+            self.assertIn(cap, keyring)
+
+        keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
+        keyring_path_b = self.mount_b.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path_a,
+                             cephfs_mntpt='/', cephfs_name=self.fs1.name)
+        self.mount_b.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path_b,
+                             cephfs_mntpt='/', cephfs_name=self.fs2.name)
+        self.run_cap_tests(filepaths, filedata, mounts, TEST_PERM)
+
+
+        self.fs2.authorize(self.client_id, ('/', TEST_PERM,))
+        keyring = self.fs1.mon_manager.run_cluster_cmd(
+            args=f'auth get {self.client_name}', stdout=StringIO()).\
+            stdout.getvalue()
+        mon_cap = (f'caps mon = "allow r fsname={self.fs1.name}, '
+                               f'allow r fsname={self.fs2.name}"')
+        osd_cap = (f'caps osd = "allow r tag cephfs data={self.fs1.name}, '
+                               f'allow r tag cephfs data={self.fs2.name}"')
+        mds_cap = (f'caps mds = "allow r fsname={self.fs1.name}, '
+                               f'allow r fsname={self.fs2.name}"')
+        for cap in (mon_cap, osd_cap, mds_cap):
+            self.assertIn(cap, keyring)
+
+        keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
+        keyring_path_b = self.mount_b.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id,
+                           client_keyring_path=keyring_path_a,
+                           cephfs_mntpt='/', cephfs_name=self.fs1.name)
+        self.mount_b.remount(client_id=self.client_id,
+                           client_keyring_path=keyring_path_b,
+                           cephfs_mntpt='/', cephfs_name=self.fs2.name)
+        self.run_cap_tests(filepaths, filedata, mounts, TEST_PERM)
+
+    def test_for_client_with_no_caps(self):
+        """
+        Test that "ceph fs authorize" adds caps to the keyring when the
+        entity already has a keyring but it contains no caps.
+        """
+        filepaths, filedata, mounts = self.write_test_files((self.mount_a,))
+        self.run_cluster_cmd(f'auth add {self.client_name}')
+
+        # testing begins here.
+        TEST_PERM = 'rw'
+        self.fs.authorize(self.client_id, ('/', TEST_PERM,))
+
+        keyring = self.run_cluster_cmd(f'auth get {self.client_name}')
+        mon_cap = f'caps mon = "allow r fsname={self.fs.name}"'
+        osd_cap = f'caps osd = "allow rw tag cephfs data={self.fs.name}"'
+        mds_cap = f'caps mds = "allow rw fsname={self.fs.name}"'
+        for cap in (mon_cap, osd_cap, mds_cap):
+            self.assertIn(cap, keyring)
+        self.run_cap_tests(filepaths, filedata, mounts, TEST_PERM)
+
+    def test_caps_passed_same_as_current_caps(self):
+        """
+        Test that "ceph fs authorize" exits with the keyring on stdout and the
+        expected error message on stderr when caps supplied to the subcommand
+        are already present in the entity's keyring.
+        """
+        keyring1 = self.fs.authorize(self.client_id, ('/', 'rw')).strip()
+
+        # testing begins here.
+        proc = self.fs.mon_manager.run_cluster_cmd(
+            args=f'fs authorize {self.fs.name} {self.client_name} / rw',
+            stdout=StringIO(), stderr=StringIO())
+        keyring2 = proc.stdout.getvalue()
+        errmsg = proc.stderr.getvalue()
+
+        self.assertIn(keyring1, keyring2)
+        self.assertIn(f'{self.client_name} already has caps that are same as '
+                       'those supplied', errmsg)
 
 
 class TestAdminCommandIdempotency(CephFSTestCase):
