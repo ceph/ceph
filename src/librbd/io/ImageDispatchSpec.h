@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/Context.h"
+#include "common/buffer_pool.h"
 #include "common/zipkin_trace.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/Types.h"
@@ -22,7 +23,7 @@ namespace io {
 
 struct ImageDispatcherInterface;
 
-class ImageDispatchSpec {
+class ImageDispatchSpec : public PooledObject {
 private:
   // helper to avoid extra heap allocation per object IO
   struct C_Dispatcher : public Context {

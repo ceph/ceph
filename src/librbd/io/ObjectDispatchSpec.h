@@ -8,6 +8,7 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "common/buffer_pool.h"
 #include "common/zipkin_trace.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
@@ -18,7 +19,7 @@ namespace io {
 
 struct ObjectDispatcherInterface;
 
-struct ObjectDispatchSpec {
+struct ObjectDispatchSpec : public PooledObject {
 private:
   // helper to avoid extra heap allocation per object IO
   struct C_Dispatcher : public Context {

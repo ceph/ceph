@@ -43,6 +43,7 @@
 
 #include "common/admin_socket.h"
 #include "common/async/completion.h"
+#include "common/buffer_pool.h"
 #include "common/ceph_time.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_timer.h"
@@ -1880,7 +1881,7 @@ public:
       return nullptr;
   }
 
-  struct Op : public RefCountedObject {
+  struct Op : public RefCountedObject, public PooledObject {
     OSDSession *session = nullptr;
     int incarnation = 0;
 

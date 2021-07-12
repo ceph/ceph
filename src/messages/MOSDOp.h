@@ -20,6 +20,7 @@
 
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
+#include "common/buffer_pool.h"
 #include "common/hobject.h"
 
 /*
@@ -34,7 +35,7 @@ class MOSDOpReply;
 
 namespace _mosdop {
 template<typename V>
-class MOSDOp final : public MOSDFastDispatchOp {
+class MOSDOp final : public MOSDFastDispatchOp, public PooledObject {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 3;

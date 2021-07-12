@@ -32,6 +32,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
   ${PROJECT_SOURCE_DIR}/src/common/buffer.cc
+  ${PROJECT_SOURCE_DIR}/src/common/buffer_pool.cc
   ${PROJECT_SOURCE_DIR}/src/common/buffer_seastar.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc

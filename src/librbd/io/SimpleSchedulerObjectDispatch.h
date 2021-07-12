@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IO_SIMPLE_SCHEDULER_OBJECT_DISPATCH_H
 #define CEPH_LIBRBD_IO_SIMPLE_SCHEDULER_OBJECT_DISPATCH_H
 
+#include "common/buffer_pool.h"
 #include "common/ceph_mutex.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
@@ -187,7 +188,9 @@ private:
   };
 
   typedef std::shared_ptr<ObjectRequests> ObjectRequestsRef;
-  typedef std::map<uint64_t, ObjectRequestsRef> Requests;
+  typedef std::map<uint64_t, ObjectRequestsRef, std::less<uint64_t>,
+                   PooledAllocator<std::pair<const uint64_t,
+                                             ObjectRequestsRef>>> Requests;
 
   ImageCtxT *m_image_ctx;
 

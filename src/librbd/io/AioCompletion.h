@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IO_AIO_COMPLETION_H
 #define CEPH_LIBRBD_IO_AIO_COMPLETION_H
 
+#include "common/buffer_pool.h"
 #include "common/ceph_time.h"
 #include "include/common_fwd.h"
 #include "include/Context.h"
@@ -37,7 +38,7 @@ namespace io {
  * within the caller's thread of execution (instead via a librados
  * context or via a thread pool context for cache read hits).
  */
-struct AioCompletion {
+struct AioCompletion : public PooledObject {
   typedef enum {
     AIO_STATE_PENDING = 0,
     AIO_STATE_CALLBACK,

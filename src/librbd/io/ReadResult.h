@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IO_READ_RESULT_H
 #define CEPH_LIBRBD_IO_READ_RESULT_H
 
+#include "common/buffer_pool.h"
 #include "include/common_fwd.h"
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
@@ -39,7 +40,7 @@ public:
     void finish(int r) override;
   };
 
-  struct C_ObjectReadRequest : public Context {
+  struct C_ObjectReadRequest : public Context, public PooledObject {
     AioCompletion *aio_completion;
     ReadExtents extents;
 

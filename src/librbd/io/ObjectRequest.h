@@ -8,6 +8,7 @@
 #include "include/buffer.h"
 #include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
+#include "common/buffer_pool.h"
 #include "common/zipkin_trace.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Types.h"
@@ -34,7 +35,7 @@ template <typename> class CopyupRequest;
  * for I/O due to layering.
  */
 template <typename ImageCtxT = ImageCtx>
-class ObjectRequest {
+class ObjectRequest : public PooledObject {
 public:
   static ObjectRequest* create_write(
       ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
