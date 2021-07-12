@@ -1926,6 +1926,7 @@ public:
 
     version_t *objver;
     epoch_t *reply_epoch = nullptr;
+    epoch_t send_epoch = 0;
 
     ceph::coarse_mono_time stamp;
 
@@ -2575,7 +2576,8 @@ private:
 			     cct->_conf->objecter_inflight_ops)};
  public:
   Objecter(CephContext *cct, Messenger *m, MonClient *mc,
-	   boost::asio::io_context& service);
+	   boost::asio::io_context& service,
+	   int osd_whoami = -1);
   ~Objecter() override;
 
   void init();
@@ -2927,9 +2929,12 @@ public:
     ObjectOperation& op, const SnapContext& snapc,
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
-    osd_reqid_t reqid = osd_reqid_t()) {
+    osd_reqid_t reqid = osd_reqid_t(),
+    epoch_t pg_epoch = 0) {
     Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
 			      oncommit, objver, reqid);
+    if (pg_epoch)
+      o->send_epoch = pg_epoch;
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
@@ -2940,7 +2945,8 @@ public:
 	      ceph::real_time mtime, int flags,
 	      std::unique_ptr<Op::OpComp>&& oncommit,
 	      version_t *objver = NULL, osd_reqid_t reqid = osd_reqid_t(),
-	      ZTracer::Trace *parent_trace = nullptr) {
+	      ZTracer::Trace *parent_trace = nullptr,
+	      epoch_t pg_epoch = 0) {
     Op *o = new Op(oid, oloc, std::move(op.ops), flags | global_op_flags |
 		   CEPH_OSD_FLAG_WRITE, std::move(oncommit), objver,
 		   nullptr, parent_trace);
@@ -2952,6 +2958,8 @@ public:
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
     o->reqid = reqid;
+    if (pg_epoch)
+      o->send_epoch = pg_epoch;
     op.clear();
     op_submit(o);
   }
@@ -3902,6 +3910,8 @@ private:
   epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply =
     cct->_conf->objecter_retry_writes_after_first_reply;
+
+  int osd_whoami;
 
 public:
   void set_epoch_barrier(epoch_t epoch);
