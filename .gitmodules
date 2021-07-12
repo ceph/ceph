@@ -78,3 +78,8 @@
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
 	branch = ceph-master
+[submodule "src/aws-sdk-cpp"]
+	path = src/aws-sdk-cpp
+	url = https://github.com/ceph/aws-sdk-cpp
+	depth = 1
+	shallow = true
