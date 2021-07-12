@@ -7,7 +7,6 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <fstream>
 
 using namespace std;
 
@@ -59,7 +58,7 @@ private:
   using cache = Cache<Key, value_type>;
 
 protected:
-  Value get_value(Key key, bool count_hit=true);
+  Value get_value(Key key, bool count_hit = true);
   ttl_time_point get_value_time_point(Key key);
   bool exists(Key key);
   bool expired(Key key);
@@ -90,14 +89,14 @@ public:
 template <class Key>
 class TTLCache<Key, PyObject *> : public TTLCacheBase<Key, PyObject *> {
 public:
-	std::ofstream fi;
   TTLCache(uint16_t ttl_ = 0, uint16_t size = UINT16_MAX, float spread = 0.25)
-      : TTLCacheBase<Key, PyObject *>(ttl_, size, spread) {fi.open("ttlout");}
+      : TTLCacheBase<Key, PyObject *>(ttl_, size, spread) {}
   ~TTLCache(){};
   std::optional<PyObject *> get(Key key);
   void erase(Key key);
+
 private:
-  using ttl_base = TTLCacheBase<Key, PyObject*>;
+  using ttl_base = TTLCacheBase<Key, PyObject *>;
 };
 
 #include "TTLCache.cc"

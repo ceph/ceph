@@ -14,7 +14,8 @@ void TTLCacheBase<Key, Value>::insert(Key key, Value value) {
   uint16_t ttl_spread = ttl * this->ttl_spread_percent;
   // in order not to have spikes of misses we increase or decrease by 25% of
   // the ttl
-  uint16_t spreaded_ttl = ttl + (rand()/float(RAND_MAX) - .5) * 2 * ttl_spread;
+  uint16_t spreaded_ttl =
+      ttl + (rand() / float(RAND_MAX) - .5) * 2 * ttl_spread;
   auto expiration_date = now + std::chrono::seconds(spreaded_ttl);
   cache::insert(key, {value, expiration_date});
 }
@@ -36,14 +37,10 @@ std::optional<Value> TTLCacheBase<Key, Value>::get(Key key) {
 template <class Key>
 std::optional<PyObject *> TTLCache<Key, PyObject *>::get(Key key) {
   std::optional<PyObject *> value;
-this->fi << "Get py " << key << "\n";
-this->fi.flush();
   if (!this->exists(key)) {
     return value;
   }
   if (this->expired(key)) {
-this->fi << "Erasing" << key << "\n";
-this->fi.flush();
     this->erase(key);
     return value;
   }
@@ -60,8 +57,6 @@ void TTLCacheBase<Key, Value>::erase(Key key) {
 }
 
 template <class Key> void TTLCache<Key, PyObject *>::erase(Key key) {
-this->fi << "Erasing pyobj " << key << "\n";
-this->fi.flush();
   Py_DECREF(this->get_value(key, false));
   ttl_base::erase(key);
 }

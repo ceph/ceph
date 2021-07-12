@@ -3,22 +3,20 @@
 #include "mgr/TTLCache.h"
 #include "mgr/PyUtil.h"
 #include "gtest/gtest.h"
-#include <boost/optional.hpp>
-#include <boost/optional/optional_io.hpp>
 
 using namespace std;
 
 TEST(TTLCache, Get) {
 	TTLCache<string, int> c{100};
 	c.insert("foo", 1);
-	boost::optional<int> foo = c.get("foo");
+	std::optional<int> foo = c.get("foo");
 	ASSERT_EQ(*foo ,1);
 }
 
 TEST(TTLCache, Erase) {
 	TTLCache<string, int> c{100};
 	c.insert("foo", 1);
-	boost::optional<int> foo = c.get("foo");
+	std::optional<int> foo = c.get("foo");
 	ASSERT_EQ(*foo, 1);
 	c.erase("foo");
 	foo = c.get("foo");
@@ -38,7 +36,7 @@ TEST(TTLCache, Clear) {
 TEST(TTLCache, NoTTL) {
 	TTLCache<string, int> c{100};
 	c.insert("foo", 1);
-	boost::optional<int> foo = c.get("foo");
+	std::optional<int> foo = c.get("foo");
 	ASSERT_EQ(*foo, 1);
 	c.set_ttl(0);
 	c.insert("foo2", 2);

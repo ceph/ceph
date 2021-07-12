@@ -24,7 +24,6 @@
 
 #include "mgr/MgrContext.h"
 #include "mgr/TTLCache.h"
-#include "mgr/MsgpackFormatter.h"
 
 // For ::mgr_store_prefix
 #include "PyModule.h"
@@ -189,7 +188,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 
 PyObject *ActivePyModules::_get_python(const std::string &what)
 {
-  PyFormatter f;
+  PyJSONFormatter f;
 
   // Drop the GIL, as most of the following blocks will block on
   // a mutex -- they are all responsible for re-taking the GIL before
@@ -199,7 +198,9 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
   if (what == "fs_map") {
     return cluster_state.with_fsmap([&](const FSMap &fsmap) {
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       fsmap.dump(&f);
+      f.close_section();
       return f.get();
     });
   } else if (what == "osdmap_crush_map_text") {
@@ -213,15 +214,15 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
   } else if (what.substr(0, 7) == "osd_map") {
     return cluster_state.with_osdmap([&](const OSDMap &osd_map){
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       if (what == "osd_map") {
-      MsgpackFormatter mf;
-        osd_map.dump(&mf);
-	return mf.get();
+        osd_map.dump(&f);
       } else if (what == "osd_map_tree") {
         osd_map.print_tree(&f, nullptr);
       } else if (what == "osd_map_crush") {
         osd_map.crush->dump(&f);
       }
+	f.close_section();
       return f.get();
     });
   } else if (what == "modified_config_options") {
@@ -242,22 +243,28 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
     return f.get();
   } else if (what.substr(0, 6) == "config") {
     with_gil_t with_gil{no_gil};
+    f.open_object_section("");
     if (what == "config_options") {
       g_conf().config_options(&f);
     } else if (what == "config") {
       g_conf().show_config(&f);
     }
+    f.close_section();
     return f.get();
   } else if (what == "mon_map") {
     return cluster_state.with_monmap([&](const MonMap &monmap) {
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       monmap.dump(&f);
+      f.close_section();
       return f.get();
     });
   } else if (what == "service_map") {
     return cluster_state.with_servicemap([&](const ServiceMap &service_map) {
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       service_map.dump(&f);
+      f.close_section();
       return f.get();
     });
   } else if (what == "osd_metadata") {
@@ -291,6 +298,7 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
   } else if (what == "pg_summary") {
     return cluster_state.with_pgmap(
         [&f, &no_gil](const PGMap &pg_map) {
+	  f.open_object_section("");
           std::map<std::string, std::map<std::string, uint32_t> > osds;
           std::map<std::string, std::map<std::string, uint32_t> > pools;
           std::map<std::string, uint32_t> all;
@@ -331,6 +339,7 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
           f.open_object_section("pg_stats_sum");
           pg_map.pg_sum.dump(&f);
           f.close_section();
+          f.close_section();
 	  return f.get();
         }
     );
@@ -338,7 +347,9 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
     return cluster_state.with_pgmap(
         [&](const PGMap &pg_map) {
 	  with_gil_t with_gil{no_gil};
+	  f.open_object_section("");
 	  pg_map.print_summary(&f, nullptr);
+	  f.close_section();
           return f.get();
         }
     );
@@ -387,8 +398,10 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
 	const OSDMap& osd_map,
 	const PGMap &pg_map) {
         with_gil_t with_gil{no_gil};
+	f.open_object_section("");
         pg_map.dump_cluster_stats(nullptr, &f, true);
         pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
+	f.close_section();
 	return f.get();
       });
   } else if (what == "pg_stats") {
@@ -400,7 +413,9 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
   } else if (what == "pool_stats") {
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
       with_gil_t with_gil{no_gil};
+	f.open_object_section("");
       pg_map.dump_pool_stats(&f);
+	f.close_section();
       return f.get();
     });
   } else if (what == "pg_ready") {
@@ -410,7 +425,9 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
   } else if (what == "osd_stats") {
     return cluster_state.with_pgmap([&](const PGMap &pg_map) {
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       pg_map.dump_osd_stats(&f, false);
+      f.close_section();
       return f.get();
     });
   } else if (what == "osd_ping_times") {
@@ -424,46 +441,60 @@ PyObject *ActivePyModules::_get_python(const std::string &what)
     return cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap,
 					    const PGMap& pg_map) {
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       f.open_array_section("pool_stats");
       for (auto &p : osdmap.get_pools()) {
         poolid = p.first;
         pg_map.dump_pool_stats_and_io_rate(poolid, osdmap, &f, nullptr);
       }
       f.close_section();
+      f.close_section();
       return f.get();
     });
   } else if (what == "health") {
     return cluster_state.with_health([&](const ceph::bufferlist &health_json) {
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       f.dump_string("json", health_json.to_str());
+      f.close_section();
       return f.get();
     });
   } else if (what == "mon_status") {
     return cluster_state.with_mon_status(
         [&](const ceph::bufferlist &mon_status_json) {
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       f.dump_string("json", mon_status_json.to_str());
+      f.close_section();
       return f.get();
     });
   } else if (what == "mgr_map") {
     return cluster_state.with_mgrmap([&](const MgrMap &mgr_map) {
       with_gil_t with_gil{no_gil};
+      f.open_object_section("");
       mgr_map.dump(&f);
+      f.close_section();
       return f.get();
     });
   } else if (what == "mgr_ips") {
-    entity_addrvec_t myaddrs = server.get_myaddrs();
-    with_gil_t with_gil{no_gil};
-    f.open_array_section("ips");
-    std::set<std::string> did;
-    for (auto& i : myaddrs.v) {
-      std::string ip = i.ip_only_to_str();
-      if (auto [where, inserted] = did.insert(ip); inserted) {
+    return cluster_state.with_mgrmap([&](const MgrMap &mgr_map) {
+      with_gil_t with_gil{no_gil};
+      f.open_object_section("");
+      f.open_array_section("ips");
+      std::set<std::string> did;
+      for (auto& i : server.get_myaddrs().v) {
+	std::string ip = i.ip_only_to_str();
+	if (did.count(ip)) {
+	  continue;
+	}
+	did.insert(ip);
 	f.dump_string("ip", ip);
       }
-    }
-    f.close_section();
-    return f.get();
+      f.close_section();
+      f.close_section();
+      return f.get();
+    });
+
   } else if (what == "have_local_config_map") {
     with_gil_t with_gil{no_gil};
     f.dump_bool("have_local_config_map", have_local_config_map);

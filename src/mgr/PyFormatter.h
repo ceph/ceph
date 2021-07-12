@@ -141,5 +141,15 @@ private:
 
 };
 
+class PyJSONFormatter : public JSONFormatter {
+public:
+  PyObject *get();
+
+private:
+  using json_formatter = JSONFormatter;
+  template <class T> void add_value(std::string_view name, T val);
+  void add_value(std::string_view name, std::string_view val, bool quoted);
+};
+
 #endif
 
