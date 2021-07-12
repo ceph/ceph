@@ -1278,7 +1278,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->dump_string("pool", cfg.poolname);
       f->dump_string("namespace", cfg.nsname);
       f->dump_string("image", cfg.imgname);
-      f->dump_string("snap", cfg.snapname);
+      f->dump_string("snapshot", cfg.snapname);
       f->dump_int("disk_number", cfg.disk_number ? cfg.disk_number : -1);
       f->dump_string("status", status);
       f->close_section();
@@ -1350,7 +1350,7 @@ static int do_show_mapped_device(std::string format, bool pretty_format,
   f->dump_string("pool", cfg.poolname);
   f->dump_string("namespace", cfg.nsname);
   f->dump_string("image", cfg.imgname);
-  f->dump_string("snap", cfg.snapname);
+  f->dump_string("snapshot", cfg.snapname);
   f->dump_int("persistent", cfg.persistent);
   f->dump_int("disk_number", conn_info.DiskNumber ? conn_info.DiskNumber : -1);
   f->dump_string("status", cfg.active ? WNBD_STATUS_ACTIVE : WNBD_STATUS_INACTIVE);

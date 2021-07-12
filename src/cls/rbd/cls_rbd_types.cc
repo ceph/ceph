@@ -867,12 +867,12 @@ void SnapshotInfo::decode(bufferlist::const_iterator& it) {
 }
 
 void SnapshotInfo::dump(Formatter *f) const {
-  f->dump_unsigned("id", id);
+  f->dump_unsigned("snapshot_id", id);
   f->open_object_section("namespace");
   boost::apply_visitor(DumpSnapshotNamespaceVisitor(f, "type"),
                        snapshot_namespace);
   f->close_section();
-  f->dump_string("name", name);
+  f->dump_string("snapshot", name);
   f->dump_unsigned("image_size", image_size);
   f->dump_stream("timestamp") << timestamp;
 }
@@ -1119,7 +1119,7 @@ void TrashImageSpec::decode(bufferlist::const_iterator &it) {
 
 void TrashImageSpec::dump(Formatter *f) const {
   f->dump_stream("source") << source;
-  f->dump_string("name", name);
+  f->dump_string("image", name);
   f->dump_unsigned("deletion_time", deletion_time);
   f->dump_unsigned("deferment_end_time", deferment_end_time);
 }

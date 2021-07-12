@@ -369,11 +369,11 @@ static int do_list(const std::string &format, bool pretty_format)
 
     if (f) {
       f->open_object_section("device");
-      f->dump_string("id", id);
+      f->dump_string("image_id", id);
       f->dump_string("pool", poolname);
       f->dump_string("namespace", nsname);
       f->dump_string("image", imgname);
-      f->dump_string("snap", snapname);
+      f->dump_string("snapshot", snapname);
       f->dump_string("device", "/dev/" + name);
       f->close_section();
     } else {

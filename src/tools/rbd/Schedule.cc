@@ -356,4 +356,3 @@ std::ostream& operator<<(std::ostream& os, ScheduleList &l) {
 }
 
 } // namespace rbd
-

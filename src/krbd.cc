@@ -939,11 +939,11 @@ static bool dump_one_image(Formatter *f, TextTable *tbl,
 
   if (f) {
     f->open_object_section("device");
-    f->dump_string("id", id);
+    f->dump_string("image_id", id);
     f->dump_string("pool", spec->pool_name);
     f->dump_string("namespace", spec->nspace_name);
-    f->dump_string("name", spec->image_name);
-    f->dump_string("snap", spec->snap_name);
+    f->dump_string("image", spec->image_name);
+    f->dump_string("snapshot", spec->snap_name);
     f->dump_string("device", devnode);
     f->close_section();
   } else {

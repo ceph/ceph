@@ -216,8 +216,8 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
     for (const auto& entry : trash_entries) {
        if (f) {
          f->open_object_section("image");
-         f->dump_string("id", entry.id);
-         f->dump_string("name", entry.name);
+         f->dump_string("image_id", entry.id);
+         f->dump_string("image", entry.name);
          f->close_section();
        } else {
          std::cout << entry.id << " " << entry.name << std::endl;
@@ -302,8 +302,8 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
 
     if (f) {
       f->open_object_section("image");
-      f->dump_string("id", entry.id);
-      f->dump_string("name", entry.name);
+      f->dump_string("image_id", entry.id);
+      f->dump_string("image", entry.name);
       f->dump_string("source", del_source);
       f->dump_string("deleted_at", time_str);
       f->dump_string("status",
@@ -311,7 +311,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
       if (has_parent) {
         f->open_object_section("parent");
         f->dump_string("pool", parent_image.pool_name);
-        f->dump_string("pool_namespace", parent_image.pool_namespace);
+        f->dump_string("namespace", parent_image.pool_namespace);
         f->dump_string("image", parent_image.image_name);
         f->dump_string("snapshot", parent_snap.name);
         f->close_section();
