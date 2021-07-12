@@ -2589,7 +2589,7 @@ void PGMap::get_health_checks(
     switch(i.first) {
       case UNAVAILABLE:
         health_code = "PG_AVAILABILITY";
-        sev = HEALTH_WARN;
+        sev = HEALTH_ERR;
         summary = "Reduced data availability: ";
         break;
       case DEGRADED:
