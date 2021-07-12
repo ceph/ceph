@@ -228,24 +228,24 @@ struct bluefs_transaction_t {
     encode(offset, op_bl);
     encode(length, op_bl);
   }
-  void op_dir_create(const string& dir) {
+  void op_dir_create(std::string_view dir) {
     using ceph::encode;
     encode((__u8)OP_DIR_CREATE, op_bl);
     encode(dir, op_bl);
   }
-  void op_dir_remove(const string& dir) {
+  void op_dir_remove(std::string_view dir) {
     using ceph::encode;
     encode((__u8)OP_DIR_REMOVE, op_bl);
     encode(dir, op_bl);
   }
-  void op_dir_link(const string& dir, const string& file, uint64_t ino) {
+  void op_dir_link(std::string_view dir, std::string_view file, uint64_t ino) {
     using ceph::encode;
     encode((__u8)OP_DIR_LINK, op_bl);
     encode(dir, op_bl);
     encode(file, op_bl);
     encode(ino, op_bl);
   }
-  void op_dir_unlink(const string& dir, const string& file) {
+  void op_dir_unlink(std::string_view dir, std::string_view file) {
     using ceph::encode;
     encode((__u8)OP_DIR_UNLINK, op_bl);
     encode(dir, op_bl);

@@ -16,14 +16,6 @@
 class BlueFS;
 
 class BlueRocksEnv : public rocksdb::EnvWrapper {
-  void split(const std::string &fn, std::string *dir, std::string *file) {
-    size_t slash = fn.rfind('/');
-    *file = fn.substr(slash + 1);
-    while (slash && fn[slash-1] == '/')
-      --slash;
-    *dir = fn.substr(0, slash);
-  }
-
 public:
   // Create a brand new sequentially-readable file with the specified name.
   // On success, stores a pointer to the new file in *result and returns OK.
