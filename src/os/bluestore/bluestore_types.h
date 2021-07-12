@@ -111,7 +111,7 @@ WRITE_CLASS_DENC(bluestore_pextent_t)
 
 std::ostream& operator<<(std::ostream& out, const bluestore_pextent_t& o);
 
-typedef mempool::bluestore_cache_other::vector<bluestore_pextent_t> PExtentVector;
+typedef std::vector<bluestore_pextent_t> PExtentVector;
 
 template<>
 struct denc_traits<PExtentVector> {
