@@ -804,9 +804,12 @@ struct MessageFrame : public Frame<MessageFrame,
     return f;
   }
 
-  inline const ceph_msg_header2 &header() {
+  inline const ceph_msg_header2 header() {
     auto& hdrbl = segments[SegmentIndex::Msg::HEADER];
-    return reinterpret_cast<const ceph_msg_header2&>(*hdrbl.c_str());
+    bufferlist::const_iterator it = hdrbl.cbegin();
+    ceph_msg_header2 header;
+    decode(header, it);
+    return header;
   }
 
   ceph::bufferlist &front() {
