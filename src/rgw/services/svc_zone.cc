@@ -58,10 +58,12 @@ std::shared_ptr<RGWBucketSyncPolicyHandler> RGWSI_Zone::get_sync_policy_handler(
   return iter->second;
 }
 
-bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const
+bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWDataProvider& source_zone) const
 {
+  auto source_tier_type = source_zone.get_tier_type();
   return target_zone.syncs_from(source_zone.name) &&
-         sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
+         (!source_tier_type ||
+          sync_modules_svc->get_manager()->supports_data_export(*source_tier_type));
 }
 
 int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
@@ -169,14 +171,17 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
-  for (auto ziter : zonegroup->zones) {
-    auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(this, sync_modules_svc, bucket_sync_svc, ziter.second.id);
+  for (auto ziter : zonegroup->combined_zones) {
+    auto& zid = ziter.first;
+    auto& zname = ziter.second;
+
+    auto zone_handler = std::make_shared<RGWBucketSyncPolicyHandler>(this, sync_modules_svc, bucket_sync_svc, zid);
     ret = zone_handler->init(dpp, y);
     if (ret < 0) {
-      ldpp_dout(dpp, -1) << "ERROR: could not initialize zone policy handler for zone=" << ziter.second.name << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: could not initialize zone policy handler for zone=" << zname << dendl;
       return ret;
-      }
-    sync_policy_handlers[ziter.second.id] = zone_handler;
+    }
+    sync_policy_handlers[zid] = zone_handler;
   }
 
   sync_policy_handler = sync_policy_handlers[zone_id()]; /* we made sure earlier that zonegroup->zones has our zone */
@@ -208,9 +213,12 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   /* first build all zones index */
   for (auto ziter : zonegroup->zones) {
     const rgw_zone_id& id = ziter.first;
-    RGWZone& z = ziter.second;
+    auto& z = ziter.second;
     zone_id_by_name[z.name] = id;
-    zone_by_id[id] = z;
+
+    auto shared_zone = std::make_shared<RGWZone>(z);
+    zone_by_id[id] = shared_zone;
+    data_provider_by_id[id] = std::static_pointer_cast<RGWDataProvider>(shared_zone);
   }
 
   if (zone_by_id.find(zone_id()) == zone_by_id.end()) {
@@ -227,22 +235,41 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
       ldpp_dout(dpp, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
       continue;
     }
-    ldpp_dout(dpp, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-    RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints, zonegroup->api_name);
-    zone_conn_map[id] = conn;
-
     bool zone_is_source = source_zones.find(z.id) != source_zones.end();
     bool zone_is_target = target_zones.find(z.id) != target_zones.end();
 
     if (zone_is_source || zone_is_target) {
       if (zone_is_source && sync_modules->supports_data_export(z.tier_type)) {
-        data_sync_source_zones.push_back(&z);
+        data_sync_source_zones.push_back(make_pair(z.id, z.name));
       }
       if (zone_is_target) {
-        zone_data_notify_to_map[id] = conn;
+        zone_data_notify_set.insert(id);
       }
     } else {
       ldpp_dout(dpp, 20) << "NOTICE: not syncing to/from zone " << z.name << " id " << z.id << dendl;
+    }
+  }
+
+  /* build foreign zones index */
+  for (auto ziter : zonegroup->foreign_zones) {
+    const rgw_zone_id& id = ziter.first;
+    RGWDataProvider& z = ziter.second;
+    auto shared_zone = std::make_shared<RGWDataProvider>(z);
+    zone_id_by_name[z.name] = id;
+    data_provider_by_id[id] = shared_zone;
+
+    bool zone_is_source = source_zones.find(z.id) != source_zones.end();
+    bool zone_is_target = target_zones.find(z.id) != target_zones.end();
+
+    if (zone_is_source || zone_is_target) {
+      if (zone_is_source) {
+        data_sync_source_zones.push_back(make_pair(z.id, z.name));
+      }
+      if (zone_is_target) {
+        zone_data_notify_set.insert(id);
+      }
+    } else {
+      ldout(cct, 20) << "NOTICE: not syncing to/from zone " << z.name << " id " << z.id << dendl;
     }
   }
 
@@ -255,11 +282,6 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 void RGWSI_Zone::shutdown()
 {
   delete rest_master_conn;
-
-  for (auto& item : zone_conn_map) {
-    auto conn = item.second;
-    delete conn;
-  }
 
   for (auto& item : zonegroup_conn_map) {
     auto conn = item.second;
@@ -902,26 +924,8 @@ bool RGWSI_Zone::find_zone(const rgw_zone_id& id, RGWZone **zone)
   if (iter == zone_by_id.end()) {
     return false;
   }
-  *zone = &(iter->second);
+  *zone = iter->second.get();
   return true;
-}
-
-RGWRESTConn *RGWSI_Zone::get_zone_conn(const rgw_zone_id& zone_id) {
-  auto citer = zone_conn_map.find(zone_id.id);
-  if (citer == zone_conn_map.end()) {
-    return NULL;
-  }
-
-  return citer->second;
-}
-
-RGWRESTConn *RGWSI_Zone::get_zone_conn_by_name(const string& name) {
-  auto i = zone_id_by_name.find(name);
-  if (i == zone_id_by_name.end()) {
-    return NULL;
-  }
-
-  return get_zone_conn(i->second);
 }
 
 bool RGWSI_Zone::find_zone_id_by_name(const string& name, rgw_zone_id *id) {
@@ -930,6 +934,29 @@ bool RGWSI_Zone::find_zone_id_by_name(const string& name, rgw_zone_id *id) {
     return false;
   }
   *id = i->second; 
+  return true;
+}
+
+bool RGWSI_Zone::find_zonegroup_by_zone(const rgw_zone_id& zid, std::shared_ptr<RGWZoneGroup> *zonegroup)
+{
+  auto& period_map = current_period->get_map();
+
+  auto iter = period_map.zonegroups_by_zone.find(zid);
+  if (iter == period_map.zonegroups_by_zone.end()) {
+    return false;
+  }
+
+  *zonegroup = iter->second;
+  return true;
+}
+
+bool RGWSI_Zone::find_data_provider(const rgw_zone_id& id, RGWDataProvider **dp)
+{
+  auto iter = data_provider_by_id.find(id);
+  if (iter == data_provider_by_id.end()) {
+    return false;
+  }
+  *dp = iter->second.get();
   return true;
 }
 
@@ -1283,27 +1310,3 @@ int RGWSI_Zone::list_placement_set(const DoutPrefixProvider *dpp, set<rgw_pool>&
 
   return names.size();
 }
-
-bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
-{
-  if (zone_public_config->redirect_zone.empty()) {
-    return false;
-  }
-
-  auto iter = zone_conn_map.find(zone_public_config->redirect_zone);
-  if (iter == zone_conn_map.end()) {
-    ldout(cct, 0) << "ERROR: cannot find entry for redirect zone: " << zone_public_config->redirect_zone << dendl;
-    return false;
-  }
-
-  RGWRESTConn *conn = iter->second;
-
-  int ret = conn->get_url(*endpoint);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
-    return false;
-  }
-
-  return true;
-}
-

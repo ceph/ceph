@@ -140,6 +140,12 @@ RGWCoroutine::~RGWCoroutine() {
   }
 }
 
+void RGWCoroutine::set_stack(RGWCoroutinesStack *s)
+{
+  std::lock_guard l{stack_lock};
+  stack = s;
+}
+
 void RGWCoroutine::init_new_io(RGWIOProvider *io_provider)
 {
   stack->init_new_io(io_provider);
@@ -232,7 +238,7 @@ int RGWCoroutinesStack::operate(const DoutPrefixProvider *dpp, RGWCoroutinesEnv 
 {
   env = _env;
   RGWCoroutine *op = *pos;
-  op->stack = this;
+  op->set_stack(this);
   ldpp_dout(dpp, 20) << *op << ": operate()" << dendl;
   int r = op->operate_wrapper(dpp);
   if (r < 0) {
@@ -955,7 +961,7 @@ string RGWCoroutine::to_str() const
 
 ostream& operator<<(ostream& out, const RGWCoroutine& cr)
 {
-  out << "cr:s=" << (void *)cr.get_stack() << ":op=" << (void *)&cr << ":" << typeid(cr).name();
+  out << "cr:s=" << (void *)cr.get_stack() << ":op=" << (void *)&cr << ":" << typeid(cr).name() << ":" << cr.cref_value();
   return out;
 }
 
@@ -1027,6 +1033,10 @@ bool RGWCoroutine::drain_children(int num_cr_left,
 
 void RGWCoroutine::wakeup()
 {
+  std::shared_lock l{stack_lock};
+  if (!stack) {
+    return;
+  }
   stack->wakeup();
 }
 

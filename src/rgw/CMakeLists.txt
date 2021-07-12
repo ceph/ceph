@@ -30,6 +30,8 @@ set(librgw_common_srcs
   services/svc_notify.cc
   services/svc_otp.cc
   services/svc_quota.cc
+  services/svc_sip_marker.cc
+  services/svc_sip_marker_sobj.cc
   services/svc_sync_modules.cc
   services/svc_rados.cc
   services/svc_sys_obj.cc
@@ -79,8 +81,13 @@ set(librgw_common_srcs
   rgw_pubsub.cc
   rgw_sync.cc
   rgw_data_sync.cc
+  rgw_sip_bucket.cc
+  rgw_sip_data.cc
+  rgw_sip_meta.cc
+  rgw_sip_rest.cc
   rgw_sync_counters.cc
   rgw_sync_error_repo.cc
+  rgw_sync_info.cc
   rgw_sync_module.cc
   rgw_sync_module_aws.cc
   rgw_sync_module_es.cc
@@ -96,12 +103,15 @@ set(librgw_common_srcs
   rgw_trim_bilog.cc
   rgw_trim_datalog.cc
   rgw_trim_mdlog.cc
+  rgw_trim_tools.cc
   rgw_period_history.cc
   rgw_period_puller.cc
+  rgw_remote.cc
   rgw_reshard.cc
   rgw_coroutine.cc
   rgw_cr_rados.cc
   rgw_cr_rest.cc
+  rgw_cr_sip.cc
   rgw_cr_tools.cc
   rgw_object_expirer_core.cc
   rgw_op.cc
@@ -123,6 +133,7 @@ set(librgw_common_srcs
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
+  rgw_rest_sip.cc
   rgw_role.cc
   rgw_sal.cc
   rgw_sal_rados.cc

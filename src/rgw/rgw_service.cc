@@ -18,6 +18,7 @@
 #include "services/svc_notify.h"
 #include "services/svc_otp.h"
 #include "services/svc_rados.h"
+#include "services/svc_sip_marker_sobj.h"
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_quota.h"
@@ -34,6 +35,11 @@
 #include "rgw_metadata.h"
 #include "rgw_otp.h"
 #include "rgw_user.h"
+#include "rgw_remote.h"
+
+#include "rgw_sync_info.h"
+#include "rgw_sip_meta.h"
+#include "rgw_sip_data.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -65,6 +71,7 @@ int RGWServices_Def::init(CephContext *cct,
   notify = std::make_unique<RGWSI_Notify>(cct);
   otp = std::make_unique<RGWSI_OTP>(cct);
   rados = std::make_unique<RGWSI_RADOS>(cct);
+  sip_marker_sobj = std::make_unique<RGWSI_SIP_Marker_SObj>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
@@ -98,6 +105,7 @@ int RGWServices_Def::init(CephContext *cct,
   notify->init(zone.get(), rados.get(), finisher.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   rados->init();
+  sip_marker_sobj->init(zone.get(), sysobj.get());
   zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
@@ -303,6 +311,8 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   notify = _svc.notify.get();
   otp = _svc.otp.get();
   rados = _svc.rados.get();
+  sip_marker_sobj = _svc.sip_marker_sobj.get();
+  sip_marker = sip_marker_sobj;
   zone = _svc.zone.get();
   zone_utils = _svc.zone_utils.get();
   quota = _svc.quota.get();
@@ -363,6 +373,7 @@ int RGWCtlDef::init(RGWServices& svc, const DoutPrefixProvider *dpp)
                                 svc.bucket_sync,
                                 svc.bi));
   otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
+  remote.reset(new RGWRemoteCtl(svc.zone, user.get()));
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
@@ -381,6 +392,10 @@ int RGWCtlDef::init(RGWServices& svc, const DoutPrefixProvider *dpp)
                dpp);
 
   otp->init((RGWOTPMetadataHandler *)meta.otp.get());
+
+  remote->init(dpp);
+
+  si.mgr.reset(new RGWSIPManager());
 
   return 0;
 }
@@ -405,6 +420,9 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
   otp = _ctl.otp.get();
+  remote = _ctl.remote.get();
+
+  si.mgr = _ctl.si.mgr.get();
 
   r = meta.user->attach(meta.mgr);
   if (r < 0) {
@@ -429,6 +447,48 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
     ldout(cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
+
+  auto meta_full_sip = new SIProvider_MetaFull(cct, meta.mgr);
+  r = meta_full_sip->init(dpp);
+  if (r < 0) {
+    lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
+    return r;
+  }
+
+  auto meta_inc_sip = new SIProvider_MetaInc(cct, svc->mdlog, svc->zone->get_current_period_id());
+  r = meta_inc_sip->init(dpp);
+  if (r < 0) {
+    lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.inc)" << dendl;
+    return r;
+  }
+
+  si.mgr->register_sip("meta", "meta", { SIProvider::StageType::FULL, SIProvider::StageType::INC },
+                       std::make_shared<RGWSIPGen_Single>(new SIProvider_Container(cct,
+                                                                                   "meta",
+                                                                                   std::nullopt,
+                                                                                   { SIProviderRef(meta_full_sip),
+                                                                                     SIProviderRef(meta_inc_sip) } )));
+
+  auto data_full_sip = new SIProvider_DataFull(cct, meta.mgr, bucket);
+  r = data_full_sip->init(dpp);
+  if (r < 0) {
+    lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
+    return r;
+  }
+
+  auto data_inc_sip = new SIProvider_DataInc(cct, svc->datalog_rados, bucket);
+  r = data_inc_sip->init(dpp);
+  if (r < 0) {
+    lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
+    return r;
+  }
+
+  si.mgr->register_sip("data", "data", { SIProvider::StageType::FULL, SIProvider::StageType::INC },
+                       std::make_shared<RGWSIPGen_Single>(new SIProvider_Container(cct,
+                                                                                   "data",
+                                                                                   std::nullopt,
+                                                                                   { SIProviderRef(data_full_sip),
+                                                                                     SIProviderRef(data_inc_sip) } )));
 
   return 0;
 }

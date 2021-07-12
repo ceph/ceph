@@ -154,7 +154,7 @@ void rgw_mdlog_shard_data::decode_json(JSONObj *obj) {
 
 int RGWShardCollectCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
-    while (spawn_next()) {
+    while (spawn_next(dpp)) {
       current_running++;
 
       while (current_running >= max_concurrent) {
@@ -205,7 +205,7 @@ public:
                                                                  sync_env(_sync_env),
                                                                  period(period), num_shards(_num_shards),
                                                                  mdlog_info(_mdlog_info), shard_id(0) {}
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
 class RGWListRemoteMDLogCR : public RGWShardCollectCR {
@@ -230,7 +230,7 @@ public:
     shards.swap(_shards);
     iter = shards.begin();
   }
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
 RGWRemoteMetaLog::~RGWRemoteMetaLog()
@@ -606,7 +606,7 @@ RGWCoroutine* create_list_remote_mdlog_shard_cr(RGWMetaSyncEnv *env,
                                        max_entries, result);
 }
 
-bool RGWReadRemoteMDLogInfoCR::spawn_next() {
+bool RGWReadRemoteMDLogInfoCR::spawn_next(const DoutPrefixProvider *dpp) {
   if (shard_id >= num_shards) {
     return false;
   }
@@ -615,7 +615,7 @@ bool RGWReadRemoteMDLogInfoCR::spawn_next() {
   return true;
 }
 
-bool RGWListRemoteMDLogCR::spawn_next() {
+bool RGWListRemoteMDLogCR::spawn_next(const DoutPrefixProvider *dpp) {
   if (iter == shards.end()) {
     return false;
   }
@@ -744,10 +744,10 @@ class RGWReadSyncStatusMarkersCR : public RGWShardCollectCR {
     : RGWShardCollectCR(env->cct, MAX_CONCURRENT_SHARDS),
       env(env), num_shards(num_shards), markers(markers)
   {}
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
-bool RGWReadSyncStatusMarkersCR::spawn_next()
+bool RGWReadSyncStatusMarkersCR::spawn_next(const DoutPrefixProvider *dpp)
 {
   if (shard_id >= num_shards) {
     return false;
@@ -1225,7 +1225,7 @@ public:
                                                                 sync_marker(_marker),
                                                                 tn(_tn){}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
+  RGWCoroutine *store_marker(const DoutPrefixProvider *dpp, const string& new_marker, const string& key, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     if (index_pos > 0) {
       sync_marker.pos = index_pos;
@@ -1235,7 +1235,7 @@ public:
       sync_marker.timestamp = timestamp;
     }
 
-    ldpp_dout(sync_env->dpp, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " realm_epoch=" << sync_marker.realm_epoch << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " realm_epoch=" << sync_marker.realm_epoch << dendl;
     tn->log(20, SSTR("new marker=" << new_marker));
     rgw::sal::RadosStore* store = sync_env->store;
     return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->dpp, sync_env->async_rados,
@@ -1273,7 +1273,7 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
 
     if (op_status != MDLOG_STATUS_COMPLETE) {
       tn->log(20, "skipping pending operation");
-      yield call(marker_tracker->finish(entry_marker));
+      yield call(marker_tracker->finish(dpp, entry_marker));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -1332,7 +1332,7 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
 
     if (sync_status == 0 && marker_tracker) {
       /* update marker */
-      yield call(marker_tracker->finish(entry_marker));
+      yield call(marker_tracker->finish(dpp, entry_marker));
       sync_status = retcode;
     }
     if (sync_status < 0) {
@@ -1615,7 +1615,7 @@ public:
           marker = *iter;
           tn->log(20, SSTR("full sync: " << marker));
           total_entries++;
-          if (!marker_tracker->start(marker, total_entries, real_time())) {
+          if (!marker_tracker->start(marker, std::nullopt, total_entries, real_time())) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << marker << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
@@ -1802,7 +1802,7 @@ public:
               continue;
             }
             tn->log(20, SSTR("log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp));
-            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp.to_real_time())) {
+            if (!marker_tracker->start(log_iter->id, std::nullopt, 0, log_iter->timestamp.to_real_time())) {
               ldpp_dout(sync_env->dpp, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;

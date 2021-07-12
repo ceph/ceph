@@ -12,8 +12,28 @@
 
 #include "services/svc_zone.h"
 
+#include <boost/asio/yield.hpp>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+int RGWSerialCR::operate(const DoutPrefixProvider *dpp)
+{
+  reenter(this) {
+    for (iter = crs.begin();
+         iter != crs.end();
+         ++iter) {
+      yield call(*iter);
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+    }
+
+    return set_cr_done();
+  }
+
+  return 0;
+}
 
 template<>
 int RGWUserCreateCR::Request::_send_request(const DoutPrefixProvider *dpp)

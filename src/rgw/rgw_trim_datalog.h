@@ -6,8 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "common/dout.h"
-
+class DoutPrefixProvider;
 class RGWCoroutine;
 class RGWRados;
 class RGWHTTPManager;
@@ -24,5 +23,4 @@ extern RGWCoroutine* create_data_log_trim_cr(const DoutPrefixProvider *dpp, rgw:
 // factory function for datalog trim via radosgw-admin
 RGWCoroutine* create_admin_data_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
                                             RGWHTTPManager *http,
-                                            int num_shards,
-                                            std::vector<std::string>& markers);
+                                            int num_shards);

@@ -17,6 +17,7 @@
 #include "rgw_orphan.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_tools.h"
+#include "rgw_sync_info.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -1364,6 +1365,46 @@ void RGWZoneParams::decode_json(JSONObj *obj)
 
 }
 
+void RGWDataProvider::dump_dp_extra(Formatter *f) const
+{
+  encode_json("data_access_conf", data_access_conf, f);
+  encode_json("sip_conf", sip_conf, f);
+}
+
+void RGWDataProvider::decode_json_dp_extra(JSONObj *obj)
+{
+  JSONDecoder::decode_json("data_access_conf", data_access_conf, obj);
+  JSONDecoder::decode_json("sip_conf", sip_conf, obj);
+}
+
+void RGWDataProvider::RESTConfig::dump(Formatter *f) const
+{
+  encode_json("endpoints", endpoints, f);
+  encode_json("uid", uid, f);
+  encode_json("access_key", access_key, f);
+  encode_json("secret", secret, f);
+}
+
+void RGWDataProvider::RESTConfig::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+  JSONDecoder::decode_json("uid", uid, obj);
+  JSONDecoder::decode_json("access_key", access_key, obj);
+  JSONDecoder::decode_json("secret", secret, obj);
+}
+
+void RGWDataProvider::SIPConfig::dump(Formatter *f) const
+{
+  encode_json("rest_conf", rest_conf, f);
+  encode_json("path_prefix", path_prefix, f);
+}
+
+void RGWDataProvider::SIPConfig::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("rest_conf", rest_conf, obj);
+  JSONDecoder::decode_json("path_prefix", path_prefix, obj);
+}
+
 void RGWZone::dump(Formatter *f) const
 {
   encode_json("id", id, f);
@@ -1377,6 +1418,7 @@ void RGWZone::dump(Formatter *f) const
   encode_json("sync_from_all", sync_from_all, f);
   encode_json("sync_from", sync_from, f);
   encode_json("redirect_zone", redirect_zone, f);
+  dump_dp_extra(f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -1395,6 +1437,26 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("sync_from_all", sync_from_all, true, obj);
   JSONDecoder::decode_json("sync_from", sync_from, obj);
   JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
+  decode_json_dp_extra(obj);
+}
+
+void RGWForeignZone::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("name", name, f);
+  encode_json("endpoints", endpoints, f);
+  dump_dp_extra(f);
+}
+
+void RGWForeignZone::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
+  if (id.empty()) {
+    id = name;
+  }
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+  decode_json_dp_extra(obj);
 }
 
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
@@ -1428,6 +1490,13 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("default_placement", default_placement, f);
   encode_json("realm_id", realm_id, f);
   encode_json("sync_policy", sync_policy, f);
+
+  {
+    Formatter::ArraySection section(*f, "foreign_zones");
+    for (auto& entry : foreign_zones) {
+      encode_json("fz", entry.second, f);
+    }
+  }
 }
 
 static void decode_zones(map<rgw_zone_id, RGWZone>& zones, JSONObj *o)
@@ -1465,6 +1534,13 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("sync_policy", sync_policy, obj);
+  vector<RGWForeignZone> fz_vec;
+  JSONDecoder::decode_json("foreign_zones", fz_vec, obj);
+  foreign_zones.clear();
+  for (auto& fz : fz_vec) {
+    foreign_zones.emplace(fz.id, std::move(fz));
+  }
+  init_combined_zones();
 }
 
 
@@ -1761,12 +1837,14 @@ void rgw_sync_error_info::dump(Formatter *f) const {
 void rgw_bucket_shard_full_sync_marker::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("position", position, obj);
+  JSONDecoder::decode_json("position_id", position_id, obj);
   JSONDecoder::decode_json("count", count, obj);
 }
 
 void rgw_bucket_shard_full_sync_marker::dump(Formatter *f) const
 {
   encode_json("position", position, f);
+  encode_json("position_id", position_id, f);
   encode_json("count", count, f);
 }
 
@@ -1786,23 +1864,26 @@ void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
 {
   std::string s;
   JSONDecoder::decode_json("status", s, obj);
+
+  auto& _state = state.raw();
+  
   if (s == "full-sync") {
-    state = StateFullSync;
+    _state = StateFullSync;
   } else if (s == "incremental-sync") {
-    state = StateIncrementalSync;
+    _state = StateIncrementalSync;
   } else if (s == "stopped") {
-    state = StateStopped;
+    _state = StateStopped;
   } else {
-    state = StateInit;
+    _state = StateInit;
   }
-  JSONDecoder::decode_json("full_marker", full_marker, obj);
-  JSONDecoder::decode_json("inc_marker", inc_marker, obj);
+  JSONDecoder::decode_json("full_marker", full_marker.raw(), obj);
+  JSONDecoder::decode_json("inc_marker", inc_marker.raw(), obj);
 }
 
 void rgw_bucket_shard_sync_info::dump(Formatter *f) const
 {
   const char *s{nullptr};
-  switch ((SyncState)state) {
+  switch ((SyncState)*state) {
     case StateInit:
     s = "init";
     break;
@@ -1820,8 +1901,8 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
     break;
   }
   encode_json("status", s, f);
-  encode_json("full_marker", full_marker, f);
-  encode_json("inc_marker", inc_marker, f);
+  encode_json("full_marker", *full_marker, f);
+  encode_json("inc_marker", *inc_marker, f);
 }
 
 /* This utility function shouldn't conflict with the overload of std::to_string
@@ -2099,4 +2180,16 @@ void objexp_hint_entry::dump(Formatter *f) const
 void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
+}
+
+void rgw_sip_pos::dump(Formatter *f) const
+{
+  encode_json("marker", marker, f);
+  encode_json("timestamp", timestamp, f);
+}
+
+void rgw_sip_pos::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
 }

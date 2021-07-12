@@ -22,6 +22,7 @@
 #include "common/bounded_key_counter.h"
 #include "common/errno.h"
 #include "rgw_trim_bilog.h"
+#include "rgw_trim_tools.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_cr_tools.h"
@@ -354,7 +355,7 @@ struct BucketTrimObserver {
 /// populate the status with the minimum stable marker of each shard
 template <typename Iter>
 int take_min_status(CephContext *cct, Iter first, Iter last,
-                    std::vector<std::string> *status)
+                    std::vector<std::optional<std::string> > *status)
 {
   for (auto peer = first; peer != last; ++peer) {
     if (peer->size() != status->size()) {
@@ -369,8 +370,8 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
         continue;
       }
       // always take the first marker, or any later marker that's smaller
-      if (peer == first || marker > shard.inc_marker.position) {
-        marker = std::move(shard.inc_marker.position);
+      if (peer == first || !marker || marker > shard.inc_marker->position) {
+        marker = std::move(shard.inc_marker.raw().position);
       }
     }
   }
@@ -384,34 +385,46 @@ class BucketTrimShardCollectCR : public RGWShardCollectCR {
   const DoutPrefixProvider *dpp;
   rgw::sal::RadosStore* const store;
   const RGWBucketInfo& bucket_info;
-  const std::vector<std::string>& markers; //< shard markers to trim
+  const std::vector<std::optional<std::string> >& markers; //< shard markers to trim
   size_t i{0}; //< index of current shard marker
+  std::shared_ptr<RGWTrimSIPMgr> sip_mgr;
  public:
   BucketTrimShardCollectCR(const DoutPrefixProvider *dpp,
-                           rgw::sal::RadosStore* store, const RGWBucketInfo& bucket_info,
-                           const std::vector<std::string>& markers)
+                           rgw::sal::RadosStore *store, const RGWBucketInfo& bucket_info,
+                           const std::vector<std::optional<std::string> >& markers,
+                           std::shared_ptr<RGWTrimSIPMgr> _sip_mgr)
     : RGWShardCollectCR(store->ctx(), MAX_CONCURRENT_SHARDS),
-      dpp(dpp), store(store), bucket_info(bucket_info), markers(markers)
+      dpp(dpp), store(store), bucket_info(bucket_info), markers(markers),
+      sip_mgr(_sip_mgr)
   {}
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
-bool BucketTrimShardCollectCR::spawn_next()
+bool BucketTrimShardCollectCR::spawn_next(const DoutPrefixProvider *dpp)
 {
   while (i < markers.size()) {
-    const auto& marker = markers[i];
+    const auto& opt_marker = markers[i];
     const auto shard_id = i++;
 
-    // skip empty markers
-    if (!marker.empty()) {
-      ldpp_dout(dpp, 10) << "trimming bilog shard " << shard_id
-          << " of " << bucket_info.bucket << " at marker " << marker << dendl;
-      spawn(new RGWRadosBILogTrimCR(dpp, store, bucket_info, shard_id,
-                                    std::string{}, marker),
-            false);
-      return true;
+    if (!opt_marker ||
+        opt_marker->empty()) {
+      // skip empty markers
+      continue;
     }
+
+    auto& marker = *opt_marker;
+
+    ldout(cct, 10) << "trimming bilog shard " << shard_id
+      << " of " << bucket_info.bucket << " at marker " << marker << dendl;
+    spawn(new RGWSerialCR(store->ctx(),
+                          { new RGWRadosBILogTrimCR(dpp, store, bucket_info, shard_id,
+                                                    std::string{}, marker),
+                          sip_mgr->set_min_source_pos_cr(dpp, shard_id, marker) }),
+          false);
+
+    return true;
   }
+
   return false;
 }
 
@@ -432,7 +445,11 @@ class BucketTrimInstanceCR : public RGWCoroutine {
 
   using StatusShards = std::vector<rgw_bucket_shard_sync_info>;
   std::vector<StatusShards> peer_status; //< sync status for each peer
-  std::vector<std::string> min_markers; //< min marker per shard
+  std::vector<std::optional<std::string> > min_markers; //< min marker per shard
+  std::vector<std::optional<std::string> > min_source_pos; //< last trim pos
+
+  std::shared_ptr<RGWTrimSIPMgr> sip_mgr;
+  std::set<rgw_zone_id> sip_target_zones;
 
  public:
   BucketTrimInstanceCR(rgw::sal::RadosStore* store, RGWHTTPManager *http,
@@ -479,6 +496,34 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(-ENOENT);
     }
 
+    // initialize each shard with the maximum marker, which is only used when
+    // there are no peers syncing from us
+    {
+      auto num_shards = std::max(1u, pbucket_info->layout.current_index.layout.normal.num_shards);
+      min_markers.resize(num_shards);
+      min_source_pos.resize(num_shards);
+    }
+
+    sip_mgr.reset(RGWTrimTools::get_trim_sip_mgr(store,
+                                                 "bucket",
+                                                 SIProvider::StageType::INC,
+                                                 bucket_instance));
+
+    yield call(sip_mgr->init_cr(dpp));
+    if (retcode < 0) {
+      ldout(cct, 0) << "ERROR: failed to initialize trim sip manager for data.inc: retcode=" << retcode << dendl;
+      return set_cr_error(retcode);
+    }
+
+    yield call(sip_mgr->get_targets_info_cr(&min_markers,
+                                            &min_source_pos,
+                                            nullptr,
+                                            &sip_target_zones));
+    if (retcode < 0) {
+      ldout(cct, 0) << "ERROR: failed to get sip targets info for bucket instance=" << bucket_instance << ": ret=" << retcode << dendl;
+      return set_cr_error(retcode);
+    }
+
     // query peers for sync status
     set_status("fetching sync status from relevant peers");
     yield {
@@ -488,6 +533,11 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       rgw_zone_id last_zid;
       for (auto& diter : all_dests) {
         const auto& zid = diter.first;
+        if (sip_target_zones.find(zid) != sip_target_zones.end()) {
+          /* buckets from this zone already updated us, will not query zone */
+          ldout(cct, 20) << "bilog trim: not querying remote zone " << zid << ": local sip marker info for bucket (" << bucket_instance << ") exists" << dendl;
+          continue;
+        }
         if (zid == last_zid) {
           continue;
         }
@@ -496,8 +546,6 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       }
 
       peer_status.resize(zids.size());
-
-      auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
 
       auto p = peer_status.begin();
       for (auto& zid : zids) {
@@ -512,13 +560,13 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
           { nullptr, nullptr }
         };
 
-        auto ziter = zone_conn_map.find(zid);
-        if (ziter == zone_conn_map.end()) {
+        auto opt_conns = store->ctl()->remote->zone_conns(zid);
+        if (!opt_conns) {
           ldpp_dout(dpp, 0) << "WARNING: no connection to zone " << zid << ", can't trim bucket: " << bucket << dendl;
           return set_cr_error(-ECANCELED);
         }
         using StatusCR = RGWReadRESTResourceCR<StatusShards>;
-        spawn(new StatusCR(cct, ziter->second, http, "/admin/log/", params, &*p),
+        spawn(new StatusCR(cct, opt_conns->data, http, "/admin/log/", params, &*p),
               false);
         ++p;
       }
@@ -533,11 +581,6 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       }
     }
 
-    // initialize each shard with the maximum marker, which is only used when
-    // there are no peers syncing from us
-    min_markers.assign(std::max(1u, pbucket_info->layout.current_index.layout.normal.num_shards),
-                       RGWSyncLogTrimCR::max_marker);
-
     // determine the minimum marker for each shard
     retcode = take_min_status(cct, peer_status.begin(), peer_status.end(),
                               &min_markers);
@@ -546,11 +589,26 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       return set_cr_error(retcode);
     }
 
+    if (min_markers.size() == min_source_pos.size()) {
+      /* should really always happen */
+      for (int i = 0; i < (int)min_markers.size(); ++i) {
+        auto& marker = min_markers[i];
+        if (marker <= min_source_pos[i]) {
+          marker.reset();
+        }
+      }
+    } else {
+      ldout(cct, 0) << "WARNING: min_markers.size() != min_source_pos.size(), likely a bug (affects optimization)" << dendl;
+
+      /* operation will still be correct, just we'll try to trim logs that were already trimmed */
+    }
+
     // trim shards with a ShardCollectCR
     ldpp_dout(dpp, 10) << "trimming bilogs for bucket=" << pbucket_info->bucket
+       << " min_source_pos=" << min_source_pos
        << " markers=" << min_markers << ", shards=" << min_markers.size() << dendl;
     set_status("trimming bilog shards");
-    yield call(new BucketTrimShardCollectCR(dpp, store, *pbucket_info, min_markers));
+    yield call(new BucketTrimShardCollectCR(dpp, store, *pbucket_info, min_markers, sip_mgr));
     // ENODATA just means there were no keys to trim
     if (retcode == -ENODATA) {
       retcode = 0;
@@ -586,10 +644,10 @@ class BucketTrimInstanceCollectCR : public RGWShardCollectCR {
       bucket(buckets.begin()), end(buckets.end()),
       dpp(dpp)
   {}
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
-bool BucketTrimInstanceCollectCR::spawn_next()
+bool BucketTrimInstanceCollectCR::spawn_next(const DoutPrefixProvider *dpp)
 {
   if (bucket == end) {
     return false;

@@ -566,10 +566,115 @@ struct RGWZoneParams : RGWSystemMetaObj {
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
-struct RGWZone {
+struct RGWDataProvider {
+  struct RESTConfig {
+    std::optional<std::list<std::string> > endpoints; /* optional endpoint */
+    std::optional<rgw_user> uid; /* access uid to use for connection if not default (will try to read key off backend) */
+    std::optional<string> access_key; /* access key to use (should not be used with uid) */
+    std::optional<string> secret; /* secret to use, if not specified will try to use secret off backend */
+
+    bool empty() const {
+      return !(endpoints || uid || access_key || secret);
+    }
+
+    void apply(const RESTConfig& rc);
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(endpoints, bl);
+      encode(uid, bl);
+      encode(access_key, bl);
+      encode(secret, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(1, bl);
+      decode(endpoints, bl);
+      decode(uid, bl);
+      decode(access_key, bl);
+      decode(secret, bl);
+      DECODE_FINISH(bl);
+    }
+
+    void dump(Formatter *f) const;
+    void decode_json(JSONObj *obj);
+  };
+
+  struct SIPConfig {
+    RESTConfig rest_conf;
+    std::optional<std::string> path_prefix; /* url path prefix for sip operations */
+
+    void apply(const SIPConfig& sc);
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      rest_conf.encode(bl);
+      encode(path_prefix, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(1, bl);
+      rest_conf.decode(bl);
+      decode(path_prefix, bl);
+      DECODE_FINISH(bl);
+    }
+
+    void dump(Formatter *f) const;
+    void decode_json(JSONObj *obj);
+  };
+
+  /* base */
   std::string id;
   std::string name;
   list<std::string> endpoints;
+
+  /* extra */
+  std::optional<RESTConfig> data_access_conf;
+  std::optional<SIPConfig> sip_conf;
+
+  virtual ~RGWDataProvider() {}
+
+  virtual void encode_dp_base_raw(bufferlist& bl) const {
+    encode(id, bl);
+    encode(name, bl);
+    encode(endpoints, bl);
+  }
+
+  virtual void decode_dp_base_raw(bufferlist::const_iterator& bl) {
+    decode(id, bl);
+    decode(name, bl);
+    decode(endpoints, bl);
+  }
+
+  void encode_dp_extra(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(data_access_conf, bl);
+    encode(sip_conf, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode_dp_extra(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(data_access_conf, bl);
+    decode(sip_conf, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump_dp_extra(Formatter *f) const;
+  void decode_json_dp_extra(JSONObj *obj);
+
+  virtual std::optional<std::string> get_tier_type() const {
+    return std::nullopt;
+  }
+};
+WRITE_CLASS_ENCODER(RGWDataProvider::RESTConfig)
+WRITE_CLASS_ENCODER(RGWDataProvider::SIPConfig)
+
+using RGWDataProviderRef = std::shared_ptr<RGWDataProvider>;
+
+struct RGWZone : public RGWDataProvider {
   bool log_meta;
   bool log_data;
   bool read_only;
@@ -600,7 +705,7 @@ struct RGWZone {
       sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(name, bl);
     encode(endpoints, bl);
     encode(log_meta, bl);
@@ -612,11 +717,12 @@ struct RGWZone {
     encode(sync_from_all, bl);
     encode(sync_from, bl);
     encode(redirect_zone, bl);
+    encode_dp_extra(bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -643,6 +749,9 @@ struct RGWZone {
     if (struct_v >= 7) {
       decode(redirect_zone, bl);
     }
+    if (struct_v >= 8) {
+      decode_dp_extra(bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -651,11 +760,37 @@ struct RGWZone {
 
   bool is_read_only() const { return read_only; }
 
+  std::optional<std::string> get_tier_type() const override {
+    return tier_type;
+  }
+
   bool syncs_from(const std::string& zone_name) const {
     return (sync_from_all || sync_from.find(zone_name) != sync_from.end());
   }
 };
 WRITE_CLASS_ENCODER(RGWZone)
+
+using RGWZoneRef = std::shared_ptr<RGWZone>;
+
+struct RGWForeignZone : public RGWDataProvider {
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode_dp_base_raw(bl);
+    encode_dp_extra(bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode_dp_base_raw(bl);
+    decode_dp_extra(bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWForeignZone)
 
 struct RGWDefaultZoneGroupInfo {
   std::string default_zonegroup;
@@ -727,6 +862,10 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   rgw_zone_id master_zone;
   map<rgw_zone_id, RGWZone> zones;
 
+  map<rgw_zone_id, RGWForeignZone> foreign_zones;
+
+  map<rgw_zone_id, string> combined_zones; /* id -> name of rgw zones, foreign zones */
+
   map<std::string, RGWZoneGroupPlacementTarget> placement_targets;
   rgw_placement_rule default_placement;
 
@@ -769,7 +908,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void post_process_params(const DoutPrefixProvider *dpp, optional_yield y);
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -783,11 +922,12 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     RGWSystemMetaObj::encode(bl);
     encode(realm_id, bl);
     encode(sync_policy, bl);
+    encode(foreign_zones, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -811,8 +951,14 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     if (struct_v >= 5) {
       decode(sync_policy, bl);
     }
+    if (struct_v >= 6) {
+      decode(foreign_zones, bl);
+    }
+    init_combined_zones();
     DECODE_FINISH(bl);
   }
+
+  void init_combined_zones();
 
   int read_default_id(const DoutPrefixProvider *dpp, std::string& default_id, optional_yield y, bool old_format = false) override;
   int set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = false) override;
@@ -833,6 +979,18 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   const std::string& get_names_oid_prefix() const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
+  int modify_foreign_zone(const DoutPrefixProvider *dpp,
+                          string zone_name,
+                          rgw_zone_id zone_id,
+                          const list<std::string>& endpoints,
+                          const RGWDataProvider::RESTConfig& data_access_config,
+                          const RGWDataProvider::SIPConfig& sip_config,
+                          bool add);
+
+  int remove_foreign_zone(const DoutPrefixProvider *dpp,
+                          string zone_name,
+                          rgw_zone_id zone_id);
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZoneGroup*>& o);
@@ -844,6 +1002,7 @@ struct RGWPeriodMap
   std::string id;
   map<std::string, RGWZoneGroup> zonegroups;
   map<std::string, RGWZoneGroup> zonegroups_by_api;
+  map<rgw_zone_id, std::shared_ptr<RGWZoneGroup> > zonegroups_by_zone;
   map<std::string, uint32_t> short_zone_ids;
 
   std::string master_zonegroup;
@@ -859,6 +1018,7 @@ struct RGWPeriodMap
   void reset() {
     zonegroups.clear();
     zonegroups_by_api.clear();
+    zonegroups_by_zone.clear();
     master_zonegroup.clear();
   }
 

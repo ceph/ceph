@@ -858,7 +858,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     ldpp_dout(this, 20) << "RGWOp_BILog_Status::execute(optional_yield y): getting sync status for pipe=" << pipe << dendl;
 
-    op_ret = rgw_bucket_sync_status(this, static_cast<rgw::sal::RadosStore*>(store), pipe, bucket->get_info(), nullptr, &status);
+    op_ret = rgw_bucket_sync_status(this, static_cast<rgw::sal::RadosStore*>(store), pipe, bucket->get_info(), &status, nullptr);
 
     if (op_ret < 0) {
       ldpp_dout(this, -1) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
@@ -907,7 +907,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       pipe.dest.bucket = pinfo->bucket;
     }
 
-    int r = rgw_bucket_sync_status(this, static_cast<rgw::sal::RadosStore*>(store), pipe, *pinfo, &bucket->get_info(), &current_status);
+    int r = rgw_bucket_sync_status(this, static_cast<rgw::sal::RadosStore*>(store), pipe, *pinfo, &current_status, nullptr);
     if (r < 0) {
       ldpp_dout(this, -1) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
       op_ret = r;
@@ -927,7 +927,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       for (auto& cur_shard_status : current_status) {
         auto& result_shard_status = *m++;
         // always take the first marker, or any later marker that's smaller
-        if (cur_shard_status.inc_marker.position < result_shard_status.inc_marker.position) {
+        if (cur_shard_status.inc_marker->position < result_shard_status.inc_marker->position) {
           result_shard_status = std::move(cur_shard_status);
         }
       }

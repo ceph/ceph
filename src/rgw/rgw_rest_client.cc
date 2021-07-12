@@ -940,17 +940,32 @@ int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
           return ret;
         }
       } else {
-        *mtime = real_time();
+        set_str_from_headers(out_headers, "LAST_MODIFIED", mtime_str);
+        if (!mtime_str.empty()) {
+          int ret = parse_time(mtime_str.c_str(), mtime);
+          if (ret < 0) {
+            return ret;
+          }
+        } else {
+          *mtime = real_time();
+        }
       }
     }
     if (psize) {
       string size_str;
       set_str_from_headers(out_headers, "RGWX_OBJECT_SIZE", size_str);
-      string err;
-      *psize = strict_strtoll(size_str.c_str(), 10, &err);
-      if (!err.empty()) {
-        ldout(cct, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
-        return -EIO;
+      if (size_str.empty()) {
+        set_str_from_headers(out_headers, "CONTENT_LENGTH", size_str);
+      }
+      if (!size_str.empty()) {
+        string err;
+        *psize = strict_strtoll(size_str.c_str(), 10, &err);
+        if (!err.empty()) {
+          ldout(cct, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
+          return -EIO;
+        }
+      } else {
+        *psize = 0;
       }
     }
   }
@@ -1002,6 +1017,14 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
   size_t orig_len = len;
 
   if (cb) {
+    if (ofs == 0 &&
+        cb->get_need_headers()) {
+      int ret = cb->handle_headers(out_headers);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
     in_data.append((const char *)ptr, len);
 
     size_t orig_in_data_len = in_data.length();

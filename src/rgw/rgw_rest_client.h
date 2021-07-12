@@ -130,12 +130,22 @@ public:
   class ReceiveCB {
     protected:
       uint64_t extra_data_len{0};
+      bool need_headers{true};
     public:
       ReceiveCB() = default;
       virtual ~ReceiveCB() = default;
       virtual int handle_data(bufferlist& bl, bool *pause = nullptr) = 0;
+      virtual int handle_headers(const map<string, string>& headers) {
+        return 0;
+      }
       virtual void set_extra_data_len(uint64_t len) {
         extra_data_len = len;
+      }
+      void set_need_headers(bool val) {
+        need_headers = val;
+      }
+      bool get_need_headers() const {
+        return need_headers;
       }
   };
 

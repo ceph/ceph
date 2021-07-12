@@ -52,6 +52,29 @@ set(test_rgw_a_src test_rgw_common.cc)
 add_library(test_rgw_a STATIC ${test_rgw_a_src})
 target_link_libraries(test_rgw_a ${rgw_libs})
 
+# ceph_test_rgw_sip
+set(test_rgw_sip_srcs test_rgw_sip.cc)
+add_executable(ceph_test_rgw_sip
+  ${test_rgw_sip_srcs}
+  )
+target_link_libraries(ceph_test_rgw_sip
+  test_rgw_a
+  # cls_rgw_client
+  #cls_lock_client
+  #cls_refcount_client
+  #cls_log_client
+  #cls_timeindex_client
+  #cls_version_client
+  #cls_user_client
+  librados
+  global
+  ${BLKID_LIBRARIES}
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${UNITTEST_LIBS}
+  ${CRYPTO_LIBS})
+
 # ceph_test_rgw_manifest
 set(test_rgw_manifest_srcs test_rgw_manifest.cc)
 add_executable(ceph_test_rgw_manifest

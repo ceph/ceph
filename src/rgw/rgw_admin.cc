@@ -35,6 +35,7 @@ extern "C" {
 
 #include "rgw_user.h"
 #include "rgw_bucket.h"
+#include "rgw_cr_sip.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
@@ -60,13 +61,21 @@ extern "C" {
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_checkpoint.h"
 #include "rgw_lua.h"
+#include "rgw_sync_info.h"
+#include "rgw_remote.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta_be_otp.h"
+#include "services/svc_sip_marker.h"
 #include "services/svc_zone.h"
+
+#include "rgw_sip_meta.h"
+#include "rgw_sip_data.h"
+#include "rgw_sip_bucket.h"
+#include "rgw_sip_rest.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -88,7 +97,7 @@ static const DoutPrefixProvider* dpp() {
 
 #define CHECK_TRUE(x, msg, err) \
   do { \
-    if (!x) { \
+    if (!(x)) { \
       cerr << msg << std::endl; \
       return err; \
     } \
@@ -633,6 +642,7 @@ enum class OPT {
   OBJECT_RM,
   OBJECT_UNLINK,
   OBJECT_STAT,
+  OBJECT_FETCH,
   OBJECT_REWRITE,
   OBJECTS_EXPIRE,
   OBJECTS_EXPIRE_STALE_LIST,
@@ -684,6 +694,9 @@ enum class OPT {
   ZONE_PLACEMENT_RM,
   ZONE_PLACEMENT_LIST,
   ZONE_PLACEMENT_GET,
+  FOREIGN_ZONE_CREATE,
+  FOREIGN_ZONE_MODIFY,
+  FOREIGN_ZONE_DELETE,
   CAPS_ADD,
   CAPS_RM,
   METADATA_GET,
@@ -782,7 +795,17 @@ enum class OPT {
   SCRIPT_RM,
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
-  SCRIPT_PACKAGE_LIST
+  SCRIPT_PACKAGE_LIST,
+  SI_PROVIDER_LIST,
+  SI_PROVIDER_INFO,
+  SI_PROVIDER_FETCH,
+  SI_PROVIDER_TRIM,
+  SI_PROVIDER_STATE,
+  SI_PROVIDER_MARKER_TARGET_SET,
+  SI_PROVIDER_MARKER_TARGET_RM,
+  SI_PROVIDER_MARKER_SOURCE_SET,
+  SI_PROVIDER_MARKER_INFO_GET,
+  SI_PROVIDER_MARKER_INFO_RM,
 };
 
 }
@@ -845,6 +868,7 @@ static SimpleCmd::Commands all_cmds = {
   { "objects expire", OPT::OBJECTS_EXPIRE },
   { "objects expire-stale list", OPT::OBJECTS_EXPIRE_STALE_LIST },
   { "objects expire-stale rm", OPT::OBJECTS_EXPIRE_STALE_RM },
+  { "object fetch", OPT::OBJECT_FETCH },
   { "bi get", OPT::BI_GET },
   { "bi put", OPT::BI_PUT },
   { "bi list", OPT::BI_LIST },
@@ -896,6 +920,9 @@ static SimpleCmd::Commands all_cmds = {
   { "zone placement rm", OPT::ZONE_PLACEMENT_RM },
   { "zone placement list", OPT::ZONE_PLACEMENT_LIST },
   { "zone placement get", OPT::ZONE_PLACEMENT_GET },
+  { "foreign zone create", OPT::FOREIGN_ZONE_CREATE },
+  { "foreign zone modify", OPT::FOREIGN_ZONE_MODIFY },
+  { "foreign zone delete", OPT::FOREIGN_ZONE_DELETE },
   { "caps add", OPT::CAPS_ADD },
   { "caps rm", OPT::CAPS_RM },
   { "metadata get [*]", OPT::METADATA_GET },
@@ -1004,6 +1031,19 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
+  { "si provider list", OPT::SI_PROVIDER_LIST },
+  { "si provider fetch", OPT::SI_PROVIDER_FETCH },
+  { "si provider trim", OPT::SI_PROVIDER_TRIM },
+  { "sip list", OPT::SI_PROVIDER_LIST },
+  { "sip info", OPT::SI_PROVIDER_INFO },
+  { "sip fetch", OPT::SI_PROVIDER_FETCH },
+  { "sip trim", OPT::SI_PROVIDER_TRIM },
+  { "sip state", OPT::SI_PROVIDER_STATE },
+  { "sip marker target set", OPT::SI_PROVIDER_MARKER_TARGET_SET },
+  { "sip marker target rm", OPT::SI_PROVIDER_MARKER_TARGET_RM },
+  { "sip marker source set", OPT::SI_PROVIDER_MARKER_SOURCE_SET },
+  { "sip marker info get", OPT::SI_PROVIDER_MARKER_INFO_GET },
+  { "sip marker info rm", OPT::SI_PROVIDER_MARKER_INFO_RM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -2029,9 +2069,9 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
 {
   stringstream ss;
 
-  RGWZone *sz;
+  RGWDataProvider *sz;
 
-  if (!static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(source_zone, &sz)) {
+  if (!static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_data_provider(source_zone, &sz)) {
     push_ss(ss, status, tab) << string("zone not found");
     flush_ss(ss, status);
     return;
@@ -2220,14 +2260,14 @@ static void sync_status(Formatter *formatter)
 
   list<string> data_status;
 
-  auto& zone_conn_map = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone_conn_map();
+  auto& source_zones = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_data_sync_source_zones();
 
-  for (auto iter : zone_conn_map) {
-    const rgw_zone_id& source_id = iter.first;
+  for (auto& entry : source_zones) {
+    auto& source_id = entry.first;
     string source_str = "source: ";
     string s = source_str + source_id.id;
-    RGWZone *sz;
-    if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(source_id, &sz)) {
+    RGWDataProvider *sz;
+    if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_data_provider(source_id, &sz)) {
       s += string(" (") + sz->name + ")";
     }
     data_status.push_back(s);
@@ -2247,15 +2287,16 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
 }
 
 static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, const RGWZone& zone,
-                                     const RGWZone& source, RGWRESTConn *conn,
+                                     const rgw_zone_id& source_zone_id,
+                                     const string& source_zone_name,
                                      const RGWBucketInfo& bucket_info,
                                      rgw_sync_bucket_pipe pipe,
                                      int width, std::ostream& out)
 {
-  out << indented{width, "source zone"} << source.id << " (" << source.name << ")" << std::endl;
+  out << indented{width, "source zone"} << source_zone_id << " (" << source_zone_name << ")" << std::endl;
 
   // syncing from this zone?
-  if (!zone.syncs_from(source.name)) {
+  if (!zone.syncs_from(source_zone_name)) {
     out << indented{width} << "does not sync from zone\n";
     return 0;
   }
@@ -2269,14 +2310,19 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   int r = init_bucket(nullptr, *pipe.source.bucket, &source_bucket);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to read source bucket info: " << cpp_strerror(r) << dendl;
-    return r;
+
+    /* source bucket info might not exist because it's a foreign zone */
+    if (r != -ENOENT) {
+      return r;
+    }
   }
 
   pipe.source.bucket = source_bucket->get_key();
   pipe.dest.bucket = bucket_info.bucket;
 
   std::vector<rgw_bucket_shard_sync_info> status;
-  r = rgw_bucket_sync_status(dpp, store, pipe, bucket_info, &source_bucket->get_info(), &status);
+  std::vector<rgw_bucket_index_marker_info> remote_markers;
+  r = rgw_bucket_sync_status(dpp, store, pipe, bucket_info, &status, &remote_markers);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to read bucket sync status: " << cpp_strerror(r) << dendl;
     return r;
@@ -2294,7 +2340,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     auto& m = status[shard_id];
     if (m.state == BucketSyncState::StateFullSync) {
       num_full++;
-      full_complete += m.full_marker.count;
+      full_complete += m.full_marker->count;
     } else if (m.state == BucketSyncState::StateIncrementalSync) {
       num_inc++;
     }
@@ -2306,22 +2352,16 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   }
   out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
 
-  BucketIndexShardsManager remote_markers;
-  r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(), remote_markers, null_yield);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "failed to read remote log: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   std::set<int> shards_behind;
-  for (auto& r : remote_markers.get()) {
-    auto shard_id = r.first;
+  int i = 0;
+  for (auto& r : remote_markers) {
+    int shard_id = i++;
     auto& m = status[shard_id];
-    if (r.second.empty()) {
+    if (r.marker.empty()) {
       continue; // empty bucket index shard
     }
-    auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
-    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.second) {
+    auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker->position);
+    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.marker) {
       shards_behind.insert(shard_id);
     }
   }
@@ -2377,8 +2417,8 @@ static rgw_zone_id resolve_zone_id(const string& s)
 {
   rgw_zone_id result;
 
-  RGWZone *zone;
-  if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(s, &zone)) {
+  RGWDataProvider *zone;
+  if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_data_provider(s, &zone)) {
     return rgw_zone_id(s);
   }
   if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(s, &result)) {
@@ -2574,35 +2614,30 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
 
   auto sources = handler->get_all_sources();
 
-  auto& zone_conn_map = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone_conn_map();
   set<rgw_zone_id> zone_ids;
 
   if (!source_zone_id.empty()) {
-    auto z = zonegroup.zones.find(source_zone_id);
-    if (z == zonegroup.zones.end()) {
+    auto z = zonegroup.combined_zones.find(source_zone_id);
+    if (z == zonegroup.combined_zones.end()) {
       ldpp_dout(dpp(), -1) << "Source zone not found in zonegroup "
           << zonegroup.get_name() << dendl;
       return -EINVAL;
     }
-    auto c = zone_conn_map.find(source_zone_id);
-    if (c == zone_conn_map.end()) {
-      ldpp_dout(dpp(), -1) << "No connection to zone " << z->second.name << dendl;
+    auto c = store->ctl()->remote->zone_conns(source_zone_id);
+    if (!c) {
+      lderr(store->ctx()) << "No connection to zone " << z->second << dendl;
       return -EINVAL;
     }
     zone_ids.insert(source_zone_id);
   } else {
-    for (const auto& entry : zonegroup.zones) {
-      zone_ids.insert(entry.second.id);
+    for (const auto& entry : zonegroup.combined_zones) {
+      zone_ids.insert(entry.first);
     }
   }
 
   for (auto& zone_id : zone_ids) {
-    auto z = zonegroup.zones.find(zone_id.id);
-    if (z == zonegroup.zones.end()) { /* should't happen */
-      continue;
-    }
-    auto c = zone_conn_map.find(zone_id.id);
-    if (c == zone_conn_map.end()) { /* should't happen */
+    auto z = zonegroup.combined_zones.find(zone_id.id);
+    if (z == zonegroup.combined_zones.end()) { /* should't happen */
       continue;
     }
 
@@ -2612,9 +2647,9 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
 	  pipe.source.bucket != opt_source_bucket) {
 	continue;
       }
-      if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-	bucket_source_sync_status(dpp(), store, zone, z->second,
-				  c->second,
+      if (pipe.source.zone.value_or(rgw_zone_id()) == z->first) {
+	bucket_source_sync_status(dpp(), store, zone,
+                                  z->first, z->second,
 				  info, pipe,
 				  width, out);
       }
@@ -2836,12 +2871,30 @@ static void show_result(T& obj,
   formatter->flush(cout);
 }
 
-void init_optional_bucket(std::optional<rgw_bucket>& opt_bucket,
+void init_optional_bucket(CephContext *cct,
+                          std::optional<rgw_bucket>& opt_bucket,
                           std::optional<string>& opt_tenant,
                           std::optional<string>& opt_bucket_name,
                           std::optional<string>& opt_bucket_id)
 {
   if (opt_tenant || opt_bucket_name || opt_bucket_id) {
+    if (opt_bucket_name && (!opt_tenant || !opt_bucket_id)) {
+      rgw_bucket b;
+
+      int r = rgw_bucket_parse_bucket_key(cct, *opt_bucket_name,
+                                          &b, nullptr);
+      if (r >= 0) {
+        opt_bucket_name = b.name;
+
+        if (!opt_tenant && !b.tenant.empty()) {
+          opt_tenant = b.tenant;
+        }
+        if (!opt_bucket_id && !b.bucket_id.empty()) {
+          opt_bucket_id = b.bucket_id;
+        }
+      }
+    }
+
     opt_bucket.emplace();
     if (opt_tenant) {
       opt_bucket->tenant = *opt_tenant;
@@ -2852,6 +2905,20 @@ void init_optional_bucket(std::optional<rgw_bucket>& opt_bucket,
     if (opt_bucket_id) {
       opt_bucket->bucket_id = *opt_bucket_id;
     }
+  }
+}
+
+void init_optional_object_key(std::optional<rgw_obj_key>& opt_object,
+                              std::optional<string>& opt_object_name,
+                              std::optional<string>& opt_object_version)
+{
+  if (! opt_object_name) {
+    return;
+  }
+
+  opt_object.emplace(*opt_object_name);
+  if (opt_object_version) {
+    opt_object->set_instance(*opt_object_version);
   }
 }
 
@@ -2973,9 +3040,9 @@ class JSONFormatter_PrettyZone : public JSONFormatter {
     void encode_json(const char *name, const void *pval, ceph::Formatter *f) const override {
       auto zone_id = *(static_cast<const rgw_zone_id *>(pval));
       string zone_name;
-      RGWZone *zone;
-      if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(zone_id, &zone)) {
-        zone_name = zone->name;
+      RGWDataProvider *dp;
+      if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_data_provider(zone_id, &dp)) {
+        zone_name = dp->name;
       } else {
         cerr << "WARNING: cannot find zone name for id=" << zone_id << std::endl;
         zone_name = zone_id.id;
@@ -2998,6 +3065,242 @@ public:
     return &encode_filter;
   }
 };
+
+class SIPCRMgr : public RGWCoroutinesManager {
+  CephContext *cct;
+  RGWHTTPManager http_manager;
+  RGWCoroutinesManagerRegistry *cr_registry;
+
+  struct {
+    RGWRemoteCtl *remote;
+  } ctl;
+
+public:
+  SIPCRMgr(CephContext *_cct,
+           RGWRemoteCtl *_remote_ctl,
+           RGWCoroutinesManagerRegistry *_cr_registry) : RGWCoroutinesManager(_cct, _cr_registry),
+                                                         cct(_cct),
+                                                         http_manager(_cct, completion_mgr) {
+    ctl.remote = _remote_ctl;
+    http_manager.start();
+  }
+
+  SIProviderCRMgr *create(std::optional<rgw_zone_id> zid) {
+    if (!zid) {
+      return new SIProviderCRMgr_Local(cct,
+                                       static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker,
+                                       static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr,
+                                       static_cast<rgw::sal::RadosStore*>(store)->svc()->rados->get_async_processor());
+    }
+
+    auto c = ctl.remote->zone_conns(*zid);
+    if (!c) {
+      lderr(cct) << "ERROR: couldn't find connection to zone " << *zid << dendl;
+      return nullptr;
+    }
+
+    return new SIProviderCRMgr_REST(cct, c->sip, &http_manager);
+  }
+};
+
+class SIPRESTMgr : public RGWCoroutinesManager {
+  CephContext *cct;
+  RGWHTTPManager http_manager;
+  RGWCoroutinesManagerRegistry *cr_registry;
+
+  struct {
+    RGWRemoteCtl *remote;
+  } ctl;
+
+public:
+  SIPRESTMgr(CephContext *_cct,
+             RGWRemoteCtl *_remote_ctl,
+             RGWCoroutinesManagerRegistry *_cr_registry) : RGWCoroutinesManager(_cct, _cr_registry),
+                                                           cct(_cct),
+                                                           http_manager(_cct, completion_mgr) {
+    ctl.remote = _remote_ctl;
+    http_manager.start();
+  }
+
+  SIProvider_REST *create(const rgw_zone_id& zid,
+                          std::optional<string> remote_provider_name,
+                          std::optional<string> data_type,
+                          std::optional<SIProvider::StageType> stage_type,
+                          std::optional<string> instance,
+                         SIProvider::TypeHandlerProviderRef type_provider) {
+    if (!remote_provider_name) {
+      if (!data_type && !stage_type) {
+        return nullptr;
+      }
+    }
+
+    auto c = ctl.remote->zone_conns(zid);
+    if (!c) {
+      return nullptr;
+    }
+
+    SIProvider_REST *sip = nullptr;
+
+    if (remote_provider_name) {
+      sip = new SIProvider_REST_SingleType(dpp(), this,
+                                            c->sip, &http_manager,
+                                            *remote_provider_name,
+                                            instance,
+                                            type_provider);
+    } else {
+      sip = new SIProvider_REST_SingleType(dpp(), this,
+                                           c->sip, &http_manager,
+                                           *data_type,
+                                           *stage_type,
+                                           instance,
+                                           type_provider);
+    }
+
+    if (sip) {
+      int r = sip->init(dpp());
+      if (r < 0) {
+        cerr << "ERROR: failed to initialize sip" << std::endl;
+        delete sip;
+        return nullptr;
+      }
+    }
+
+    return sip;
+  }
+};
+
+RGWRESTConn *get_source_conn(CephContext *cct,
+                             RGWRemoteCtl *remote_ctl,
+                             std::optional<rgw_zone_id> source_zone,
+                             std::optional<string> endpoint,
+                             std::optional<string> opt_region,
+                             const string& access_key,
+                             const string& secret)
+{
+  if (source_zone) {
+    auto conn = remote_ctl->zone_conns(*source_zone);
+    if (!conn) {
+      cerr << "ERROR: could not find zone connection for source zone (" << *source_zone << ")" << std::endl;
+      return nullptr;
+    }
+    return conn->data;
+  }
+
+  if (!endpoint) {
+    return nullptr;
+  }
+
+  list<string> endpoints = { *endpoint };
+
+  RGWAccessKey k(access_key, secret);
+
+  auto remote_id = *endpoint;
+
+  return remote_ctl->create_conn(dpp(), remote_id, endpoints, k, opt_region);
+}
+
+static std::shared_ptr<SIProvider::TypeHandlerProvider> get_sip_type_handler(std::optional<string> opt_sip_type,
+                                                                             std::optional<string> opt_sip_data_type)
+{
+  string sip_type;
+
+  if (opt_sip_data_type) {
+    sip_type = *opt_sip_data_type;
+  } else {
+    sip_type = opt_sip_type.value_or("");
+    auto pos = sip_type.find(".");
+    if (pos != string::npos) {
+      sip_type = sip_type.substr(0, pos);
+    }
+  }
+
+
+  SIProvider::TypeHandlerProvider *p{nullptr};
+  if (boost::algorithm::starts_with(sip_type, "meta")) {
+      p = new SITypeHandlerProvider_Default<siprovider_meta_info>();
+  } else if (boost::algorithm::starts_with(sip_type, "data")) {
+      p = new SITypeHandlerProvider_Default<siprovider_data_info>();
+  } else if (boost::algorithm::starts_with(sip_type, "bucket")) {
+      p = new SITypeHandlerProvider_Default<siprovider_bucket_entry_info>();
+  }
+  std::shared_ptr<SIProvider::TypeHandlerProvider> result(p);
+  return result;
+}
+
+int find_sip_provider(std::optional<string> opt_sip,
+                      std::optional<string> opt_sip_data_type,
+                      std::optional<SIProvider::StageType> opt_sip_stage_type,
+                      std::optional<string> opt_sip_instance,
+                      std::optional<rgw_zone_id> opt_zone_id,
+                      std::optional<SIPRESTMgr>& sip_rest_mgr,
+                      SIProviderRef *provider,
+                      SIProvider::stage_id_t *stage_id)
+{
+  if (!opt_sip) {
+    if (!opt_sip_data_type ||
+        !opt_sip_stage_type) {
+      cerr << "ERROR: either --sip or both --sip-data-type and --sip-stage-type need to be specified" << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  if (opt_zone_id) {
+    sip_rest_mgr.emplace(static_cast<rgw::sal::RadosStore*>(store)->ctx(),
+                         static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
+                         static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_cr_registry());
+    auto sip_type_handler = get_sip_type_handler(opt_sip, opt_sip_data_type);
+    if (!sip_type_handler) {
+      cerr << "ERROR: unknown sip type: " << (opt_sip ? *opt_sip : *opt_sip_data_type) << std::endl;
+      return -EINVAL;
+    }
+    provider->reset(sip_rest_mgr->create(*opt_zone_id,
+                                         opt_sip,
+                                         opt_sip_data_type,
+                                         opt_sip_stage_type,
+                                         opt_sip_instance, 
+                                         sip_type_handler));
+  } else {
+    if (opt_sip) {
+      *provider = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip(dpp(), *opt_sip, opt_sip_instance);
+    } else {
+      *provider = static_cast<rgw::sal::RadosStore*>(store)->ctl()->si.mgr->find_sip_by_type(dpp(),
+                                                         *opt_sip_data_type,
+                                                         *opt_sip_stage_type,
+                                                         opt_sip_instance);
+    }
+  }
+
+  if (!*provider) {
+    cerr << "ERROR: sync info provider not found" << std::endl;
+    return -ENOENT;
+  }
+
+  const auto& stages = (*provider)->get_info(dpp()).stages;
+  if (stages.empty()) {
+    cerr << "ERROR: provider has no stages" << std::endl;
+    return -EIO;
+  }
+
+  if (!stage_id) {
+    return 0;
+  }
+
+  if (!opt_sip_stage_type) {
+    *stage_id = stages[0].sid;
+    return 0;
+  }
+
+  for (const auto& stage : stages) {
+    if (stage.type == *opt_sip_stage_type) {
+      *stage_id = stage.sid;
+      return 0;
+    }
+  }
+
+  cerr << "ERROR: provider does not have specified stage" << std::endl;
+
+  return -EIO;
+}
 
 int main(int argc, const char **argv)
 {
@@ -3092,6 +3395,7 @@ int main(int argc, const char **argv)
   string infile;
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
+  std::optional<string> opt_marker;
   string marker;
   string start_marker;
   string end_marker;
@@ -3183,6 +3487,8 @@ int main(int argc, const char **argv)
   std::optional<std::string> script_package;
   int allow_compilation = false;
 
+  std::optional<rgw_zone_id> opt_zone_id;
+  std::optional<string> opt_zone_name;
   std::optional<string> opt_group_id;
   std::optional<string> opt_status;
   std::optional<string> opt_flow_type;
@@ -3222,6 +3528,35 @@ int main(int argc, const char **argv)
   ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
+  std::optional<string> opt_sip;
+  std::optional<string> opt_sip_instance;
+  std::optional<string> opt_sip_data_type;
+  std::optional<SIProvider::StageType> opt_sip_stage_type;
+  std::optional<SIProvider::stage_id_t> opt_stage_id;
+  std::optional<string> opt_target_id;
+  std::optional<bool> opt_check_exists;
+
+  std::optional<string> opt_object_name;
+  std::optional<string> opt_object_version;
+  std::optional<rgw_obj_key> opt_object;
+  std::optional<string> opt_source_object_name;
+  std::optional<string> opt_source_object_version;
+  std::optional<rgw_obj_key> opt_source_object;
+  std::optional<string> opt_dest_object_name;
+  std::optional<string> opt_dest_object_version;
+  std::optional<rgw_obj_key> opt_dest_object;
+
+  std::optional<list<string> > opt_endpoints;
+  std::optional<string> opt_endpoint;
+  std::optional<string> opt_foreign_zone_name;
+  std::optional<string> opt_foreign_zone_id;
+  std::optional<rgw_user> opt_uid;
+  std::optional<string> opt_access_key;
+  std::optional<string> opt_secret;
+  std::optional<string> opt_path_prefix;
+
+  RGWDataProvider::SIPConfig sip_conf;
+
   SimpleCmd cmd(all_cmds, cmd_aliases);
   bool raw_storage_op = false;
 
@@ -3236,6 +3571,11 @@ int main(int argc, const char **argv)
         cerr << "no value for uid" << std::endl;
         exit(1);
       }
+      opt_uid = user_id_arg;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-uid", (char*)NULL)) {
+      rgw_user sip_uid;
+      sip_uid.from_str(val);
+      sip_conf.rest_conf.uid = sip_uid;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--new-uid", (char*)NULL)) {
       new_user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -3245,10 +3585,16 @@ int main(int argc, const char **argv)
       user_ns = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
+      opt_access_key = access_key;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-access-key", (char*)NULL)) {
+      sip_conf.rest_conf.access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
       subuser = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
       secret_key = val;
+      opt_secret = secret_key;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-secret", "--sip-secret-key", (char*)NULL)) {
+      sip_conf.rest_conf.secret = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
@@ -3261,8 +3607,10 @@ int main(int argc, const char **argv)
       pool = rgw_pool(pool_name);
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
+      opt_object_name = object;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*)NULL)) {
       object_version = val;
+      opt_object_version = object_version;
     } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*)NULL)) {
       client_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*)NULL)) {
@@ -3446,6 +3794,7 @@ int main(int argc, const char **argv)
       metadata_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*)NULL)) {
       marker = val;
+      opt_marker = marker;
     } else if (ceph_argparse_witharg(args, i, &val, "--start-marker", (char*)NULL)) {
       start_marker = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--end-marker", (char*)NULL)) {
@@ -3512,10 +3861,21 @@ int main(int argc, const char **argv)
       api_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
       zone_id = val;
+      opt_zone_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--zone-name", (char*)NULL)) {
+      opt_zone_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
       get_str_list(val, endpoints);
+      opt_endpoints = endpoints;
+      if (!endpoints.empty()) {
+        opt_endpoint = endpoints.front();
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-endpoints", (char*)NULL)) {
+      list<string> sip_endpoints;
+      get_str_list(val, sip_endpoints);
+      sip_conf.rest_conf.endpoints = sip_endpoints;
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
       get_str_list(val, sync_from);
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
@@ -3572,6 +3932,9 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+      opt_path_prefix = path_prefix;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-path-prefix", (char*)NULL)) {
+      sip_conf.path_prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
       totp_serial = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-pin", (char*)NULL)) {
@@ -3651,6 +4014,20 @@ int main(int argc, const char **argv)
       opt_retry_delay_ms = std::chrono::milliseconds(atoi(val.c_str()));
     } else if (ceph_argparse_witharg(args, i, &val, "--timeout-sec", (char*)NULL)) {
       opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip", "--si-provider", (char*)NULL)) {
+      opt_sip = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-instance", (char*)NULL)) {
+      opt_sip_instance = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-data-type", (char*)NULL)) {
+      opt_sip_data_type = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-stage-type", (char*)NULL)) {
+      opt_sip_stage_type = SIProvider::stage_type_from_str(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--stage-id", (char*)NULL)) {
+      opt_stage_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-id", (char*)NULL)) {
+      opt_target_id = val;
+    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--check-exists", (char*)NULL)) {
+      opt_check_exists = (bool)tmp_int;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
@@ -3661,6 +4038,21 @@ int main(int argc, const char **argv)
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--rgw-obj-fs", (char*)NULL)) {
       rgw_obj_fs = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-object", (char*)NULL)) {
+      opt_source_object_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-object-version", (char*)NULL)) {
+      opt_source_object_version = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-object", (char*)NULL)) {
+      opt_dest_object_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dest-object-version", (char*)NULL)) {
+      opt_dest_object_version = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--endpoint", (char*)NULL)) {
+      opt_endpoint = val;
+      endpoints = { val };
+    } else if (ceph_argparse_witharg(args, i, &val, "--foreign-zone-name", (char*)NULL)) {
+      opt_foreign_zone_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--foreign-zone-id", (char*)NULL)) {
+      opt_foreign_zone_id = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3736,6 +4128,8 @@ int main(int argc, const char **argv)
 			 OPT::ZONE_PLACEMENT_ADD, OPT::ZONE_PLACEMENT_RM,
 			 OPT::ZONE_PLACEMENT_MODIFY, OPT::ZONE_PLACEMENT_LIST,
 			 OPT::ZONE_PLACEMENT_GET,
+                         OPT::FOREIGN_ZONE_CREATE, OPT::FOREIGN_ZONE_MODIFY,
+                         OPT::FOREIGN_ZONE_DELETE,
 			 OPT::REALM_CREATE,
 			 OPT::PERIOD_DELETE, OPT::PERIOD_GET,
 			 OPT::PERIOD_GET_CURRENT, OPT::PERIOD_LIST,
@@ -3810,7 +4204,12 @@ int main(int argc, const char **argv)
 			 OPT::PUBSUB_SUB_GET,
 			 OPT::PUBSUB_SUB_PULL,
 			 OPT::SCRIPT_GET,
-    };
+			 OPT::SI_PROVIDER_LIST,
+			 OPT::SI_PROVIDER_INFO,
+			 OPT::SI_PROVIDER_FETCH,
+			 OPT::SI_PROVIDER_STATE,
+			 OPT::SI_PROVIDER_MARKER_INFO_GET,
+  };
 
     std::set<OPT> gc_ops_list = {
 			 OPT::GC_LIST,
@@ -3843,12 +4242,15 @@ int main(int argc, const char **argv)
     /* Needs to be after the store is initialized.  Note, user could be empty here. */
     user = store->get_user(user_id_arg);
 
-    init_optional_bucket(opt_bucket, opt_tenant,
+    init_optional_bucket(cct.get(), opt_bucket, opt_tenant,
                          opt_bucket_name, opt_bucket_id);
-    init_optional_bucket(opt_source_bucket, opt_source_tenant,
+    init_optional_bucket(cct.get(), opt_source_bucket, opt_source_tenant,
                          opt_source_bucket_name, opt_source_bucket_id);
-    init_optional_bucket(opt_dest_bucket, opt_dest_tenant,
+    init_optional_bucket(cct.get(), opt_dest_bucket, opt_dest_tenant,
                          opt_dest_bucket_name, opt_dest_bucket_id);
+    init_optional_object_key(opt_object, opt_object_name, opt_object_version);
+    init_optional_object_key(opt_source_object, opt_source_object_name, opt_source_object_version);
+    init_optional_object_key(opt_dest_object, opt_dest_object_name, opt_dest_object_version);
 
     if (tenant.empty()) {
       tenant = user->get_tenant();
@@ -5445,12 +5847,73 @@ int main(int argc, const char **argv)
 	encode_json("placement_pools", p->second, formatter.get());
 	formatter->flush(cout);
       }
+    case OPT::FOREIGN_ZONE_CREATE:
+    case OPT::FOREIGN_ZONE_MODIFY:
+    case OPT::FOREIGN_ZONE_DELETE:
+      {
+        if (!opt_foreign_zone_name ||
+            opt_foreign_zone_name->empty()) {
+          if (opt_cmd == OPT::FOREIGN_ZONE_CREATE) {
+            cerr << "ERROR: missing --foreign-zone-name" << std::endl;
+            return EINVAL;
+          } else if (!opt_foreign_zone_id ||
+                     opt_foreign_zone_id->empty()) {
+            cerr << "ERROR: missing --foreign-zone-name or --foreign-zone-id" << std::endl;
+            return EINVAL;
+          }
+        }
+
+        RGWDataProvider::RESTConfig data_access_conf;
+        data_access_conf.endpoints = opt_endpoints;
+        data_access_conf.uid = opt_uid;
+        data_access_conf.access_key = opt_access_key;
+        data_access_conf.secret = opt_secret;
+
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	int ret = zonegroup.init(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->sysobj, null_yield);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+        if (opt_cmd == OPT::FOREIGN_ZONE_CREATE ||
+            opt_cmd == OPT::FOREIGN_ZONE_MODIFY) {
+          ret = zonegroup.modify_foreign_zone(dpp(),
+                                              opt_foreign_zone_name.value_or(string()),
+                                              opt_foreign_zone_id.value_or(string()),
+                                              endpoints,
+                                              data_access_conf,
+                                              sip_conf,
+                                              opt_cmd == OPT::FOREIGN_ZONE_MODIFY);
+          if (ret < 0) {
+            cerr << "failed to apply foreign zone config: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+        } else  if (opt_cmd == OPT::FOREIGN_ZONE_DELETE) {
+          ret = zonegroup.remove_foreign_zone(dpp(),
+                                              opt_foreign_zone_name.value_or(string()),
+                                              opt_foreign_zone_id.value_or(string()));
+          if (ret < 0) {
+            cerr << "failed to remove foreign zone: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+
+        }
+
+        zonegroup.post_process_params(dpp(), null_yield);
+        ret = zonegroup.update(dpp(), null_yield);
+        if (ret < 0) {
+          cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+      }
+      break;
     default:
       break;
     }
     return 0;
   }
 
+  resolve_zone_id_opt(opt_zone_name, opt_zone_id);
   resolve_zone_id_opt(opt_effective_zone_name, opt_effective_zone_id);
   resolve_zone_id_opt(opt_source_zone_name, opt_source_zone_id);
   resolve_zone_id_opt(opt_dest_zone_name, opt_dest_zone_id);
@@ -7181,6 +7644,80 @@ next:
     }
   }
 
+  if (opt_cmd == OPT::OBJECT_FETCH) {
+    CHECK_TRUE(require_opt(opt_dest_bucket), "ERROR: --dest-bucket was not specified", EINVAL);
+
+    if (!opt_dest_object) {
+      opt_dest_object = opt_object;
+    }
+
+    CHECK_TRUE(require_opt(opt_dest_object), "ERROR: --dest-object was not specified", EINVAL);
+    CHECK_TRUE(opt_source_zone_id || opt_endpoint, "ERROR: either--source-zone or --endpoint needs to be specified", EINVAL);
+
+    if (!opt_source_bucket) {
+      opt_source_bucket = opt_dest_bucket;
+    }
+
+    if (!opt_source_object) {
+      opt_source_object = opt_dest_object;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> sal_dest_bucket;
+    int ret = init_bucket(user.get(), *opt_dest_bucket, &sal_dest_bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    unique_ptr<rgw::sal::Bucket> sal_source_bucket;
+    ret = init_bucket(user.get(), *opt_source_bucket, &sal_source_bucket);
+    if (ret < 0) {
+      cerr << "WARNING: could not init source bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw_obj source_object(sal_source_bucket->get_key(), *opt_source_object);
+    rgw_obj dest_object(sal_dest_bucket->get_key(), *opt_dest_object);
+
+    auto conn  = get_source_conn(store->ctx(),
+                                 static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
+                                 opt_source_zone_id,
+                                 opt_endpoint,
+                                 opt_region,
+                                 access_key,
+                                 secret_key);
+    if (!conn) {
+      return ENOENT;
+    }
+
+    if (!opt_dest_owner) {
+      if (!user_id_arg.empty()) {
+        opt_dest_owner = user_id_arg;
+      } else {
+        opt_dest_owner = sal_dest_bucket->get_info().owner;
+      }
+    }
+
+    rgw::sal::RadosObject sal_source_object(static_cast<rgw::sal::RadosStore*>(store), source_object.key, sal_source_bucket.get());
+    rgw::sal::RadosObject sal_dest_object(static_cast<rgw::sal::RadosStore*>(store), dest_object.key, sal_dest_bucket.get());
+
+    RGWRados::FetchRemoteObjParams params;
+
+    RGWObjectCtx obj_ctx(store);
+    ret = static_cast<rgw::sal::RadosStore*>(store)->getRados()->fetch_remote_obj(dpp(), obj_ctx,
+                                              conn,
+                                              false, /* foreign source */
+                                              *opt_dest_owner,
+                                              &sal_dest_object,
+                                              &sal_source_object,
+                                              sal_dest_bucket.get(),
+                                              sal_source_bucket.get(),
+                                              params);
+    if (ret < 0) {
+      cerr << "ERROR: fetch_remote_obj() failed: " << cpp_strerror(-ret) << std::endl;
+    }
+  }
+
   if (opt_cmd == OPT::BUCKET_RM) {
     if (!inconsistent_index) {
       RGWBucketAdminOp::remove_bucket(store, bucket_op, null_yield, dpp(), bypass_gc, true);
@@ -8375,10 +8912,10 @@ next:
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_CREATE) {
     CHECK_TRUE(require_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
     CHECK_TRUE(require_opt(opt_flow_id), "ERROR: --flow-id not specified", EINVAL);
-    CHECK_TRUE(require_opt(opt_flow_type,
-                           (symmetrical_flow_opt(*opt_flow_type) ||
-                            directional_flow_opt(*opt_flow_type))),
-                           "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)", EINVAL);
+    CHECK_TRUE((opt_flow_type &&
+                (symmetrical_flow_opt(*opt_flow_type) ||
+                 directional_flow_opt(*opt_flow_type))),
+               "ERROR: --flow-type not specified or invalid (options: symmetrical, directional)", EINVAL);
 
     SyncPolicyContext sync_policy_ctx(zonegroup_id, zonegroup_name, opt_bucket);
     ret = sync_policy_ctx.init();
@@ -8497,11 +9034,15 @@ next:
       }
     }
 
-    pipe->source.add_zones(*opt_source_zone_ids);
+    if (opt_source_zone_ids) {
+      pipe->source.add_zones(*opt_source_zone_ids);
+    }
     pipe->source.set_bucket(opt_source_tenant,
                             opt_source_bucket_name,
                             opt_source_bucket_id);
-    pipe->dest.add_zones(*opt_dest_zone_ids);
+    if (opt_dest_zone_ids) {
+      pipe->dest.add_zones(*opt_dest_zone_ids);
+    }
     pipe->dest.set_bucket(opt_dest_tenant,
                             opt_dest_bucket_name,
                             opt_dest_bucket_id);
@@ -8642,7 +9183,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    map<int, string> markers;
+    map<int, RGWSI_BILog_RADOS::Status> markers;
     ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->get_log_status(dpp(), bucket->get_info(), shard_id,
 						    &markers, null_yield);
     if (ret < 0) {
@@ -8774,8 +9315,7 @@ next:
     }
 
     auto num_shards = g_conf()->rgw_data_log_num_shards;
-    std::vector<std::string> markers(num_shards);
-    ret = crs.run(dpp(), create_admin_data_log_trim_cr(dpp(), static_cast<rgw::sal::RadosStore*>(store), &http, num_shards, markers));
+    ret = crs.run(dpp(), create_admin_data_log_trim_cr(dpp(), static_cast<rgw::sal::RadosStore*>(store), &http, num_shards));
     if (ret < 0) {
       cerr << "automated datalog trim failed with " << cpp_strerror(ret) << std::endl;
       return -ret;
@@ -9430,6 +9970,437 @@ next:
     return EPERM;
 #endif
   }
+
+ if (opt_cmd == OPT::SI_PROVIDER_LIST) {
+   SIPCRMgr sip_cr_mgr(cct.get(),
+                       static_cast<rgw::sal::RadosStore*>(store)->ctl()->remote,
+                       static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_cr_registry());
+
+   auto mgr = sip_cr_mgr.create(opt_zone_id);
+   if (!mgr) {
+     return EIO;
+   }
+
+   std::vector<string> providers;
+   int r = sip_cr_mgr.run(dpp(), mgr->list_cr(&providers));
+   if (r < 0) {
+     lderr(cct) << "ERROR: failed to list providers: " << cpp_strerror(-r) << dendl;
+     return -r;
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("providers", providers, formatter.get());
+   }
+   formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_INFO) {
+   std::optional<SIPRESTMgr> sip_rest_mgr;
+   SIProviderRef provider;
+
+   int r = find_sip_provider(opt_sip,
+                             opt_sip_data_type,
+                             opt_sip_stage_type,
+                             opt_sip_instance,
+                             opt_zone_id,
+                             sip_rest_mgr,
+                             &provider,
+                             nullptr);
+   if (r < 0) {
+     cerr << "ERROR: find_sip_provider() returned error: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("info", provider->get_info(dpp()), formatter.get());
+   }
+   formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_FETCH) {
+   std::optional<SIPRESTMgr> sip_rest_mgr;
+   SIProviderRef provider;
+
+   SIProvider::stage_id_t found_sid;
+
+   int r = find_sip_provider(opt_sip,
+                             opt_sip_data_type,
+                             opt_sip_stage_type,
+                             opt_sip_instance,
+                             opt_zone_id,
+                             sip_rest_mgr,
+                             &provider,
+                             &found_sid);
+   if (r < 0) {
+     cerr << "ERROR: find_sip_provider() returned error: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   auto stage_id = opt_stage_id.value_or(found_sid);
+
+   SIProvider::StageInfo stage_info;
+   r = provider->get_stage_info(dpp(), stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+
+#define MAX_FETCH_CHUNK 1000
+   if (!max_entries_specified) {
+     max_entries = MAX_FETCH_CHUNK;
+   }
+
+   SIProvider::fetch_result result;
+   r = provider->fetch(dpp(), stage_id, shard_id, marker,  max_entries, &result);
+   if (r < 0) {
+     cerr << "ERROR: failed to fetch entries: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   auto type_handler = provider->get_type_handler();
+   if (!type_handler) {
+     cerr << "ERROR: no type handler for stage_id=" << stage_id << std::endl;
+     return EIO;
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("more", result.more, formatter.get());
+     encode_json("done", result.done, formatter.get());
+
+     Formatter::ArraySection as(*formatter, "entries");
+
+     for (auto& e : result.entries) {
+       Formatter::ObjectSection hs(*formatter, "handler");
+       encode_json("key", e.key, formatter.get());
+       r = type_handler->handle_entry(stage_id, e, [&](SIProvider::EntryInfoBase& info) {
+         encode_json("info", info, formatter.get());
+         return 0;
+       });
+       if (r < 0) {
+         cerr << "ERROR: provider->handle_entry() failed: " << cpp_strerror(-r) << std::endl;
+         break;
+       }
+     }
+   }
+   formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_TRIM) {
+   std::optional<SIPRESTMgr> sip_rest_mgr;
+   SIProviderRef provider;
+   SIProvider::stage_id_t found_sid;
+
+   int r = find_sip_provider(opt_sip,
+                             opt_sip_data_type,
+                             opt_sip_stage_type,
+                             opt_sip_instance,
+                             opt_zone_id,
+                             sip_rest_mgr,
+                             &provider,
+                             &found_sid);
+   if (r < 0) {
+     cerr << "ERROR: find_sip_provider() returned error: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   auto stage_id = opt_stage_id.value_or(found_sid);
+   r = provider->trim(dpp(), stage_id, shard_id, marker);
+   if (r < 0) {
+     cerr << "ERROR: failed to trim sync info provider: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_STATE) {
+   std::optional<SIPRESTMgr> sip_rest_mgr;
+   SIProviderRef provider;
+   SIProvider::stage_id_t found_sid;
+
+   int r = find_sip_provider(opt_sip,
+                             opt_sip_data_type,
+                             opt_sip_stage_type,
+                             opt_sip_instance,
+                             opt_zone_id,
+                             sip_rest_mgr,
+                             &provider,
+                             &found_sid);
+   if (r < 0) {
+     cerr << "ERROR: find_sip_provider() returned error: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   string marker;
+   ceph::real_time timestamp;
+   bool disabled;
+
+   auto stage_id = opt_stage_id.value_or(found_sid);
+
+   SIProvider::StageInfo stage_info;
+   r = provider->get_stage_info(dpp(), stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+   r = provider->get_cur_state(dpp(), stage_id, shard_id, &marker, &timestamp, &disabled, null_yield);
+   if (r < 0) {
+     cerr << "ERROR: failed to trim sync info provider: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("marker", marker, formatter.get());
+     encode_json("timestamp", timestamp, formatter.get());
+     encode_json("disabled", disabled, formatter.get());
+   }
+   formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_TARGET_SET ||
+     opt_cmd == OPT::SI_PROVIDER_MARKER_TARGET_RM) {
+   bool set_cmd = (opt_cmd == OPT::SI_PROVIDER_MARKER_TARGET_SET);
+   if (!opt_target_id) {
+     cerr << "ERROR: --target-id not specified" << std::endl;
+     return EINVAL;
+   }
+
+   if (set_cmd) {
+     if (!opt_marker) {
+       cerr << "ERROR: --marker not specified" << std::endl;
+       return EINVAL;
+     }
+   }
+
+   std::optional<SIPRESTMgr> sip_rest_mgr;
+   SIProviderRef provider;
+   SIProvider::stage_id_t found_sid;
+
+   int r = find_sip_provider(opt_sip,
+                             opt_sip_data_type,
+                             opt_sip_stage_type,
+                             opt_sip_instance,
+                             opt_zone_id,
+                             sip_rest_mgr,
+                             &provider,
+                             &found_sid);
+   if (r < 0) {
+     cerr << "ERROR: find_sip_provider() returned error: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   auto stage_id = opt_stage_id.value_or(found_sid);
+
+   SIProvider::StageInfo stage_info;
+   r = provider->get_stage_info(dpp(), stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   if (!marker_handler) {
+     cerr << "ERROR: can't get sip marker handler" << std::endl;
+     return EIO;
+   }
+
+   RGWSI_SIP_Marker::Handler::modify_result result;
+
+   if (set_cmd) {
+     auto check_exists_flag = opt_check_exists.value_or(false);
+     auto params = RGWSI_SIP_Marker::SetParams{*opt_target_id,
+                                               *opt_marker,
+                                               real_clock::now(),
+                                               check_exists_flag};
+     r = marker_handler->set_marker(dpp(), stage_id, shard_id, params, &result);
+     if (r < 0) {
+       cerr << "ERROR: failed to set target marker info: " << cpp_strerror(-r) << std::endl;
+       return -r;
+     }
+   } else {
+     r = marker_handler->remove_target(dpp(), *opt_target_id, stage_id, shard_id, &result);
+     if (r < 0) {
+       cerr << "ERROR: failed to remove target marker info: " << cpp_strerror(-r) << std::endl;
+       return -r;
+     }
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("result", result, formatter.get());
+   }
+   formatter->flush(cout);
+
+ }
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_SOURCE_SET) {
+   if (!opt_marker) {
+     cerr << "ERROR: --marker not specified" << std::endl;
+     return EINVAL;
+   }
+
+   std::optional<SIPRESTMgr> sip_rest_mgr;
+   SIProviderRef provider;
+   SIProvider::stage_id_t found_sid;
+
+   int r = find_sip_provider(opt_sip,
+                             opt_sip_data_type,
+                             opt_sip_stage_type,
+                             opt_sip_instance,
+                             opt_zone_id,
+                             sip_rest_mgr,
+                             &provider,
+                             &found_sid);
+   if (r < 0) {
+     cerr << "ERROR: find_sip_provider() returned error: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   auto stage_id = opt_stage_id.value_or(found_sid);
+
+   SIProvider::StageInfo stage_info;
+   r = provider->get_stage_info(dpp(), stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   if (!marker_handler) {
+     cerr << "ERROR: can't get sip marker handler" << std::endl;
+     return EIO;
+   }
+
+   RGWSI_SIP_Marker::Handler::modify_result result;
+
+   r = marker_handler->set_min_source_pos(dpp(), stage_id, shard_id, *opt_marker);
+   if (r < 0) {
+     cerr << "ERROR: failed to set target marker info: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   RGWSI_SIP_Marker::stage_shard_info sinfo;
+
+   r = marker_handler->get_info(dpp(), stage_id, shard_id, &sinfo);
+   if (r < 0) {
+     cerr << "ERROR: failed to fetch marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("info", sinfo, formatter.get());
+   }
+   formatter->flush(cout);
+
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_MARKER_INFO_GET ||
+     opt_cmd == OPT::SI_PROVIDER_MARKER_INFO_RM) {
+   bool opt_get = (opt_cmd != OPT::SI_PROVIDER_MARKER_INFO_RM);
+
+   std::optional<SIPRESTMgr> sip_rest_mgr;
+   SIProviderRef provider;
+   SIProvider::stage_id_t found_sid;
+
+   int r = find_sip_provider(opt_sip,
+                             opt_sip_data_type,
+                             opt_sip_stage_type,
+                             opt_sip_instance,
+                             opt_zone_id,
+                             sip_rest_mgr,
+                             &provider,
+                             &found_sid);
+   if (r < 0) {
+     cerr << "ERROR: find_sip_provider() returned error: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   auto stage_id = opt_stage_id.value_or(found_sid);
+
+   SIProvider::StageInfo stage_info;
+   r = provider->get_stage_info(dpp(), stage_id, &stage_info);
+   if (r < 0) {
+     cerr << "ERROR: could not get stage info for sid=" << stage_id << ": " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   if (shard_id < 0) {
+     if (stage_info.num_shards <= 1) { /* shouldn't have 0 shards anyway */
+       shard_id = 0;
+     } else {
+       cerr << "ERROR: --shard-id not specified (stage has " << stage_info.num_shards << " shards)" << std::endl;
+       return EINVAL;
+     }
+   }
+   auto marker_handler = static_cast<rgw::sal::RadosStore*>(store)->svc()->sip_marker->get_handler(provider);
+   if (!marker_handler) {
+     cerr << "ERROR: can't get sip marker handler" << std::endl;
+     return EIO;
+   }
+
+   if (opt_get) {
+     RGWSI_SIP_Marker::stage_shard_info sinfo;
+
+     r = marker_handler->get_info(dpp(), stage_id, shard_id, &sinfo);
+     if (r < 0) {
+       cerr << "ERROR: failed to fetch marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
+       return -r;
+     }
+
+     {
+       Formatter::ObjectSection top_section(*formatter, "result");
+       encode_json("info", sinfo, formatter.get());
+     }
+     formatter->flush(cout);
+   } else {
+     if (!yes_i_really_mean_it) {
+       cerr << "this command will remove sync marker tracking info for requested bucket; "
+         << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+       return EINVAL;
+     }
+
+     r = marker_handler->remove_info(dpp(), stage_id, shard_id);
+     if (r < 0 && r != -ENOENT) {
+       cerr << "ERROR: failed to remove marker handler stage marker info: " << cpp_strerror(-r) << std::endl;
+       return -r;
+     }
+   }
+ }
 
   return 0;
 }

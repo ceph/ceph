@@ -2821,13 +2821,13 @@ int RGWPostObj_ObjStore_S3::get_tags()
 
 int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
 {
-  if (part_bl(parts, "policy", &s->auth.s3_postobj_creds.encoded_policy)) {
+  if (part_bl(parts, "policy", &s->info.s3_postobj_creds.encoded_policy)) {
     bool aws4_auth = false;
 
     /* x-amz-algorithm handling */
     using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
-    if ((part_str(parts, "x-amz-algorithm", &s->auth.s3_postobj_creds.x_amz_algorithm)) &&
-        (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR)) {
+    if ((part_str(parts, "x-amz-algorithm", &s->info.s3_postobj_creds.x_amz_algorithm)) &&
+        (s->info.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR)) {
       ldpp_dout(this, 0) << "Signature verification algorithm AWS v4 (AWS4-HMAC-SHA256)" << dendl;
       aws4_auth = true;
     } else {
@@ -2840,7 +2840,7 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
 
       /* x-amz-credential handling */
       if (!part_str(parts, "x-amz-credential",
-                    &s->auth.s3_postobj_creds.x_amz_credential)) {
+                    &s->info.s3_postobj_creds.x_amz_credential)) {
         ldpp_dout(this, 0) << "No S3 aws4 credential found!" << dendl;
         err_msg = "Missing aws4 credential";
         return -EINVAL;
@@ -2848,7 +2848,7 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
 
       /* x-amz-signature handling */
       if (!part_str(parts, "x-amz-signature",
-                    &s->auth.s3_postobj_creds.signature)) {
+                    &s->info.s3_postobj_creds.signature)) {
         ldpp_dout(this, 0) << "No aws4 signature found!" << dendl;
         err_msg = "Missing aws4 signature";
         return -EINVAL;
@@ -2866,21 +2866,21 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
 
       // check that the signature matches the encoded policy
       if (!part_str(parts, "AWSAccessKeyId",
-                    &s->auth.s3_postobj_creds.access_key)) {
+                    &s->info.s3_postobj_creds.access_key)) {
         ldpp_dout(this, 0) << "No S3 aws2 access key found!" << dendl;
         err_msg = "Missing aws2 access key";
         return -EINVAL;
       }
 
-      if (!part_str(parts, "signature", &s->auth.s3_postobj_creds.signature)) {
+      if (!part_str(parts, "signature", &s->info.s3_postobj_creds.signature)) {
         ldpp_dout(this, 0) << "No aws2 signature found!" << dendl;
         err_msg = "Missing aws2 signature";
         return -EINVAL;
       }
     }
 
-    if (part_str(parts, "x-amz-security-token", &s->auth.s3_postobj_creds.x_amz_security_token)) {
-      if (s->auth.s3_postobj_creds.x_amz_security_token.size() == 0) {
+    if (part_str(parts, "x-amz-security-token", &s->info.s3_postobj_creds.x_amz_security_token)) {
+      if (s->info.s3_postobj_creds.x_amz_security_token.size() == 0) {
         err_msg = "Invalid token";
         return -EINVAL;
       }
@@ -2901,7 +2901,7 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
 
     ceph::bufferlist decoded_policy;
     try {
-      decoded_policy.decode_base64(s->auth.s3_postobj_creds.encoded_policy);
+      decoded_policy.decode_base64(s->info.s3_postobj_creds.encoded_policy);
     } catch (buffer::error& err) {
       ldpp_dout(this, 0) << "failed to decode_base64 policy" << dendl;
       err_msg = "Could not decode policy";
@@ -5472,6 +5472,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_SET_BUCKET_VERSIONING:
         case RGW_OP_DELETE_MULTI_OBJ:
         case RGW_OP_ADMIN_SET_METADATA:
+        case RGW_OP_SIP_MARKER_SET_INFO:
         case RGW_OP_SYNC_DATALOG_NOTIFY:
         case RGW_OP_SYNC_MDLOG_NOTIFY:
         case RGW_OP_PERIOD_POST:
@@ -5656,10 +5657,10 @@ AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
 {
   return {
-    s->auth.s3_postobj_creds.access_key,
-    s->auth.s3_postobj_creds.signature,
-    s->auth.s3_postobj_creds.x_amz_security_token,
-    s->auth.s3_postobj_creds.encoded_policy.to_str(),
+    s->info.s3_postobj_creds.access_key,
+    s->info.s3_postobj_creds.signature,
+    s->info.s3_postobj_creds.x_amz_security_token,
+    s->info.s3_postobj_creds.encoded_policy.to_str(),
     rgw::auth::s3::get_v2_signature,
     null_completer_factory
   };
@@ -5668,7 +5669,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
 AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 {
-  const std::string_view credential = s->auth.s3_postobj_creds.x_amz_credential;
+  const std::string_view credential = s->info.s3_postobj_creds.x_amz_credential;
 
   /* grab access key id */
   const size_t pos = credential.find("/");
@@ -5688,9 +5689,9 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 
   return {
     access_key_id,
-    s->auth.s3_postobj_creds.signature,
-    s->auth.s3_postobj_creds.x_amz_security_token,
-    s->auth.s3_postobj_creds.encoded_policy.to_str(),
+    s->info.s3_postobj_creds.signature,
+    s->info.s3_postobj_creds.x_amz_security_token,
+    s->info.s3_postobj_creds.encoded_policy.to_str(),
     sig_factory,
     null_completer_factory
   };
@@ -5699,7 +5700,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 {
-  if (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR) {
+  if (s->info.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR) {
     ldpp_dout(s, 0) << "Signature verification algorithm AWS v4"
                      << " (AWS4-HMAC-SHA256)" << dendl;
     return get_auth_data_v4(s);
@@ -5979,7 +5980,7 @@ rgw::auth::s3::STSEngine::authenticate(
 {
   if (! s->info.args.exists("x-amz-security-token") &&
       ! s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN") &&
-      s->auth.s3_postobj_creds.x_amz_security_token.empty()) {
+      s->info.s3_postobj_creds.x_amz_security_token.empty()) {
     return result_t::deny();
   }
 

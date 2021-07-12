@@ -338,8 +338,8 @@ class RGWHTTPArgs {
   void append(const std::string& name, const string& val);
   /** Get the value for a specific argument parameter */
   const string& get(const std::string& name, bool *exists = NULL) const;
-  boost::optional<const std::string&>
-  get_optional(const std::string& name) const;
+  boost::optional<const std::string&> get_optional(const std::string& name) const;
+  std::optional<std::string> get_std_optional(const std::string& name) const;
   int get_bool(const std::string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
@@ -1184,6 +1184,26 @@ struct req_info {
   string domain;
   string storage_class;
 
+  /* A container for credentials of the S3's browser upload. It's necessary
+   * because: 1) the ::authenticate() method of auth engines and strategies
+   * take req_state only; 2) auth strategies live much longer than RGWOps -
+   * there is no way to pass additional data dependencies through ctors. */
+  class {
+    /* Writer. */
+    friend class RGWPostObj_ObjStore_S3;
+    /* Reader. */
+    friend class rgw::auth::s3::AWSBrowserUploadAbstractor;
+    friend class rgw::auth::s3::STSEngine;
+
+    std::string access_key;
+    std::string signature;
+    std::string x_amz_algorithm;
+    std::string x_amz_credential;
+    std::string x_amz_date;
+    std::string x_amz_security_token;
+    ceph::bufferlist encoded_policy;
+  } s3_postobj_creds;
+
   req_info(CephContext *cct, const RGWEnv *env);
   void rebuild_from(req_info& src);
   void init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta);
@@ -1475,6 +1495,9 @@ struct rgw_obj_key {
     snprintf(buf, sizeof(buf), "%s[%s]", name.c_str(), instance.c_str());
     return buf;
   }
+
+  string to_escaped_str() const;
+  static rgw_obj_key from_escaped_str(const string& s);
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
@@ -1564,26 +1587,6 @@ struct req_state : DoutPrefixProvider {
     std::unique_ptr<rgw::auth::Identity> identity;
 
     std::shared_ptr<rgw::auth::Completer> completer;
-
-    /* A container for credentials of the S3's browser upload. It's necessary
-     * because: 1) the ::authenticate() method of auth engines and strategies
-     * take req_state only; 2) auth strategies live much longer than RGWOps -
-     * there is no way to pass additional data dependencies through ctors. */
-    class {
-      /* Writer. */
-      friend class RGWPostObj_ObjStore_S3;
-      /* Reader. */
-      friend class rgw::auth::s3::AWSBrowserUploadAbstractor;
-      friend class rgw::auth::s3::STSEngine;
-
-      std::string access_key;
-      std::string signature;
-      std::string x_amz_algorithm;
-      std::string x_amz_credential;
-      std::string x_amz_date;
-      std::string x_amz_security_token;
-      ceph::bufferlist encoded_policy;
-    } s3_postobj_creds;
   } auth;
 
   std::unique_ptr<RGWAccessControlPolicy> user_acl;
@@ -2291,6 +2294,14 @@ static inline void rgw_escape_str(const string& s, char esc_char,
   }
   *destp++ = '\0';
   *dest = dest_buf;
+}
+
+static inline string rgw_escape_str(const string& s, char esc_char,
+				  char special_char)
+{
+  string result;
+  rgw_escape_str(s, esc_char, special_char, &result);
+  return result;
 }
 
 static inline ssize_t rgw_unescape_str(const string& s, ssize_t ofs,

@@ -37,7 +37,7 @@ class PurgeLogShardsCR : public RGWShardCollectCR {
       store(store), mdlog(mdlog), num_shards(num_shards), obj(pool, "")
   {}
 
-  bool spawn_next() override {
+  bool spawn_next(const DoutPrefixProvider *dpp) override {
     if (i == num_shards) {
       return false;
     }
@@ -271,10 +271,10 @@ class MetaMasterTrimShardCollectCR : public RGWShardCollectCR {
       env(env), mdlog(mdlog), sync_status(sync_status)
   {}
 
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
-bool MetaMasterTrimShardCollectCR::spawn_next()
+bool MetaMasterTrimShardCollectCR::spawn_next(const DoutPrefixProvider *dpp)
 {
   while (shard_id < env.num_shards) {
     auto m = sync_status.sync_markers.find(shard_id);
@@ -321,7 +321,7 @@ class MetaMasterStatusCollectCR : public RGWShardCollectCR {
       env(env), c(env.connections.begin()), s(env.peer_status.begin())
   {}
 
-  bool spawn_next() override {
+  bool spawn_next(const DoutPrefixProvider *dpp) override {
     if (c == env.connections.end()) {
       return false;
     }
@@ -531,10 +531,10 @@ class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
                   env.store->getRados()->get_sync_tracer());
   }
 
-  bool spawn_next() override;
+  bool spawn_next(const DoutPrefixProvider *dpp) override;
 };
 
-bool MetaPeerTrimShardCollectCR::spawn_next()
+bool MetaPeerTrimShardCollectCR::spawn_next(const DoutPrefixProvider *dpp)
 {
   if (shard_id >= env.num_shards) {
     return false;

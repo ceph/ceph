@@ -30,6 +30,7 @@
 #include "rgw_aio.h"
 
 #include "rgw_zone.h"
+#include "rgw_remote.h"
 #include "rgw_rest_conn.h"
 #include "rgw_service.h"
 #include "services/svc_sys_obj.h"
@@ -2068,7 +2069,7 @@ bool RadosZone::is_writeable()
 
 bool RadosZone::get_redirect_endpoint(std::string* endpoint)
 {
-  return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+  return store->ctl()->remote->get_redirect_zone_endpoint(endpoint);
 }
 
 bool RadosZone::has_zonegroup_api(const std::string& api) const

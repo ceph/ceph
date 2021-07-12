@@ -7,14 +7,18 @@
 #include "common/errno.h"
 
 #include "rgw_trim_datalog.h"
+#include "rgw_trim_tools.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_datalog.h"
+#include "rgw_cr_tools.h"
 #include "rgw_data_sync.h"
 #include "rgw_zone.h"
 #include "rgw_bucket.h"
+#include "rgw_remote.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_sip_marker.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -84,7 +88,9 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
     auto m = dest;
     for (auto &shard : p->sync_markers) {
       const auto& stable = get_stable_marker(shard.second);
-      if (*m > stable) {
+      auto& m_entry = *m; /* m_entry is optional if not set */
+      if (!m_entry ||
+          m_entry > stable) {
         *m = stable;
       }
       ++m;
@@ -94,6 +100,8 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
 
 } // anonymous namespace
 
+
+
 class DataLogTrimCR : public RGWCoroutine {
   using TrimCR = DatalogTrimImplCR;
   const DoutPrefixProvider *dpp;
@@ -102,21 +110,25 @@ class DataLogTrimCR : public RGWCoroutine {
   const int num_shards;
   const std::string& zone_id; //< my zone id
   std::vector<rgw_data_sync_status> peer_status; //< sync status for each peer
-  std::vector<std::string> min_shard_markers; //< min marker per shard
-  std::vector<std::string>& last_trim; //< last trimmed marker per shard
+  std::vector<std::optional<std::string> > min_shard_markers; //< min marker per shard
+  std::vector<std::optional<std::string> > last_trim; //< last trimmed marker per shard
   int ret{0};
+
+  int i;
+
+  std::unique_ptr<RGWTrimSIPMgr> sip_mgr;
+  std::set<string> sip_targets;
 
  public:
   DataLogTrimCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
-                   int num_shards, std::vector<std::string>& last_trim)
+                int num_shards)
     : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards),
       zone_id(store->svc()->zone->get_zone().id),
-      peer_status(store->svc()->zone->get_zone_data_notify_to_map().size()),
-      min_shard_markers(num_shards,
-			std::string(store->svc()->datalog_rados->max_marker())),
-      last_trim(last_trim)
-  {}
+      min_shard_markers(num_shards),
+      last_trim(num_shards)
+  {
+  }
 
   int operate(const DoutPrefixProvider *dpp) override;
 };
@@ -126,6 +138,29 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
   reenter(this) {
     ldpp_dout(dpp, 10) << "fetching sync status for zone " << zone_id << dendl;
     set_status("fetching sync status");
+
+    sip_mgr.reset(RGWTrimTools::get_trim_sip_mgr(store,
+                                                 "data",
+                                                 SIProvider::StageType::INC,
+                                                 nullopt));
+
+    yield call(sip_mgr->init_cr(dpp));
+    if (retcode < 0) {
+      ldout(cct, 0) << "ERROR: failed to initialize trim sip manager for data.inc: retcode=" << retcode << dendl;
+      return set_cr_error(retcode);
+    }
+
+    yield call(sip_mgr->get_targets_info_cr(&min_shard_markers,
+                                            &last_trim,
+                                            &sip_targets,
+                                            nullptr));
+    if (retcode < 0) {
+      ldout(cct, 0) << "ERROR: failed to get sip targets info: ret=" << retcode << dendl;
+      return set_cr_error(retcode);
+    }
+
+    ldout(cct, 20) << "sip targets: " << sip_targets << dendl;
+
     yield {
       // query data sync status from each sync peer
       rgw_http_param_pair params[] = {
@@ -135,13 +170,23 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
         { nullptr, nullptr }
       };
 
-      auto p = peer_status.begin();
-      for (auto& c : store->svc()->zone->get_zone_data_notify_to_map()) {
+      peer_status.reserve(store->ctl()->remote->get_zone_data_notify_to_map().size());
+
+      i = 0;
+
+      for (auto& c : store->ctl()->remote->get_zone_data_notify_to_map()) {
+        if (sip_targets.find(c.first.id) != sip_targets.end()) {
+          ldpp_dout(dpp, 10) << "skipping fetching remote target (" << c.first << "): have sip marker info for it" << dendl;
+          continue;
+        }
+
+        peer_status.resize(peer_status.size() + 1);
+        auto& p = peer_status[i++];
+
         ldpp_dout(dpp, 20) << "query sync status from " << c.first << dendl;
         using StatusCR = RGWReadRESTResourceCR<rgw_data_sync_status>;
-        spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),
+        spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &p),
               false);
-        ++p;
       }
     }
 
@@ -171,9 +216,12 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
           continue;
         }
         ldpp_dout(dpp, 10) << "trimming log shard " << i
-            << " at marker=" << m
+            << " at marker=" << *m
             << " last_trim=" << last_trim[i] << dendl;
-        spawn(new TrimCR(dpp, store, i, m, &last_trim[i]),
+        spawn(new RGWSerialCR(cct,
+                              { new TrimCR(dpp, store, i, *m, nullptr),
+                                sip_mgr->set_min_source_pos_cr(dpp, i, *m)
+                              }),
               true);
       }
     }
@@ -184,10 +232,9 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
 
 RGWCoroutine* create_admin_data_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
                                             RGWHTTPManager *http,
-                                            int num_shards,
-                                            std::vector<std::string>& markers)
+                                            int num_shards)
 {
-  return new DataLogTrimCR(dpp, store, http, num_shards, markers);
+  return new DataLogTrimCR(dpp, store, http, num_shards);
 }
 
 class DataLogTrimPollCR : public RGWCoroutine {
@@ -198,7 +245,6 @@ class DataLogTrimPollCR : public RGWCoroutine {
   const utime_t interval; //< polling interval
   const std::string lock_oid; //< use first data log shard for lock
   const std::string lock_cookie;
-  std::vector<std::string> last_trim; //< last trimmed marker per shard
 
  public:
   DataLogTrimPollCR(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
@@ -206,8 +252,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
     : RGWCoroutine(store->ctx()), dpp(dpp), store(store), http(http),
       num_shards(num_shards), interval(interval),
       lock_oid(store->svc()->datalog_rados->get_oid(0, 0)),
-      lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
-      last_trim(num_shards)
+      lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
   int operate(const DoutPrefixProvider *dpp) override;
@@ -235,7 +280,7 @@ int DataLogTrimPollCR::operate(const DoutPrefixProvider *dpp)
       }
 
       set_status("trimming");
-      yield call(new DataLogTrimCR(dpp, store, http, num_shards, last_trim));
+      yield call(new DataLogTrimCR(dpp, store, http, num_shards));
 
       // note that the lock is not released. this is intentional, as it avoids
       // duplicating this work in other gateways

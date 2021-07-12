@@ -57,6 +57,8 @@ class RGWReshardWait;
 class RGWSysObjectCtx;
 struct get_obj_data;
 
+class RGWRESTConn;
+
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
 #define PUT_OBJ_EXCL        0x02
@@ -1126,36 +1128,53 @@ public:
                string *ptag,
                string *petag);
 
-  int fetch_remote_obj(RGWObjectCtx& obj_ctx,
-                       const rgw_user& user_id,
-                       req_info *info,
+
+  struct FetchRemoteObjParams {
+    req_info *info{nullptr};
+    std::optional<rgw_placement_rule> dest_placement_rule;
+    ceph::real_time *src_mtime{nullptr};
+    ceph::real_time *mtime{nullptr};
+    const ceph::real_time *mod_ptr{nullptr};
+    const ceph::real_time *unmod_ptr{nullptr};
+    bool high_precision_time{false};
+    const char *if_match{nullptr};
+    const char *if_nomatch{nullptr};
+    AttrsMod attrs_mod{ATTRSMOD_NONE};
+    bool copy_if_newer{false};
+    rgw::sal::Attrs *pattrs{nullptr};
+    RGWObjCategory category{RGWObjCategory::Main};
+    std::optional<uint64_t> olh_epoch;
+    ceph::real_time delete_at;
+    string *ptag{nullptr};
+    string *petag{nullptr};
+    bool same_zonegroup_semantics{false};
+    void (*progress_cb)(off_t, void *){nullptr};
+    void *progress_data{nullptr};
+    RGWFetchObjFilter *filter{nullptr};
+    rgw_zone_set *zones_trace{nullptr};
+    std::optional<uint64_t> *bytes_transferred{nullptr};
+  };
+
+  int fetch_remote_obj(const DoutPrefixProvider *dpp,
+                       RGWObjectCtx& obj_ctx,
                        const rgw_zone_id& source_zone,
+                       const rgw_user& user_id,
                        rgw::sal::Object* dest_obj,
                        rgw::sal::Object* src_obj,
 		       rgw::sal::Bucket* dest_bucket,
 		       rgw::sal::Bucket* src_bucket,
-		       std::optional<rgw_placement_rule> dest_placement,
-                       ceph::real_time *src_mtime,
-                       ceph::real_time *mtime,
-                       const ceph::real_time *mod_ptr,
-                       const ceph::real_time *unmod_ptr,
-                       bool high_precision_time,
-                       const char *if_match,
-                       const char *if_nomatch,
-                       AttrsMod attrs_mod,
-                       bool copy_if_newer,
-                       rgw::sal::Attrs& attrs,
-                       RGWObjCategory category,
-                       std::optional<uint64_t> olh_epoch,
-		       ceph::real_time delete_at,
-                       string *ptag,
-                       string *petag,
-                       void (*progress_cb)(off_t, void *),
-                       void *progress_data,
-                       const DoutPrefixProvider *dpp,
-                       RGWFetchObjFilter *filter,
-                       rgw_zone_set *zones_trace= nullptr,
-                       std::optional<uint64_t>* bytes_transferred = 0);
+                       const FetchRemoteObjParams& params);
+
+  int fetch_remote_obj(const DoutPrefixProvider *dpp,
+                       RGWObjectCtx& obj_ctx,
+                       RGWRESTConn *conn,
+                       bool foreign_source,
+                       const rgw_user& user_id,
+                       rgw::sal::Object* dest_obj,
+                       rgw::sal::Object* src_obj,
+		       rgw::sal::Bucket* dest_bucket,
+		       rgw::sal::Bucket* src_bucket,
+                       const FetchRemoteObjParams& params);
   /**
    * Copy an object.
    * dest_obj: the object to copy into

@@ -252,7 +252,10 @@ void rgw_sync_bucket_entities::set_bucket(std::optional<string> tenant,
                 std::optional<string> bucket_name,
                 std::optional<string> bucket_id)
 {
-  if ((!bucket) && (tenant || bucket_name || bucket_id)) {
+  if (!bucket) {
+    if (!tenant && !bucket_name && !bucket_id) {
+      return;
+    }
     bucket.emplace();
   }
 
