@@ -9,7 +9,6 @@ This module is runnable outside of ceph-mgr, useful for testing.
 import datetime
 import threading
 import logging
-import json
 from contextlib import contextmanager
 from time import sleep
 
@@ -114,11 +113,17 @@ class KubernetesResource(Generic[T]):
     def _fetch(self) -> str:
         """ Execute the requested api method as a one-off fetch"""
         response = self.api_func(**self.kwargs)
-        # metadata is a client.V1ListMeta object type
-        metadata = response.metadata  # type: client.V1ListMeta
-        self._items = {item.metadata.name: item for item in response.items}
-        log.info('Full fetch of {}. result: {}'.format(self.api_func, len(self._items)))
-        return metadata.resource_version
+        # try-except pattern because customObjectApi objects aren't subscriptable
+        try:
+            metadata = response['metadata']
+            self._items = {item['metadata']['name']: item for item in response['items']}
+            log.info('Full fetch of {}. result: {}'.format(self.api_func, len(self._items)))
+            return metadata['resourceVersion']
+        except TypeError:
+            metadata = response.metadata
+            self._items = {item.metadata.name: item for item in response.items}
+            log.info('Full fetch of {}. result: {}'.format(self.api_func, len(self._items)))
+            return metadata.resource_version
 
     @property
     def items(self) -> Iterable[T]:
@@ -155,11 +160,13 @@ class KubernetesResource(Generic[T]):
                 self.health = ''
                 item = event['object']
                 try:
-                    name = item.metadata.name
+                    name = item['metadata']['name']
                 except AttributeError:
                     raise AttributeError(
                         "{} doesn't contain a metadata.name. Unable to track changes".format(
                             self.api_func))
+                except TypeError:
+                    name = item.metadata.name
 
                 log.info('{} event: {}'.format(event['type'], name))
 
@@ -191,16 +198,25 @@ class KubernetesResource(Generic[T]):
 class RookCluster(object):
     # import of client.CoreV1Api must be optional at import time.
     # Instead allow mgr/rook to be imported anyway.
-    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', rook_env: 'RookEnv'):
+    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', storageV1_api: 'client.StorageV1Api', rook_env: 'RookEnv', storage_class: 'str'):
         self.rook_env = rook_env  # type: RookEnv
         self.coreV1_api = coreV1_api  # client.CoreV1Api
         self.batchV1_api = batchV1_api
+        self.customObjects_api = customObjects_api
+        self.storageV1_api = storageV1_api  # client.StorageV1Api
+        self.storage_class = storage_class # type: str
 
         #  TODO: replace direct k8s calls with Rook API calls
         # when they're implemented
-        self.inventory_maps: KubernetesResource[client.V1ConfigMapList] = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
-                                                 namespace=self.rook_env.operator_namespace,
-                                                 label_selector="app=rook-discover")
+        self.pvs : KubernetesResource[client.V1PersistentVolumeList] = KubernetesResource(self.coreV1_api.list_persistent_volume)                                                 
+        
+        self.storage_classes : KubernetesResource = KubernetesResource(self.storageV1_api.list_storage_class)
+
+        self.discovery_results: KubernetesResource = KubernetesResource(self.customObjects_api.list_cluster_custom_object,
+                                                 group="local.storage.openshift.io",
+                                                 version="v1alpha1",
+                                                 plural="localvolumediscoveryresults")
+        
 
         self.rook_pods: KubernetesResource[client.V1Pod] = KubernetesResource(self.coreV1_api.list_namespaced_pod,
                                             namespace=self.rook_env.namespace,
@@ -243,20 +259,70 @@ class RookCluster(object):
     def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, dict]:
         def predicate(item: client.V1ConfigMapList) -> bool:
             if nodenames is not None:
-                return item.metadata.labels['rook.io/node'] in nodenames
+                return item['spec']['nodeName'] in nodenames
             else:
                 return True
+        matching_sc = [i for i in self.storage_classes.items if self.storage_class == i.metadata.name]
+        if len(matching_sc) == 0:
+            log.error(f"No storage class exists matching configured Rook orchestrator storage class which currently is <{self.storage_class}>. This storage class can be set in ceph config (mgr/rook/storage_class)")
+            raise Exception('No storage class exists matching name provided in ceph config at mgr/rook/storage_class')
+        storage_class = matching_sc[0]
 
-        try:
-            result = [i for i in self.inventory_maps.items if predicate(i)]
-        except ApiException as dummy_e:
-            log.exception("Failed to fetch device metadata")
-            raise
+        lso_discovery_results = []
+        # this means the storage class was created by LSO
+        if 'local.storage.openshift.io/owner-name' in storage_class.metadata.labels:
+            try:
+                lso_discovery_results = [i for i in self.discovery_results.items if predicate(i)]
+            except ApiException as dummy_e:
+                log.error("Failed to fetch device metadata")
+                raise
 
-        nodename_to_devices = {}
-        for i in result:
-            drives = json.loads(i.data['devices'])
-            nodename_to_devices[i.metadata.labels['rook.io/node']] = drives
+        lso_devices = {}
+        for i in lso_discovery_results:
+            drives = i['status']['discoveredDevices']
+            for drive in drives:
+                lso_devices[drive['deviceID'].split('/')[-1]] = drive
+        pvs_in_sc = [i for i in self.pvs.items if i.spec.storage_class_name == self.storage_class]
+
+        def convert_size(size_str: str) -> int:
+            units = ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei")
+            unit = size_str[-2:]
+            try:
+                factor = units.index(unit)
+            except ValueError:
+                log.error("PV size format invalid")
+                raise
+            coeff = int(size_str[:-2])
+            size = coeff * (2 ** (10 * factor))
+            return size
+
+        nodename_to_devices: Dict[str, Any] = {}
+        for i in pvs_in_sc:
+            if (not i.metadata.annotations) or ('storage.openshift.com/device-id' not in i.metadata.annotations) or (i.metadata.annotations['storage.openshift.com/device-id'] not in lso_devices):
+                size = convert_size(i.spec.capacity['storage'])
+                path = i.spec.host_path.path if i.spec.host_path else ('/dev/' + i.metadata.annotations['storage.openshift.com/device-name']) if i.metadata.annotations['storage.openshift.com/device-name'] else ''
+                state = 'Available' if (i.spec.volume_mode == 'Block' and i.spec.claim_ref == None) else 'Unavailable'
+                info = {
+                        'path': path, 
+                        'size': size, 
+                        'status': {
+                            'state': state
+                        } 
+                }
+                node = 'N/A'
+
+                if i.spec.node_affinity:
+                    terms = i.spec.node_affinity.required.node_selector_terms
+                    if len(terms) == 1 and len(terms[0].match_expressions) == 1 and terms[0].match_expressions[0].key == 'kubernetes.io/hostname' and len(terms[0].match_expressions[0].values) == 1:
+                        node = terms[0].match_expressions[0].values[0]
+                if node not in nodename_to_devices:
+                    nodename_to_devices[node] = []
+                nodename_to_devices[node].append(info)
+            else: 
+                if i.metadata.labels['kubernetes.io/hostname'] not in nodename_to_devices:
+                    nodename_to_devices[i.metadata.labels['kubernetes.io/hostname']] = []
+                nodename_to_devices[i.metadata.labels['kubernetes.io/hostname']].append(lso_devices[i.metadata.annotations['storage.openshift.com/device-id']])
+
 
         return nodename_to_devices
 
