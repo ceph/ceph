@@ -1,0 +1,5 @@
+tasks:
+- s3tests-go:
+    client.0:
+      force-branch: master
+      force-repo: https://github.com/ceph/go_s3tests.git
