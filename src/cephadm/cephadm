@@ -3961,6 +3961,13 @@ def prepare_bootstrap_config(
                 and not cp.has_option('mgr', 'mgr standby modules')
         ):
             cp.set('mgr', 'mgr_standby_modules', 'false')
+    if ctx.log_to_file:
+        cp.set('global', 'log_to_file', 'true')
+        cp.set('global', 'log_to_stderr', 'false')
+        cp.set('global', 'log_to_journald', 'false')
+        cp.set('global', 'mon_cluster_log_to_file', 'true')
+        cp.set('global', 'mon_cluster_log_to_stderr', 'false')
+        cp.set('global', 'mon_cluster_log_to_journald', 'false')
 
     cpf = StringIO()
     cp.write(cpf)
@@ -7931,7 +7938,6 @@ def _get_parser():
         '--ssh-user',
         default='root',
         help='set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
-
     parser_bootstrap.add_argument(
         '--skip-mon-network',
         action='store_true',
@@ -7987,7 +7993,6 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
-
     parser_bootstrap.add_argument(
         '--shared_ceph_folder',
         metavar='CEPH_SOURCE_FOLDER',
@@ -8025,6 +8030,10 @@ def _get_parser():
         '--single-host-defaults',
         action='store_true',
         help='adjust configuration defaults to suit a single-host cluster')
+    parser_bootstrap.add_argument(
+        '--log-to-file',
+        action='store_true',
+        help='configure cluster to log to traditional log files in /var/log/ceph/$fsid')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')

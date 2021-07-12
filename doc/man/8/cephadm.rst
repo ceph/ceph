@@ -53,6 +53,7 @@ Synopsis
 | **cephadm** **bootstrap** [-h] [--config CONFIG] [--mon-id MON_ID]
 |                           [--mon-addrv MON_ADDRV] [--mon-ip MON_IP]
 |                           [--mgr-id MGR_ID] [--fsid FSID]
+|                           [--log-to-file] [--single-host-defaults]
 |                           [--output-dir OUTPUT_DIR]
 |                           [--output-keyring OUTPUT_KEYRING]
 |                           [--output-config OUTPUT_CONFIG]
@@ -208,6 +209,8 @@ Arguments:
 * [--mon-ip MON_IP]               mon IP
 * [--mgr-id MGR_ID]               mgr id (default: randomly generated)
 * [--fsid FSID]                   cluster FSID
+* [--log-to-file]                 configure cluster to log to traditional log files
+* [--single-host-defaults]        configure cluster to run on a single host
 * [--output-dir OUTPUT_DIR]       directory to write config, keyring, and pub key files
 * [--output-keyring OUTPUT_KEYRING] location to write keyring file with new cluster admin and mon keys
 * [--output-config OUTPUT_CONFIG] location to write conf file to connect to new cluster
