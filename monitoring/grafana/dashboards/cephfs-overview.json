@@ -89,14 +89,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ceph_objecter_op_r{ceph_daemon=~\"($mds_servers).*\"})",
+          "expr": "sum(rate(ceph_objecter_op_r{ceph_daemon=~\"($mds_servers).*\"}[1m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Read Ops",
           "refId": "A"
         },
         {
-          "expr": "sum(ceph_objecter_op_w{ceph_daemon=~\"($mds_servers).*\"})",
+          "expr": "sum(rate(ceph_objecter_op_w{ceph_daemon=~\"($mds_servers).*\"}[1m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Write Ops",
