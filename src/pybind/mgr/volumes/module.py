@@ -320,6 +320,24 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Cancel an pending or ongoing clone operation.",
             'perm': 'r'
         },
+        {
+            'cmd': 'fs subvolume snapshot mirror enable '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+                   'desc': "Enable snapshot mirroring of a CephFS subvolume in a volume, "
+                           "and optionally, in a specific subvolume group",
+                   'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot mirror disable '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+                   'desc': "Disable snapshot mirroring of a CephFS subvolume in a volume, "
+                           "and optionally, in a specific subvolume group",
+                   'perm': 'rw'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -615,3 +633,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_mirror_enable(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_mirror_enable(vol_name=cmd['vol_name'],
+                                                        sub_name=cmd['sub_name'],
+                                                        group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_mirror_disable(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_mirror_disable(vol_name=cmd['vol_name'],
+                                                         sub_name=cmd['sub_name'],
+                                                         group_name=cmd.get('group_name', None))
+

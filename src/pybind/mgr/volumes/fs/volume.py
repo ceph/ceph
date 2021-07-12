@@ -1,3 +1,4 @@
+import os
 import json
 import errno
 import logging
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 ALLOWED_ACCESS_LEVELS = ('r', 'rw')
-
+MIRRORING_MODULE = 'mirroring'
 
 def octal_str_to_decimal_int(mode):
     try:
@@ -375,6 +376,69 @@ class VolumeClient(CephfsClient["Module"]):
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     subvolumes = group.list_subvolumes()
                     ret = 0, name_to_json(subvolumes), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_snapshot_mirror_enable(self, **kwargs):
+        ret = 0, "", ""
+        volname = kwargs["vol_name"]
+        subvolname = kwargs["sub_name"]
+        groupname = kwargs["group_name"]
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.GETPATH) as subvolume:
+                        snap_path = subvolume.snapshot_base_path().decode("utf-8")
+                        subvolume.set_mirrored()
+                        unset_on_exit = True
+                        cmd = {'fs_name': volname, 'path': os.path.dirname(snap_path)}
+                        try:
+                            res = self.mgr.remote(MIRRORING_MODULE, 'snapshot_mirror_add_dir', **cmd)
+                            if res[0] and res[0] != -errno.EEXIST:
+                                if res[0] == -errno.EAGAIN:
+                                    raise VolumeException(-errno.EAGAIN, 'mirror disable in-progess')
+                                raise VolumeException(res[0], res[2])
+                            unset_on_exit = False
+                        except ImportError:
+                            # mirroring module not enabled
+                            raise VolumeException(-errno.EINVAL, f'\'{MIRRORING_MODULE}\' module not enabled')
+                        except (RuntimeError, Exception) as e:
+                            log.error(f'failed to enable mirroring for subvolume {subvolname}: {e}')
+                            raise VolumeException(-errno.EINVAL, 'failed to enable mirror')
+                        finally:
+                            if unset_on_exit:
+                                subvolume.unset_mirrored()
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_snapshot_mirror_disable(self, **kwargs):
+        ret = 0, "", ""
+        volname = kwargs["vol_name"]
+        subvolname = kwargs["sub_name"]
+        groupname = kwargs["group_name"]
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.GETPATH) as subvolume:
+                        snap_path = subvolume.snapshot_base_path().decode("utf-8")
+                        cmd = {'fs_name': volname, 'path': os.path.dirname(snap_path)}
+                        try:
+                            res = self.mgr.remote(MIRRORING_MODULE, 'snapshot_mirror_remove_dir', **cmd)
+                            if res[0] and res[0] != -errno.ENOENT:
+                                if res[0] == -errno.EINVAL:
+                                    raise VolumeException(-errno.EAGAIN, 'mirror disable in-progess')
+                                raise VolumeException(res[0], res[2])
+                            subvolume.unset_mirrored()
+                        except ImportError:
+                            # mirroring module not enabled
+                            raise VolumeException(-errno.EINVAL, f'\'{MIRRORING_MODULE}\' module not enabled')
+                        except (RuntimeError, Exception) as e:
+                            log.error(f'failed to disable mirroring for subvolume {subvolname}: {e}')
+                            raise VolumeException(-errno.EINVAL, 'failed to disable mirror')
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
