@@ -80,7 +80,8 @@ public:
 };
 
 static const size_t AES_256_KEYSIZE = 256 / 8;
-bool AES_256_ECB_encrypt(CephContext* cct,
+bool AES_256_ECB_encrypt(const DoutPrefixProvider* dpp,
+                         CephContext* cct,
                          const uint8_t* key,
                          size_t key_size,
                          const uint8_t* data_in,
@@ -88,8 +89,8 @@ bool AES_256_ECB_encrypt(CephContext* cct,
                          size_t data_size);
 
 class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
+  const DoutPrefixProvider *dpp;
   CephContext* cct;
-
   std::unique_ptr<BlockCrypt> crypt; /**< already configured stateless BlockCrypt
                                           for operations when enough data is accumulated */
   off_t enc_begin_skip; /**< amount of data to skip from beginning of received data */
@@ -103,7 +104,8 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
 protected:
   std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 public:
-  RGWGetObj_BlockDecrypt(CephContext* cct,
+  RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
+                         CephContext* cct,
                          RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt);
   virtual ~RGWGetObj_BlockDecrypt();
@@ -121,13 +123,15 @@ public:
 
 class RGWPutObj_BlockEncrypt : public rgw::putobj::Pipe
 {
+  const DoutPrefixProvider *dpp;
   CephContext* cct;
   std::unique_ptr<BlockCrypt> crypt; /**< already configured stateless BlockCrypt
                                           for operations when enough data is accumulated */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   const size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
 public:
-  RGWPutObj_BlockEncrypt(CephContext* cct,
+  RGWPutObj_BlockEncrypt(const DoutPrefixProvider *dpp,
+                         CephContext* cct,
                          rgw::putobj::DataProcessor *next,
                          std::unique_ptr<BlockCrypt> crypt);
 
