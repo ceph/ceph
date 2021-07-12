@@ -7,6 +7,10 @@
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 #include "rgw/rgw_basic_types.h"
 
 #define CEPH_RGW_REMOVE 'r'
@@ -339,6 +343,14 @@ struct cls_rgw_obj_key {
   cls_rgw_obj_key(const std::string &_name) : name(_name) {}
   cls_rgw_obj_key(const std::string& n, const std::string& i) : name(n), instance(i) {}
 
+  std::string to_string() const {
+    return fmt::format("{}({})", name, instance);
+  }
+
+  bool empty() const {
+    return name.empty();
+  }
+
   void set(const std::string& _name) {
     name = _name;
   }
@@ -347,6 +359,7 @@ struct cls_rgw_obj_key {
     return (name.compare(k.name) == 0) &&
            (instance.compare(k.instance) == 0);
   }
+
   bool operator<(const cls_rgw_obj_key& k) const {
     int r = name.compare(k.name);
     if (r == 0) {
@@ -354,12 +367,16 @@ struct cls_rgw_obj_key {
     }
     return (r < 0);
   }
+
   bool operator<=(const cls_rgw_obj_key& k) const {
     return !(k < *this);
   }
-  bool empty() const {
-    return name.empty();
+
+  std::ostream& operator<<(std::ostream& out) const {
+    out << to_string();
+    return out;
   }
+
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
     encode(name, bl);
