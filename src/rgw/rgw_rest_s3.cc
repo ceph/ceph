@@ -2368,7 +2368,7 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
   /* handle object tagging */
   auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
   if (tag_str){
-    obj_tags = std::make_unique<RGWObjTags>();
+    obj_tags = RGWObjTags{};
     ret = obj_tags->set_from_string(tag_str);
     if (ret < 0){
       ldpp_dout(this,0) << "setting obj tags failed with " << ret << dendl;
@@ -3636,6 +3636,18 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
     return op_ret;
 
   policy = s3policy;
+
+  /* handle object tagging */
+  if (auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING"); tag_str) {
+    obj_tags = RGWObjTags{};
+    if (int ret = obj_tags->set_from_string(tag_str); ret < 0) {
+      ldpp_dout(this, 0) << "setting obj tags failed with " << ret << dendl;
+      if (ret == -ERR_INVALID_TAG){
+        op_ret = -EINVAL;
+      }
+      return ret;
+    }
+  }
 
   return 0;
 }
