@@ -233,6 +233,7 @@ class OSDService(CephService):
                 cmd = self.driveselection_to_ceph_volume(ds,
                                                          osd_id_claims.filtered_by_host(host),
                                                          preview=True)
+
                 if not cmd:
                     logger.debug("No data_devices, skipping DriveGroup: {}".format(
                         osdspec.service_name()))
@@ -248,8 +249,16 @@ class OSDService(CephService):
                         concat_out = {}
 
                     ret_all.append({'data': concat_out,
+                                    'err': '',
                                     'osdspec': osdspec.service_id,
                                     'host': host})
+                elif err:
+                    err_filtered = [line for line in err if ' stderr ' in line]
+                    ret_all.append({'data': {},
+                                    'err': '\n'.join([line[line.find(" stderr ") + 8:] for line in err_filtered]),
+                                    'osdspec': osdspec.service_id,
+                                    'host': host})
+
         return ret_all
 
     def resolve_hosts_for_osdspecs(self,

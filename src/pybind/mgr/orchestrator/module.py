@@ -125,7 +125,7 @@ def generate_preview_tables(data: Any, osd_only: bool = False) -> str:
     warning = [x.get('warning') for x in data if x.get('warning')]
     osd_table = preview_table_osd(data)
     service_table = preview_table_services(data)
-
+    errors_summary = preview_osd_error_summary(data)
     if osd_only:
         tables = f"""
 {''.join(warning)}
@@ -150,7 +150,14 @@ OSDSPEC PREVIEWS
 ################
 {osd_table}
 """
-        return tables
+    errors_summary_output = ''
+    if errors_summary:
+        errors_summary_output = f"""\n
+Errors Summary
+##############
+{errors_summary}
+"""
+    return tables + errors_summary_output
 
 
 def preview_table_osd(data: List) -> str:
@@ -190,6 +197,19 @@ def preview_table_services(data: List) -> str:
             table.add_row((item.get('service_type'), item.get('service_name'),
                            " ".join(item.get('add')), " ".join(item.get('remove'))))
     return table.get_string()
+
+
+def preview_osd_error_summary(data: List) -> str:
+    result = ""
+    for osd_data in data:
+        if osd_data.get('service_type') != 'osd':
+            continue
+        for host, specs in osd_data.get('data').items():
+            for spec in specs:
+                if spec.get('err'):
+                    dd = spec.get('err')
+                    result += f'{result}\n{host}:\n{dd}:\n'
+    return result
 
 
 class OrchestratorCli(OrchestratorClientMixin, MgrModule,
