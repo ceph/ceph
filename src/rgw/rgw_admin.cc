@@ -3440,7 +3440,7 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-f", "--infile", (char*)NULL)) {
       infile = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*)NULL)) {
       metadata_key = val;
@@ -9306,7 +9306,7 @@ next:
       return EINVAL;
     }
     if (infile.empty()) {
-      cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
+      cerr << "ERROR: infile was not provided (via --infile/-f)" << std::endl;
       return EINVAL;
     }
     bufferlist bl;
