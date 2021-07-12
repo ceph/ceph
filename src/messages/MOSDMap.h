@@ -158,6 +158,10 @@ public:
       out << " src has " << oldest_map << ".." << newest_map;
     out << ")";
   }
+
+  bool support_reencode() const override {
+    return false;
+  }
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
