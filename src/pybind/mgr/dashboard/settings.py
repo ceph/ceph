@@ -72,6 +72,9 @@ class Options(object):
     RGW_API_USER_ID = Setting('', [dict, str])
     RGW_API_SSL_VERIFY = Setting(True, [bool])
 
+    # Ceph Issue Tracker API Access Key
+    CEPH_TRACKER_API_KEY = Setting('', [str])
+
     # Grafana settings
     GRAFANA_API_URL = Setting('', [str])
     GRAFANA_FRONTEND_API_URL = Setting('', [str])
