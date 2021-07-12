@@ -585,7 +585,7 @@ bool ProtocolV2::append_frame(F& frame) {
 
   ldout(cct, 25) << __func__ << " assembled frame " << bl.length()
                  << " bytes " << tx_frame_asm << dendl;
-  connection->outgoing_bl.append(bl);
+  connection->outgoing_bl.claim_append(std::move(bl));
   return true;
 }
 
