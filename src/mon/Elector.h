@@ -259,9 +259,9 @@ class Elector : public ElectionOwner, RankProvider {
    * @post  we sent an ack message to @p who
    * @post  we reset the expire_event timer
    *
-   * @param who Some other monitor's numeric identifier. 
+   * @param high_priority_rank Some other monitor's numeric identifier.
    */
-  void _defer_to(int who);
+  void _defer_to(int high_priority_rank);
   /**
    * Our ElectionLogic told us we won an election! Identify the quorum
    * features, tell our new peons we've won, and invoke Monitor::win_election().
