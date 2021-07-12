@@ -1295,7 +1295,8 @@ private:
 		 const UserPerm& perms);
 
   int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
-	      const UserPerm& perm, std::string* alternate_name=nullptr);
+	      const UserPerm& perm, std::string* alternate_name=nullptr,
+              bool is_rename=false);
 
   int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm, std::string alternate_name,
 	    InodeRef *inp = 0);
@@ -1535,6 +1536,8 @@ private:
 
   std::map<std::pair<int64_t,std::string>, int> pool_perms;
   std::list<ceph::condition_variable*> waiting_for_pool_perm;
+
+  std::list<ceph::condition_variable*> waiting_for_rename;
 
   uint64_t retries_on_invalidate = 0;
 
