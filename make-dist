@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 
 SCRIPTNAME="$(basename "${0}")"
 BASEDIR="$(readlink -f "$(dirname "${0}")")"
