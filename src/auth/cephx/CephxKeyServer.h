@@ -195,8 +195,8 @@ class KeyServer : public KeyStore {
   KeyServerData data;
   mutable ceph::mutex lock;
 
-  int _rotate_secret(uint32_t service_id);
-  bool _check_rotating_secrets();
+  int _rotate_secret(uint32_t service_id, int auth_done);
+  bool _check_rotating_secrets(int auth_done = 0);
   void _dump_rotating_secrets();
   int _build_session_auth_info(uint32_t service_id, 
 			       const AuthTicket& parent_ticket,
@@ -297,7 +297,7 @@ public:
     }
   }
 
-  bool updated_rotating(ceph::buffer::list& rotating_bl, version_t& rotating_ver);
+  bool updated_rotating(ceph::buffer::list& rotating_bl, version_t& rotating_ver, int auth_done = 0);
 
   bool get_rotating_encrypted(const EntityName& name, ceph::buffer::list& enc_bl) const;
 
