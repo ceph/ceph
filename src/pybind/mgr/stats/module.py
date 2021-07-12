@@ -28,7 +28,9 @@ class Module(MgrModule):
 
     def notify(self, notify_type, notify_id):
         if notify_type == "command":
-            self.fs_perf_stats.notify(notify_id)
+            self.fs_perf_stats.notify_cmd(notify_id)
+        elif notify_type == "fs_map":
+            self.fs_perf_stats.notify_fsmap()
 
     def handle_command(self, inbuf, cmd):
         prefix = cmd['prefix']
