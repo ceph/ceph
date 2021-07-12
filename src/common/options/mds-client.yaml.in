@@ -533,6 +533,15 @@ options:
   services:
   - mds_client
   min: 1
+- name: client_maintain_atime
+  type: bool
+  level: advanced
+  desc: Eanble client maintaim atime
+  default: false
+  tags:
+  - client
+  service:
+  - mds_client
 - name: client_shutdown_timeout
   type: secs
   level: advanced

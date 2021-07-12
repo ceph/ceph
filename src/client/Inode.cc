@@ -50,6 +50,7 @@ ostream& operator<<(ostream &out, const Inode &in)
       << " btime=" << in.btime
       << " mtime=" << in.mtime
       << " ctime=" << in.ctime
+      << " atime=" << in.atime
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";
