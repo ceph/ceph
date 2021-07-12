@@ -202,7 +202,7 @@ protected:
       --res;
     }
     vault_token->assign(std::string{buf, static_cast<size_t>(res)});
-    memset(buf, 0, sizeof(buf));
+    
     ::ceph::crypto::zeroize_for_security(buf, sizeof(buf));
     return res;
   }
