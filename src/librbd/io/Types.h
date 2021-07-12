@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IO_TYPES_H
 #define CEPH_LIBRBD_IO_TYPES_H
 
+#include "include/buffer_pool.h"
 #include "include/int_types.h"
 #include "include/rados/rados_types.hpp"
 #include "common/interval_map.h"
@@ -312,7 +313,7 @@ struct ReadExtent {
     }
 };
 
-typedef std::vector<ReadExtent> ReadExtents;
+typedef std::vector<ReadExtent, PooledAllocator<ReadExtent>> ReadExtents;
 
 typedef std::map<uint64_t, uint64_t> ExtentMap;
 

@@ -28,6 +28,7 @@
 
 #include "common/error_code.h"
 
+#include "include/buffer_pool.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_mutex.h"
 
@@ -158,7 +159,7 @@ struct RunOnDelete {
 typedef std::shared_ptr<RunOnDelete> RunOnDeleteRef;
 
 template <typename T>
-class LambdaContext : public Context {
+class LambdaContext : public Context, public PooledObject {
 public:
   LambdaContext(T &&t) : t(std::forward<T>(t)) {}
   void finish(int r) override {

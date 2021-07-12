@@ -1,5 +1,6 @@
 add_library(common_buffer_obj OBJECT
-  buffer.cc)
+  buffer.cc
+  buffer_pool.cc)
 
 add_library(common_texttable_obj OBJECT
   TextTable.cc)

@@ -32,6 +32,7 @@
 #include <fmt/format.h>
 
 #include "include/buffer.h"
+#include "include/buffer_pool.h"
 #include "include/ceph_assert.h"
 #include "include/ceph_fs.h"
 #include "include/common_fwd.h"
@@ -1880,7 +1881,7 @@ public:
       return nullptr;
   }
 
-  struct Op : public RefCountedObject {
+  struct Op : public RefCountedObject, public PooledObject {
     OSDSession *session = nullptr;
     int incarnation = 0;
 
