@@ -761,19 +761,34 @@ class RgwService(CephService):
         assert self.TYPE == spec.service_type
 
         # set rgw_realm and rgw_zone, if present
-        if spec.rgw_realm:
+        if spec.rgw_zone:
+            if not spec.rgw_realm:
+                raise OrchestratorError(f'{spec} has a zone {spec.rgw_zone}, but no realm')
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
+                'name': 'rgw_zone',
+                'value': spec.rgw_zone,
+            })
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config set',
                 'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
                 'name': 'rgw_realm',
                 'value': spec.rgw_realm,
             })
-        if spec.rgw_zone:
+        else:
+            # explicitly set zone AND zonegroup to 'default'
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config set',
                 'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
                 'name': 'rgw_zone',
-                'value': spec.rgw_zone,
+                'value': 'default',
+            })
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
+                'name': 'rgw_zonegroup',
+                'value': 'default',
             })
 
         if spec.rgw_frontend_ssl_certificate:
@@ -869,6 +884,11 @@ class RgwService(CephService):
             'prefix': 'config rm',
             'who': utils.name_to_config_section(service_name),
             'name': 'rgw_zone',
+        })
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': utils.name_to_config_section(service_name),
+            'name': 'rgw_zonegroup',
         })
         self.mgr.check_mon_command({
             'prefix': 'config-key rm',
