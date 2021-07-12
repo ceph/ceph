@@ -3744,13 +3744,13 @@ void RGWListMultipart_ObjStore_S3::send_response()
   if (op_ret == 0) {
     dump_start(s);
     s->formatter->open_object_section_in_ns("ListPartsResult", XMLNS_AWS_S3);
-    map<uint32_t, RGWUploadPartInfo>::iterator iter;
-    map<uint32_t, RGWUploadPartInfo>::reverse_iterator test_iter;
+    map<uint32_t, std::unique_ptr<rgw::sal::MultipartPart>>::iterator iter;
+    map<uint32_t, std::unique_ptr<rgw::sal::MultipartPart>>::reverse_iterator test_iter;
     int cur_max = 0;
 
-    iter = parts.begin();
-    test_iter = parts.rbegin();
-    if (test_iter != parts.rend()) {
+    iter = upload->get_parts().begin();
+    test_iter = upload->get_parts().rbegin();
+    if (test_iter != upload->get_parts().rend()) {
       cur_max = test_iter->first;
     }
     if (!s->bucket_tenant.empty())
@@ -3767,16 +3767,16 @@ void RGWListMultipart_ObjStore_S3::send_response()
     ACLOwner& owner = policy.get_owner();
     dump_owner(s, owner.get_id(), owner.get_display_name());
 
-    for (; iter != parts.end(); ++iter) {
-      RGWUploadPartInfo& info = iter->second;
+    for (; iter != upload->get_parts().end(); ++iter) {
+      rgw::sal::MultipartPart* part = iter->second.get();
 
       s->formatter->open_object_section("Part");
 
-      dump_time(s, "LastModified", &info.modified);
+      dump_time(s, "LastModified", &part->get_mtime());
 
-      s->formatter->dump_unsigned("PartNumber", info.num);
-      s->formatter->dump_format("ETag", "\"%s\"", info.etag.c_str());
-      s->formatter->dump_unsigned("Size", info.accounted_size);
+      s->formatter->dump_unsigned("PartNumber", part->get_num());
+      s->formatter->dump_format("ETag", "\"%s\"", part->get_etag().c_str());
+      s->formatter->dump_unsigned("Size", part->get_size());
       s->formatter->close_section();
     }
     s->formatter->close_section();
@@ -3809,32 +3809,30 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
   const string& upload_id_marker = marker.get_upload_id();
   if (!upload_id_marker.empty())
     s->formatter->dump_string("UploadIdMarker", upload_id_marker);
-  string next_key = next_marker.mp.get_key();
-  if (!next_key.empty())
-    s->formatter->dump_string("NextKeyMarker", next_key);
-  string next_upload_id = next_marker.mp.get_upload_id();
-  if (!next_upload_id.empty())
-    s->formatter->dump_string("NextUploadIdMarker", next_upload_id);
+  if (!next_marker_key.empty())
+    s->formatter->dump_string("NextKeyMarker", next_marker_key);
+  if (!next_marker_upload_id.empty())
+    s->formatter->dump_string("NextUploadIdMarker", next_marker_upload_id);
   s->formatter->dump_int("MaxUploads", max_uploads);
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
   s->formatter->dump_string("IsTruncated", (is_truncated ? "true" : "false"));
 
   if (op_ret >= 0) {
-    vector<RGWMultipartUploadEntry>::iterator iter;
+    vector<std::unique_ptr<rgw::sal::MultipartUpload>>::iterator iter;
     for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
-      RGWMPObj& mp = iter->mp;
+      rgw::sal::MultipartUpload* upload = iter->get();
       s->formatter->open_array_section("Upload");
       if (encode_url) {
-        s->formatter->dump_string("Key", url_encode(mp.get_key(), false));
+        s->formatter->dump_string("Key", url_encode(upload->get_key(), false));
       } else {
-        s->formatter->dump_string("Key", mp.get_key());
+        s->formatter->dump_string("Key", upload->get_key());
       }
-      s->formatter->dump_string("UploadId", mp.get_upload_id());
+      s->formatter->dump_string("UploadId", upload->get_upload_id());
       dump_owner(s, s->user->get_id(), s->user->get_display_name(), "Initiator");
       dump_owner(s, s->user->get_id(), s->user->get_display_name());
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_time(s, "Initiated", &iter->obj.meta.mtime);
+      dump_time(s, "Initiated", &upload->get_mtime());
       s->formatter->close_section();
     }
     if (!common_prefixes.empty()) {

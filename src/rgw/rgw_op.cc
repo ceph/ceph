@@ -6096,20 +6096,14 @@ void RGWCompleteMultipart::pre_exec()
 void RGWCompleteMultipart::execute(optional_yield y)
 {
   RGWMultiCompleteUpload *parts;
-  map<int, string>::iterator iter;
   RGWMultiXMLParser parser;
   string meta_oid;
-  map<uint32_t, RGWUploadPartInfo> obj_parts;
-  map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
+  std::unique_ptr<rgw::sal::MultipartUpload> upload;
   rgw::sal::Attrs attrs;
   off_t ofs = 0;
-  MD5 hash;
-  char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
   bufferlist etag_bl;
   std::unique_ptr<rgw::sal::Object> meta_obj;
   std::unique_ptr<rgw::sal::Object> target_obj;
-  RGWMPObj mp;
   RGWObjManifest manifest;
   uint64_t olh_epoch = 0;
 
@@ -6148,27 +6142,18 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  mp.init(s->object->get_name(), upload_id);
+  upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(), upload_id);
 
 
-  meta_oid = mp.get_meta();
+  meta_oid = upload->get_meta();
 
-  int total_parts = 0;
-  int handled_parts = 0;
-  int max_parts = 1000;
-  int marker = 0;
-  bool truncated;
   RGWCompressionInfo cs_info;
   bool compressed = false;
   uint64_t accounted_size = 0;
 
-  uint64_t min_part_size = s->cct->_conf->rgw_multipart_min_part_size;
-
   list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
   bool versioned_object = s->bucket->versioning_enabled();
-
-  iter = parts->parts.begin();
 
   meta_obj = s->bucket->get_object(rgw_obj_key(meta_oid, string(), mp_ns));
   meta_obj->set_in_extra_data(true);
@@ -6210,115 +6195,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  do {
-    op_ret = list_multipart_parts(this, s, upload_id, meta_oid, max_parts,
-				  marker, obj_parts, &marker, &truncated);
-    if (op_ret == -ENOENT) {
-      op_ret = -ERR_NO_SUCH_UPLOAD;
-    }
-    if (op_ret < 0)
-      return;
+  op_ret = upload->complete(this, s->cct, etag, manifest, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
+    return;
+  }
 
-    total_parts += obj_parts.size();
-    if (!truncated && total_parts != (int)parts->parts.size()) {
-      ldpp_dout(this, 0) << "NOTICE: total parts mismatch: have: " << total_parts
-		       << " expected: " << parts->parts.size() << dendl;
-      op_ret = -ERR_INVALID_PART;
-      return;
-    }
-
-    for (obj_iter = obj_parts.begin(); iter != parts->parts.end() && obj_iter != obj_parts.end(); ++iter, ++obj_iter, ++handled_parts) {
-      uint64_t part_size = obj_iter->second.accounted_size;
-      if (handled_parts < (int)parts->parts.size() - 1 &&
-          part_size < min_part_size) {
-        op_ret = -ERR_TOO_SMALL;
-        return;
-      }
-
-      char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-      if (iter->first != (int)obj_iter->first) {
-        ldpp_dout(this, 0) << "NOTICE: parts num mismatch: next requested: "
-			 << iter->first << " next uploaded: "
-			 << obj_iter->first << dendl;
-        op_ret = -ERR_INVALID_PART;
-        return;
-      }
-      string part_etag = rgw_string_unquote(iter->second);
-      if (part_etag.compare(obj_iter->second.etag) != 0) {
-        ldpp_dout(this, 0) << "NOTICE: etag mismatch: part: " << iter->first
-			 << " etag: " << iter->second << dendl;
-        op_ret = -ERR_INVALID_PART;
-        return;
-      }
-
-      hex_to_buf(obj_iter->second.etag.c_str(), petag,
-		CEPH_CRYPTO_MD5_DIGESTSIZE);
-      hash.Update((const unsigned char *)petag, sizeof(petag));
-
-      RGWUploadPartInfo& obj_part = obj_iter->second;
-
-      /* update manifest for part */
-      string oid = mp.get_part(obj_iter->second.num);
-      rgw_obj src_obj;
-      src_obj.init_ns(s->bucket->get_key(), oid, mp_ns);
-
-      if (obj_part.manifest.empty()) {
-        ldpp_dout(this, 0) << "ERROR: empty manifest for object part: obj="
-			 << src_obj << dendl;
-        op_ret = -ERR_INVALID_PART;
-        return;
-      } else {
-        manifest.append(this, obj_part.manifest, store->get_zone());
-      }
-
-      bool part_compressed = (obj_part.cs_info.compression_type != "none");
-      if ((handled_parts > 0) &&
-          ((part_compressed != compressed) ||
-            (cs_info.compression_type != obj_part.cs_info.compression_type))) {
-          ldpp_dout(this, 0) << "ERROR: compression type was changed during multipart upload ("
-                           << cs_info.compression_type << ">>" << obj_part.cs_info.compression_type << ")" << dendl;
-          op_ret = -ERR_INVALID_PART;
-          return; 
-      }
-      
-      if (part_compressed) {
-        int64_t new_ofs; // offset in compression data for new part
-        if (cs_info.blocks.size() > 0)
-          new_ofs = cs_info.blocks.back().new_ofs + cs_info.blocks.back().len;
-        else
-          new_ofs = 0;
-        for (const auto& block : obj_part.cs_info.blocks) {
-          compression_block cb;
-          cb.old_ofs = block.old_ofs + cs_info.orig_size;
-          cb.new_ofs = new_ofs;
-          cb.len = block.len;
-          cs_info.blocks.push_back(cb);
-          new_ofs = cb.new_ofs + cb.len;
-        } 
-        if (!compressed)
-          cs_info.compression_type = obj_part.cs_info.compression_type;
-        cs_info.orig_size += obj_part.cs_info.orig_size;
-        compressed = true;
-      }
-
-      rgw_obj_index_key remove_key;
-      src_obj.key.get_index_key(&remove_key);
-
-      remove_objs.push_back(remove_key);
-
-      ofs += obj_part.size;
-      accounted_size += obj_part.accounted_size;
-    }
-  } while (truncated);
-  hash.Final((unsigned char *)final_etag);
-
-  buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)parts->parts.size());
-  etag = final_etag_str;
-  ldpp_dout(this, 10) << "calculated etag: " << final_etag_str << dendl;
-
-  etag_bl.append(final_etag_str, strlen(final_etag_str));
+  etag_bl.append(etag);
 
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
@@ -6374,7 +6257,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   // send request to notification manager
-  int ret = res->publish_commit(this, ofs, target_obj->get_mtime(), final_etag_str,  target_obj->get_instance());
+  int ret = res->publish_commit(this, ofs, target_obj->get_mtime(), etag, target_obj->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6501,23 +6384,16 @@ void RGWAbortMultipart::execute(optional_yield y)
 {
   op_ret = -EINVAL;
   string upload_id;
-  string meta_oid;
   upload_id = s->info.args.get("uploadId");
   rgw_obj meta_obj;
-  RGWMPObj mp;
+  std::unique_ptr<rgw::sal::MultipartUpload> upload;
 
   if (upload_id.empty() || rgw::sal::Object::empty(s->object.get()))
     return;
 
-  mp.init(s->object->get_name(), upload_id);
-  meta_oid = mp.get_meta();
-
-  op_ret = get_multipart_info(this, s, meta_oid, nullptr);
-  if (op_ret < 0)
-    return;
-
+  upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(), upload_id);
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-  op_ret = abort_multipart_upload(this, store, s->cct, obj_ctx, s->bucket.get(), mp);
+  op_ret = upload->abort(this, s->cct, obj_ctx);
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)
@@ -6536,14 +6412,13 @@ void RGWListMultipart::pre_exec()
 void RGWListMultipart::execute(optional_yield y)
 {
   string meta_oid;
-  RGWMPObj mp;
 
   op_ret = get_params(y);
   if (op_ret < 0)
     return;
 
-  mp.init(s->object->get_name(), upload_id);
-  meta_oid = mp.get_meta();
+  upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(), upload_id);
+  meta_oid = upload->get_meta();
 
   rgw::sal::Attrs attrs;
   op_ret = get_multipart_info(this, s, meta_oid, nullptr, &attrs);
@@ -6561,8 +6436,7 @@ void RGWListMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = list_multipart_parts(this, s, upload_id, meta_oid, max_parts,
-				marker, parts, NULL, &truncated);
+  op_ret = upload->list_parts(this, s->cct, max_parts, marker, NULL, &truncated);
 }
 
 int RGWListBucketMultiparts::verify_permission(optional_yield y)
@@ -6582,7 +6456,6 @@ void RGWListBucketMultiparts::pre_exec()
 
 void RGWListBucketMultiparts::execute(optional_yield y)
 {
-  vector<rgw_bucket_dir_entry> objs;
   string marker_meta;
 
   op_ret = get_params(y);
@@ -6603,23 +6476,16 @@ void RGWListBucketMultiparts::execute(optional_yield y)
   }
   marker_meta = marker.get_meta();
 
-  op_ret = list_bucket_multiparts(this, s->bucket.get(), prefix, marker_meta, delimiter,
-                                  max_uploads, &objs, &common_prefixes, &is_truncated);
+  op_ret = s->bucket->list_multiparts(this, prefix, marker_meta,
+				      delimiter, max_uploads, uploads,
+				      &common_prefixes, &is_truncated);
   if (op_ret < 0) {
     return;
   }
 
-  if (!objs.empty()) {
-    vector<rgw_bucket_dir_entry>::iterator iter;
-    RGWMultipartUploadEntry entry;
-    for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      rgw_obj_key key(iter->key);
-      if (!entry.mp.from_meta(key.name))
-        continue;
-      entry.obj = *iter;
-      uploads.push_back(entry);
-    }
-    next_marker = entry;
+  if (!uploads.empty()) {
+    next_marker_key = uploads.back()->get_key();
+    next_marker_upload_id = uploads.back()->get_upload_id();
   }
 }
 

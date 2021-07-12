@@ -1449,21 +1449,15 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 {
   constexpr int max_uploads = 1000;
   constexpr int max_parts = 1000;
-  static const std::string mp_ns = RGW_OBJ_NS_MULTIPART;
-  static MultipartMetaFilter mp_filter;
-
+  std::string marker;
+  vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  bool is_truncated;
   int ret;
 
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
-
-  params.ns = mp_ns;
-  params.filter = &mp_filter;
-  // use empty string for initial params.marker
   // use empty strings for params.{prefix,delim}
 
   do {
-    ret = bucket->list(dpp, params, max_uploads, results, null_yield);
+    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
       ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<
@@ -1476,39 +1470,19 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
       return ret;
     }
 
-    if (!results.objs.empty()) {
-      std::vector<RGWMultipartUploadEntry> uploads;
-      RGWMultipartUploadEntry entry;
-      for (const rgw_bucket_dir_entry& obj : results.objs) {
-	const rgw_obj_key& key = obj.key;
-	if (!entry.mp.from_meta(key.name)) {
-	  // we only want the meta objects, so skip all the components
-	  continue;
-	}
-	entry.obj = obj;
-	uploads.push_back(entry);
-	ldpp_dout(dpp, 20) << "RGWRadosList::" << __func__ <<
-	  " processing incomplete multipart entry " <<
-	  entry << dendl;
-      }
-
+    if (!uploads.empty()) {
       // now process the uploads vector
       for (const auto& upload : uploads) {
-	const RGWMPObj& mp = upload.mp;
 	int parts_marker = 0;
 	bool is_parts_truncated = false;
 
 	do { // while (is_parts_truncated);
-	  std::map<uint32_t, RGWUploadPartInfo> parts;
-	  ret = list_multipart_parts(dpp, bucket, store->ctx(),
-				     mp.get_upload_id(), mp.get_meta(),
-				     max_parts, parts_marker,
-				     parts, &parts_marker,
-				     &is_parts_truncated);
+	  ret = upload->list_parts(dpp, store->ctx(), max_parts, parts_marker,
+				   &parts_marker, &is_parts_truncated);
 	  if (ret == -ENOENT) {
 	    ldpp_dout(dpp, 5) <<  "RGWRadosList::" << __func__ <<
 	      ": WARNING: list_multipart_parts returned ret=-ENOENT "
-	      "for " << mp.get_upload_id() << ", moving on" << dendl;
+	      "for " << upload->get_upload_id() << ", moving on" << dendl;
 	    break;
 	  } else if (ret < 0) {
 	    ldpp_dout(dpp, -1) << "RGWRadosList::" << __func__ <<
@@ -1517,8 +1491,10 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 	    return ret;
 	  }
 
-	  for (auto& p : parts) {
-	    RGWObjManifest& manifest = p.second.manifest;
+	  for (auto& p : upload->get_parts()) {
+	    rgw::sal::RadosMultipartPart* part =
+	      dynamic_cast<rgw::sal::RadosMultipartPart*>(p.second.get());
+	    RGWObjManifest& manifest = part->get_manifest();
 	    for (auto obj_it = manifest.obj_begin(dpp);
 		 obj_it != manifest.obj_end(dpp);
 		 ++obj_it) {
@@ -1530,7 +1506,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 	} while (is_parts_truncated);
       } // for (const auto& upload
     } // if objs not empty
-  } while (results.is_truncated);
+  } while (is_truncated);
 
   return 0;
 } // RGWRadosList::do_incomplete_multipart
