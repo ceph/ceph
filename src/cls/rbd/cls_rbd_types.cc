@@ -1351,5 +1351,145 @@ void sanitize_entity_inst(entity_inst_t* entity_inst) {
   entity_inst->addr.set_type(entity_addr_t::TYPE_ANY);
 }
 
+void RwlCacheDaemonInfo::encode(bufferlist &bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(id, bl);
+  encode(rdma_address, bl);
+  encode(rdma_port, bl);
+  encode(total_size, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheDaemonInfo::decode(bufferlist::const_iterator &it) {
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(id, it);
+  decode(rdma_address, it);
+  decode(rdma_port, it);
+  decode(total_size, it);
+  DECODE_FINISH(it);
+}
+
+void RwlCacheDaemonPing::encode(bufferlist &bl) const
+{
+  using ceph::decode;
+  ENCODE_START(1, 1, bl);
+  encode(id, bl);
+  encode(freed_caches, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheDaemonPing::decode(bufferlist::const_iterator &it)
+{
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(id, it);
+  decode(freed_caches, it);
+  DECODE_FINISH(it);
+}
+
+void RwlCacheDaemonNeedFreeCaches::encode(bufferlist &bl) const
+{
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(need_free_caches, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheDaemonNeedFreeCaches::decode(bufferlist::const_iterator &it)
+{
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(need_free_caches, it);
+  DECODE_FINISH(it);
+}
+
+void RwlCacheRequest::encode(bufferlist &bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(id, bl);
+  encode(size, bl);
+  encode(copies, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheRequest::decode(bufferlist::const_iterator &it) {
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(id, it);
+  decode(size, it);
+  decode(copies, it);
+  DECODE_FINISH(it);
+}
+
+void RwlCacheInfo::DaemonInfo::encode(bufferlist &bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(id, bl);
+  encode(rdma_address, bl);
+  encode(rdma_port, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheInfo::DaemonInfo::decode(bufferlist::const_iterator &it) {
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(id, it);
+  decode(rdma_address, it);
+  decode(rdma_port, it);
+  DECODE_FINISH(it);
+}
+
+void RwlCacheInfo::encode(bufferlist &bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(cache_id, bl);
+  encode(daemons, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheInfo::decode(bufferlist::const_iterator &it) {
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(cache_id, it);
+  decode(daemons, it);
+  DECODE_FINISH(it);
+}
+
+void RwlCacheRequestAck::encode(bufferlist &bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(cache_id, bl);
+  encode(result, bl);
+  encode(need_free_daemons, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheRequestAck::decode(bufferlist::const_iterator &it) {
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(cache_id, it);
+  decode(result, it);
+  decode(need_free_daemons, it);
+  DECODE_FINISH(it);
+}
+
+void RwlCacheFree::encode(bufferlist &bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(cache_id, bl);
+  encode(need_free_daemons, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RwlCacheFree::decode(bufferlist::const_iterator &it) {
+  using ceph::decode;
+  DECODE_START(1, it);
+  decode(cache_id, it);
+  decode(need_free_daemons, it);
+  DECODE_FINISH(it);
+}
+
 } // namespace rbd
 } // namespace cls

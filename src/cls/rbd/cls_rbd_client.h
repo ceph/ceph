@@ -657,6 +657,25 @@ void sparsify(librados::ObjectWriteOperation *op, uint64_t sparse_size,
 int sparsify(librados::IoCtx *ioctx, const std::string &oid, uint64_t sparse_size,
              bool remove_empty);
 
+// operations on rwlcache object
+void rwlcache_daemoninfo(librados::ObjectWriteOperation *op, struct cls::rbd::RwlCacheDaemonInfo &req);
+int rwlcache_daemoninfo(librados::IoCtx *ioct, struct cls::rbd::RwlCacheDaemonInfo &req);
+
+int rwlcache_daemonping(librados::IoCtx *ioct, struct cls::rbd::RwlCacheDaemonPing &ping,
+			bool &has_need_free_cache);
+
+int rwlcache_get_needfree_caches(librados::IoCtx *ioctx, uint64_t daemon_id,
+				  struct cls::rbd::RwlCacheDaemonNeedFreeCaches &need_free_caches);
+
+int rwlcache_request(librados::IoCtx *ioct, struct cls::rbd::RwlCacheRequest &req, epoch_t &cache_id);
+int rwlcache_get_cacheinfo(librados::IoCtx *ioct, epoch_t cache_id, struct cls::rbd::RwlCacheInfo &cache);
+
+int rwlcache_request_ack(librados::IoCtx *ioct, struct cls::rbd::RwlCacheRequestAck &req);
+
+int rwlcache_free(librados::IoCtx *ioctx, struct cls::rbd::RwlCacheFree &req);
+
+int rwlcache_primaryping(librados::IoCtx *ioctx, epoch_t cache_id, bool &has_removed_daemon);
+
 } // namespace cls_client
 } // namespace librbd
 

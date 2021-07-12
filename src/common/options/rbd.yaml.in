@@ -836,6 +836,20 @@ options:
   default: /tmp
   services:
   - rbd
+- name: rbd_persistent_replicated_cache_cls_pool
+  type: str
+  level: advanced
+  desc: The cls pool is the pool which store object of managing rbd persistent
+    replicated cache cluster info.
+  services:
+  - rbd
+- name: rbd_persistent_replicated_cache_alloc_from_same_host
+  type: bool
+  level: advanced
+  desc: Whether primary and replciated in the same host. Only for test.
+  default: false
+  services:
+  - rbd
 - name: rbd_quiesce_notification_attempts
   type: uint
   level: dev
