@@ -107,11 +107,11 @@ class LastEpochClean {
     std::vector<epoch_t> epoch_by_pg;
     ps_t next_missing = 0;
     epoch_t floor = std::numeric_limits<epoch_t>::max();
-    void report(ps_t pg, epoch_t last_epoch_clean);
+    void report(unsigned pg_num, ps_t pg, epoch_t last_epoch_clean);
   };
   std::map<uint64_t, Lec> report_by_pool;
 public:
-  void report(const pg_t& pg, epoch_t last_epoch_clean);
+  void report(unsigned pg_num, const pg_t& pg, epoch_t last_epoch_clean);
   void remove_pool(uint64_t pool);
   epoch_t get_lower_bound(const OSDMap& latest) const;
 
