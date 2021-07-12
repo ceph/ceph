@@ -332,8 +332,6 @@ class ExportMgr:
 
     def update_export(self, export_config):
         try:
-            if not export_config:
-                raise NFSInvalidOperation("Empty Config!!")
             new_export = json.loads(export_config)
             # check export type
             return FSExport(self).update_export(new_export)

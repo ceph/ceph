@@ -38,8 +38,8 @@ else:
         return getattr(tp, '__origin__', None)
 
 
-ERROR_MSG_EMPTY_INPUT_FILE = 'Empty content: please add a password/secret to the file.'
-ERROR_MSG_NO_INPUT_FILE = 'Please specify the file containing the password/secret with "-i" option.'
+ERROR_MSG_EMPTY_INPUT_FILE = 'Empty input file'
+ERROR_MSG_NO_INPUT_FILE = 'Input file not specified'
 # Full list of strings in "osd_types.cc:pg_state_string()"
 PG_STATES = [
     "active",
@@ -413,19 +413,23 @@ def CLIWriteCommand(prefix: str, poll: bool = False) -> CLICommand:
     return CLICommand(prefix, "w", poll)
 
 
-def CLICheckNonemptyFileInput(func: HandlerFuncType) -> HandlerFuncType:
-    @functools.wraps(func)
-    def check(*args: Any, **kwargs: Any) -> Tuple[int, str, str]:
-        if 'inbuf' not in kwargs:
-            return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
-        if isinstance(kwargs['inbuf'], str):
-            # Delete new line separator at EOF (it may have been added by a text editor).
-            kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
-        if not kwargs['inbuf']:
-            return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
-        return func(*args, **kwargs)
-    check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
-    return check
+def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerFuncType]:
+    def CheckFileInput(func: HandlerFuncType) -> HandlerFuncType:
+        @functools.wraps(func)
+        def check(*args: Any, **kwargs: Any) -> Tuple[int, str, str]:
+            if 'inbuf' not in kwargs:
+                return -errno.EINVAL, '', f'{ERROR_MSG_NO_INPUT_FILE}: Please specify the file '\
+                                          f'containing {desc} with "-i" option'
+            if isinstance(kwargs['inbuf'], str):
+                # Delete new line separator at EOF (it may have been added by a text editor).
+                kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
+            if not kwargs['inbuf'] or not kwargs['inbuf'].strip():
+                return -errno.EINVAL, '', f'{ERROR_MSG_EMPTY_INPUT_FILE}: Please add {desc} to '\
+                                           'the file'
+            return func(*args, **kwargs)
+        check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+        return check
+    return CheckFileInput
 
 
 def _get_localized_key(prefix: str, key: str) -> str:

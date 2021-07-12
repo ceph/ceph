@@ -254,6 +254,6 @@ def handles_secret(cmd: str) -> bool:
     return bool([cmd for secret_word in ['password', 'key'] if (secret_word in cmd)])
 
 
-@CLICheckNonemptyFileInput
+@CLICheckNonemptyFileInput(desc='password/secret')
 def get_secret(inbuf=None):
     return inbuf, None, None
