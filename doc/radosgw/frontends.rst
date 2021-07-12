@@ -95,6 +95,15 @@ Options
 :Type: Integer
 :Default: ``65000``
 
+``enable_keep_alive``
+
+:Description: Optional value to enable connection to keep alive, either
+              "yes" or "no". It allows clients to reuse TCP connections
+              for subsequent HTTP requests, which improves performance.
+
+:Type: String
+:Default: "no"
+
 
 Generic Options
 ===============

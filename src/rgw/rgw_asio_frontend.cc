@@ -371,6 +371,7 @@ class AsioFrontend {
     tcp::socket socket;
     bool use_ssl = false;
     bool use_nodelay = false;
+    bool use_keep_alive = false;
 
     explicit Listener(boost::asio::io_context& context)
       : acceptor(context), socket(context) {}
@@ -563,7 +564,14 @@ int AsioFrontend::init()
       l.use_nodelay = (nodelay->second == "1");
     }
   }
-  
+
+  // parse keep alive
+  auto keep_alive = config.find("enable_keep_alive");
+  if (keep_alive != config.end()) {
+    for (auto& l : listeners) {
+      l.use_keep_alive = (keep_alive->second == "yes");
+    }
+  }
 
   bool socket_bound = false;
   // start listeners
@@ -891,6 +899,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   auto socket = std::move(l.socket);
   tcp::no_delay options(l.use_nodelay);
   socket.set_option(options,ec);
+  boost::asio::socket_base::keep_alive keep_alive_option(l.use_keep_alive);
+  socket.set_option(keep_alive_option, ec);
   l.acceptor.async_accept(l.socket,
                           [this, &l] (boost::system::error_code ec) {
                             accept(l, ec);
