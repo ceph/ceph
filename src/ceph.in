@@ -29,6 +29,7 @@ import stat
 import sys
 import time
 import platform
+import glob
 
 from typing import Dict, List, Sequence, Tuple
 
@@ -159,7 +160,8 @@ from ceph_argparse import \
     validate_command, find_cmd_target, \
     json_command, run_in_thread, Flag
 
-from ceph_daemon import admin_socket, DaemonWatcher, Termsize
+from ceph_daemon import admin_socket, DaemonWatcher, Termsize, \
+    DaemonHistogramWatcher
 
 # just a couple of globals
 
@@ -773,7 +775,10 @@ def maybe_daemon_command(parsed_args, childargs):
     """
 
     daemon_perf = False
+    daemon_hist = False
     sockpath = None
+    sockpaths = []
+    for_whom = None
     if parsed_args.admin_socket:
         sockpath = parsed_args.admin_socket
     elif len(childargs) > 0 and childargs[0] in ["daemon", "daemonperf"]:
@@ -797,9 +802,54 @@ def maybe_daemon_command(parsed_args, childargs):
             print('{0} requires at least {1} arguments'.format(childargs[0], require_args),
                   file=sys.stderr)
             return True, errno.EINVAL
+    elif len(childargs) > 0 and childargs[0] in ["daemonhistogram"]:
+        daemon_hist = True
+        # Treat "daemonhistogram <path>" or "daemonhistogram <name>" like --admin_daemon <path>
+        require_args = 3
+        if len(childargs) >= require_args:
+            mask = childargs[1]
+            for_all = False
+            if mask.endswith(".all"):
+                for_all = True
+                asok = os.path.dirname(ceph_conf(parsed_args, 'admin_socket', None)).decode("utf-8")
+                if not asok:
+                    print('Can\'t get admin socket path', file=sys.stderr)
+                    return True, errno.EINVAL
+                mask = asok + "/" + mask[:-4] + ".*.asok"
+                sockpaths = glob.glob(mask)
+            else:
+                sockpaths = childargs[1].split(',')
+            sockpaths.sort()
+            for i, sp in enumerate(sockpaths):
+                if for_whom:
+                  for_whom += ", "
+                else:
+                  for_whom = ""
+
+                if sp.find('/') >= 0:
+                    for_whom += os.path.splitext(os.path.basename(sp))[0]
+                else:
+                    # try resolve daemon name
+                    try:
+                        sockpaths[i] = get_admin_socket(parsed_args, sp)
+                        for_whom += sp
+                    except Exception as e:
+                        print('Can\'t get admin socket path: ' + str(e), file=sys.stderr)
+                        return True, errno.EINVAL
+            #do not show every daemon but use short spec instead
+            if for_all:
+                for_whom = childargs[1]
+            childargs = childargs[2:]
+        else:
+            print('{0} requires at least {1} arguments'.format(childargs[0], require_args),
+                  file=sys.stderr)
+            return True, errno.EINVAL
 
     if sockpath and daemon_perf:
         return True, daemonperf(childargs, sockpath)
+    elif len(sockpaths) and daemon_hist:
+        counter = childargs.pop(0)
+        return True, daemonhistogram(childargs, for_whom, sockpaths, counter)
     elif sockpath:
         try:
             raw_write(admin_socket(sockpath, childargs, parsed_args.output_format))
@@ -893,6 +943,44 @@ def daemonperf(childargs: Sequence[str], sockpath: str):
 
     return 0
 
+def daemonhistogram(childargs: Sequence[str], for_whom, sockets, counter):
+    """
+    Handle daemonhistogram command; returns errno or 0
+
+    daemonhistogram <all-spec|some-spec> counter_name [batch|live] [interval] [count]
+      all-spec is DAEMON.all, where DAEMON=osd|mds|mgr|mon, e.g. osd.all
+      some-spec is a comma separated list of specific daemons provided 
+        in a form of DAEMON.ID pair or admin socket filepath, e.g.
+          osd.0,/tmp/ceph-asok.4QuLqw/osd.1.asok,osd.3,/tmp/ceph-asok.4QuLqw/osd.3.asok
+
+    """
+    interval = 1
+    count = None
+    batch = False
+
+    if len(childargs) > 0:
+        batch = childargs.pop(0) == 'batch'
+
+    if len(childargs) > 0:
+        try:
+            interval = float(childargs.pop(0))
+            if interval < 0:
+                raise ValueError
+        except ValueError:
+            print('daemonperf: interval should be a positive number', file=sys.stderr)
+            return errno.EINVAL
+
+    if len(childargs) > 0:
+        arg = childargs.pop(0)
+        if (not isnum(arg)) or (int(arg) < 0):
+            print('daemonperf: count should be a positive integer', file=sys.stderr)
+            return errno.EINVAL
+        count = int(arg)
+
+    watcher = DaemonHistogramWatcher()
+    watcher.run_histogram(batch, for_whom, sockets, counter, interval, count)
+
+    return 0
 
 def get_scrub_timestamps(childargs: Sequence[str]) -> Dict[str,
                                                            Tuple[str, str]]:
