@@ -39,6 +39,7 @@ int main(int argc, char *argv[])
                                   { "mtime", "meta.mtime" },
                                   { "lastmodified", "meta.mtime" },
                                   { "contenttype", "meta.contenttype" },
+                                  { "permissions", "permissions.keyword" },
   };
   es_query.set_field_aliases(&aliases);
 
@@ -48,7 +49,8 @@ int main(int argc, char *argv[])
                                                            {"meta.etag", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.contenttype", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.mtime", ESEntityTypeMap::ES_ENTITY_DATE},
-                                                           {"meta.size", ESEntityTypeMap::ES_ENTITY_INT} };
+                                                           {"meta.size", ESEntityTypeMap::ES_ENTITY_INT},
+                                                           {"permissions.keyword", ESEntityTypeMap::ES_ENTITY_STR} };
   ESEntityTypeMap gm(generic_map);
   es_query.set_generic_type_map(&gm);
 
