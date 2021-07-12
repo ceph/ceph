@@ -86,7 +86,9 @@ using namespace librados;
 
 #include "compressor/Compressor.h"
 
+#if defined(HAVE_LIBAIO)
 #include "rgw_d3n_datacache.h"
+#endif
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -1081,8 +1083,10 @@ void RGWRados::finalize()
 
   delete binfo_cache;
   delete obj_tombstone_cache;
+#if defined(HAVE_LIBAIO)
   if (d3n_data_cache)
     delete d3n_data_cache;
+#endif
 
   if (reshard_wait.get()) {
     reshard_wait->stop();
@@ -1124,10 +1128,12 @@ int RGWRados::init_rados()
 
   cr_registry = crs.release();
 
+#if defined(HAVE_LIBAIO)
   if (use_datacache) {
     d3n_data_cache = new D3nDataCache();
     d3n_data_cache->init(cct);
   }
+#endif
 
   return ret;
 }
@@ -6377,14 +6383,23 @@ int get_obj_data::flush(rgw::AioResultList&& results) {
     }
 
     if (rgwrados->get_use_datacache()) {
+#if defined(HAVE_LIBAIO)
       const std::lock_guard l(d3n_get_data.d3n_lock);
+#endif
       auto oid = completed.front().obj.get_ref().obj.oid;
-      if (bl.length() <= g_conf()->rgw_get_obj_max_req_size && !d3n_bypass_cache_write) {
+      if (bl.length() <= g_conf()->rgw_get_obj_max_req_size
+#if defined(HAVE_LIBAIO)
+	   && !d3n_bypass_cache_write
+#endif
+           ) {
         lsubdout(g_ceph_context, rgw_datacache, 10) << "D3nDataCache: " << __func__ << "(): bl.length <= rgw_get_obj_max_req_size (default 4MB) - write to datacache, bl.length=" << bl.length() << dendl;
         rgwrados->d3n_data_cache->put(bl, bl.length(), oid);
-      } else {
+      } 
+#if defined(HAVE_LIBAIO)
+        else {
         lsubdout(g_ceph_context, rgw_datacache, 10) << "D3nDataCache: " << __func__ << "(): not writing to datacache - bl.length > rgw_get_obj_max_req_size (default 4MB), bl.length=" << bl.length() << " or d3n_bypass_cache_write=" << d3n_bypass_cache_write << dendl;
       }
+#endif
     }
     completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
   }

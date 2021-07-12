@@ -23,7 +23,9 @@
 
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#if defined(HAVE_LIBAIO)
 #include "rgw_d3n_datacache.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -50,6 +52,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     }
     return store;
   }
+#if defined(HAVE_LIBAIO)
   else if (svc.compare("d3n") == 0) {
     rgw::sal::RadosStore *store = new rgw::sal::RadosStore();
     RGWRados* rados = new D3nRGWDataCache<RGWRados>;
@@ -68,6 +71,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     }
     return store;
   }
+#endif
 
   return nullptr;
 }
