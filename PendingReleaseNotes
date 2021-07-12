@@ -19,6 +19,11 @@
 
 * The ``device_health_metrics`` pool has been renamed ``.mgr``. It is now
   used as a common store for all ``ceph-mgr`` modules.
+
+* fs: A file system can be created with a specific ID ("fscid"). This is useful
+  in certain recovery scenarios, e.g., monitor database lost and rebuilt, and
+  the restored file system is expected to have the same ID as before.
+
 * fs: A file system can be renamed using the `fs rename` command. Any cephx
   credentials authorized for the old file system name will need to be
   reauthorized to the new file system name. Since the operations of the clients
