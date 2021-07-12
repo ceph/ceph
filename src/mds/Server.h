@@ -28,6 +28,7 @@
 #include "messages/MClientSnap.h"
 #include "messages/MClientReclaim.h"
 #include "messages/MClientReclaimReply.h"
+#include "messages/MClientQoS.h"
 #include "messages/MLock.h"
 
 #include "CInode.h"
@@ -211,6 +212,7 @@ public:
   void handle_client_setdirlayout(MDRequestRef& mdr);
 
   int parse_quota_vxattr(string name, string value, quota_info_t *quota);
+  int parse_qos_vxattr(string name, string value, dmclock_info_t *info);
   void create_quota_realm(CInode *in);
   int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);
@@ -417,7 +419,8 @@ private:
            xattr_name == "ceph.dir.subvolume"sv ||
            xattr_name == "ceph.dir.pin"sv ||
            xattr_name == "ceph.dir.pin.random"sv ||
-           xattr_name == "ceph.dir.pin.distributed"sv;
+           xattr_name == "ceph.dir.pin.distributed"sv ||
+           xattr_name.rfind("ceph.dmclock", 0) == 0;
   }
 
   static bool is_allowed_ceph_xattr(std::string_view xattr_name) {

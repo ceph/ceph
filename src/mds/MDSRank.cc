@@ -537,6 +537,8 @@ MDSRank::MDSRank(
   locker = new Locker(this, mdcache);
 
   heartbeat_grace = g_conf().get_val<double>("mds_heartbeat_grace");
+  mds_dmclock_scheduler = new MDSDmclockScheduler(this);
+
   op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
                                          cct->_conf->mds_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
@@ -561,6 +563,7 @@ MDSRank::~MDSRank()
 
   if (server) { delete server; server = 0; }
   if (locker) { delete locker; locker = 0; }
+  if (mds_dmclock_scheduler) { delete mds_dmclock_scheduler; mds_dmclock_scheduler = 0; }
 
   if (logger) {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
@@ -1177,7 +1180,8 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
       type == MSG_MDS_SCRUB_STATS ||
       type == CEPH_MSG_CLIENT_CAPS ||
       type == CEPH_MSG_CLIENT_CAPRELEASE ||
-      type == CEPH_MSG_CLIENT_LEASE) {
+      type == CEPH_MSG_CLIENT_LEASE ||
+      type == MSG_MDS_DMCLOCK_QOS) {
     return true;
   }
 
@@ -1264,6 +1268,11 @@ void MDSRank::handle_message(const cref_t<Message> &m)
     case MSG_MDS_SCRUB_STATS:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       scrubstack->dispatch(m);
+      break;
+
+    case MSG_MDS_DMCLOCK_QOS:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
+      mds_dmclock_scheduler->proc_message(m);
       break;
 
     default:
@@ -2800,6 +2809,9 @@ void MDSRankDispatcher::handle_asok_command(
       goto out;
     }
     damage_table.erase(id);
+  } else if (command == "dump qos") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->dump(f);
   } else {
     r = -CEPHFS_ENOSYS;
   }
@@ -3689,6 +3701,10 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_recall_warning_decay_rate",
     "mds_request_load_average_decay_rate",
     "mds_session_cache_liveness_decay_rate",
+    "mds_dmclock_enable",
+    "mds_dmclock_reservation",
+    "mds_dmclock_weight",
+    "mds_dmclock_limit",
     "mds_heartbeat_grace",
     "mds_session_cap_acquisition_decay_rate",
     "mds_max_caps_per_client",
@@ -3737,10 +3753,12 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
     if (changed.count("mds_log_pause") && !g_conf()->mds_log_pause) {
       mdlog->kick_submitter();
     }
+    dout(0) << "handle_conf_change() called" << dendl;
     sessionmap.handle_conf_change(changed);
     server->handle_conf_change(changed);
     mdcache->handle_conf_change(changed, *mdsmap);
     purge_queue.handle_conf_change(changed, *mdsmap);
+    mds_dmclock_scheduler->handle_conf_change(changed);
   }));
 }
 

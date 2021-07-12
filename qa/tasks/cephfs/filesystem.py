@@ -583,6 +583,21 @@ class Filesystem(MDSCluster):
         c = ["fs", "required_client_features", self.name, *args]
         return self.mon_manager.run_cluster_cmd(args=c, **kwargs)
 
+    def set_mds_qos(self, yes):
+        for id in self.mds_ids:
+            self.mds_asok(["config", "set", "mds_dmclock_enable", str(yes).lower()], mds_id=id)
+
+    def is_mds_qos(self, id=None):
+        if id:
+            return self.mds_asok(["config", "get", "mds_dmclock_enable"],
+                    mds_id=id)["mds_dmclock_enable"] == "true"
+
+        result = []
+        for id_ in self.mds_ids:
+            result.append(self.mds_asok(["config", "get", "mds_dmclock_enable"], mds_id=id_))
+
+        return all(row["mds_dmclock_enable"] == "true" for row in result)
+
     # In Octopus+, the PG count can be omitted to use the default. We keep the
     # hard-coded value for deployments of Mimic/Nautilus.
     pgs_per_fs_pool = 8

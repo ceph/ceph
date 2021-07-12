@@ -129,6 +129,7 @@
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
 #include "messages/MClientQuota.h"
+#include "messages/MClientQoS.h"
 #include "messages/MClientMetrics.h"
 
 #include "messages/MMDSPeerRequest.h"
@@ -176,6 +177,7 @@
 #include "messages/MDentryLink.h"
 
 #include "messages/MHeartbeat.h"
+#include "messages/MMDSDmclockQoS.h"
 
 #include "messages/MMDSTableRequest.h"
 #include "messages/MMDSMetrics.h"
@@ -695,6 +697,9 @@ Message *decode_message(CephContext *cct,
   case CEPH_MSG_CLIENT_QUOTA:
     m = make_message<MClientQuota>();
     break;
+  case CEPH_MSG_CLIENT_QOS:
+    m = make_message<MClientQoS>();
+    break;
   case CEPH_MSG_CLIENT_METRICS:
     m = make_message<MClientMetrics>();
     break;
@@ -859,6 +864,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_PING:
     m = make_message<MMDSPing>();
+    break;
+
+  case MSG_MDS_DMCLOCK_QOS:
+    m = make_message<MDSDmclockQoS>();
     break;
 
   case MSG_MGR_BEACON:
