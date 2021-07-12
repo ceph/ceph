@@ -256,7 +256,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
   do {
     int ret = user->list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "failed to read user buckets: "
+      ldpp_dout(dpp, 0) << "failed to read user buckets: "
 			     << cpp_strerror(-ret) << dendl;
       return;
     }
@@ -272,7 +272,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
       std::unique_ptr<rgw::sal::Bucket> actual_bucket;
       int r = store->get_bucket(dpp, user, user->get_tenant(), bucket->get_name(), &actual_bucket, null_yield);
       if (r < 0) {
-        ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
+        ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
       }
 
@@ -833,12 +833,12 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
 }
 
 
-int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
+int RGWBucket::policy_bl_to_stream(const DoutPrefixProvider *dpp, bufferlist& bl, ostream& o)
 {
   RGWAccessControlPolicy_S3 policy(g_ceph_context);
   int ret = decode_bl(bl, policy);
   if (ret < 0) {
-    ldout(store->ctx(),0) << "failed to decode RGWAccessControlPolicy" << dendl;
+    ldpp_dout(dpp, 0) << "failed to decode RGWAccessControlPolicy" << dendl;
   }
   policy.to_xml(o);
   return 0;
@@ -872,7 +872,7 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolic
 
     ret = decode_bl(bl, policy);
     if (ret < 0) {
-      ldout(store->ctx(),0) << "failed to decode RGWAccessControlPolicy" << dendl;
+      ldpp_dout(dpp, 0) << "failed to decode RGWAccessControlPolicy" << dendl;
     }
     return ret;
   }
@@ -884,7 +884,7 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolic
 
   ret = decode_bl(aiter->second, policy);
   if (ret < 0) {
-    ldout(store->ctx(),0) << "failed to decode RGWAccessControlPolicy" << dendl;
+    ldpp_dout(dpp, 0) << "failed to decode RGWAccessControlPolicy" << dendl;
   }
 
   return ret;

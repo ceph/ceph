@@ -243,7 +243,7 @@ int RGWCoroutinesStack::operate(const DoutPrefixProvider *dpp, RGWCoroutinesEnv 
 
   if (op->is_done()) {
     int op_retcode = r;
-    r = unwind(op_retcode);
+    r = unwind(dpp, op_retcode);
     op->put();
     done_flag = (pos == ops.end());
     blocked_flag &= !done_flag;
@@ -352,12 +352,12 @@ void RGWCoroutinesStack::io_complete(const rgw_io_id& io_id)
   completion_mgr->complete(nullptr, io_id, (void *)this);
 }
 
-int RGWCoroutinesStack::unwind(int retcode)
+int RGWCoroutinesStack::unwind(const DoutPrefixProvider *dpp, int retcode)
 {
   rgw_spawned_stacks *src_spawned = &(*pos)->spawned;
 
   if (pos == ops.begin()) {
-    ldout(cct, 15) << "stack " << (void *)this << " end" << dendl;
+    ldpp_dout(dpp, 15) << "stack " << (void *)this << " end" << dendl;
     spawned.inherit(src_spawned);
     ops.clear();
     pos = ops.end();
@@ -372,11 +372,11 @@ int RGWCoroutinesStack::unwind(int retcode)
   return 0;
 }
 
-void RGWCoroutinesStack::cancel()
+void RGWCoroutinesStack::cancel(const DoutPrefixProvider *dpp)
 {
   while (!ops.empty()) {
     RGWCoroutine *op = *pos;
-    unwind(-ECANCELED);
+    unwind(dpp, -ECANCELED);
     op->put();
   }
   put();
@@ -491,7 +491,7 @@ bool RGWCoroutinesStack::unblock_stack(RGWCoroutinesStack **s)
   return true;
 }
 
-void RGWCoroutinesManager::report_error(RGWCoroutinesStack *op)
+void RGWCoroutinesManager::report_error(const DoutPrefixProvider *dpp, RGWCoroutinesStack *op)
 {
   if (!op) {
     return;
@@ -500,7 +500,7 @@ void RGWCoroutinesManager::report_error(RGWCoroutinesStack *op)
   if (err.empty()) {
     return;
   }
-  lderr(cct) << "ERROR: failed operation: " << op->error_str() << dendl;
+  ldpp_dout(dpp, -1) << "ERROR: failed operation: " << op->error_str() << dendl;
 }
 
 void RGWCoroutinesStack::dump(Formatter *f) const {
@@ -655,13 +655,13 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
     }
 
     if (stack->is_error()) {
-      report_error(stack);
+      report_error(dpp, stack);
     }
 
     op_not_blocked = false;
 
     if (stack->is_io_blocked()) {
-      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
       if (stack->is_interval_waiting()) {
         interval_wait_count++;
       }
@@ -670,10 +670,10 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
       /* do nothing, we'll re-add the stack when the blocking stack is done,
        * or when we're awaken
        */
-      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is_blocked_by_stack()=" << stack->is_blocked_by_stack()
+      ldpp_dout(dpp, 20) << __func__ << ":" << " stack=" << (void *)stack << " is_blocked_by_stack()=" << stack->is_blocked_by_stack()
 	             << " is_sleeping=" << stack->is_sleeping() << " waiting_for_child()=" << stack->waiting_for_child() << dendl;
     } else if (stack->is_done()) {
-      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is done" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << ":" << " stack=" << (void *)stack << " is done" << dendl;
       RGWCoroutinesStack *s;
       while (stack->unblock_stack(&s)) {
 	if (!s->is_blocked_by_stack() && !s->is_done()) {
@@ -718,7 +718,7 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
       ret = completion_mgr->get_next(&io);
       lock.lock();
       if (ret < 0) {
-       ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
+       ldpp_dout(dpp, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
     }
@@ -729,10 +729,10 @@ next:
       ret = completion_mgr->get_next(&io);
       lock.lock();
       if (ret < 0) {
-        ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
+        ldpp_dout(dpp, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       if (going_down) {
-	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
+	ldpp_dout(dpp, 5) << __func__ << "(): was stopped, exiting" << dendl;
 	ret = -ECANCELED;
         canceled = true;
         break;
@@ -756,15 +756,15 @@ next:
       ::encode_json("entry", *s, &formatter);
     }
     formatter.close_section();
-    lderr(cct) << __func__ << "(): ERROR: deadlock detected, dumping remaining coroutines:\n";
+    ldpp_dout(dpp, -1) << __func__ << "(): ERROR: deadlock detected, dumping remaining coroutines:\n";
     formatter.flush(*_dout);
     *_dout << dendl;
     ceph_assert(context_stacks.empty() || going_down); // assert on deadlock
   }
 
   for (auto stack : context_stacks) {
-    ldout(cct, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
-    stack->cancel();
+    ldpp_dout(dpp, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
+    stack->cancel(dpp);
   }
   run_contexts.erase(run_context);
   lock.unlock();
@@ -860,7 +860,7 @@ RGWCoroutinesManagerRegistry::~RGWCoroutinesManagerRegistry()
   }
 }
 
-int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
+int RGWCoroutinesManagerRegistry::hook_to_admin_command(const DoutPrefixProvider *dpp, const string& command)
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   if (!admin_command.empty()) {
@@ -870,7 +870,7 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
   int r = admin_socket->register_command(admin_command, this,
 				     "dump current coroutines stack state");
   if (r < 0) {
-    lderr(cct) << "ERROR: fail to register admin socket command (r=" << r << ")" << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: fail to register admin socket command (r=" << r << ")" << dendl;
     return r;
   }
   return 0;

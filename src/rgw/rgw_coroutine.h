@@ -536,7 +536,7 @@ public:
   void call(RGWCoroutine *next_op);
   RGWCoroutinesStack *spawn(RGWCoroutine *next_op, bool wait);
   RGWCoroutinesStack *prealloc_stack();
-  int unwind(int retcode);
+  int unwind(const DoutPrefixProvider *dpp, int retcode);
 
   int wait(const utime_t& interval);
   void wakeup();
@@ -547,7 +547,7 @@ public:
 
   bool collect(int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id); /* returns true if needs to be called again */
 
-  void cancel();
+  void cancel(const DoutPrefixProvider *dpp);
 
   RGWAioCompletionNotifier *create_completion_notifier();
   template <typename T>
@@ -611,7 +611,7 @@ public:
   void add(RGWCoroutinesManager *mgr);
   void remove(RGWCoroutinesManager *mgr);
 
-  int hook_to_admin_command(const string& command);
+  int hook_to_admin_command(const DoutPrefixProvider *dpp, const string& command);
   int call(std::string_view command, const cmdmap_t& cmdmap,
 	   Formatter *f,
 	   std::ostream& ss,
@@ -671,7 +671,7 @@ public:
     }
   }
 
-  virtual void report_error(RGWCoroutinesStack *op);
+  virtual void report_error(const DoutPrefixProvider *dpp, RGWCoroutinesStack *op);
 
   RGWAioCompletionNotifier *create_completion_notifier(RGWCoroutinesStack *stack);
   template <typename T>

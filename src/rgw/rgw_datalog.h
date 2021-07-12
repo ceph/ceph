@@ -157,9 +157,9 @@ public:
     emplace(0, be);
   }
 
-  bs::error_code handle_init(entries_t e) noexcept override;
-  bs::error_code handle_new_gens(entries_t e) noexcept override;
-  bs::error_code handle_empty_to(uint64_t new_tail) noexcept override;
+  bs::error_code handle_init(const DoutPrefixProvider *dpp, entries_t e) noexcept override;
+  bs::error_code handle_new_gens(const DoutPrefixProvider *dpp, entries_t e) noexcept override;
+  bs::error_code handle_empty_to(const DoutPrefixProvider *dpp, uint64_t new_tail) noexcept override;
 
   int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
 };
@@ -206,7 +206,7 @@ class RGWDataChangesLog {
 
   void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
   void register_renew(const rgw_bucket_shard& bs);
-  void update_renewed(const rgw_bucket_shard& bs, ceph::real_time expiration);
+  void update_renewed(const DoutPrefixProvider *dpp, const rgw_bucket_shard& bs, ceph::real_time expiration);
 
   ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
   ceph::condition_variable renew_cond;

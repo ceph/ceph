@@ -236,7 +236,7 @@ int RGWObjectSimplePutCR::Request::_send_request(const DoutPrefixProvider *dpp)
 
   int ret = params.bucket->get_object(params.key, &obj);
   if (ret < 0) {
-    lderr(cct) << "ERROR: failed to get object: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to get object: " << cpp_strerror(-ret) << dendl;
     return -ret;
   }
 
@@ -259,7 +259,7 @@ int RGWBucketLifecycleConfigCR::Request::_send_request(const DoutPrefixProvider 
 
   RGWLC *lc = store->getRados()->get_lc();
   if (!lc) {
-    lderr(cct) << "ERROR: lifecycle object is not initialized!" << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: lifecycle object is not initialized!" << dendl;
     return -EIO;
   }
 
@@ -267,7 +267,7 @@ int RGWBucketLifecycleConfigCR::Request::_send_request(const DoutPrefixProvider 
                                   params.bucket_attrs,
                                   &params.config);
   if (ret < 0) {
-    lderr(cct) << "ERROR: failed to set lifecycle on bucke: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to set lifecycle on bucke: " << cpp_strerror(-ret) << dendl;
     return -ret;
   }
 

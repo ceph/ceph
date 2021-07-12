@@ -354,7 +354,7 @@ public:
   int set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
   int remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
-  int policy_bl_to_stream(bufferlist& bl, ostream& o);
+  int policy_bl_to_stream(const DoutPrefixProvider *dpp, bufferlist& bl, ostream& o);
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y, const DoutPrefixProvider *dpp);
   int sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 

@@ -422,7 +422,7 @@ protected:
 
 public:
   virtual int init(const DoutPrefixProvider *dpp) = 0;
-  virtual int read(bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
+  virtual int read(const DoutPrefixProvider *dpp, bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
   virtual int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) = 0;
   virtual bool has_attrs() = 0;
   virtual void get_attrs(std::map<string, string> *attrs) = 0;
@@ -487,7 +487,7 @@ public:
   ~RGWStreamReadHTTPResourceCRF();
 
   int init(const DoutPrefixProvider *dpp) override;
-  int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
+  int read(const DoutPrefixProvider *dpp, bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
   int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) override;
   bool has_attrs() override;
   void get_attrs(std::map<string, string> *attrs) override;
