@@ -176,6 +176,7 @@ const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
 constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
 const uint8_t RWL_POOL_VERSION = 1;
+const uint64_t SSD_POOL_VERSION = 1;
 const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
 const double AGGRESSIVE_RETIRE_HIGH_WATER = 0.75;
 const double RETIRE_HIGH_WATER = 0.50;
@@ -288,21 +289,19 @@ struct WriteLogPoolRoot {
   #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t layout_version = 0;
-  uint64_t cur_sync_gen = 0;
   #endif
   uint64_t pool_size;
   uint64_t flushed_sync_gen;     /* All writing entries with this or a lower
                                   * sync gen number are flushed. */
   uint32_t block_size;           /* block size */
   uint32_t num_log_entries;
-  uint32_t first_free_entry;     /* Entry following the newest valid entry */
-  uint32_t first_valid_entry;    /* Index of the oldest valid entry in the log */
+  uint64_t first_free_entry;     /* Entry following the newest valid entry */
+  uint64_t first_valid_entry;    /* Index of the oldest valid entry in the log */
 
   #ifdef WITH_RBD_SSD_CACHE
   DENC(WriteLogPoolRoot, v, p) {
     DENC_START(1, 1, p);
     denc(v.layout_version, p);
-    denc(v.cur_sync_gen, p);
     denc(v.pool_size, p);
     denc(v.flushed_sync_gen, p);
     denc(v.block_size, p);
