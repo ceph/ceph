@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import os
+from concurrent import futures
 from functools import total_ordering
 from ceph_volume import sys_info, process
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
+
+logger = logging.getLogger(__name__)
+
 
 report_template = """
 {dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
@@ -30,10 +35,26 @@ class Devices(object):
     def __init__(self, filter_for_batch=False, with_lsm=False):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
-        self.devices = [Device(k, with_lsm) for k in
-                            sys_info.devices.keys()]
-        if filter_for_batch:
-            self.devices = [d for d in self.devices if d.available_lvm_batch]
+
+        self.devices = []
+        with futures.ThreadPoolExecutor(max_workers=4) as executor:
+            device_futures = {executor.submit(Device, k): k for k in
+                              sys_info.devices.keys()}
+            for device_future in futures.as_completed(device_futures,
+                                                      timeout=60):
+                path = device_futures[device_future]
+                try:
+                    device = device_future.result()
+                except Exception as e:
+                    logger.error('Failed to retrieve device info for {}'
+                              'Raised {}'.format(path, e))
+                    raise e
+                # add the device to the list if either filter_for_batch is
+                # false or if its true we check the available_lvm_batch prop
+                if not filter_for_batch:
+                    self.devices.append(device)
+                elif device.available_lvm_batch:
+                    self.devices.append(device)
 
     def pretty_report(self):
         output = [
