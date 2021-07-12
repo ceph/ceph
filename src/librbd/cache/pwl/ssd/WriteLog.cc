@@ -316,7 +316,7 @@ void WriteLog<I>::enlist_op_appender() {
  * all prior log entries are persisted everywhere.
  */
 template<typename I>
-void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops) {
+void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIORequestT *req) {
   bool need_finisher = false;
   GenericLogOperationsVector appending;
 
@@ -334,6 +334,13 @@ void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops) {
       need_finisher = has_sync_point_logs(ops);
     }
     this->m_ops_to_append.splice(this->m_ops_to_append.end(), ops);
+
+    if (req != nullptr) {
+      if (this->get_persist_on_flush()) {
+        req->complete_user_request(0);
+      }
+      req->release_cell();
+    }
   }
 
   if (need_finisher) {
@@ -349,11 +356,7 @@ template <typename I>
 void WriteLog<I>::setup_schedule_append(pwl::GenericLogOperationsVector &ops,
                                         bool do_early_flush,
                                         C_BlockIORequestT *req) {
-  this->schedule_append(ops);
-  if (this->get_persist_on_flush()) {
-    req->complete_user_request(0);
-  }
-  req->release_cell();
+  this->schedule_append(ops, req);
 }
 
 template <typename I>
