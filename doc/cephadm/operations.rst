@@ -384,6 +384,8 @@ The OS kernel version (maj.min) is checked for consistency across the hosts.
 The kernel version of the majority of the hosts is used as the basis for 
 identifying anomalies.
 
+.. _client_keyrings_and_configs:
+
 Client keyrings and configs
 ===========================
 
@@ -460,6 +462,7 @@ To disable management of a keyring file, run a command of the following form:
   This deletes any keyring files for this entity that were previously written
   to cluster nodes.
 
+.. _etc_ceph_conf_distribution:
 
 /etc/ceph/ceph.conf
 ===================
@@ -490,6 +493,11 @@ the following form:
 
 For example, to distribute configs to hosts with the ``bare_config`` label, run
 the following command:
+
+Distributing ceph.conf to hosts tagged with bare_config 
+-------------------------------------------------------
+
+For example, to distribute configs to hosts with the ``bare_config`` label, run the following command:
 
 .. prompt:: bash #
 
