@@ -4292,6 +4292,32 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (cmp != src_attrs.end())
     attrs[RGW_ATTR_COMPRESSION] = cmp->second;
 
+  attrs.erase(RGW_ATTR_OBJECT_RETENTION);
+  attrs.erase(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  if (dest_bucket->get_info().obj_lock_enabled()) {
+    auto obj_lock_mode_str = info->env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
+    auto obj_lock_date_str = info->env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
+    auto obj_legal_hold_str = info->env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+    if (obj_lock_mode_str && obj_lock_date_str) {
+      boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
+      RGWObjectRetention obj_retention(obj_lock_mode_str, *date);
+      if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph_clock_now()) {
+        ldpp_dout(dpp, 0) << "ERROR: the retain-until date must be in the future" << dendl;
+        return -EINVAL;
+      }
+      bufferlist retention_bl;
+      obj_retention.encode(retention_bl);
+      attrs[RGW_ATTR_OBJECT_RETENTION] = retention_bl;
+    }
+
+    if (obj_legal_hold_str) {
+      RGWObjectLegalHold obj_legal_hold(obj_legal_hold_str);
+      bufferlist bl;
+      obj_legal_hold.encode(bl);
+      attrs[RGW_ATTR_OBJECT_LEGAL_HOLD] = bl;
+    }
+  }
+
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
 
