@@ -79,6 +79,24 @@ template<typename T> class DencDumper;
 
 namespace ceph {
 
+#ifdef BUFFER_CORRUPTION_DEBUG
+class canary_t {
+  static constexpr std::uint64_t canary_bird{0xBADC0FFEEBADC0DE};
+  const std::uint64_t cage{canary_bird};
+public:
+  void is_alive_or_die() const;
+};
+#else
+// Canary can be injected both by (privately) inheriting from it or by
+// defining a `canary_t`-typed member. However, the later imposes space
+// overhead. In contrast, inheritance provides a chance for the Empty
+// Base Optimization.
+struct canary_t {
+  // defining in place to not impose unnccessary calling.
+  void is_alive_or_die() const {}
+};
+#endif
+
 template <class T>
 struct nop_delete {
   void operator()(T*) {}
@@ -163,7 +181,7 @@ struct error_code;
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
    */
-  class CEPH_BUFFER_API ptr {
+  class CEPH_BUFFER_API ptr : private canary_t {
     friend class list;
   protected:
     raw *_raw;
@@ -242,6 +260,7 @@ struct error_code;
     ptr& operator= (const ptr& p);
     ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
+      canary_t::is_alive_or_die();
       // BE CAREFUL: this destructor is called also for hypercombined ptr_node.
       // After freeing underlying raw, `*this` can become inaccessible as well!
       release();
