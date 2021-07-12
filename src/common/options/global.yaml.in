@@ -1137,7 +1137,7 @@ options:
   level: advanced
   desc: Highest port number to bind daemon(s) to
   fmt_desc: The maximum port number to which an OSD or MDS daemon will bind.
-  default: 7300
+  default: 7568
   with_legacy: true
 # FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
 - name: ms_bind_retry_count
