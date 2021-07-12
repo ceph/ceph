@@ -233,6 +233,8 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
     }
     if (transitioned_objects_cache[*index] || check_queue || processing_queue) {
       processing_queue = false;
+      ldpp_dout(this, 1) << "RGWGC::list GC index_shard=" << *index << "marker: " << marker << dendl;
+
       ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[*index], marker, (max - result.size()) - entries.size(), expired_only, queue_entries, truncated, next_marker);
       if (ret < 0) {
         return ret;
