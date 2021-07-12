@@ -19,7 +19,9 @@ update APT's database and install Ceph::
 Installing with RPM
 ===================
 
-To install Ceph with RPMs, execute the following steps:
+To install Ceph with RPMs on RHEL 8 and derivatives the next steps are not needed because DNF support repository priorities natively.
+
+On RHEL 7 and derivatives execute the following steps for supporting repository priorities:
 
 
 #. Install ``yum-plugin-priorities``. ::
@@ -32,6 +34,10 @@ To install Ceph with RPMs, execute the following steps:
 
 	[main]
 	enabled = 1
+
+
+Now you can enable Ceph YUM repositories ensuring they have the correct priority:
+
 
 #. Ensure your YUM ``ceph.repo`` entry includes ``priority=2``. See
    `Get Packages`_ for details::
