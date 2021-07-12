@@ -1,5 +1,7 @@
 # flake8: noqa
 import json
+from textwrap import dedent
+
 import pytest
 from typing import Optional, Tuple, Iterator, List, Any, Dict
 
@@ -113,12 +115,21 @@ EXPORT
         def stat(self) -> Tuple[int, None]:
             return len(self.raw), None
 
+        def __repr__(self):
+            return f'TestNFS.RObject({self.key!r}, {self.raw!r})'
+
+        def __eq__(self, other):
+            return self.key == other.key and self.raw == other.raw
+
     def _ioctx_write_full_mock(self, key: str, content: bytes) -> None:
         if key not in self.temp_store[self.temp_store_namespace]:
             self.temp_store[self.temp_store_namespace][key] = \
                 TestNFS.RObject(key, content.decode('utf-8'))
         else:
             self.temp_store[self.temp_store_namespace][key].raw = content.decode('utf-8')
+
+    def _ioctx_append_mock(self, key: str, content: bytes):
+        self.temp_store[self.temp_store_namespace][key].raw += content.decode('utf-8')
 
     def _ioctx_remove_mock(self, key: str) -> None:
         del self.temp_store[self.temp_store_namespace][key]
@@ -135,9 +146,14 @@ EXPORT
 
     def _ioctx_set_namespace_mock(self, namespace: str) -> None:
         self.temp_store_namespace = namespace
+        if self.temp_store_namespace not in self.temp_store:
+            self.temp_store[self.temp_store_namespace] = {}
 
-    def _reset_temp_store(self) -> None:
+    def _reset_temp_store(self, empty=False) -> None:
         self.temp_store_namespace = None
+        if empty:
+            self.temp_store = {}
+            return
         self.temp_store = {
             'ns': {
                 'export-1': TestNFS.RObject("export-1", self.export_1),
@@ -161,6 +177,7 @@ EXPORT
         self.io_mock.stat = self._ioctl_stat_mock
         self.io_mock.list_objects.side_effect = self._ioctx_list_objects_mock
         self.io_mock.write_full.side_effect = self._ioctx_write_full_mock
+        self.io_mock.append.side_effect = self._ioctx_append_mock
         self.io_mock.remove_object.side_effect = self._ioctx_remove_mock
 
         # mock nfs services
@@ -236,6 +253,7 @@ EXPORT
             return 0, json.dumps(u), ''
 
         with mock.patch('nfs.module.Module.describe_service') as describe_service, \
+                mock.patch('nfs.module.Module.apply_nfs') as apply_nfs, \
                 mock.patch('nfs.module.Module.rados') as rados, \
                 mock.patch('nfs.export.available_clusters',
                            return_value=self.clusters.keys()), \
@@ -250,6 +268,7 @@ EXPORT
             rados.open_ioctx.return_value.__exit__ = mock.Mock(return_value=None)
 
             describe_service.return_value = OrchResult(orch_nfs_services)
+            apply_nfs.return_value.serialized_exception = None
 
             self._reset_temp_store()
 
@@ -801,6 +820,48 @@ NFS_CORE_PARAM {
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.0.0/16"]
         assert export.cluster_id == cluster_id
+
+    def test_create_and_remove_export(self):
+        with self._mock_orchestrator(True), \
+                mock.patch('nfs.module.Module.get_osdmap') as get_osdmap:
+            get_osdmap.return_value.dump.return_value.get.return_value = {}
+            self._reset_temp_store(empty=True)
+            m = Module('nfs', '', '')
+            assert m._cmd_nfs_cluster_create(
+                cluster_id='foo'
+            ) == (0, '', 'foo cluster already exists')
+            assert self.temp_store == {'foo': {'conf-nfs.foo': TestNFS.RObject('conf-nfs.foo', '')}}
+
+            assert m._cmd_rgw_export_create_rgw(
+                bucket='bucket',
+                cluster_id='foo',
+                pseudo_path="/mybucket",
+            )[0] == 0
+            ex1 = dedent("""
+            EXPORT {
+                FSAL {
+                    name = "RGW";
+                    user_id = "nfs.foo.bucket";
+                    access_key_id = "the_access_key";
+                    secret_access_key = "the_secret_key";
+                }
+                export_id = 1;
+                path = "bucket";
+                pseudo = "/mybucket";
+                access_type = "RW";
+                squash = "none";
+                attr_expiration_time = 0;
+                security_label = true;
+                protocols = 4;
+                transports = "TCP";
+            }
+            """).lstrip()
+            assert self.temp_store == {
+                'foo': {
+                    'conf-nfs.foo': TestNFS.RObject('conf-nfs.foo', '%url "rados://nfs-ganesha/foo/export-1"\n\n'),
+                    'export-1': TestNFS.RObject('export-1', ex1),
+                }
+            }
 
     def test_create_export_cephfs(self):
         with self._mock_orchestrator(True):
