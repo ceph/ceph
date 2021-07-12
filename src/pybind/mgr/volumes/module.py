@@ -214,6 +214,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolumegroup snapshot subvolume_list '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=snap_name,type=CephString ',
+            'desc': "List subvolumes in CephFS subvolume group snapshot",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolume snapshot ls '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
@@ -542,6 +550,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                        group_name=cmd['group_name'],
                                                        snap_name=cmd['snap_name'],
                                                        force=cmd.get('force', False))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_snapshot_subvolume_list(self, inbuf, cmd):
+        return self.vc.subvolume_group_snapshot_subvolume_list(vol_name=cmd['vol_name'],
+                                                               group_name=cmd['group_name'],
+                                                               snap_name=cmd['snap_name'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_ls(self, inbuf, cmd):
