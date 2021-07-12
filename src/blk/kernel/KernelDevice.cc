@@ -236,6 +236,13 @@ int KernelDevice::open(const string& p)
       this->devname = devname;
       _detect_vdo();
     }
+
+    auto rotational_type = cct->_conf.get_val<string>("bluestore_debug_enforce_settings");
+    if (rotational_type.compare("hdd") == 0) {
+      rotational = true;
+    } else if (rotational_type.compare("ssd") == 0) {
+      rotational = false;
+    }
   }
 
   r = _aio_start();
