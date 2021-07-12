@@ -457,20 +457,21 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
 
     mempool::osd_pglog::list<pg_log_entry_t> new_entries;
     new_entries.splice(new_entries.end(), olog.log, from, to);
-    append_log_entries_update_missing(
-      info.last_backfill,
-      new_entries,
-      false,
-      &log,
-      missing,
-      rollbacker,
-      this);
 
     _merge_divergent_entries(
       log,
       divergent,
       info,
       original_crt,
+      missing,
+      rollbacker,
+      this);
+
+    append_log_entries_update_missing(
+      info.last_backfill,
+      new_entries,
+      false,
+      &log,
       missing,
       rollbacker,
       this);

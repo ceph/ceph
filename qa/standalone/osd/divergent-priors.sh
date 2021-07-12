@@ -602,8 +602,8 @@ function TEST_divergent_2() {
     rm -f $dir/existing
 
     grep _merge_object_divergent_entries $(find $dir -name '*osd*log')
-    # Check for _merge_object_divergent_entries for case #1
-    if ! grep -q "_merge_object_divergent_entries: more recent entry found:" $(find $dir -name '*osd*log')
+    # Check for _merge_object_divergent_entries for case #5
+    if ! grep -q "_merge_object_divergent_entries.*cannot roll back, removing and adding to missing" $(find $dir -name '*osd*log')
     then
 	    echo failure
 	    return 1
@@ -812,8 +812,8 @@ function TEST_divergent_3() {
     rm -f $dir/existing
 
     grep _merge_object_divergent_entries $(find $dir -name '*osd*log')
-    # Check for _merge_object_divergent_entries for case #1
-    if ! grep -q "_merge_object_divergent_entries: more recent entry found:" $(find $dir -name '*osd*log')
+    # Check for _merge_object_divergent_entries for case #5
+    if ! grep -q "_merge_object_divergent_entries.*cannot roll back, removing and adding to missing" $(find $dir -name '*osd*log')
     then
 	    echo failure
 	    return 1

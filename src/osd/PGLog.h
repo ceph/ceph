@@ -1057,27 +1057,7 @@ protected:
       /// Case 1)
       ldpp_dout(dpp, 10) << __func__ << ": more recent entry found: "
 			 << *objiter->second << ", already merged" << dendl;
-
-      ceph_assert(objiter->second->version > last_divergent_update);
-
-      // ensure missing has been updated appropriately
-      if (objiter->second->is_update() ||
-	  (missing.may_include_deletes && objiter->second->is_delete())) {
-	ceph_assert(missing.is_missing(hoid) &&
-	       missing.get_items().at(hoid).need == objiter->second->version);
-      } else {
-	ceph_assert(!missing.is_missing(hoid));
-      }
-      missing.revise_have(hoid, eversion_t());
-      missing.mark_fully_dirty(hoid);
-      if (rollbacker) {
-	if (!object_not_in_store) {
-	  rollbacker->remove(hoid);
-	}
-	for (auto &&i: entries) {
-	  rollbacker->trim(i);
-	}
-      }
+      ceph_abort_msg("unexpected error, actually we shouldn't have gotten here!");
       return;
     }
 
