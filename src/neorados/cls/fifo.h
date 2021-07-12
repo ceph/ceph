@@ -96,7 +96,10 @@ void create_meta(WriteOp& op, std::string_view id,
 		 std::optional<std::string_view> oid_prefix,
 		 bool exclusive = false,
 		 std::uint64_t max_part_size = default_max_part_size,
-		 std::uint64_t max_entry_size = default_max_entry_size);
+		 std::uint64_t max_entry_size = default_max_entry_size,
+     std::uint64_t visibility_timeout = 0,
+     std::uint64_t retention_period = 0);
+
 void get_meta(ReadOp& op, std::optional<fifo::objv> objv,
 	      bs::error_code* ec_out, fifo::info* info,
 	      std::uint32_t* part_header_size,
@@ -123,6 +126,19 @@ void list_part(ReadOp& op,
 	       bool* more,
 	       bool* full_part,
 	       std::string* ptag);
+void get_part_visible_offset(WriteOp& op,
+	       std::optional<string_view> tag,
+	       std::uint64_t ofs,
+	       std::uint64_t max_entries,
+	       std::uint64_t& visible_ofs,
+         bool& invisible_part,
+	       bs::error_code* ec_out);
+void get_part_trim_offset(WriteOp& op,
+	       std::optional<string_view> tag,
+	       std::uint64_t start_ofs,
+	       std::uint64_t end_ofs,
+	       std::uint64_t& trim_ofs,
+	       bs::error_code* ec_out);
 void get_part_info(ReadOp& op,
 		   bs::error_code* out_ec,
 		   fifo::part_header* header);
@@ -142,6 +158,14 @@ struct marker {
     return fmt::format("{:0>20}:{:0>20}", num, ofs);
   }
 };
+
+inline bool operator<(const marker& m1, const marker& m2) {
+  return m1.num < m2.num || (m1.num == m2.num && m1.ofs < m2.ofs);
+}
+
+inline bool operator>(const marker& m1, const marker& m2) {
+  return m1.num > m2.num || (m1.num == m2.num && m1.ofs > m2.ofs);
+}
 
 struct list_entry {
   cb::list data;
@@ -365,6 +389,10 @@ public:
 		     std::uint64_t max_part_size = default_max_part_size,
 		     /// Maximum size of any entry
 		     std::uint64_t max_entry_size = default_max_entry_size,
+         /// the time (in seconds) after listing in which an entry is invisible
+         std::uint64_t visibility_timeout = 0,
+         /// the time (in seconds) after listing after which an entry is deleted
+         std::uint64_t retention_period = 0,
 		     /// Default executor. By default use the one
 		     /// associated with the RADOS handle.
 		     std::optional<ba::executor> executor = std::nullopt) {
@@ -372,7 +400,7 @@ public:
 				  std::unique_ptr<FIFO>)> init(ct);
     WriteOp op;
     create_meta(op, oid, objv, oid_prefix, exclusive, max_part_size,
-		max_entry_size);
+		max_entry_size, visibility_timeout, retention_period);
     auto e = ba::get_associated_executor(init.completion_handler,
 					 executor.value_or(r.get_executor()));
     auto a = ba::get_associated_allocator(init.completion_handler);
@@ -564,6 +592,56 @@ public:
     return init.result.get();
   }
 
+  /// List the visible entries in a FIFO
+  /// once entries are listed via this function they become invisible for
+  /// the duration of visibility_timeout and will be automatically trimmed
+  /// after the retention_period
+  /// Signature(bs::error_code ec, bs::vector<list_entry> entries, bool more)
+  ///
+  /// More is true if entries beyond the last exist.
+  /// The list entries are of the form:
+  /// data - Contents of the entry
+  /// marker - String representing the position of this entry within the FIFO.
+  /// mtime - Time (on the OSD) at which the entry was pushed.
+  template<typename CT>
+  auto list2(int max_entries, //< Maximum number of entries to fetch
+	    /// Optionally, a marker indicating the position after
+	    /// which to begin listing. If null, begin at first visible entry strting from tail
+	    std::optional<std::string_view> markstr,
+	    CT&& ct //< CompletionToken
+    ) {
+    ba::async_completion<CT, void(bs::error_code,
+				  std::vector<list_entry>, bool)> init(ct);
+    std::unique_lock l(m);
+    std::int64_t part_num = info.tail_part_num;
+    l.unlock();
+    std::uint64_t ofs = 0;
+    auto a = ba::get_associated_allocator(init.completion_handler);
+    auto e = ba::get_associated_executor(init.completion_handler);
+
+    if (markstr) {
+      auto marker = to_marker(*markstr);
+      if (!marker) {
+        ldout(r->cct(), 0) << __func__
+          << "(): failed to parse marker (" << *markstr
+			    << ")" << dendl;
+        e.post(ca::bind_handler(std::move(init.completion_handler),
+              errc::invalid_marker,
+              std::vector<list_entry>{}, false), a);
+        return init.result.get();
+      }
+      part_num = marker->num;
+      ofs = marker->ofs;
+    }
+
+    using handler_type = decltype(init.completion_handler);
+    auto ls = ceph::allocate_unique<Lister<handler_type>>(
+        a, this, part_num, ofs, max_entries,
+        std::move(init.completion_handler));
+    ls.release()->list2();
+    return init.result.get();
+  }
+
   /// Trim entries from the tail to the given position
   /// Signature: (bs::error_code)
   template<typename CT>
@@ -586,6 +664,53 @@ public:
       using handler_type = decltype(init.completion_handler);
       auto t = ceph::allocate_unique<Trimmer<handler_type>>(
 	a, this, m->num, m->ofs, exclusive, std::move(init.completion_handler));
+      t.release()->trim();
+    }
+    return init.result.get();
+  }
+
+  /// Trim entries from the tail to the given position
+  /// Signature: (bs::error_code)
+  template<typename CT>
+  auto trim2(std::string_view start_markstr, //< Position from which to trim
+      std::string_view end_markstr, //< Position to which to trim, inclusive
+	    bool exclusive, //< If true, trim markers up to but NOT INCLUDING
+	                    //< markstr, otherwise trim markstr as well.
+	    CT&& ct //< CompletionToken
+    ) {
+    ba::async_completion<CT, void(bs::error_code)> init(ct);
+    auto a = ba::get_associated_allocator(init.completion_handler);
+    auto e = ba::get_associated_executor(init.completion_handler);
+    const auto start_m = to_marker(start_markstr);
+    const auto end_m = to_marker(end_markstr);
+    if (!start_m) {
+      std::cout
+        << __func__ << "(): failed to parse start marker: marker="
+			 << start_markstr << std::endl;
+      e.post(ca::bind_handler(std::move(init.completion_handler),
+			      errc::invalid_marker), a);
+      return init.result.get();
+    } else if (!end_m) {
+      std::cout
+        << __func__ << "(): failed to parse end marker: marker="
+			 << end_markstr << std::endl;
+      e.post(ca::bind_handler(std::move(init.completion_handler),
+			      errc::invalid_marker), a);
+      return init.result.get();
+    }  else if(!(start_m.value() < end_m.value())) {
+      std::cout
+        << __func__ << "(): start marker: " << start_markstr << 
+			 " must be smaller than end marker: " << end_markstr << std::endl;
+      e.post(ca::bind_handler(std::move(init.completion_handler),
+			      errc::invalid_marker), a);
+    } else {
+      std::cout
+        << __func__ << "(): called with on: " <<  
+        start_markstr << " - " << end_markstr << std::endl;
+      using handler_type = decltype(init.completion_handler);
+      auto t = ceph::allocate_unique<Trimmer2<handler_type>>(a, this, 
+          start_m->num, start_m->ofs, end_m->num,end_m->ofs, 
+          std::move(init.completion_handler));
       t.release()->trim();
     }
     return init.result.get();
@@ -1359,6 +1484,98 @@ private:
 	return;
       }
     }
+
+    void list2() {
+      if (max_entries == 0) {
+	      handle({});
+	      return;
+      }
+
+	    ec_out.clear();
+	    part_more = false;
+	    part_full = false;
+	    entries.clear();
+
+	    std::unique_lock l(f->m);
+	    auto part_oid = f->info.part_oid(part_num);
+	    l.unlock();
+
+	    WriteOp op;
+      bool invisible_part;
+	    get_part_visible_offset(op, {}, ofs, max_entries, ofs, invisible_part, &ec_out);
+	    auto e = ba::get_associated_executor(handler, f->get_executor());
+	    auto a = ba::get_associated_allocator(handler);
+	    f->r->execute(part_oid, f->ioc, std::move(op), 
+        ca::bind_ea(e, a, [t = std::unique_ptr<Lister>(this), this, part_oid, &invisible_part](bs::error_code ec) mutable {
+          t.release();
+          // TODO: handle part removal
+	        if (ec) {
+            ldout(f->r->cct(), 0) << __func__ << "(): get_part_visible_offset() on oid=" << part_oid
+              << " returned ec=" << ec.message() << dendl;
+		        handle(ec);
+		        return;
+	        }
+	        if (ec_out) {
+            ldout(f->r->cct(), 0) << __func__ << "(): get_part_visible_offset() on oid=" << f->info.part_oid(part_num)
+              << " returned ec=" << ec_out.message() << dendl;
+		        handle(ec_out);
+		        return;
+	        }
+          if (invisible_part) {
+            // try to read from next part
+	          ++part_num;
+	          ofs = 0;
+	          list2();
+            return;
+          }
+
+	        ReadOp op;
+	        ec_out.clear();
+	        list_part(op, {}, ofs, max_entries, &ec_out, &entries, &part_more, &part_full, nullptr);
+	        auto e = ba::get_associated_executor(handler, f->get_executor());
+	        auto a = ba::get_associated_allocator(handler);
+	        f->r->execute(part_oid, f->ioc, std::move(op), nullptr, ca::bind_ea(e, a,[t = std::unique_ptr<Lister>(this), this, part_oid](bs::error_code ec) mutable {
+	          t.release();
+            // TODO: handle part removal
+	          if (ec) {
+              ldout(f->r->cct(), 0) << __func__ << "(): list_part() on oid=" << part_oid
+		            << " returned ec=" << ec.message() << dendl;
+		          handle(ec);
+		          return;
+	          }
+	          if (ec_out) {
+              ldout(f->r->cct(), 0) << __func__ << "(): list_part() on oid=" << part_oid
+      		      << " returned ec=" << ec_out.message() << dendl;
+		          handle(ec_out);
+		          return;
+	          }
+
+	          more = part_full || part_more;
+	          for (auto& entry : entries) {
+		          list_entry e;
+		          e.data = std::move(entry.data);
+		          e.marker = marker{part_num, entry.ofs}.to_string();
+		          e.mtime = entry.mtime;
+		          result.push_back(std::move(e));
+	          }
+	          max_entries -= entries.size();
+	          entries.clear();
+	          if (max_entries > 0 && part_more) {
+		          list2();
+		          return;
+	          }
+
+	          if (!part_full) {
+		          handle({});
+		          return;
+	          }
+           
+	          ++part_num;
+	          ofs = 0;
+	          list2();
+          }));
+	      }));
+    }
   };
 
   template<typename Handler>
@@ -1474,6 +1691,162 @@ private:
 	    }
 	    update();
 	  }));
+    }
+  };
+
+  template<typename Handler>
+  class Trimmer2 {
+    FIFO* f;
+    std::int64_t max_part_size;
+    std::int64_t start_part_num;
+    std::uint64_t start_ofs;
+    std::int64_t end_part_num;
+    std::uint64_t end_ofs;
+    Handler handler;
+    std::int64_t pn;
+    int update_retries = 0;
+    bs::error_code ec_out;
+    bool contiguous_trim = true;
+
+    void handle(bs::error_code ec) {
+      auto h = std::move(handler);
+
+      FIFO::assoc_delete(h, this);
+      return std::move(h)(ec);
+    }
+
+    void update() {
+      std::cout << "INFO: " << __func__  << " called" << std::endl;
+      std::unique_lock l(f->m);
+      auto objv = f->info.version;
+      l.unlock();
+      auto a = ba::get_associated_allocator(handler);
+      auto e = ba::get_associated_executor(handler, f->get_executor());
+      f->_update_meta(fifo::update{}.tail_part_num(pn),
+          objv,
+	        ca::bind_ea(e, a, [this, t = std::unique_ptr<Trimmer2>(this)](bs::error_code ec, bool canceled) mutable {
+	          t.release();
+	          if (canceled) {
+	            if (update_retries >= MAX_RACE_RETRIES) {
+              std::cout 
+		              << "ERROR: " << __func__
+		              << "(): race check failed too many times, likely a bug"
+		              << std::endl;
+		            handle(errc::raced);
+		            return;
+	            }
+            }
+	          std::unique_lock l(f->m);
+	          const auto tail_part_num = f->info.tail_part_num;
+	          l.unlock();
+	          if (tail_part_num < pn) {
+	            ++update_retries;
+	            update();
+	            return;
+	          }
+	          handle({});
+	          return;
+	        }));
+    }
+
+    inline void stop_or_continue() {
+      if (pn == end_part_num) {
+	      handle({});
+        return;
+      }
+      ++pn;
+      trim();
+    }
+
+  public:
+    Trimmer2(FIFO* _f, std::int64_t _start_part_num, std::uint64_t _start_ofs,
+        std::int64_t _end_part_num, std::uint64_t _end_ofs, Handler&& _handler)
+      : f(_f), start_ofs(_start_ofs), end_ofs(_end_ofs), handler(std::move(_handler)) {
+      std::unique_lock l(f->m);
+      // we start to loop from the tail part
+      pn = f->info.tail_part_num;
+      // we cannot start trimming before the tail part
+      start_part_num = std::max(_start_part_num, pn);
+	    max_part_size = f->info.params.max_part_size;
+      // cannot end trimming after the head part
+      end_part_num = std::min(_end_part_num, f->info.head_part_num);
+      // TODO: add assert on start < end
+    }
+
+    void trim() {
+      if (pn < start_part_num) { 
+        contiguous_trim = false;
+        std::cout << __func__ << "(): INFO: skip part: " << pn << std::endl;
+        ++pn;
+	      trim();
+        return;
+      }
+
+	    WriteOp op;
+      std::uint64_t trim_ofs;
+	    get_part_trim_offset(op, {}, 
+          ((start_part_num == pn) ? start_ofs : 0),
+          ((end_part_num == pn) ? end_ofs : max_part_size), 
+          trim_ofs, 
+          &ec_out);
+
+      auto a = ba::get_associated_allocator(handler);
+      auto e = ba::get_associated_executor(handler, f->get_executor());
+	    std::unique_lock l(f->m);
+	    auto part_oid = f->info.part_oid(pn);
+	    l.unlock();
+	    f->r->execute(part_oid, f->ioc, std::move(op), 
+        ca::bind_ea(e, a, [&e, &a, t = std::unique_ptr<Trimmer2>(this), this, part_oid, &trim_ofs](bs::error_code ec) mutable {
+          t.release();
+          if (ec) {
+            cout
+		          << __func__ << "(): ERROR: trim_part_trim_offset() on part="
+		          << pn << " returned ec=" << ec.message() << std::endl;
+		        handle(ec);
+		        return;
+          }
+
+          cout << __func__ << "(): INFO: get_part_trim_offset returned offset: " << trim_ofs 
+            << " on part: " << pn << std::endl;
+          if (trim_ofs == 0) {
+            contiguous_trim = false;
+            cout << __func__ << "(): INFO: non contiguous trim on part: " << pn << std::endl;
+            stop_or_continue();
+            return;
+          }
+
+          if (contiguous_trim) {
+            cout << __func__ << "(): INFO: contiguous trim on part: " << pn << " with offset: " << trim_ofs << std::endl;
+            f->trim_part(pn, trim_ofs, std::nullopt, false, ca::bind_ea(e, a, [t = std::unique_ptr<Trimmer2>(this), this](bs::error_code ec) mutable {
+              t.release();
+	            if (ec && ec != bs::errc::no_such_file_or_directory) {
+                cout
+		              << __func__ << "(): ERROR: trim_part() on part="
+		              << pn << " returned ec=" << ec.message() << std::endl;
+		            handle(ec);
+		            return;
+	            }
+              if (pn < end_part_num) {
+	              ++pn;
+	              trim();
+                return;
+              }
+	            std::unique_lock l(f->m);
+	            const auto tail_part_num = f->info.tail_part_num;
+	            l.unlock();
+	            if (pn <= tail_part_num) {
+	              // don't need to modify meta info
+	              handle({});
+	              return;
+	            }
+	            update();
+	          }));
+            return;
+          }
+          std::cout
+            << __func__ << "(): INFO: non contiguous trim on part: " << pn  << std::endl;
+          stop_or_continue();
+        }));
     }
   };
 
