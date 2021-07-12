@@ -1,5 +1,5 @@
 from collections import namedtuple
-
+import ceph
 
 sys_info = namedtuple('sys_info', ['devices'])
 sys_info.devices = dict()
@@ -17,6 +17,6 @@ class UnloadedConfig(object):
 conf = namedtuple('config', ['ceph', 'cluster', 'verbosity', 'path', 'log_path'])
 conf.ceph = UnloadedConfig()
 
-__version__ = "1.0.0"
+__version__ = ceph.__version__
+__release__ = ceph.__release__
 
-__release__ = "quincy"

@@ -5,6 +5,7 @@ import pkg_resources
 import sys
 import logging
 
+import ceph_volume
 from ceph_volume.decorators import catches
 from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory, drive_group
 
@@ -114,6 +115,10 @@ Ceph Conf: {ceph_path}
             description=self.help(),
         )
         parser.add_argument(
+            '--version',
+            action="store_true",
+            help="display version")
+        parser.add_argument(
             '--cluster',
             default='ceph',
             help='Cluster name (defaults to "ceph")',
@@ -137,6 +142,11 @@ Ceph Conf: {ceph_path}
         log.setup_console()
         logger = logging.getLogger(__name__)
         logger.info("Running command: ceph-volume %s %s", " ".join(main_args), " ".join(subcommand_args))
+
+        if args.version:
+            print('ceph version {0}'.format(ceph_volume.__version__))
+            return
+
         # set all variables from args and load everything needed according to
         # them
         configuration.load_ceph_conf_path(cluster_name=args.cluster)
