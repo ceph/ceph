@@ -8,6 +8,7 @@
 #include "Protocol.h"
 #include "msg/async/frames_v2.h"
 #include "msg/async/crypto_onwire.h"
+#include "msg/async/compression_onwire.h"
 
 namespace crimson::net {
 
@@ -122,8 +123,9 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> write_flush(bufferlist&& buf);
 
   ceph::crypto::onwire::rxtx_t session_stream_handlers;
-  ceph::msgr::v2::FrameAssembler tx_frame_asm{&session_stream_handlers, false};
-  ceph::msgr::v2::FrameAssembler rx_frame_asm{&session_stream_handlers, false};
+  ceph::compression::onwire::rxtx_t session_comp_handlers;
+  ceph::msgr::v2::FrameAssembler tx_frame_asm{&session_stream_handlers, false, &session_comp_handlers};
+  ceph::msgr::v2::FrameAssembler rx_frame_asm{&session_stream_handlers, false, &session_comp_handlers};
   ceph::bufferlist rx_preamble;
   ceph::msgr::v2::segment_bls_t rx_segments_data;
 
