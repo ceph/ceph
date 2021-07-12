@@ -181,6 +181,11 @@ class Migrations:
         return True
 
     def migrate_nfs_spec(self, service_id: str, pool: str, ns: Optional[str]) -> None:
+        renamed = False
+        if service_id.startswith('ganesha-'):
+            service_id = service_id[8:]
+            renamed = True
+
         self.mgr.log.info(
             f'Migrating nfs.{service_id} from legacy pool {pool} namespace {ns}'
         )
@@ -201,6 +206,25 @@ class Migrations:
                 break
         self.mgr.log.info(f'Found {len(exports)} exports for legacy nfs.{service_id}')
 
+        if renamed:
+            # rename from nfs.ganesha-* to nfs.*.  This will destroy old daemons and
+            # deploy new ones.
+            self.mgr.log.info(f'Replacing nfs.ganesha-{service_id} with nfs.{service_id}')
+            spec = self.mgr.spec_store[f'nfs.ganesha-{service_id}'].spec
+            self.mgr.spec_store.rm(f'nfs.ganesha-{service_id}')
+            spec.service_id = service_id
+            self.mgr.spec_store.save(spec, True)
+        else:
+            # redeploy all ganesha daemons to ensures that the daemon
+            # cephx are correct AND container configs are set up properly
+            daemons = [d.name() for d in self.mgr.cache.get_daemons_by_service(f'nfs.{service_id}')]
+            self.mgr.log.info(f'Removing old nfs.{service_id} daemons {daemons}')
+            self.mgr.remove_daemons(daemons)
+
+            # re-save service spec (without pool and namespace properties!)
+            spec = self.mgr.spec_store[f'nfs.{service_id}'].spec
+            self.mgr.spec_store.save(spec)
+
         # import exports
         for export in exports:
             ex = ''
@@ -219,15 +243,7 @@ class Migrations:
             if ret:
                 self.mgr.log.warning(f'Failed to migrate export ({ret}): {err}\nExport was:\n{ex}')
 
-        # redeploy all ganesha daemons to ensures that the daemon
-        # cephx are correct AND container configs are set up properly
-        daemons = [d.name() for d in self.mgr.cache.get_daemons_by_service(f'nfs.{service_id}')]
-        self.mgr.log.info(f'Removing old daemons {daemons}')
-        self.mgr.remove_daemons(daemons)
 
-        # re-save service spec (without pool and namespace properties!)
-        spec = self.mgr.spec_store[f'nfs.{service_id}'].spec
-        self.mgr.spec_store.save(spec)
 
 
 def queue_migrate_nfs_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
