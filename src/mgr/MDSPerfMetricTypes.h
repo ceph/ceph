@@ -124,6 +124,12 @@ enum class MDSPerformanceCounterType : uint8_t {
   OPENED_FILES_METRIC = 5,
   PINNED_ICAPS_METRIC = 6,
   OPENED_INODES_METRIC = 7,
+  AVG_READ_LATENCY_METRIC = 8,
+  STDEV_READ_LATENCY_METRIC = 9,
+  AVG_WRITE_LATENCY_METRIC = 10,
+  STDEV_WRITE_LATENCY_METRIC = 11,
+  AVG_METADATA_LATENCY_METRIC = 12,
+  STDEV_METADATA_LATENCY_METRIC = 13,
 };
 
 struct MDSPerformanceCounterDescriptor {
@@ -139,6 +145,12 @@ struct MDSPerformanceCounterDescriptor {
     case MDSPerformanceCounterType::OPENED_FILES_METRIC:
     case MDSPerformanceCounterType::PINNED_ICAPS_METRIC:
     case MDSPerformanceCounterType::OPENED_INODES_METRIC:
+    case MDSPerformanceCounterType::AVG_READ_LATENCY_METRIC:
+    case MDSPerformanceCounterType::STDEV_READ_LATENCY_METRIC:
+    case MDSPerformanceCounterType::AVG_WRITE_LATENCY_METRIC:
+    case MDSPerformanceCounterType::STDEV_WRITE_LATENCY_METRIC:
+    case MDSPerformanceCounterType::AVG_METADATA_LATENCY_METRIC:
+    case MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC:
       return true;
     default:
       return false;

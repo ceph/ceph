@@ -168,6 +168,30 @@ bool Client::is_reserved_vino(vinodeno_t &vino) {
   return false;
 }
 
+// running average and standard deviation -- presented in
+// Donald Knuth's TAoCP, Volume II.
+double calc_average(double old_avg, double value, uint64_t count) {
+  double new_avg;
+  if (count == 1) {
+    new_avg = value;
+  } else {
+    new_avg = old_avg + ((value - old_avg) / count);
+  }
+
+  return new_avg;
+}
+
+double calc_stddev(double old_stddev, double old_mean, double new_mean,
+                   double value, uint64_t count) {
+  double new_variance;
+  if (count == 1) {
+    new_variance = 0.0;
+  } else {
+    new_variance = old_stddev + (value - old_mean)*(value - new_mean);
+  }
+
+  return std::sqrt(count > 1 ? new_variance / (count - 1) : 0.0);
+}
 
 // -------------
 
@@ -575,6 +599,13 @@ void Client::_finish_init()
     plb.add_time_avg(l_c_wrlat, "wrlat", "Latency of a file data write operation");
     plb.add_time_avg(l_c_read, "rdlat", "Latency of a file data read operation");
     plb.add_time_avg(l_c_fsync, "fsync", "Latency of a file sync operation");
+    // average, standard deviation mds/r/w/ latencies
+    plb.add_time(l_c_md_avg, "mdavg", "Average latency for processing metadata requests");
+    plb.add_time(l_c_md_stddev, "mdstddev", "Variability of latency for metadata requests");
+    plb.add_time(l_c_rd_avg, "readavg", "Average latency for processing read requests");
+    plb.add_time(l_c_rd_stddev, "readstddev", "Variability of latency for read requests");
+    plb.add_time(l_c_wr_avg, "writeavg", "Average latency for processing write requests");
+    plb.add_time(l_c_wr_stddev, "writestddev", "Variability of latency for write requests");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
@@ -700,6 +731,66 @@ void Client::shutdown()
   }
 }
 
+void Client::update_io_stat_metadata(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new onesxs
+  auto o_avg = logger->tget(l_c_md_avg).to_nsec();
+  auto o_stddev = logger->tget(l_c_md_stddev).to_nsec();
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_metadata_request);
+  auto n_stddev = calc_stddev(o_stddev, o_avg, n_avg, lat_nsec,
+                              nr_metadata_request);
+
+  logger->tinc(l_c_lat, latency);
+  logger->tinc(l_c_reply, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_md_avg, avg);
+  utime_t stddev;
+  stddev.set_from_double(n_stddev / 1000000000);
+  logger->tset(l_c_md_stddev, stddev);
+}
+
+void Client::update_io_stat_read(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new ones
+  auto o_avg = logger->tget(l_c_rd_avg).to_nsec();
+  auto o_stddev = logger->tget(l_c_rd_stddev).to_nsec();
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_read_request);
+  auto n_stddev = calc_stddev(o_stddev, o_avg, n_avg, lat_nsec,
+                              nr_read_request);
+
+  logger->tinc(l_c_read, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_rd_avg, avg);
+  utime_t stddev;
+  stddev.set_from_double(n_stddev / 1000000000);
+  logger->tset(l_c_rd_stddev, stddev);
+}
+
+void Client::update_io_stat_write(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new ones
+  auto o_avg = logger->tget(l_c_wr_avg).to_nsec();
+  auto o_stddev = logger->tget(l_c_wr_stddev).to_nsec();
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_write_request);
+  auto n_stddev = calc_stddev(o_stddev, o_avg, n_avg, lat_nsec,
+                              nr_write_request);
+
+  logger->tinc(l_c_wrlat, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_wr_avg, avg);
+  utime_t stddev;
+  stddev.set_from_double(n_stddev / 1000000000);
+  logger->tset(l_c_wr_stddev, stddev);
+}
 
 // ===================
 // metadata cache stuff
@@ -1903,8 +1994,9 @@ int Client::make_request(MetaRequest *request,
   utime_t lat = ceph_clock_now();
   lat -= request->sent_stamp;
   ldout(cct, 20) << "lat " << lat << dendl;
-  logger->tinc(l_c_lat, lat);
-  logger->tinc(l_c_reply, lat);
+
+  ++nr_metadata_request;
+  update_io_stat_metadata(lat);
 
   put_request(request);
   return r;
@@ -6639,15 +6731,21 @@ void Client::collect_and_send_global_metrics() {
   std::vector<ClientMetricMessage> message;
 
   // read latency
-  metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read)));
+  metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read),
+                                                  logger->tget(l_c_rd_avg),
+                                                  logger->tget(l_c_rd_stddev)));
   message.push_back(metric);
 
   // write latency
-  metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat)));
+  metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat),
+                                                   logger->tget(l_c_wr_avg),
+                                                   logger->tget(l_c_wr_stddev)));
   message.push_back(metric);
 
   // metadata latency
-  metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
+  metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat),
+                                                      logger->tget(l_c_md_avg),
+                                                      logger->tget(l_c_md_stddev)));
   message.push_back(metric);
 
   // cap hit ratio -- nr_caps is unused right now
@@ -9920,7 +10018,9 @@ success:
   
   lat = ceph_clock_now();
   lat -= start;
-  logger->tinc(l_c_read, lat);
+
+  ++nr_read_request;
+  update_io_stat_read(lat);
 
 done:
   // done!
@@ -10375,7 +10475,9 @@ success:
   // time
   lat = ceph_clock_now();
   lat -= start;
-  logger->tinc(l_c_wrlat, lat);
+
+  ++nr_write_request;
+  update_io_stat_write(lat);
 
   if (fpos) {
     lock_fh_pos(f);

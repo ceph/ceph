@@ -1093,6 +1093,12 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
     {"opened_files", MDSPerformanceCounterType::OPENED_FILES_METRIC},
     {"pinned_icaps", MDSPerformanceCounterType::PINNED_ICAPS_METRIC},
     {"opened_inodes", MDSPerformanceCounterType::OPENED_INODES_METRIC},
+    {"avg_read_latency", MDSPerformanceCounterType::AVG_READ_LATENCY_METRIC},
+    {"stdev_read_latency", MDSPerformanceCounterType::STDEV_READ_LATENCY_METRIC},
+    {"avg_write_latency", MDSPerformanceCounterType::AVG_WRITE_LATENCY_METRIC},
+    {"stdev_write_latency", MDSPerformanceCounterType::STDEV_WRITE_LATENCY_METRIC},
+    {"avg_metadata_latency", MDSPerformanceCounterType::AVG_METADATA_LATENCY_METRIC},
+    {"stdev_metadata_latency", MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC},
   };
 
   PyObject *py_query = nullptr;
