@@ -583,9 +583,14 @@ class Filesystem(MDSCluster):
         c = ["fs", "required_client_features", self.name, *args]
         return self.mon_manager.run_cluster_cmd(args=c, **kwargs)
 
-    # In Octopus+, the PG count can be omitted to use the default. We keep the
-    # hard-coded value for deployments of Mimic/Nautilus.
-    pgs_per_fs_pool = 8
+    # Since v15.1.0 the pg autoscale mode has been enabled as default,
+    # will let the pg autoscale mode to calculate the pg_num as needed.
+    # We set the pg_num_min to 64 to make sure that pg autoscale mode
+    # won't set the pg_num to low to fix Tracker#45434.
+    pg_num = 64
+    pg_num_min = 64
+    target_size_ratio = 0.9
+    target_size_ratio_ec = 0.9
 
     def create(self):
         if self.name is None:
@@ -597,13 +602,22 @@ class Filesystem(MDSCluster):
         else:
             data_pool_name = self.data_pool_name
 
+        # will use the ec pool to store the data and a small amount of
+        # metadata still goes to the primary data pool for all files.
+        if not self.metadata_overlay and self.ec_profile and 'disabled' not in self.ec_profile:
+            self.target_size_ratio = 0.05
+
         log.debug("Creating filesystem '{0}'".format(self.name))
 
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                         self.metadata_pool_name, self.pgs_per_fs_pool.__str__())
+                                         self.metadata_pool_name,
+                                         '--pg_num_min', str(self.pg_num_min))
 
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                         data_pool_name, self.pgs_per_fs_pool.__str__())
+                                         data_pool_name, str(self.pg_num),
+                                         '--pg_num_min', str(self.pg_num_min),
+                                         '--target_size_ratio',
+                                         str(self.target_size_ratio))
 
         if self.metadata_overlay:
             self.mon_manager.raw_cluster_cmd('fs', 'new',
@@ -622,9 +636,10 @@ class Filesystem(MDSCluster):
                 cmd.extend(self.ec_profile)
                 self.mon_manager.raw_cluster_cmd(*cmd)
                 self.mon_manager.raw_cluster_cmd(
-                    'osd', 'pool', 'create',
-                    ec_data_pool_name, self.pgs_per_fs_pool.__str__(), 'erasure',
-                    ec_data_pool_name)
+                    'osd', 'pool', 'create', ec_data_pool_name,
+                    'erasure', ec_data_pool_name,
+                    '--pg_num_min', str(self.pg_num_min),
+                    '--target_size_ratio', str(self.target_size_ratio_ec))
                 self.mon_manager.raw_cluster_cmd(
                     'osd', 'pool', 'set',
                     ec_data_pool_name, 'allow_ec_overwrites', 'true')
@@ -778,7 +793,8 @@ class Filesystem(MDSCluster):
 
     def add_data_pool(self, name, create=True):
         if create:
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.pgs_per_fs_pool.__str__())
+            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name,
+                                             '--pg_num_min', str(self.pg_num_min))
         self.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', self.name, name)
         self.get_pool_names(refresh = True)
         for poolid, fs_name in self.data_pools.items():
@@ -830,6 +846,12 @@ class Filesystem(MDSCluster):
         if self.id is not None:
             raise RuntimeError("can't set filesystem name if its fscid is set")
         self.data_pool_name = name
+
+    def get_pool_pg_num(self, pool_name):
+        pgs = json.loads(self.mon_manager.raw_cluster_cmd('osd', 'pool', 'get',
+                                                          pool_name, 'pg_num',
+                                                          '--format=json-pretty'))
+        return int(pgs['pg_num'])
 
     def get_namespace_id(self):
         return self.id
