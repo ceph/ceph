@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
 
+import { AuthStorageDirective } from './auth-storage.directive';
 import { AutofocusDirective } from './autofocus.directive';
 import { DimlessBinaryPerSecondDirective } from './dimless-binary-per-second.directive';
 import { DimlessBinaryDirective } from './dimless-binary.directive';
@@ -31,7 +32,8 @@ import { TrimDirective } from './trim.directive';
     FormScopeDirective,
     CdFormControlDirective,
     CdFormGroupDirective,
-    CdFormValidationDirective
+    CdFormValidationDirective,
+    AuthStorageDirective
   ],
   exports: [
     AutofocusDirective,
@@ -47,7 +49,8 @@ import { TrimDirective } from './trim.directive';
     FormScopeDirective,
     CdFormControlDirective,
     CdFormGroupDirective,
-    CdFormValidationDirective
+    CdFormValidationDirective,
+    AuthStorageDirective
   ]
 })
 export class DirectivesModule {}
