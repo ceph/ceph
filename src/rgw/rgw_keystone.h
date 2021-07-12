@@ -175,10 +175,42 @@ public:
     void decode_json(JSONObj *obj);
   };
 
+  /* RBAC machinery */
+  struct default_rbac_roles
+  {
+    unsigned int admin: 1;
+    unsigned int member: 1;
+    unsigned int reader: 1;
+
+    default_rbac_roles() :
+      admin(false), member(false), reader(false)
+      {}
+
+    bool is_admin() {
+      return admin;
+    }
+
+    bool is_member() {
+      return is_admin() || member;
+    }
+
+    bool is_reader()  {
+      return is_member() || reader;
+    }
+  };
+
+  struct default_rbac_mappings
+  {
+    default_rbac_roles system;
+    default_rbac_roles domain;
+    default_rbac_roles project;
+  };
+
   Token token;
   Project project;
   User user;
   std::list<Role> roles;
+  default_rbac_mappings rbac;
 
   void decode_v3(JSONObj* obj);
   void decode_v2(JSONObj* obj);
