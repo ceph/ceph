@@ -3,6 +3,9 @@ import errno
 import logging
 import re
 import shlex
+import asyncio
+import tempfile
+import threading
 from collections import defaultdict
 from configparser import ConfigParser
 from functools import wraps
@@ -16,7 +19,6 @@ from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
 import datetime
 import os
 import random
-import tempfile
 import multiprocessing.pool
 import subprocess
 from prettytable import PrettyTable
@@ -42,8 +44,8 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
-from . import remotes
 from . import utils
+from . import ssh
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
     RbdMirrorService, CrashService, CephadmService, CephfsMirrorService
@@ -63,20 +65,10 @@ from .utils import CEPH_TYPES, GATEWAY_TYPES, forall_hosts, cephadmNoImage
 from .configchecks import CephadmConfigChecks
 
 try:
-    import remoto
-    # NOTE(mattoliverau) Patch remoto until remoto PR
-    # (https://github.com/alfredodeza/remoto/pull/56) lands
-    from distutils.version import StrictVersion
-    if StrictVersion(remoto.__version__) <= StrictVersion('1.2'):
-        def remoto_has_connection(self: Any) -> bool:
-            return self.gateway.hasreceiver()
-
-        from remoto.backends import BaseConnection
-        BaseConnection.has_connection = remoto_has_connection
-    import remoto.process
+    import asyncssh
 except ImportError as e:
-    remoto = None
-    remoto_import_error = str(e)
+    asyncssh = None
+    asyncssh_import_error = str(e)
 
 logger = logging.getLogger(__name__)
 
@@ -355,6 +347,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.run = True
         self.event = Event()
 
+        self.ssh = ssh.SSHManager(self)
+
+        # AttributeError: 'EventLoop' object has no attribute 'mgr'
+        # self.ssh_loop = ssh.EventLoop(threading.currentThread())
+
         if self.get_store('pause'):
             self.paused = True
         else:
@@ -393,9 +390,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
-
-        self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
-                                    remoto.backends.LegacyModuleExecute]] = {}
+            self.ssh_user: Optional[str] = None
+            self._ssh_options: Optional[str] = None
+            self.tkey = tempfile.NamedTemporaryFile(prefix='cephadm-identity-')
+            self.ssh_config_fname: Optional[str] = None
+            self.ssh_config: Optional[str] = None
+            self._temp_files: List = []
+            self.ssh_key: Optional[str] = None
+            self.ssh_pub: Optional[str] = None
 
         self.notify('mon_map', None)
         self.config_notify()
@@ -413,7 +415,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self._worker_pool = multiprocessing.pool.ThreadPool(10)
 
-        self._reconfig_ssh()
+        self.ssh._reconfig_ssh()
 
         CephadmOrchestrator.instance = self
 
@@ -497,6 +499,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         A command handler will typically change the declarative state
         of cephadm. This loop will then attempt to apply this new state.
         """
+        # for ssh in serve
+        self.loops: Dict[threading.Thread, asyncio.AbstractEventLoop] = {}
+        self.event_loop = ssh.EventLoop(self)
+
         serve = CephadmServe(self)
         serve.serve()
 
@@ -615,57 +621,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 continue
             return name
 
-    def _reconfig_ssh(self) -> None:
-        temp_files = []  # type: list
-        ssh_options = []  # type: List[str]
-
-        # ssh_config
-        ssh_config_fname = self.ssh_config_file
-        ssh_config = self.get_store("ssh_config")
-        if ssh_config is not None or ssh_config_fname is None:
-            if not ssh_config:
-                ssh_config = DEFAULT_SSH_CONFIG
-            f = tempfile.NamedTemporaryFile(prefix='cephadm-conf-')
-            os.fchmod(f.fileno(), 0o600)
-            f.write(ssh_config.encode('utf-8'))
-            f.flush()  # make visible to other processes
-            temp_files += [f]
-            ssh_config_fname = f.name
-        if ssh_config_fname:
-            self.validate_ssh_config_fname(ssh_config_fname)
-            ssh_options += ['-F', ssh_config_fname]
-        self.ssh_config = ssh_config
-
-        # identity
-        ssh_key = self.get_store("ssh_identity_key")
-        ssh_pub = self.get_store("ssh_identity_pub")
-        self.ssh_pub = ssh_pub
-        self.ssh_key = ssh_key
-        if ssh_key and ssh_pub:
-            tkey = tempfile.NamedTemporaryFile(prefix='cephadm-identity-')
-            tkey.write(ssh_key.encode('utf-8'))
-            os.fchmod(tkey.fileno(), 0o600)
-            tkey.flush()  # make visible to other processes
-            tpub = open(tkey.name + '.pub', 'w')
-            os.fchmod(tpub.fileno(), 0o600)
-            tpub.write(ssh_pub)
-            tpub.flush()  # make visible to other processes
-            temp_files += [tkey, tpub]
-            ssh_options += ['-i', tkey.name]
-
-        self._temp_files = temp_files
-        if ssh_options:
-            self._ssh_options = ' '.join(ssh_options)  # type: Optional[str]
-        else:
-            self._ssh_options = None
-
-        if self.mode == 'root':
-            self.ssh_user = self.get_store('ssh_user', default='root')
-        elif self.mode == 'cephadm-package':
-            self.ssh_user = 'cephadm'
-
-        self._reset_cons()
-
     def validate_ssh_config_content(self, ssh_config: Optional[str]) -> None:
         if ssh_config is None or len(ssh_config.strip()) == 0:
             raise OrchestratorValidationError('ssh_config cannot be empty')
@@ -682,31 +637,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             raise OrchestratorValidationError("ssh_config \"{}\" does not exist".format(
                 ssh_config_fname))
 
-    def _reset_con(self, host: str) -> None:
-        conn, r = self._cons.get(host, (None, None))
-        if conn:
-            self.log.debug('_reset_con close %s' % host)
-            conn.exit()
-            del self._cons[host]
-
-    def _reset_cons(self) -> None:
-        for host, conn_and_r in self._cons.items():
-            self.log.debug('_reset_cons close %s' % host)
-            conn, r = conn_and_r
-            conn.exit()
-        self._cons = {}
-
     def offline_hosts_remove(self, host: str) -> None:
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
 
     @staticmethod
     def can_run() -> Tuple[bool, str]:
-        if remoto is not None:
+        if asyncssh is not None:
             return True, ""
         else:
-            return False, "loading remoto library:{}".format(
-                remoto_import_error)
+            return False, "loading asyncssh library:{}".format(
+                asyncssh_import_error)
 
     def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         """
@@ -729,7 +670,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     def _validate_and_set_ssh_val(self, what: str, new: Optional[str], old: Optional[str]) -> None:
         self.set_store(what, new)
-        self._reconfig_ssh()
+        self.ssh._reconfig_ssh()
         if self.cache.get_hosts():
             # Can't check anything without hosts
             host = self.cache.get_hosts()[0]
@@ -737,7 +678,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if r is not None:
                 # connection failed reset user
                 self.set_store(what, old)
-                self._reconfig_ssh()
+                self.ssh._reconfig_ssh()
                 raise OrchestratorError('ssh connection %s@%s failed' % (self.ssh_user, host))
         self.log.info(f'Set ssh {what}')
 
@@ -765,7 +706,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.set_store("ssh_config", None)
         self.ssh_config_tmp = None
         self.log.info('Cleared ssh_config')
-        self._reconfig_ssh()
+        self.ssh._reconfig_ssh()
         return 0, "", ""
 
     @orchestrator._cli_read_command('cephadm get-ssh-config')
@@ -808,7 +749,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 tmp_dir.cleanup()
             self.set_store('ssh_identity_key', secret)
             self.set_store('ssh_identity_pub', pub)
-            self._reconfig_ssh()
+            self.ssh._reconfig_ssh()
         return 0, '', ''
 
     @orchestrator._cli_write_command(
@@ -842,7 +783,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Clear cluster SSH key"""
         self.set_store('ssh_identity_key', None)
         self.set_store('ssh_identity_pub', None)
-        self._reconfig_ssh()
+        self.ssh._reconfig_ssh()
         self.log.info('Cleared cluster SSH key')
         return 0, '', ''
 
@@ -937,7 +878,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                              addr=addr,
                                                              error_ok=True, no_fsid=True)
             if code:
-                return 1, '', ('check-host failed:\n' + '\n'.join(err))
+                # err will contain stdout and stderr, so we filter on the message text to
+                # only show the errors
+                errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
+                raise OrchestratorError('Host %s (%s) failed check(s): %s' % (
+                    host, addr, errors))
         except OrchestratorError:
             self.log.exception(f"check-host failed for '{host}'")
             return 1, '', ('check-host failed:\n'
@@ -1289,51 +1234,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._kick_serve_loop()
         return HandleCommandResult()
 
-    def _get_connection(self, host: str) -> Tuple['remoto.backends.BaseConnection',
-                                                  'remoto.backends.LegacyModuleExecute']:
-        """
-        Setup a connection for running commands on remote host.
-        """
-        conn, r = self._cons.get(host, (None, None))
-        if conn:
-            if conn.has_connection():
-                self.log.debug('Have connection to %s' % host)
-                return conn, r
-            else:
-                self._reset_con(host)
-        assert self.ssh_user
-        n = self.ssh_user + '@' + host
-        self.log.debug("Opening connection to {} with ssh options '{}'".format(
-            n, self._ssh_options))
-        child_logger = self.log.getChild(n)
-        child_logger.setLevel('WARNING')
-        conn = remoto.Connection(
-            n,
-            logger=child_logger,
-            ssh_options=self._ssh_options,
-            sudo=True if self.ssh_user != 'root' else False)
-
-        r = conn.import_module(remotes)
-        self._cons[host] = conn, r
-
-        return conn, r
-
-    def _executable_path(self, conn: 'remoto.backends.BaseConnection', executable: str) -> str:
-        """
-        Remote validator that accepts a connection object to ensure that a certain
-        executable is available returning its full path if so.
-
-        Otherwise an exception with thorough details will be raised, informing the
-        user that the executable was not found.
-        """
-        executable_path = conn.remote_module.which(executable)
-        if not executable_path:
-            raise RuntimeError("Executable '{}' not found on host '{}'".format(
-                executable, conn.hostname))
-        self.log.debug("Found executable '{}' at path '{}'".format(executable,
-                                                                   executable_path))
-        return executable_path
-
     def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
         image: Optional[str] = None
@@ -1415,11 +1315,8 @@ Then run the following:
             addr=addr,
             error_ok=True, no_fsid=True)
         if code:
-            # err will contain stdout and stderr, so we filter on the message text to
-            # only show the errors
-            errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
             raise OrchestratorError('Host %s (%s) failed check(s): %s' % (
-                host, addr, errors))
+                host, addr, err))
         return ip_addr
 
     def _add_host(self, spec):
@@ -1481,7 +1378,7 @@ Then run the following:
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
-        self._reset_con(host)
+        self.ssh._reset_con(host)
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
         return "Removed host '{}'".format(host)
@@ -1490,7 +1387,7 @@ Then run the following:
     def update_host_addr(self, host: str, addr: str) -> str:
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
-        self._reset_con(host)
+        self.ssh._reset_con(host)
         self.event.set()  # refresh stray health check
         self.log.info('Set host %s addr to %s' % (host, addr))
         return "Updated host '{}' addr to '{}'".format(host, addr)

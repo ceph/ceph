@@ -3,16 +3,7 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
-
-from cephadm import remotes
-
-try:
-    import remoto
-    import execnet.gateway_bootstrap
-except ImportError:
-    remoto = None
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -34,7 +25,6 @@ from . import utils
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
-    from remoto.backends import BaseConnection
 
 logger = logging.getLogger(__name__)
 
@@ -302,16 +292,13 @@ class CephadmServe:
                     if match:
                         continue
                 self.log.info(f'Updating {host}:{path}')
-                self._write_remote_file(host, path, content, mode, uid, gid)
+                self.mgr.ssh.write_remote_file(host, path, content, mode, uid, gid)
                 self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
                 updated_files = True
             for path in old_files.keys():
                 self.log.info(f'Removing {host}:{path}')
-                with self._remote_connection(host) as tpl:
-                    conn, connr = tpl
-                    out, err, code = remoto.process.check(
-                        conn,
-                        ['rm', '-f', path])
+                cmd = ['rm', '-f', path]
+                self.mgr.ssh.check_execute_command(host, cmd)
                 updated_files = True
                 self.mgr.cache.removed_client_file(host, path)
             if updated_files:
@@ -1158,97 +1145,88 @@ class CephadmServe:
 
         :env_vars: in format -> [KEY=VALUE, ..]
         """
+
+        self.mgr.ssh.remote_connection(host, addr)
+
         self.log.debug(f"_run_cephadm : command = {command}")
         self.log.debug(f"_run_cephadm : args = {args}")
 
         bypass_image = ('cephadm-exporter',)
 
-        with self._remote_connection(host, addr) as tpl:
-            conn, connr = tpl
-            assert image or entity
-            # Skip the image check for daemons deployed that are not ceph containers
-            if not str(entity).startswith(bypass_image):
-                if not image and entity is not cephadmNoImage:
-                    image = self.mgr._get_container_image(entity)
+        assert image or entity
+        # Skip the image check for daemons deployed that are not ceph containers
+        if not str(entity).startswith(bypass_image):
+            if not image and entity is not cephadmNoImage:
+                image = self.mgr._get_container_image(entity)
 
-            final_args = []
+        final_args = []
 
-            # global args
-            if env_vars:
-                for env_var_pair in env_vars:
-                    final_args.extend(['--env', env_var_pair])
+        # global args
+        if env_vars:
+            for env_var_pair in env_vars:
+                final_args.extend(['--env', env_var_pair])
 
-            if image:
-                final_args.extend(['--image', image])
+        if image:
+            final_args.extend(['--image', image])
 
-            if not self.mgr.container_init:
-                final_args += ['--no-container-init']
+        if not self.mgr.container_init:
+            final_args += ['--no-container-init']
 
-            # subcommand
-            final_args.append(command)
+        # subcommand
+        final_args.append(command)
 
-            # subcommand args
-            if not no_fsid:
-                final_args += ['--fsid', self.mgr._cluster_fsid]
+        # subcommand args
+        if not no_fsid:
+            final_args += ['--fsid', self.mgr._cluster_fsid]
 
-            final_args += args
+        final_args += args
 
-            # exec
-            self.log.debug('args: %s' % (' '.join(final_args)))
-            if self.mgr.mode == 'root':
-                if stdin:
-                    self.log.debug('stdin: %s' % stdin)
+        # exec
+        self.log.debug('args: %s' % (' '.join(final_args)))
+        if self.mgr.mode == 'root':
+            if stdin:
+                self.log.debug('stdin: %s' % stdin)
 
-                python = connr.choose_python()
-                if not python:
-                    raise RuntimeError(
-                        'unable to find python on %s (tried %s in %s)' % (
-                            host, remotes.PYTHONS, remotes.PATH))
-                try:
-                    out, err, code = remoto.process.check(
-                        conn,
-                        [python, self.mgr.cephadm_binary_path] + final_args,
-                        stdin=stdin.encode('utf-8') if stdin is not None else None)
-                    if code == 2:
-                        out_ls, err_ls, code_ls = remoto.process.check(
-                            conn, ['ls', self.mgr.cephadm_binary_path])
-                        if code_ls == 2:
-                            self._deploy_cephadm_binary_conn(conn, host)
-                            out, err, code = remoto.process.check(
-                                conn,
-                                [python, self.mgr.cephadm_binary_path] + final_args,
-                                stdin=stdin.encode('utf-8') if stdin is not None else None)
+            cmd = ['which', 'python3']
+            python = self.mgr.ssh.check_execute_command(host, cmd, addr=addr)
+            cmd = [python, self.mgr.cephadm_binary_path] + final_args
 
-                except RuntimeError as e:
-                    self.mgr._reset_con(host)
-                    if error_ok:
-                        return [], [str(e)], 1
-                    raise
+            try:
+                out, err, code = self.mgr.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
+                if code == 2:
+                    ls_cmd = ['ls', self.mgr.cephadm_binary_path]
+                    out_ls, err_ls, code_ls = self.mgr.ssh.execute_command(host, ls_cmd, addr=addr)
+                    if code_ls == 2:
+                        self._deploy_cephadm_binary(host, addr)
+                        out, err, code = self.mgr.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
 
-            elif self.mgr.mode == 'cephadm-package':
-                try:
-                    out, err, code = remoto.process.check(
-                        conn,
-                        ['sudo', '/usr/bin/cephadm'] + final_args,
-                        stdin=stdin)
-                except RuntimeError as e:
-                    self.mgr._reset_con(host)
-                    if error_ok:
-                        return [], [str(e)], 1
-                    raise
-            else:
-                assert False, 'unsupported mode'
+            except Exception as e:
+                self.mgr.ssh._reset_con(host)
+                if error_ok:
+                    return [], [str(e)], 1
+                raise
 
-            self.log.debug('code: %d' % code)
-            if out:
-                self.log.debug('out: %s' % '\n'.join(out))
-            if err:
-                self.log.debug('err: %s' % '\n'.join(err))
-            if code and not error_ok:
-                raise OrchestratorError(
-                    'cephadm exited with an error code: %d, stderr:%s' % (
-                        code, '\n'.join(err)))
-            return out, err, code
+        elif self.mgr.mode == 'cephadm-package':
+            try:
+                cmd = ['/usr/bin/cephadm'] + final_args
+                out, err, code = self.mgr.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
+            except Exception as e:
+                self.mgr.ssh._reset_con(host)
+                if error_ok:
+                    return [], [str(e)], 1
+                raise
+        else:
+            assert False, 'unsupported mode'
+
+        self.log.debug(f'code: {code}')
+        if out:
+            self.log.debug(f'out: {out}')
+        if err:
+            self.log.debug(f'err: {err}')
+        if code and not error_ok:
+            raise OrchestratorError(
+                f'cephadm exited with an error code: {code}, stderr: {err}')
+        return [out], [err], code
 
     def _get_container_image_info(self, image_name: str) -> ContainerInspectInfo:
         # pick a random host...
@@ -1288,97 +1266,7 @@ class CephadmServe:
             return f"Host {host} failed to login to {url} as {username} with given password"
         return None
 
-    def _deploy_cephadm_binary(self, host: str) -> None:
+    def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        with self._remote_connection(host) as tpl:
-            conn, _connr = tpl
-            return self._deploy_cephadm_binary_conn(conn, host)
-
-    def _deploy_cephadm_binary_conn(self, conn: "BaseConnection", host: str) -> None:
-        _out, _err, code = remoto.process.check(
-            conn,
-            ['mkdir', '-p', f'/var/lib/ceph/{self.mgr._cluster_fsid}'])
-        if code:
-            msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
-            self.log.warning(msg)
-            raise OrchestratorError(msg)
-        _out, _err, code = remoto.process.check(
-            conn,
-            ['tee', '-', self.mgr.cephadm_binary_path],
-            stdin=self.mgr._cephadm.encode('utf-8'))
-        if code:
-            msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
-            self.log.warning(msg)
-            raise OrchestratorError(msg)
-
-    def _write_remote_file(self,
-                           host: str,
-                           path: str,
-                           content: bytes,
-                           mode: int,
-                           uid: int,
-                           gid: int) -> None:
-        with self._remote_connection(host) as tpl:
-            conn, connr = tpl
-            try:
-                errmsg = connr.write_file(path, content, mode, uid, gid)
-                if errmsg is not None:
-                    raise OrchestratorError(errmsg)
-            except Exception as e:
-                msg = f"Unable to write {host}:{path}: {e}"
-                self.log.warning(msg)
-                raise OrchestratorError(msg)
-
-    @contextmanager
-    def _remote_connection(self,
-                           host: str,
-                           addr: Optional[str] = None,
-                           ) -> Iterator[Tuple["BaseConnection", Any]]:
-        if not addr and host in self.mgr.inventory:
-            addr = self.mgr.inventory.get_addr(host)
-
-        self.mgr.offline_hosts_remove(host)
-
-        try:
-            try:
-                if not addr:
-                    raise OrchestratorError("host address is empty")
-                conn, connr = self.mgr._get_connection(addr)
-            except OSError as e:
-                self.mgr._reset_con(host)
-                msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there: {str(e)}"
-                raise execnet.gateway_bootstrap.HostNotFound(msg)
-
-            yield (conn, connr)
-
-        except execnet.gateway_bootstrap.HostNotFound as e:
-            # this is a misleading exception as it seems to be thrown for
-            # any sort of connection failure, even those having nothing to
-            # do with "host not found" (e.g., ssh key permission denied).
-            self.mgr.offline_hosts.add(host)
-            self.mgr._reset_con(host)
-
-            user = self.mgr.ssh_user if self.mgr.mode == 'root' else 'cephadm'
-            if str(e).startswith("Can't communicate"):
-                msg = str(e)
-            else:
-                msg = f'''Failed to connect to {host} ({addr}).
-Please make sure that the host is reachable and accepts connections using the cephadm SSH key
-
-To add the cephadm SSH key to the host:
-> ceph cephadm get-pub-key > ~/ceph.pub
-> ssh-copy-id -f -i ~/ceph.pub {user}@{addr}
-
-To check that the host is reachable open a new shell with the --no-hosts flag:
-> cephadm shell --no-hosts
-
-Then run the following:
-> ceph cephadm get-ssh-config > ssh_config
-> ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
-> chmod 0600 ~/cephadm_private_key
-> ssh -F ssh_config -i ~/cephadm_private_key {user}@{addr}'''
-            raise OrchestratorError(msg) from e
-        except Exception as ex:
-            self.log.exception(ex)
-            raise
+        self.mgr.ssh.write_remote_file(host, self.mgr.cephadm_binary_path, self.mgr._cephadm.encode('utf-8'), addr=addr)
