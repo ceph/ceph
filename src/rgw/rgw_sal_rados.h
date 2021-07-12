@@ -151,6 +151,8 @@ class RadosObject : public Object {
     }
     RadosObject(RadosObject& _o) = default;
 
+    virtual ~RadosObject();
+
     virtual int delete_object(const DoutPrefixProvider* dpp, RGWObjectCtx* obj_ctx,
 			      optional_yield y, bool prevent_versioning) override;
     virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
@@ -286,7 +288,7 @@ class RadosBucket : public Bucket {
         acls() {
     }
 
-    ~RadosBucket() { }
+    virtual ~RadosBucket();
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) override;

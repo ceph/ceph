@@ -46,6 +46,8 @@
 
 namespace rgw::sal {
 
+RadosObject::~RadosObject() {}
+
 static int decode_policy(CephContext* cct,
                          bufferlist& bl,
                          RGWAccessControlPolicy* policy)
@@ -214,6 +216,8 @@ Object* RadosBucket::create_object(const rgw_obj_key &key)
 {
   return nullptr;
 }
+
+RadosBucket::~RadosBucket() {}
 
 int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
 			       bool delete_children,

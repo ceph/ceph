@@ -53,6 +53,7 @@ bool RGWMultiCompleteUpload::xml_end(const char *el) {
   return true;
 }
 
+RGWMultiXMLParser::~RGWMultiXMLParser() {}
 
 XMLObj *RGWMultiXMLParser::alloc_obj(const char *el) {
   XMLObj *obj = NULL;

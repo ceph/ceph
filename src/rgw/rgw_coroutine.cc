@@ -191,6 +191,14 @@ stringstream& RGWCoroutine::Status::set_status()
   return status;
 }
 
+RGWCoroutinesManager::~RGWCoroutinesManager() {
+  stop();
+  completion_mgr->put();
+  if (cr_registry) {
+    cr_registry->remove(this);
+  }
+}
+
 int64_t RGWCoroutinesManager::get_next_io_id()
 {
   return (int64_t)++max_io_id;

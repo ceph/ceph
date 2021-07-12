@@ -276,7 +276,7 @@ protected:
   }
 public:
   RGWCoroutine(CephContext *_cct) : status(_cct), _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
-  ~RGWCoroutine() override;
+  virtual ~RGWCoroutine() override;
 
   virtual int operate(const DoutPrefixProvider *dpp) = 0;
 
@@ -606,7 +606,7 @@ class RGWCoroutinesManagerRegistry : public RefCountedObject, public AdminSocket
 
 public:
   explicit RGWCoroutinesManagerRegistry(CephContext *_cct) : cct(_cct) {}
-  ~RGWCoroutinesManagerRegistry() override;
+  virtual ~RGWCoroutinesManagerRegistry() override;
 
   void add(RGWCoroutinesManager *mgr);
   void remove(RGWCoroutinesManager *mgr);
@@ -654,13 +654,7 @@ public:
       cr_registry->add(this);
     }
   }
-  virtual ~RGWCoroutinesManager() {
-    stop();
-    completion_mgr->put();
-    if (cr_registry) {
-      cr_registry->remove(this);
-    }
-  }
+  virtual ~RGWCoroutinesManager();
 
   int run(const DoutPrefixProvider *dpp, list<RGWCoroutinesStack *>& ops);
   int run(const DoutPrefixProvider *dpp, RGWCoroutine *op);
