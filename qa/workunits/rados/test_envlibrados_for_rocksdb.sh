@@ -33,7 +33,7 @@ case $(distro_id) in
                 sudo subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
                 ;;
         esac
-        install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64 cmake
+        install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64 cmake libarchive
         ;;
 	opensuse*|suse|sles)
 		install git gcc-c++ snappy-devel zlib-devel libbz2-devel libradospp-devel
