@@ -52,6 +52,12 @@ target_link_libraries(denc-mod-osd
   osd
   mon)
 
+if(WITH_JAEGER)
+  add_dependencies(denc-mod-common jaegertracing::libjaegertracing)
+else()
+  add_dependencies(denc-mod-common opentracing::libopentracing)
+endif()
+
 if(WITH_RADOSGW)
   add_denc_mod(denc-mod-rgw
     rgw_types.cc

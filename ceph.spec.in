@@ -1336,6 +1336,9 @@ cmake .. \
 %if 0%{with rbd_ssd_cache}
     -DWITH_RBD_SSD_CACHE:BOOL=ON \
 %endif
+%if 0%{with jaeger}
+    -DWITH_JAEGER=ON \
+%endif
 %if 0%{with system_pmdk}
     -DWITH_SYSTEM_PMDK:BOOL=ON \
 %endif

@@ -301,7 +301,8 @@ public:
     uint64_t offset,
     size_t len,
     ceph::buffer::list& bl,
-    uint32_t op_flags = 0) override;
+    uint32_t op_flags = 0,
+    TrackedOpRef op = TrackedOpRef()) override;
   using ObjectStore::fiemap;
   int fiemap(CollectionHandle& c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, ceph::buffer::list& bl) override;

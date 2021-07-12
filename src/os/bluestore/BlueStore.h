@@ -52,10 +52,6 @@
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 
-#ifdef WITH_BLKIN
-#include "common/zipkin_trace.h"
-#endif
-
 class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
@@ -1543,6 +1539,23 @@ public:
       return "???";
     }
 
+    std::string_view get_state_name_sv() {
+      switch (state) {
+      case STATE_PREPARE: return "prepare";
+      case STATE_AIO_WAIT: return "aio_wait";
+      case STATE_IO_DONE: return "io_done";
+      case STATE_KV_QUEUED: return "kv_queued";
+      case STATE_KV_SUBMITTED: return "kv_submitted";
+      case STATE_KV_DONE: return "kv_done";
+      case STATE_DEFERRED_QUEUED: return "deferred_queued";
+      case STATE_DEFERRED_CLEANUP: return "deferred_cleanup";
+      case STATE_DEFERRED_DONE: return "deferred_done";
+      case STATE_FINISHING: return "finishing";
+      case STATE_DONE: return "done";
+      }
+      return "???";
+    }
+
 #if defined(WITH_LTTNG)
     const char *get_state_latency_name(int state) {
       switch (state) {
@@ -1563,11 +1576,9 @@ public:
 
     inline void set_state(state_t s) {
        state = s;
-#ifdef WITH_BLKIN
-       if (trace) {
-         trace.event(get_state_name());
-       } 
-#endif
+       if (tracer_op) {
+         tracer_op->mark_tracepoint(get_state_name_sv());
+       }
     }
     inline state_t get_state() {
       return state;
@@ -1623,9 +1634,7 @@ public:
     bool tracing = false;
 #endif
 
-#ifdef WITH_BLKIN
-    ZTracer::Trace trace;
-#endif
+    TrackedOpRef  tracer_op = nullptr;
 
     explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o,
 			  std::list<Context*> *on_commits)
@@ -1639,11 +1648,9 @@ public:
       }
     }
     ~TransContext() {
-#ifdef WITH_BLKIN
-      if (trace) {
-        trace.event("txc destruct");
+      if (tracer_op) {
+        tracer_op->mark_tracepoint("txc destruct");
       }
-#endif
       delete deferred_txn;
     }
 
@@ -2326,10 +2333,6 @@ private:
     void _resize_shards(bool interval_stats);
   } mempool_thread;
 
-#ifdef WITH_BLKIN
-  ZTracer::Endpoint trace_endpoint {"0.0.0.0", 0, "BlueStore"};
-#endif
-
   // --------------------------------------------------------
   // private methods
 
@@ -2721,7 +2724,8 @@ public:
     uint64_t offset,
     size_t len,
     ceph::buffer::list& bl,
-    uint32_t op_flags = 0) override;
+    uint32_t op_flags = 0,
+    TrackedOpRef op = TrackedOpRef()) override;
 
 private:
 
@@ -2804,7 +2808,8 @@ private:
     size_t len,
     ceph::buffer::list& bl,
     uint32_t op_flags = 0,
-    uint64_t retry_count = 0);
+    uint64_t retry_count = 0,
+    TrackedOpRef op = TrackedOpRef());
 
   int _do_readv(
     Collection *c,

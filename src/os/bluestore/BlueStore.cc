@@ -9562,7 +9562,8 @@ int BlueStore::read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  TrackedOpRef op)
 {
   auto start = mono_clock::now();
   Collection *c = static_cast<Collection *>(c_.get());
@@ -9583,6 +9584,9 @@ int BlueStore::read(
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
       cct->_conf->bluestore_log_op_age);
+    if (op) {
+      op->mark_tracepoint("get onode");
+    }
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -9591,7 +9595,7 @@ int BlueStore::read(
     if (offset == length && offset == 0)
       length = o->onode.size;
 
-    r = _do_read(c, o, offset, length, bl, op_flags);
+    r = _do_read(c, o, offset, length, bl, op_flags, 0, op);
     if (r == -EIO) {
       logger->inc(l_bluestore_read_eio);
     }
@@ -9611,6 +9615,9 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
+  if (op) {
+    op->mark_tracepoint("read finished");
+  }
   log_latency(__func__,
     l_bluestore_read_lat,
     mono_clock::now() - start,
@@ -9884,7 +9891,8 @@ int BlueStore::_do_read(
   size_t length,
   bufferlist& bl,
   uint32_t op_flags,
-  uint64_t retry_count)
+  uint64_t retry_count,
+  TrackedOpRef op)
 {
   FUNCTRACE(cct);
   int r = 0;
@@ -9918,6 +9926,9 @@ int BlueStore::_do_read(
 
   auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
+  if (op) {
+    op->mark_tracepoint("read onode meta");
+  }
   log_latency(__func__,
     l_bluestore_read_onode_meta_lat,
     mono_clock::now() - start,
@@ -9959,6 +9970,9 @@ int BlueStore::_do_read(
       ceph_assert(r == -EIO); // no other errors allowed
       return -EIO;
     }
+  }
+  if (op) {
+    op->mark_tracepoint("aio read finished");
   }
   log_latency_fn(__func__,
     l_bluestore_read_wait_aio_lat,
@@ -11251,18 +11265,15 @@ BlueStore::TransContext *BlueStore::_txc_create(
   TransContext *txc = new TransContext(cct, c, osr, on_commits);
   txc->t = db->get_transaction();
 
-#ifdef WITH_BLKIN
-  if (osd_op && osd_op->pg_trace) {
-    txc->trace.init("TransContext", &trace_endpoint,
-                    &osd_op->pg_trace);
-    txc->trace.event("txc create");
-    txc->trace.keyval("txc seq", txc->seq);
-  }
-#endif
-
   osr->queue_new(txc);
   dout(20) << __func__ << " osr " << osr << " = " << txc
 	   << " seq " << txc->seq << dendl;
+
+  if (osd_op) {
+    osd_op->mark_tracepoint("txc create", {{"txc seq", txc->seq}});
+    txc->tracer_op = osd_op;
+  }
+
   return txc;
 }
 
@@ -11321,11 +11332,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       throttle.log_state_latency(*txc, logger, l_bluestore_state_prepare_lat);
       if (txc->ioc.has_pending_aios()) {
 	txc->set_state(TransContext::STATE_AIO_WAIT);
-#ifdef WITH_BLKIN
-        if (txc->trace) {
-          txc->trace.keyval("pending aios", txc->ioc.num_pending.load());
-        }
-#endif
 	txc->had_ios = true;
 	_txc_aio_submit(txc);
 	return;
@@ -11661,11 +11667,9 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
     auto start = mono_clock::now();
 #endif
 
-#ifdef WITH_BLKIN
-    if (txc->trace) {
-      txc->trace.event("db async submit");
+    if (txc->tracer_op) {
+      txc->tracer_op->mark_tracepoint("db async submit");
     }
-#endif
 
     int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
     ceph_assert(r == 0);
@@ -12202,14 +12206,13 @@ void BlueStore::_kv_sync_thread()
       int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
-#ifdef WITH_BLKIN
       for (auto txc : kv_committing) {
-        if (txc->trace) {
-          txc->trace.event("db sync submit");
-          txc->trace.keyval("kv_committing size", kv_committing.size());
+        if (txc->tracer_op) {
+          txc->tracer_op->mark_tracepoint("db sync submit",
+                                       {{"kv_commiting size",
+                                         kv_committing.size()}});
         }
       }
-#endif
 
       int committing_size = kv_committing.size();
       int deferred_size = deferred_stable.size();
@@ -12763,11 +12766,9 @@ int BlueStore::queue_transactions(
 
   _txc_finalize_kv(txc, txc->t);
 
-#ifdef WITH_BLKIN
-  if (txc->trace) {
-    txc->trace.event("txc encode finished");
+  if (txc->tracer_op) {
+    txc->tracer_op->mark_tracepoint("txc encode finished");
   }
-#endif
 
   if (handle)
     handle->suspend_tp_timeout();
@@ -12820,11 +12821,9 @@ int BlueStore::queue_transactions(
     }
   }
 
-#ifdef WITH_BLKIN
-  if (txc->trace) {
-    txc->trace.event("txc applied");
+  if (txc->tracer_op) {
+    txc->tracer_op->mark_tracepoint("txc applied");
   }
-#endif
 
   log_latency("submit_transact",
     l_bluestore_submit_lat,
