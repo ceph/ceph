@@ -2400,7 +2400,7 @@ private:
   uint64_t _zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size);
   int _zoned_check_config_settings();
   void _zoned_update_cleaning_metadata(TransContext *txc);
-  std::string _zoned_key(uint64_t offset, const ghobject_t *oid);
+  std::string _zoned_key(uint64_t offset, OnodeRef o);
 #endif
 
 public:

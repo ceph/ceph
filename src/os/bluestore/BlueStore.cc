@@ -11521,7 +11521,7 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
 }
 
 #ifdef HAVE_LIBZBD
-// For every object we maintain <zone_num+oid, offset> tuple in the
+// For every object we maintain <zone_num+cid+oid, offset> tuple in the
 // PREFIX_ZONED_CL_INFO namespace.  When a new object written to a zone, we
 // insert the corresponding tuple to the database.  When an object is truncated,
 // we remove the corresponding tuple.  When an object is overwritten, we remove
@@ -11534,27 +11534,28 @@ void BlueStore::_zoned_update_cleaning_metadata(TransContext *txc) {
       if (offset > 0) {
 	bufferlist offset_bl;
 	encode(offset, offset_bl);
-        txc->t->set(PREFIX_ZONED_CL_INFO, _zoned_key(offset, &o->oid), offset_bl);
+        txc->t->set(PREFIX_ZONED_CL_INFO, _zoned_key(offset, o), offset_bl);
       } else {
-        txc->t->rmkey(PREFIX_ZONED_CL_INFO, _zoned_key(-offset, &o->oid));
+        txc->t->rmkey(PREFIX_ZONED_CL_INFO, _zoned_key(-offset, o));
       }
     }
   }
 }
 
-// Given an offset and possibly an oid, returns a key of the form zone_num+oid.
-std::string BlueStore::_zoned_key(uint64_t offset, const ghobject_t *oid) {
+// Given an offset and possibly an OnodeRef, returns a key of the form
+// zone_num+cid+oid.
+std::string BlueStore::_zoned_key(uint64_t offset, OnodeRef o) {
   uint64_t zone_num = offset / bdev->get_zone_size();
   std::string zone_key;
   _key_encode_u64(zone_num, &zone_key);
 
-  if (!oid)
+  if (!o)
     return zone_key;
 
-  std::string object_key;
-  get_object_key(cct, *oid, &object_key);
+  std::string oid;
+  get_object_key(cct, o->oid, &oid);
 
-  return zone_key + object_key;
+  return zone_key + o->c->cid.to_str() + oid;
 }
 
 // For now, to avoid interface changes we piggyback zone_size (in MiB) and the
