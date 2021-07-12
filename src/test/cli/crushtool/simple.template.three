@@ -28,7 +28,7 @@ cluster cluster0 {
 
 # rules
 rule data {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 1
 	max_size 10
@@ -37,7 +37,7 @@ rule data {
 	step emit
 }
 rule metadata {
-	ruleset 1
+	id 1
 	type replicated
 	min_size 1
 	max_size 10
@@ -46,7 +46,7 @@ rule metadata {
 	step emit
 }
 rule rbd {
-	ruleset 2
+	id 2
 	type replicated
 	min_size 1
 	max_size 10

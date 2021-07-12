@@ -429,51 +429,6 @@ bool CrushTester::check_name_maps(unsigned max_id) const
   return true;
 }
 
-static string get_rule_name(CrushWrapper& crush, int rule)
-{
-  if (crush.get_rule_name(rule))
-    return crush.get_rule_name(rule);
-  else
-    return string("rule") + std::to_string(rule);
-}
-
-void CrushTester::check_overlapped_rules() const
-{
-  namespace icl = boost::icl;
-  typedef std::set<string> RuleNames;
-  typedef icl::interval_map<int, RuleNames> Rules;
-  // <ruleset, type> => interval_map<size, {names}>
-  typedef std::map<std::pair<int, int>, Rules> RuleSets;
-  using interval = icl::interval<int>;
-
-  // mimic the logic of crush_find_rule(), but it only return the first matched
-  // one, but I am collecting all of them by the overlapped sizes.
-  RuleSets rulesets;
-  for (int rule = 0; rule < crush.get_max_rules(); rule++) {
-    if (!crush.rule_exists(rule)) {
-      continue;
-    }
-    Rules& rules = rulesets[{crush.get_rule_mask_ruleset(rule),
-			     crush.get_rule_mask_type(rule)}];
-    rules += make_pair(interval::closed(crush.get_rule_mask_min_size(rule),
-					crush.get_rule_mask_max_size(rule)),
-		       RuleNames{get_rule_name(crush, rule)});
-  }
-  for (auto i : rulesets) {
-    auto ruleset_type = i.first;
-    const Rules& rules = i.second;
-    for (auto r : rules) {
-      const RuleNames& names = r.second;
-      // if there are more than one rules covering the same size range,
-      // print them out.
-      if (names.size() > 1) {
-	err << "overlapped rules in ruleset " << ruleset_type.first << ": "
-	    << boost::join(names, ", ") << "\n";
-      }
-    }
-  }
-}
-
 int CrushTester::test()
 {
   if (min_rule < 0 || max_rule < 0) {
@@ -483,6 +438,10 @@ int CrushTester::test()
   if (min_x < 0 || max_x < 0) {
     min_x = 0;
     max_x = 1023;
+  }
+  if (min_rep < 0 && max_rep < 0) {
+    cerr << "must specify --num-rep or both --min-rep and --max-rep" << std::endl;
+    return -EINVAL;
   }
 
   // initial osd weights
@@ -523,23 +482,14 @@ int CrushTester::test()
         err << "rule " << r << " dne" << std::endl;
       continue;
     }
-    if (ruleset >= 0 &&
-	crush.get_rule_mask_ruleset(r) != ruleset) {
-      continue;
-    }
-    int minr = min_rep, maxr = max_rep;
-    if (min_rep < 0 || max_rep < 0) {
-      minr = crush.get_rule_mask_min_size(r);
-      maxr = crush.get_rule_mask_max_size(r);
-    }
     
     if (output_statistics)
       err << "rule " << r << " (" << crush.get_rule_name(r)
       << "), x = " << min_x << ".." << max_x
-      << ", numrep = " << minr << ".." << maxr
+      << ", numrep = " << min_rep << ".." << max_rep
       << std::endl;
 
-    for (int nr = minr; nr <= maxr; nr++) {
+    for (int nr = min_rep; nr <= max_rep; nr++) {
       vector<int> per(crush.get_max_devices());
       map<int,int> sizes;
 
@@ -769,17 +719,8 @@ int CrushTester::compare(CrushWrapper& crush2)
         err << "rule " << r << " dne" << std::endl;
       continue;
     }
-    if (ruleset >= 0 &&
-	crush.get_rule_mask_ruleset(r) != ruleset) {
-      continue;
-    }
-    int minr = min_rep, maxr = max_rep;
-    if (min_rep < 0 || max_rep < 0) {
-      minr = crush.get_rule_mask_min_size(r);
-      maxr = crush.get_rule_mask_max_size(r);
-    }
     int bad = 0;
-    for (int nr = minr; nr <= maxr; nr++) {
+    for (int nr = min_rep; nr <= max_rep; nr++) {
       for (int x = min_x; x <= max_x; ++x) {
 	vector<int> out;
 	crush.do_rule(r, x, out, nr, weight, 0);
@@ -793,7 +734,7 @@ int CrushTester::compare(CrushWrapper& crush2)
     if (bad) {
       ret = -1;
     }
-    int max = (maxr - minr + 1) * (max_x - min_x + 1);
+    int max = (max_rep - min_rep + 1) * (max_x - min_x + 1);
     double ratio = (double)bad / (double)max;
     cout << "rule " << r << " had " << bad << "/" << max
 	 << " mismatched mappings (" << ratio << ")" << std::endl;

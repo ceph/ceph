@@ -105,13 +105,11 @@ describe('PoolFormComponent', () => {
       compression_algorithms: ['snappy'],
       compression_modes: ['none', 'passive'],
       crush_rules_replicated: [
-        Mocks.getCrushRule({ id: 0, min: 2, max: 4, name: 'rep1', type: 'replicated' }),
-        Mocks.getCrushRule({ id: 1, min: 3, max: 18, name: 'rep2', type: 'replicated' }),
-        Mocks.getCrushRule({ id: 2, min: 1, max: 9, name: 'used_rule', type: 'replicated' })
+        Mocks.getCrushRule({ id: 0, name: 'rep1', type: 'replicated' }),
+        Mocks.getCrushRule({ id: 1, name: 'rep2', type: 'replicated' }),
+        Mocks.getCrushRule({ id: 2, name: 'used_rule', type: 'replicated' })
       ],
-      crush_rules_erasure: [
-        Mocks.getCrushRule({ id: 3, min: 1, max: 1, name: 'ecp1', type: 'erasure' })
-      ],
+      crush_rules_erasure: [Mocks.getCrushRule({ id: 3, name: 'ecp1', type: 'erasure' })],
       erasure_code_profiles: [ecp1],
       pg_autoscale_default_mode: 'off',
       pg_autoscale_modes: ['off', 'warn', 'on'],
@@ -289,7 +287,6 @@ describe('PoolFormComponent', () => {
       formHelper.expectValidChange('poolType', 'replicated');
       form.get('crushRule').updateValueAndValidity();
       formHelper.expectError('crushRule', 'required'); // As multiple rules exist
-      formHelper.expectErrorChange('crushRule', { min_size: 20 }, 'tooFewOsds');
     });
 
     it('validates crushRule with no crush rules', () => {
@@ -303,17 +300,6 @@ describe('PoolFormComponent', () => {
       component.info.nodes = Mocks.getCrushMap();
       formHelper.setValue('poolType', 'replicated');
       formHelper.expectValid('size');
-      formHelper.setValue('crushRule', Mocks.getCrushRule({ min: 2, max: 6 })); // 3 OSDs usable
-      formHelper.expectErrorChange('size', 1, 'min');
-      formHelper.expectErrorChange('size', 4, 'max'); // More than usable
-      formHelper.expectValidChange('size', 3);
-
-      formHelper.setValue(
-        'crushRule',
-        Mocks.getCrushRule({ min: 1, max: 2, failureDomain: 'osd-rack' }) // 4 OSDs usable
-      );
-      formHelper.expectErrorChange('size', 4, 'max'); // More than rule allows
-      formHelper.expectValidChange('size', 2);
     });
 
     it('validates if warning is displayed when size is 1', () => {
@@ -460,13 +446,13 @@ describe('PoolFormComponent', () => {
 
       it('should set size to maximum if size exceeds maximum', () => {
         formHelper.setValue('crushRule', component.info.crush_rules_replicated[0]);
-        expect(form.getValue('size')).toBe(4);
+        expect(form.getValue('size')).toBe(10);
       });
 
       it('should set size to minimum if size is lower than minimum', () => {
         formHelper.setValue('size', -1);
         formHelper.setValue('crushRule', component.info.crush_rules_replicated[0]);
-        expect(form.getValue('size')).toBe(2);
+        expect(form.getValue('size')).toBe(1);
       });
     });
 
@@ -496,7 +482,7 @@ describe('PoolFormComponent', () => {
 
       it('disables rule field if only one rule exists which is used in the disabled field', () => {
         infoReturn.crush_rules_replicated = [
-          Mocks.getCrushRule({ id: 0, min: 2, max: 4, name: 'rep1', type: 'replicated' })
+          Mocks.getCrushRule({ id: 0, name: 'rep1', type: 'replicated' })
         ];
         setUpPoolComponent();
         formHelper.setValue('poolType', 'replicated');
@@ -525,10 +511,6 @@ describe('PoolFormComponent', () => {
   });
 
   describe('getMaxSize and getMinSize', () => {
-    const setCrushRule = ({ min, max }: { min?: number; max?: number }) => {
-      formHelper.setValue('crushRule', Mocks.getCrushRule({ min, max }));
-    };
-
     it('returns 0 if osd count is 0', () => {
       component.info.osd_count = 0;
       expect(component.getMinSize()).toBe(0);
@@ -541,36 +523,22 @@ describe('PoolFormComponent', () => {
       expect(component.getMaxSize()).toBe(0);
     });
 
-    it('returns minimum and maximum of rule', () => {
-      setCrushRule({ min: 2, max: 6 });
-      expect(component.getMinSize()).toBe(2);
-      expect(component.getMaxSize()).toBe(6);
-    });
-
     it('returns 1 as minimum and 3 as maximum if no crush rule is available', () => {
       expect(component.getMinSize()).toBe(1);
       expect(component.getMaxSize()).toBe(3);
     });
 
-    it('returns the osd count as maximum if the rule maximum exceeds it', () => {
-      setCrushRule({ max: 100 });
-      expect(component.getMaxSize()).toBe(15);
-    });
-
     it('should return the osd count as minimum if its lower the the rule minimum', () => {
-      setCrushRule({ min: 20 });
-      expect(component.getMinSize()).toBe(20);
+      component.info.osd_count = 0;
+      formHelper.setValue('crushRule', component.info.crush_rules_replicated[0]);
       const control = form.get('crushRule');
       expect(control.invalid).toBe(true);
       formHelper.expectError(control, 'tooFewOsds');
     });
 
     it('should get the right maximum if the device type is defined', () => {
-      formHelper.setValue(
-        'crushRule',
-        Mocks.getCrushRule({ min: 1, max: 5, itemName: 'default~ssd' })
-      );
-      expect(form.getValue('crushRule').usable_size).toBe(5);
+      formHelper.setValue('crushRule', Mocks.getCrushRule({ itemName: 'default~ssd' }));
+      expect(form.getValue('crushRule').usable_size).toBe(10);
     });
   });
 

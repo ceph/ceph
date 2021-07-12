@@ -77,7 +77,7 @@ struct ceph_file_layout {
 
 	/* object -> pg layout */
 	__le32 fl_unused;       /* unused; used to be preferred primary for pg (-1 for none) */
-	__le32 fl_pg_pool;      /* namespace, crush ruleset, rep level */
+	__le32 fl_pg_pool;      /* namespace, crush rule, rep level */
 } __attribute__ ((packed));
 
 #define CEPH_MIN_STRIPE_UNIT 65536

@@ -40,28 +40,22 @@ cluster cluster1 {
 
 # rules
 rule data {
-	ruleset 0
+	id 0
 	type replicated
-	min_size 1
-	max_size 10
 	step take cluster0
 	step chooseleaf firstn 0 type host
 	step emit
 }
 rule metadata {
-	ruleset 1
+	id 1
 	type replicated
-	min_size 1
-	max_size 10
 	step take cluster0
 	step chooseleaf firstn 0 type host
 	step emit
 }
 rule rbd {
-	ruleset 2
+	id 2
 	type replicated
-	min_size 1
-	max_size 10
 	step take cluster1
 	step chooseleaf firstn 0 type host
 	step emit

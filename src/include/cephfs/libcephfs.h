@@ -84,7 +84,7 @@ struct ceph_file_layout {
 
 	/* object -> pg layout */
 	uint32_t fl_pg_preferred; /* preferred primary for pg (-1 for none) */
-	uint32_t fl_pg_pool;      /* namespace, crush ruleset, rep level */
+	uint32_t fl_pg_pool;      /* namespace, crush rule, rep level */
 } __attribute__ ((packed));
 
 struct CephContext;

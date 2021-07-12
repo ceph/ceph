@@ -70,8 +70,6 @@ root root0 {
 rule choose {
 	id 0
 	type replicated
-	min_size 2
-	max_size 3
 	step take root0
 	step choose firstn 0 type host
 	step choose firstn 1 type device
@@ -81,8 +79,6 @@ rule choose {
 rule choose-two {
 	id 1
 	type replicated
-	min_size 2
-	max_size 3
 	step take root0
 	step choose firstn 0 type device
 	step emit
@@ -91,8 +87,6 @@ rule choose-two {
 rule chooseleaf {
 	id 2
 	type replicated
-	min_size 2
-	max_size 3
 	step take root0
 	step chooseleaf firstn 0 type host
 	step emit
@@ -101,8 +95,6 @@ rule chooseleaf {
 rule choose-set {
 	id 3
 	type replicated
-	min_size 2
-	max_size 3
 	step set_choose_tries 3
 	step set_choose_local_tries 2
 	step set_choose_local_fallback_tries 2
@@ -116,8 +108,6 @@ rule choose-set {
 rule choose-set-two {
 	id 4
 	type replicated
-	min_size 2
-	max_size 3
 	step set_choose_tries 3
 	step set_choose_local_tries 2
 	step set_choose_local_fallback_tries 2
@@ -130,8 +120,6 @@ rule choose-set-two {
 rule chooseleaf-set {
 	id 5
 	type replicated
-	min_size 2
-	max_size 3
 	step set_choose_tries 3
 	step set_choose_local_tries 2
 	step set_choose_local_fallback_tries 2

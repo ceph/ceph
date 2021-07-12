@@ -2364,7 +2364,7 @@ TEST(ErasureCodeShec, decode2_4)
 
 TEST(ErasureCodeShec, create_rule_1_2)
 {
-  //create ruleset
+  //create rule
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
   crush->set_type_name(2, "root");
@@ -2422,7 +2422,7 @@ TEST(ErasureCodeShec, create_rule_1_2)
 
 TEST(ErasureCodeShec, create_rule_4)
 {
-  //create ruleset
+  //create rule
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
   crush->set_type_name(2, "root");
@@ -2473,7 +2473,7 @@ TEST(ErasureCodeShec, create_rule_4)
 
 TEST(ErasureCodeShec, create_rule2_1)
 {
-  //create ruleset
+  //create rule
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
   crush->set_type_name(2, "root");
@@ -2532,7 +2532,7 @@ struct CreateRuleset2_3_Param_d {
 
 TEST(ErasureCodeShec, create_rule2_3)
 {
-  //create ruleset
+  //create rule
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
   crush->set_type_name(2, "root");

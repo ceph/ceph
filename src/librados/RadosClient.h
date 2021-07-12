@@ -135,8 +135,8 @@ public:
 
   /*
   -1 was set as the default value and monitor will pickup the right crush rule with below order:
-    a) osd pool default crush replicated ruleset
-    b) the first ruleset in crush ruleset
+    a) osd pool default crush replicated rule
+    b) the first rule
     c) error out if no value find
   */
   int pool_create(string& name, int16_t crush_rule=-1);

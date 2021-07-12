@@ -10,11 +10,8 @@ class CrushRuleTest(DashboardTestCase):
     AUTH_ROLES = ['pool-manager']
 
     rule_schema = JObj(sub_elems={
-        'max_size': int,
-        'min_size': int,
         'rule_id': int,
         'rule_name': str,
-        'ruleset': int,
         'steps': JList(JObj({}, allow_unknown=True))
     }, allow_unknown=True)
 
@@ -24,7 +21,7 @@ class CrushRuleTest(DashboardTestCase):
         self._post('/api/crush_rule', data)
         self.assertStatus(201)
         # Makes sure rule exists
-        rule = self._get('/api/crush_rule/{}'.format(name))
+        rule = self._get('/api/crush_rule/{}'.format(name), version='2.0')
         self.assertStatus(200)
         self.assertSchemaBody(self.rule_schema)
         self.assertEqual(rule['rule_name'], name)
@@ -34,12 +31,12 @@ class CrushRuleTest(DashboardTestCase):
 
     @DashboardTestCase.RunAs('test', 'test', ['rgw-manager'])
     def test_read_access_permissions(self):
-        self._get('/api/crush_rule')
+        self._get('/api/crush_rule', version='2.0')
         self.assertStatus(403)
 
     @DashboardTestCase.RunAs('test', 'test', ['read-only'])
     def test_write_access_permissions(self):
-        self._get('/api/crush_rule')
+        self._get('/api/crush_rule', version='2.0')
         self.assertStatus(200)
         data = {'name': 'some_rule', 'root': 'default', 'failure_domain': 'osd'}
         self._post('/api/crush_rule', data)
@@ -54,7 +51,7 @@ class CrushRuleTest(DashboardTestCase):
         cls._ceph_cmd(['osd', 'crush', 'rule', 'rm', 'another_rule'])
 
     def test_list(self):
-        self._get('/api/crush_rule')
+        self._get('/api/crush_rule', version='2.0')
         self.assertStatus(200)
         self.assertSchemaBody(JList(self.rule_schema))
 

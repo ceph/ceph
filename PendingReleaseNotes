@@ -351,3 +351,7 @@
   zone are provided, the user is now responsible for setting up the
   multisite configuration beforehand--cephadm no longer attempts to
   create missing realms or zones.
+
+* The ``min_size`` and ``max_size`` CRUSH rule properties have been removed.  Older
+  CRUSH maps will still compile but Ceph will issue a warning that these fields are
+  ignored.

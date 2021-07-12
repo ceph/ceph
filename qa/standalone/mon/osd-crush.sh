@@ -42,17 +42,17 @@ function TEST_crush_rule_create_simple() {
     ceph --format xml osd crush rule dump replicated_rule | \
         egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
         grep '<op>choose_firstn</op><num>0</num><type>osd</type>' || return 1
-    local ruleset=ruleset0
+    local rule=rule0
     local root=host1
     ceph osd crush add-bucket $root host
     local failure_domain=osd
-    ceph osd crush rule create-simple $ruleset $root $failure_domain || return 1
-    ceph osd crush rule create-simple $ruleset $root $failure_domain 2>&1 | \
-        grep "$ruleset already exists" || return 1
-    ceph --format xml osd crush rule dump $ruleset | \
+    ceph osd crush rule create-simple $rule $root $failure_domain || return 1
+    ceph osd crush rule create-simple $rule $root $failure_domain 2>&1 | \
+        grep "$rule already exists" || return 1
+    ceph --format xml osd crush rule dump $rule | \
         egrep '<op>take</op><item>[^<]+</item><item_name>'$root'</item_name>' | \
         grep '<op>choose_firstn</op><num>0</num><type>'$failure_domain'</type>' || return 1
-    ceph osd crush rule rm $ruleset || return 1
+    ceph osd crush rule rm $rule || return 1
 }
 
 function TEST_crush_rule_dump() {
@@ -60,25 +60,25 @@ function TEST_crush_rule_dump() {
 
     run_mon $dir a || return 1
 
-    local ruleset=ruleset1
-    ceph osd crush rule create-erasure $ruleset || return 1
-    test $(ceph --format json osd crush rule dump $ruleset | \
-           jq ".rule_name == \"$ruleset\"") == true || return 1
+    local rule=rule1
+    ceph osd crush rule create-erasure $rule || return 1
+    test $(ceph --format json osd crush rule dump $rule | \
+           jq ".rule_name == \"$rule\"") == true || return 1
     test $(ceph --format json osd crush rule dump | \
-           jq "map(select(.rule_name == \"$ruleset\")) | length == 1") == true || return 1
-    ! ceph osd crush rule dump non_existent_ruleset || return 1
-    ceph osd crush rule rm $ruleset || return 1
+           jq "map(select(.rule_name == \"$rule\")) | length == 1") == true || return 1
+    ! ceph osd crush rule dump non_existent_rule || return 1
+    ceph osd crush rule rm $rule || return 1
 }
 
 function TEST_crush_rule_rm() {
-    local ruleset=erasure2
+    local rule=erasure2
 
     run_mon $dir a || return 1
 
-    ceph osd crush rule create-erasure $ruleset default || return 1
-    ceph osd crush rule ls | grep $ruleset || return 1
-    ceph osd crush rule rm $ruleset || return 1
-    ! ceph osd crush rule ls | grep $ruleset || return 1
+    ceph osd crush rule create-erasure $rule default || return 1
+    ceph osd crush rule ls | grep $rule || return 1
+    ceph osd crush rule rm $rule || return 1
+    ! ceph osd crush rule ls | grep $rule || return 1
 }
 
 function TEST_crush_rule_create_erasure() {
@@ -88,80 +88,39 @@ function TEST_crush_rule_create_erasure() {
     # should have at least one OSD
     run_osd $dir 0 || return 1
 
-    local ruleset=ruleset3
+    local rule=rule3
     #
-    # create a new ruleset with the default profile, implicitly
+    # create a new rule with the default profile, implicitly
     #
-    ceph osd crush rule create-erasure $ruleset || return 1
-    ceph osd crush rule create-erasure $ruleset 2>&1 | \
-        grep "$ruleset already exists" || return 1
-    ceph --format xml osd crush rule dump $ruleset | \
+    ceph osd crush rule create-erasure $rule || return 1
+    ceph osd crush rule create-erasure $rule 2>&1 | \
+        grep "$rule already exists" || return 1
+    ceph --format xml osd crush rule dump $rule | \
         egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
         grep '<op>chooseleaf_indep</op><num>0</num><type>host</type>' || return 1
-    ceph osd crush rule rm $ruleset || return 1
-    ! ceph osd crush rule ls | grep $ruleset || return 1
+    ceph osd crush rule rm $rule || return 1
+    ! ceph osd crush rule ls | grep $rule || return 1
     #
-    # create a new ruleset with the default profile, explicitly
+    # create a new rule with the default profile, explicitly
     #
-    ceph osd crush rule create-erasure $ruleset default || return 1
-    ceph osd crush rule ls | grep $ruleset || return 1
-    ceph osd crush rule rm $ruleset || return 1
-    ! ceph osd crush rule ls | grep $ruleset || return 1
+    ceph osd crush rule create-erasure $rule default || return 1
+    ceph osd crush rule ls | grep $rule || return 1
+    ceph osd crush rule rm $rule || return 1
+    ! ceph osd crush rule ls | grep $rule || return 1
     #
-    # create a new ruleset and the default profile, implicitly
+    # create a new rule and the default profile, implicitly
     #
     ceph osd erasure-code-profile rm default || return 1
     ! ceph osd erasure-code-profile ls | grep default || return 1
-    ceph osd crush rule create-erasure $ruleset || return 1
+    ceph osd crush rule create-erasure $rule || return 1
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path mon.a) log flush || return 1
     grep 'profile set default' $dir/mon.a.log || return 1
     ceph osd erasure-code-profile ls | grep default || return 1
-    ceph osd crush rule rm $ruleset || return 1
-    ! ceph osd crush rule ls | grep $ruleset || return 1
+    ceph osd crush rule rm $rule || return 1
+    ! ceph osd crush rule ls | grep $rule || return 1
 }
 
-function check_ruleset_id_match_rule_id() {
-    local rule_name=$1
-    rule_id=`ceph osd crush rule dump $rule_name | grep "\"rule_id\":" | awk -F ":|," '{print int($2)}'`
-    ruleset_id=`ceph osd crush rule dump $rule_name | grep "\"ruleset\":"| awk -F ":|," '{print int($2)}'`
-    test $ruleset_id = $rule_id || return 1
-}
-
-function generate_manipulated_rules() {
-    local dir=$1
-    ceph osd crush add-bucket $root host
-    ceph osd crush rule create-simple test_rule1 $root osd firstn || return 1
-    ceph osd crush rule create-simple test_rule2 $root osd firstn || return 1
-    ceph osd getcrushmap -o $dir/original_map
-    crushtool -d $dir/original_map -o $dir/decoded_original_map
-    #manipulate the rulesets , to make the rule_id != ruleset_id
-    ${SED} -i 's/ruleset 0/ruleset 3/' $dir/decoded_original_map
-    ${SED} -i 's/ruleset 2/ruleset 0/' $dir/decoded_original_map
-    ${SED} -i 's/ruleset 1/ruleset 2/' $dir/decoded_original_map
-
-    crushtool -c $dir/decoded_original_map -o $dir/new_map
-    ceph osd setcrushmap -i $dir/new_map
-
-    ceph osd crush rule dump
-}
-
-function TEST_crush_ruleset_match_rule_when_creating() {
-    local dir=$1
-
-    run_mon $dir a || return 1
-
-    local root=host1
-
-    generate_manipulated_rules $dir
-
-    ceph osd crush rule create-simple special_rule_simple $root osd firstn || return 1
-
-    ceph osd crush rule dump
-    #show special_rule_simple has same rule_id and ruleset_id
-    check_ruleset_id_match_rule_id special_rule_simple || return 1
-}
-
-function TEST_add_ruleset_failed() {
+function TEST_add_rule_failed() {
     local dir=$1
 
     run_mon $dir a || return 1
@@ -177,10 +136,8 @@ function TEST_add_ruleset_failed() {
         do
             cat <<EOF
 rule test_rule$i {
-	ruleset $i
+	id $i
 	type replicated
-	min_size 1
-	max_size 10
 	step take $root
 	step choose firstn 0 type osd
 	step emit
