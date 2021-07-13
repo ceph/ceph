@@ -316,3 +316,44 @@ operational.
     will contain holes in place of the missing data.
 
 .. _Symbolic link recovery: https://tracker.ceph.com/issues/46166
+
+
+Restoring file system after recovering monitor stores using OSDs
+----------------------------------------------------------------
+
+During rare occasions, all the monitor stores of a cluster may get corrupted.
+To recover the cluster in such a scenario, you need to rebuild the monitor
+stores using the OSDs, and get back the pools intact (active+clean state).
+However, the rebuilt monitor stores don't restore the FS/MDS maps. Additonal
+steps are required to bring back the file system. Currently, only the steps to
+recover a **single active MDS** file system have been identified, and tested.
+These are described below.
+
+Stop all the MDSs of the cluster.
+
+.. warning::
+
+     If the MDSs are not stopped, they may start wiping the pools when
+     recreating the file system.
+
+Recreate the file system using the recovered file system pools.
+
+::
+
+    ceph fs new <fs_name> <metadata_pool> <data_pool> --force
+
+The file system cluster ID, fscid, of the file system will not be preserved.
+To preserve the fscid, pass the desired fscid when recreating the file system.
+
+::
+
+    ceph fs new <fs_name> <metadata_pool> <data_pool> --fscid <fscid> --force
+
+Reset the file system.
+
+::
+
+    ceph fs reset <fs_name> --yes-i-really-mean-it
+
+Restart the MDSs. Check that the file system is no longer in degraded state and
+one of the MDSs is active.
