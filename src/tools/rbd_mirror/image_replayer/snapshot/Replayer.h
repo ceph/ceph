@@ -211,7 +211,7 @@ private:
   int m_error_code = 0;
   std::string m_error_description;
 
-  C_UpdateWatchCtx* m_update_watch_ctx;
+  C_UpdateWatchCtx* m_update_watch_ctx = nullptr;
   uint64_t m_local_update_watcher_handle = 0;
   uint64_t m_remote_update_watcher_handle = 0;
   bool m_image_updated = false;
