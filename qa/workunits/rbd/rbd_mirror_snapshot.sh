@@ -384,11 +384,6 @@ for i in ${image2} ${image4}; do
 done
 
 testlog "TEST: disable mirror while daemon is stopped"
-# TODO: workaround for the daemon to ack the deletion, to remove when
-#       image_map cleanup is fixed
-for i in ${image2} ${image4}; do
-        wait_for_image_present ${CLUSTER1} ${POOL} ${i} 'deleted'
-done
 stop_mirrors ${CLUSTER1}
 stop_mirrors ${CLUSTER2}
 disable_mirror ${CLUSTER2} ${POOL} ${image}
@@ -396,11 +391,6 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   test_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 fi
 start_mirrors ${CLUSTER1}
-start_mirrors ${CLUSTER2} # TODO: remove start/stop of cluster2 deamons when
-                          #       image_map cleanup at startup is resolved
-wait_for_image_in_omap ${CLUSTER1} ${POOL}
-wait_for_image_in_omap ${CLUSTER2} ${POOL}
-stop_mirrors ${CLUSTER2}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 enable_mirror ${CLUSTER2} ${POOL} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
