@@ -30,6 +30,7 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { HostFormComponent } from './host-form/host-form.component';
 
 const BASE_URL = 'hosts';
 
@@ -61,6 +62,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   errorMessage: string;
   enableButton: boolean;
   pageURL: string;
+  bsModalRef: NgbModalRef;
 
   icons = Icons;
 
@@ -133,12 +135,14 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   }
 
   ngOnInit() {
-    this.clusterCreation ? (this.pageURL = 'create-cluster') : (this.pageURL = BASE_URL);
     this.tableActions.unshift({
       name: this.actionLabels.ADD,
       permission: 'create',
       icon: Icons.add,
-      click: () => this.router.navigate([this.pageURL, { outlets: { modal: [URLVerbs.ADD] } }]),
+      click: () =>
+        this.clusterCreation
+          ? (this.bsModalRef = this.modalService.show(HostFormComponent))
+          : this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }]),
       disable: (selection: CdTableSelection) => this.getDisable('add', selection)
     });
     this.columns = [
