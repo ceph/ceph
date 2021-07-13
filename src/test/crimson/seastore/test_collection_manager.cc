@@ -71,7 +71,7 @@ struct collection_manager_test_t :
   }
 
   auto get_root() {
-    auto tref = tm->create_transaction();
+    auto tref = create_mutate_transaction();
     auto coll_root = with_trans_intr(
       *tref,
       [this](auto &t) {
@@ -97,7 +97,7 @@ struct collection_manager_test_t :
   }
 
   void checking_mappings(coll_root_t &coll_root) {
-    auto t = tm->create_transaction();
+    auto t = create_read_transaction();
     checking_mappings(coll_root, *t);
   }
 };
@@ -107,7 +107,7 @@ TEST_F(collection_manager_test_t, basic)
   run_async([this] {
     coll_root_t coll_root = get_root();
     {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       for (int i = 0; i < 20; i++) {
         coll_t cid(spg_t(pg_t(i+1,i+2), shard_id_t::NO_SHARD));
         create(coll_root, *t, cid, coll_info_t(i));
@@ -121,7 +121,7 @@ TEST_F(collection_manager_test_t, basic)
     replay();
     checking_mappings(coll_root);
     {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       for (auto iter = test_coll_mappings.begin();
            iter != test_coll_mappings.end();) {
         remove(coll_root, *t, iter->first);
@@ -131,7 +131,7 @@ TEST_F(collection_manager_test_t, basic)
     }
     replay();
     {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       auto list_ret = list(coll_root, *t);
       submit_transaction(std::move(t));
       EXPECT_EQ(list_ret.size(), test_coll_mappings.size());
@@ -145,7 +145,7 @@ TEST_F(collection_manager_test_t, overflow)
     coll_root_t coll_root = get_root();
     auto old_location = coll_root.get_location();
 
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     for (int i = 0; i < 412; i++) {
       coll_t cid(spg_t(pg_t(i+1,i+2), shard_id_t::NO_SHARD));
       create(coll_root, *t, cid, coll_info_t(i));
@@ -165,7 +165,7 @@ TEST_F(collection_manager_test_t, update)
   run_async([this] {
     coll_root_t coll_root = get_root();
     {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       for (int i = 0; i < 2; i++) {
         coll_t cid(spg_t(pg_t(1,i+1), shard_id_t::NO_SHARD));
 	create(coll_root, *t, cid, coll_info_t(i));
@@ -177,7 +177,7 @@ TEST_F(collection_manager_test_t, update)
        auto iter1= test_coll_mappings.begin();
        auto iter2 = std::next(test_coll_mappings.begin(), 1);
        EXPECT_NE(iter1->second.split_bits, iter2->second.split_bits);
-       auto t = tm->create_transaction();
+       auto t = create_mutate_transaction();
        update(coll_root, *t, iter1->first, iter2->second);
        submit_transaction(std::move(t));
        iter1->second.split_bits = iter2->second.split_bits;

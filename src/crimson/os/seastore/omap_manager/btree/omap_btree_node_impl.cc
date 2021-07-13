@@ -294,7 +294,7 @@ OMapInnerNode::make_balanced_ret
 OMapInnerNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 {
   logger().debug("OMapInnerNode: {}", __func__);
-  ceph_assert(_right->get_type() == type);
+  ceph_assert(_right->get_type() == TYPE);
   return oc.tm.alloc_extents<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
     .si_then([this, _right] (auto &&replacement_pair){
       auto replacement_left = replacement_pair.front();
@@ -567,7 +567,7 @@ OMapLeafNode::make_split_children(omap_context_t oc)
 OMapLeafNode::full_merge_ret
 OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 {
-  ceph_assert(right->get_type() == type);
+  ceph_assert(right->get_type() == TYPE);
   logger().debug("OMapLeafNode: {}", __func__);
   return oc.tm.alloc_extent<OMapLeafNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE)
     .si_then([this, right] (auto &&replacement) {
@@ -581,7 +581,7 @@ OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 OMapLeafNode::make_balanced_ret
 OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 {
-  ceph_assert(_right->get_type() == type);
+  ceph_assert(_right->get_type() == TYPE);
   logger().debug("OMapLeafNode: {}",  __func__);
   return oc.tm.alloc_extents<OMapLeafNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE, 2)
     .si_then([this, _right] (auto &&replacement_pair) {

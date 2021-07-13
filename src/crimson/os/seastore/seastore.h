@@ -161,11 +161,12 @@ private:
   auto repeat_with_internal_context(
     CollectionRef ch,
     ceph::os::Transaction &&t,
+    Transaction::src_t src,
     F &&f) {
     return seastar::do_with(
       internal_context_t(
 	ch, std::move(t),
-	transaction_manager->create_transaction()),
+	transaction_manager->create_transaction(src)),
       std::forward<F>(f),
       [this](auto &ctx, auto &f) {
 	return ctx.transaction->get_handle().take_collection_lock(
@@ -188,6 +189,7 @@ private:
   auto repeat_with_onode(
     CollectionRef ch,
     const ghobject_t &oid,
+    Transaction::src_t src,
     F &&f) const {
     return seastar::do_with(
       oid,
@@ -196,8 +198,8 @@ private:
       OnodeRef(),
       std::forward<F>(f),
       [=](auto &oid, auto &ret, auto &t, auto &onode, auto &f) {
-	return repeat_eagain([&, this] {
-	  t = transaction_manager->create_transaction();
+	return repeat_eagain([&, this, src] {
+	  t = transaction_manager->create_transaction(src);
 	  return onode_manager->get_onode(
 	    *t, oid
 	  ).safe_then([&](auto onode_ret) {

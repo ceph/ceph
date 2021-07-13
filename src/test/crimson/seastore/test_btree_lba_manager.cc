@@ -73,7 +73,7 @@ struct btree_lba_manager_test :
       return journal.open_for_write();
     }).safe_then([this](auto addr) {
       return seastar::do_with(
-	cache.create_transaction(),
+	cache.create_transaction(Transaction::src_t::MUTATE),
 	[this](auto &transaction) {
 	  cache.init();
 	  return cache.mkfs(*transaction
@@ -116,7 +116,7 @@ struct btree_lba_manager_test :
 
   auto create_transaction() {
     auto t = test_transaction_t{
-      cache.create_transaction(),
+      cache.create_transaction(Transaction::src_t::MUTATE),
       test_lba_mappings
     };
     cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
@@ -125,7 +125,7 @@ struct btree_lba_manager_test :
 
   auto create_weak_transaction() {
     auto t = test_transaction_t{
-      cache.create_weak_transaction(),
+      cache.create_weak_transaction(Transaction::src_t::READ),
       test_lba_mappings
     };
     return t;

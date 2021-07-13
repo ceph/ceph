@@ -16,7 +16,10 @@
 namespace crimson::os::seastore {
 
 Cache::Cache(SegmentManager &segment_manager) :
-  segment_manager(segment_manager) {}
+  segment_manager(segment_manager)
+{
+  register_metrics();
+}
 
 Cache::~Cache()
 {
@@ -43,7 +46,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   }
 
   // absent from transaction
-  ext = query_cache(addr);
+  // retiring is not included by the cache hit metrics
+  ext = query_cache(addr, nullptr);
   if (ext) {
     if (ext->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
       t.add_to_read_set(ext);
@@ -78,6 +82,241 @@ void Cache::dump_contents()
     DEBUG("live {}", i);
   }
   DEBUG("exit");
+}
+
+void Cache::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  using src_t = Transaction::src_t;
+
+  auto src_label = sm::label("src");
+  std::map<src_t, sm::label_instance> labels_by_src {
+    {src_t::MUTATE,  src_label("MUTATE")},
+    {src_t::READ,    src_label("READ")},
+    {src_t::INIT,    src_label("INIT")},
+    {src_t::CLEANER, src_label("CLEANER")},
+  };
+
+  auto ext_label = sm::label("ext");
+  std::map<extent_types_t, sm::label_instance> labels_by_ext {
+    {extent_types_t::ROOT,                ext_label("ROOT")},
+    {extent_types_t::LADDR_INTERNAL,      ext_label("LADDR_INTERNAL")},
+    {extent_types_t::LADDR_LEAF,          ext_label("LADDR_LEAF")},
+    {extent_types_t::OMAP_INNER,          ext_label("OMAP_INNER")},
+    {extent_types_t::OMAP_LEAF,           ext_label("OMAP_LEAF")},
+    {extent_types_t::ONODE_BLOCK_STAGED,  ext_label("ONODE_BLOCK_STAGED")},
+    {extent_types_t::COLL_BLOCK,          ext_label("COLL_BLOCK")},
+    {extent_types_t::OBJECT_DATA_BLOCK,   ext_label("OBJECT_DATA_BLOCK")},
+    {extent_types_t::RETIRED_PLACEHOLDER, ext_label("RETIRED_PLACEHOLDER")},
+    {extent_types_t::RBM_ALLOC_INFO,      ext_label("RBM_ALLOC_INFO")},
+    {extent_types_t::TEST_BLOCK,          ext_label("TEST_BLOCK")},
+    {extent_types_t::TEST_BLOCK_PHYSICAL, ext_label("TEST_BLOCK_PHYSICAL")}
+  };
+
+  /*
+   * trans_created
+   */
+  stats.trans_created_by_src.fill(0);
+  auto register_trans_created = [this, &labels_by_src](src_t src) {
+    std::ostringstream oss_desc;
+    oss_desc << "total number of transaction created (src="
+             << src << ")";
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "trans_created",
+          get_counter(stats.trans_created_by_src, src),
+          sm::description(oss_desc.str()),
+          {labels_by_src.find(src)->second}
+        ),
+      }
+    );
+  };
+  for (auto& [src, label] : labels_by_src) {
+    register_trans_created(src);
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "trans_created",
+        [this] {
+          uint64_t total = 0;
+          for (auto& v : stats.trans_created_by_src) {
+            total += v;
+          }
+          return total;
+        },
+        sm::description("total number of transaction created"),
+        {src_label("ALL")}
+      ),
+    }
+  );
+
+  /*
+   * trans_committed
+   */
+  stats.trans_committed_by_src.fill(0);
+  auto register_trans_committed = [this, &labels_by_src](src_t src) {
+    std::ostringstream oss_desc;
+    oss_desc << "total number of transaction committed (src="
+             << src << ")";
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "trans_committed",
+          get_counter(stats.trans_committed_by_src, src),
+          sm::description(oss_desc.str()),
+          {labels_by_src.find(src)->second}
+        ),
+      }
+    );
+  };
+  for (auto& src : {src_t::MUTATE,
+                    src_t::INIT,
+                    src_t::CLEANER}) {
+    register_trans_committed(src);
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "trans_committed",
+        [this] {
+          uint64_t total = 0;
+          for (auto& v : stats.trans_committed_by_src) {
+            total += v;
+          }
+          return total;
+        },
+        sm::description("total number of transaction committed"),
+        {src_label("ALL")}
+      ),
+    }
+  );
+
+  /*
+   * trans_invalidated
+   */
+  auto register_trans_invalidated =
+    [this, &labels_by_src, &labels_by_ext](src_t src, extent_types_t ext) {
+      auto m_key = std::make_pair(src, ext);
+      stats.trans_invalidated[m_key] = 0;
+      std::ostringstream oss_desc;
+      oss_desc << "total number of transaction invalidated (src="
+               << src << ", ext="
+               << ext << ")";
+      metrics.add_group(
+        "cache",
+        {
+          sm::make_counter(
+            "trans_invalidated",
+            stats.trans_invalidated.find(m_key)->second,
+            sm::description(oss_desc.str()),
+            {labels_by_src.find(src)->second,
+             labels_by_ext.find(ext)->second}
+          ),
+        }
+      );
+    };
+  for (auto& [src, label] : labels_by_src) {
+    for (auto& [ext, _label] : labels_by_ext) {
+      register_trans_invalidated(src, ext);
+    }
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "trans_invalidated",
+        [this] {
+          uint64_t total = 0;
+          for (auto& [k, v] : stats.trans_invalidated) {
+            total += v;
+          }
+          return total;
+        },
+        sm::description("total number of transaction invalidated"),
+        {src_label("ALL")}
+      ),
+    }
+  );
+
+  /*
+   * cache_query: cache_access and cache_hit
+   */
+  auto register_cache_access =
+    [this, &labels_by_src, &labels_by_ext](src_t src, extent_types_t ext) {
+      auto m_key = std::make_pair(src, ext);
+      stats.cache_query[m_key] = {0, 0};
+      std::ostringstream oss_labels;
+      oss_labels << "(src=" << src << ", ext=" << ext << ")";
+      auto str_labels = oss_labels.str();
+      {
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              "cache_access",
+              stats.cache_query.find(m_key)->second.access,
+              sm::description("total number of cache accesses " + str_labels),
+              {labels_by_src.find(src)->second,
+               labels_by_ext.find(ext)->second}
+            ),
+            sm::make_counter(
+              "cache_hit",
+              stats.cache_query.find(m_key)->second.hit,
+              sm::description("total number of cache hits " + str_labels),
+              {labels_by_src.find(src)->second,
+               labels_by_ext.find(ext)->second}
+            ),
+          }
+        );
+      }
+    };
+
+  for (auto& [src, label] : labels_by_src) {
+    for (auto& [ext, _label] : labels_by_ext) {
+      if (ext != extent_types_t::RETIRED_PLACEHOLDER) {
+        register_cache_access(src, ext);
+      }
+    }
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "cache_access",
+        [this] {
+          uint64_t total = 0;
+          for (auto& [k, v] : stats.cache_query) {
+            total += v.access;
+          }
+          return total;
+        },
+        sm::description("total number of cache accesses"),
+        {src_label("ALL")}
+      ),
+      sm::make_counter(
+        "cache_hit",
+        [this] {
+          uint64_t total = 0;
+          for (auto& [k, v] : stats.cache_query) {
+            total += v.hit;
+          }
+          return total;
+        },
+        sm::description("total number of cache hits"),
+        {src_label("ALL")}
+      ),
+    }
+  );
 }
 
 void Cache::add_extent(CachedExtentRef ref)
@@ -180,9 +419,19 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
 }
 
 void Cache::invalidate(CachedExtent &extent) {
+  LOG_PREFIX(Cache::invalidate);
+  DEBUG("invalidate begin -- extent {}", extent);
   for (auto &&i: extent.transactions) {
-    i.t->conflicted = true;
+    if (!i.t->conflicted) {
+      DEBUGT("set conflict", *i.t);
+      i.t->conflicted = true;
+      assert(!i.t->is_weak());
+      auto m_key = std::make_pair(i.t->get_src(), extent.get_type());
+      assert(stats.trans_invalidated.count(m_key));
+      ++(stats.trans_invalidated[m_key]);
+    }
   }
+  DEBUG("invalidate end");
   extent.state = CachedExtent::extent_state_t::INVALID;
 }
 
@@ -253,6 +502,10 @@ record_t Cache::prepare_record(Transaction &t)
 {
   LOG_PREFIX(Cache::prepare_record);
   DEBUGT("enter", t);
+
+  assert(!t.is_weak());
+  assert(t.get_src() != Transaction::src_t::READ);
+  ++(get_counter(stats.trans_committed_by_src, t.get_src()));
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
@@ -468,7 +721,8 @@ Cache::replay_delta(
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
-      auto ret = query_cache(addr);
+      // replay is not included by the cache hit metrics
+      auto ret = query_cache(addr, nullptr);
       if (ret) {
         // no retired-placeholder should be exist yet because no transaction
         // has been created.
@@ -481,11 +735,13 @@ Cache::replay_delta(
       }
     };
     auto extent_fut = (delta.pversion == 0 ?
+      // replay is not included by the cache hit metrics
       get_extent_by_type(
-	delta.type,
-	delta.paddr,
-	delta.laddr,
-	delta.length) :
+        delta.type,
+        delta.paddr,
+        delta.laddr,
+        delta.length,
+        nullptr) :
       _get_extent_if_cached(
 	delta.paddr)
     ).handle_error(
@@ -583,45 +839,60 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
   laddr_t laddr,
-  segment_off_t length)
+  segment_off_t length,
+  const Transaction::src_t* p_src)
 {
   return [=] {
+    src_ext_t* p_metric_key = nullptr;
+    src_ext_t metric_key;
+    if (p_src) {
+      metric_key = std::make_pair(*p_src, type);
+      p_metric_key = &metric_key;
+    }
+
     switch (type) {
     case extent_types_t::ROOT:
       assert(0 == "ROOT is never directly read");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::LADDR_INTERNAL:
-      return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
+      return get_extent<lba_manager::btree::LBAInternalNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::LADDR_LEAF:
-      return get_extent<lba_manager::btree::LBALeafNode>(offset, length
+      return get_extent<lba_manager::btree::LBALeafNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_INNER:
-      return get_extent<omap_manager::OMapInnerNode>(offset, length
+      return get_extent<omap_manager::OMapInnerNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_LEAF:
-      return get_extent<omap_manager::OMapLeafNode>(offset, length
+      return get_extent<omap_manager::OMapLeafNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::COLL_BLOCK:
-      return get_extent<collection_manager::CollectionNode>(offset, length
+      return get_extent<collection_manager::CollectionNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::ONODE_BLOCK_STAGED:
-      return get_extent<onode::SeastoreNodeExtent>(offset, length
+      return get_extent<onode::SeastoreNodeExtent>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OBJECT_DATA_BLOCK:
-      return get_extent<ObjectDataBlock>(offset, length
+      return get_extent<ObjectDataBlock>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
@@ -629,12 +900,14 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       ceph_assert(0 == "impossible");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::TEST_BLOCK:
-      return get_extent<TestBlock>(offset, length
+      return get_extent<TestBlock>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::TEST_BLOCK_PHYSICAL:
-      return get_extent<TestBlockPhysical>(offset, length
+      return get_extent<TestBlockPhysical>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
