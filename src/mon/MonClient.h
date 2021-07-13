@@ -290,7 +290,9 @@ private:
   bool want_monmap;
   ceph::condition_variable map_cond;
   bool passthrough_monmap = false;
-  bool got_config = false;
+
+  bool want_bootstrap_config = false;
+  ceph::ref_t<MConfig> bootstrap_config;
 
   // authenticate
   std::unique_ptr<AuthClientHandler> auth;

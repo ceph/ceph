@@ -183,6 +183,12 @@ std::string get_positional_argument(const po::variables_map &vm, size_t index) {
   return "";
 }
 
+void normalize_pool_name(std::string* pool_name) {
+  if (pool_name->empty()) {
+    *pool_name = get_default_pool_name();
+  }
+}
+
 std::string get_default_pool_name() {
   return g_ceph_context->_conf.get_val<std::string>("rbd_default_pool");
 }
@@ -209,10 +215,6 @@ int get_pool_and_namespace_names(
       }
       ++(*arg_index);
     }
-  }
-
-  if (default_empty_pool_name && pool_name->empty()) {
-    *pool_name = get_default_pool_name();
   }
 
   if (!g_ceph_context->_conf.get_val<bool>("rbd_validate_names")) {
@@ -259,10 +261,6 @@ int get_pool_image_id(const po::variables_map &vm,
         return r;
       }
     }
-  }
-
-  if (pool_name != nullptr && pool_name->empty()) {
-    *pool_name = get_default_pool_name();
   }
 
   if (image_id != nullptr && image_id->empty()) {
@@ -350,10 +348,6 @@ int get_pool_generic_snapshot_names(const po::variables_map &vm,
     }
   }
 
-  if (pool_name != nullptr && pool_name->empty()) {
-    *pool_name = get_default_pool_name();
-  }
-
   if (generic_name != nullptr && generic_name_required &&
       generic_name->empty()) {
     std::string prefix = at::get_description_prefix(mod);
@@ -363,7 +357,7 @@ int get_pool_generic_snapshot_names(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  std::regex pattern("^[^@/]+?$");
+  std::regex pattern("^[^@/]*?$");
   if (spec_validation == SPEC_VALIDATION_FULL) {
     // validate pool name while creating/renaming/copying/cloning/importing/etc
     if ((pool_name != nullptr) && !std::regex_match (*pool_name, pattern)) {
@@ -451,8 +445,6 @@ int get_image_options(const boost::program_options::variables_map &vm,
   if (vm.count(at::IMAGE_FEATURES)) {
     features = vm[at::IMAGE_FEATURES].as<uint64_t>();
     features_specified = true;
-  } else {
-    features = get_rbd_default_features(g_ceph_context);
   }
 
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
@@ -661,7 +653,6 @@ int get_formatter(const po::variables_map &vm,
 void init_context() {
   g_conf().set_val_or_die("rbd_cache_writethrough_until_flush", "false");
   g_conf().apply_changes(nullptr);
-  common_init_finish(g_ceph_context);
 }
 
 int init_rados(librados::Rados *rados) {
@@ -698,8 +689,10 @@ int init(const std::string &pool_name, const std::string& namespace_name,
   return 0;
 }
 
-int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
+int init_io_ctx(librados::Rados &rados, std::string pool_name,
                 const std::string& namespace_name, librados::IoCtx *io_ctx) {
+  normalize_pool_name(&pool_name);
+
   int r = rados.ioctx_create(pool_name.c_str(), *io_ctx);
   if (r < 0) {
     if (r == -ENOENT && pool_name == get_default_pool_name()) {
