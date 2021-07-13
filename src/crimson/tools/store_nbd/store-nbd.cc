@@ -426,6 +426,11 @@ void NBDHandler::run()
               logger().error("NBDHandler::run saw exception {}", e);
             });
           });
+      }).handle_exception_type([] (const std::system_error &e) {
+        // an ECONNABORTED is expected when we are being stopped.
+        if (e.code() != std::errc::connection_aborted) {
+          logger().error("accept failed: {}", e);
+        }
       });
     });
   }).handle_exception_type([](const seastar::gate_closed_exception&) {});
