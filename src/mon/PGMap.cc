@@ -1923,57 +1923,6 @@ void PGMap::get_stuck_stats(
   }
 }
 
-bool PGMap::get_stuck_counts(const utime_t cutoff, map<string, int>& note) const
-{
-  int inactive = 0;
-  int unclean = 0;
-  int degraded = 0;
-  int undersized = 0;
-  int stale = 0;
-
-  for (auto i = pg_stat.begin();
-       i != pg_stat.end();
-       ++i) {
-    if (! (i->second.state & PG_STATE_ACTIVE)) {
-      if (i->second.last_active < cutoff)
-        ++inactive;
-    }
-    if (! (i->second.state & PG_STATE_CLEAN)) {
-      if (i->second.last_clean < cutoff)
-        ++unclean;
-    }
-    if (i->second.state & PG_STATE_DEGRADED) {
-      if (i->second.last_undegraded < cutoff)
-        ++degraded;
-    }
-    if (i->second.state & PG_STATE_UNDERSIZED) {
-      if (i->second.last_fullsized < cutoff)
-        ++undersized;
-    }
-    if (i->second.state & PG_STATE_STALE) {
-      if (i->second.last_unstale < cutoff)
-        ++stale;
-    }
-  }
-
-  if (inactive)
-    note["stuck inactive"] = inactive;
-
-  if (unclean)
-    note["stuck unclean"] = unclean;
-
-  if (undersized)
-    note["stuck undersized"] = undersized;
-
-  if (degraded)
-    note["stuck degraded"] = degraded;
-
-  if (stale)
-    note["stuck stale"] = stale;
-
-  return inactive || unclean || undersized || degraded || stale;
-}
-
 void PGMap::dump_stuck(ceph::Formatter *f, int types, utime_t cutoff) const
 {
   mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;

@@ -467,7 +467,6 @@ public:
   void get_stuck_stats(
     int types, const utime_t cutoff,
     mempool::pgmap::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;
-  bool get_stuck_counts(const utime_t cutoff, std::map<std::string, int>& note) const;
   void dump_stuck(ceph::Formatter *f, int types, utime_t cutoff) const;
   void dump_stuck_plain(std::ostream& ss, int types, utime_t cutoff) const;
   int dump_stuck_pg_stats(std::stringstream &ds,
