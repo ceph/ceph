@@ -220,11 +220,14 @@ struct DeviceState : public RefCountedObject
 
   pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
   utime_t life_expectancy_stamp;          ///< when life expectency was recorded
+  float wear_level = -1;                  ///< SSD wear level (negative if unknown)
 
   void set_metadata(map<string,string>&& m);
 
   void set_life_expectancy(utime_t from, utime_t to, utime_t now);
   void rm_life_expectancy();
+
+  void set_wear_level(float wear);
 
   string get_life_expectancy_str(utime_t now) const;
 
