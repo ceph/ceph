@@ -114,6 +114,11 @@ RemotePeeringEvent::ConnectionPipeline &RemotePeeringEvent::cp()
   return get_osd_priv(conn.get()).peering_request_conn_pipeline;
 }
 
+RemotePeeringEvent::OSDPipeline &RemotePeeringEvent::op()
+{
+  return osd.peering_request_osd_pipeline;
+}
+
 void RemotePeeringEvent::on_pg_absent()
 {
   if (auto& e = get_event().get_event();
@@ -149,8 +154,16 @@ seastar::future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
 seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
 {
   return with_blocking_future(
-    handle.enter(cp().await_map)
+    handle.enter(op().await_active)
   ).then([this] {
+    if (osd.wait_for_active) {
+      return osd.wait_for_active->get_shared_future();
+    } else {
+      return seastar::now();
+    }
+  }).then([this] {
+    return with_blocking_future(handle.enter(cp().await_map));
+  }).then([this] {
     return with_blocking_future(
       osd.osdmap_gate.wait_for_map(evt.get_epoch_sent()));
   }).then([this](auto epoch) {
