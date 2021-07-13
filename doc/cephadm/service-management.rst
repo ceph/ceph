@@ -402,7 +402,17 @@ To disable the automatic management of dameons, set ``unmanaged=True`` in the
 Deploying a daemon on a host manually
 -------------------------------------
 
-To manually deploy a daemon on a host, run a command of the following form:
+.. note::
+
+  This workflow has a very limited use case and should only be used
+  in rare circumstances. 
+
+To manually deploy a daemon on a host, follow these steps:
+
+Modify the service spec for a service by getting the 
+existing spec, adding ``unmanaged: true``, and applying the modified spec. 
+
+Then manually deploy the daemon using the following:
 
    .. prompt:: bash #
 
@@ -413,6 +423,13 @@ For example :
    .. prompt:: bash #
 
      ceph orch daemon add mgr --placement=my_host
+
+.. note:: 
+
+  Removing ``unmanaged: true`` from the service spec will 
+  enable the reconciliation loop for this service and will
+  potentially lead to the removal of the daemon, depending
+  on the placement spec. 
 
 Removing a daemon from a host manually
 --------------------------------------
