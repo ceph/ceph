@@ -379,7 +379,7 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const std::string oid,
                    rgw_cls_bi_entry *entry);
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string oid, rgw_cls_bi_entry& entry);
 void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const std::string oid, rgw_cls_bi_entry& entry);
-int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string oid,
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name, const std::string& marker, uint32_t max,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated);
 
