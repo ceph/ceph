@@ -6,6 +6,8 @@
 #include <string_view>
 #include <ostream>
 
+#include <seastar/core/shared_future.hh>
+
 class OSDMap;
 
 class OSDState {
@@ -21,6 +23,7 @@ class OSDState {
   };
 
   State state = State::INITIALIZING;
+  mutable seastar::shared_promise<> wait_for_active;
 
 public:
   bool is_initializing() const {
@@ -35,6 +38,10 @@ public:
   bool is_active() const {
     return state == State::ACTIVE;
   }
+  seastar::future<> when_active() const {
+    return is_active() ? seastar::now()
+                       : wait_for_active.get_shared_future();
+  };
   bool is_prestop() const {
     return state == State::PRESTOP;
   }
@@ -52,12 +59,16 @@ public:
   }
   void set_active() {
     state = State::ACTIVE;
+    wait_for_active.set_value();
+    wait_for_active = {};
   }
   void set_prestop() {
     state = State::PRESTOP;
   }
   void set_stopping() {
     state = State::STOPPING;
+    wait_for_active.set_exception(crimson::common::system_shutdown_exception{});
+    wait_for_active = {};
   }
   std::string_view to_string() const {
     switch (state) {

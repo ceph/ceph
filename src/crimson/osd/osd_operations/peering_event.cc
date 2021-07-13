@@ -156,11 +156,7 @@ seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
   return with_blocking_future(
     handle.enter(op().await_active)
   ).then([this] {
-    if (osd.wait_for_active) {
-      return osd.wait_for_active->get_shared_future();
-    } else {
-      return seastar::now();
-    }
+    return osd.state.when_active();
   }).then([this] {
     return with_blocking_future(handle.enter(cp().await_map));
   }).then([this] {
