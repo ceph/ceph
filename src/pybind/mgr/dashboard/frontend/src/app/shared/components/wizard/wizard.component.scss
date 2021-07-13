@@ -1,10 +1,7 @@
 @use './src/styles/vendor/variables' as vv;
 
-.wizard-step-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
+.card-body {
+  padding-left: 0;
 }
 
 span.circle-step {
@@ -17,4 +14,17 @@ span.circle-step {
   margin-right: 5px;
   text-align: center;
   width: 1.6em;
+
+  &.active {
+    background-color: vv.$primary;
+  }
+}
+
+.nav-pills .nav-link {
+  background-color: vv.$white;
+  color: vv.$gray-800;
+
+  &.active {
+    color: vv.$primary;
+  }
 }

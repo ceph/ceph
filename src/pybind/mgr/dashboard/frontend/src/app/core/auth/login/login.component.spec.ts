@@ -53,6 +53,6 @@ describe('LoginComponent', () => {
     component.login();
 
     expect(routerNavigateSpy).toHaveBeenCalledTimes(1);
-    expect(routerNavigateSpy).toHaveBeenCalledWith(['/create-cluster']);
+    expect(routerNavigateSpy).toHaveBeenCalledWith(['/expand-cluster']);
   });
 });
