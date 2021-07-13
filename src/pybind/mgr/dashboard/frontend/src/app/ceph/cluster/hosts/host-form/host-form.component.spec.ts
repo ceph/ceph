@@ -3,6 +3,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
@@ -24,7 +25,8 @@ describe('HostFormComponent', () => {
         ReactiveFormsModule,
         ToastrModule.forRoot()
       ],
-      declarations: [HostFormComponent]
+      declarations: [HostFormComponent],
+      providers: [NgbActiveModal]
     },
     [LoadingPanelComponent]
   );
