@@ -55,6 +55,13 @@ add_executable(unittest_bloom_filter
 add_ceph_unittest(unittest_bloom_filter)
 target_link_libraries(unittest_bloom_filter ceph-common)
 
+# unittest_lruset
+add_executable(unittest_lruset
+  test_lruset.cc
+  )
+add_ceph_unittest(unittest_lruset)
+target_link_libraries(unittest_lruset)
+
 # unittest_histogram
 add_executable(unittest_histogram
   histogram.cc

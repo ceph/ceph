@@ -211,13 +211,28 @@ options:
   - mon
   flags:
   - runtime
-- name: mon_log_max_summary
+- name: mon_log_max
   type: uint
   level: advanced
   desc: number of recent cluster log messages to retain
+  default: 10000
+  services:
+  - mon
+  with_legacy: true
+- name: mon_log_max_summary
+  type: uint
+  level: advanced
+  desc: number of recent cluster log messages to dedup against
   default: 50
   services:
   - mon
+  with_legacy: true
+- name: mon_log_full_interval
+  type: uint
+  level: advanced
+  desc: how many epochs before we encode a full copy of recent log keys
+  default: 50
+  services: [mon]
   with_legacy: true
 - name: mon_max_log_entries_per_event
   type: int
