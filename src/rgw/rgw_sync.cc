@@ -1394,6 +1394,8 @@ public:
   int state_store_mdlog_entries_complete();
 };
 
+#define META_SYNC_SPAWN_WINDOW 20
+
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
 
@@ -1623,6 +1625,11 @@ public:
               stack_to_pos[stack] = marker;
               pos_to_prev[marker] = marker;
             }
+            // limit spawn window
+            while (num_spawned() > META_SYNC_SPAWN_WINDOW) {
+              yield wait_for_child();
+              collect_children();
+            }
           }
         }
         collect_children();
@@ -1810,6 +1817,11 @@ public:
                 // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
                 pos_to_prev[log_iter->id] = marker;
+              }
+              // limit spawn window
+              while (num_spawned() > META_SYNC_SPAWN_WINDOW) {
+                yield wait_for_child();
+                collect_children();
               }
             }
             marker = log_iter->id;
