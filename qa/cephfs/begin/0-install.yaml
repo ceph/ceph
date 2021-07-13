@@ -1,6 +1,3 @@
-log-rotate:
-  ceph-mds: 10G
-  ceph-osd: 10G
 tasks:
   - install:
       extra_packages:
@@ -53,7 +50,6 @@ tasks:
         - libtool
         - libuuid-devel
         - xfsprogs-devel
-  - ceph:
 syslog:
   ignorelist:
     - WARNING*.*check_session_state
