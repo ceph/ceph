@@ -400,6 +400,7 @@ class CephSalt(Task):
                              .format(self.ctx))
         if not success:
             self.ctx.cluster.run(args="rpm -qa | sort")
+        self.sm.gather_logfile('ceph/cephadm.out')
         self.log.debug("end of end method")
 
     def teardown(self):
