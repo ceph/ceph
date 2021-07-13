@@ -2763,8 +2763,8 @@ bool pg_stat_t::is_acting_osd(int32_t osd, bool primary) const
 void pg_stat_t::dump(Formatter *f) const
 {
   f->dump_stream("version") << version;
-  f->dump_stream("reported_seq") << reported_seq;
-  f->dump_stream("reported_epoch") << reported_epoch;
+  f->dump_unsigned("reported_seq", reported_seq);
+  f->dump_unsigned("reported_epoch", reported_epoch);
   f->dump_string("state", pg_state_string(state));
   f->dump_stream("last_fresh") << last_fresh;
   f->dump_stream("last_change") << last_change;
