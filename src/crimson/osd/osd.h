@@ -231,7 +231,6 @@ private:
   friend class PGAdvanceMap;
 
   RemotePeeringEvent::OSDPipeline peering_request_osd_pipeline;
-  std::optional<seastar::shared_promise<>> wait_for_active;
   friend class RemotePeeringEvent;
 
 public:
