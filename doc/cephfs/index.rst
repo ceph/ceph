@@ -170,6 +170,7 @@ Troubleshooting and Disaster Recovery
     Troubleshooting <troubleshooting>
     Disaster recovery <disaster-recovery>
     cephfs-journal-tool <cephfs-journal-tool>
+    Recovering file system after monitor store loss <recover-fs-after-mon-store-loss>
 
 
 .. raw:: html
