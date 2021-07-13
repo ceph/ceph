@@ -9,7 +9,7 @@
 
 // included for get_extent_by_type
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node_impl.h"
+#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 #include "crimson/os/seastore/omap_manager/btree/omap_btree_node_impl.h"
 #include "crimson/os/seastore/object_data_handler.h"
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"

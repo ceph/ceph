@@ -187,34 +187,6 @@ struct btree_lba_manager_test :
     return ret;
   }
 
-  auto set_mapping(
-    test_transaction_t &t,
-    laddr_t addr,
-    size_t len,
-    paddr_t paddr) {
-    auto [b, e] = get_overlap(t, addr, len);
-    EXPECT_EQ(b, e);
-
-    auto ret = with_trans_intr(
-      *t.t,
-      [=](auto &t) {
-	return lba_manager->set_extent(t, addr, len, paddr);
-      }).unsafe_get0();
-    EXPECT_EQ(addr, ret->get_laddr());
-    EXPECT_EQ(len, ret->get_length());
-    EXPECT_EQ(paddr, ret->get_paddr());
-    t.mappings.emplace(
-      std::make_pair(
-	ret->get_laddr(),
-	test_extent_t{
-	  ret->get_paddr(),
-	  ret->get_length(),
-	  1
-        }
-      ));
-    return ret;
-  }
-
   auto decref_mapping(
     test_transaction_t &t,
     laddr_t addr) {
