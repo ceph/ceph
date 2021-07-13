@@ -507,3 +507,53 @@ class TestMonitoring(object):
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type.replace('-', '_')), 0
         version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
+
+    @mock.patch('cephadm.os.fchown')
+    @mock.patch('cephadm.get_parm')
+    @mock.patch('cephadm.makedirs')
+    @mock.patch('cephadm.open')
+    @mock.patch('cephadm.make_log_dir')
+    @mock.patch('cephadm.make_data_dir')
+    @mock.patch('cephadm.args')
+    def test_create_daemon_dirs_prometheus(self, args, make_data_dir, make_log_dir, _open, makedirs,
+                                           get_parm, fchown):
+        """
+        Ensures the required and optional files given in the configuration are
+        created and mapped correctly inside the container. Tests absolute and
+        relative file paths given in the configuration.
+        """
+        args.data_dir = '/somedir'
+        fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
+        daemon_type = 'prometheus'
+        uid, gid = 50, 50
+        daemon_id = 'home'
+        files = {
+            'files': {
+                'prometheus.yml': 'foo',
+                '/etc/prometheus/alerting/ceph_alerts.yml': 'bar'
+            }
+        }
+        get_parm.return_value = files
+
+        cd.create_daemon_dirs(fsid,
+                              daemon_type,
+                              daemon_id,
+                              uid,
+                              gid,
+                              config=None,
+                              keyring=None)
+
+        prefix = '{data_dir}/{fsid}/{daemon_type}.{daemon_id}'.format(
+            data_dir=args.data_dir,
+            fsid=fsid,
+            daemon_type=daemon_type,
+            daemon_id=daemon_id
+        )
+        assert _open.call_args_list == [
+            call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
+                 encoding='utf-8'),
+            call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
+                 encoding='utf-8'),
+        ]
+        assert call().__enter__().write('foo') in _open.mock_calls
+        assert call().__enter__().write('bar') in _open.mock_calls
