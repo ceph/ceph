@@ -23,7 +23,7 @@ seastar::future<> TMDriver::write(
   assert((ptr.length() % (size_t)segment_manager->get_block_size()) == 0);
   return repeat_eagain([this, offset, ptr=std::move(ptr)] {
     return seastar::do_with(
-      tm->create_transaction(),
+      tm->create_transaction(Transaction::src_t::MUTATE),
       ptr,
       [this, offset](auto &t, auto &ptr) mutable {
 	return tm->dec_ref(
@@ -101,7 +101,7 @@ seastar::future<bufferlist> TMDriver::read(
   auto &blret = *blptrret;
   return repeat_eagain([=, &blret] {
     return seastar::do_with(
-      tm->create_transaction(),
+      tm->create_transaction(Transaction::src_t::READ),
       [=, &blret](auto &t) {
 	return read_extents(*t, offset, size
 	).safe_then([=, &blret](auto ext_list) mutable {

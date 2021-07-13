@@ -4,6 +4,8 @@
 #pragma once
 
 #include <iostream>
+#include <unordered_map>
+#include <boost/functional/hash.hpp>
 
 #include "seastar/core/shared_future.hh"
 
@@ -94,35 +96,50 @@ public:
 
   retired_extent_gate_t retired_extent_gate;
 
-  /// Creates empty transaction
-  TransactionRef create_transaction() {
+  /// Creates empty transaction by source
+  TransactionRef create_transaction(
+      Transaction::src_t src) {
     LOG_PREFIX(Cache::create_transaction);
+
+    ++(get_counter(stats.trans_created_by_src, src));
+
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       false,
+      src,
       last_commit
     );
     retired_extent_gate.add_token(ret->retired_gate_token);
-    DEBUGT("created", *ret);
+    DEBUGT("created source={}", *ret, src);
     return ret;
   }
 
-  /// Creates empty weak transaction
-  TransactionRef create_weak_transaction() {
+  /// Creates empty weak transaction by source
+  TransactionRef create_weak_transaction(
+      Transaction::src_t src) {
     LOG_PREFIX(Cache::create_weak_transaction);
+
+    ++(get_counter(stats.trans_created_by_src, src));
+
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
       true,
+      src,
       last_commit
     );
     retired_extent_gate.add_token(ret->retired_gate_token);
-    DEBUGT("created", *ret);
+    DEBUGT("created source={}", *ret, src);
     return ret;
   }
 
   /// Resets transaction preserving
   void reset_transaction_preserve_handle(Transaction &t) {
+    LOG_PREFIX(Cache::reset_transaction_preserve_handle);
+    if (t.did_reset()) {
+      ++(get_counter(stats.trans_created_by_src, t.get_src()));
+    }
     t.reset_preserve_handle(last_commit);
+    DEBUGT("reset", t);
   }
 
   /**
@@ -281,9 +298,14 @@ public:
       return trans_intr::make_interruptible(
 	get_extent<T>(offset, length)
       ).si_then(
-	[&t](auto ref) mutable {
+	[&t, this](auto ref) {
 	  if (!ref->is_valid()) {
+	    LOG_PREFIX(Cache::get_extent);
+	    DEBUGT("got invalid extent: {}", t, ref);
 	    t.conflicted = true;
+	    auto m_key = std::make_pair(t.get_src(), T::TYPE);
+	    assert(stats.trans_invalidated.count(m_key));
+	    ++(stats.trans_invalidated[m_key]);
 	    return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	  } else {
 	    t.add_to_read_set(ref);
@@ -328,7 +350,12 @@ public:
 	get_extent_by_type(type, offset, laddr, length)
       ).si_then([=, &t](CachedExtentRef ret) {
         if (!ret->is_valid()) {
+          LOG_PREFIX(Cache::get_extent_by_type);
+          DEBUGT("got invalid extent: {}", t, ret);
           t.conflicted = true;
+          auto m_key = std::make_pair(t.get_src(), type);
+          assert(stats.trans_invalidated.count(m_key));
+          ++(stats.trans_invalidated[m_key]);
           return get_extent_ertr::make_ready_future<CachedExtentRef>();
         } else {
           t.add_to_read_set(ret);
@@ -556,6 +583,23 @@ private:
    * holds refs to dirty extents.  Ordered by CachedExtent::get_dirty_from().
    */
   CachedExtent::list dirty;
+
+  using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
+  struct {
+    std::array<uint64_t, Transaction::SRC_MAX> trans_created_by_src;
+    std::array<uint64_t, Transaction::SRC_MAX> trans_committed_by_src;
+    std::unordered_map<src_ext_t, uint64_t,
+                       boost::hash<src_ext_t>> trans_invalidated;
+  } stats;
+  uint64_t& get_counter(
+      std::array<uint64_t, Transaction::SRC_MAX>& counters_by_src,
+      Transaction::src_t src) {
+    assert(static_cast<std::size_t>(src) < counters_by_src.size());
+    return counters_by_src[static_cast<std::size_t>(src)];
+  }
+
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 
   /// alloc buffer for cached extent
   bufferptr alloc_cache_buf(size_t size) {

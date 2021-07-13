@@ -46,6 +46,12 @@ class SeastoreNodeExtent final: public NodeExtent {
   SeastoreNodeExtent(const SeastoreNodeExtent& other)
     : NodeExtent(other) {}
   ~SeastoreNodeExtent() override = default;
+
+  constexpr static extent_types_t TYPE = extent_types_t::ONODE_BLOCK_STAGED;
+  extent_types_t get_type() const override {
+    return TYPE;
+  }
+
  protected:
   NodeExtentRef mutate(context_t, DeltaRecorderURef&&) override;
 
@@ -56,14 +62,12 @@ class SeastoreNodeExtent final: public NodeExtent {
   CachedExtentRef duplicate_for_write() override {
     return CachedExtentRef(new SeastoreNodeExtent(*this));
   }
-  extent_types_t get_type() const override {
-    return extent_types_t::ONODE_BLOCK_STAGED;
-  }
   ceph::bufferlist get_delta() override {
     assert(recorder);
     return recorder->get_delta();
   }
   void apply_delta(const ceph::bufferlist&) override;
+
  private:
   DeltaRecorderURef recorder;
 };
