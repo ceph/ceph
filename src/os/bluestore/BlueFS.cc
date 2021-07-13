@@ -2548,14 +2548,13 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
       log_cond.wait(l);
     }
     vselector->sub_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
-    do {
-      int r = _allocate(
-        vselector->select_prefer_bdev(log_writer->file->vselector_hint),
-        cct->_conf->bluefs_max_log_runway,
-        &log_writer->file->fnode);
-      ceph_assert(r == 0);
-      runway += cct->_conf->bluefs_max_log_runway;
-    } while (runway < (int64_t)cct->_conf->bluefs_min_log_runway);
+    runway = round_up_to(cct->_conf->bluefs_min_log_runway - runway,
+        cct->_conf->bluefs_max_log_runway);
+    int r = _allocate(
+      vselector->select_prefer_bdev(log_writer->file->vselector_hint),
+      runway,
+      &log_writer->file->fnode);
+    ceph_assert(r == 0);
     vselector->add_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
     log_t.op_file_update(log_writer->file->fnode);
     just_expanded_log = true;
