@@ -235,6 +235,7 @@ public:
 
 class BtreeLBAPin : public LBAPin {
   friend class BtreeLBAManager;
+  friend class LBABtree;
 
   /**
    * parent

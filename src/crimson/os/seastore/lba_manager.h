@@ -83,18 +83,6 @@ public:
     extent_len_t len,
     paddr_t addr) = 0;
 
-  /**
-   * Creates a new absolute mapping.
-   *
-   * off~len must be unreferenced
-   */
-  using set_extent_iertr = base_iertr::extend<
-    crimson::ct_error::invarg>;
-  using set_extent_ret = set_extent_iertr::future<LBAPinRef>;
-  virtual set_extent_ret set_extent(
-    Transaction &t,
-    laddr_t off, extent_len_t len, paddr_t addr) = 0;
-
   struct ref_update_result_t {
     unsigned refcount = 0;
     paddr_t addr;
