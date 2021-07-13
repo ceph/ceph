@@ -4,7 +4,9 @@ from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
 from cephadm.schedule import HostAssignment
+import rados
 
+from mgr_module import NFS_POOL_NAME
 from orchestrator import OrchestratorError, DaemonDescription
 
 if TYPE_CHECKING:
@@ -178,6 +180,7 @@ class Migrations:
                 if pool != '.nfs':
                     self.migrate_nfs_spec(service_id, pool, ns)
             self.nfs_migration_queue = []
+            self.mgr.log.info('Done migrating all NFS services')
         return True
 
     def migrate_nfs_spec(self, service_id: str, pool: str, ns: Optional[str]) -> None:
@@ -206,7 +209,18 @@ class Migrations:
                 break
         self.mgr.log.info(f'Found {len(exports)} exports for legacy nfs.{service_id}')
 
-        if renamed:
+        # copy grace file
+        if service_id != ns:
+            try:
+                grace = ioctx.read("grace")
+                new_ioctx = self.mgr.rados.open_ioctx(NFS_POOL_NAME)
+                new_ioctx.set_namespace(service_id)
+                new_ioctx.write_full("grace", grace)
+                self.mgr.log.info('Migrated nfs-ganesha grace file')
+            except rados.ObjectNotFound:
+                self.mgr.log.debug('failed to read old grace file; skipping')
+
+        if renamed and f'nfs.ganesha-{service_id}' in self.mgr.spec_store:
             # rename from nfs.ganesha-* to nfs.*.  This will destroy old daemons and
             # deploy new ones.
             self.mgr.log.info(f'Replacing nfs.ganesha-{service_id} with nfs.{service_id}')
@@ -242,8 +256,7 @@ class Migrations:
             }, inbuf=ex)
             if ret:
                 self.mgr.log.warning(f'Failed to migrate export ({ret}): {err}\nExport was:\n{ex}')
-
-
+        self.mgr.log.info(f'Done migrating nfs.{service_id}')
 
 
 def queue_migrate_nfs_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
