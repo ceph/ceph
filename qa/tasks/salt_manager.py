@@ -17,6 +17,7 @@ Linter:
     flake8 --max-line-length=100
 '''
 import logging
+import os
 import re
 
 from teuthology.contextutil import safe_while
@@ -168,22 +169,25 @@ class SaltManager(object):
         systemctl_remote(self.ctx.cluster, "enable", "salt-minion")
 
     def gather_logfile(self, logfile):
+        archivedir = '/home/ubuntu/cephtest/archive'
         for _remote in self.ctx.cluster.remotes.keys():
+            if logfile.startswith('/'):
+                filepath = logfile
+            else:
+                filepath = f'/var/log/{logfile}'
+            filename = os.path.basename(logfile)
             try:
                 _remote.run(args=[
-                    'sudo', 'test', '-f', '/var/log/{}'.format(logfile),
+                    'sudo', 'test', '-f', filepath,
                     ])
             except CommandFailedError:
                 continue
-            log.info((
-                "gathering logfile /var/log/{} from remote {}"
-                ).format(logfile, _remote.hostname))
+            log.info(
+                f"gathering logfile {filepath} from remote {_remote.hostname}")
             _remote.run(args=[
-                'sudo', 'cp', '-a', '/var/log/{}'.format(logfile),
-                '/home/ubuntu/cephtest/archive/',
+                'sudo', 'cp', '-a', filepath, f'{archivedir}/',
                 run.Raw(';'),
-                'sudo', 'chown', 'ubuntu',
-                '/home/ubuntu/cephtest/archive/{}'.format(logfile)
+                'sudo', 'chown', 'ubuntu', f'{archivedir}/{filename}'
                 ])
 
     def gather_logs(self, logdir, archive=None):
