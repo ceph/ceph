@@ -94,7 +94,8 @@ OSD::OSD(int id, uint32_t nonce,
       update_stats();
     }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
-    osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
+    osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services))),
+    wait_for_active(std::in_place_t{})
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
@@ -1067,6 +1068,9 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       if (state.is_booting()) {
         logger().info("osd.{}: activating...", whoami);
         state.set_active();
+        assert(wait_for_active);
+        wait_for_active->set_value();
+        wait_for_active = std::nullopt;
         beacon_timer.arm_periodic(
           std::chrono::seconds(local_conf()->osd_beacon_report_interval));
         tick_timer.arm_periodic(

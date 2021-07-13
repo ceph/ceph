@@ -230,6 +230,10 @@ private:
   void update_heartbeat_peers();
   friend class PGAdvanceMap;
 
+  RemotePeeringEvent::OSDPipeline peering_request_osd_pipeline;
+  std::optional<seastar::shared_promise<>> wait_for_active;
+  friend class RemotePeeringEvent;
+
 public:
   blocking_future<Ref<PG>> get_or_create_pg(
     spg_t pgid,
