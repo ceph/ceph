@@ -176,6 +176,92 @@ see `Prometheus`_ for more details.
 Profiling Crimson
 =================
 
+fio
+---
+
+``crimson-store-nbd`` exposes configurable ``FuturizedStore`` internals as an
+NBD server for use with fio.
+
+To use fio to test ``crimson-store-nbd``,
+
+#. You will need to install ``libnbd``, and compile fio like
+
+   .. prompt:: bash $
+
+      apt-get install libnbd-dev
+      git clone git://git.kernel.dk/fio.git
+      cd fio
+      ./configure --enable-libnbd
+      make
+
+#. Build ``crimson-store-nbd``
+
+   .. prompt:: bash $
+
+      cd build
+      ninja crimson-store-nbd
+
+#. Run the ``crimson-store-nbd`` server with a block device. Please specify
+   the path to the raw device, like ``/dev/nvme1n1`` in place of the created
+   file for testing with a block device.
+
+   .. prompt:: bash $
+
+      export disk_img=/tmp/disk.img
+      export unix_socket=/tmp/store_nbd_socket.sock
+      rm -f $disk_img $unix_socket
+      truncate -s 512M $disk_img
+      ./bin/crimson-store-nbd \
+        --device-path $disk_img \
+        --smp 1 \
+        --mkfs true \
+        --type transaction_manager \
+        --uds-path ${unix_socket} &
+
+   in which,
+
+   ``--smp``
+     how many CPU cores are used
+
+   ``--mkfs``
+     initialize the device first
+
+   ``--type``
+     which backend to use. If ``transaction_manager`` is specified, SeaStore's
+     ``TransactionManager`` and ``BlockSegmentManager`` are used to emulate a
+     block device. Otherwise, this option is used to choose a backend of
+     ``FuturizedStore``, where the whole "device" is divided into multiple
+     fixed-size objects whose size is specified by ``--object-size``. So, if
+     you are only interested in testing the lower-level implementation of
+     SeaStore like logical address translation layer and garbage collection
+     without the object store semantics, ``transaction_manager`` would be a
+     better choice.
+
+#. Create an fio job file named ``nbd.fio``
+
+   .. code:: ini
+
+      [global]
+      ioengine=nbd
+      uri=nbd+unix:///?socket=${unix_socket}
+      rw=randrw
+      time_based
+      runtime=120
+      group_reporting
+      iodepth=1
+      size=512M
+
+      [job0]
+      offset=0
+
+#. Test the crimson object store using the fio compiled just now
+
+   .. prompt:: bash $
+
+      ./fio nbd.fio
+
+CBT
+---
 We can use `cbt`_ for performing perf tests::
 
   $ git checkout master
