@@ -14,5 +14,6 @@ overrides:
         rgw md log max shards: 4
         rgw data log num shards: 4
         rgw sync obj etag verify: true
+        rgw sync meta inject err probability: 0.1
   rgw:
     compression type: random
