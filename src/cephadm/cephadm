@@ -2080,12 +2080,15 @@ def check_units(ctx, units, enabler=None):
     return False
 
 
-def is_container_running(ctx: CephadmContext, name: str) -> bool:
-    out, err, ret = call(ctx, [
-        ctx.container_engine.path, 'container', 'inspect',
-        '--format', '{{.State.Status}}', name
-    ])
-    return out == 'running'
+def is_container_running(ctx: CephadmContext, c: 'CephContainer') -> bool:
+    for name in [c.cname, c.old_cname]:
+        out, err, ret = call(ctx, [
+            ctx.container_engine.path, 'container', 'inspect',
+            '--format', '{{.State.Status}}', name
+        ])
+        if out == 'running':
+            return True
+    return False
 
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
@@ -4426,9 +4429,8 @@ def command_deploy(ctx):
 
     redeploy = False
     unit_name = get_unit_name(ctx.fsid, daemon_type, daemon_id)
-    container_name = 'ceph-%s-%s.%s' % (ctx.fsid, daemon_type, daemon_id)
     (_, state, _) = check_unit(ctx, unit_name)
-    if state == 'running' or is_container_running(ctx, container_name):
+    if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ctx.fsid, daemon_type, daemon_id, 'bash')):
         redeploy = True
 
     if ctx.reconfig:
@@ -4993,12 +4995,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         version = None
                         start_stamp = None
 
-                        cmd = [
-                            container_path, 'inspect',
-                            '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
-                            'ceph-%s-%s' % (fsid, j)
-                        ]
-                        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.DEBUG)
+                        out, err, code = get_container_stats(ctx, container_path, fsid, daemon_type, daemon_id)
                         if not code:
                             (container_id, image_name, image_id, start,
                              version) = out.strip().split(',')
@@ -5128,6 +5125,21 @@ def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):
             continue
         return d
     raise Error('Daemon not found: {}. See `cephadm ls`'.format(name))
+
+
+def get_container_stats(ctx: CephadmContext, container_path: str, fsid: str, daemon_type: str, daemon_id: str) -> Tuple[str, str, int]:
+    c = CephContainer.for_daemon(ctx, fsid, daemon_type, daemon_id, 'bash')
+    out, err, code = '', '', -1
+    for name in (c.cname, c.old_cname):
+        cmd = [
+            container_path, 'inspect',
+            '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
+            name
+        ]
+        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.DEBUG)
+        if not code:
+            break
+    return out, err, code
 
 ##################################
 
