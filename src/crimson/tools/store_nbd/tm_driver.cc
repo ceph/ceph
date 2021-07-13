@@ -214,12 +214,9 @@ seastar::future<> TMDriver::mount()
 
 seastar::future<> TMDriver::close()
 {
-  return segment_manager->close(
-  ).safe_then([this] {
-    return tm->close();
-  }).safe_then([this] {
+  return tm->close().safe_then([this] {
     clear();
-    return seastar::now();
+    return segment_manager->close();
   }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid errror during TMDriver::close"
