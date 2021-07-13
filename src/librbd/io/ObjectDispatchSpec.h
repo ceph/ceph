@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/buffer_pool.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/zipkin_trace.h"
@@ -18,7 +19,7 @@ namespace io {
 
 struct ObjectDispatcherInterface;
 
-struct ObjectDispatchSpec {
+struct ObjectDispatchSpec : public PooledObject {
 private:
   // helper to avoid extra heap allocation per object IO
   struct C_Dispatcher : public Context {

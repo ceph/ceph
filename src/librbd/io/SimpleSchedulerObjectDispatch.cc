@@ -431,8 +431,9 @@ void SimpleSchedulerObjectDispatch<I>::dispatch_all_delayed_requests() {
 template <typename I>
 void SimpleSchedulerObjectDispatch<I>::register_in_flight_request(
     uint64_t object_no, const utime_t &start_time, Context **on_finish) {
+  PooledAllocator<ObjectRequests> allocator;
   auto res = m_requests.insert(
-      {object_no, std::make_shared<ObjectRequests>(object_no)});
+      {object_no, std::allocate_shared<ObjectRequests>(allocator, object_no)});
   ceph_assert(res.second);
   auto it = res.first;
 
