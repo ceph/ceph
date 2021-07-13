@@ -392,7 +392,7 @@ seastar::future<> OSD::_send_boot()
   logger().info("cluster_msgr: {}", cluster_msgr->get_myaddr());
   auto m = crimson::make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
-                                  osdmap->get_epoch(),
+                                  boot_epoch,
                                   heartbeat->get_back_addrs(),
                                   heartbeat->get_front_addrs(),
                                   cluster_msgr->get_myaddrs(),
