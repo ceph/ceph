@@ -8,6 +8,8 @@ import six
 from six.moves import http_client
 from six.moves.urllib.parse import urlparse
 import json
+import time
+import math
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -326,12 +328,16 @@ def create_secrets(ctx, config):
                     token_resp.status < 300):
                 raise Exception("Cannot authenticate user "+secret["username"]+" for secret creation")
 
+            expire = time.time() + 5400		# now + 90m
+            (expire_fract,dummy) = math.modf(expire)
+            expire_format = "%%FT%%T.%06d" % (round(expire_fract*1000000))
+            expiration = time.strftime(expire_format, time.gmtime(expire))
             token_id = token_resp.getheader('x-subject-token')
 
             key1_json = json.dumps(
                 {
                     "name": secret['name'],
-                    "expiration": "2020-12-31T19:14:44.180394",
+                    "expiration": expiration,
                     "algorithm": "aes",
                     "bit_length": 256,
                     "mode": "cbc",
