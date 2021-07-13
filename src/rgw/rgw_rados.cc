@@ -2462,7 +2462,9 @@ int RGWRados::fix_head_obj_locator(const DoutPrefixProvider *dpp, const RGWBucke
 #define HEAD_SIZE 512 * 1024
   op.read(0, HEAD_SIZE, &data, NULL);
 
-  ret = rgw_rados_operate(dpp, ioctx, oid, &op, &data, null_yield);
+  ret = rgw_rados_operate(
+      dpp, ioctx, oid, &op, &data, null_yield,
+      cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: rgw_rados_operate(oid=" << oid << ") returned ret=" << ret << dendl;
     return ret;
@@ -2540,7 +2542,9 @@ int RGWRados::move_rados_obj(const DoutPrefixProvider *dpp,
       mtime = real_clock::from_timespec(mtime_ts);
     }
     rop.read(ofs, chunk_size, &data, NULL);
-    ret = rgw_rados_operate(dpp, src_ioctx, src_oid, &rop, &data, null_yield);
+    ret = rgw_rados_operate(
+        dpp, src_ioctx, src_oid, &rop, &data, null_yield,
+        cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
     if (ret < 0) {
       goto done_err;
     }
@@ -5577,6 +5581,7 @@ int RGWRados::Object::Stat::stat_async(const DoutPrefixProvider *dpp)
   RGWObjectCtx& ctx = source->get_ctx();
   rgw_obj& obj = source->get_obj();
   RGWRados *store = source->get_store();
+  CephContext *cct = store->ctx();
 
   RGWObjState *s = ctx.get_state(obj); /* calling this one directly because otherwise a sync request will be sent */
   result.obj = obj;
@@ -5603,7 +5608,10 @@ int RGWRados::Object::Stat::stat_async(const DoutPrefixProvider *dpp)
   op.getxattrs(&result.attrs, NULL);
   state.completion = librados::Rados::aio_create_completion(nullptr, nullptr);
   state.io_ctx.locator_set_key(loc);
-  r = state.io_ctx.aio_operate(oid, state.completion, &op, NULL);
+  r = state.io_ctx.aio_operate(
+      oid, state.completion, &op,
+      cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0,
+      NULL);
   if (r < 0) {
     ldpp_dout(dpp, 5) << __func__
 						   << ": ERROR: aio_operate() returned ret=" << r
@@ -6248,6 +6256,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
   uint64_t len, read_len;
   bool reading_from_head = true;
   ObjectReadOperation op;
+  CephContext *cct = store->ctx();
 
   bool merge_bl = false;
   bufferlist *pbl = &bl;
@@ -6341,7 +6350,9 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
 
   state.cur_ioctx->locator_set_key(read_obj.loc);
 
-  r = state.cur_ioctx->operate(read_obj.oid, &op, NULL);
+  r = state.cur_ioctx->operate(
+      read_obj.oid, &op, NULL,
+      cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
   ldpp_dout(dpp, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r < 0) {
@@ -6446,7 +6457,13 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
-  auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
+  auto completed =
+      d->aio->get(obj,
+                  rgw::Aio::librados_op(std::move(op), d->yield,
+                                        cct->_conf->rgw_balanced_read
+                                            ? librados::OPERATION_BALANCE_READS
+                                            : 0),
+                  cost, id);
 
   return d->flush(std::move(completed));
 }
@@ -6545,7 +6562,9 @@ int RGWRados::iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
   return 0;
 }
 
-int RGWRados::obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, ObjectWriteOperation *op)
+int RGWRados::obj_operate(const DoutPrefixProvider *dpp,
+                          const RGWBucketInfo &bucket_info, const rgw_obj &obj,
+                          ObjectWriteOperation *op, int flags)
 {
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, obj, &ref);
@@ -6553,10 +6572,13 @@ int RGWRados::obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bu
     return r;
   }
 
-  return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, null_yield);
+  return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, null_yield,
+                           flags);
 }
 
-int RGWRados::obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, ObjectReadOperation *op)
+int RGWRados::obj_operate(const DoutPrefixProvider *dpp,
+                          const RGWBucketInfo &bucket_info, const rgw_obj &obj,
+                          ObjectReadOperation *op, int flags)
 {
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, obj, &ref);
@@ -6566,7 +6588,8 @@ int RGWRados::obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bu
 
   bufferlist outbl;
 
-  return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, &outbl, null_yield);
+  return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, &outbl,
+                           null_yield, flags);
 }
 
 int RGWRados::olh_init_modification_impl(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag)
@@ -7432,7 +7455,9 @@ int RGWRados::get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket
   ObjectReadOperation op;
   op.getxattrs(&attrset, NULL);
 
-  int r = obj_operate(dpp, bucket_info, obj, &op);
+  int r = obj_operate(
+      dpp, bucket_info, obj, &op,
+      cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
   if (r < 0) {
     return r;
   }
@@ -7582,7 +7607,9 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
   bufferlist outbl;
-  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);
+  r = rgw_rados_operate(
+      dpp, ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield,
+      cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
 
   if (epoch) {
     *epoch = ref.pool.ioctx().get_last_version();

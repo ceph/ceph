@@ -3196,3 +3196,12 @@ options:
   - rgw
   flags:
   - startup
+- name: rgw_balanced_read
+  type: bool
+  level: advanced
+  desc: Use balanced read when reading from RADOS
+  long_desc: If true, RGW will pass OPERATION_BALANCE_READS flag when reading from RADOS.
+  default: true
+  services:
+  - rgw
+  with_legacy: true

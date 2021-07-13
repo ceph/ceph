@@ -110,7 +110,7 @@ handle_dne(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx,
 }
 
 tl::expected<log_type, bs::error_code>
-log_backing_type(const DoutPrefixProvider *dpp, 
+log_backing_type(const DoutPrefixProvider *dpp,
                  librados::IoCtx& ioctx,
 		 log_type def,
 		 int shards,
@@ -152,7 +152,7 @@ log_backing_type(const DoutPrefixProvider *dpp,
   return (check == shard_check::fifo ? log_type::fifo : log_type::omap);
 }
 
-bs::error_code log_remove(const DoutPrefixProvider *dpp, 
+bs::error_code log_remove(const DoutPrefixProvider *dpp,
                           librados::IoCtx& ioctx,
 			  int shards,
 			  const fu2::unique_function<std::string(int) const>& get_oid,
@@ -395,6 +395,7 @@ auto logback_generations::read(const DoutPrefixProvider *dpp, optional_yield y) 
   tl::expected<std::pair<entries_t, obj_version>, bs::error_code>
 {
   try {
+    auto cct = static_cast<CephContext*>(ioctx.cct());
     librados::ObjectReadOperation op;
     std::unique_lock l(m);
     cls_version_check(op, version, VER_COND_GE);
@@ -403,7 +404,9 @@ auto logback_generations::read(const DoutPrefixProvider *dpp, optional_yield y) 
     cls_version_read(op, &v2);
     cb::list bl;
     op.read(0, 0, &bl, nullptr);
-    auto r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+    auto r = rgw_rados_operate(
+        dpp, ioctx, oid, &op, nullptr, y,
+        cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
     if (r < 0) {
       if (r == -ENOENT) {
 	ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -487,7 +490,7 @@ bs::error_code logback_generations::watch() noexcept {
   return {};
 }
 
-bs::error_code logback_generations::new_backing(const DoutPrefixProvider *dpp, 
+bs::error_code logback_generations::new_backing(const DoutPrefixProvider *dpp,
                                                 log_type type,
 						optional_yield y) noexcept {
   static constexpr auto max_tries = 10;
@@ -541,7 +544,7 @@ bs::error_code logback_generations::new_backing(const DoutPrefixProvider *dpp,
   return {};
 }
 
-bs::error_code logback_generations::empty_to(const DoutPrefixProvider *dpp, 
+bs::error_code logback_generations::empty_to(const DoutPrefixProvider *dpp,
                                              uint64_t gen_id,
 					     optional_yield y) noexcept {
   static constexpr auto max_tries = 10;

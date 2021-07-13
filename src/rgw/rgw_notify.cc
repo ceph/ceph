@@ -85,7 +85,10 @@ class Manager : public DoutPrefixProvider {
       librados::ObjectReadOperation op;
       queues_t queues_chunk;
       op.omap_get_keys2(start_after, max_chunk, &queues_chunk, &more, &rval);
-      const auto ret = rgw_rados_operate(this, rados_ioctx, Q_LIST_OBJECT_NAME, &op, nullptr, y);
+      const auto ret = rgw_rados_operate(
+          this, rados_ioctx, Q_LIST_OBJECT_NAME, &op, nullptr, y,
+          cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS
+                                        : 0);
       if (ret == -ENOENT) {
         // queue list object was not created - nothing to do
         return 0;
@@ -344,7 +347,7 @@ class Manager : public DoutPrefixProvider {
           "" /*no tag*/);
         cls_2pc_queue_remove_entries(op, end_marker); 
         // check ownership and deleted entries in one batch
-        const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield)); 
+        const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
         if (ret == -ENOENT) {
           // queue was deleted
           ldpp_dout(this, 5) << "INFO: queue: " 
@@ -667,12 +670,12 @@ void tags_from_attributes(const req_state* s, rgw::sal::Object* obj, KeyValueMap
 }
 
 // populate event from request
-void populate_event_from_request(const reservation_t& res, 
+void populate_event_from_request(const reservation_t& res,
         rgw::sal::Object* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
-        const std::string& version, 
+        const std::string& version,
         EventType event_type,
         rgw_pubsub_s3_event& event) {
   const auto s = res.s;
@@ -719,7 +722,7 @@ bool notification_match(reservation_t& res, const rgw_pubsub_topic_filter& filte
     return false;
   }
   const auto obj = res.object;
-  if (!match(filter.s3_filter.key_filter, 
+  if (!match(filter.s3_filter.key_filter,
         res.object_name ? *res.object_name : obj->get_name())) {
     return false;
   }
@@ -778,7 +781,7 @@ int publish_reserve(const DoutPrefixProvider *dpp, EventType event_type,
       // notification does not apply to req_state
       continue;
     }
-    ldpp_dout(dpp, 20) << "INFO: notification: '" << topic_filter.s3_id << 
+    ldpp_dout(dpp, 20) << "INFO: notification: '" << topic_filter.s3_id <<
         "' on topic: '" << topic_cfg.dest.arn_topic << 
         "' and bucket: '" << res.s->bucket->get_name() << 
         "' (unique topic: '" << topic_cfg.name <<
@@ -794,10 +797,10 @@ int publish_reserve(const DoutPrefixProvider *dpp, EventType event_type,
       int rval;
       const auto& queue_name = topic_cfg.dest.arn_topic;
       cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
-      auto ret = rgw_rados_operate(dpp, res.store->getRados()->get_notif_pool_ctx(), 
+      auto ret = rgw_rados_operate(dpp, res.store->getRados()->get_notif_pool_ctx(),
           queue_name, &op, res.s->yield, librados::OPERATION_RETURNVEC);
       if (ret < 0) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to reserve notification on queue: " << queue_name 
+        ldpp_dout(dpp, 1) << "ERROR: failed to reserve notification on queue: " << queue_name
           << ". error: " << ret << dendl;
         // if no space is left in queue we ask client to slow down
         return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
@@ -858,7 +861,7 @@ int publish_commit(rgw::sal::Object* obj,
         bufferlist obl;
         int rval;
         cls_2pc_queue_reserve(op, bl.length(), 1, &obl, &rval);
-        ret = rgw_rados_operate(dpp, res.store->getRados()->get_notif_pool_ctx(), 
+        ret = rgw_rados_operate(dpp, res.store->getRados()->get_notif_pool_ctx(),
           queue_name, &op, res.s->yield, librados::OPERATION_RETURNVEC);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to reserve extra space on queue: " << queue_name
@@ -922,7 +925,7 @@ int publish_abort(const DoutPrefixProvider *dpp, reservation_t& res) {
       queue_name, &op,
       res.s->yield);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: " << topic.res_id << 
+      ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: " << topic.res_id <<
         " from queue: " << queue_name << ". error: " << ret << dendl;
       return ret;
     }

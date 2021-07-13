@@ -181,9 +181,15 @@ int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optiona
     librados::ObjectReadOperation op;
     packages_t packages_chunk;
     op.omap_get_keys2(start_after, max_chunk, &packages_chunk, &more, &rval);
-    const auto ret = rgw_rados_operate(dpp, *(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_lc_pool_ctx()),
-      PACKAGE_LIST_OBJECT_NAME, &op, nullptr, y);
-  
+    const auto ret =
+        rgw_rados_operate(dpp, *(static_cast<rgw::sal::RadosStore *>(store)
+                                ->getRados()
+                                ->get_lc_pool_ctx()),
+                          PACKAGE_LIST_OBJECT_NAME, &op, nullptr, y,
+                          store->ctx()->_conf->rgw_balanced_read
+                              ? librados::OPERATION_BALANCE_READS
+                              : 0);
+
     if (ret < 0) {
       return ret;
     }

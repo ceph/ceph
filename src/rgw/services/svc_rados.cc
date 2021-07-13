@@ -142,6 +142,12 @@ int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectRe
   return ref.pool.ioctx().aio_operate(ref.obj.oid, c, op, pbl);
 }
 
+int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c,
+                                  librados::ObjectReadOperation *op, int flags,
+                                  bufferlist *pbl) {
+  return ref.pool.ioctx().aio_operate(ref.obj.oid, c, op, flags, pbl);
+}
+
 int RGWSI_RADOS::Obj::watch(uint64_t *handle, librados::WatchCtx2 *ctx)
 {
   return ref.pool.ioctx().watch2(ref.obj.oid, handle, ctx);

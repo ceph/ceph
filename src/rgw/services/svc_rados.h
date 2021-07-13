@@ -173,6 +173,9 @@ public:
     int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
     int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
                     bufferlist *pbl);
+    int aio_operate(librados::AioCompletion *c,
+                    librados::ObjectReadOperation *op, int flags,
+                    bufferlist *pbl);
 
     int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
     int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);

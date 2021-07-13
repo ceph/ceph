@@ -137,7 +137,9 @@ int RGWSI_SysObj_Core::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, nullptr);
   }
   bufferlist outbl;
-  r = rados_obj.operate(dpp, &op, &outbl, y);
+  r = rados_obj.operate(
+      dpp, &op, &outbl, y,
+      cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
 
   if (epoch) {
     *epoch = rados_obj.get_last_version();
@@ -242,7 +244,9 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
     return r;
   }
-  r = rados_obj.operate(dpp, &op, nullptr, y);
+  r = rados_obj.operate(
+      dpp, &op, nullptr, y,
+      cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "rados_obj.operate() r=" << r << " bl.length=" << bl->length() << dendl;
     return r;
@@ -290,15 +294,17 @@ int RGWSI_SysObj_Core::get_attr(const DoutPrefixProvider *dpp,
 
   int rval;
   op.getxattr(name, dest, &rval);
-  
-  r = rados_obj.operate(dpp, &op, nullptr, y);
+
+  r = rados_obj.operate(
+      dpp, &op, nullptr, y,
+      cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-int RGWSI_SysObj_Core::set_attrs(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core::set_attrs(const DoutPrefixProvider *dpp,
                                  const rgw_raw_obj& obj,
                                  map<string, bufferlist>& attrs,
                                  map<string, bufferlist> *rmattrs,
@@ -351,7 +357,7 @@ int RGWSI_SysObj_Core::set_attrs(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::omap_get_vals(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core::omap_get_vals(const DoutPrefixProvider *dpp,
                                      const rgw_raw_obj& obj,
                                      const string& marker,
                                      uint64_t count,
@@ -375,8 +381,10 @@ int RGWSI_SysObj_Core::omap_get_vals(const DoutPrefixProvider *dpp,
     std::map<string, bufferlist> t;
     int rval;
     op.omap_get_vals2(start_after, count, &t, &more, &rval);
-  
-    r = rados_obj.operate(dpp, &op, nullptr, y);
+
+    r = rados_obj.operate(
+        dpp, &op, nullptr, y,
+        cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
     if (r < 0) {
       return r;
     }
@@ -394,7 +402,7 @@ int RGWSI_SysObj_Core::omap_get_vals(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::omap_get_all(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core::omap_get_all(const DoutPrefixProvider *dpp,
                                     const rgw_raw_obj& obj,
                                     std::map<string, bufferlist> *m,
                                     optional_yield y)
@@ -417,8 +425,10 @@ int RGWSI_SysObj_Core::omap_get_all(const DoutPrefixProvider *dpp,
     std::map<string, bufferlist> t;
     int rval;
     op.omap_get_vals2(start_after, count, &t, &more, &rval);
-  
-    r = rados_obj.operate(dpp, &op, nullptr, y);
+
+    r = rados_obj.operate(
+        dpp, &op, nullptr, y,
+        cct->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS : 0);
     if (r < 0) {
       return r;
     }
@@ -509,7 +519,7 @@ int RGWSI_SysObj_Core::notify(const DoutPrefixProvider *dpp, const rgw_raw_obj& 
   return r;
 }
 
-int RGWSI_SysObj_Core::remove(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core::remove(const DoutPrefixProvider *dpp,
                               RGWSysObjectCtxBase& obj_ctx,
                               RGWObjVersionTracker *objv_tracker,
                               const rgw_raw_obj& obj,
@@ -536,7 +546,7 @@ int RGWSI_SysObj_Core::remove(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::write(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core::write(const DoutPrefixProvider *dpp,
                              const rgw_raw_obj& obj,
                              real_time *pmtime,
                              map<std::string, bufferlist>& attrs,
@@ -604,7 +614,7 @@ int RGWSI_SysObj_Core::write(const DoutPrefixProvider *dpp,
 }
 
 
-int RGWSI_SysObj_Core::write_data(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core::write_data(const DoutPrefixProvider *dpp,
                                   const rgw_raw_obj& obj,
                                   const bufferlist& bl,
                                   bool exclusive,

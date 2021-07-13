@@ -453,7 +453,7 @@ class RGWRados
                          bool follow_olh, optional_yield y, bool assume_noent = false);
   int append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state, optional_yield y);
-  
+
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 
@@ -1302,8 +1302,12 @@ public:
                    map<string, bufferlist> *attrs, bufferlist *first_chunk,
                    RGWObjVersionTracker *objv_tracker, optional_yield y);
 
-  int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
-  int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
+  int obj_operate(const DoutPrefixProvider *dpp,
+                  const RGWBucketInfo &bucket_info, const rgw_obj &obj,
+                  librados::ObjectWriteOperation *op, int flags = 0);
+  int obj_operate(const DoutPrefixProvider *dpp,
+                  const RGWBucketInfo &bucket_info, const rgw_obj &obj,
+                  librados::ObjectReadOperation *op, int flags = 0);
 
   int guard_reshard(const DoutPrefixProvider *dpp,
                     BucketShard *bs,

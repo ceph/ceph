@@ -318,7 +318,11 @@ int RGWRadosGetOmapKeysCR::send_request(const DoutPrefixProvider *dpp) {
   op.omap_get_keys2(marker, max_entries, &result->entries, &result->more, nullptr);
 
   cn = stack->create_completion_notifier(result);
-  return result->ref.pool.ioctx().aio_operate(result->ref.obj.oid, cn->completion(), &op, NULL);
+  return result->ref.pool.ioctx().aio_operate(
+      result->ref.obj.oid, cn->completion(), &op,
+      store->ctx()->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS
+                                             : 0,
+      NULL);
 }
 
 int RGWRadosGetOmapKeysCR::request_complete()
@@ -356,7 +360,11 @@ int RGWRadosGetOmapValsCR::send_request(const DoutPrefixProvider *dpp) {
   op.omap_get_vals2(marker, max_entries, &result->entries, &result->more, nullptr);
 
   cn = stack->create_completion_notifier(result);
-  return result->ref.pool.ioctx().aio_operate(result->ref.obj.oid, cn->completion(), &op, NULL);
+  return result->ref.pool.ioctx().aio_operate(
+      result->ref.obj.oid, cn->completion(), &op,
+      store->ctx()->_conf->rgw_balanced_read ? librados::OPERATION_BALANCE_READS
+                                             : 0,
+      NULL);
 }
 
 int RGWRadosGetOmapValsCR::request_complete()

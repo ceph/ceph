@@ -94,11 +94,11 @@ class Aio {
   virtual AioResultList drain() = 0;
 
   static OpFunc librados_op(librados::ObjectReadOperation&& op,
-                            optional_yield y);
+                            optional_yield y, int flags = 0);
   static OpFunc librados_op(librados::ObjectWriteOperation&& op,
-                            optional_yield y);
+                            optional_yield y, int flags = 0);
   static OpFunc d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
-                             off_t read_ofs, off_t read_len, std::string& location);
+                             off_t read_ofs, off_t read_len, std::string &location);
 };
 
 } // namespace rgw
