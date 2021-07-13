@@ -91,23 +91,16 @@ const routes: Routes = [
 
       // Cluster
       {
-        path: 'create-cluster',
+        path: 'expand-cluster',
         component: CreateClusterComponent,
         canActivate: [ModuleStatusGuardService],
-        children: [
-          {
-            path: URLVerbs.ADD,
-            component: HostFormComponent,
-            outlet: 'modal'
-          }
-        ],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'orchestrator',
             redirectTo: 'dashboard',
             backend: 'cephadm'
           },
-          breadcrumbs: 'Create Cluster'
+          breadcrumbs: 'Expand Cluster'
         }
       },
       {

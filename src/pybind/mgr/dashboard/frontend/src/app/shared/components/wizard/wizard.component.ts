@@ -16,7 +16,6 @@ export class WizardComponent implements OnInit, OnDestroy {
   stepsTitle: string[];
 
   steps: Observable<WizardStepModel[]>;
-  currentSteps: Observable<WizardStepModel>;
   currentStep: WizardStepModel;
   currentStepSub: Subscription;
 
@@ -25,7 +24,6 @@ export class WizardComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.stepsService.setTotalSteps(this.stepsTitle.length);
     this.steps = this.stepsService.getSteps();
-    this.currentSteps = this.stepsService.getCurrentStep();
     this.currentStepSub = this.stepsService.getCurrentStep().subscribe((step: WizardStepModel) => {
       this.currentStep = step;
     });

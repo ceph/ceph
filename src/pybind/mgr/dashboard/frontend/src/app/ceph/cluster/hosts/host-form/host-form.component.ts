@@ -2,6 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+
 import { HostService } from '~/app/shared/api/host.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -36,7 +38,8 @@ export class HostFormComponent extends CdForm implements OnInit {
     private router: Router,
     private actionLabels: ActionLabelsI18n,
     private hostService: HostService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    public activeModal: NgbActiveModal
   ) {
     super();
     this.resource = $localize`host`;
@@ -44,7 +47,9 @@ export class HostFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.pageURL = this.router.url.includes('hosts') ? 'hosts' : 'create-cluster';
+    if (this.router.url.includes('hosts')) {
+      this.pageURL = 'hosts';
+    }
     this.createForm();
     this.hostService.list().subscribe((resp: any[]) => {
       this.hostnames = resp.map((host) => {
@@ -80,7 +85,7 @@ export class HostFormComponent extends CdForm implements OnInit {
     this.allLabels = this.hostForm.get('labels').value;
     this.taskWrapper
       .wrapTaskAroundCall({
-        task: new FinishedTask('host/' + URLVerbs.CREATE, {
+        task: new FinishedTask('host/' + URLVerbs.ADD, {
           hostname: hostname
         }),
         call: this.hostService.create(hostname, this.addr, this.allLabels, this.status)
@@ -90,7 +95,9 @@ export class HostFormComponent extends CdForm implements OnInit {
           this.hostForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.router.navigate([this.pageURL, { outlets: { modal: null } }]);
+          this.pageURL === 'hosts'
+            ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+            : this.activeModal.close();
         }
       });
   }

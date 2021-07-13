@@ -1,16 +1,19 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, OnDestroy, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { forkJoin, Subscription } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { HostService } from '~/app/shared/api/host.service';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { ActionLabelsI18n, AppConstants } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 
@@ -20,14 +23,16 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
   styleUrls: ['./create-cluster.component.scss']
 })
 export class CreateClusterComponent implements OnDestroy {
+  @ViewChild('skipConfirmTpl', { static: true })
+  skipConfirmTpl: TemplateRef<any>;
   currentStep: WizardStepModel;
   currentStepSub: Subscription;
   permissions: Permissions;
   projectConstants: typeof AppConstants = AppConstants;
-  hosts: Array<object> = [];
   stepTitles = ['Add Hosts', 'Review'];
   startClusterCreation = false;
   observables: any = [];
+  modalRef: NgbModalRef;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -36,7 +41,8 @@ export class CreateClusterComponent implements OnDestroy {
     private hostService: HostService,
     private notificationService: NotificationService,
     private actionLabels: ActionLabelsI18n,
-    private clusterService: ClusterService
+    private clusterService: ClusterService,
+    private modalService: ModalService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.currentStepSub = this.stepsService.getCurrentStep().subscribe((step: WizardStepModel) => {
@@ -50,13 +56,27 @@ export class CreateClusterComponent implements OnDestroy {
   }
 
   skipClusterCreation() {
-    this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
-      this.notificationService.show(
-        NotificationType.info,
-        $localize`Cluster creation skipped by user`
-      );
-      this.router.navigate(['/dashboard']);
-    });
+    const modalVariables = {
+      titleText: $localize`Warning`,
+      buttonText: $localize`Continue`,
+      warning: true,
+      bodyTpl: this.skipConfirmTpl,
+      showSubmit: true,
+      onSubmit: () => {
+        this.clusterService.updateStatus('POST_INSTALLED').subscribe({
+          error: () => this.modalRef.close(),
+          complete: () => {
+            this.notificationService.show(
+              NotificationType.info,
+              $localize`Cluster expansion skipped by user`
+            );
+            this.router.navigate(['/dashboard']);
+            this.modalRef.close();
+          }
+        });
+      }
+    };
+    this.modalRef = this.modalService.show(ConfirmationModalComponent, modalVariables);
   }
 
   onSubmit() {
@@ -66,7 +86,7 @@ export class CreateClusterComponent implements OnDestroy {
           this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
             this.notificationService.show(
               NotificationType.success,
-              $localize`Cluster creation was successful`
+              $localize`Cluster expansion was successful`
             );
             this.router.navigate(['/dashboard']);
           })
@@ -101,7 +121,7 @@ export class CreateClusterComponent implements OnDestroy {
   }
 
   showSubmitButtonLabel() {
-    return !this.stepsService.isLastStep() ? this.actionLabels.NEXT : $localize`Create Cluster`;
+    return !this.stepsService.isLastStep() ? this.actionLabels.NEXT : $localize`Expand Cluster`;
   }
 
   showCancelButtonLabel() {
