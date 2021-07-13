@@ -399,8 +399,8 @@ void get_purge_arguments(po::options_description *positional,
        "value range: 0.0-1.0");
 }
 
-int execute_purge (const po::variables_map &vm,
-                   const std::vector<std::string> &ceph_global_init_args) {
+int execute_purge(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   std::string pool_name;
   std::string namespace_name;
   size_t arg_index = 0;
@@ -445,10 +445,19 @@ int execute_purge (const po::variables_map &vm,
   r = rbd.trash_purge_with_progress(io_ctx, expire_ts, threshold, pc);
   if (r < 0) {
     pc.fail();
-  } else {
-    pc.finish();
+    if (r == -ENOTEMPTY || r == -EBUSY || r == -EMLINK || r == -EUCLEAN) {
+      std::cerr << "rbd: some expired images could not be removed"
+                << std::endl
+                << "Ensure that they are closed/unmapped, do not have "
+                << "snapshots (including trashed snapshots with linked "
+                << "clones), are not in a group and were moved to the "
+                << "trash successfully."
+                << std::endl;
+    }
+    return r;
   }
 
+  pc.finish();
   return 0;
 }
 
