@@ -1,11 +1,12 @@
-.. _cephfs-nfs:
+.. _mgr-nfs:
 
 
-=======================
-CephFS Exports over NFS
-=======================
+=============================
+CephFS & RGW Exports over NFS
+=============================
 
-CephFS namespaces can be exported over NFS protocol using the `NFS-Ganesha NFS server`_
+CephFS namespaces and RGW buckets can be exported over NFS protocol using the
+`NFS-Ganesha NFS server`_
 
 Requirements
 ============
@@ -211,7 +212,7 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs <fsname> <cluster_id> <pseudo_path> [--readonly] [--path=/path/in/cephfs]
+    $ ceph nfs export create cephfs <fsname> <cluster_id> <pseudo_path> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>]
 
 This creates export RADOS objects containing the export block, where
 
@@ -220,7 +221,7 @@ that will serve this export.
 
 ``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server.  It must be an absolute path and unique.
+``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server. It must be an absolute path and unique.
 
 ``<path>`` is the path within cephfs. Valid path should be given and default
 path is '/'. It need not be unique. Subvolume path can be fetched using:
@@ -229,10 +230,36 @@ path is '/'. It need not be unique. Subvolume path can be fetched using:
 
    $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
+``<client_addr>`` is the list of client address for which these export
+permissions will be applicable. By default all clients can access the export
+according to specified export permissions. See the `NFS-Ganesha Export Sample`_
+for permissible values.
+
+``<squash>`` defines the kind of user id squashing to be performed. The default
+value is `no_root_squash`. See the `NFS-Ganesha Export Sample`_ for
+permissible values.
+
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
-Delete CephFS Export
-====================
+Create RGW Export
+=================
+
+To export a bucket
+
+.. code::
+
+   $ ceph nfs export create rgw <bucket_name> <cluster_id> <pseudo_path> [--readonly] [--client_addr <value>...] [--realm <value>]
+
+For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network
+
+.. code::
+
+   $ ceph nfs export create rgw mybucket mynfs /bucketdata --client_addr 192.168.10.0/24
+
+.. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
+
+Delete Export
+=============
 
 .. code:: bash
 
@@ -244,8 +271,8 @@ This deletes an export in an NFS Ganesha cluster, where:
 
 ``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
-List CephFS Exports
-===================
+List Exports
+============
 
 .. code:: bash
 
@@ -257,8 +284,8 @@ It lists exports for a cluster, where:
 
 With the ``--detailed`` option enabled it shows entire export block.
 
-Get CephFS Export
-=================
+Get Export
+==========
 
 .. code:: bash
 
@@ -272,14 +299,14 @@ where:
 ``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
 
-Create or update CephFS Export via JSON specification
-=====================================================
+Create or update Export via JSON specification
+==============================================
 
 An existing export can be dumped in JSON format with:
 
 .. prompt:: bash #
 
-    ceph nfs export info *<pseudo_path>*
+    ceph nfs export info *<cluster_id>* *<pseudo_path>*
 
 An export can be created or modified by importing a JSON description in the
 same format:
@@ -382,3 +409,4 @@ Checking NFS-Ganesha logs with
 Log level can be changed using `nfs cluster config set` command.
 
 .. _NFS-Ganesha NFS Server: https://github.com/nfs-ganesha/nfs-ganesha/wiki
+.. _NFS-Ganesha Export Sample: https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/config_samples/export.txt
