@@ -49,7 +49,7 @@ Seastore is still under active development.
 daemonize
 ---------
 
-Unlike ``ceph-osd``, ``crimson-osd`` does daemonize itself even if the
+Unlike ``ceph-osd``, ``crimson-osd`` does not daemonize itself even if the
 ``daemonize`` option is enabled. Because, to read this option, ``crimson-osd``
 needs to ready its config sharded service, but this sharded service lives
 in the seastar reactor. If we fork a child process and exit the parent after
