@@ -64,7 +64,7 @@ try:
 except:
     pass
 
-def init_log():
+def init_log(log_level=logging.INFO):
     global log
     if log is not None:
         del log
@@ -79,7 +79,7 @@ def init_log():
         datefmt='%Y-%m-%dT%H:%M:%S')
     handler.setFormatter(formatter)
     log.addHandler(handler)
-    log.setLevel(logging.INFO)
+    log.setLevel(log_level)
 
 log = None
 init_log()
@@ -1130,7 +1130,7 @@ def clear_old_log():
         os.remove(logpath)
         with open(logpath, 'w') as logfile:
             logfile.write('')
-        init_log()
+        init_log(log.level)
         log.debug('logging in a fresh file now...')
 
 
