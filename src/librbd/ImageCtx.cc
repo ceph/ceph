@@ -730,14 +730,8 @@ public:
     std::unique_lock image_locker(image_lock);
 
     // reset settings back to global defaults
-    for (auto& key : config_overrides) {
-      std::string value;
-      int r = cct->_conf.get_val(key, &value);
-      ceph_assert(r == 0);
-
-      config.set_val(key, value);
-    }
     config_overrides.clear();
+    config.set_config_values(cct->_conf.get_config_values());
 
     // extract config overrides
     for (auto meta_pair : meta) {

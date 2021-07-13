@@ -425,6 +425,8 @@ TEST(Queue, SpawnAsyncRequest)
   });
 
   context.poll();
+  // may require two poll invocations due to racy mutex locking
+  context.poll();
   EXPECT_TRUE(context.stopped());
 }
 
