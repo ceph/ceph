@@ -111,7 +111,7 @@ describe('Dashboard Main Page', () => {
         }
 
         spec.pageObject.navigateTo();
-        spec.pageObject.getTableTotalCount().then((tableCount) => {
+        spec.pageObject.getTableCount('total').then((tableCount) => {
           expect(tableCount).to.eq(
             dashCount,
             `Text of card "${spec.cardName}" and regex "${spec.regexMatcher}" resulted in ${dashCount} ` +

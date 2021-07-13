@@ -23,7 +23,7 @@ describe('OSDs page', () => {
 
   describe('check existence of fields on OSD page', () => {
     it('should check that number of rows and count in footer match', () => {
-      osds.getTableTotalCount().then((text) => {
+      osds.getTableCount('total').then((text) => {
         osds.getTableRows().its('length').should('equal', text);
       });
     });
