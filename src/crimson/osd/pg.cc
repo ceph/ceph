@@ -463,14 +463,14 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 void PG::do_peering_event(
   PGPeeringEvent& evt, PeeringCtx &rctx)
 {
-  if (!peering_state.pg_has_reset_since(evt.get_epoch_requested())) {
+  if (peering_state.pg_has_reset_since(evt.get_epoch_requested())) {
+    logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
+  } else {
     logger().debug("{} handling {} for pg: {}", __func__, evt.get_desc(), pgid);
     peering_state.handle_event(
       evt.get_event(),
       &rctx);
     peering_state.write_if_dirty(rctx.transaction);
-  } else {
-    logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
   }
 }
 
