@@ -194,7 +194,7 @@ struct omap_manager_test_t :
   }
 
   void check_mappings(omap_root_t &omap_root) {
-    auto t = tm->create_transaction();
+    auto t = create_read_transaction();
     check_mappings(omap_root, *t);
   }
 
@@ -215,7 +215,7 @@ struct omap_manager_test_t :
   }
 
   auto initialize() {
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     omap_root_t omap_root = with_trans_intr(
       *t,
       [this](auto &t) {
@@ -235,14 +235,14 @@ TEST_F(omap_manager_test_t, basic)
     string val = "test";
 
     {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       logger().debug("first transaction");
       set_key(omap_root, *t, key, val);
       get_value(omap_root, *t, key);
       submit_transaction(std::move(t));
     }
     {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       logger().debug("second transaction");
       get_value(omap_root, *t, key);
       rm_key(omap_root, *t, key);
@@ -250,7 +250,7 @@ TEST_F(omap_manager_test_t, basic)
       submit_transaction(std::move(t));
     }
     {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       logger().debug("third transaction");
       get_value(omap_root, *t, key);
       submit_transaction(std::move(t));
@@ -264,7 +264,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split)
     omap_root_t omap_root = initialize();
 
     for (unsigned i = 0; i < 40; i++) {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 10; ++j) {
         set_random_key(omap_root, *t);
@@ -285,7 +285,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
     omap_root_t omap_root = initialize();
 
     for (unsigned i = 0; i < 80; i++) {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       logger().debug("opened split_merge transaction");
       for (unsigned j = 0; j < 5; ++j) {
         set_random_key(omap_root, *t);
@@ -300,7 +300,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
       }
     }
     auto mkeys = get_mapped_keys();
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     for (unsigned i = 0; i < mkeys.size(); i++) {
       if (i % 3 != 0) {
         rm_key(omap_root, *t, mkeys[i]);
@@ -309,7 +309,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
       if (i % 10 == 0) {
         logger().debug("submitting transaction i= {}", i);
         submit_transaction(std::move(t));
-        t = tm->create_transaction();
+        t = create_mutate_transaction();
       }
       if (i % 100 == 0) {
         logger().debug("check_mappings  i= {}", i);
@@ -328,7 +328,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
     omap_root_t omap_root = initialize();
 
     for (unsigned i = 0; i < 50; i++) {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       logger().debug("opened split_merge transaction");
       for (unsigned j = 0; j < 5; ++j) {
         set_random_key(omap_root, *t);
@@ -343,7 +343,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
       }
     }
     auto mkeys = get_mapped_keys();
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     for (unsigned i = 0; i < mkeys.size(); i++) {
       if (30 < i && i < 100) {
         rm_key(omap_root, *t, mkeys[i]);
@@ -352,7 +352,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
       if (i % 10 == 0) {
         logger().debug("submitting transaction i= {}", i);
         submit_transaction(std::move(t));
-        t = tm->create_transaction();
+        t = create_mutate_transaction();
       }
       if (i % 50 == 0) {
         logger().debug("check_mappings  i= {}", i);
@@ -375,7 +375,7 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
 
     string temp;
     for (unsigned i = 0; i < 40; i++) {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 10; ++j) {
         auto key = set_random_key(omap_root, *t);
@@ -391,17 +391,17 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
     }
 
     {
-      auto t = tm->create_transaction();
+      auto t = create_read_transaction();
       list(omap_root, *t, std::nullopt);
     }
 
     {
-      auto t = tm->create_transaction();
+      auto t = create_read_transaction();
       list(omap_root, *t, temp, 100);
     }
 
     {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
       clear(omap_root, *t);
       submit_transaction(std::move(t));
     }
@@ -415,7 +415,7 @@ TEST_F(omap_manager_test_t, internal_force_split)
 
     for (unsigned i = 0; i < 10; i++) {
       logger().debug("opened split transaction");
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
 
       for (unsigned j = 0; j < 80; ++j) {
         set_random_key(omap_root, *t);
@@ -437,7 +437,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
 
     for (unsigned i = 0; i < 8; i++) {
       logger().debug("opened split transaction");
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
 
       for (unsigned j = 0; j < 80; ++j) {
         set_random_key(omap_root, *t);
@@ -449,14 +449,14 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
       submit_transaction(std::move(t));
     }
     auto mkeys = get_mapped_keys();
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     for (unsigned i = 0; i < mkeys.size(); i++) {
       rm_key(omap_root, *t, mkeys[i]);
 
       if (i % 10 == 0) {
         logger().debug("submitting transaction i= {}", i);
         submit_transaction(std::move(t));
-        t = tm->create_transaction();
+        t = create_mutate_transaction();
       }
       if (i % 50 == 0) {
         logger().debug("check_mappings  i= {}", i);
@@ -477,7 +477,7 @@ TEST_F(omap_manager_test_t, replay)
 
     for (unsigned i = 0; i < 8; i++) {
       logger().debug("opened split transaction");
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
 
       for (unsigned j = 0; j < 80; ++j) {
         set_random_key(omap_root, *t);
@@ -492,7 +492,7 @@ TEST_F(omap_manager_test_t, replay)
     check_mappings(omap_root);
 
     auto mkeys = get_mapped_keys();
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     for (unsigned i = 0; i < mkeys.size(); i++) {
       rm_key(omap_root, *t, mkeys[i]);
 
@@ -500,7 +500,7 @@ TEST_F(omap_manager_test_t, replay)
         logger().debug("submitting transaction i= {}", i);
         submit_transaction(std::move(t));
         replay();
-        t = tm->create_transaction();
+        t = create_mutate_transaction();
       }
       if (i % 50 == 0) {
         logger().debug("check_mappings  i= {}", i);
@@ -524,7 +524,7 @@ TEST_F(omap_manager_test_t, internal_force_split_to_root)
 
     logger().debug("set big keys");
     for (unsigned i = 0; i < 53; i++) {
-      auto t = tm->create_transaction();
+      auto t = create_mutate_transaction();
 
       for (unsigned j = 0; j < 8; ++j) {
         set_random_key(omap_root, *t);
@@ -534,7 +534,7 @@ TEST_F(omap_manager_test_t, internal_force_split_to_root)
     }
      logger().debug("set small keys");
      for (unsigned i = 0; i < 100; i++) {
-       auto t = tm->create_transaction();
+       auto t = create_mutate_transaction();
        for (unsigned j = 0; j < 8; ++j) {
          set_random_key(omap_root, *t);
        }

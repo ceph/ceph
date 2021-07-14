@@ -173,8 +173,9 @@ struct CollectionNode
     copy_to_node();
   }
 
+  static constexpr extent_types_t TYPE = extent_types_t::COLL_BLOCK;
   extent_types_t get_type() const final {
-    return type;
+    return TYPE;
   }
 
   std::ostream &print_detail_l(std::ostream &out) const final;

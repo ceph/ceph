@@ -246,7 +246,7 @@ public:
   public:
     virtual ~ExtentCallbackInterface() = default;
 
-    virtual TransactionRef create_transaction() = 0;
+    virtual TransactionRef create_transaction(Transaction::src_t) = 0;
 
     /**
      * get_next_dirty_extent

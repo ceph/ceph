@@ -85,7 +85,7 @@ struct fltree_onode_manager_test_t
       return tm->mount(
       ).safe_then([this] {
 	return seastar::do_with(
-	  tm->create_transaction(),
+	  create_mutate_transaction(),
 	  [this](auto &t) {
 	    return manager->mkfs(*t
 	    ).safe_then([this, &t] {
@@ -102,7 +102,7 @@ struct fltree_onode_manager_test_t
 
   template <typename F>
   void with_transaction(F&& f) {
-    auto t = tm->create_transaction();
+    auto t = create_mutate_transaction();
     std::invoke(f, *t);
     submit_transaction(std::move(t));
     segment_cleaner->run_until_halt().get0();

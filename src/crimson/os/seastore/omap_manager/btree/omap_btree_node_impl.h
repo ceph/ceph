@@ -36,8 +36,6 @@ struct OMapInnerNode
     OMapNode(std::forward<T>(t)...),
     StringKVInnerNodeLayout(get_bptr().c_str()) {}
 
-  static constexpr extent_types_t type = extent_types_t::OMAP_INNER;
-
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
   bool extent_will_overflow(size_t ksize, std::optional<size_t> vsize) const {
     return is_overflow(ksize);
@@ -104,8 +102,9 @@ struct OMapInnerNode
 
   std::ostream &print_detail_l(std::ostream &out) const final;
 
+  static constexpr extent_types_t TYPE = extent_types_t::OMAP_INNER;
   extent_types_t get_type() const final {
-    return type;
+    return TYPE;
   }
 
   ceph::bufferlist get_delta() final {
@@ -148,8 +147,6 @@ struct OMapLeafNode
   OMapLeafNode(T&&... t) :
     OMapNode(std::forward<T>(t)...),
     StringKVLeafNodeLayout(get_bptr().c_str()) {}
-
-  static constexpr extent_types_t type = extent_types_t::OMAP_LEAF;
 
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
   bool extent_will_overflow(
@@ -202,8 +199,9 @@ struct OMapLeafNode
     omap_context_t oc,
     OMapNodeRef _right) final;
 
+  static constexpr extent_types_t TYPE = extent_types_t::OMAP_LEAF;
   extent_types_t get_type() const final {
-    return type;
+    return TYPE;
   }
 
   ceph::bufferlist get_delta() final {

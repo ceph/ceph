@@ -351,11 +351,11 @@ struct transaction_manager_test_t :
   };
 
   test_transaction_t create_transaction() {
-    return { itm.create_transaction(), {} };
+    return { create_mutate_transaction(), {} };
   }
 
-  test_transaction_t create_weak_transaction() {
-    return { itm.create_weak_transaction(), {} };
+  test_transaction_t create_weak_test_transaction() {
+    return { create_weak_transaction(), {} };
   }
 
   TestBlockRef alloc_extent(
@@ -386,7 +386,7 @@ struct transaction_manager_test_t :
   }
 
   bool check_usage() {
-    auto t = create_weak_transaction();
+    auto t = create_weak_test_transaction();
     SpaceTrackerIRef tracker(segment_cleaner->get_empty_space_tracker());
     with_trans_intr(
       *t.t,
@@ -416,7 +416,7 @@ struct transaction_manager_test_t :
   }
 
   void check_mappings() {
-    auto t = create_weak_transaction();
+    auto t = create_weak_test_transaction();
     check_mappings(t);
   }
 
