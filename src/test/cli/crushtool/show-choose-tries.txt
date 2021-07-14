@@ -24,21 +24,17 @@ root root {
 	item device2 weight 1.00000
 }
 
-rule first_ruleset {
-	ruleset 0
+rule first_rule {
+	id 0
 	type replicated
-	min_size 1
-	max_size 10
 	step take root
 	step choose firstn 0 type device
 	step emit
 }
 
-rule indep_ruleset {
-    ruleset 1
+rule indep_rule {
+    id 1
     type erasure
-    min_size 3
-    max_size 20
     step set_chooseleaf_tries 5
     step take root
     step choose indep 0 type device

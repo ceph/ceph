@@ -14,7 +14,6 @@ class CrushTester {
 
   std::map<int, int> device_weight;
   int min_rule, max_rule;
-  int ruleset;
   int min_x, max_x;
   int min_rep, max_rep;
   int64_t pool_id;
@@ -169,7 +168,6 @@ public:
   CrushTester(CrushWrapper& c, std::ostream& eo)
     : crush(c), err(eo),
       min_rule(-1), max_rule(-1),
-      ruleset(-1),
       min_x(-1), max_x(-1),
       min_rep(-1), max_rep(-1),
       pool_id(-1),
@@ -341,10 +339,6 @@ public:
     min_rule = max_rule = rule;
   }
 
-  void set_ruleset(int rs) {
-    ruleset = rs;
-  }
-
   /**
    * check if any bucket/nodes is referencing an unknown name or type
    * @param max_id rejects any non-bucket items with id less than this number,
@@ -353,10 +347,6 @@ public:
    *         large, true otherwise
    */
   bool check_name_maps(unsigned max_id = 0) const;
-  /**
-   * print out overlapped crush rules belonging to the same ruleset
-   */
-  void check_overlapped_rules() const;
   int test();
   int test_with_fork(int timeout);
 

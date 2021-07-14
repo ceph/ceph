@@ -771,8 +771,6 @@
   rule replicated_rule {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take default (esc)
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)

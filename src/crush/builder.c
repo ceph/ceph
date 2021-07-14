@@ -98,17 +98,16 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 	return r;
 }
 
-struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, int maxsize)
+struct crush_rule *crush_make_rule(int len, int type)
 {
 	struct crush_rule *rule;
 	rule = malloc(crush_rule_size(len));
         if (!rule)
                 return NULL;
 	rule->len = len;
-	rule->mask.ruleset = ruleset;
-	rule->mask.type = type;
-	rule->mask.min_size = minsize;
-	rule->mask.max_size = maxsize;
+	rule->type = type;
+	rule->deprecated_min_size = 1;
+	rule->deprecated_max_size = 100;
 	return rule;
 }
 
