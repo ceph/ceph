@@ -567,6 +567,43 @@ struct transaction_manager_test_t :
     bool success = try_submit_transaction(std::move(t));
     EXPECT_FALSE(success);
   }
+
+  auto trigger_find_hole(const size_t& size, int &num) {
+    return repeat_eagain([&, this] {
+      return seastar::do_with(create_transaction(), [&, this] (auto &t) {
+        return crimson::do_for_each(
+               boost::make_counting_iterator(0),
+               boost::make_counting_iterator(num),
+          [&, this] (auto idx) {
+          using ertr = with_trans_ertr<TransactionManager::alloc_extent_iertr>;
+          using ret = ertr::future<>;
+          return itm.alloc_extent<TestBlock>(*(t.t), L_ADDR_MIN, size)
+            .safe_then([&, this] (auto extent) ->ret {
+            extent->set_contents(get_random_contents());
+            EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
+            EXPECT_EQ(size, extent->get_length());
+            test_mappings.alloced(extent->get_laddr(), *extent, t.mapping_delta);
+            return ertr::make_ready_future<>();
+          });
+        }).safe_then([&t, this] {
+          using ertr = with_trans_ertr<TransactionManager::submit_transaction_iertr>;
+          using ret = ertr::future<>;
+          return itm.submit_transaction(*t.t).safe_then([]() -> ret {
+            return ertr::make_ready_future<>();
+          });
+        }).safe_then([&t, this]() {
+          test_mappings.consume(t.mapping_delta);
+        });
+      });
+    }).safe_then([this]() {
+      return segment_cleaner->run_until_halt();
+    }).handle_error(
+      crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::list_collections"
+      }
+    );
+  }
+
 };
 
 TEST_F(transaction_manager_test_t, basic)
@@ -961,3 +998,20 @@ TEST_F(transaction_manager_test_t, random_writes_concurrent)
     );
   });
 }
+
+TEST_F(transaction_manager_test_t, find_hole_assert_triggeri)
+{
+  constexpr unsigned max = 20;
+  constexpr size_t BSIZE = 4<<10;
+  int num = 100;
+  run([&, this] {
+    return seastar::parallel_for_each(
+      boost::make_counting_iterator(0u),
+      boost::make_counting_iterator(max),
+      [&, this](auto idx) {
+        return trigger_find_hole(BSIZE, num);
+    });
+  });
+
+}
+
