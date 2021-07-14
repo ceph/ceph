@@ -1488,3 +1488,65 @@ class TestShell(object):
             retval = cd.command_shell(ctx)
             assert retval == 0
             assert ctx.keyring == 'foo'
+
+
+class TestCephVolume(object):
+
+    @staticmethod
+    def _get_cmd(*args):
+        return [
+            'ceph-volume',
+            *args,
+            '--', 'inventory', '--format', 'json'
+        ]
+
+    def test_noop(self):
+        cmd = self._get_cmd()
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.fsid == None
+            assert ctx.config == None
+            assert ctx.keyring == None
+            assert ctx.config_json == None
+
+    def test_fsid(self, cephadm_fs):
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+
+        cmd = self._get_cmd('--fsid', fsid)
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.fsid == fsid
+
+        s = get_ceph_conf(fsid=fsid)
+        f = cephadm_fs.create_file('ceph.conf', contents=s)
+
+        cmd = self._get_cmd('--fsid', fsid, '--config', f.path)
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.fsid == fsid
+
+    def test_config(self, cephadm_fs):
+        cmd = self._get_cmd('--config', 'foo')
+        with with_cephadm_ctx(cmd) as ctx:
+            err = r'No such file or directory'
+            with pytest.raises(cd.Error, match=err):
+                cd.command_ceph_volume(ctx)
+
+        cephadm_fs.create_file('bar')
+        cmd = self._get_cmd('--config', 'bar')
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.config == 'bar'
+
+    def test_keyring(self, cephadm_fs):
+        cmd = self._get_cmd('--keyring', 'foo')
+        with with_cephadm_ctx(cmd) as ctx:
+            err = r'No such file or directory'
+            with pytest.raises(cd.Error, match=err):
+                cd.command_ceph_volume(ctx)
+
+        cephadm_fs.create_file('bar')
+        cmd = self._get_cmd('--keyring', 'bar')
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.keyring == 'bar'
