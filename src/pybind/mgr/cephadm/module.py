@@ -1456,35 +1456,80 @@ Then run the following:
         return self._add_host(spec)
 
     @handle_orch_error
-    def remove_host(self, host):
-        # type: (str) -> str
+    def remove_host(self, host: str, force: bool = False, offline: bool = False) -> str:
         """
         Remove a host from orchestrator management.
 
         :param host: host name
+        :param force: bypass running daemons check
+        :param offline: remove offline host
         """
-        # Verify if it is possible to remove the host safely
-        daemons = self.cache.get_daemons_by_host(host)
-        if daemons:
-            self.log.warning(f"Blocked {host} removal. Daemons running: {daemons}")
 
-            daemons_table = ""
-            daemons_table += "{:<20} {:<15}\n".format("type", "id")
-            daemons_table += "{:<20} {:<15}\n".format("-" * 20, "-" * 15)
+        # check if host is offline
+        host_offline = host in self.offline_hosts
+
+        if host_offline and not offline:
+            return "{} is offline, please use --offline and --force to remove this host. This can potentially cause data loss".format(host)
+
+        if not host_offline and offline:
+            return "{} is online, please remove host without --offline.".format(host)
+
+        if offline and not force:
+            return "Removing an offline host requires --force"
+
+        # check if there are daemons on the host
+        if not force:
+            daemons = self.cache.get_daemons_by_host(host)
+            if daemons:
+                self.log.warning(f"Blocked {host} removal. Daemons running: {daemons}")
+
+                daemons_table = ""
+                daemons_table += "{:<20} {:<15}\n".format("type", "id")
+                daemons_table += "{:<20} {:<15}\n".format("-" * 20, "-" * 15)
+                for d in daemons:
+                    daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
+
+                return "Not allowed to remove %s from cluster. " \
+                    "The following daemons are running in the host:" \
+                    "\n%s\nPlease run 'ceph orch host drain %s' to remove daemons from host" % (
+                        host, daemons_table, host)
+
+        def run_cmd(cmd_args: dict) -> None:
+            ret, out, err = self.mon_command(cmd_args)
+            if ret != 0:
+                self.log.debug(f"ran {cmd_args} with mon_command")
+                self.log.error(
+                    f"cmd: {cmd_args.get('prefix')} failed with: {err}. (errno:{ret})")
+            self.log.debug(f"cmd: {cmd_args.get('prefix')} returns: {out}")
+
+        if offline:
+            daemons = self.cache.get_daemons_by_host(host)
             for d in daemons:
-                daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
+                self.log.info(f"removing: {d.name()}")
 
-            return "Not allowed to remove %s from cluster. " \
-                "The following daemons are running in the host:" \
-                "\n%s\nPlease run 'ceph orch host drain %s' to remove daemons from host" % (
-                    host, daemons_table, host)
+                if d.daemon_type != 'osd':
+                    self.cephadm_services[str(d.daemon_type)].pre_remove(d)
+                    self.cephadm_services[str(d.daemon_type)].post_remove(d)
+                else:
+                    cmd_args = {
+                        'prefix': 'osd purge-actual',
+                        'id': int(str(d.daemon_id)),
+                        'yes_i_really_mean_it': True
+                    }
+                    run_cmd(cmd_args)
+
+            cmd_args = {
+                'prefix': 'osd crush rm',
+                'name': host
+            }
+            run_cmd(cmd_args)
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
         self._reset_con(host)
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
-        return "Removed host '{}'".format(host)
+        return "Removed {} host '{}'".format('offline' if offline else '', host)
 
     @handle_orch_error
     def update_host_addr(self, host: str, addr: str) -> str:

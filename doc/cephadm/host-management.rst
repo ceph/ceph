@@ -94,6 +94,18 @@ Once all daemons are removed you can remove the host with the following:
 
   ceph orch host rm <host>
 
+Offline host removal
+--------------------
+
+If a host is offline and can not be recovered it can still be removed from the cluster with the following:
+
+.. prompt:: bash #
+
+  ceph orch host rm <host> --offline --force
+
+This can potentially cause data loss as osds will be forcefully purged from the cluster by calling ``osd purge-actual`` for each osd.
+Service specs that still contain this host should be manually updated.
+
 .. _orchestrator-host-labels:
 
 Host labels
