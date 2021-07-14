@@ -4,6 +4,9 @@ tasks:
       extra_system_packages:
         deb: ['s3cmd']
         rpm: ['s3cmd']
+      extra_packages:
+        deb: ['ceph-immutable-object-cache']
+        rpm: ['ceph-immutable-object-cache']
 - ceph:
 - openssl_keys:
 - rgw:

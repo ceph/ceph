@@ -1,0 +1,24 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw d3n l1 local datacache enabled: true
+        rgw d3n l1 local datacache backend: ioc
+        rgw enable ops log: true
+        immutable object cache path: /tmp/rgw_datacache/
+        immutable object cache_max size: 10737418240
+        debug immutable_obj_cache: 20/20
+  rgw:
+    datacache: true
+    datacache_path: /tmp/rgw_datacache
+tasks:
+- immutable_object_cache:
+    client.0:
+      immutable object cache path: /tmp/rgw_datacache/
+- workunit:
+    clients:
+      client.0:
+      - rgw/run-datacache.sh
+    env:
+      RGW_DATACACHE_PATH: /tmp/rgw_datacache
+      RGW_DATACACHE_BACKEND: ioc
