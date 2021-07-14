@@ -309,15 +309,7 @@ void LogSummary::build_ordered_tail_legacy(list<LogEntry> *tail) const
 
 void LogSummary::encode(bufferlist& bl, uint64_t features) const
 {
-  if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
-    ENCODE_START(2, 2, bl);
-    encode(version, bl);
-    list<LogEntry> tail;
-    build_ordered_tail_legacy(&tail);
-    encode(tail, bl, features);
-    ENCODE_FINISH(bl);
-    return;
-  }
+  assert(HAVE_FEATURE(features, SERVER_MIMIC));
   ENCODE_START(4, 3, bl);
   encode(version, bl);
   encode(seq, bl);
@@ -331,19 +323,11 @@ void LogSummary::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(version, bl);
-  if (struct_v < 3) {
-    list<LogEntry> tail;
-    decode(tail, bl);
-    for (auto& i : tail) {
-      add_legacy(i);
-    }
-  } else {
-    decode(seq, bl);
-    decode(tail_by_channel, bl);
-    if (struct_v >= 4) {
-      decode(channel_info, bl);
-      recent_keys.decode(bl);
-    }
+  decode(seq, bl);
+  decode(tail_by_channel, bl);
+  if (struct_v >= 4) {
+    decode(channel_info, bl);
+    recent_keys.decode(bl);
   }
   DECODE_FINISH(bl);
   keys.clear();
