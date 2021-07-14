@@ -379,7 +379,7 @@ void PaxosService::maybe_trim()
 
   version_t trim_to = get_trim_to();
   if (trim_to < get_first_committed()) {
-    dout(10) << __func__ << " trim_to " << trim_to << " < first_committed"
+    dout(10) << __func__ << " trim_to " << trim_to << " < first_committed "
 	     << get_first_committed() << dendl;
     return;
   }
