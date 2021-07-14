@@ -212,7 +212,9 @@ void ObjectCache::put(const DoutPrefixProvider *dpp, const string& name, ObjectC
     target.version = info.version;
 }
 
-bool ObjectCache::remove(const DoutPrefixProvider *dpp, const string& name)
+// WARNING: This function /must not/ be modified to cache a
+// negative lookup. It must only invalidate.
+bool ObjectCache::invalidate_remove(const DoutPrefixProvider *dpp, const string& name)
 {
   std::unique_lock l{lock};
 
