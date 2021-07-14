@@ -282,7 +282,7 @@ void PeerReplayer::remove_directory(string_view dir_root) {
   if (it1 == m_registered.end()) {
     m_snap_sync_stats.erase(_dir_root);
   } else {
-    it1->second.replayer->cancel();
+    it1->second.canceled = true;
   }
   m_cond.notify_all();
 }

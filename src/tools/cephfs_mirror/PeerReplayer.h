@@ -88,21 +88,13 @@ private:
       return 0;
     }
 
-    void cancel() {
-      canceled = true;
-    }
-
-    bool is_canceled() const {
-      return canceled;
-    }
-
   private:
     PeerReplayer *m_peer_replayer;
-    bool canceled = false;
   };
 
   struct DirRegistry {
     int fd;
+    bool canceled = false;
     SnapshotReplayerThread *replayer;
   };
 
@@ -244,7 +236,7 @@ private:
       return true;
     }
     auto &dr = m_registered.at(dir_root);
-    if (dr.replayer->is_canceled()) {
+    if (dr.canceled) {
       *retval = -ECANCELED;
       return true;
     }
