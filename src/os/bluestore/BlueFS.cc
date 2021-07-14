@@ -1136,9 +1136,13 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       bufferlist t;
       int r = _read(log_reader, read_pos, more, &t, NULL);
       if (r < (int)more) {
-	dout(10) << __func__ << " 0x" << std::hex << pos
-                 << ": stop: len is 0x" << bl.length() + more << std::dec
-                 << ", which is past eof" << dendl;
+	derr << __func__ << " 0x" << std::hex << pos
+                 << ": stop: len is 0x" << bl.length() + more
+                 << " " << read_pos << std::dec
+                 << ", which is past eof "
+                 << " more " << more << " bs " << super.block_size << " r=" << r << " "
+                 << log_reader->file->fnode
+                 << dendl;
 	if (cct->_conf->bluefs_replay_recovery) {
 	  //try to search for more data
 	  r += do_replay_recovery_read(log_reader, pos, read_pos + r, more - r, &t);
@@ -2002,7 +2006,7 @@ int64_t BlueFS::_read(
         uint64_t x_off = 0;
         auto p = h->file->fnode.seek(buf->bl_off, &x_off);
 	if (p == h->file->fnode.extents.end()) {
-	  dout(5) << __func__ << " reading less then required "
+	  dout(0) << __func__ << " reading less then required "
 		  << ret << "<" << ret + len << dendl;
 	  break;
 	}
@@ -2522,58 +2526,53 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   dout(10) << __func__ << " " << log_t << dendl;
   ceph_assert(!log_t.empty());
 
-  // allocate some more space (before we run out)?
-  // BTW: this triggers `flush()` in the `page_aligned_appender` of `log_writer`.
-  int64_t estimate_log_t_size = 0;
-  {
-    bufferlist bl;
-    ::encode(log_t, bl);
-
-    bluefs_transaction_t tmp_log_t;
-    tmp_log_t.op_file_update(log_writer->file->fnode);
-    bufferlist tmp_bl;
-    ::encode(tmp_log_t, tmp_bl);
-
-    estimate_log_t_size = round_up_to(bl.length(), super.block_size) + round_up_to(tmp_bl.length(), super.block_size);
-  }
-
   int64_t runway = log_writer->file->fnode.get_allocated() -
-    log_writer->get_effective_write_pos() - estimate_log_t_size;
-  bool just_expanded_log = false;
-  if (runway < (int64_t)cct->_conf->bluefs_min_log_runway) {
-    dout(10) << __func__ << " allocating more log runway (0x"
-	     << std::hex << runway << std::dec  << " remaining)" << dendl;
-    while (new_log_writer) {
-      dout(10) << __func__ << " waiting for async compaction" << dendl;
-      log_cond.wait(l);
-    }
-    vselector->sub_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
-    runway = round_up_to(cct->_conf->bluefs_min_log_runway - runway,
-        cct->_conf->bluefs_max_log_runway);
-    int r = _allocate(
-      vselector->select_prefer_bdev(log_writer->file->vselector_hint),
-      runway,
-      &log_writer->file->fnode);
-    ceph_assert(r == 0);
-    vselector->add_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
-    log_t.op_file_update(log_writer->file->fnode);
-    just_expanded_log = true;
-  }
-
+      log_writer->get_effective_write_pos();
+  int64_t runway_inc = (int64_t)cct->_conf->bluefs_min_log_runway - runway;
+  int64_t expand_undo_pos = -1;
   bufferlist bl;
-  bl.reserve(super.block_size);
-  encode(log_t, bl);
-  // pad to block boundary
-  size_t realign = super.block_size - (bl.length() % super.block_size);
-  if (realign && realign != super.block_size)
-    bl.append_zero(realign);
+  while (1) {
+    if (runway_inc > 0) {
+      runway_inc = round_up_to(runway_inc,
+        std::max(
+          (int64_t)cct->_conf->bluefs_max_log_runway,
+          (int64_t) super.block_size));
+      dout(10) << __func__ << " allocating more log runway (0x"
+	       << std::hex << runway_inc << std::dec  << " remaining)" << dendl;
+      while (new_log_writer) {
+        dout(10) << __func__ << " waiting for async compaction" << dendl;
+        log_cond.wait(l);
+      }
+      vselector->sub_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
+      int r = _allocate(
+        vselector->select_prefer_bdev(log_writer->file->vselector_hint),
+        runway_inc,
+        &log_writer->file->fnode);
+      ceph_assert(r == 0);
+      vselector->add_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
+      if (expand_undo_pos >= 0) {
+        log_t.undo_op((unsigned)expand_undo_pos);
+      }
+      expand_undo_pos = log_t.get_cur_pos();
+      log_t.op_file_update(log_writer->file->fnode);
+      runway += runway_inc;
+    }
+
+    bl.reserve(super.block_size);
+    encode(log_t, bl);
+    // pad to block boundary
+    size_t realign = super.block_size - (bl.length() % super.block_size);
+    if (realign && realign != super.block_size)
+      bl.append_zero(realign);
+    if (bl.length() + (int64_t)cct->_conf->bluefs_min_log_runway <= runway) {
+      break;
+    }
+    runway_inc = bl.length() - runway + (int64_t)cct->_conf->bluefs_min_log_runway;
+    bl.clear();
+  }
 
   logger->inc(l_bluefs_logged_bytes, bl.length());
-
-  if (just_expanded_log) {
-    ceph_assert(bl.length() <= runway); // if we write this, we will have an unrecoverable data loss
-  }
-
+  ceph_assert(!(bl.length() % super.block_size));
   log_writer->append(bl);
 
   log_t.clear();

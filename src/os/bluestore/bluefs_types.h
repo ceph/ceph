@@ -210,6 +210,15 @@ struct bluefs_transaction_t {
     return op_bl.length() == 0;
   }
 
+  unsigned get_cur_pos() const {
+    return op_bl.length();
+  }
+  void undo_op(unsigned pos) {
+    bufferlist tmp;
+    op_bl.splice(0, pos, &tmp);
+    op_bl.swap(tmp);
+  }
+
   void op_init() {
     using ceph::encode;
     encode((__u8)OP_INIT, op_bl);
