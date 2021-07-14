@@ -147,7 +147,11 @@ seastar::future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
   if (pg) {
     return PeeringEvent::complete_rctx(pg);
   } else {
-    return shard_services.dispatch_context_messages(std::move(ctx));
+    logger().debug("{}: OSDState is {}", *this, osd.state);
+    return osd.state.when_active().then([this] {
+      assert(osd.state.is_active());
+      return shard_services.dispatch_context_messages(std::move(ctx));
+    });
   }
 }
 
