@@ -109,6 +109,10 @@ Event Types
 
    The ``s3:ObjectRemoved:DeleteMarkerCreated`` event presents information on the latest version of the object
 
+.. note::
+
+   In case of multipart upload, an ``ObjectCreated:CompleteMultipartUpload`` notification will be sent at the end of the process.
+
 Topic Configuration
 -------------------
 In the case of bucket notifications, the topics management API will be derived from `AWS Simple Notification Service API`_. 
