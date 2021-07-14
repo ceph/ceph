@@ -713,6 +713,18 @@ struct rbm_alloc_delta_t {
 
 }
 
+namespace std {
+
+template<>
+struct hash<::crimson::os::seastore::extent_types_t> {
+  std::size_t operator()(
+      const ::crimson::os::seastore::extent_types_t& type) const noexcept {
+    return std::hash<uint8_t>{}((uint8_t)type);
+  }
+};
+
+}
+
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
