@@ -373,8 +373,11 @@ void PaxosService::maybe_trim()
     return;
 
   version_t trim_to = get_trim_to();
-  if (trim_to < get_first_committed())
+  if (trim_to < get_first_committed()) {
+    dout(10) << __func__ << " trim_to " << trim_to << " < first_committed "
+	     << get_first_committed() << dendl;
     return;
+  }
 
   version_t to_remove = trim_to - get_first_committed();
   const version_t trim_min = g_conf().get_val<version_t>("paxos_service_trim_min");
