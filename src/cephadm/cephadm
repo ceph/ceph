@@ -4625,6 +4625,11 @@ def command_enter(ctx):
 @infer_image
 def command_ceph_volume(ctx):
     # type: (CephadmContext) -> None
+    cp = read_config(ctx.config)
+    if cp.has_option('global', 'fsid') and \
+       cp.get('global', 'fsid') != ctx.fsid:
+        raise Error('fsid does not match ceph.conf')
+
     if ctx.fsid:
         make_log_dir(ctx, ctx.fsid)
 
