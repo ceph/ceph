@@ -151,9 +151,15 @@ private:
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
   std::shared_ptr<rocksdb::Cache> create_block_cache(const std::string& cache_type, size_t cache_size, double cache_prio_high = 0.0);
-  int extract_block_cache_options(const std::string& opts_str,
+  int split_column_family_options(const std::string& opts_str,
 				  std::unordered_map<std::string, std::string>* column_opts_map,
 				  std::string* block_cache_opt);
+  int apply_block_cache_options(const std::string& column_name,
+				const std::string& block_cache_opt,
+				rocksdb::ColumnFamilyOptions* cf_opt);
+  int update_column_family_options(const std::string& base_name,
+				   const std::string& more_options,
+				   rocksdb::ColumnFamilyOptions* cf_opt);
   // manage async compactions
   ceph::mutex compact_queue_lock =
     ceph::make_mutex("RocksDBStore::compact_thread_lock");
