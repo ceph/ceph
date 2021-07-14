@@ -30,11 +30,9 @@ default default {
 }
 
 # rules
-rule replicated_ruleset {
+rule replicated_rule {
 	id 0
 	type replicated
-	min_size 1
-	max_size 10
 	step take default
 	step chooseleaf firstn 0 type host
 	step emit

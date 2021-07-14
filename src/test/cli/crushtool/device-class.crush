@@ -64,8 +64,6 @@ root root {
 rule data-ssd {
 	id 1
 	type replicated
-	min_size 2
-	max_size 2
 	step take root class ssd
 	step chooseleaf firstn 0 type rack
 	step emit
@@ -73,8 +71,6 @@ rule data-ssd {
 rule data-hdd {
 	id 2
 	type replicated
-	min_size 2
-	max_size 2
 	step take root class hdd
 	step chooseleaf firstn 0 type rack
 	step emit
@@ -82,8 +78,6 @@ rule data-hdd {
 rule data {
 	id 3
 	type replicated
-	min_size 2
-	max_size 2
 	step take root
 	step chooseleaf firstn 0 type rack
 	step emit

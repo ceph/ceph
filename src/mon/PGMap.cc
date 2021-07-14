@@ -771,9 +771,7 @@ void PGMapDigest::dump_pool_stats_full(
     const pool_stat_t &stat = pg_pool_sum.at(pool_id);
 
     const pg_pool_t *pool = osd_map.get_pg_pool(pool_id);
-    int ruleno = osd_map.crush->find_rule(pool->get_crush_rule(),
-                                         pool->get_type(),
-                                         pool->get_size());
+    int ruleno = pool->get_crush_rule();
     int64_t avail;
     if (avail_by_rule.count(ruleno) == 0) {
       // FIXME: we don't guarantee avail_space_by_rule is up-to-date before this function is invoked
@@ -975,9 +973,7 @@ int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
 					 int64_t poolid) const
 {
   const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
-  int ruleno = osd_map.crush->find_rule(pool->get_crush_rule(),
-					pool->get_type(),
-					pool->get_size());
+  int ruleno = pool->get_crush_rule();
   int64_t avail;
   avail = get_rule_avail(ruleno);
   if (avail < 0)
@@ -1039,9 +1035,7 @@ void PGMap::get_rules_avail(const OSDMap& osdmap,
     if ((pool_id < 0) || (pg_pool_sum.count(pool_id) == 0))
       continue;
     const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
-    int ruleno = osdmap.crush->find_rule(pool->get_crush_rule(),
-					 pool->get_type(),
-					 pool->get_size());
+    int ruleno = pool->get_crush_rule();
     if (avail_map->count(ruleno) == 0)
       (*avail_map)[ruleno] = get_rule_avail(osdmap, ruleno);
   }

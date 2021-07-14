@@ -19,7 +19,7 @@ domain root {
 }
 
 rule rule-bad {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 1
 	max_size 10
@@ -29,7 +29,7 @@ rule rule-bad {
 }
 
 rule rule-good {
-	ruleset 1
+	id 1
 	type erasure
 	min_size 1
 	max_size 10

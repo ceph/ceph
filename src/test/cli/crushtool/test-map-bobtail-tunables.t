@@ -1,4 +1,4 @@
-  $ crushtool -i "$TESTDIR/test-map-a.crushmap" --test --show-mappings --show-statistics --rule 0 --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 --set-chooseleaf-descend-once 1
+  $ crushtool -i "$TESTDIR/test-map-a.crushmap" --test --show-mappings --show-statistics --rule 0 --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 --set-chooseleaf-descend-once 1 --min-rep 1 --max-rep 10
   rule 0 (data), x = 0..1023, numrep = 1..10
   CRUSH rule 0 x 0 [36]
   CRUSH rule 0 x 1 [876]

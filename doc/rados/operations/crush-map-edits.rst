@@ -552,11 +552,9 @@ There are three types of transformations possible:
 
    For example, imagine you have an existing rule like::
 
-     rule replicated_ruleset {
+     rule replicated_rule {
         id 0
         type replicated
-        min_size 1
-        max_size 10
         step take default
         step chooseleaf firstn 0 type rack
         step emit
@@ -565,11 +563,9 @@ There are three types of transformations possible:
    If you reclassify the root `default` as class `hdd`, the rule will
    become::
 
-     rule replicated_ruleset {
+     rule replicated_rule {
         id 0
         type replicated
-        min_size 1
-        max_size 10
         step take default class hdd
         step chooseleaf firstn 0 type rack
         step emit

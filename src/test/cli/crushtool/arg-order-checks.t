@@ -192,8 +192,6 @@
   rule replicated_rule {
   \tid 0 (esc)
   \ttype replicated (esc)
-  \tmin_size 1 (esc)
-  \tmax_size 10 (esc)
   \tstep take root (esc)
   \tstep chooseleaf firstn 0 type node (esc)
   \tstep emit (esc)
@@ -201,7 +199,7 @@
   
   # end crush map
 # tunables before reweight
-  $ crushtool -i "$map" --set-straw-calc-version 0 --reweight --test --show-utilization --max-x 100 --min-x 1
+  $ crushtool -i "$map" --set-straw-calc-version 0 --reweight --test --show-utilization --max-x 100 --min-x 1 --min-rep 1 --max-rep 10
   rule 0 (replicated_rule), x = 1..100, numrep = 1..10
   rule 0 (replicated_rule) num_rep 1 result size == 1:\t100/100 (esc)
     device 0:\t\t stored : 4\t expected : 4 (esc)
@@ -466,7 +464,7 @@
     device 23:\t\t stored : 13\t expected : 20 (esc)
     device 24:\t\t stored : 18\t expected : 20 (esc)
   crushtool successfully built or modified map.  Use '-o <file>' to write it out.
-  $ crushtool -i "$map" --set-straw-calc-version 1 --reweight --test --show-utilization --max-x 100 --min-x 1
+  $ crushtool -i "$map" --set-straw-calc-version 1 --reweight --test --show-utilization --max-x 100 --min-x 1 --min-rep 1 --max-rep 10
   rule 0 (replicated_rule), x = 1..100, numrep = 1..10
   rule 0 (replicated_rule) num_rep 1 result size == 1:\t100/100 (esc)
     device 1:\t\t stored : 1\t expected : 4 (esc)

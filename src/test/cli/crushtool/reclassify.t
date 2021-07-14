@@ -18,7 +18,7 @@
   moving items from -23 (ttipod001-cephosd-1-ssd) to -7 (ttipod001-cephosd-1)
   moving items from -22 (ttipod001-cephosd-2-ssd) to -8 (ttipod001-cephosd-2)
   moving items from -21 (ssd) to -5 (default)
-  $ crushtool -i $TESTDIR/crush-classes/a --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/a --compare foo --min-rep 1 --max-rep 10
   rule 0 had 0/10240 mismatched mappings (0)
   rule 1 had 0/10240 mismatched mappings (0)
   maps appear equivalent
@@ -51,7 +51,7 @@
   moving items from -9 (node-21-ssd) to -25 (node-21)
   moving items from -8 (node-20-ssd) to -18 (node-20)
   moving items from -7 (ssd) to -13 (default)
-  $ crushtool -i $TESTDIR/crush-classes/d --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/d --compare foo --min-rep 1 --max-rep 10
   rule 0 had 0/10240 mismatched mappings (0)
   rule 1 had 0/10240 mismatched mappings (0)
   maps appear equivalent
@@ -99,7 +99,7 @@
 
 this one has weird node weights, so *lots* of mappings change...
 
-  $ crushtool -i $TESTDIR/crush-classes/e --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/e --compare foo --min-rep 1 --max-rep 10
   rule 0 had 6540/10240 mismatched mappings (0.638672)
   rule 1 had 8417/10240 mismatched mappings (0.821973)
   warning: maps are NOT equivalent
@@ -149,9 +149,9 @@ this one has weird node weights, so *lots* of mappings change...
 wonky crush weights on Ceph-Stor1, so a small number of mappings change
 because the new map has a strictly summing hierarchy.
 
-  $ crushtool -i $TESTDIR/crush-classes/c --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/c --compare foo --min-rep 1 --max-rep 10
   rule 0 had 158/10240 mismatched mappings (0.0154297)
-  rule 1 had 62/5120 mismatched mappings (0.0121094)
+  rule 1 had 138/10240 mismatched mappings (0.0134766)
   rule 2 had 0/10240 mismatched mappings (0)
   warning: maps are NOT equivalent
   [1]
@@ -222,7 +222,7 @@ because the new map has a strictly summing hierarchy.
     renumbering bucket -83 -> -55
     renumbering bucket -73 -> -56
     renumbering bucket -69 -> -57
-  $ crushtool -i $TESTDIR/crush-classes/beesly --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/beesly --compare foo --min-rep 1 --max-rep 10
   rule 0 had 0/10240 mismatched mappings (0)
   rule 1 had 0/10240 mismatched mappings (0)
   rule 2 had 0/10240 mismatched mappings (0)
@@ -238,7 +238,7 @@ because the new map has a strictly summing hierarchy.
     renumbering bucket -4 -> -11
     renumbering bucket -3 -> -13
     renumbering bucket -2 -> -14
-  $ crushtool -i $TESTDIR/crush-classes/flax --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/flax --compare foo --min-rep 1 --max-rep 10
   rule 0 had 0/10240 mismatched mappings (0)
   maps appear equivalent
 
@@ -279,9 +279,9 @@ below is an adjusted version of the same cluster's map
     renumbering bucket -14 -> -200
     renumbering bucket -5 -> -201
     renumbering bucket -2 -> -202
-  $ crushtool -i $TESTDIR/crush-classes/gabe2 --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/gabe2 --compare foo --min-rep 1 --max-rep 10
   rule 0 had 627/10240 mismatched mappings (0.0612305)
-  rule 1 had 422/6144 mismatched mappings (0.0686849)
+  rule 1 had 652/10240 mismatched mappings (0.0636719)
   warning: maps are NOT equivalent
   [1]
 
@@ -404,9 +404,9 @@ below is an adjusted version of the same cluster's map
   new bucket -155 missing parent, adding at {root=default}
   new bucket -154 missing parent, adding at {root=default}
 
-  $ crushtool -i $TESTDIR/crush-classes/b --compare foo
-  rule 0 had 0/3072 mismatched mappings (0)
-  rule 1 had 0/4096 mismatched mappings (0)
+  $ crushtool -i $TESTDIR/crush-classes/b --compare foo --min-rep 1 --max-rep 10
+  rule 0 had 0/10240 mismatched mappings (0)
+  rule 1 had 0/10240 mismatched mappings (0)
   maps appear equivalent
 
   $ crushtool -i $TESTDIR/crush-classes/f --reclassify --reclassify-root default hdd -o foo
@@ -440,9 +440,9 @@ below is an adjusted version of the same cluster's map
 We expect some mismatches below because there are some ssd-labeled nodes under
 default that we aren't changing the class on.
 
-  $ crushtool -i $TESTDIR/crush-classes/f --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/f --compare foo --min-rep 1 --max-rep 10
   rule 0 had 627/10240 mismatched mappings (0.0612305)
-  rule 1 had 422/6144 mismatched mappings (0.0686849)
+  rule 1 had 652/10240 mismatched mappings (0.0636719)
   warning: maps are NOT equivalent
   [1]
 
@@ -556,7 +556,7 @@ default that we aren't changing the class on.
   moving items from -4 (sata-osd14) to -87 (osd14)
   moving items from -3 (sata-osd10) to -86 (osd10)
   moving items from -2 (sata-osd11) to -85 (osd11)
-  $ crushtool -i $TESTDIR/crush-classes/g --compare foo
+  $ crushtool -i $TESTDIR/crush-classes/g --compare foo --min-rep 1 --max-rep 10
   rule 0 had 0/10240 mismatched mappings (0)
   rule 1 had 0/10240 mismatched mappings (0)
   maps appear equivalent

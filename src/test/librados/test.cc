@@ -66,30 +66,30 @@ int destroy_ec_profile(rados_t *cluster,
   return ret;
 }
 
-int destroy_ruleset(rados_t *cluster,
-                    const std::string &ruleset,
-                    std::ostream &oss)
+int destroy_rule(rados_t *cluster,
+		 const std::string &rule,
+		 std::ostream &oss)
 {
   char *cmd[2];
   std::string tmp = ("{\"prefix\": \"osd crush rule rm\", \"name\":\"" +
-                     ruleset + "\"}");
+                     rule + "\"}");
   cmd[0] = (char*)tmp.c_str();
   cmd[1] = NULL;
   int ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
   if (ret)
-    oss << "rados_mon_command: osd crush rule rm " + ruleset + " failed with error " << ret;
+    oss << "rados_mon_command: osd crush rule rm " + rule + " failed with error " << ret;
   return ret;
 }
 
-int destroy_ec_profile_and_ruleset(rados_t *cluster,
-                                   const std::string &ruleset,
-                                   std::ostream &oss)
+int destroy_ec_profile_and_rule(rados_t *cluster,
+				const std::string &rule,
+				std::ostream &oss)
 {
   int ret;
-  ret = destroy_ec_profile(cluster, ruleset, oss);
+  ret = destroy_ec_profile(cluster, rule, oss);
   if (ret)
     return ret;
-  return destroy_ruleset(cluster, ruleset, oss);
+  return destroy_rule(cluster, rule, oss);
 }
 
 
@@ -100,7 +100,7 @@ std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster)
     return err;
 
   std::ostringstream oss;
-  int ret = destroy_ec_profile_and_ruleset(cluster, pool_name, oss);
+  int ret = destroy_ec_profile_and_rule(cluster, pool_name, oss);
   if (ret) {
     rados_shutdown(*cluster);
     return oss.str();
@@ -185,7 +185,7 @@ int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster)
   CephContext *cct = static_cast<CephContext*>(rados_cct(*cluster));
   if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
     std::ostringstream oss;
-    ret = destroy_ec_profile_and_ruleset(cluster, pool_name, oss);
+    ret = destroy_ec_profile_and_rule(cluster, pool_name, oss);
     if (ret) {
       rados_shutdown(*cluster);
       return ret;

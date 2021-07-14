@@ -54,8 +54,6 @@ root root {
 rule data {
 	id 3
 	type replicated
-	min_size 2
-	max_size 2
 	step take root
 	step chooseleaf firstn 0 type rack
 	step emit

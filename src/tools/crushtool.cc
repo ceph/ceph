@@ -199,8 +199,8 @@ void usage()
   cout << "                         show location for given device id\n";
   cout << "   -i mapfn --test       test a range of inputs on the map\n";
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
-  cout << "      [--min-rule r] [--max-rule r] [--rule r] [--ruleset rs]\n";
-  cout << "      [--num-rep n]\n";
+  cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
+  cout << "      [--min-rep n] [--max-rep n] [--num-rep n]\n";
   cout << "      [--pool-id n]      specifies pool id\n";
   cout << "      [--batches b]      split the CRUSH mapping into b > 1 rounds\n";
   cout << "      [--weight|-w devno weight]\n";
@@ -741,6 +741,18 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       tester.set_num_rep(x);
+    } else if (ceph_argparse_witharg(args, i, &x, err, "--min_rep", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      tester.set_min_rep(x);
+    } else if (ceph_argparse_witharg(args, i, &x, err, "--max_rep", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      tester.set_max_rep(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--max_x", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -783,12 +795,6 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       tester.set_rule(x);
-    } else if (ceph_argparse_witharg(args, i, &x, err, "--ruleset", (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << err.str() << std::endl;
-	return EXIT_FAILURE;
-      }
-      tester.set_ruleset(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--batches", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -1031,7 +1037,7 @@ int main(int argc, const char **argv)
       set<int> roots;
       crush.find_roots(&roots);
       if (roots.size() > 1) {
-	cerr << "The crush rulesets will use the root " << root << "\n"
+	cerr << "The crush rules will use the root " << root << "\n"
 	     << "and ignore the others.\n"
 	     << "There are " << roots.size() << " roots, they can be\n"
 	     << "grouped into a single root by appending something like:\n"
@@ -1260,7 +1266,6 @@ int main(int argc, const char **argv)
   }
 
   if (check) {
-    tester.check_overlapped_rules();
     if (max_id >= 0) {
       if (!tester.check_name_maps(max_id)) {
 	return EXIT_FAILURE;

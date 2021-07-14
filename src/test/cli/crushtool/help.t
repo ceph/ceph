@@ -91,8 +91,8 @@
                            show location for given device id
      -i mapfn --test       test a range of inputs on the map
         [--min-x x] [--max-x x] [--x x]
-        [--min-rule r] [--max-rule r] [--rule r] [--ruleset rs]
-        [--num-rep n]
+        [--min-rule r] [--max-rule r] [--rule r]
+        [--min-rep n] [--max-rep n] [--num-rep n]
         [--pool-id n]      specifies pool id
         [--batches b]      split the CRUSH mapping into b > 1 rounds
         [--weight|-w devno weight]
