@@ -417,21 +417,30 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
   invalidate(*prev);
 }
 
-void Cache::invalidate(CachedExtent &extent) {
+void Cache::invalidate(CachedExtent &extent)
+{
   LOG_PREFIX(Cache::invalidate);
   DEBUG("invalidate begin -- extent {}", extent);
   for (auto &&i: extent.transactions) {
     if (!i.t->conflicted) {
-      DEBUGT("set conflict", *i.t);
-      i.t->conflicted = true;
       assert(!i.t->is_weak());
-      auto m_key = std::make_pair(i.t->get_src(), extent.get_type());
-      assert(stats.trans_invalidated.count(m_key));
-      ++(stats.trans_invalidated[m_key]);
+      invalidate(*i.t, extent);
     }
   }
   DEBUG("invalidate end");
   extent.state = CachedExtent::extent_state_t::INVALID;
+}
+
+void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
+{
+  LOG_PREFIX(Cache::invalidate);
+  assert(!t.conflicted);
+  DEBUGT("set conflict", t);
+  t.conflicted = true;
+  auto m_key = std::make_pair(
+      t.get_src(), conflicting_extent.get_type());
+  assert(stats.trans_invalidated.count(m_key));
+  ++(stats.trans_invalidated[m_key]);
 }
 
 CachedExtentRef Cache::alloc_new_extent_by_type(

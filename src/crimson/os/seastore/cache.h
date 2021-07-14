@@ -307,10 +307,7 @@ public:
 	  if (!ref->is_valid()) {
 	    LOG_PREFIX(Cache::get_extent);
 	    DEBUGT("got invalid extent: {}", t, ref);
-	    t.conflicted = true;
-	    auto m_key = std::make_pair(t.get_src(), T::TYPE);
-	    assert(stats.trans_invalidated.count(m_key));
-	    ++(stats.trans_invalidated[m_key]);
+	    invalidate(t, *ref.get());
 	    return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	  } else {
 	    t.add_to_read_set(ref);
@@ -359,10 +356,7 @@ public:
         if (!ret->is_valid()) {
           LOG_PREFIX(Cache::get_extent_by_type);
           DEBUGT("got invalid extent: {}", t, ret);
-          t.conflicted = true;
-          auto m_key = std::make_pair(t.get_src(), type);
-          assert(stats.trans_invalidated.count(m_key));
-          ++(stats.trans_invalidated[m_key]);
+          invalidate(t, *ret.get());
           return get_extent_ertr::make_ready_future<CachedExtentRef>();
         } else {
           t.add_to_read_set(ret);
@@ -646,6 +640,9 @@ private:
 
   /// Invalidate extent and mark affected transactions
   void invalidate(CachedExtent &extent);
+
+  /// Mark a valid transaction as conflicted
+  void invalidate(Transaction& t, CachedExtent& conflicting_extent);
 
   template <typename T>
   get_extent_ret<T> read_extent(
