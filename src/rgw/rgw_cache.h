@@ -17,7 +17,7 @@
 
 enum {
   UPDATE_OBJ,
-  REMOVE_OBJ,
+  INVALIDATE_OBJ,
 };
 
 #define CACHE_FLAG_DATA           0x01
@@ -125,6 +125,11 @@ struct RGWCacheNotifyInfo {
   static void generate_test_instances(list<RGWCacheNotifyInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
+inline std::ostream& operator <<(std::ostream& m, const RGWCacheNotifyInfo& cni) {
+  return m << "[op: " << cni.op << ", obj: " << cni.obj
+	   << ", ofs" << cni.ofs << ", ns" << cni.ns << "]";
+}
+
 
 class RGWChainedCache {
 public:
@@ -199,7 +204,7 @@ public:
   }
 
   void put(const DoutPrefixProvider *dpp, const std::string& name, ObjectCacheInfo& bl, rgw_cache_entry_info *cache_info);
-  bool remove(const DoutPrefixProvider *dpp, const std::string& name);
+  bool invalidate_remove(const DoutPrefixProvider *dpp, const std::string& name);
   void set_ctx(CephContext *_cct) {
     cct = _cct;
     lru_window = cct->_conf->rgw_cache_lru_size / 2;
