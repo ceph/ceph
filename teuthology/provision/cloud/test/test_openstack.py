@@ -22,6 +22,15 @@ test_config = dict(
                 password='password',
                 ex_force_auth_url='http://127.0.0.1:9999/v2.0/tokens',
             ),
+        ),
+        image_exclude_provider=dict(
+            driver='openstack',
+            exclude_image=['.*-exclude1', '.*-exclude2'],
+            driver_args=dict(
+                username='user',
+                password='password',
+                ex_force_auth_url='http://127.0.0.1:9999/v2.0/tokens',
+            ),
         )
     )
 )
@@ -174,9 +183,21 @@ class TestOpenStackProvider(TestOpenStackBase):
 
     def test_images(self):
         obj = cloud.get_provider('my_provider')
-        self.mocks['m_list_images'].return_value = ['image0', 'image1']
+        self.mocks['m_list_images'].return_value = [
+                get_fake_obj(attributes=dict(name=_))
+                    for _ in ['image0', 'image1']]
         assert not hasattr(obj, '_images')
-        assert obj.images == ['image0', 'image1']
+        assert [_.name for _ in obj.images] == ['image0', 'image1']
+        assert hasattr(obj, '_images')
+
+    def test_exclude_image(self):
+        obj = cloud.get_provider('image_exclude_provider')
+        self.mocks['m_list_images'].return_value = [
+                get_fake_obj(attributes=dict(name=_))
+                    for _ in ['image0', 'image1',
+                        'image2-exclude1', 'image3-exclude2']]
+        assert not hasattr(obj, '_images')
+        assert [_.name for _ in obj.images] == ['image0', 'image1']
         assert hasattr(obj, '_images')
 
     def test_sizes(self):
