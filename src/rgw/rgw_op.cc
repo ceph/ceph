@@ -3810,9 +3810,11 @@ void RGWPutObj::execute(optional_yield y)
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
 						s, rgw::notify::ObjectCreatedPut);
-  op_ret = res->publish_reserve(this, obj_tags.get());
-  if (op_ret < 0) {
-    return;
+  if(!multipart) {
+    op_ret = res->publish_reserve(this, obj_tags.get());
+    if (op_ret < 0) {
+      return;
+    }
   }
 
   // create the object processor
@@ -5994,14 +5996,6 @@ void RGWInitMultipart::execute(optional_yield y)
     return;
   }
 
-  // make reservation for notification if needed
-  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
-				s, rgw::notify::ObjectCreatedPost);
-  op_ret = res->publish_reserve(this);
-  if (op_ret < 0) {
-    return;
-  }
-
   do {
     char buf[33];
     std::unique_ptr<rgw::sal::Object> obj;
@@ -6039,12 +6033,6 @@ void RGWInitMultipart::execute(optional_yield y)
     op_ret = obj_op->write_meta(this, bl.length(), 0, s->yield);
   } while (op_ret == -EEXIST);
   
-  // send request to notification manager
-  int ret = res->publish_commit(this, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), "");
-  if (ret < 0) {
-    ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
-    // too late to rollback operation, hence op_ret is not set here
-  }
 }
 
 int RGWCompleteMultipart::verify_permission(optional_yield y)

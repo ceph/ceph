@@ -1406,7 +1406,7 @@ def ps_s3_creation_triggers_on_master(external_endpoint_address=None, ca_locatio
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     topic_conf_list = [{'Id': notification_name,'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectCreated:Put', 's3:ObjectCreated:Copy']
+                        'Events': ['s3:ObjectCreated:Put', 's3:ObjectCreated:Copy', 's3:ObjectCreated:CompleteMultipartUpload']
                        }]
 
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
@@ -1661,12 +1661,10 @@ def test_ps_s3_multipart_on_master():
 
     # check amqp receiver
     events = receiver1.get_and_reset_events()
-    assert_equal(len(events), 3)
+    assert_equal(len(events), 1)
 
     events = receiver2.get_and_reset_events()
-    assert_equal(len(events), 1)
-    assert_equal(events[0]['Records'][0]['eventName'], 'ObjectCreated:Post')
-    assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_2')
+    assert_equal(len(events), 0)
 
     events = receiver3.get_and_reset_events()
     assert_equal(len(events), 1)
@@ -1769,7 +1767,7 @@ def test_ps_s3_metadata_on_master():
     time.sleep(5)
     # check amqp receiver
     events = receiver.get_and_reset_events()
-    assert_equal(len(events), 4) # PUT, COPY, Multipart start, Multipart End
+    assert_equal(len(events), 3) # PUT, COPY, Multipart start, Multipart End
     for event in events:
         assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
 

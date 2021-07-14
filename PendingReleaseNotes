@@ -40,6 +40,11 @@
   If you want to return back the old behavior add 'ssl_options=' (empty) to
   ``rgw frontends`` configuration.
 
+* RGW: The behavior for Multipart Upload was modified so that only 
+  CompleteMultipartUpload notification is sent at the end of the multipart upload. 
+  The POST notification at the beginning of the upload, and PUT notifications that 
+  were sent on each part are not sent anymore.
+
 >=16.0.0
 --------
 * mgr/nfs: ``nfs`` module is moved out of volumes plugin. Prior using the
