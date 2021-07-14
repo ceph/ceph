@@ -78,38 +78,18 @@ def run_cmd(cmd, expects=0):
     cmdlog = LOG.getChild('run_cmd')
     cmdlog.debug('{fc}'.format(fc=' '.join(full_cmd)))
 
-    proc = subprocess.Popen(full_cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
-
-    stdout = []
-    stderr = []
-    while True:
-        try:
-            out, err = proc.communicate()
-            if out is not None:
-                stdout += out.decode().split('\n')
-                cmdlog.debug('stdout: {s}'.format(s=out))
-            if err is not None:
-                stdout += err.decode().split('\n')
-                cmdlog.debug('stderr: {s}'.format(s=err))
-        except ValueError:
-            ret = proc.wait()
-            break
-
-    if ret != expects:
-        cmdlog.error('cmd > {cmd}'.format(cmd=full_cmd))
-        cmdlog.error("expected return '{expected}' got '{got}'".format(
-            expected=expects, got=ret))
+    proc = subprocess.run(full_cmd,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE,
+                          universal_newlines=True)
+    if proc.returncode != expects:
+        cmdlog.error(f'cmd > {proc.args}')
+        cmdlog.error(f'expected return "{expects}" got "{proc.returncode}"')
         cmdlog.error('stdout')
-        for i in stdout:
-            cmdlog.error('{x}'.format(x=i))
+        cmdlog.error(proc.stdout)
         cmdlog.error('stderr')
-        for i in stderr:
-            cmdlog.error('{x}'.format(x=i))
+        cmdlog.error(proc.stderr)
 
-
-# end run_cmd
 
 def gen_data(size, rnd):
     chars = string.ascii_letters + string.digits
