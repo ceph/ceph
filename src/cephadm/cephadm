@@ -2081,14 +2081,18 @@ def check_units(ctx, units, enabler=None):
 
 
 def is_container_running(ctx: CephadmContext, c: 'CephContainer') -> bool:
+    return bool(get_running_container_name(ctx, c))
+
+
+def get_running_container_name(ctx: CephadmContext, c: 'CephContainer') -> Optional[str]:
     for name in [c.cname, c.old_cname]:
         out, err, ret = call(ctx, [
             ctx.container_engine.path, 'container', 'inspect',
             '--format', '{{.State.Status}}', name
         ])
         if out == 'running':
-            return True
-    return False
+            return name
+    return None
 
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
@@ -3361,6 +3365,9 @@ class CephContainer:
 
     def exec_cmd(self, cmd):
         # type: (List[str]) -> List[str]
+        cname = get_running_container_name(self.ctx, self)
+        if not cname:
+            raise Error('unable to find container "{}"'.format(self.cname))
         return [
             str(self.ctx.container_engine.path),
             'exec',
