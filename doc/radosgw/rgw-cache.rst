@@ -17,6 +17,8 @@ and caching-out on subsequent GET requests, passing thru transparently PUT,POST,
 
 The feature introduces 2 new APIs: Auth and Cache.
 
+    NOTE: The `D3N RGW Data Cache`_ is an alternative data caching mechanism implemented natively in the Rados Gatewey.
+
 New APIs
 -------------------------
 
@@ -148,3 +150,6 @@ Appendix
  #auth_request /authentication;
 
 may (depending on the hardware) increases the performance significantly as it forgoes the auth API calls to radosgw.
+
+
+.. _D3N RGW Data Cache: ../d3n_datacache/
