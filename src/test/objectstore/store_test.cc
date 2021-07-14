@@ -9139,6 +9139,22 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed3Test) {
   );
 }
 
+TEST_P(StoreTestSpecificAUSize, SyntheticBlueFSLogRunwayOverflow) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char* m[][10] = {
+    { "bluestore_min_alloc_size", "8192", 0 }, // must be the first!
+    { "bluefs_alloc_size", "8192", 0 },
+    { "bluefs_max_prefetch ", "8192", 0 },
+    { "bluefs_min_log_runway ", "8192", 0 },
+    { "bluefs_max_log_runway ", "8192", 0 },
+    { "bluefs_log_compact_min_size ", "21474836480", 0 },
+    { 0 },
+  };
+  do_matrix(m, std::bind(&StoreTest::doSyntheticTest, this, _1, _2, _3, _4));
+}
+
 TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
   if (string(GetParam()) != "bluestore")
     return;
