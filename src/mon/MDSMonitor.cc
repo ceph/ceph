@@ -290,7 +290,7 @@ version_t MDSMonitor::get_trim_to() const
 {
   version_t floor = 0;
   if (g_conf()->mon_mds_force_trim_to > 0 &&
-      g_conf()->mon_mds_force_trim_to < (int)get_last_committed()) {
+      g_conf()->mon_mds_force_trim_to <= (int)get_last_committed()) {
     floor = g_conf()->mon_mds_force_trim_to;
     dout(10) << __func__ << " explicit mon_mds_force_trim_to = "
              << floor << dendl;
