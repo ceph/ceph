@@ -273,8 +273,11 @@ version_t MDSMonitor::get_trim_to() const
   unsigned max = g_conf()->mon_max_mdsmap_epochs;
   version_t last = get_last_committed();
 
-  if (last - get_first_committed() > max && floor < last - max)
-    return last - max;
+  if (last - get_first_committed() > max && floor < last - max) {
+    floor = last-max;
+  }
+
+  dout(20) << __func__ << " = " << floor << dendl;
   return floor;
 }
 

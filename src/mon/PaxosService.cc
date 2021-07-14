@@ -372,14 +372,17 @@ void PaxosService::maybe_trim()
   if (!is_writeable())
     return;
 
+  const version_t first_committed = get_first_committed();
   version_t trim_to = get_trim_to();
-  if (trim_to < get_first_committed()) {
+  dout(20) << __func__ << " " << first_committed << "~" << trim_to << dendl;
+
+  if (trim_to < first_committed) {
     dout(10) << __func__ << " trim_to " << trim_to << " < first_committed "
-	     << get_first_committed() << dendl;
+	     << first_committed << dendl;
     return;
   }
 
-  version_t to_remove = trim_to - get_first_committed();
+  version_t to_remove = trim_to - first_committed;
   const version_t trim_min = g_conf().get_val<version_t>("paxos_service_trim_min");
   if (trim_min > 0 &&
       to_remove < trim_min) {
@@ -388,13 +391,13 @@ void PaxosService::maybe_trim()
     return;
   }
 
-  to_remove = [to_remove, this] {
+  to_remove = [to_remove, trim_to, this] {
     const version_t trim_max = g_conf().get_val<version_t>("paxos_service_trim_max");
     if (trim_max == 0 || to_remove < trim_max) {
       return to_remove;
     }
     if (to_remove < trim_max * 1.5) {
-      dout(10) << __func__ << " trim to " << get_trim_to() << " would only trim " << to_remove
+      dout(10) << __func__ << " trim to " << trim_to << " would only trim " << to_remove
              << " > paxos_service_trim_max, limiting to " << trim_max
              << dendl;
       return trim_max;
@@ -407,11 +410,11 @@ void PaxosService::maybe_trim()
       return new_trim_max;
     }
   }();
-  trim_to = get_first_committed() + to_remove;
+  trim_to = first_committed + to_remove;
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  trim(t, get_first_committed(), trim_to);
+  trim(t, first_committed, trim_to);
   put_first_committed(t, trim_to);
   cached_first_committed = trim_to;
 
