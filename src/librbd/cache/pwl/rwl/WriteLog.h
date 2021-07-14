@@ -82,7 +82,7 @@ protected:
   using AbstractWriteLog<ImageCtxT>::m_first_valid_entry;
 
   void process_work() override;
-  void schedule_append_ops(pwl::GenericLogOperations &ops) override;
+  void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) override;
   void append_scheduled_ops(void) override;
   void reserve_cache(C_BlockIORequestT *req,
                      bool &alloc_succeeds, bool &no_space) override;
