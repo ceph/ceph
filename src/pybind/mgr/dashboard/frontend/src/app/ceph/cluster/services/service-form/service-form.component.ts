@@ -202,14 +202,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.composeIf(
             {
-              service_type: 'rgw',
-              unmanaged: false,
-              ssl: true
-            },
-            [Validators.required, CdValidators.sslPrivKey()]
-          ),
-          CdValidators.composeIf(
-            {
               service_type: 'iscsi',
               unmanaged: false,
               ssl: true
@@ -331,7 +323,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
             serviceSpec['rgw_frontend_ssl_certificate'] = values['ssl_cert'].trim();
-            serviceSpec['rgw_frontend_ssl_key'] = values['ssl_key'].trim();
           }
           break;
         case 'iscsi':
