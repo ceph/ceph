@@ -98,8 +98,7 @@ def with_cephadm_ctx(
     if not hostname:
         hostname = 'host1'
 
-    with mock.patch('cephadm.get_parm'), \
-         mock.patch('cephadm.attempt_bind'), \
+    with mock.patch('cephadm.attempt_bind'), \
          mock.patch('cephadm.call', return_value=('', '', 0)), \
          mock.patch('cephadm.call_timeout', return_value=0), \
          mock.patch('cephadm.find_executable', return_value='foo'), \
