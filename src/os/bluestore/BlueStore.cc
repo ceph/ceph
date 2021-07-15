@@ -8547,7 +8547,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  pext_to_release.reserve(pextents.size());
 	  // rewriting all valid pextents
 	  for (auto e = pextents.begin(); e != pextents.end();
-	         b_off += e->length, e++) {
+	         e++) {
+	    auto b_off_cur = b_off;
+	    b_off += e->length;
 	    if (!e->is_valid()) {
 	      continue;
 	    }
@@ -8585,7 +8587,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	    e = pextents.erase(e);
     	    e = pextents.insert(e, exts.begin(), exts.end());
 	    b->get_blob().map_bl(
-	      b_off, bl,
+	      b_off_cur, bl,
 	      [&](uint64_t offset, bufferlist& t) {
 		int r = bdev->write(offset, t, false);
 		ceph_assert(r == 0);
