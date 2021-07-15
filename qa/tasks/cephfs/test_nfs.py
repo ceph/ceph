@@ -23,8 +23,8 @@ class TestNFS(MgrTestCase):
     def _orch_cmd(self, *args):
         return self._cmd("orch", *args)
 
-    def _sys_cmd(self, cmd):
-        ret = self.ctx.cluster.run(args=cmd, check_status=False, stdout=BytesIO(), stderr=BytesIO())
+    def _sys_cmd(self, cmd, **kwargs):
+        ret = self.ctx.cluster.run(args=cmd, check_status=False, stdout=BytesIO(), stderr=BytesIO(), **kwargs)
         stdout = ret[0].stdout
         if stdout:
             return stdout.getvalue()
@@ -61,13 +61,15 @@ class TestNFS(MgrTestCase):
         }
 
     def _check_nfs_server_status(self):
-        res = self._sys_cmd(['sudo', 'systemctl', 'status', 'nfs-server'])
+        res = self._sys_cmd(['sudo', 'systemctl', 'status', 'nfs-server'],
+                            omit_sudo=False)
         if isinstance(res, bytes) and b'Active: active' in res:
             self._disable_nfs()
 
     def _disable_nfs(self):
         log.info("Disabling NFS")
-        self._sys_cmd(['sudo', 'systemctl', 'disable', 'nfs-server', '--now'])
+        self._sys_cmd(['sudo', 'systemctl', 'disable', 'nfs-server', '--now'],
+                      omit_sudo=False)
 
     def _fetch_nfs_status(self):
         return self._orch_cmd('ps', f'--service_name={self.expected_name}')
@@ -260,7 +262,8 @@ class TestNFS(MgrTestCase):
             try:
                 self.ctx.cluster.run(
                     args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
-                          f'{ip}:{pseudo_path}', '/mnt'])
+                          f'{ip}:{pseudo_path}', '/mnt'],
+                    omit_sudo=False)
                 break
             except CommandFailedError as e:
                 if tries:
@@ -272,14 +275,16 @@ class TestNFS(MgrTestCase):
                     return
                 raise
 
-        self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'])
+        self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'],
+                             omit_sudo=False)
 
         try:
             self.ctx.cluster.run(args=['touch', '/mnt/test'])
             out_mnt = self._sys_cmd(['ls', '/mnt'])
             self.assertEqual(out_mnt,  b'test\n')
         finally:
-            self.ctx.cluster.run(args=['sudo', 'umount', '/mnt'])
+            self.ctx.cluster.run(args=['sudo', 'umount', '/mnt'],
+                                 omit_sudo=False)
 
     def _write_to_read_only_export(self, pseudo_path, port, ip):
         '''
