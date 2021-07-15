@@ -446,7 +446,10 @@ void Cache::register_metrics()
 
   /**
    * Cached extents (including placeholders)
+   *
+   * Dirty extents
    */
+  stats.dirty_bytes = 0;
   metrics.add_group(
     "cache",
     {
@@ -464,6 +467,20 @@ void Cache::register_metrics()
           return extents.get_bytes();
         },
         sm::description("total bytes of cached extents"),
+        {labels_by_counter.find("BYTES")->second}
+      ),
+      sm::make_counter(
+        "dirty_extents",
+        [this] {
+          return dirty.size();
+        },
+        sm::description("total number of dirty extents"),
+        {labels_by_counter.find("EXTENTS")->second}
+      ),
+      sm::make_counter(
+        "dirty_extents",
+        stats.dirty_bytes,
+        sm::description("total bytes of dirty extents"),
         {labels_by_counter.find("BYTES")->second}
       ),
     }
@@ -504,12 +521,14 @@ void Cache::add_to_dirty(CachedExtentRef ref)
   assert(!ref->primary_ref_list_hook.is_linked());
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
+  stats.dirty_bytes += ref->get_length();
 }
 
 void Cache::remove_from_dirty(CachedExtentRef ref)
 {
   if (ref->is_dirty()) {
     ceph_assert(ref->primary_ref_list_hook.is_linked());
+    stats.dirty_bytes -= ref->get_length();
     dirty.erase(dirty.s_iterator_to(*ref));
     intrusive_ptr_release(&*ref);
   } else {
@@ -551,6 +570,7 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
   if (prev->get_type() == extent_types_t::ROOT) {
     assert(prev->primary_ref_list_hook.is_linked());
     assert(prev->is_dirty());
+    stats.dirty_bytes -= prev->get_length();
     dirty.erase(dirty.s_iterator_to(*prev));
     intrusive_ptr_release(&*prev);
     add_to_dirty(next);
@@ -919,9 +939,11 @@ Cache::close_ertr::future<> Cache::close()
   root.reset();
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
+    stats.dirty_bytes -= ptr->get_length();
     dirty.erase(i++);
     intrusive_ptr_release(ptr);
   }
+  assert(stats.dirty_bytes == 0);
   return close_ertr::now();
 }
 

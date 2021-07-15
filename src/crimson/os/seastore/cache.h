@@ -652,6 +652,7 @@ private:
                        boost::hash<src_ext_t>> cache_query;
     uint64_t read_transactions_successful;
     effort_t read_effort_successful;
+    uint64_t dirty_bytes;
   } stats;
 
   template <typename CounterT>
