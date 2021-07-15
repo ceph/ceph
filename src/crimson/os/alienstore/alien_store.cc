@@ -29,7 +29,7 @@ namespace {
 
 seastar::logger& logger()
 {
-  return crimson::get_logger(ceph_subsys_bluestore);
+  return crimson::get_logger(ceph_subsys_alienstore);
 }
 
 class OnCommit final: public Context
