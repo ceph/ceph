@@ -113,6 +113,13 @@ void Cache::register_metrics()
     {extent_types_t::TEST_BLOCK_PHYSICAL, ext_label("TEST_BLOCK_PHYSICAL")}
   };
 
+  auto counter_label = sm::label("counter");
+  std::map<std::string, sm::label_instance> labels_by_counter {
+    {"EXTENTS",     counter_label("EXTENTS")},
+    {"BYTES",       counter_label("BYTES")},
+    {"DELTA_BYTES", counter_label("DELTA_BYTES")},
+  };
+
   /*
    * trans_created
    */
@@ -350,13 +357,6 @@ void Cache::register_metrics()
       {"FRESH",  effort_label("FRESH")},
     };
 
-    auto counter_label = sm::label("counter");
-    std::map<std::string, sm::label_instance> labels_by_counter {
-      {"EXTENTS", counter_label("EXTENTS")},
-      {"BYTES", counter_label("BYTES")},
-      {"DELTA_BYTES", counter_label("DELTA_BYTES")},
-    };
-
     auto register_effort =
       [this, &labels_by_src, &labels_by_effort, &labels_by_counter]
       (const char* category,
@@ -443,6 +443,31 @@ void Cache::register_metrics()
       register_read_effort_successful(counter_name, value);
     }
   }
+
+  /**
+   * Cached extents (including placeholders)
+   */
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "cached_extents",
+        [this] {
+          return extents.size();
+        },
+        sm::description("total number of cached extents"),
+        {labels_by_counter.find("EXTENTS")->second}
+      ),
+      sm::make_counter(
+        "cached_extents",
+        [this] {
+          return extents.get_bytes();
+        },
+        sm::description("total bytes of cached extents"),
+        {labels_by_counter.find("BYTES")->second}
+      ),
+    }
+  );
 }
 
 void Cache::add_extent(CachedExtentRef ref)
