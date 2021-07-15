@@ -2678,10 +2678,10 @@ TEST_F(TestClsRbd, group_snap_set) {
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
 
   auto it = keys.begin();
-  ASSERT_EQ(1U, keys.size());
+  ASSERT_EQ(2U, keys.size());
 
-  string snap_key = "snapshot_" + stringify(snap.id);
-  ASSERT_EQ(snap_key, *it);
+  ASSERT_EQ("snap_order_" + snap.id, *it++);
+  ASSERT_EQ("snapshot_" + snap.id, *it);
 }
 
 TEST_F(TestClsRbd, group_snap_list) {
@@ -2699,11 +2699,17 @@ TEST_F(TestClsRbd, group_snap_list) {
   cls::rbd::GroupSnapshot snap2 = {snap_id2, "test_snapshot2", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap2));
 
+  string snap_id0 = "snap_id0";
+  cls::rbd::GroupSnapshot snap0 = {snap_id0, "test_snapshot0", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap0));
+
   std::vector<cls::rbd::GroupSnapshot> snapshots;
   ASSERT_EQ(0, group_snap_list(&ioctx, group_id, cls::rbd::GroupSnapshot(), 10, &snapshots));
-  ASSERT_EQ(2U, snapshots.size());
+  ASSERT_EQ(3U, snapshots.size());
+  // The insertion order should be preserved
   ASSERT_EQ(snap_id1, snapshots[0].id);
   ASSERT_EQ(snap_id2, snapshots[1].id);
+  ASSERT_EQ(snap_id0, snapshots[2].id);
 }
 
 static std::string hexify(int v) {
@@ -2720,12 +2726,17 @@ TEST_F(TestClsRbd, group_snap_list_max_return) {
   string group_id = "group_id_snap_list_max_return";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
-  for (int i = 0; i < 15; ++i) {
-    string snap_id = "snap_id" + hexify(i);
+  std::vector<cls::rbd::GroupSnapshot> expected_snapshots;
+  std::set<int> used_ids;
+  for (int i = 0; i < 1025; ++i) {
+    int id;
+    do { id = rand(); } while (!used_ids.insert(id).second);
+    string snap_id = "snap_id" + hexify(id);
     cls::rbd::GroupSnapshot snap = {snap_id,
 				    "test_snapshot" + hexify(i),
 				    cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
     ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
+    expected_snapshots.emplace_back(snap);
   }
 
   std::vector<cls::rbd::GroupSnapshot> snapshots;
@@ -2733,17 +2744,18 @@ TEST_F(TestClsRbd, group_snap_list_max_return) {
   ASSERT_EQ(10U, snapshots.size());
 
   for (int i = 0; i < 10; ++i) {
-    string snap_id = "snap_id" + hexify(i);
-    ASSERT_EQ(snap_id, snapshots[i].id);
+    ASSERT_EQ(expected_snapshots[i].id, snapshots[i].id);
   }
 
   cls::rbd::GroupSnapshot last_snap = *snapshots.rbegin();
+  ASSERT_EQ(0, group_snap_remove(&ioctx, group_id, last_snap.id));
+  ASSERT_EQ(-ERESTART, group_snap_list(&ioctx, group_id, last_snap, 1025, &snapshots));
 
-  ASSERT_EQ(0, group_snap_list(&ioctx, group_id, last_snap, 10, &snapshots));
-  ASSERT_EQ(5U, snapshots.size());
-  for (int i = 10; i < 15; ++i) {
-    string snap_id = "snap_id" + hexify(i);
-    ASSERT_EQ(snap_id, snapshots[i - 10].id);
+  last_snap = *(++snapshots.rbegin());
+  ASSERT_EQ(0, group_snap_list(&ioctx, group_id, last_snap, 1025, &snapshots));
+  ASSERT_EQ(1015U, snapshots.size());
+  for (int i = 10; i < 1025; ++i) {
+    ASSERT_EQ(expected_snapshots[i].id, snapshots[i - 10].id);
   }
 }
 
@@ -2789,10 +2801,10 @@ TEST_F(TestClsRbd, group_snap_remove) {
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
 
   auto it = keys.begin();
-  ASSERT_EQ(1U, keys.size());
+  ASSERT_EQ(2U, keys.size());
 
-  string snap_key = "snapshot_" + stringify(snap.id);
-  ASSERT_EQ(snap_key, *it);
+  ASSERT_EQ("snap_order_" + snap.id, *it++);
+  ASSERT_EQ("snapshot_" + snap.id, *it);
 
   // Remove the snapshot
 
