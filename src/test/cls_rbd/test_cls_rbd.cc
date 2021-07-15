@@ -2678,10 +2678,10 @@ TEST_F(TestClsRbd, group_snap_set) {
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
 
   auto it = keys.begin();
-  ASSERT_EQ(1U, keys.size());
+  ASSERT_EQ(2U, keys.size());
 
-  string snap_key = "snapshot_" + stringify(snap.id);
-  ASSERT_EQ(snap_key, *it);
+  ASSERT_EQ("snap_order_" + snap.id, *it++);
+  ASSERT_EQ("snapshot_" + snap.id, *it);
 }
 
 TEST_F(TestClsRbd, group_snap_list) {
@@ -2738,7 +2738,6 @@ TEST_F(TestClsRbd, group_snap_list_max_return) {
   }
 
   cls::rbd::GroupSnapshot last_snap = *snapshots.rbegin();
-
   ASSERT_EQ(0, group_snap_list(&ioctx, group_id, last_snap, 10, &snapshots));
   ASSERT_EQ(5U, snapshots.size());
   for (int i = 10; i < 15; ++i) {
@@ -2775,7 +2774,6 @@ TEST_F(TestClsRbd, group_snap_list_max_read) {
 
 TEST_F(TestClsRbd, group_snap_remove) {
   librados::IoCtx ioctx;
-
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   string group_id = "group_id_snap_remove";
@@ -2789,10 +2787,10 @@ TEST_F(TestClsRbd, group_snap_remove) {
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
 
   auto it = keys.begin();
-  ASSERT_EQ(1U, keys.size());
+  ASSERT_EQ(2U, keys.size());
 
-  string snap_key = "snapshot_" + stringify(snap.id);
-  ASSERT_EQ(snap_key, *it);
+  ASSERT_EQ("snap_order_" + snap.id, *it++);
+  ASSERT_EQ("snapshot_" + snap.id, *it);
 
   // Remove the snapshot
 
@@ -2801,6 +2799,32 @@ TEST_F(TestClsRbd, group_snap_remove) {
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
 
   ASSERT_EQ(0U, keys.size());
+}
+
+TEST_F(TestClsRbd, group_snap_remove_without_order) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string group_id = "group_id_snap_remove_without_order";
+  ASSERT_EQ(0, ioctx.create(group_id, true));
+
+  string snap_id = "snap_id";
+  cls::rbd::GroupSnapshot snap = {snap_id, "test_snapshot",
+                                  cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
+
+  // Simulate an older snapshot by removing the order key
+  set<string> keys = {"snap_order_" + snap.id};
+  ASSERT_EQ(0, ioctx.omap_rm_keys(group_id, keys));
+
+  ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
+  ASSERT_EQ(1U, keys.size());
+
+  auto it = keys.begin();
+  ASSERT_EQ("snapshot_" + snap.id, *it);
+
+  // Remove the snapshot
+  ASSERT_EQ(0, group_snap_remove(&ioctx, group_id, snap_id));
 }
 
 TEST_F(TestClsRbd, group_snap_get_by_id) {
