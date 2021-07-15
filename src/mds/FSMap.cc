@@ -634,7 +634,7 @@ void FSMap::update_compat(const CompatSet &c)
 
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(7, 6, bl);
+  ENCODE_START(STRUCT_VERSION, 6, bl);
   encode(epoch, bl);
   encode(next_filesystem_id, bl);
   encode(legacy_client_fscid, bl);
@@ -655,8 +655,9 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 
 void FSMap::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(7, p);
+  DECODE_START(STRUCT_VERSION, p);
   DECODE_OLDEST(7);
+  struct_version = struct_v;
   decode(epoch, p);
   decode(next_filesystem_id, p);
   decode(legacy_client_fscid, p);
