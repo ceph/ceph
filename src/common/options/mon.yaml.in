@@ -39,6 +39,13 @@ options:
   default: 5
   services:
   - mon
+- name: mon_down_mkfs_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds that the cluster may have a mon down after cluster creation
+  default: 1_min
+  services:
+  - mon
 - name: mon_mgr_beacon_grace
   type: secs
   level: advanced
