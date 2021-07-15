@@ -1,3 +1,42 @@
+#
+# How to use this file
+# ====================
+#
+# Before moving forward the docker must be installed and your user
+# must be in docker group, for example for openSUSE do the following:
+#
+#   sudo zypper in docker
+#   sudo usermod -a -G docker $USER
+#
+# Note: to activate user group relogin might be required.
+#
+# Create a directory where the development setup be located.
+# Go to the directory and checkout pulpito, paddles, and teuthology.
+#
+#   git clone https://github.com/ceph/paddles
+#   git clone https://github.com/ceph/pulpito
+#   git clone https://github.com/ceph/teuthology
+#
+# Note: use your own repos or branches.
+#
+# Go to teuthology, bootstrap virtual environment and install docker-composer.
+#
+#   cd teuthology
+#   ./bootstrap
+#   . virtualenv/bin/activate
+#   pip install docker-compose
+#
+# Make sure docker is running, build images for postgres, paddles, pulpito and beanstalk.
+#
+#   sudo systemctl start docker
+#   docker-compose build
+#
+# Run the services:
+#
+#   docker-compose up
+#
+# Todo: add worker or/and dispatcher service
+
 version: "3.7"
 
 services:
@@ -40,4 +79,3 @@ services:
         build: beanstalk/alpine
         ports:
             - "11300:11300"
-    # todo: teuthology-worker
