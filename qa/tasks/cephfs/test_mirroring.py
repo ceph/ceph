@@ -1166,3 +1166,105 @@ class TestMirroring(CephFSTestCase):
             raise RuntimeError('adding peer should fail')
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_cancel_mirroring_and_readd(self):
+        """
+        Test adding a directory path for synchronization post removal of already added directory paths
+
+        ... to ensure that synchronization of the newly added directory path functions
+        as expected. Note that we schedule three (3) directories for mirroring to ensure
+        that all replayer threads (3 by default) in the mirror daemon are busy.
+        """
+        log.debug('reconfigure client auth caps')
+        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+            'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
+                'mds', 'allow rw',
+                'mon', 'allow r',
+                'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
+                    self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+
+        log.debug(f'mounting filesystem {self.secondary_fs_name}')
+        self.mount_b.umount_wait()
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
+
+        # create a bunch of files in a directory to snap
+        self.mount_a.run_shell(["mkdir", "d0"])
+        self.mount_a.run_shell(["mkdir", "d1"])
+        self.mount_a.run_shell(["mkdir", "d2"])
+        for i in range(4):
+            filename = f'file.{i}'
+            self.mount_a.write_n_mb(os.path.join('d0', filename), 1024)
+            self.mount_a.write_n_mb(os.path.join('d1', filename), 1024)
+            self.mount_a.write_n_mb(os.path.join('d2', filename), 1024)
+
+        log.debug('enabling mirroring')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        log.debug('adding directory paths')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d1')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d2')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # take snapshots
+        log.debug('taking snapshots')
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
+        self.mount_a.run_shell(["mkdir", "d1/.snap/snap0"])
+        self.mount_a.run_shell(["mkdir", "d2/.snap/snap0"])
+
+        time.sleep(10)
+        log.debug('checking snap in progress')
+        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
+                                         "client.mirror_remote@ceph", '/d0', 'snap0')
+        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
+                                         "client.mirror_remote@ceph", '/d1', 'snap0')
+        self.check_peer_snap_in_progress(self.primary_fs_name, self.primary_fs_id,
+                                         "client.mirror_remote@ceph", '/d2', 'snap0')
+
+        log.debug('removing directories 1')
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        log.debug('removing directories 2')
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d1')
+        log.debug('removing directories 3')
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d2')
+
+        log.debug('removing snapshots')
+        self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
+        self.mount_a.run_shell(["rmdir", "d1/.snap/snap0"])
+        self.mount_a.run_shell(["rmdir", "d2/.snap/snap0"])
+
+        for i in range(4):
+            filename = f'file.{i}'
+            log.debug(f'deleting {filename}')
+            self.mount_a.run_shell(["rm", "-f", os.path.join('d0', filename)])
+            self.mount_a.run_shell(["rm", "-f", os.path.join('d1', filename)])
+            self.mount_a.run_shell(["rm", "-f", os.path.join('d2', filename)])
+
+        log.debug('creating new files...')
+        self.mount_a.create_n_files('d0/file', 50, sync=True)
+        self.mount_a.create_n_files('d1/file', 50, sync=True)
+        self.mount_a.create_n_files('d2/file', 50, sync=True)
+
+        log.debug('adding directory paths')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d1')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d2')
+
+        log.debug('creating new snapshots...')
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
+        self.mount_a.run_shell(["mkdir", "d1/.snap/snap0"])
+        self.mount_a.run_shell(["mkdir", "d2/.snap/snap0"])
+
+        time.sleep(60)
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap0', 1)
+        self.verify_snapshot('d0', 'snap0')
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d1', 'snap0', 1)
+        self.verify_snapshot('d1', 'snap0')
+
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d2', 'snap0', 1)
+        self.verify_snapshot('d2', 'snap0')
+
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
