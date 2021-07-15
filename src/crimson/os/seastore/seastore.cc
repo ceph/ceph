@@ -40,9 +40,45 @@ SeaStore::SeaStore(
     transaction_manager(std::move(tm)),
     collection_manager(std::move(cm)),
     onode_manager(std::move(om))
-{}
+{
+  register_metrics();
+}
 
 SeaStore::~SeaStore() = default;
+
+void SeaStore::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  using op_type_t = SeaStore::op_type_t;
+  auto lat_label = sm::label("latency");
+  std::map<op_type_t, sm::label_instance> labels_by_op_type = {
+    {op_type_t::TRANSACTION,     lat_label("TRANSACTION")},
+    {op_type_t::READ,            lat_label("READ")},
+    {op_type_t::WRITE,           lat_label("WRITE")},
+    {op_type_t::GET_ATTR,        lat_label("GET_ATTR")},
+    {op_type_t::GET_ATTRS,       lat_label("GET_ATTRS")},
+    {op_type_t::STAT,            lat_label("STAT")},
+    {op_type_t::OMAP_GET_VALUES, lat_label("OMAP_GET_VALUES")},
+    {op_type_t::OMAP_LIST,       lat_label("OMAP_LIST")},
+  };
+
+  for (auto& [op_type, label] : labels_by_op_type) {
+    auto desc = fmt::format("latency of seastore operation (optype={})",
+                            op_type);
+    metrics.add_group(
+      "seastore",
+      {
+        sm::make_histogram(
+          "op_lat", [this, op_type] {
+          return get_latency(op_type);
+          },
+          sm::description(desc),
+          {label}
+        ),
+      }
+    );
+  }
+}
 
 seastar::future<> SeaStore::stop()
 {
@@ -216,6 +252,7 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
     ch,
     oid,
     Transaction::src_t::READ,
+    op_type_t::READ,
     [=](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
       size_t size = onode.get_layout().size;
 
@@ -261,6 +298,7 @@ SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
     c,
     oid,
     Transaction::src_t::READ,
+    op_type_t::GET_ATTR,
     [=](auto &t, auto& onode) -> _omap_get_value_ertr::future<ceph::bufferlist> {
       auto& layout = onode.get_layout();
       if (name == OI_ATTR && layout.oi_size) {
@@ -295,6 +333,7 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
     c,
     oid,
     Transaction::src_t::READ,
+    op_type_t::GET_ATTRS,
     [=](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
       return _omap_list(layout.xattr_root, t, std::nullopt,
@@ -329,6 +368,7 @@ seastar::future<struct stat> SeaStore::stat(
     c,
     oid,
     Transaction::src_t::READ,
+    op_type_t::STAT,
     [=, &oid](auto &t, auto &onode) {
       struct stat st;
       auto &olayout = onode.get_layout();
@@ -366,6 +406,7 @@ SeaStore::omap_get_values(
     c,
     oid,
     Transaction::src_t::READ,
+    op_type_t::OMAP_GET_VALUES,
     [this, keys](auto &t, auto &onode) {
       omap_root_t omap_root = onode.get_layout().omap_root.get();
       return _omap_get_values(
@@ -483,6 +524,7 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_list(
     c,
     oid,
     Transaction::src_t::READ,
+    op_type_t::OMAP_LIST,
     [this, config, &start](auto &t, auto &onode) {
       return _omap_list(
 	onode.get_layout().omap_root,
@@ -633,6 +675,7 @@ seastar::future<> SeaStore::do_transaction(
     _ch,
     std::move(_t),
     Transaction::src_t::MUTATE,
+    op_type_t::TRANSACTION,
     [this](auto &ctx) {
       return onode_manager->get_or_create_onodes(
 	*ctx.transaction, ctx.iter.get_objects()
