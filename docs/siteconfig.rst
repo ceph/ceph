@@ -242,3 +242,7 @@ Here is a sample configuration with many of the options set and documented::
     pelagos:
       endpoint: http://head.ses.suse.de:5000/
       machine_types: ['type1', 'type2', 'type3']
+
+    # Do not allow more than that many jobs in a single run by default.
+    # To disable this check use 0.
+    job_threshold: 500

@@ -59,7 +59,7 @@ def process_args(args):
             value = normalize_suite_name(value)
         if key == 'suite_relpath' and value is None:
             value = ''
-        elif key in ('limit', 'priority', 'num', 'newest', 'seed'):
+        elif key in ('limit', 'priority', 'num', 'newest', 'seed', 'job_threshold'):
             value = int(value)
         elif key == 'subset' and value is not None:
             # take input string '2/3' and turn into (2, 3)
