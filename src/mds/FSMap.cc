@@ -472,7 +472,7 @@ void FSMap::update_compat(const CompatSet &c)
 
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(7, 6, bl);
+  ENCODE_START(STRUCT_VERSION, 6, bl);
   encode(epoch, bl);
   encode(next_filesystem_id, bl);
   encode(legacy_client_fscid, bl);
@@ -497,7 +497,8 @@ void FSMap::decode(bufferlist::const_iterator& p)
   // MDSMonitor to store an FSMap instead of an MDSMap was
   // 5, so anything older than 6 is decoded as an MDSMap,
   // and anything newer is decoded as an FSMap.
-  DECODE_START_LEGACY_COMPAT_LEN_16(7, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(STRUCT_VERSION, 4, 4, p);
+  struct_version = struct_v;
   if (struct_v < 6) {
     // Because the mon used to store an MDSMap where we now
     // store an FSMap, FSMap knows how to decode the legacy
