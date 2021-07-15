@@ -119,24 +119,25 @@ class DefaultFetcher():
             nodename_to_devices[node].append(device)
         return nodename_to_devices
 
-    def device(self, i: client.V1PersistenVolume) -> Tuple[str, Device]:
-        size = self.convert_size(i.spec.capacity['storage'])
-        path = i.spec.host_path.path if i.spec.host_path else ('/dev/' + i.metadata.annotations['storage.openshift.com/device-name']) if i.metadata.annotations['storage.openshift.com/device-name'] else ''
-        state = i.spec.volume_mode == 'Block' and i.spec.claim_ref == None
-        device = Device(
-                path = path,
-                sys_api = dict(
-                    size = size
-                ),
-                available = state,
-        )
-
+    def device(self, i: 'client.V1PersistentVolume') -> Tuple[str, Device]:
         node = 'N/A'
-
         if i.spec.node_affinity:
             terms = i.spec.node_affinity.required.node_selector_terms
             if len(terms) == 1 and len(terms[0].match_expressions) == 1 and terms[0].match_expressions[0].key == 'kubernetes.io/hostname' and len(terms[0].match_expressions[0].values) == 1:
                 node = terms[0].match_expressions[0].values[0]
+        size = self.convert_size(i.spec.capacity['storage'])
+        path = i.spec.host_path.path if i.spec.host_path else ('/dev/' + i.metadata.annotations['storage.openshift.com/device-name']) if i.metadata.annotations['storage.openshift.com/device-name'] else ''
+        state = i.spec.volume_mode == 'Block' and i.status.phase == 'Available'
+        pv_name = i.metadata.name
+        device = Device(
+                path = path,
+                sys_api = dict(
+                    size = size,
+                    node = node,
+                    pv_name = pv_name
+                ),
+                available = state,
+        )
         return (node, device)
         
 
