@@ -889,6 +889,7 @@ spec:
                 placement=ps)
             unmanaged_spec = ServiceSpec.from_json(spec.to_json())
             unmanaged_spec.unmanaged = True
+            cephadm_module._mon_command_mock_mgr_module_ls = lambda *args: json.dumps({'enabled_modules': []})
             with with_service(cephadm_module, unmanaged_spec):
 
                 c = cephadm_module.add_daemon(spec)
@@ -1024,6 +1025,7 @@ spec:
     @mock.patch("subprocess.run", mock.MagicMock())
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
+            cephadm_module._mon_command_mock_mgr_module_ls = lambda *args: json.dumps({'enabled_modules': []})
             with with_service(cephadm_module, spec, meth, 'test'):
                 pass
 

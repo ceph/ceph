@@ -8,7 +8,7 @@ from ipaddress import ip_address, IPv6Address
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import IscsiServiceSpec
 
-from orchestrator import DaemonDescription, DaemonDescriptionStatus
+from orchestrator import DaemonDescription, DaemonDescriptionStatus, OrchestratorError
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from .. import utils
 
@@ -150,12 +150,24 @@ class IscsiService(CephService):
         """
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
-        # remove config for dashboard iscsi gateways
         ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'dashboard iscsi-gateway-rm',
-            'name': daemon.hostname,
+            'prefix': 'mgr module ls',
+            'format': 'json',
         })
-        logger.info(f'{daemon.hostname} removed from iscsi gateways dashboard config')
+        try:
+            j = json.loads(out)
+        except ValueError:
+            msg = 'Failed to parse mgr module ls: Cannot decode JSON'
+            logger.exception('%s: \'%s\'' % (msg, out))
+            raise OrchestratorError('failed to parse mgr module ls')
+
+        if 'dashboard' in j['enabled_modules']:
+            # remove config for dashboard iscsi gateways
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'dashboard iscsi-gateway-rm',
+                'name': daemon.hostname,
+            })
+            logger.info(f'{daemon.hostname} removed from iscsi gateways dashboard config')
 
         # needed to know if we have ssl stuff for iscsi in ceph config
         iscsi_config_dict = {}
