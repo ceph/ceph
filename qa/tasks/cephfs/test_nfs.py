@@ -10,6 +10,7 @@ from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
+NFS_POOL_NAME = '.nfs'  # should match mgr_module.py
 
 # TODO Add test for cluster update when ganesha can be deployed on multiple ports.
 class TestNFS(MgrTestCase):
@@ -161,7 +162,7 @@ class TestNFS(MgrTestCase):
         self._cmd(*export_cmd)
         # Check if user id for export is created
         self._check_auth_ls(export_id, check_in=True)
-        res = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'get',
+        res = self._sys_cmd(['rados', '-p', NFS_POOL_NAME, '-N', self.cluster_id, 'get',
                              f'export-{export_id}', '-'])
         # Check if export object is created
         if res == b'':
@@ -233,7 +234,7 @@ class TestNFS(MgrTestCase):
         Test if export or config object are deleted successfully.
         :param conf_obj: It denotes config object needs to be checked
         '''
-        rados_obj_ls = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'ls'])
+        rados_obj_ls = self._sys_cmd(['rados', '-p', NFS_POOL_NAME, '-N', self.cluster_id, 'ls'])
 
         if b'export-' in rados_obj_ls or (conf_obj and b'conf-nfs' in rados_obj_ls):
             self.fail("Delete export failed")
@@ -254,14 +255,22 @@ class TestNFS(MgrTestCase):
         :param ip: IP of deployed nfs cluster
         :param check: It denotes if i/o testing needs to be done
         '''
-        try:
-            self.ctx.cluster.run(args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
-                                       f'{ip}:{pseudo_path}', '/mnt'])
-        except CommandFailedError as e:
-            # Check if mount failed only when non existing pseudo path is passed
-            if not check and e.exitstatus == 32:
-                return
-            raise
+        tries = 3
+        while True:
+            try:
+                self.ctx.cluster.run(
+                    args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
+                          f'{ip}:{pseudo_path}', '/mnt'])
+                break
+            except CommandFailedError as e:
+                if tries:
+                    tries -= 1
+                    time.sleep(2)
+                    continue
+                # Check if mount failed only when non existing pseudo path is passed
+                if not check and e.exitstatus == 32:
+                    return
+                raise
 
         self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'])
 
@@ -472,7 +481,7 @@ class TestNFS(MgrTestCase):
         '''
         self._test_create_cluster()
 
-        pool = 'nfs-ganesha'
+        pool = NFS_POOL_NAME
         user_id = 'test'
         fs_name = 'user_test_fs'
         pseudo_path = '/ceph'
@@ -511,7 +520,7 @@ class TestNFS(MgrTestCase):
         self.assertEqual(config, res.decode('utf-8'))
         self._test_mnt(pseudo_path, port, ip)
         self._nfs_cmd('cluster', 'config', 'reset', self.cluster_id)
-        rados_obj_ls = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'ls'])
+        rados_obj_ls = self._sys_cmd(['rados', '-p', NFS_POOL_NAME, '-N', self.cluster_id, 'ls'])
         if b'conf-nfs' not in rados_obj_ls and b'userconf-nfs' in rados_obj_ls:
             self.fail("User config not deleted")
         time.sleep(30)

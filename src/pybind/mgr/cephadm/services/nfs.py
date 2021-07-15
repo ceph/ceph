@@ -6,6 +6,7 @@ import tempfile
 from typing import Dict, Tuple, Any, List, cast, Optional
 
 from mgr_module import HandleCommandResult
+from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 
@@ -58,8 +59,7 @@ class NFSService(CephService):
         from nfs.cluster import create_ganesha_pool
 
         assert self.TYPE == spec.service_type
-        assert spec.pool
-        create_ganesha_pool(self.mgr, spec.pool)
+        create_ganesha_pool(self.mgr)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -98,10 +98,10 @@ class NFSService(CephService):
             context = {
                 "user": rados_user,
                 "nodeid": nodeid,
-                "pool": spec.pool,
-                "namespace": spec.namespace if spec.namespace else '',
+                "pool": POOL_NAME,
+                "namespace": spec.service_id,
                 "rgw_user": rgw_user,
-                "url": spec.rados_config_location(),
+                "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
                 "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
                 "bind_addr": daemon_spec.ip if daemon_spec.ip else '',
@@ -111,9 +111,8 @@ class NFSService(CephService):
         # generate the cephadm config json
         def get_cephadm_config() -> Dict[str, Any]:
             config: Dict[str, Any] = {}
-            config['pool'] = spec.pool
-            if spec.namespace:
-                config['namespace'] = spec.namespace
+            config['pool'] = POOL_NAME
+            config['namespace'] = spec.service_id
             config['userid'] = rados_user
             config['extra_args'] = ['-N', 'NIV_EVENT']
             config['files'] = {
@@ -144,10 +143,9 @@ class NFSService(CephService):
             'rados',
             '-n', f"mgr.{self.mgr.get_mgr_id()}",
             '-k', str(self.mgr.get_ceph_option('keyring')),
-            '-p', cast(str, spec.pool),
+            '-p', POOL_NAME,
+            '--namespace', cast(str, spec.service_id),
         ]
-        if spec.namespace:
-            cmd += ['--namespace', spec.namespace]
         result = subprocess.run(
             cmd + ['get', objname, '-'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -171,9 +169,7 @@ class NFSService(CephService):
         spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         entity: AuthEntity = self.get_auth_entity(daemon_id)
 
-        osd_caps = 'allow rw pool=%s' % (spec.pool)
-        if spec.namespace:
-            osd_caps = '%s namespace=%s' % (osd_caps, spec.namespace)
+        osd_caps = 'allow rw pool=%s namespace=%s' % (POOL_NAME, spec.service_id)
 
         logger.info('Creating key for %s' % entity)
         keyring = self.get_keyring_with_caps(entity,
@@ -205,7 +201,7 @@ class NFSService(CephService):
         entity = AuthEntity(f'client.{tmp_id}')
         keyring = self.get_keyring_with_caps(
             entity,
-            ['mon', 'allow r', 'osd', f'allow rwx pool {spec.pool}']
+            ['mon', 'allow r', 'osd', f'allow rwx pool {POOL_NAME}']
         )
         tmp_keyring = tempfile.NamedTemporaryFile(mode='w', prefix='mgr-grace-keyring')
         os.fchmod(tmp_keyring.fileno(), 0o600)
@@ -220,11 +216,10 @@ class NFSService(CephService):
                 'ganesha-rados-grace',
                 '--cephconf', tmp_conf.name,
                 '--userid', tmp_id,
-                '--pool', cast(str, spec.pool),
+                '--pool', POOL_NAME,
+                '--ns', cast(str, spec.service_id),
+                action, nodeid,
             ]
-            if spec.namespace:
-                cmd += ['--ns', spec.namespace]
-            cmd += [action, nodeid]
             self.mgr.log.debug(cmd)
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     timeout=10)
@@ -283,11 +278,10 @@ class NFSService(CephService):
             'rados',
             '-n', f"mgr.{self.mgr.get_mgr_id()}",
             '-k', str(self.mgr.get_ceph_option('keyring')),
-            '-p', cast(str, spec.pool),
+            '-p', POOL_NAME,
+            '--namespace', cast(str, spec.service_id),
+            'rm', 'grace',
         ]
-        if spec.namespace:
-            cmd += ['--namespace', spec.namespace]
-        cmd += ['rm', 'grace']
         subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
