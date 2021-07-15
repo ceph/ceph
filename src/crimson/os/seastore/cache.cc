@@ -573,6 +573,7 @@ record_t Cache::prepare_record(Transaction &t)
 	});
       i->last_committed_crc = final_crc;
     }
+    assert(record.deltas.back().bl.length());
   }
 
   // Transaction is now a go, set up in-memory cache state

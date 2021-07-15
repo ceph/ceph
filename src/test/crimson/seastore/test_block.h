@@ -90,7 +90,7 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
 
   TestBlockPhysical(ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)) {}
-  TestBlockPhysical(const TestBlock &other)
+  TestBlockPhysical(const TestBlockPhysical &other)
     : CachedExtent(other) {}
 
   CachedExtentRef duplicate_for_write() final {
@@ -104,15 +104,16 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
 
   void set_contents(char c, uint16_t offset, uint16_t len) {
     ::memset(get_bptr().c_str() + offset, c, len);
+    delta.push_back({c, offset, len});
   }
 
   void set_contents(char c) {
     set_contents(c, 0, get_length());
   }
 
-  ceph::bufferlist get_delta() final { return ceph::bufferlist(); }
+  ceph::bufferlist get_delta() final;
 
-  void apply_delta_and_adjust_crc(paddr_t, const ceph::bufferlist &bl) final {}
+  void apply_delta_and_adjust_crc(paddr_t, const ceph::bufferlist &bl) final;
 };
 using TestBlockPhysicalRef = TCachedExtentRef<TestBlockPhysical>;
 
