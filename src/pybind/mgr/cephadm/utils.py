@@ -79,7 +79,7 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
                 raise
 
         assert CephadmOrchestrator.instance is not None
-        return CephadmOrchestrator.instance._worker_pool.map(do_work, vals)
+        return list(CephadmOrchestrator.instance._worker_pool.map(do_work, vals))
 
     return forall_hosts_wrapper
 
