@@ -90,7 +90,7 @@ def threaded(f: Callable[..., None]) -> Callable[..., threading.Thread]:
 
 
 class DefaultFetcher():
-    def __init__(self, storage_class: str, coreV1_api: client.CoreV1Api):
+    def __init__(self, storage_class: str, coreV1_api: 'client.CoreV1Api'):
         self.storage_class = storage_class
         self.coreV1_api = coreV1_api
 
@@ -141,7 +141,7 @@ class DefaultFetcher():
         
 
 class LSOFetcher(DefaultFetcher):
-    def __init__(self, storage_class: str, coreV1_api: client.CoreV1Api, customObjects_api: client.CustomObjectsApi, nodenames: Optional[List[str]] = None):
+    def __init__(self, storage_class: 'str', coreV1_api: 'client.CoreV1Api', customObjects_api: 'client.CustomObjectsApi', nodenames: 'Optional[List[str]]' = None):
         super().__init__(storage_class, coreV1_api)
         self.customObjects_api = customObjects_api
         self.nodenames = nodenames
@@ -153,7 +153,7 @@ class LSOFetcher(DefaultFetcher):
                                                  version="v1alpha1",
                                                  plural="localvolumediscoveryresults")
 
-    def predicate(self, item: client.V1ConfigMapList) -> bool:
+    def predicate(self, item: 'client.V1ConfigMapList') -> bool:
             if self.nodenames is not None:
                 return item['spec']['nodeName'] in self.nodenames
             else:
