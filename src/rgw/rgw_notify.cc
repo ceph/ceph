@@ -658,13 +658,14 @@ void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValue
 }
 
 // populate event from request
-void populate_event_from_request(const req_state *s, 
+void populate_event_from_request(const reservation_t& res,
         rgw::sal::RGWObject* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         EventType event_type,
-        rgw_pubsub_s3_event& event) { 
+        rgw_pubsub_s3_event& event) {
+  const auto s = res.s;
   event.eventTime = mtime;
   event.eventName = to_string(event_type);
   event.userIdentity = s->user->get_id().id;    // user that triggered the change
@@ -684,12 +685,14 @@ void populate_event_from_request(const req_state *s,
           std::back_inserter(event.object_sequencer));
   set_event_id(event.id, etag, ts);
   event.bucket_id = s->bucket->get_bucket_id();
-  // pass meta data
-  if (s->info.x_meta_map.empty()) {
-    // try to fetch the metadata from the attributes
+  // pass metadata
+  if (res.cached_metadata.empty()) {
+    // no metadata cached:
+    // either no metadata exist or no metadata filter was used
+    event.x_meta_map = s->info.x_meta_map;
     metadata_from_attributes(s, obj, event.x_meta_map);
   } else {
-    event.x_meta_map = s->info.x_meta_map;
+    event.x_meta_map = std::move(res.cached_metadata);
   }
   // pass tags
   if (s->tagset.get_tags().empty()) {
@@ -701,29 +704,22 @@ void populate_event_from_request(const req_state *s,
   // opaque data will be filled from topic configuration
 }
 
-bool notification_match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::RGWObject* obj, 
-    EventType event, const RGWObjTags* req_tags) {
-  if (!match(filter.events, event)) { 
+bool notification_match(reservation_t& res, const rgw_pubsub_topic_filter& filter, EventType event, const RGWObjTags* req_tags) {
+  if (!match(filter.events, event)) {
     return false;
   }
+  const auto obj = res.object;
   if (!match(filter.s3_filter.key_filter, obj->get_name())) {
     return false;
   }
 
+  const auto s = res.s;
   if (!filter.s3_filter.metadata_filter.kv.empty()) {
     // metadata filter exists
-    if (!s->info.x_meta_map.empty()) {
-      // metadata was cached in req_state
-      if (!match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
-        return false;
-      }
-    } else {
-      // try to fetch the metadata from the attributes
-      KeyValueMap metadata;
-      metadata_from_attributes(s, obj, metadata);
-      if (!match(filter.s3_filter.metadata_filter, metadata)) {
-        return false;
-      }
+    res.cached_metadata = s->info.x_meta_map;
+    metadata_from_attributes(s, obj, res.cached_metadata);
+    if (!match(filter.s3_filter.metadata_filter, res.cached_metadata)) {
+      return false;
     }
   }
 
@@ -767,7 +763,7 @@ int publish_reserve(const DoutPrefixProvider *dpp, EventType event_type,
   for (const auto& bucket_topic : bucket_topics.topics) {
     const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
     const rgw_pubsub_topic& topic_cfg = topic_filter.topic;
-    if (!notification_match(topic_filter, res.s, res.object, event_type, req_tags)) {
+    if (!notification_match(res, topic_filter, event_type, req_tags)) {
       // notification does not apply to req_state
       continue;
     }
@@ -820,7 +816,7 @@ int publish_commit(rgw::sal::RGWObject* obj,
       continue;
     }
     event_entry_t event_entry;
-    populate_event_from_request(res.s, obj, size, mtime, etag, event_type, event_entry.event);
+    populate_event_from_request(res, obj, size, mtime, etag, event_type, event_entry.event);
     event_entry.event.configurationId = topic.configurationId;
     event_entry.event.opaque_data = topic.cfg.opaque_data;
     if (topic.cfg.dest.persistent) { 
