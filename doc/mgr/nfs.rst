@@ -22,7 +22,7 @@ Ganesha Configuration Hierarchy
 
 Cephadm and rook starts nfs-ganesha daemon with `bootstrap configuration`
 containing minimal ganesha configuration, creates empty rados `common config`
-object in `nfs-ganesha` pool and watches this config object. The `mgr/nfs`
+object in `.nfs` pool and watches this config object. The `mgr/nfs`
 module adds rados export object urls to the common config object. If cluster
 config is set, it creates `user config` object containing custom ganesha
 configuration and adds it url to common config object.
@@ -188,7 +188,7 @@ Example use cases
    daemons to access ceph cluster. User can be created in following way using
    `auth get-or-create`::
 
-         # ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=nfs-ganesha namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
+         # ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=.nfs namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
 
 Reset NFS Ganesha Configuration
 ===============================
@@ -313,7 +313,7 @@ same format:
 
 .. prompt:: bash #
 
-    ceph nfs export apply -i <json_file>
+    ceph nfs export apply *<cluster_id>* -i <json_file>
 
 For example,::
 
