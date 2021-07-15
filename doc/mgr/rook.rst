@@ -1,4 +1,6 @@
 
+.. _mgr-rook:
+
 =============================
 Rook orchestrator integration
 =============================
