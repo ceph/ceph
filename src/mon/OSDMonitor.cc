@@ -6191,6 +6191,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       }
     } else /* var != "all" */  {
       choices_map_t::const_iterator found = ALL_CHOICES.find(var);
+      if (found == ALL_CHOICES.end()) {
+        ss << "pool '" << poolstr
+	       << "': invalid variable: '" << var << "'";
+        r = -EINVAL;
+        goto reply;
+      }
+
       osd_pool_get_choices selected = found->second;
 
       if (!p->is_tier() &&
