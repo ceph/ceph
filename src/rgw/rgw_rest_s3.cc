@@ -6496,7 +6496,9 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
   }
   else
   {
-
+    if (input == nullptr) {
+      input = "";
+    }
     m_aws_response_handler.get()->init_success_response();
     length_before_processing = (m_aws_response_handler->get_sql_result()).size();
 
@@ -6599,13 +6601,21 @@ int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string tag_name, std::string& 
 
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
-  if (len == 0) {
+  int status=0;
+  if (m_aws_response_handler.get() == nullptr) {
+    m_aws_response_handler = std::make_unique<aws_response_handler>(s,this);
+  }
+  
+  if(len == 0 && s->obj_size != 0) {
     return 0;
   }
+  
+  if (s->obj_size == 0) {
+    status = run_s3select(m_sql_query.c_str(), nullptr, 0);  
+  } else {
 
   auto bl_len = bl.get_num_buffers();
 
-  int status=0;
   int i=0;
 
   for(auto& it : bl.buffers()) {
@@ -6619,17 +6629,14 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
       continue; 
     }
     
-    if (m_aws_response_handler.get() == nullptr)
-    {
-    m_aws_response_handler = std::make_unique<aws_response_handler>(s,this);
-    }
     m_aws_response_handler.get()->set_processed_size(it.length());
 
     status = run_s3select(m_sql_query.c_str(), &(it)[0], it.length());
     if(status<0) {
       break;
-    }
+    } 
     i++;
+  }
   }
 
   if (m_aws_response_handler.get()->get_processed_size() == s->obj_size) {
@@ -6639,6 +6646,5 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
     m_aws_response_handler.get()->init_end_response();
     }
   }
-
   return status;
 }
