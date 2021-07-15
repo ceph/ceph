@@ -2867,11 +2867,13 @@ void DaemonServer::adjust_pgs()
 		}
 	      }
 	    }
-	    dout(10) << "pool " << i.first
-		     << " pgp_num_target " << p.get_pgp_num_target()
-		     << " pgp_num " << p.get_pgp_num()
-		     << " -> " << next << dendl;
-	    pgp_num_to_set[osdmap.get_pool_name(i.first)] = next;
+	    if (next != p.get_pgp_num()) {
+	      dout(10) << "pool " << i.first
+		       << " pgp_num_target " << p.get_pgp_num_target()
+		       << " pgp_num " << p.get_pgp_num()
+		       << " -> " << next << dendl;
+	      pgp_num_to_set[osdmap.get_pool_name(i.first)] = next;
+	    }
 	  }
 	}
 	if (left == 0) {
