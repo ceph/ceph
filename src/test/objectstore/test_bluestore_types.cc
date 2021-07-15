@@ -1687,6 +1687,55 @@ TEST(bluestore_blob_t, unused)
     ASSERT_TRUE(b.is_unused(end0_aligned, min_alloc_size * 3 - end0_aligned));
   }
 }
+// This UT is primarily intended to show how repair procedure
+// causes erroneous write to INVALID_OFFSET which is reported in
+// https://tracker.ceph.com/issues/51682
+// Basic map_any functionality is tested as well though.
+//
+TEST(bluestore_blob_t, wrong_map_bl_in_51682)
+{
+  {
+    bluestore_blob_t b;
+    uint64_t min_alloc_size = 4 << 10; // 64 kB
+
+    b.allocated_test(bluestore_pextent_t(0x17ba000, 4 * min_alloc_size));
+    b.allocated_test(bluestore_pextent_t(0x17bf000, 4 * min_alloc_size));
+    b.allocated_test(
+      bluestore_pextent_t(
+        bluestore_pextent_t::INVALID_OFFSET,
+        1 * min_alloc_size));
+    b.allocated_test(bluestore_pextent_t(0x153c44d000, 7 * min_alloc_size));
+
+    b.mark_used(0, 0x8000);
+    b.mark_used(0x9000, 0x7000);
+
+    string s(0x7000, 'a');
+    bufferlist bl;
+    bl.append(s);
+    const size_t num_expected_entries = 5;
+    uint64_t expected[num_expected_entries][2] = {
+      {0x17ba000, 0x4000},
+      {0x17bf000, 0x3000},
+      {0x17c0000, 0x3000},
+      {0xffffffffffffffff, 0x1000},
+      {0x153c44d000, 0x3000}};
+    size_t expected_pos = 0;
+    b.map_bl(0, bl,
+      [&](uint64_t o, bufferlist& bl) {
+        ASSERT_EQ(o, expected[expected_pos][0]);
+        ASSERT_EQ(bl.length(), expected[expected_pos][1]);
+        ++expected_pos;
+      });
+    // 0x5000 is an improper offset presumably provided when doing a repair
+    b.map_bl(0x5000, bl,
+      [&](uint64_t o, bufferlist& bl) {
+        ASSERT_EQ(o, expected[expected_pos][0]);
+        ASSERT_EQ(bl.length(), expected[expected_pos][1]);
+        ++expected_pos;
+      });
+    ASSERT_EQ(expected_pos, num_expected_entries);
+  }
+}
 
 int main(int argc, char **argv) {
   vector<const char*> args;
