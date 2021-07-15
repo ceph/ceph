@@ -28,7 +28,9 @@
 #include "include/types.h"
 
 #include <algorithm>
+#include <functional>
 #include <errno.h>
+#include <optional>
 #include <sstream>
 
 #include "include/uuid.h"
@@ -6898,6 +6900,7 @@ int dir_remove(cls_method_context_t hctx,
 }
 
 static const string RBD_GROUP_SNAP_KEY_PREFIX = "snapshot_";
+static const string RBD_GROUP_SNAP_ORDER_KEY_PREFIX = "snap_order_";
 
 std::string snap_key(const std::string &snap_id) {
   ostringstream oss;
@@ -6905,10 +6908,120 @@ std::string snap_key(const std::string &snap_id) {
   return oss.str();
 }
 
+std::string snap_order_key(const std::string &snap_id) {
+  ostringstream oss;
+  oss << RBD_GROUP_SNAP_ORDER_KEY_PREFIX << snap_id;
+  return oss.str();
+}
+
+static const string snap_id_from_order_key(const string &key) {
+  return key.substr(RBD_GROUP_SNAP_ORDER_KEY_PREFIX.size());
+}
+
 int snap_list(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
               uint64_t max_return,
               std::vector<cls::rbd::GroupSnapshot> *group_snaps)
 {
+  int max_read = RBD_MAX_KEYS_READ;
+  std::map<std::string, bufferlist> vals;
+  std::string last_read = snap_key("");
+
+  group_snaps->clear();
+
+  bool more;
+  do {
+    int r = cls_cxx_map_get_vals(hctx, last_read,
+				 RBD_GROUP_SNAP_KEY_PREFIX,
+				 max_read, &vals, &more);
+    if (r < 0)
+      return r;
+
+    for (auto it = vals.begin(); it != vals.end(); ++it) {
+
+      auto iter = it->second.cbegin();
+      cls::rbd::GroupSnapshot snap;
+      try {
+	decode(snap, iter);
+      } catch (const ceph::buffer::error &err) {
+	CLS_ERR("error decoding snapshot: %s", it->first.c_str());
+	return -EIO;
+      }
+      CLS_LOG(20, "Discovered snapshot %s %s",
+	      snap.name.c_str(),
+	      snap.id.c_str());
+      group_snaps->push_back(snap);
+    }
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    } else {
+      ceph_assert(!more);
+    }
+  } while (more);
+
+  // Sort snapshots in the order they were created.
+  std::optional<uint64_t> start_after_order;
+  last_read = snap_order_key("");
+  std::map<string, uint64_t> orders;
+  do {
+    int r = cls_cxx_map_get_vals(hctx, last_read,
+                                 RBD_GROUP_SNAP_ORDER_KEY_PREFIX, max_read,
+                                 &vals, &more);
+    if (r < 0) {
+      return r;
+    }
+    for (auto &[key, bl] : vals) {
+      auto iter = bl.cbegin();
+      uint64_t order;
+      try {
+        decode(order, iter);
+      } catch (const ceph::buffer::error &err) {
+        CLS_ERR("error decoding snapshot order: %s", key.c_str());
+        return -EIO;
+      }
+      auto snap_id = snap_id_from_order_key(key);
+      orders[snap_id] = order;
+      if (snap_id == start_after.id) {
+        start_after_order = order;
+      }
+    }
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    } else {
+      ceph_assert(!more);
+    }
+  } while (more);
+
+  std::sort(group_snaps->begin(), group_snaps->end(),
+            [&orders](const cls::rbd::GroupSnapshot &a,
+                      const cls::rbd::GroupSnapshot &b) {
+              return orders[a.id] < orders[b.id];
+            });
+
+  if (!start_after_order) {
+    if (!start_after.id.empty()) {
+      CLS_LOG(5, "start_after '%s' not found", start_after.id.c_str());
+      return -ERESTART;
+    }
+  } else {
+    auto it = group_snaps->begin();
+    for (; it != group_snaps->end(); it++) {
+      if (orders[it->id] > *start_after_order) {
+        break;
+      }
+    }
+    group_snaps->erase(group_snaps->begin(), it);
+  }
+
+  if (group_snaps->size() > max_return) {
+    group_snaps->resize(max_return);
+  }
+
+  return 0;
+}
+
+int snap_list_unsorted(cls_method_context_t hctx,
+                       cls::rbd::GroupSnapshot start_after, uint64_t max_return,
+                       std::vector<cls::rbd::GroupSnapshot> *group_snaps) {
   int max_read = RBD_MAX_KEYS_READ;
   std::map<string, bufferlist> vals;
   string last_read = snap_key(start_after.id);
@@ -6941,6 +7054,8 @@ int snap_list(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
 
     if (!vals.empty()) {
       last_read = vals.rbegin()->first;
+    } else {
+      ceph_assert(!more);
     }
   } while (more && (group_snaps->size() < max_return));
 
@@ -6956,7 +7071,7 @@ static int check_duplicate_snap_name(cls_method_context_t hctx,
   std::vector<cls::rbd::GroupSnapshot> page;
 
   for (;;) {
-    int r = snap_list(hctx, snap_last, max_read, &page);
+    int r = snap_list_unsorted(hctx, snap_last, max_read, &page);
     if (r < 0) {
       return r;
     }
@@ -7459,6 +7574,43 @@ int group_snap_set(cls_method_context_t hctx,
     } else if (r >= 0) {
       return -EEXIST;
     }
+
+    std::string last_read = group::snap_order_key("");
+    bool more;
+    uint64_t max_order = 0;
+    std::map<string, bufferlist> vals;
+    do {
+      int r = cls_cxx_map_get_vals(hctx, last_read,
+                                   group::RBD_GROUP_SNAP_ORDER_KEY_PREFIX,
+                                   RBD_MAX_KEYS_READ, &vals, &more);
+      if (r < 0) {
+        return r;
+      }
+      for (auto &[key, bl] : vals) {
+        auto iter = bl.cbegin();
+        uint64_t order;
+        try {
+          decode(order, iter);
+        } catch (const ceph::buffer::error &err) {
+          CLS_ERR("error decoding snapshot order: %s", key.c_str());
+          return -EIO;
+        }
+        max_order = std::max(max_order, order);
+      }
+      if (!vals.empty()) {
+        last_read = vals.rbegin()->first;
+      } else {
+        ceph_assert(!more);
+      }
+    } while (more);
+
+    std::string order_key = group::snap_order_key(group_snap.id);
+    bufferlist bl;
+    encode(++max_order, bl);
+    r = cls_cxx_map_set_val(hctx, order_key, & bl);
+    if (r < 0) {
+      return r;
+    }
   }
 
   bufferlist obl;
@@ -7492,6 +7644,10 @@ int group_snap_remove(cls_method_context_t hctx,
 
   CLS_LOG(20, "removing snapshot with key %s", snap_key.c_str());
   int r = cls_cxx_map_remove_key(hctx, snap_key);
+  if (r == 0) {
+    std::string snap_order_key = group::snap_order_key(snap_id);
+    cls_cxx_map_remove_key(hctx, snap_order_key);
+  }
   return r;
 }
 
