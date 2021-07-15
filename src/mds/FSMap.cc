@@ -656,8 +656,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 void FSMap::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(7, p);
-  if (struct_v <= 6)
-    ceph_abort("detected old mdsmap in mon stores");
+  DECODE_OLDEST(7);
   decode(epoch, p);
   decode(next_filesystem_id, p);
   decode(legacy_client_fscid, p);
