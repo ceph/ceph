@@ -26,6 +26,7 @@ class Transaction;
 class Transaction {
 public:
   using Ref = std::unique_ptr<Transaction>;
+  using on_destruct_func_t = std::function<void(Transaction&)>;
   enum class get_extent_ret {
     PRESENT,
     ABSENT,
@@ -171,15 +172,18 @@ public:
     OrderingHandle &&handle,
     bool weak,
     src_t src,
-    journal_seq_t initiated_after
+    journal_seq_t initiated_after,
+    on_destruct_func_t&& f
   ) : weak(weak),
       retired_gate_token(initiated_after),
       handle(std::move(handle)),
+      on_destruct(std::move(f)),
       src(src)
   {}
 
 
   ~Transaction() {
+    on_destruct(*this);
     for (auto i = write_set.begin();
 	 i != write_set.end();) {
       i->state = CachedExtent::extent_state_t::INVALID;
@@ -243,6 +247,8 @@ private:
 
   OrderingHandle handle;
 
+  on_destruct_func_t on_destruct;
+
   const src_t src;
 };
 using TransactionRef = Transaction::Ref;
@@ -269,7 +275,8 @@ inline TransactionRef make_test_transaction() {
     get_dummy_ordering_handle(),
     false,
     Transaction::src_t::MUTATE,
-    journal_seq_t{}
+    journal_seq_t{},
+    [](Transaction&) {}
   );
 }
 

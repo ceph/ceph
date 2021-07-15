@@ -107,7 +107,10 @@ public:
       get_dummy_ordering_handle(),
       false,
       src,
-      last_commit
+      last_commit,
+      [this](Transaction& t) {
+        return on_transaction_destruct(t);
+      }
     );
     retired_extent_gate.add_token(ret->retired_gate_token);
     DEBUGT("created source={}", *ret, src);
@@ -125,7 +128,10 @@ public:
       get_dummy_ordering_handle(),
       true,
       src,
-      last_commit
+      last_commit,
+      [this](Transaction& t) {
+        return on_transaction_destruct(t);
+      }
     );
     retired_extent_gate.add_token(ret->retired_gate_token);
     DEBUGT("created source={}", *ret, src);
@@ -644,6 +650,8 @@ private:
     std::array<trans_efforts_t, Transaction::SRC_MAX> invalidated_efforts_by_src;
     std::unordered_map<src_ext_t, query_counters_t,
                        boost::hash<src_ext_t>> cache_query;
+    uint64_t read_transactions_successful;
+    effort_t read_effort_successful;
   } stats;
 
   template <typename CounterT>
@@ -695,6 +703,9 @@ private:
 
   /// Measure efforts of a submitting/invalidating transaction
   void measure_efforts(Transaction& t, trans_efforts_t& efforts);
+
+  /// Introspect transaction when it is being destructed
+  void on_transaction_destruct(Transaction& t);
 
   template <typename T>
   get_extent_ret<T> read_extent(

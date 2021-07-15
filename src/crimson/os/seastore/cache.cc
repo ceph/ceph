@@ -249,6 +249,22 @@ void Cache::register_metrics()
     }
   );
 
+  /**
+   * read_transactions_successful
+   */
+  stats.read_transactions_successful = 0;
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "read_trans_successful",
+        stats.read_transactions_successful,
+        sm::description("total number of successful read transactions"),
+        {}
+      ),
+    }
+  );
+
   /*
    * cache_query: cache_access and cache_hit
    */
@@ -400,6 +416,32 @@ void Cache::register_metrics()
         } // effort_name
       } // src
     } // category
+
+    /**
+     * read_effort_successful
+     */
+    stats.read_effort_successful = {};
+    auto register_read_effort_successful =
+      [this, &labels_by_counter]
+      (const char* counter_name, uint64_t& value) {
+        std::ostringstream oss_desc;
+        oss_desc << "total successful read transactional effort labeled by counter";
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              "read_effort_successful",
+              value,
+              sm::description(oss_desc.str()),
+              {labels_by_counter.find(counter_name)->second}
+            ),
+          }
+        );
+      };
+    for (auto& counter_name : {"EXTENTS", "BYTES"}) {
+      auto& value = stats.read_effort_successful.get_by_name(counter_name);
+      register_read_effort_successful(counter_name, value);
+    }
   }
 }
 
@@ -560,6 +602,25 @@ void Cache::measure_efforts(Transaction& t, trans_efforts_t& efforts)
    * Mutated blocks are special because CachedExtent::get_delta() is not
    * idempotent, so they need to be dealt later.
    */
+}
+
+void Cache::on_transaction_destruct(Transaction& t)
+{
+  LOG_PREFIX(Cache::on_transaction_destruct);
+  if (t.get_src() == Transaction::src_t::READ &&
+      t.conflicted == false &&
+      !t.is_weak()) {
+    DEBUGT("read is successful", t);
+    ++stats.read_transactions_successful;
+
+    assert(t.retired_set.empty());
+    assert(t.fresh_block_list.empty());
+    assert(t.mutated_block_list.empty());
+    stats.read_effort_successful.extents += t.read_set.size();
+    for (auto &i: t.read_set) {
+      stats.read_effort_successful.bytes += i.ref->get_length();
+    }
+  }
 }
 
 CachedExtentRef Cache::alloc_new_extent_by_type(
