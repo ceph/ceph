@@ -590,16 +590,65 @@ private:
     uint64_t hit;
   };
 
+  /**
+   * effort_t
+   *
+   * Count the number of extents involved in the effort and the total bytes of
+   * them.
+   *
+   * Each effort_t represents the effort of a set of extents involved in the
+   * transaction, classified by read, mutate, retire and allocate behaviors,
+   * see trans_efforts_t.
+   */
+  struct effort_t {
+    uint64_t extents = 0;
+    uint64_t bytes = 0;
+
+    uint64_t& get_by_name(const std::string& counter_name) {
+      if (counter_name == "EXTENTS") {
+        return extents;
+      } else {
+        ceph_assert(counter_name == "BYTES");
+        return bytes;
+      }
+    }
+  };
+
+  struct trans_efforts_t {
+    effort_t read;
+    effort_t mutate;
+    uint64_t mutate_delta_bytes = 0;
+    effort_t retire;
+    effort_t fresh;
+
+    effort_t& get_by_name(const std::string& effort_name) {
+      if (effort_name == "READ") {
+        return read;
+      } else if (effort_name == "MUTATE") {
+        return mutate;
+      } else if (effort_name == "RETIRE") {
+        return retire;
+      } else {
+        ceph_assert(effort_name == "FRESH");
+        return fresh;
+      }
+    }
+  };
+
   struct {
     std::array<uint64_t, Transaction::SRC_MAX> trans_created_by_src;
     std::array<uint64_t, Transaction::SRC_MAX> trans_committed_by_src;
+    std::array<trans_efforts_t, Transaction::SRC_MAX> committed_efforts_by_src;
     std::unordered_map<src_ext_t, uint64_t,
                        boost::hash<src_ext_t>> trans_invalidated;
+    std::array<trans_efforts_t, Transaction::SRC_MAX> invalidated_efforts_by_src;
     std::unordered_map<src_ext_t, query_counters_t,
                        boost::hash<src_ext_t>> cache_query;
   } stats;
-  uint64_t& get_counter(
-      std::array<uint64_t, Transaction::SRC_MAX>& counters_by_src,
+
+  template <typename CounterT>
+  CounterT& get_counter(
+      std::array<CounterT, Transaction::SRC_MAX>& counters_by_src,
       Transaction::src_t src) {
     assert(static_cast<std::size_t>(src) < counters_by_src.size());
     return counters_by_src[static_cast<std::size_t>(src)];
@@ -643,6 +692,9 @@ private:
 
   /// Mark a valid transaction as conflicted
   void invalidate(Transaction& t, CachedExtent& conflicting_extent);
+
+  /// Measure efforts of a submitting/invalidating transaction
+  void measure_efforts(Transaction& t, trans_efforts_t& efforts);
 
   template <typename T>
   get_extent_ret<T> read_extent(
