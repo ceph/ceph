@@ -506,24 +506,26 @@ void Mirror::update_fs_mirrors() {
   {
     std::scoped_lock locker(m_lock);
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
-      if (check_failure && !mirror_action.action_in_progress &&
-          mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed()) {
+      auto failed = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed();
+      auto blocklisted = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted();
+
+      if (check_failure && !mirror_action.action_in_progress && failed) {
         // about to restart failed mirror instance -- nothing
         // should interfere
         dout(5) << ": filesystem=" << filesystem << " failed mirroring -- restarting" << dendl;
         auto peers = mirror_action.fs_mirror->get_peers();
-        mirror_action.action_ctxs.push_front(
-          new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers));
-      } else if (check_blocklist && !mirror_action.action_in_progress &&
-                 mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted()) {
+        auto ctx =  new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
+        ctx->complete(0);
+      } else if (check_blocklist && !mirror_action.action_in_progress && blocklisted) {
         // about to restart blocklisted mirror instance -- nothing
         // should interfere
         dout(5) << ": filesystem=" << filesystem << " is blocklisted -- restarting" << dendl;
         auto peers = mirror_action.fs_mirror->get_peers();
-        mirror_action.action_ctxs.push_front(
-          new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers));
+        auto ctx = new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
+        ctx->complete(0);
       }
-      if (!mirror_action.action_ctxs.empty() && !mirror_action.action_in_progress) {
+      if (!failed && !blocklisted && !mirror_action.action_ctxs.empty()
+          && !mirror_action.action_in_progress) {
         auto ctx = std::move(mirror_action.action_ctxs.front());
         mirror_action.action_ctxs.pop_front();
         ctx->complete(0);
