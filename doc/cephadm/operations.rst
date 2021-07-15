@@ -390,11 +390,11 @@ identifying anomalies.
 Client keyrings and configs
 ===========================
 
-Cephadm can distribute copies of the ``ceph.conf`` and client keyring files to
-hosts. It is usually a good idea to store a copy of the config and
-``client.admin`` keyring on any hosts that is used to administer the cluster
-via the CLI.  By default, cephadm does this for any nodes that have the
-``_admin`` label (which normally includes the bootstrap host).
+Cephadm can distribute copies of the ``ceph.conf`` file and client keyring
+files to hosts. It is usually a good idea to store a copy of the config and
+``client.admin`` keyring on any host used to administer the cluster via the
+CLI.  By default, cephadm does this for any nodes that have the ``_admin``
+label (which normally includes the bootstrap host).
 
 When a client keyring is placed under management, cephadm will:
 
