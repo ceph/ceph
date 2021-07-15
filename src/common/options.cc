@@ -5634,6 +5634,11 @@ std::vector<Option> get_global_options() {
     .set_description("Period in seconds between monitor-to-manager "
                      "health/status updates"),
 
+    Option("mon_down_mkfs_grace", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .add_service("mon")
+    .set_description("Period in seconds that the cluster may have a mon down after cluster creation"),
+
     Option("mon_mgr_beacon_grace", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(30)
     .add_service("mon")
