@@ -84,13 +84,20 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 
   const int max_read = 1024;
   cls::rbd::GroupSnapshot snap_last;
+  cls_snaps->clear();
 
   for (;;) {
     vector<cls::rbd::GroupSnapshot> snaps_page;
 
     r = cls_client::group_snap_list(&group_ioctx, group_header_oid,
 				    snap_last, max_read, &snaps_page);
-
+    if (r == -ERESTART && !snap_last.id.empty()) {
+      ldout(cct, 20) << "invalid snap_last " << snap_last.id << ", "
+                     << "restarting listing" << dendl;
+      cls_snaps->clear();
+      snap_last = {};
+      continue;
+    }
     if (r < 0) {
       lderr(cct) << "error reading snap list from group: "
 	<< cpp_strerror(-r) << dendl;
