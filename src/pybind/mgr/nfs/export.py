@@ -475,17 +475,21 @@ class ExportMgr:
             'format': 'json',
         })
         if ret == -errno.EINVAL and 'does not match' in err:
-            ret, out, err = self.mgr.check_mon_command({
+            ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth caps',
                 'entity': 'client.{}'.format(entity),
                 'caps': nfs_caps,
                 'format': 'json',
             })
-            ret, out, err = self.mgr.check_mon_command({
+            if err:
+                raise NFSException(f'Failed to update caps for {entity}: {err}')
+            ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth get',
                 'entity': 'client.{}'.format(entity),
                 'format': 'json',
             })
+            if err:
+                raise NFSException(f'Failed to fetch caps for {entity}: {err}')
 
         json_res = json.loads(out)
         log.info("Export user created is {}".format(json_res[0]['entity']))
