@@ -198,7 +198,7 @@ managed by ECBackend.  The important invariant is that we can't
 have uncacheable and rmw operations running at the same time
 on the same object.  For simplicity, we simply enforce that any
 operation which contains an rmw operation must wait until
-all in-progress uncacheable operations are complete.
+all in-progress uncacheable operations are complete. 
 
 There are improvements to be made here in the future.
 
