@@ -828,8 +828,7 @@ def test_node_assignment(service_type, placement, hosts, daemons, rank_map, post
         service_id = 'mynfs'
         spec = ServiceSpec(service_type=service_type,
                            service_id=service_id,
-                           placement=placement,
-                           pool='foo')
+                           placement=placement)
 
     if not spec:
         spec = ServiceSpec(service_type=service_type,

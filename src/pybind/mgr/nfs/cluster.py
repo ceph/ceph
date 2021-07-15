@@ -4,12 +4,13 @@ import re
 import socket
 from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING, Tuple
 
+from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
 
 import orchestrator
 
 from .exception import NFSInvalidOperation, ClusterNotFound
-from .utils import POOL_NAME, available_clusters, restart_nfs_service
+from .utils import available_clusters, restart_nfs_service
 from .export import NFSRados, exception_handler
 
 if TYPE_CHECKING:
@@ -33,18 +34,17 @@ def resolve_ip(hostname: str) -> str:
         raise NFSInvalidOperation(f"Cannot resolve IP for host {hostname}: {e}")
 
 
-def create_ganesha_pool(mgr: 'MgrModule', pool: str) -> None:
+def create_ganesha_pool(mgr: 'MgrModule') -> None:
     pool_list = [p['pool_name'] for p in mgr.get_osdmap().dump().get('pools', [])]
-    if pool not in pool_list:
-        mgr.check_mon_command({'prefix': 'osd pool create', 'pool': pool})
+    if POOL_NAME not in pool_list:
+        mgr.check_mon_command({'prefix': 'osd pool create', 'pool': POOL_NAME})
         mgr.check_mon_command({'prefix': 'osd pool application enable',
-                               'pool': pool,
+                               'pool': POOL_NAME,
                                'app': 'nfs'})
 
 
 class NFSCluster:
     def __init__(self, mgr: 'Module') -> None:
-        self.pool_name = POOL_NAME
         self.mgr = mgr
 
     def _get_common_conf_obj_name(self, cluster_id: str) -> str:
@@ -58,7 +58,6 @@ class NFSCluster:
             # nfs + ingress
             # run NFS on non-standard port
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
-                                  pool=self.pool_name, namespace=cluster_id,
                                   placement=PlacementSpec.from_string(placement),
                                   # use non-default port so we don't conflict with ingress
                                   port=12049)
@@ -75,7 +74,6 @@ class NFSCluster:
         else:
             # standalone nfs
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
-                                  pool=self.pool_name, namespace=cluster_id,
                                   placement=PlacementSpec.from_string(placement))
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
@@ -105,7 +103,7 @@ class NFSCluster:
                 raise NFSInvalidOperation(f"cluster id {cluster_id} is invalid. "
                                           f"{invalid_str.group()} is char not permitted")
 
-            create_ganesha_pool(self.mgr, self.pool_name)
+            create_ganesha_pool(self.mgr)
 
             self.create_empty_rados_obj(cluster_id)
 
