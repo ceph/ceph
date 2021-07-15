@@ -29,7 +29,6 @@ log = logging.getLogger(__name__)
 class Run(object):
     WAIT_MAX_JOB_TIME = 30 * 60
     WAIT_PAUSE = 5 * 60
-    JOBS_TO_SCHEDULE_THRESHOLD = 500
     __slots__ = (
         'args', 'name', 'base_config', 'suite_repo_path', 'base_yaml_paths',
         'base_args', 'package_versions', 'kernel_dict', 'config_input',
@@ -527,10 +526,14 @@ Note: To force run, use --force-priority'''
             util.schedule_fail(msg)
 
     def check_num_jobs(self, jobs_to_schedule):
-        msg=f'''Unable to schedule {jobs_to_schedule} jobs, too many jobs.
+        """
+        Fail schedule if number of jobs exceeds job threshold.
+        """
+        threshold = self.args.job_threshold
+        msg=f'''Unable to schedule {jobs_to_schedule} jobs, too many jobs, when maximum {threshold} jobs allowed.
 
-Note: If you still want to go ahead, use --disable-num-jobs-check'''
-        if jobs_to_schedule > Run.JOBS_TO_SCHEDULE_THRESHOLD:
+Note: If you still want to go ahead, use --job-threshold 0'''
+        if threshold and jobs_to_schedule > threshold:
             util.schedule_fail(msg)
 
     def schedule_suite(self):
@@ -649,9 +652,7 @@ Note: If you still want to go ahead, use --disable-num-jobs-check'''
         if self.args.priority and jobs_to_schedule and not self.args.force_priority:
             self.check_priority(len(jobs_to_schedule))
 
-        # Before scheduling jobs, check number of jobs to avoid scheduling 1000s
-        if jobs_to_schedule and not self.args.disable_num_jobs_check:
-            self.check_num_jobs(len(jobs_to_schedule))
+        self.check_num_jobs(len(jobs_to_schedule))
 
         self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
 

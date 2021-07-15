@@ -172,11 +172,9 @@ Scheduler arguments:
                               in the output of teuthology-suite command. -1
                               for a random seed [default: -1].
  --force-priority             Skip the priority check.
- --disable-num-jobs-check     Skip the number of jobs check. By default,
-                              teuthology will not allow you to schedule more
-                              than JOBS_TO_SCHEDULE_THRESHOLD=500 jobs, because
-                              it is too high. Use this if you need to schedule
-                              more than 500 jobs.
+ --job-threshold <threshold>  Do not allow to schedule the run if the number
+                              of jobs exceeds <threshold>. Use 0 to allow
+                              any number [default: {default_job_threshold}].
 
 """.format(
     default_machine_type=config.default_machine_type,
@@ -186,6 +184,7 @@ Scheduler arguments:
     default_suite_repo=defaults('--suite-repo',
                             config.get_ceph_qa_suite_git_url()),
     default_ceph_branch=defaults('--ceph-branch', 'master'),
+    default_job_threshold=config.job_threshold,
 )
 
 

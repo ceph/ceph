@@ -151,6 +151,7 @@ class TeuthologyConfig(YamlConfig):
         'gitbuilder_host': 'gitbuilder.ceph.com',
         'githelper_base_url': 'http://git.ceph.com:8080',
         'check_package_signatures': True,
+        'job_threshold': 500,
         'lab_domain': 'front.sepia.ceph.com',
         'lock_server': 'http://paddles.front.sepia.ceph.com/',
         'max_job_time': 259200,  # 3 days
