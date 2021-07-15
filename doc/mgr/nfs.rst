@@ -1,71 +1,31 @@
 .. _mgr-nfs:
 
-
 =============================
 CephFS & RGW Exports over NFS
 =============================
 
-CephFS namespaces and RGW buckets can be exported over NFS protocol using the
-`NFS-Ganesha NFS server`_
+CephFS namespaces and RGW buckets can be exported over NFS protocol
+using the `NFS-Ganesha NFS server`_.
 
-Requirements
-============
+The ``nfs`` manager module provides a general interface for managing
+NFS exports of either CephFS directories or RGW buckets.  Exports can
+be managed either via the CLI ``ceph nfs export ...`` commands
+or via the dashboard.
 
--  Latest Ceph file system with mgr enabled
--  ``nfs-ganesha``, ``nfs-ganesha-ceph``, ``nfs-ganesha-rados-grace`` and
-   ``nfs-ganesha-rados-urls`` packages (version 3.3 and above)
+The deployment of the nfs-ganesha daemons can also be managed
+automatically if either the :ref:`cephadm` or :ref:`mgr-rook`
+orchestrators are enabled.  If neither are in use (e.g., Ceph is
+deployed via an external orchestrator like Ansible or Puppet), the
+nfs-ganesha daemons must be manually deployed; for more information,
+see :ref:`nfs-ganesha-config`.
 
-.. note:: From Pacific, the nfs mgr module must be enabled prior to use.
+.. note:: Starting with Ceph Pacific, the ``nfs`` mgr module must be enabled.
 
-Ganesha Configuration Hierarchy
-===============================
-
-Cephadm and rook starts nfs-ganesha daemon with `bootstrap configuration`
-containing minimal ganesha configuration, creates empty rados `common config`
-object in `.nfs` pool and watches this config object. The `mgr/nfs`
-module adds rados export object urls to the common config object. If cluster
-config is set, it creates `user config` object containing custom ganesha
-configuration and adds it url to common config object.
-
-.. ditaa::
-
-
-                             rados://$pool/$namespace/export-$i        rados://$pool/$namespace/userconf-nfs.$cluster_id
-                                      (export config)                          (user config)
-
-                        +----------+    +----------+    +----------+      +---------------------------+
-                        |          |    |          |    |          |      |                           |
-                        | export-1 |    | export-2 |    | export-3 |      | userconf-nfs.$cluster_id  |
-                        |          |    |          |    |          |      |                           |
-                        +----+-----+    +----+-----+    +-----+----+      +-------------+-------------+
-                             ^               ^                ^                         ^
-                             |               |                |                         |
-                             +--------------------------------+-------------------------+
-                                        %url |
-                                             |
-                                    +--------+--------+
-                                    |                 |  rados://$pool/$namespace/conf-nfs.$svc
-                                    |  conf+nfs.$svc  |  (common config)
-                                    |                 |
-                                    +--------+--------+
-                                             ^
-                                             |
-                                   watch_url |
-                     +----------------------------------------------+
-                     |                       |                      |
-                     |                       |                      |            RADOS
-             +----------------------------------------------------------------------------------+
-                     |                       |                      |            CONTAINER
-           watch_url |             watch_url |            watch_url |
-                     |                       |                      |
-            +--------+-------+      +--------+-------+      +-------+--------+
-            |                |      |                |      |                |  /etc/ganesha/ganesha.conf
-            |   nfs.$svc.a   |      |   nfs.$svc.b   |      |   nfs.$svc.c   |  (bootstrap config)
-            |                |      |                |      |                |
-            +----------------+      +----------------+      +----------------+
+NFS Cluster managemnt
+=====================
 
 Create NFS Ganesha Cluster
-==========================
+--------------------------
 
 .. code:: bash
 
@@ -75,14 +35,14 @@ This creates a common recovery pool for all NFS Ganesha daemons, new user based 
 ``cluster_id``, and a common NFS Ganesha config RADOS object.
 
 .. note:: Since this command also brings up NFS Ganesha daemons using a ceph-mgr
-   orchestrator module (see :doc:`/mgr/orchestrator`) such as "mgr/cephadm", at
+   orchestrator module (see :doc:`/mgr/orchestrator`) such as cephadm or rook, at
    least one such module must be enabled for it to work.
 
    Currently, NFS Ganesha daemon deployed by cephadm listens on the standard
    port. So only one daemon will be deployed on a host.
 
 ``<cluster_id>`` is an arbitrary string by which this NFS Ganesha cluster will be
-known.
+known (e.g., ``mynfs``).
 
 ``<placement>`` is an optional string signifying which hosts should have NFS Ganesha
 daemon containers running on them and, optionally, the total number of NFS
@@ -98,7 +58,7 @@ cluster)::
 
     "2 host1,host2"
 
-To deploy NFS with an HA front-end (virtual IP and load balancer), add the
+To deploy NFS with a high-availability front-end (virtual IP and load balancer), add the
 ``--ingress`` flag and specify a virtual IP address. This will deploy a combination
 of keepalived and haproxy to provide an high-availability NFS frontend for the NFS
 service.
@@ -107,7 +67,7 @@ For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
 
 Delete NFS Ganesha Cluster
-==========================
+--------------------------
 
 .. code:: bash
 
@@ -115,8 +75,8 @@ Delete NFS Ganesha Cluster
 
 This deletes the deployed cluster.
 
-List NFS Ganesha Cluster
-========================
+List NFS Ganesha Clusters
+-------------------------
 
 .. code:: bash
 
@@ -124,24 +84,10 @@ List NFS Ganesha Cluster
 
 This lists deployed clusters.
 
-Show NFS Ganesha Cluster Information
-====================================
-
-.. code:: bash
-
-    $ ceph nfs cluster info [<cluster_id>]
-
-This displays ip and port of deployed cluster.
-
-.. note:: This will not work with rook backend. Instead expose port with
-   kubectl patch command and fetch the port details with kubectl get services
-   command::
-
-   $ kubectl patch service -n rook-ceph -p '{"spec":{"type": "NodePort"}}' rook-ceph-nfs-<cluster-name>-<node-id>
-   $ kubectl get services -n rook-ceph rook-ceph-nfs-<cluster-name>-<node-id>
+.. _nfs-cluster-set:
 
 Set Customized NFS Ganesha Configuration
-========================================
+----------------------------------------
 
 .. code:: bash
 
@@ -150,39 +96,38 @@ Set Customized NFS Ganesha Configuration
 With this the nfs cluster will use the specified config and it will have
 precedence over default config blocks.
 
-Example use cases
+Example use cases include:
 
-1) Changing log level
+#. Changing log level.  The logging level can be adjusted with the following config
+   fragment::
 
-  It can be done by adding LOG block in the following way::
-
-   LOG {
-    COMPONENTS {
-        ALL = FULL_DEBUG;
-    }
-   }
-
-2) Adding custom export block
-
-  The following sample block creates a single export. This export will not be
-  managed by `ceph nfs export` interface::
-
-   EXPORT {
-     Export_Id = 100;
-     Transports = TCP;
-     Path = /;
-     Pseudo = /ceph/;
-     Protocols = 4;
-     Access_Type = RW;
-     Attr_Expiration_Time = 0;
-     Squash = None;
-     FSAL {
-       Name = CEPH;
-       Filesystem = "filesystem name";
-       User_Id = "user id";
-       Secret_Access_Key = "secret key";
+     LOG {
+         COMPONENTS {
+             ALL = FULL_DEBUG;
+         }
      }
-   }
+
+#. Adding custom export block.
+
+   The following sample block creates a single export. This export will not be
+   managed by `ceph nfs export` interface::
+
+    EXPORT {
+      Export_Id = 100;
+      Transports = TCP;
+      Path = /;
+      Pseudo = /ceph/;
+      Protocols = 4;
+      Access_Type = RW;
+      Attr_Expiration_Time = 0;
+      Squash = None;
+      FSAL {
+        Name = CEPH;
+        Filesystem = "filesystem name";
+        User_Id = "user id";
+        Secret_Access_Key = "secret key";
+      }
+    }
 
 .. note:: User specified in FSAL block should have proper caps for NFS-Ganesha
    daemons to access ceph cluster. User can be created in following way using
@@ -191,7 +136,7 @@ Example use cases
          # ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=.nfs namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
 
 Reset NFS Ganesha Configuration
-===============================
+-------------------------------
 
 .. code:: bash
 
@@ -202,13 +147,17 @@ This removes the user defined configuration.
 .. note:: With a rook deployment, ganesha pods must be explicitly restarted
    for the new config blocks to be effective.
 
-Create CephFS Export
-====================
+
+Export Management
+=================
 
 .. warning:: Currently, the nfs interface is not integrated with dashboard. Both
    dashboard and nfs interface have different export requirements and
    create exports differently. Management of dashboard created exports is not
    supported.
+
+Create CephFS Export
+--------------------
 
 .. code:: bash
 
@@ -242,7 +191,7 @@ permissible values.
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
 Create RGW Export
-=================
+-----------------
 
 To export a bucket
 
@@ -259,7 +208,7 @@ For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */b
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
 Delete Export
-=============
+-------------
 
 .. code:: bash
 
@@ -272,7 +221,7 @@ This deletes an export in an NFS Ganesha cluster, where:
 ``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
 List Exports
-============
+------------
 
 .. code:: bash
 
@@ -285,7 +234,7 @@ It lists exports for a cluster, where:
 With the ``--detailed`` option enabled it shows entire export block.
 
 Get Export
-==========
+----------
 
 .. code:: bash
 
@@ -299,8 +248,8 @@ where:
 ``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
 
-Create or update Export via JSON specification
-==============================================
+Create or update export via JSON specification
+----------------------------------------------
 
 An existing export can be dumped in JSON format with:
 
@@ -401,11 +350,24 @@ fragment.  For example,::
    }
 
 
-Mount
-=====
+Mounting
+========
 
-After the exports are successfully created and NFS Ganesha daemons are no longer in
-grace period. The exports can be mounted by
+After the exports are successfully created and NFS Ganesha daemons are
+deployed, exports can be mounted with:
+
+.. code:: bash
+
+    $ mount -t nfs <ganesha-host-name>:<pseudo_path> <mount-point>
+
+For example, if the NFS cluster was created with ``--ingress --virtual-ip 192.168.10.10``
+and the export's pseudo-path was ``/foo``, the export can be mounted at ``/mnt`` with:
+
+.. code:: bash
+
+    $ mount -t nfs 192.168.10.10:/foo /mnt
+
+If the NFS service is running on a non-standard port number:
 
 .. code:: bash
 
@@ -418,19 +380,78 @@ Troubleshooting
 
 Checking NFS-Ganesha logs with
 
-1) ``cephadm``
+1) ``cephadm``: The NFS daemons can be listed with:
 
    .. code:: bash
 
-      $ cephadm logs --fsid <fsid> --name nfs.<cluster_id>.hostname
+	    $ ceph orch ps --daemon-type nfs
 
-2) ``rook``
+   You can via the logs for a specific daemon (e.g., ``nfs.mynfs.0.0.myhost.xkfzal``) on
+   the relevant host with:
+
+   .. code:: bash
+
+      # cephadm logs --fsid <fsid> --name nfs.mynfs.0.0.myhost.xkfzal
+
+2) ``rook``:
 
    .. code:: bash
 
       $ kubectl logs -n rook-ceph rook-ceph-nfs-<cluster_id>-<node_id> nfs-ganesha
 
-Log level can be changed using `nfs cluster config set` command.
+The NFS log level can be adjusted using `nfs cluster config set` command (see :ref:`nfs-cluster-set`).
+
+
+.. _nfs-ganesha-config:
+
+Ganesha Configuration Hierarchy
+===============================
+
+-  ``nfs-ganesha``, ``nfs-ganesha-ceph``, ``nfs-ganesha-rados-grace`` and
+   ``nfs-ganesha-rados-urls`` packages (version 3.3 and above)
+
+Cephadm and rook start each nfs-ganesha daemon with a minimal
+`bootstrap` configuration file that pulls from a shared `common`
+configuration stored in the ``.nfs`` RADOS pool and watches the common
+config for changes.  Each export is written to a separate RADOS object
+that is referenced by URL from the common config.
+
+.. ditaa::
+
+                             rados://$pool/$namespace/export-$i        rados://$pool/$namespace/userconf-nfs.$cluster_id
+                                      (export config)                          (user config)
+
+                        +----------+    +----------+    +----------+      +---------------------------+
+                        |          |    |          |    |          |      |                           |
+                        | export-1 |    | export-2 |    | export-3 |      | userconf-nfs.$cluster_id  |
+                        |          |    |          |    |          |      |                           |
+                        +----+-----+    +----+-----+    +-----+----+      +-------------+-------------+
+                             ^               ^                ^                         ^
+                             |               |                |                         |
+                             +--------------------------------+-------------------------+
+                                        %url |
+                                             |
+                                    +--------+--------+
+                                    |                 |  rados://$pool/$namespace/conf-nfs.$svc
+                                    |  conf+nfs.$svc  |  (common config)
+                                    |                 |
+                                    +--------+--------+
+                                             ^
+                                             |
+                                   watch_url |
+                     +----------------------------------------------+
+                     |                       |                      |
+                     |                       |                      |            RADOS
+             +----------------------------------------------------------------------------------+
+                     |                       |                      |            CONTAINER
+           watch_url |             watch_url |            watch_url |
+                     |                       |                      |
+            +--------+-------+      +--------+-------+      +-------+--------+
+            |                |      |                |      |                |  /etc/ganesha/ganesha.conf
+            |   nfs.$svc.a   |      |   nfs.$svc.b   |      |   nfs.$svc.c   |  (bootstrap config)
+            |                |      |                |      |                |
+            +----------------+      +----------------+      +----------------+
+
 
 .. _NFS-Ganesha NFS Server: https://github.com/nfs-ganesha/nfs-ganesha/wiki
 .. _NFS-Ganesha Export Sample: https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/config_samples/export.txt
