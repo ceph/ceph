@@ -48,6 +48,7 @@ tasks:
         - .*test_container_staticweb.StaticWebTest.test_web_listing_css
         - .*test_container_synchronization.*
         - .*test_object_services.PublicObjectTest.test_access_public_container_object_without_using_creds
+        - .*test_object_services.ObjectTest.test_create_object_with_transfer_encoding
 
 overrides:
   ceph:
