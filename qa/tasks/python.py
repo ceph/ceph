@@ -15,23 +15,21 @@ def task(ctx, config):
             import boto3
             c = boto3.resource(...)
 
-    or
+    The provided dict is normally indexed by role.  You can also include a 
+    'sudo: false' key to run the code without sudo.
 
       tasks:
       - python:
-          sudo: true
+          sudo: false
           host.b: |
             import boto3
             c = boto3.resource(...)
-
-    The provided dict is normally indexed by role.  However, you can also include a 
-    'sudo: true' key to run the code with sudo.
     """
     assert isinstance(config, dict), "task python got invalid config"
 
     testdir = teuthology.get_testdir(ctx)
 
-    sudo = config.pop('sudo', False)
+    sudo = config.pop('sudo', True)
 
     for role, code in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
@@ -41,5 +39,7 @@ def task(ctx, config):
             'TESTDIR={tdir}'.format(tdir=testdir),
             'python3',
         ]
+        if sudo:
+            args = ['sudo'] + args
         remote.run(args=args, stdin=subst_vip(ctx, code))
 
