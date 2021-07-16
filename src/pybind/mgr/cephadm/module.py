@@ -1230,6 +1230,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @orchestrator._cli_read_command('orch client-keyring ls')
     def _client_keyring_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        """
+        List client keyrings under cephadm management
+        """
         if format != Format.plain:
             output = to_format(self.keys.keys.values(), format, many=True, cls=ClientKeyringSpec)
         else:
@@ -1257,6 +1260,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             owner: Optional[str] = None,
             mode: Optional[str] = None,
     ) -> HandleCommandResult:
+        """
+        Add or update client keyring under cephadm management
+        """
         if not entity.startswith('client.'):
             raise OrchestratorError('entity must start with client.')
         if owner:
@@ -1285,6 +1291,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self,
             entity: str,
     ) -> HandleCommandResult:
+        """
+        Remove client keyring from cephadm management
+        """
         self.keys.rm(entity)
         self._kick_serve_loop()
         return HandleCommandResult()
