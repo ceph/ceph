@@ -28,16 +28,33 @@ struct BucketIndexAioArg : public RefCountedObject {
 };
 
 /*
- * This class manages AIO completions. This class is not completely thread-safe,
- * methods like *get_next* is not thread-safe and is expected to be called from
- * within one thread.
+ * This class manages AIO completions. This class is not completely
+ * thread-safe, methods like *get_next_request_id* is not thread-safe
+ * and is expected to be called from within one thread.
  */
 class BucketIndexAioManager {
+public:
+
+  // allows us to reaccess the shard id and shard's oid during and
+  // after the asynchronous call is made
+  struct RequestObj {
+    int shard_id;
+    std::string oid;
+
+    RequestObj(int _shard_id, const std::string& _oid) :
+      shard_id(_shard_id), oid(_oid)
+    {/* empty */}
+  };
+
+
 private:
+  // NB: the following 4 maps use the request_id as the key; this
+  // is not the same as the shard_id!
   std::map<int, librados::AioCompletion*> pendings;
   std::map<int, librados::AioCompletion*> completions;
-  std::map<int, std::string> pending_objs;
-  std::map<int, std::string> completion_objs;
+  std::map<int, const RequestObj> pending_objs;
+  std::map<int, const RequestObj> completion_objs;
+
   int next = 0;
   ceph::mutex lock = ceph::make_mutex("BucketIndexAioManager::lock");
   ceph::condition_variable cond;
@@ -55,8 +72,8 @@ private:
    *
    * Return next request ID.
    */
-  int get_next() { return next++; }
-    
+  int get_next_request_id() { return next++; }
+
   /*
    * Add a new pending AIO completion instance.
    *
@@ -65,10 +82,11 @@ private:
    * @param oid        - the object id associated with the object, if it is NULL, we don't
    *                     track the object id per callback.
    */
-  void add_pending(int id, librados::AioCompletion* completion, const std::string& oid) {
-    pendings[id] = completion;
-    pending_objs[id] = oid;
+  void add_pending(int request_id, librados::AioCompletion* completion, const int shard_id, const std::string& oid) {
+    pendings[request_id] = completion;
+    pending_objs.emplace(request_id, RequestObj(shard_id, oid));
   }
+
 public:
   /*
    * Create a new instance.
@@ -78,7 +96,7 @@ public:
   /*
    * Do completion for the given AIO request.
    */
-  void do_completion(int id);
+  void do_completion(int request_id);
 
   /*
    * Wait for AIO completions.
@@ -96,13 +114,14 @@ public:
   /**
    * Do aio read operation.
    */
-  bool aio_operate(librados::IoCtx& io_ctx, const std::string& oid, librados::ObjectReadOperation *op) {
+  bool aio_operate(librados::IoCtx& io_ctx, const int shard_id, const std::string& oid, librados::ObjectReadOperation *op) {
     std::lock_guard l{lock};
-    BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
+    const int request_id = get_next_request_id();
+    BucketIndexAioArg *arg = new BucketIndexAioArg(request_id, this);
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
     if (r >= 0) {
-      add_pending(arg->id, c, oid);
+      add_pending(arg->id, c, shard_id, oid);
     } else {
       arg->put();
       c->release();
@@ -113,13 +132,14 @@ public:
   /**
    * Do aio write operation.
    */
-  bool aio_operate(librados::IoCtx& io_ctx, const std::string& oid, librados::ObjectWriteOperation *op) {
+  bool aio_operate(librados::IoCtx& io_ctx, const int shard_id, const std::string& oid, librados::ObjectWriteOperation *op) {
     std::lock_guard l{lock};
-    BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
+    const int request_id = get_next_request_id();
+    BucketIndexAioArg *arg = new BucketIndexAioArg(request_id, this);
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);
     if (r >= 0) {
-      add_pending(arg->id, c, oid);
+      add_pending(arg->id, c, shard_id, oid);
     } else {
       arg->put();
       c->release();
@@ -436,9 +456,11 @@ class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
   std::string delimiter;
   uint32_t num_entries;
   bool list_versions;
-  std::map<int, rgw_cls_list_ret>& result;
+  std::map<int, rgw_cls_list_ret>& result; // request_id -> return value
+
 protected:
   int issue_op(int shard_id, const std::string& oid) override;
+
 public:
   CLSRGWIssueBucketList(librados::IoCtx& io_ctx,
 			const cls_rgw_obj_key& _start_obj,
@@ -446,7 +468,8 @@ public:
 			const std::string& _delimiter,
 			uint32_t _num_entries,
                         bool _list_versions,
-                        std::map<int, std::string>& oids,
+                        std::map<int, std::string>& oids, // shard_id -> shard_oid
+			// shard_id -> return value
                         std::map<int, rgw_cls_list_ret>& list_results,
                         uint32_t max_aio) :
   CLSRGWConcurrentIO(io_ctx, oids, max_aio),
