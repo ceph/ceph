@@ -454,7 +454,11 @@ void LogMonitor::log_external_backlog()
     }
   }
   // we may have logged ahead of summary.version, but never ahead of paxos
-  assert(external_log_to <= get_last_committed());
+  if (external_log_to > get_last_committed()) {
+    derr << __func__ << " rewinding external_log_to from " << external_log_to
+	 << " -> " << get_last_committed() << " (sync_force? mon rebuild?)" << dendl;
+    external_log_to = get_last_committed();
+  }
   if (external_log_to >= summary.version) {
     return;
   }
