@@ -1,0 +1,54 @@
+<div class="login-suse">
+  <header>
+    <nav class="navbar">
+      <a class="navbar-brand"><span>SUSE Enterprise Storage</span></a>
+      <div class="form-inline">
+        <cd-language-selector></cd-language-selector>
+      </div>
+    </nav>
+  </header>
+
+  <section>
+    <div class="container">
+      <div class="row full-height vertical-align">
+        <div class="col-sm-6 d-none d-md-block">
+          <h1 i18n>SUSE Enterprise Storage</h1>
+          <p i18n>
+            <span i18n
+                  class="subheader">
+              AN INTELLIGENT SOFTWARE-DEFINED STORAGE SOLUTION, POWERED BY CEPH TECHNOLOGY,
+              WHICH ENABLES YOU TO TRANSFORM YOUR ENTERPRISE STORAGE INFRASTRUCTURE.
+            </span>
+            <ng-container i18n>
+              <span class="d-md-none d-lg-block">
+                Providing IT organizations with a simple to manage, agile infrastructure with increased speed of delivery,
+                durability and reliability. Accelerate innovation, reduce costs and alleviate proprietary hardware lock-in
+                by transforming your enterprise storage infrastructure with a truly open, and unified intelligent
+                software-defined storage solution.
+              </span>
+            </ng-container>
+          </p>
+        </div>
+
+        <div class="col-xs-12 col-md-5 col-sm-offset-1">
+          <router-outlet></router-outlet>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="row">
+        <div class="col-sm-9">
+          <span>© 2020 Ceph contributors. Free software (LGPL 2.1)</span>
+        </div>
+        <div class="col-sm-3 text-right d-none d-sm-block">
+          <img alt="SUSE Logo"
+               src="assets/SUSE_Chameleon_L_White-neg_sRGB-250.png"
+               class="footer-logo">
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>

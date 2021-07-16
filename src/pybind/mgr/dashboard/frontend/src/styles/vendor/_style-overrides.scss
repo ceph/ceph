@@ -2,3 +2,385 @@
 
 Custom styles, third-party libraries, frameworks, design systems, ...
 */
+@import 'variables';
+
+@font-face {
+  font-family: 'WorkSansLight';
+  src: url('assets/WorkSans-Light.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'WorkSansMedium';
+  src: url('assets/WorkSans-Medium.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'WorkSansRegular';
+  src: url('assets/WorkSans-Regular.ttf') format('truetype');
+}
+
+/* Body */
+body {
+  font-family: 'WorkSansRegular', 'Verdana', Helvetica, Arial, sans-serif;
+}
+
+/* Header */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'WorkSansMedium', 'Verdana', Helvetica, Arial, sans-serif;
+}
+.subheader {
+  font-family: 'WorkSansLight', 'Verdana', Helvetica, Arial, sans-serif;
+}
+
+/* Button */
+.btn-primary,
+.btn-secondary {
+  background-color: $color-primary !important;
+  border-color: $color-primary !important;
+}
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.active,
+.open .dropdown-toggle.btn-primary,
+.btn-secondary:hover,
+.btn-secondary:focus,
+.btn-secondary:active,
+.btn-secondary.active,
+.open .dropdown-toggle.btn-secondary {
+  background-color: lighten($color-primary, 10) !important;
+  border-color: lighten($color-primary, 10) !important;
+}
+.btn-secondary:focus {
+  box-shadow: 0 0 0 0.2rem rgba($color-primary, 0.5) !important;
+}
+.btn-primary:active,
+.btn-primary.active,
+.open .dropdown-toggle.btn-primary,
+.btn-secondary:active,
+.btn-secondary.active,
+.open .dropdown-toggle.btn-secondary {
+  &:hover,
+  &:focus {
+    background-color: lighten($color-primary, 10) !important;
+    border-color: lighten($color-primary, 10) !important;
+  }
+}
+.btn-primary.disabled,
+.btn-primary[disabled],
+fieldset[disabled] .btn-primary,
+.btn-primary.disabled:hover,
+.btn-primary[disabled]:hover,
+fieldset[disabled] .btn-primary:hover,
+.btn-primary.disabled:focus,
+.btn-primary[disabled]:focus,
+fieldset[disabled] .btn-primary:focus,
+.btn-primary.disabled:active,
+.btn-primary[disabled]:active,
+fieldset[disabled] .btn-primary:active,
+.btn-primary.disabled.active,
+.btn-primary[disabled].active,
+fieldset[disabled] .btn-primary.active,
+.btn-secondary.disabled,
+.btn-secondary[disabled],
+fieldset[disabled] .btn-secondary,
+.btn-secondary.disabled:hover,
+.btn-secondary[disabled]:hover,
+fieldset[disabled] .btn-secondary:hover,
+.btn-secondary.disabled:focus,
+.btn-secondary[disabled]:focus,
+fieldset[disabled] .btn-secondary:focus,
+.btn-secondary.disabled:active,
+.btn-secondary[disabled]:active,
+fieldset[disabled] .btn-secondary:active,
+.btn-secondary.disabled.active,
+.btn-secondary[disabled].active,
+fieldset[disabled] .btn-secondary.active {
+  background-color: $color-primary !important;
+  border-color: $color-primary !important;
+}
+
+/* Icons */
+.ceph-icon {
+  background: {
+    image: url('assets/SUSE_Chameleon_L_Green-pos_sRGB-250.png');
+    clip: padding-box;
+    size: contain;
+    repeat: no-repeat;
+  }
+  padding: 15px;
+  margin-right: 1em;
+}
+
+/* Login */
+.login-suse {
+  font-family: 'WorkSansRegular', 'Verdana', Helvetica, Arial, sans-serif;
+  color: $color-soft-gray;
+  background-color: $color-login-background;
+  width: 100%;
+  margin: 0;
+
+  header {
+    margin-bottom: 30px;
+    background-color: $color-secondary;
+
+    .row {
+      margin: 0;
+
+      @media screen and (max-width: $screen-sm-max) {
+        margin-left: -15px;
+      }
+    }
+
+    .navbar {
+      border: 0;
+      margin: 0;
+      padding: 0 12px;
+
+      .navbar-brand {
+        font-size: 2rem;
+        line-height: 2.5rem;
+        height: 60px;
+        padding: 15px 15px;
+
+        span {
+          @media screen and (max-width: $screen-xs-max) {
+            display: none;
+          }
+        }
+      }
+
+      .form-inline {
+        .dropdown-toggle {
+          display: block;
+          border: 0;
+          padding: 21px 15px;
+
+          &:hover,
+          &:focus {
+            color: $color-black;
+            background-color: $color-primary;
+            text-decoration: none;
+          }
+
+          @media screen and (max-width: $screen-sm-max) {
+            margin-left: 15px;
+          }
+        }
+
+        .dropdown-menu {
+          @media screen and (max-width: $screen-sm-max) {
+            background-color: $color-white;
+          }
+        }
+      }
+    }
+
+    cd-language-selector .form-control {
+      background-color: transparent;
+      border: 0;
+      padding: 10px 0;
+    }
+  }
+
+  section {
+    display: inline-flex;
+    width: 100%;
+    min-height: 100vh;
+    margin: -90px auto -100px;
+
+    h1 {
+      margin-bottom: 3rem;
+      font-size: 4rem;
+      color: $color-primary;
+    }
+
+    p {
+      font-size: 1.2rem;
+    }
+
+    .subheader {
+      display: block;
+      margin-bottom: 1rem;
+      font-size: 1.4rem;
+      font-weight: bold;
+    }
+
+    h2 {
+      margin: 2.5rem 0;
+      font-size: 2.5rem;
+    }
+
+    .form-group {
+      border-left: 0;
+      background-color: $color-login-background;
+
+      &:focus-within {
+        border-left: 0;
+      }
+
+      input {
+        background-color: $color-white;
+        border-color: $color-white;
+        color: $body-color;
+        font-size: 13px;
+        height: 2.5rem;
+
+        &:focus {
+          border-color: rgba($color-primary, 0.8);
+          box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px 2px rgba($color-primary, 0.5);
+          outline: 0;
+        }
+      }
+    }
+
+    .btn-password {
+      color: $body-color;
+      border-left: 1px solid $body-color;
+      background-color: $color-white;
+
+      &:hover {
+        color: $color-white;
+        background-color: $color-secondary;
+      }
+
+      &:focus {
+        color: $body-color;
+        background-color: $color-white;
+        border-color: rgba($color-primary, 0.8);
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px 2px rgba($color-primary, 0.5);
+        outline: 0;
+      }
+    }
+  }
+
+  footer {
+    margin-top: 30px;
+    height: 70px;
+    padding-top: 23px;
+    border-bottom: 16px solid $color-primary;
+
+    .footer-logo {
+      width: 50px;
+      margin-top: -16px;
+    }
+
+    .container {
+      padding-bottom: 10px;
+    }
+  }
+}
+
+/* About */
+.suse-logo {
+  width: 140px;
+  margin-bottom: 1.5rem;
+}
+
+.modal-content {
+  overflow: hidden;
+}
+
+.modal-header,
+.modal-body,
+.modal-footer {
+  z-index: 1;
+}
+
+.modal-footer {
+  position: relative;
+}
+
+.green-background-1,
+.green-background-2 {
+  width: 140%;
+  height: 400px;
+  left: -20%;
+  position: absolute;
+}
+
+.green-background-1 {
+  background-color: $color-green-contrast-1;
+  bottom: -240px;
+  transform: rotate(-11deg);
+}
+
+.green-background-2 {
+  background-color: $color-green-contrast-2;
+  bottom: -310px;
+  transform: rotate(-6deg);
+}
+
+// Dashboard
+
+.dashboard {
+  background-color: #ffffff !important;
+
+  .card {
+    background-color: #f5f5f5;
+  }
+}
+
+// Navigation
+@mixin suse-nav-link {
+  .nav-link,
+  a {
+    background-color: #f5f5f5 !important;
+    border-left: 5px solid transparent !important;
+    color: $body-color !important;
+    margin: 0 16px 0 0 !important;
+    padding: 8px 0 8px 21px !important;
+
+    &:hover {
+      background-color: transparent !important;
+      border-left: 5px solid $color-primary !important;
+    }
+  }
+}
+@mixin suse-nav-link-active {
+  background-color: $color-primary !important;
+  border-radius: 0 2px 2px 0;
+  color: #ffffff !important;
+
+  &:hover {
+    background-color: $color-primary !important;
+    border-left: 5px solid transparent !important;
+  }
+}
+
+nav#sidebar {
+  background-color: #f5f5f5 !important;
+  padding-top: 1.5rem;
+
+  .nav-item ul {
+    background-color: #f5f5f5 !important;
+
+    @include suse-nav-link;
+
+    a {
+      padding: 8px 0 8px 33px !important;
+    }
+
+    .active a {
+      @include suse-nav-link-active;
+    }
+  }
+
+  @include suse-nav-link;
+  .active .nav-link {
+    @include suse-nav-link-active;
+  }
+}
+
+.nav-item.active .fa-heartbeat.health-ok {
+  color: #ffffff !important;
+}
+
+// Logo
+
+.cd-navbar-top .cd-navbar-brand .navbar-brand > img {
+  height: 29px !important;
+}

@@ -23,9 +23,8 @@ export class DocService {
     });
   }
 
-  urlGenerator(section: string, release = 'master'): string {
-    const docVersion = release === 'master' ? 'latest' : release;
-    const domain = `https://docs.ceph.com/en/${docVersion}/`;
+  urlGenerator(section: string, release = '7'): string {
+    const domain = `https://documentation.suse.com/ses/${release}/single-html/`;
     const domainCeph = `https://ceph.io/`;
 
     const sections = {
