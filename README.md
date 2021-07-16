@@ -95,7 +95,7 @@ Another example below is building with debugging and alternate locations
 for a couple of external dependencies:
 
 	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" \
-	-DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
+	-DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-Og -g3 -gdwarf-4" \
 	..
 
 To view an exhaustive list of -D options, you can invoke `cmake` with:
