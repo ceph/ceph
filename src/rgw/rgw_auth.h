@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <system_error>
 #include <utility>
+#include <tuple>
 
 #include "rgw_common.h"
 #include "rgw_web_idp.h"
@@ -32,6 +33,22 @@ public:
   using idset_t = boost::container::flat_set<Principal>;
 
   virtual ~Identity() = default;
+
+  class Predicate {
+  public:
+    class Result {
+      bool matched;
+      bool applied;
+    public:
+      Result(bool matched, bool applied)
+	: matched(matched), applied(applied)
+	{}
+      const bool operator()() const {
+	return (matched && applied);
+     }
+    };
+    virtual const Result operator()(void) const = 0;
+  };
 
   /* Translate the ACL provided in @aclspec into concrete permission set that
    * can be used during the authorization phase (RGWOp::verify_permission).
@@ -81,6 +98,10 @@ public:
   virtual std::string get_subuser() const = 0;
 
   virtual std::string get_role_tenant() const { return ""; }
+
+  virtual Predicate::Result match_and_assert(const Predicate& p) {
+    return Predicate::Result(false, false);
+  }
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -88,7 +109,6 @@ inline std::ostream& operator<<(std::ostream& out,
   id.to_str(out);
   return out;
 }
-
 
 std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
