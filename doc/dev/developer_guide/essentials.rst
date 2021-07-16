@@ -159,6 +159,26 @@ register an account. Registering gives you a unique IRC identity and allows you
 to access channels where unregistered users have been locked out for technical
 reasons.
 
+To register your account on Ceph's IRC channels, type the following into the text field in your IRC client::
+
+  /msg NickServ REGISTER irc_username username@foo.com
+
+Successful registration will return the following::
+
+   -NickServ- Nickname irc_username has been registered successfully and is now yours to use.
+   -NickServ- See HELP SET for information on settings that you can set on your new
+   -NickServ- nickname.  If you change nickname or reconnect to the IRC network you will be
+   -NickServ- required to identify using the password you chose when you registered.  See
+   -NickServ- HELP IDENTIFY for more information on identifying your nickname.
+   -NickServ-
+   -NickServ- To complete the registration, the nickname must be VERIFIED.  To verify
+   -NickServ- your nick, go to https://services.oftc.net/, log in with your NickServ
+   -NickServ- password, and follow the instructions there.  Note that we do not validate
+   -NickServ- the e-mail address.
+
+When you have received this message, go to
+`https://services.oftc.net/ <https://services.oftc.net/>`_ and follow the
+instructions there to verify your account.
 
 Channels
 ~~~~~~~~
