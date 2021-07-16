@@ -84,7 +84,13 @@ class OpenStackProvider(Provider):
     @property
     def images(self):
         if not hasattr(self, '_images'):
-            self._images = retry(self.driver.list_images)
+            exclude_image = self.conf.get('exclude_image', [])
+            if exclude_image and not isinstance(exclude_image, list):
+                exclude_image = [exclude_image]
+            exclude_re = [re.compile(x) for x in exclude_image]
+            images = retry(self.driver.list_images)
+            self._images = [_ for _ in images
+                if not any(x.match(_.name) for x in exclude_re)]
         return self._images
 
     @property
