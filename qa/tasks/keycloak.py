@@ -261,21 +261,39 @@ def run_admin_cmds(ctx,config):
             if(character!=':'):
                 ans5+=character
 
-        out6= toxvenv_sh(ctx, remote, 
+        str1 = 'curl'
+        str2 = '-k'
+        str3 = '-v'
+        str4 = '-X'
+        str5 = 'POST'
+        str6 = '-u'
+        str7 = '-d'
+        str8 = 'http://localhost:8080/auth/realms/'+realm_name+'/protocol/openid-connect/token/introspect'
+
+        out6= toxvenv_sh(ctx, remote,
                  [
-                  'curl', '-k', '-v', 
-                  '-X', 'POST', 
-                  '-u', ans0, 
-                  '-d', acc_token, 
-                  'http://localhost:8080/auth/realms/'+realm_name+'/protocol/openid-connect/token/introspect', run.Raw('|'), 
-                  'jq', '-r', '.aud'
+                  str1, str2, str3, str4, str5, str6, ans0, str7, acc_token, str8, run.Raw('|'), 'jq', '-r', '.aud'
+                 ])
+
+        out7= toxvenv_sh(ctx, remote,
+                 [ 
+                  str1, str2, str3, str4, str5, str6, ans0, str7, acc_token, str8, run.Raw('|'), 'jq', '-r', '.sub'
+                 ])
+
+        out8= toxvenv_sh(ctx, remote,
+                 [ 
+                  str1, str2, str3, str4, str5, str6, ans0, str7, acc_token, str8, run.Raw('|'), 'jq', '-r', '.azp'
                  ])
 
         ans6=out6.rstrip()
+        ans7=out7.rstrip()
+        ans8=out8.rstrip()
 
         os.environ['TOKEN']=ans4
         os.environ['THUMBPRINT']=ans5
         os.environ['AUD']=ans6
+        os.environ['SUB']=ans7
+        os.environ['AZP']=ans8
         os.environ['KC_REALM']=realm_name
 
     try:
