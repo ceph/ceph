@@ -13,6 +13,10 @@
   http_port = {{ http_port }}
   http_addr = {{ http_addr }}
 [security]
+{% if not initial_admin_password %}
+  disable_initial_admin_creation = true
+{% else %}
   admin_user = admin
-  admin_password = admin
+  admin_password = {{ initial_admin_password }}
+{% endif %}
   allow_embedding = true

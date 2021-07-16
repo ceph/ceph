@@ -249,6 +249,12 @@ service_name: grafana
 spec:
   port: 1234
 ---
+service_type: grafana
+service_name: grafana
+spec:
+  initial_admin_password: secure
+  port: 1234
+---
 service_type: ingress
 service_id: rgw.foo
 service_name: ingress.rgw.foo
