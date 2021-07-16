@@ -7781,6 +7781,11 @@ next:
       return EINVAL;
     }
 
+    if (marker.empty()) {
+      cerr << "ERROR: marker must be specified for trim operation" << std::endl;
+      return EINVAL;
+    }
+
     if (period_id.empty()) {
       std::cerr << "missing --period argument" << std::endl;
       return EINVAL;
@@ -8770,10 +8775,7 @@ next:
       std::vector<rgw_data_change_log_entry> entries;
       if (specified_shard_id) {
         ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
-					entries,
-					marker.empty() ?
-					std::nullopt :
-					std::make_optional(marker),
+					entries, marker,
 					&marker, &truncated);
       } else {
         ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,
@@ -8865,11 +8867,13 @@ next:
       return EINVAL;
     }
 
-    // loop until -ENODATA
-    do {
-      auto datalog = store->svc()->datalog_rados;
-      ret = datalog->trim_entries(dpp(), shard_id, marker);
-    } while (ret == 0);
+    if (marker.empty()) {
+      cerr << "ERROR: requires a --marker" << std::endl;
+      return EINVAL;
+    }
+
+    auto datalog = store->svc()->datalog_rados;
+    ret = datalog->trim_entries(dpp(), shard_id, marker);
 
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
