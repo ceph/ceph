@@ -7566,7 +7566,10 @@ int group_snap_list(cls_method_context_t hctx,
     return -EINVAL;
   }
   std::vector<cls::rbd::GroupSnapshot> group_snaps;
-  group::snap_list(hctx, start_after, max_return, &group_snaps);
+  int r = group::snap_list(hctx, start_after, max_return, &group_snaps);
+  if (r < 0) {
+    return r;
+  }
 
   encode(group_snaps, *out);
 
