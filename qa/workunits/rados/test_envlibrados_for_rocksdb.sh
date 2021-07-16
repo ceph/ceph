@@ -24,10 +24,6 @@ case $(distro_id) in
 		;;
 	centos|fedora|rhel)
         case $(distro_id) in
-            centos)
-                # centos needs PowerTools repo for snappy-devel
-                test -x /usr/bin/dnf && sudo dnf config-manager --set-enabled powertools || true
-                ;;
             rhel)
                 # RHEL needs CRB repo for snappy-devel
                 sudo subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
