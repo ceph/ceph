@@ -3196,6 +3196,37 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
 
 int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
 {
+  //handle object lock
+  auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
+  auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
+  auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+  if (obj_lock_mode_str && obj_lock_date_str) {
+    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
+    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+      s->err.message = "invalid x-amz-object-lock-retain-until-date value";
+      ldpp_dout(this,0) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
+      s->err.message = "invalid x-amz-object-lock-mode value";
+      ldpp_dout(this,0) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    obj_retention = new RGWObjectRetention(obj_lock_mode_str, *date);
+  } else if (obj_lock_mode_str || obj_lock_date_str) {
+    s->err.message = "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date ";
+    ldpp_dout(this,0) << s->err.message << dendl;
+    return -EINVAL;
+  }
+  if (obj_legal_hold_str) {
+    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
+      s->err.message = "invalid x-amz-object-lock-legal-hold value";
+      ldpp_dout(this,0) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    obj_legal_hold = new RGWObjectLegalHold(obj_legal_hold_str);
+  }
+
   if_mod = s->info.env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
   if_unmod = s->info.env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
