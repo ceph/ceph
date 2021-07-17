@@ -35,7 +35,7 @@ function install() {
 
 function install_one() {
     case $(distro_id) in
-        ubuntu|debian|devuan)
+        ubuntu|debian|devuan|softiron)
             sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
             ;;
         centos|fedora|rhel)
