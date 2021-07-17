@@ -4284,6 +4284,15 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   src_attrs.erase(RGW_ATTR_DELETE_AT);
 
+  src_attrs.erase(RGW_ATTR_OBJECT_RETENTION);
+  src_attrs.erase(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  map<string, bufferlist>::iterator rt = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  if (rt != attrs.end())
+    src_attrs[RGW_ATTR_OBJECT_RETENTION] = rt->second;
+  map<string, bufferlist>::iterator lh = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  if (lh != attrs.end())
+    src_attrs[RGW_ATTR_OBJECT_LEGAL_HOLD] = lh->second;
+
   set_copy_attrs(src_attrs, attrs, attrs_mod);
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
