@@ -193,6 +193,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
         });
       }).finally([&server] {
         std::cout << "server shutting down" << std::endl;
+        server.msgr->stop();
         return server.msgr->shutdown();
       });
     });
@@ -221,6 +222,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
         );
       }).finally([&client] {
         std::cout << "client shutting down" << std::endl;
+        client.msgr->stop();
         return client.msgr->shutdown();
       });
     });
