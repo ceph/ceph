@@ -76,6 +76,7 @@ class PgAdjustmentProgress(object):
     """
     Keeps the initial and target pg_num values
     """
+
     def __init__(self, pool_id: int, pg_num: int, pg_num_target: int) -> None:
         self.ev_id = str(uuid.uuid4())
         self.pool_id = pool_id
@@ -89,7 +90,7 @@ class PgAdjustmentProgress(object):
         desc = 'increasing' if self.pg_num < self.pg_num_target else 'decreasing'
         module.remote('progress', 'update', self.ev_id,
                       ev_msg="PG autoscaler %s pool %d PGs from %d to %d" %
-                            (desc, self.pool_id, self.pg_num, self.pg_num_target),
+                      (desc, self.pool_id, self.pg_num, self.pg_num_target),
                       ev_progress=progress,
                       refs=[("pool", self.pool_id)])
 
@@ -108,7 +109,7 @@ class CrushSubtreeResourceStatus:
         self.pool_count: Optional[int] = None
         self.pool_used = 0
         self.total_target_ratio = 0.0
-        self.total_target_bytes = 0 # including replication / EC overhead
+        self.total_target_bytes = 0  # including replication / EC overhead
 
 
 class PgAutoscaler(MgrModule):
@@ -176,7 +177,7 @@ class PgAutoscaler(MgrModule):
         osdmap = self.get_osdmap()
         pools = osdmap.get_pools_by_name()
         profile = self.autoscale_profile
-        ps, root_map, pool_root = self._get_pool_status(osdmap, pools, profile)
+        ps, root_map = self._get_pool_status(osdmap, pools, profile)
 
         if format in ('json', 'json-pretty'):
             return 0, json.dumps(ps, indent=4, sort_keys=True), ''
@@ -273,35 +274,34 @@ class PgAutoscaler(MgrModule):
         self.log.info('Stopping pg_autoscaler')
         self._shutdown.set()
 
-    def get_subtree_resource_status(self,
-                                    osdmap: OSDMap,
-                                    crush: CRUSHMap) -> Tuple[Dict[int, CrushSubtreeResourceStatus],
-                                                              Dict[int, int]]:
-        """
-        For each CRUSH subtree of interest (i.e. the roots under which
-        we have pools), calculate the current resource usages and targets,
-        such as how many PGs there are, vs. how many PGs we would
-        like there to be.
-        """
-        result: Dict[int, CrushSubtreeResourceStatus] = {}
-        pool_root = {}
-        roots = []
+    def identify_subtrees_and_overlaps(self,
+                                       osdmap: OSDMap,
+                                       crush: CRUSHMap,
+                                       result: Dict[int, CrushSubtreeResourceStatus],
+                                       overlapped_roots: Set[int],
+                                       roots: List[CrushSubtreeResourceStatus]) -> \
+        Tuple[List[CrushSubtreeResourceStatus],
+              Set[int]]:
 
-        # identify subtrees (note that they may overlap!)
+        # We identify subtrees and overlapping roots from osdmap
         for pool_id, pool in osdmap.get_pools().items():
             crush_rule = crush.get_rule_by_id(pool['crush_rule'])
             assert crush_rule is not None
             cr_name = crush_rule['rule_name']
             root_id = crush.get_rule_root(cr_name)
             assert root_id is not None
-            pool_root[pool_id] = root_id
             osds = set(crush.get_osds_under(root_id))
 
-            # do we intersect an existing root?
+            # Are there overlapping roots?
             s = None
-            for prev in result.values():
+            for prev_root_id, prev in result.items():
                 if osds & prev.osds:
                     s = prev
+                    if prev_root_id != root_id:
+                        overlapped_roots.add(prev_root_id)
+                        overlapped_roots.add(root_id)
+                        self.log.error('pool %d has overlapping roots: %s',
+                                       pool_id, overlapped_roots)
                     break
             if not s:
                 s = CrushSubtreeResourceStatus()
@@ -319,7 +319,24 @@ class PgAutoscaler(MgrModule):
                 target_bytes = pool['options'].get('target_size_bytes', 0)
                 if target_bytes:
                     s.total_target_bytes += target_bytes * osdmap.pool_raw_used_rate(pool_id)
+        return roots, overlapped_roots
 
+    def get_subtree_resource_status(self,
+                                    osdmap: OSDMap,
+                                    crush: CRUSHMap) -> Tuple[Dict[int, CrushSubtreeResourceStatus],
+                                                              Set[int]]:
+        """
+        For each CRUSH subtree of interest (i.e. the roots under which
+        we have pools), calculate the current resource usages and targets,
+        such as how many PGs there are, vs. how many PGs we would
+        like there to be.
+        """
+        result: Dict[int, CrushSubtreeResourceStatus] = {}
+        roots: List[CrushSubtreeResourceStatus] = []
+        overlapped_roots: Set[int] = set()
+        # identify subtrees and overlapping roots
+        roots, overlapped_roots = self.identify_subtrees_and_overlaps(osdmap,
+                                                                      crush, result, overlapped_roots, roots)
         # finish subtrees
         all_stats = self.get('osd_stats')
         for s in roots:
@@ -338,14 +355,13 @@ class PgAutoscaler(MgrModule):
                     capacity += osd_stats['kb'] * 1024
 
             s.capacity = capacity
-
             self.log.debug('root_ids %s pools %s with %d osds, pg_target %d',
                            s.root_ids,
                            s.pool_ids,
                            s.osd_count,
                            s.pg_target)
 
-        return result, pool_root
+        return result, overlapped_roots
 
     def _calc_final_pg_target(
             self,
@@ -362,9 +378,9 @@ class PgAutoscaler(MgrModule):
         """
         `profile` determines behaviour of the autoscaler.
         `is_used` flag used to determine if this is the first
-        pass where the caller tries to calculate/adjust pools that has 
-        used_ratio > even_ratio else this is the second pass, 
-        we calculate final_ratio by giving it 1 / pool_count 
+        pass where the caller tries to calculate/adjust pools that has
+        used_ratio > even_ratio else this is the second pass,
+        we calculate final_ratio by giving it 1 / pool_count
         of the root we are currently looking at.
         """
         if profile == "scale-up":
@@ -374,7 +390,7 @@ class PgAutoscaler(MgrModule):
             assert pg_target is not None
             pool_pg_target = (final_ratio * pg_target) / p['size'] * bias
             final_pg_target = max(p.get('options', {}).get('pg_num_min', PG_NUM_MIN),
-                    nearest_power_of_two(pool_pg_target))
+                                  nearest_power_of_two(pool_pg_target))
 
         else:
             if is_used:
@@ -405,7 +421,7 @@ class PgAutoscaler(MgrModule):
                 pool_pg_target = (final_ratio * root_map[root_id].pg_left) / p['size'] * bias
 
             final_pg_target = max(p.get('options', {}).get('pg_num_min', PG_NUM_MIN),
-                    nearest_power_of_two(pool_pg_target))
+                                  nearest_power_of_two(pool_pg_target))
 
             self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
                           "pg target {4} quantized to {5} (current {6})".format(
@@ -426,17 +442,17 @@ class PgAutoscaler(MgrModule):
             pools: Dict[str, Dict[str, Any]],
             crush_map: CRUSHMap,
             root_map: Dict[int, CrushSubtreeResourceStatus],
-            pool_root: Dict[int, int],
             pool_stats: Dict[int, Dict[str, int]],
             ret: List[Dict[str, Any]],
             threshold: float,
             is_used: bool,
             profile: 'ScaleModeT',
+            overlapped_roots: Set[int],
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
         """
         Calculates final_pg_target of each pools and determine if it needs
         scaling, this depends on the profile of the autoscaler. For scale-down,
-        we start out with a full complement of pgs and only descrease it when other 
+        we start out with a full complement of pgs and only descrease it when other
         pools needs more pgs due to increased usage. For scale-up, we start out with
         the minimal amount of pgs and only scale when there is increase in usage.
         """
@@ -454,7 +470,12 @@ class PgAutoscaler(MgrModule):
             cr_name = crush_rule['rule_name']
             root_id = crush_map.get_rule_root(cr_name)
             assert root_id is not None
-
+            if root_id in overlapped_roots and profile == "scale-down":
+                # for scale-down profile skip pools
+                # with overlapping roots
+                self.log.warn("pool %d contains an overlapping root %d"
+                              "... skipping scaling", pool_id, root_id)
+                continue
             capacity = root_map[root_id].capacity
             assert capacity is not None
             if capacity == 0:
@@ -489,19 +510,17 @@ class PgAutoscaler(MgrModule):
                                                   capacity)
 
             capacity_ratio = max(capacity_ratio, target_ratio)
-            final_ratio, pool_pg_target, final_pg_target = self._calc_final_pg_target(p, 
-                    pool_name, root_map, root_id, capacity_ratio, even_pools, bias, is_used,
-                    profile,
-            )
+            final_ratio, pool_pg_target, final_pg_target = self._calc_final_pg_target(
+                p, pool_name, root_map, root_id, capacity_ratio, even_pools, bias, is_used, profile)
 
             if final_ratio is None:
                 continue
 
             adjust = False
-            if (final_pg_target > p['pg_num_target'] * threshold or \
-                final_pg_target < p['pg_num_target'] / threshold) and \
-                final_ratio >= 0.0 and \
-                final_ratio <= 1.0:
+            if (final_pg_target > p['pg_num_target'] * threshold or
+                    final_pg_target < p['pg_num_target'] / threshold) and \
+                    final_ratio >= 0.0 and \
+                    final_ratio <= 1.0:
                 adjust = True
 
             assert pool_pg_target is not None
@@ -525,7 +544,7 @@ class PgAutoscaler(MgrModule):
                 'pg_num_final': final_pg_target,
                 'would_adjust': adjust,
                 'bias': p.get('options', {}).get('pg_autoscale_bias', 1.0),
-                });
+            })
 
         return ret, even_pools
 
@@ -536,12 +555,11 @@ class PgAutoscaler(MgrModule):
             profile: 'ScaleModeT',
             threshold: float = 3.0,
     ) -> Tuple[List[Dict[str, Any]],
-               Dict[int, CrushSubtreeResourceStatus],
-               Dict[int, int]]:
+               Dict[int, CrushSubtreeResourceStatus]]:
         assert threshold >= 2.0
 
         crush_map = osdmap.get_crush()
-        root_map, pool_root = self.get_subtree_resource_status(osdmap, crush_map)
+        root_map, overlapped_roots = self.get_subtree_resource_status(osdmap, crush_map)
         df = self.get('df')
         pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
 
@@ -551,18 +569,18 @@ class PgAutoscaler(MgrModule):
         # First call of _calc_pool_targets() is to find/adjust pools that uses more capacaity than
         # the even_ratio of other pools and we adjust those first.
         # Second call make use of the even_pools we keep track of in the first call.
-        # All we need to do is iterate over those and give them 1/pool_count of the 
+        # All we need to do is iterate over those and give them 1/pool_count of the
         # total pgs.
 
-        ret, even_pools = self._calc_pool_targets(osdmap, pools, crush_map, root_map, pool_root,
-                    pool_stats, ret, threshold, True, profile)
+        ret, even_pools = self._calc_pool_targets(osdmap, pools, crush_map, root_map,
+                                                  pool_stats, ret, threshold, True, profile, overlapped_roots)
 
         if profile == "scale-down":
-            # We only have adjust even_pools when we use scale-down profile 
-            ret, _ = self._calc_pool_targets(osdmap, even_pools, crush_map, root_map, pool_root, 
-                    pool_stats, ret, threshold, False, profile)
+            # We only have adjust even_pools when we use scale-down profile
+            ret, _ = self._calc_pool_targets(osdmap, even_pools, crush_map, root_map,
+                                             pool_stats, ret, threshold, False, profile, overlapped_roots)
 
-        return (ret, root_map, pool_root)
+        return (ret, root_map)
 
     def _update_progress_events(self) -> None:
         osdmap = self.get_osdmap()
@@ -584,7 +602,7 @@ class PgAutoscaler(MgrModule):
             return
         pools = osdmap.get_pools_by_name()
         profile = self.autoscale_profile
-        ps, root_map, pool_root = self._get_pool_status(osdmap, pools, profile)
+        ps, root_map = self._get_pool_status(osdmap, pools, profile)
 
         # Anyone in 'warn', set the health message for them and then
         # drop them from consideration.
@@ -601,7 +619,8 @@ class PgAutoscaler(MgrModule):
             pool_id = p['pool_id']
             pool_opts = pools[p['pool_name']]['options']
             if pool_opts.get('target_size_ratio', 0) > 0 and pool_opts.get('target_size_bytes', 0) > 0:
-                    bytes_and_ratio.append('Pool %s has target_size_bytes and target_size_ratio set' % p['pool_name'])
+                bytes_and_ratio.append(
+                    'Pool %s has target_size_bytes and target_size_ratio set' % p['pool_name'])
             total_bytes[p['crush_root_id']] += max(
                 p['actual_raw_used'],
                 p['target_bytes'] * p['raw_used_rate'])
