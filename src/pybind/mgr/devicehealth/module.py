@@ -4,7 +4,7 @@ Device health monitoring
 
 import errno
 import json
-from mgr_module import MgrModule, CommandResult, CLIRequiresDB, CLICommand, Option
+from mgr_module import MgrModule, CommandResult, CLIRequiresDB, CLICommand, CLIReadCommand, Option
 import operator
 import rados
 import re
@@ -165,8 +165,7 @@ CREATE TABLE DeviceHealthMetrics (
             return False
         return parts[0] in ('osd', 'mon')
 
-    @CLICommand('device query-daemon-health-metrics',
-                perm='r')
+    @CLIReadCommand('device query-daemon-health-metrics')
     def do_query_daemon_health_metrics(self, who: str) -> Tuple[int, str, str]:
         '''
         Get device health metrics for a given daemon
@@ -182,8 +181,7 @@ CREATE TABLE DeviceHealthMetrics (
         return result.wait()
 
     @CLIRequiresDB
-    @CLICommand('device scrape-daemon-health-metrics',
-                perm='r')
+    @CLIReadCommand('device scrape-daemon-health-metrics')
     def do_scrape_daemon_health_metrics(self, who: str) -> Tuple[int, str, str]:
         '''
         Scrape and store device health metrics for a given daemon
@@ -194,8 +192,7 @@ CREATE TABLE DeviceHealthMetrics (
         return self.scrape_daemon(daemon_type, daemon_id)
 
     @CLIRequiresDB
-    @CLICommand('device scrape-health-metrics',
-                perm='r')
+    @CLIReadCommand('device scrape-health-metrics')
     def do_scrape_health_metrics(self, devid: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Scrape and store device health metrics
@@ -206,8 +203,7 @@ CREATE TABLE DeviceHealthMetrics (
             return self.scrape_device(devid)
 
     @CLIRequiresDB
-    @CLICommand('device get-health-metrics',
-                perm='r')
+    @CLIReadCommand('device get-health-metrics')
     def do_get_health_metrics(self, devid: str, sample: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Show stored device metrics for the device
@@ -215,16 +211,14 @@ CREATE TABLE DeviceHealthMetrics (
         return self.show_device_metrics(devid, sample)
 
     @CLIRequiresDB
-    @CLICommand('device check-health',
-                perm='rw')
+    @CLICommand('device check-health')
     def do_check_health(self) -> Tuple[int, str, str]:
         '''
         Check life expectancy of devices
         '''
         return self.check_health()
 
-    @CLICommand('device monitoring on',
-                perm='rw')
+    @CLICommand('device monitoring on')
     def do_monitoring_on(self) -> Tuple[int, str, str]:
         '''
         Enable device health monitoring
@@ -233,8 +227,7 @@ CREATE TABLE DeviceHealthMetrics (
         self.event.set()
         return 0, '', ''
 
-    @CLICommand('device monitoring off',
-                perm='rw')
+    @CLICommand('device monitoring off')
     def do_monitoring_off(self) -> Tuple[int, str, str]:
         '''
         Disable device health monitoring
@@ -244,8 +237,7 @@ CREATE TABLE DeviceHealthMetrics (
         return 0, '', ''
 
     @CLIRequiresDB
-    @CLICommand('device predict-life-expectancy',
-                perm='r')
+    @CLIReadCommand('device predict-life-expectancy')
     def do_predict_life_expectancy(self, devid: str) -> Tuple[int, str, str]:
         '''
         Predict life expectancy with local predictor
