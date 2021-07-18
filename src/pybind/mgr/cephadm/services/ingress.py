@@ -198,10 +198,10 @@ class IngressService(CephService):
                     f'{bare_ip} is in {subnet} on {host} interface {interface}'
                 )
                 break
-        if not interface and spec.networks:
-            # hmm, try spec.networks
+        # try to find interface by matching spec.virtual_interface_networks
+        if not interface and spec.virtual_interface_networks:
             for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-                if subnet in spec.networks:
+                if subnet in spec.virtual_interface_networks:
                     interface = list(ifaces.keys())[0]
                     logger.info(
                         f'{spec.virtual_ip} will be configured on {host} interface '
