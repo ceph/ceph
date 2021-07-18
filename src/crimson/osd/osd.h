@@ -40,6 +40,10 @@ class OSDMap;
 class OSDMeta;
 class Heartbeat;
 
+namespace seastar::alien {
+  class instance;
+}
+
 namespace ceph::os {
   class Transaction;
 }
@@ -121,6 +125,7 @@ class OSD final : public crimson::net::Dispatcher,
 
 public:
   OSD(int id, uint32_t nonce,
+      seastar::alien::instance& alien,
       crimson::net::MessengerRef cluster_msgr,
       crimson::net::MessengerRef client_msgr,
       crimson::net::MessengerRef hb_front_msgr,

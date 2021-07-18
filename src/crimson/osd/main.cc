@@ -285,6 +285,7 @@ int main(int argc, char* argv[])
             configure_crc_handling(*msgr);
           }
           osd.start_single(whoami, nonce,
+                           std::ref(app.alien()),
                            cluster_msgr, client_msgr,
                            hb_front_msgr, hb_back_msgr).get();
           auto stop_osd = seastar::defer([&] {
