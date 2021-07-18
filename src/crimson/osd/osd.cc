@@ -70,6 +70,7 @@ using crimson::os::FuturizedStore;
 namespace crimson::osd {
 
 OSD::OSD(int id, uint32_t nonce,
+         seastar::alien::instance& alien,
          crimson::net::MessengerRef cluster_msgr,
          crimson::net::MessengerRef public_msgr,
          crimson::net::MessengerRef hb_front_msgr,
@@ -85,7 +86,8 @@ OSD::OSD(int id, uint32_t nonce,
     store{crimson::os::FuturizedStore::create(
       local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"),
-      local_conf().get_config_values())},
+      local_conf().get_config_values(),
+      alien)},
     shard_services{*this, whoami, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
