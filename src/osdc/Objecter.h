@@ -1793,7 +1793,7 @@ public:
 
     epoch_t last_force_resend = 0;
 
-    op_target_t(object_t oid, object_locator_t oloc, int flags)
+    op_target_t(const object_t& oid, const object_locator_t& oloc, int flags)
       : flags(flags),
 	base_oid(oid),
 	base_oloc(oloc)
