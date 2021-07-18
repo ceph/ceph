@@ -284,8 +284,14 @@ int main(int argc, char* argv[])
                                                    nonce);
             configure_crc_handling(*msgr);
           }
+          auto store = crimson::os::FuturizedStore::create(
+            local_conf().get_val<std::string>("osd_objectstore"),
+            local_conf().get_val<std::string>("osd_data"),
+            local_conf().get_config_values(),
+            app.alien());
+
           osd.start_single(whoami, nonce,
-                           std::ref(app.alien()),
+                           std::ref(*store),
                            cluster_msgr, client_msgr,
                            hb_front_msgr, hb_back_msgr).get();
           auto stop_osd = seastar::defer([&] {
