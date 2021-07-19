@@ -399,6 +399,24 @@ public:
   ~RGWOptionsCORS_ObjStore() override {}
 };
 
+class RGWGetBucketEncryption_ObjStore : public RGWGetBucketEncryption {
+public:
+  RGWGetBucketEncryption_ObjStore() {}
+  ~RGWGetBucketEncryption_ObjStore() override {}
+};
+
+class RGWPutBucketEncryption_ObjStore : public RGWPutBucketEncryption {
+public:
+  RGWPutBucketEncryption_ObjStore() {}
+  ~RGWPutBucketEncryption_ObjStore() override {}
+};
+
+class RGWDeleteBucketEncryption_ObjStore : public RGWDeleteBucketEncryption {
+public:
+  RGWDeleteBucketEncryption_ObjStore() {}
+  ~RGWDeleteBucketEncryption_ObjStore() override {}
+};
+
 class RGWInitMultipart_ObjStore : public RGWInitMultipart {
 public:
   RGWInitMultipart_ObjStore() {}
