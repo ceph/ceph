@@ -50,12 +50,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             readonly: Optional[bool] = False,
             client_addr: Optional[List[str]] = None,
             realm: Optional[str] = None,
+            squash: str = 'none',
     ) -> Tuple[int, str, str]:
         """Create an RGW export"""
         return self.export_mgr.create_export(fsal_type='rgw', bucket=bucket,
                                              realm=realm,
                                              cluster_id=cluster_id, pseudo_path=pseudo_path,
-                                             read_only=readonly, squash='none',
+                                             read_only=readonly, squash=squash,
                                              addr=client_addr)
 
     @CLICommand('nfs export rm', perm='rw')
