@@ -348,11 +348,33 @@ static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
 
 int CLSRGWIssueBucketList::issue_op(const int shard_id, const string& oid)
 {
+  // set the marker depending on whether we've already queried this
+  // shard and gotten a RGWBIAdvanceAndRetryError (defined
+  // constant) return value; if we have use the marker in the return
+  // to advance the search, otherwise use the marker passed in by the
+  // caller
+  cls_rgw_obj_key marker;
+  auto iter = result.find(shard_id);
+  if (iter != result.end()) {
+    marker = iter->second.marker;
+  } else {
+    marker = start_obj;
+  }
+
   return issue_bucket_list_op(io_ctx, shard_id, oid,
-			      start_obj, filter_prefix, delimiter,
+			      marker, filter_prefix, delimiter,
 			      num_entries, list_versions, &manager,
 			      &result[shard_id]);
 }
+
+
+void CLSRGWIssueBucketList::reset_container(std::map<int, std::string>& objs)
+{
+  objs_container.swap(objs);
+  iter = objs_container.begin();
+  objs.clear();
+}
+
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
 {
