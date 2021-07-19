@@ -159,6 +159,11 @@ class TestCephAdm(object):
         args = cd._parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
 
+    def test_parse_mem_usage(self):
+        cd.logger = mock.Mock()
+        len, summary = cd._parse_mem_usage(0, 'c6290e3f1489,-- / --')
+        assert summary == {}
+
     def test_CustomValidation(self):
         assert cd._parse_args(['deploy', '--name', 'mon.a', '--fsid', 'fsid'])
 
