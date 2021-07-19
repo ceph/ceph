@@ -108,7 +108,7 @@ class SpaceTrackerSimple : public SpaceTrackerI {
     return live_bytes_by_segment[segment];
   }
 public:
-  SpaceTrackerSimple(size_t num_segments)
+  SpaceTrackerSimple(segment_id_t num_segments)
     : live_bytes_by_segment(num_segments, 0) {}
 
   int64_t allocate(
@@ -190,7 +190,7 @@ class SpaceTrackerDetailed : public SpaceTrackerI {
   std::vector<SegmentMap> segment_usage;
 
 public:
-  SpaceTrackerDetailed(size_t num_segments, size_t segment_size, size_t block_size)
+  SpaceTrackerDetailed(segment_id_t num_segments, size_t segment_size, size_t block_size)
     : block_size(block_size),
       segment_size(segment_size),
       segment_usage(num_segments, segment_size / block_size) {}
@@ -346,18 +346,6 @@ public:
       segment_off_t len) = 0;
 
     /**
-     * scan_extents
-     *
-     * Interface shim for Journal::scan_extents
-     */
-    using scan_extents_cursor = Journal::scan_valid_records_cursor;
-    using scan_extents_ertr = Journal::scan_extents_ertr;
-    using scan_extents_ret = Journal::scan_extents_ret;
-    virtual scan_extents_ret scan_extents(
-      scan_extents_cursor &cursor,
-      extent_len_t bytes_to_read) = 0;
-
-    /**
      * release_segment
      *
      * Release segment.
@@ -386,9 +374,11 @@ private:
   const bool detailed;
   const config_t config;
 
-  size_t num_segments = 0;
+  segment_id_t num_segments = 0;
   size_t segment_size = 0;
   size_t block_size = 0;
+
+  ScannerRef scanner;
 
   SpaceTrackerIRef space_tracker;
   std::vector<segment_info_t> segments;
@@ -417,7 +407,10 @@ private:
   std::optional<seastar::promise<>> blocked_io_wake;
 
 public:
-  SegmentCleaner(config_t config, bool detailed = false);
+  SegmentCleaner(
+    config_t config,
+    ScannerRef&& scanner,
+    bool detailed = false);
 
   void mount(SegmentManager &sm) {
     init_complete = false;
@@ -443,6 +436,13 @@ public:
     segments.resize(num_segments);
     empty_segments = num_segments;
   }
+
+  using init_segments_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using init_segments_ret_bare =
+    std::vector<std::pair<segment_id_t, segment_header_t>>;
+  using init_segments_ret = init_segments_ertr::future<init_segments_ret_bare>;
+  init_segments_ret init_segments();
 
   get_segment_ret get_segment() final;
 
@@ -633,7 +633,7 @@ private:
 
   // GC status helpers
   std::unique_ptr<
-    ExtentCallbackInterface::scan_extents_cursor
+    Scanner::scan_extents_cursor
     > scan_cursor;
 
   /**
@@ -711,7 +711,7 @@ private:
   } gc_process;
 
   using gc_ertr = work_ertr::extend_ertr<
-    ExtentCallbackInterface::scan_extents_ertr
+    Scanner::scan_extents_ertr
     >;
 
   gc_cycle_ret do_gc_cycle();

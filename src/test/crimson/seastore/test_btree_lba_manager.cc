@@ -27,6 +27,7 @@ using namespace crimson::os::seastore::lba_manager::btree;
 struct btree_lba_manager_test :
   public seastar_test_suite_t, SegmentProvider {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
+  ScannerRef scanner;
   Journal journal;
   Cache cache;
   BtreeLBAManagerRef lba_manager;
@@ -37,7 +38,8 @@ struct btree_lba_manager_test :
 
   btree_lba_manager_test()
     : segment_manager(segment_manager::create_test_ephemeral()),
-      journal(*segment_manager),
+      scanner(new Scanner(*segment_manager)),
+      journal(*segment_manager, *scanner),
       cache(*segment_manager),
       lba_manager(new BtreeLBAManager(*segment_manager, cache)),
       block_size(segment_manager->get_block_size())

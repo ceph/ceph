@@ -1173,11 +1173,14 @@ std::unique_ptr<SeaStore> make_seastore(
     segment_manager::block::BlockSegmentManager
     >(device + "/block");
 
+  auto scanner = std::make_unique<Scanner>(*sm);
+  auto& scanner_ref = *scanner.get();
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
+    std::move(scanner),
     false /* detailed */);
 
-  auto journal = std::make_unique<Journal>(*sm);
+  auto journal = std::make_unique<Journal>(*sm, scanner_ref);
   auto cache = std::make_unique<Cache>(*sm);
   auto lba_manager = lba_manager::create_lba_manager(*sm, *cache);
 
