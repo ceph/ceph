@@ -7,7 +7,7 @@ OSD Service
 List Devices
 ============
 
-``ceph-volume`` scans each cluster in the host from time to time in order
+``ceph-volume`` scans each host in the cluster from time to time in order
 to determine which devices are present and whether they are eligible to be
 used as OSDs.
 
@@ -348,7 +348,7 @@ zap`` on the remote host.
 
 .. prompt:: bash #
 
-  orch device zap <hostname> <path>
+  ceph orch device zap <hostname> <path>
 
 Example command:
 
