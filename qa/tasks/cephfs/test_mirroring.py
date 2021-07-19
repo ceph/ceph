@@ -480,7 +480,7 @@ class TestMirroring(CephFSTestCase):
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
-        self.mount_b.mount(cephfs_name=self.secondary_fs_name)
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
 
         # create a bunch of files in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
@@ -546,7 +546,7 @@ class TestMirroring(CephFSTestCase):
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
-        self.mount_b.mount(cephfs_name=self.secondary_fs_name)
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
 
         # create a bunch of files in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
@@ -582,7 +582,7 @@ class TestMirroring(CephFSTestCase):
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
-        self.mount_b.mount(cephfs_name=self.secondary_fs_name)
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
 
         # create a bunch of files in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
@@ -818,7 +818,7 @@ class TestMirroring(CephFSTestCase):
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
-        self.mount_b.mount(cephfs_name=self.secondary_fs_name)
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
 
         # create a bunch of files w/ symbolic links in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
@@ -955,7 +955,7 @@ class TestMirroring(CephFSTestCase):
                 self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
-        self.mount_b.mount(cephfs_name=self.secondary_fs_name)
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
 
         repo = 'ceph-qa-suite'
         repo_dir = 'ceph_repo'
@@ -1033,7 +1033,7 @@ class TestMirroring(CephFSTestCase):
                     self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
-        self.mount_b.mount(cephfs_name=self.secondary_fs_name)
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
 
         typs = deque(['reg', 'dir', 'sym'])
         def cleanup_and_create_with_type(dirname, fnames):
@@ -1104,7 +1104,7 @@ class TestMirroring(CephFSTestCase):
                 self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
-        self.mount_b.mount(cephfs_name=self.secondary_fs_name)
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
 
         repo = 'ceph-qa-suite'
         repo_dir = 'ceph_repo'
