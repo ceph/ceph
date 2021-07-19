@@ -1,5 +1,6 @@
 <ngb-alert type="{{ bootstrapClass }}"
-           [dismissible]="false">
+           [dismissible]="dismissible"
+           (close)="onClose()">
   <table>
     <ng-container *ngIf="size === 'normal'; else slim">
       <tr>
