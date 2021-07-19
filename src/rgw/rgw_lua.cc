@@ -118,6 +118,13 @@ int add_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_
     return -EINVAL;
   }
   
+  //replace previous versions of the package
+  const std::string package_name_no_version = package_name.substr(0, package_name.find(" "));
+  ret = remove_package(dpp, store, y, package_name_no_version);
+  if (ret < 0) {
+    return ret;
+  }
+
   // add package to list
   const bufferlist empty_bl;
   std::map<std::string, bufferlist> new_package{{package_name, empty_bl}};
@@ -134,14 +141,34 @@ int add_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_
 
 int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name) {
   librados::ObjectWriteOperation op;
-  op.omap_rm_keys(std::set<std::string>({package_name}));
-  const auto ret = rgw_rados_operate(dpp, *(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_lc_pool_ctx()),
-    PACKAGE_LIST_OBJECT_NAME, &op, y);
-
-  if (ret < 0) {
+  size_t pos = package_name.find(" ");
+  if (pos != string::npos) {
+    // remove specfic version of the the package
+    op.omap_rm_keys(std::set<std::string>({package_name}));
+    auto ret = rgw_rados_operate(dpp, *(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_lc_pool_ctx()),
+        PACKAGE_LIST_OBJECT_NAME, &op, y);
+    if (ret < 0) {
+        return ret;
+    }
+    return 0;
+  }
+  // otherwise, remove any existing versions of the package
+  packages_t packages;
+  auto ret = list_packages(dpp, store, y, packages);
+  if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
-
+  for(const auto& package : packages) {
+    const std::string package_no_version = package.substr(0, package.find(" "));
+    if (package_no_version.compare(package_name) == 0) {
+        op.omap_rm_keys(std::set<std::string>({package}));
+        ret = rgw_rados_operate(dpp, *(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_lc_pool_ctx()),
+            PACKAGE_LIST_OBJECT_NAME, &op, y);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+  }
   return 0;
 }
 
@@ -197,13 +224,11 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, opti
   // the lua rocks install dir will be created by luarocks the first time it is called
   for (const auto& package : packages) {
     bp::ipstream is;
-    bp::child c(p, "install", "--lua-version", CEPH_LUA_VERSION, "--tree", luarocks_path, "--deps-mode", "one", package, 
-        bp::std_in.close(),
-        (bp::std_err & bp::std_out) > is);
+    const auto cmd = p.string() + " install --lua-version " + CEPH_LUA_VERSION + " --tree " + luarocks_path + " --deps-mode one " + package;
+    bp::child c(cmd, bp::std_in.close(), (bp::std_err & bp::std_out) > is);
 
     // once package reload is supported, code should yield when reading output
-    std::string line = "CMD: luarocks install --lua-version " + std::string(CEPH_LUA_VERSION) + std::string(" --tree ") + 
-      luarocks_path + " --deps-mode one " + package;
+    std::string line = std::string("CMD: ") + cmd;
 
     do {
       if (!line.empty()) {
