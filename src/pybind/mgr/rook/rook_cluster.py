@@ -404,13 +404,18 @@ class DefaultCreator():
         device_list = []
         assert drive_group.data_devices is not None
         low, high = self.parse_drive_group_size(drive_group.data_devices.size)
-        limit = drive_group.data_devices.limit if hasattr(drive_group.data_devices, 'limit') else None
+        limit = getattr(drive_group.data_devices, 'limit', None)
         count = 0
-        all = drive_group.data_devices.all if hasattr(drive_group.data_devices, 'all') else None
+        all = getattr(drive_group.data_devices, 'all', None)
         paths = [device.path for device in drive_group.data_devices.paths]
         osd_list = []
         for pod in rook_pods.items:
-            if hasattr(pod, 'metadata') and hasattr(pod.metadata, 'labels') and 'osd' in pod.metadata.labels and 'ceph.rook.io/DeviceSet' in pod.metadata.labels:
+            if (
+                hasattr(pod, 'metadata') 
+                and hasattr(pod.metadata, 'labels') 
+                and 'osd' in pod.metadata.labels 
+                and 'ceph.rook.io/DeviceSet' in pod.metadata.labels
+            ):
                 osd_list.append(pod.metadata.labels['ceph.rook.io/DeviceSet'])
         for _, node in self.inventory.items():
             for device in node:
@@ -420,7 +425,17 @@ class DefaultCreator():
             for device in node:
                 if not limit or (count < limit):
                     if device.available:
-                        if all or ((device.sys_api['node'] in matching_hosts) and (self.check_bounds(low, high, int(device.sys_api['size']))) and ((not drive_group.data_devices.paths) or (device.path in paths))):
+                        if (
+                            all 
+                            or (
+                                device.sys_api['node'] in matching_hosts 
+                                and self.check_bounds(low, high, int(device.sys_api['size']))
+                                and (
+                                    not drive_group.data_devices.paths
+                                    or (device.path in paths)
+                                )
+                            )
+                        ):
                             device_list.append(device)
                             count += 1
         return device_list
@@ -447,15 +462,20 @@ class LSOCreator(DefaultCreator):
         device_list = []
         assert drive_group.data_devices is not None
         low, high = self.parse_drive_group_size(drive_group.data_devices.size)
-        limit = drive_group.data_devices.limit if hasattr(drive_group.data_devices, 'limit') else None
+        limit = getattr(drive_group.data_devices, 'limit', None)
         count = 0
-        all = drive_group.data_devices.all if hasattr(drive_group.data_devices, 'all') else None
+        all = getattr(drive_group.data_devices, 'all', None)
         paths = [device.path for device in drive_group.data_devices.paths]
-        vendor = drive_group.data_devices.model if hasattr(drive_group.data_devices, 'vendor') else None
-        model = drive_group.data_devices.model if hasattr(drive_group.data_devices, 'model') else None
+        vendor = getattr(drive_group.data_devices, 'vendor', None)
+        model = getattr(drive_group.data_devices, 'model', None)
         osd_list = []
         for pod in rook_pods.items:
-            if hasattr(pod, 'metadata') and hasattr(pod.metadata, 'labels') and 'osd' in pod.metadata.labels and 'ceph.rook.io/DeviceSet' in pod.metadata.labels:
+            if (
+                hasattr(pod, 'metadata') 
+                and hasattr(pod.metadata, 'labels') 
+                and 'osd' in pod.metadata.labels 
+                and 'ceph.rook.io/DeviceSet' in pod.metadata.labels
+            ):
                 osd_list.append(pod.metadata.labels['ceph.rook.io/DeviceSet'])
         for _, node in self.inventory.items():
             for device in node:
@@ -465,7 +485,25 @@ class LSOCreator(DefaultCreator):
             for device in node:
                 if not limit or (count < limit):
                     if device.available:
-                        if all or ((device.sys_api['node'] in matching_hosts) and (self.check_bounds(low, high, int(device.sys_api['size']))) and ((not drive_group.data_devices.paths) or (device.path in paths)) and (not vendor or (device.sys_api['vendor'] == vendor)) and (not model or (device.sys_api['model'].startsWith(model)))):
+                        if (
+                            all 
+                            or (
+                                device.sys_api['node'] in matching_hosts
+                                and self.check_bounds(low, high, int(device.sys_api['size']))
+                                and (
+                                    not drive_group.data_devices.paths
+                                    or device.path in paths
+                                ) 
+                                and (
+                                    not vendor 
+                                    or device.sys_api['vendor'] == vendor
+                                )
+                                and (
+                                    not model 
+                                    or device.sys_api['model'].startsWith(model)
+                                )
+                            )
+                        ):
                             device_list.append(device)
                             count += 1
         return device_list
