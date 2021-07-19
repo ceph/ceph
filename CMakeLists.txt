@@ -1,25 +1,19 @@
-cmake_minimum_required(VERSION 3.10.2)
-# remove cmake/modules/FindPython* once 3.12 is required
+cmake_minimum_required(VERSION 3.16)
 
 project(ceph
   VERSION 17.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy
-    CMP0028
-    CMP0046
-    CMP0048
-    CMP0051
-    CMP0054
-    CMP0056
-    CMP0065
-    CMP0074
-    CMP0075
-    CMP0093)
-  if(POLICY ${policy})
-    cmake_policy(SET ${policy} NEW)
-  endif()
-endforeach()
+cmake_policy(SET CMP0028 NEW)
+cmake_policy(SET CMP0046 NEW)
+cmake_policy(SET CMP0048 NEW)
+cmake_policy(SET CMP0051 NEW)
+cmake_policy(SET CMP0054 NEW)
+cmake_policy(SET CMP0056 NEW)
+cmake_policy(SET CMP0065 NEW)
+cmake_policy(SET CMP0074 NEW)
+cmake_policy(SET CMP0075 NEW)
+cmake_policy(SET CMP0093 NEW)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -86,10 +80,10 @@ if(WIN32)
   include_directories(
     ${PROJECT_SOURCE_DIR}/src/include/win32)
   # Boost complains if winsock2.h (or windows.h) is included before asio.hpp.
-  add_definitions(-include winsock_wrapper.h)
+  add_compile_options("SHELL:-include winsock_wrapper.h")
   # Boost is also defining some of the errno values, we'll have
   # to avoid mismatches.
-  add_definitions(-include win32_errno.h)
+  add_compile_options("SHELL:-include win32_errno.h")
 endif()
 
 if(FREEBSD)
