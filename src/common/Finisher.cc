@@ -62,8 +62,24 @@ void *Finisher::finisher_thread_entry()
       }
 
       // Now actually process the contexts.
+      int i = 0;
+      uint64_t num_events = 50;
+      uint64_t interval_ns = 5;
+      if (g_ceph_context) {
+        num_events = g_conf().get_val<uint64_t>("finisher_batch_events");
+        interval_ns = g_conf().get_val<uint64_t>("finisher_sleep_interval");
+      }
       for (auto p : in_progress_queue) {
 	p.first->complete(p.second);
+
+	// Give up the CPU to give other threads those are waiting the
+	// locks, such as the mds_lock, a change to run. Because if the
+	// in_process_queue will require the same lock frequently it will
+	// always succeed, and other lock waiters maybe stuck for several
+	// seconds or longer.
+        if (interval_ns && num_events && ++i % num_events == 0) {
+	  std::this_thread::sleep_for(std::chrono::nanoseconds(interval_ns));
+	}
       }
       ldout(cct, 10) << "finisher_thread done with " << in_progress_queue
                      << dendl;

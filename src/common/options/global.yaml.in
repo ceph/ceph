@@ -301,6 +301,28 @@ options:
   - startup
   # default changed by common_preinit()
   with_legacy: true
+- name: finisher_batch_events
+  type: uint
+  level: advanced
+  desc: how many events can finisher process continuously before giving up CPU to allow other threads to run
+  default: 5
+  services:
+  - common
+  see_also:
+  - finisher_sleep_interval
+  flags:
+  - runtime
+- name: finisher_sleep_interval
+  type: uint
+  level: advanced
+  desc: how long will the finisher thread sleep when giving up CPU, in nanoseconds
+  default: 5
+  services:
+  - common
+  see_also:
+  - finisher_batch_events
+  flags:
+  - runtime
 - name: setuser
   type: str
   level: advanced
