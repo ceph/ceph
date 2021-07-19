@@ -1527,10 +1527,13 @@ static ceph::spinlock debug_lock;
       return nullptr;                         // no non-empty buffers
     }
 
-    auto iter = std::cbegin(_buffers);
-    ++iter;
-
-    if (iter != std::cend(_buffers)) {
+    const auto second = std::next(std::cbegin(_buffers));
+    // splice() tries to not waste our appendable space; to carry
+    // it an empty bptr is added at the end. we account for that.
+    const auto end = _carriage->length() == 0 && \
+      _carriage == &_buffers.back() ? buffers_t::const_iterator(_carriage)
+                                    : std::cend(_buffers);
+    if (second != end) {
       rebuild();
     }
     return _buffers.front().c_str();
