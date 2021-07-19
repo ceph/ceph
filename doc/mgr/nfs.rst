@@ -197,7 +197,7 @@ To export a bucket
 
 .. code::
 
-   $ ceph nfs export create rgw <bucket_name> <cluster_id> <pseudo_path> [--readonly] [--client_addr <value>...] [--realm <value>]
+   $ ceph nfs export create rgw <bucket_name> <cluster_id> <pseudo_path> [--readonly] [--client_addr <value>...] [--squash <value>]
 
 For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network
 
@@ -206,6 +206,23 @@ For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */b
    $ ceph nfs export create rgw mybucket mynfs /bucketdata --client_addr 192.168.10.0/24
 
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
+
+``<bucket_name>`` is the name of the bucket that will be exported.
+
+.. note:: Currently, if multi-site RGW is enabled, Ceph can only export RGW buckets in the default realm.
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server. It must be an absolute path and unique.
+
+``<client_addr>`` is the list of client address for which these export
+permissions will be applicable. By default all clients can access the export
+according to specified export permissions. See the `NFS-Ganesha Export Sample`_
+for permissible values.
+
+``<squash>`` defines the kind of user id squashing to be performed. The default
+value is `no_root_squash`. See the `NFS-Ganesha Export Sample`_ for
+permissible values.
 
 Delete Export
 -------------
