@@ -52,12 +52,12 @@ describe('Configuration page', () => {
 
     it('should show only modified configurations', () => {
       configuration.filterTable('Modified', 'yes');
-      configuration.getTableFoundCount().should('eq', 2);
+      configuration.getTableCount('found').should('eq', 2);
     });
 
     it('should hide all modified configurations', () => {
       configuration.filterTable('Modified', 'no');
-      configuration.getTableFoundCount().should('gt', 1);
+      configuration.getTableCount('found').should('gt', 1);
     });
   });
 });
