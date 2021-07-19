@@ -662,7 +662,6 @@ NFS_CORE_PARAM {
         assert export.protocols == [4, 3]
         assert export.transports == ["TCP", "UDP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "nfs.foo.bucket"
         assert export.fsal.access_key_id == "the_access_key"
         assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
@@ -706,7 +705,6 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "nfs.foo.newbucket"
         assert export.fsal.access_key_id == "the_access_key"
         assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
@@ -749,7 +747,6 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "nfs.foo.newestbucket"
         assert export.fsal.access_key_id == "the_access_key"
         assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
@@ -835,7 +832,6 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "nfs.foo.bucket"
         assert export.fsal.access_key_id == "the_access_key"
         assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
@@ -852,7 +848,6 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "nfs.foo.bucket2"
         assert export.fsal.access_key_id == "the_access_key"
         assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
@@ -914,7 +909,6 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
-        assert export.fsal.user_id == "nfs.foo.bucket"
         assert export.fsal.access_key_id == "the_access_key"
         assert export.fsal.secret_access_key == "the_secret_key"
         assert len(export.clients) == 1
