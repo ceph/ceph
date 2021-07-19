@@ -2531,15 +2531,16 @@ def get_container(ctx: CephadmContext,
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             container_args.append('--cgroups=split')
 
-    return CephContainer(
+    return CephContainer.for_daemon(
         ctx,
-        image=ctx.image,
+        fsid=fsid,
+        daemon_type=daemon_type,
+        daemon_id=str(daemon_id),
         entrypoint=entrypoint,
         args=ceph_args + get_daemon_args(ctx, fsid, daemon_type, daemon_id),
         container_args=container_args,
         volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
         bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
-        cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
@@ -3182,6 +3183,43 @@ class CephContainer:
         self.host_network = host_network
         self.memory_request = memory_request
         self.memory_limit = memory_limit
+
+    @classmethod
+    def for_daemon(cls,
+                   ctx: CephadmContext,
+                   fsid: str,
+                   daemon_type: str,
+                   daemon_id: str,
+                   entrypoint: str,
+                   args: List[str] = [],
+                   volume_mounts: Dict[str, str] = {},
+                   container_args: List[str] = [],
+                   envs: Optional[List[str]] = None,
+                   privileged: bool = False,
+                   ptrace: bool = False,
+                   bind_mounts: Optional[List[List[str]]] = None,
+                   init: Optional[bool] = None,
+                   host_network: bool = True,
+                   memory_request: Optional[str] = None,
+                   memory_limit: Optional[str] = None,
+                   ) -> 'CephContainer':
+        return cls(
+            ctx,
+            image=ctx.image,
+            entrypoint=entrypoint,
+            args=args,
+            volume_mounts=volume_mounts,
+            cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
+            container_args=container_args,
+            envs=envs,
+            privileged=privileged,
+            ptrace=ptrace,
+            bind_mounts=bind_mounts,
+            init=init,
+            host_network=host_network,
+            memory_request=memory_request,
+            memory_limit=memory_limit,
+        )
 
     @property
     def cname(self) -> str:
