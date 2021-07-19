@@ -18,7 +18,7 @@
 
     <button type="button"
             class="navbar-toggler"
-            (click)="isCollapsed = !isCollapsed">
+            (click)="toggleRightSidebar()">
       <span i18n
             class="sr-only">Toggle navigation</span>
       <span class="">
@@ -27,7 +27,7 @@
     </button>
 
     <div class="collapse navbar-collapse"
-         [collapse]="isCollapsed">
+         [ngClass]="{'show': rightSidebarOpen}">
       <ul class="nav navbar-nav cd-navbar-utility my-2 my-md-0">
         <ng-container *ngTemplateOutlet="cd_utilities"> </ng-container>
       </ul>
@@ -58,7 +58,8 @@
     <cd-language-selector class="cd-navbar"></cd-language-selector>
   </li>
   <li class="nav-item ">
-    <cd-notifications class="cd-navbar"></cd-notifications>
+    <cd-notifications class="cd-navbar"
+                      (click)="toggleRightSidebar()"></cd-notifications>
   </li>
   <li class="nav-item ">
     <cd-dashboard-help class="cd-navbar"></cd-dashboard-help>
@@ -71,7 +72,7 @@
   </li>
 </ng-template>
 
-<ng-template #cd_menu >
+<ng-template #cd_menu>
   <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
     <!-- Dashboard -->
     <li routerLinkActive="active"
@@ -97,8 +98,7 @@
         <ng-container i18n>Cluster</ng-container>
       </a>
       <ul class="list-unstyled"
-          [collapse]="displayedSubMenu !== 'cluster'"
-          [isAnimated]="true">
+          [ngbCollapse]="displayedSubMenu !== 'cluster'">
         <li routerLinkActive="active"
             class="tc_submenuitem tc_submenuitem_hosts"
             *ngIf="permissions.hosts.read">
@@ -145,7 +145,7 @@
             class="tc_submenuitem tc_submenuitem_modules"
             *ngIf="permissions.configOpt.read">
           <a i18n
-             routerLink="/mgr-modules">Manager modules</a>
+             routerLink="/mgr-modules">Manager Modules</a>
         </li>
         <li routerLinkActive="active"
             class="tc_submenuitem tc_submenuitem_log"
@@ -158,8 +158,8 @@
             *ngIf="permissions.prometheus.read">
           <a routerLink="/monitoring">
             <ng-container i18n>Monitoring</ng-container>
-            <small *ngIf="prometheusAlertService.alerts.length > 0"
-                   class="badge badge-danger">{{ prometheusAlertService.alerts.length }}</small>
+            <small *ngIf="prometheusAlertService.activeAlerts > 0"
+                   class="badge badge-danger">{{ prometheusAlertService.activeAlerts }}</small>
           </a>
         </li>
       </ul>
@@ -188,8 +188,7 @@
       </a>
 
       <ul class="list-unstyled"
-          [collapse]="displayedSubMenu !== 'block'"
-          [isAnimated]="true">
+          [ngbCollapse]="displayedSubMenu !== 'block'">
         <li routerLinkActive="active"
             class="tc_submenuitem tc_submenuitem_block_images"
             *ngIf="permissions.rbdImage.read && enabledFeature.rbd">
@@ -233,7 +232,7 @@
         *ngIf="permissions.cephfs.read && enabledFeature.cephfs">
       <a i18n
          class="nav-link"
-         routerLink="/cephfs">Filesystems</a>
+         routerLink="/cephfs">File Systems</a>
     </li>
 
     <!-- Object Gateway -->
@@ -247,8 +246,7 @@
         <ng-container i18n>Object Gateway</ng-container>
       </a>
       <ul class="list-unstyled"
-          [collapse]="displayedSubMenu !== 'rgw'"
-          [isAnimated]="true">
+          [ngbCollapse]="displayedSubMenu !== 'rgw'">
         <li routerLinkActive="active"
             class="tc_submenuitem tc_submenuitem_rgw_daemons">
           <a i18n

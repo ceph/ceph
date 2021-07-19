@@ -7,11 +7,14 @@
 
     <!-- Username -->
     <div class="form-group has-feedback">
-      <input name="username"
+      <input id="username"
+             name="username"
              [(ngModel)]="model.username"
              #username="ngModel"
              type="text"
              placeholder="Enter your username..."
+             [attr.aria-invalid]="username.invalid"
+             aria-labelledby="username"
              class="form-control"
              required
              autofocus>
@@ -29,6 +32,8 @@
                #password="ngModel"
                type="password"
                placeholder="Enter your password..."
+               [attr.aria-invalid]="password.invalid"
+               aria-labelledby="password"
                class="form-control"
                required>
         <span class="input-group-append">

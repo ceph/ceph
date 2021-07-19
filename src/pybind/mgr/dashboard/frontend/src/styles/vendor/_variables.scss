@@ -16,17 +16,18 @@ Example:
 */
 @import '../defaults/bootstrap-defaults';
 
-$body-color: #212529;
+// Override bootstrap defaults.
+$primary: #30ba78;
+$secondary: #0c322c;
+$accent: #ff6a52;
 
-$color-primary: #30ba78;
-$color-secondary: #0c322c;
-$color-accent: #ff6a52;
+$body-color: #212529;
 
 $color-green-contrast-1: #e4f6ee;
 $color-green-contrast-2: #139448;
 
 $color-soft-gray: #f2f2f2;
-$color-white: #ffffff;
+$color-white-smoke: #f5f5f5;
 
 $button-radius: 4px;
 

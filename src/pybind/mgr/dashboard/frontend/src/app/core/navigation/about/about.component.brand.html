@@ -2,7 +2,7 @@
   <button type="button"
           class="close float-right"
           aria-label="Close"
-          (click)="modalRef.hide()">
+          (click)="activeModal.close()">
     <span aria-hidden="true">&times;</span>
   </button>
 </div>
@@ -51,7 +51,7 @@
 </div>
 <div class="modal-footer">
   <div class="text-left">
-    {{ copyright }}
+    {{ projectConstants.copyright }}
     {{ projectConstants.license }}
   </div>
 </div>

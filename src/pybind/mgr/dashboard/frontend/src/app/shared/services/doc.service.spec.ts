@@ -22,13 +22,13 @@ describe('DocService', () => {
 
   it('should return full URL', () => {
     expect(service.urlGenerator('iscsi', 'foo')).toBe(
-      'https://documentation.suse.com/ses/foo/single-html/mgr/dashboard/#enabling-iscsi-management'
+      'https://documentation.suse.com/ses/foo/single-html/ses-admin/#dashboard-iscsi-management'
     );
   });
 
   it('should return latest version URL for master', () => {
     expect(service.urlGenerator('orch', 'master')).toBe(
-      'https://documentation.suse.com/ses/master/single-html/mgr/orchestrator'
+      'https://documentation.suse.com/ses/master/single-html/ses-deployment/#deploy-cephadm-day2-orch'
     );
   });
 
@@ -66,7 +66,7 @@ describe('DocService', () => {
 
       nextSummary('foo');
       expect(result).toEqual(
-        'https://documentation.suse.com/ses/foo/single-html/mgr/dashboard/#enabling-prometheus-alerting'
+        'https://documentation.suse.com/ses/foo/single-html/ses-deployment/#deploy-cephadm-day2-service-monitoring'
       );
       expect(i).toBe(1);
       expect(subscriber.closed).toBe(true);

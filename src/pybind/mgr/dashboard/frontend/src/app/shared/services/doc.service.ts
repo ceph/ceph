@@ -23,26 +23,24 @@ export class DocService {
     });
   }
 
-  urlGenerator(section: string, release = '7'): string {
+  urlGenerator(section: string, release = '7p'): string {
     const domain = `https://documentation.suse.com/ses/${release}/single-html/`;
-    const domainCeph = `https://ceph.io/`;
-
     const sections = {
-      iscsi: `${domain}mgr/dashboard/#enabling-iscsi-management`,
-      prometheus: `${domain}mgr/dashboard/#enabling-prometheus-alerting`,
-      'nfs-ganesha': `${domain}mgr/dashboard/#configuring-nfs-ganesha-in-the-dashboard`,
-      'rgw-nfs': `${domain}radosgw/nfs`,
-      rgw: `${domain}mgr/dashboard/#enabling-the-object-gateway-management-frontend`,
-      dashboard: `${domain}mgr/dashboard`,
-      grafana: `${domain}mgr/dashboard/#enabling-the-embedding-of-grafana-dashboards`,
-      orch: `${domain}mgr/orchestrator`,
-      pgs: `${domainCeph}pgcalc`,
-      help: `${domainCeph}help/`,
-      security: `${domainCeph}security/`,
-      trademarks: `${domainCeph}legal-page/trademarks/`,
-      'dashboard-landing-page-status': `${domain}mgr/dashboard/#dashboard-landing-page-status`,
-      'dashboard-landing-page-performance': `${domain}mgr/dashboard/#dashboard-landing-page-performance`,
-      'dashboard-landing-page-capacity': `${domain}mgr/dashboard/#dashboard-landing-page-capacity`
+      iscsi: `${domain}ses-admin/#dashboard-iscsi-management`,
+      prometheus: `${domain}ses-deployment/#deploy-cephadm-day2-service-monitoring`,
+      'nfs-ganesha': `${domain}ses-admin/#ceph-nfsganesha-config`,
+      'rgw-nfs': `${domain}ses-admin/#ceph-nfsganesha-config-service-rgw`,
+      rgw: `${domain}ses-admin/#dashboard-ogw-enabling`,
+      dashboard: `${domain}ses-admin/#dashboard-initial-configuration`,
+      grafana: `${domain}ses-deployment/#deploy-cephadm-day2-service-monitoring`,
+      orch: `${domain}ses-deployment/#deploy-cephadm-day2-orch`,
+      pgs: `${domain}ses-admin/#ceph-pools`,
+      help: `${domain}`,
+      security: `${domain}ses-security`,
+      trademarks: `${domain}`,
+      'dashboard-landing-page-status': `${domain}ses-admin/#dashboard-widgets-status`,
+      'dashboard-landing-page-performance': `${domain}ses-admin/#dashboard-widgets-performance`,
+      'dashboard-landing-page-capacity': `${domain}ses-admin/#dashboard-widgets-capacity`
     };
 
     return sections[section];
@@ -56,7 +54,7 @@ export class DocService {
     return this.releaseData$
       .pipe(
         filter((value) => !!value),
-        map((release) => this.urlGenerator(section, release)),
+        map(() => this.urlGenerator(section)),
         first()
       )
       .subscribe(next, error);

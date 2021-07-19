@@ -2,19 +2,19 @@
 
 Custom styles, third-party libraries, frameworks, design systems, ...
 */
-@import 'variables';
+@use 'variables' as vv;
 
 @font-face {
   font-family: 'WorkSansLight';
-  src: url('assets/WorkSans-Light.ttf') format('truetype');
+  src: url('../../assets/WorkSans-Light.ttf') format('truetype');
 }
 @font-face {
   font-family: 'WorkSansMedium';
-  src: url('assets/WorkSans-Medium.ttf') format('truetype');
+  src: url('../../assets/WorkSans-Medium.ttf') format('truetype');
 }
 @font-face {
   font-family: 'WorkSansRegular';
-  src: url('assets/WorkSans-Regular.ttf') format('truetype');
+  src: url('../../assets/WorkSans-Regular.ttf') format('truetype');
 }
 
 /* Body */
@@ -31,16 +31,19 @@ h5,
 h6 {
   font-family: 'WorkSansMedium', 'Verdana', Helvetica, Arial, sans-serif;
 }
+
 .subheader {
   font-family: 'WorkSansLight', 'Verdana', Helvetica, Arial, sans-serif;
 }
 
 /* Button */
 .btn-primary,
-.btn-secondary {
-  background-color: $color-primary !important;
-  border-color: $color-primary !important;
+.btn-secondary,
+.btn-accent {
+  background-color: vv.$primary !important;
+  border-color: vv.$primary !important;
 }
+
 .btn-primary:hover,
 .btn-primary:focus,
 .btn-primary:active,
@@ -51,12 +54,14 @@ h6 {
 .btn-secondary:active,
 .btn-secondary.active,
 .open .dropdown-toggle.btn-secondary {
-  background-color: lighten($color-primary, 10) !important;
-  border-color: lighten($color-primary, 10) !important;
+  background-color: lighten(vv.$primary, 10) !important;
+  border-color: lighten(vv.$primary, 10) !important;
 }
+
 .btn-secondary:focus {
-  box-shadow: 0 0 0 0.2rem rgba($color-primary, 0.5) !important;
+  box-shadow: 0 0 0 0.2rem rgba(vv.$primary, 0.5) !important;
 }
+
 .btn-primary:active,
 .btn-primary.active,
 .open .dropdown-toggle.btn-primary,
@@ -65,10 +70,11 @@ h6 {
 .open .dropdown-toggle.btn-secondary {
   &:hover,
   &:focus {
-    background-color: lighten($color-primary, 10) !important;
-    border-color: lighten($color-primary, 10) !important;
+    background-color: lighten(vv.$primary, 10) !important;
+    border-color: lighten(vv.$primary, 10) !important;
   }
 }
+
 .btn-primary.disabled,
 .btn-primary[disabled],
 fieldset[disabled] .btn-primary,
@@ -99,38 +105,38 @@ fieldset[disabled] .btn-secondary:active,
 .btn-secondary.disabled.active,
 .btn-secondary[disabled].active,
 fieldset[disabled] .btn-secondary.active {
-  background-color: $color-primary !important;
-  border-color: $color-primary !important;
+  background-color: vv.$primary !important;
+  border-color: vv.$primary !important;
 }
 
 /* Icons */
 .ceph-icon {
+  margin-right: 1em !important;
+  padding: 15px !important;
   background: {
-    image: url('assets/SUSE_Chameleon_L_Green-pos_sRGB-250.png');
-    clip: padding-box;
-    size: contain;
-    repeat: no-repeat;
-  }
-  padding: 15px;
-  margin-right: 1em;
+    clip: padding-box !important;
+    image: url('../../assets/SUSE_Chameleon_L_Green-pos_sRGB-250.png') !important;
+    repeat: no-repeat !important;
+    size: contain !important;
+  };
 }
 
 /* Login */
 .login-suse {
+  background-color: vv.$color-login-background;
+  color: vv.$color-soft-gray;
   font-family: 'WorkSansRegular', 'Verdana', Helvetica, Arial, sans-serif;
-  color: $color-soft-gray;
-  background-color: $color-login-background;
-  width: 100%;
   margin: 0;
+  width: 100%;
 
   header {
+    background-color: vv.$secondary;
     margin-bottom: 30px;
-    background-color: $color-secondary;
 
     .row {
       margin: 0;
 
-      @media screen and (max-width: $screen-sm-max) {
+      @media screen and (max-width: vv.$screen-sm-max) {
         margin-left: -15px;
       }
     }
@@ -142,12 +148,12 @@ fieldset[disabled] .btn-secondary.active {
 
       .navbar-brand {
         font-size: 2rem;
-        line-height: 2.5rem;
         height: 60px;
-        padding: 15px 15px;
+        line-height: 2.5rem;
+        padding: 15px;
 
         span {
-          @media screen and (max-width: $screen-xs-max) {
+          @media screen and (max-width: vv.$screen-xs-max) {
             display: none;
           }
         }
@@ -155,25 +161,25 @@ fieldset[disabled] .btn-secondary.active {
 
       .form-inline {
         .dropdown-toggle {
-          display: block;
           border: 0;
+          display: block;
           padding: 21px 15px;
 
           &:hover,
           &:focus {
-            color: $color-black;
-            background-color: $color-primary;
+            background-color: vv.$primary;
+            color: vv.$black;
             text-decoration: none;
           }
 
-          @media screen and (max-width: $screen-sm-max) {
+          @media screen and (max-width: vv.$screen-sm-max) {
             margin-left: 15px;
           }
         }
 
         .dropdown-menu {
-          @media screen and (max-width: $screen-sm-max) {
-            background-color: $color-white;
+          @media screen and (max-width: vv.$screen-sm-max) {
+            background-color: vv.$white;
           }
         }
       }
@@ -188,14 +194,14 @@ fieldset[disabled] .btn-secondary.active {
 
   section {
     display: inline-flex;
-    width: 100%;
-    min-height: 100vh;
     margin: -90px auto -100px;
+    min-height: 100vh;
+    width: 100%;
 
     h1 {
-      margin-bottom: 3rem;
+      color: vv.$primary;
       font-size: 4rem;
-      color: $color-primary;
+      margin-bottom: 3rem;
     }
 
     p {
@@ -204,80 +210,98 @@ fieldset[disabled] .btn-secondary.active {
 
     .subheader {
       display: block;
-      margin-bottom: 1rem;
       font-size: 1.4rem;
       font-weight: bold;
+      margin-bottom: 1rem;
     }
 
     h2 {
-      margin: 2.5rem 0;
       font-size: 2.5rem;
+      margin: 2.5rem 0;
     }
 
     .form-group {
+      background-color: vv.$color-login-background;
       border-left: 0;
-      background-color: $color-login-background;
 
       &:focus-within {
         border-left: 0;
       }
 
       input {
-        background-color: $color-white;
-        border-color: $color-white;
-        color: $body-color;
+        background-color: vv.$white;
+        border-color: vv.$white;
+        color: vv.$body-color;
         font-size: 13px;
         height: 2.5rem;
 
         &:focus {
-          border-color: rgba($color-primary, 0.8);
-          box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px 2px rgba($color-primary, 0.5);
+          border-color: rgba(vv.$primary, 0.8);
+          box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px 2px rgba(vv.$primary, 0.5);
           outline: 0;
+        }
+
+        &:-webkit-autofill {
+          -webkit-background-clip: text;
         }
       }
     }
 
     .btn-password {
-      color: $body-color;
-      border-left: 1px solid $body-color;
-      background-color: $color-white;
+      background-color: vv.$white;
+      border-left: 1px solid vv.$body-color;
+      color: vv.$body-color;
 
       &:hover {
-        color: $color-white;
-        background-color: $color-secondary;
+        background-color: vv.$secondary;
+        color: vv.$white;
       }
 
       &:focus {
-        color: $body-color;
-        background-color: $color-white;
-        border-color: rgba($color-primary, 0.8);
-        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px 2px rgba($color-primary, 0.5);
+        background-color: vv.$white;
+        border-color: rgba(vv.$primary, 0.8);
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px 2px rgba(vv.$primary, 0.5);
+        color: vv.$body-color;
         outline: 0;
       }
     }
   }
 
   footer {
-    margin-top: 30px;
+    border-bottom: 16px solid vv.$primary;
     height: 70px;
+    margin-top: 30px;
     padding-top: 23px;
-    border-bottom: 16px solid $color-primary;
 
     .footer-logo {
-      width: 50px;
       margin-top: -16px;
+      width: 50px;
     }
 
     .container {
       padding-bottom: 10px;
     }
   }
+
+  a {
+    color: inherit;
+
+    &:hover {
+      color: inherit;
+    }
+  }
 }
 
 /* About */
 .suse-logo {
-  width: 140px;
   margin-bottom: 1.5rem;
+  width: 140px;
+}
+
+.modal-header {
+  .close {
+    color: inherit !important;
+  }
 }
 
 .modal-content {
@@ -296,31 +320,30 @@ fieldset[disabled] .btn-secondary.active {
 
 .green-background-1,
 .green-background-2 {
-  width: 140%;
   height: 400px;
   left: -20%;
   position: absolute;
+  width: 140%;
 }
 
 .green-background-1 {
-  background-color: $color-green-contrast-1;
+  background-color: vv.$color-green-contrast-1;
   bottom: -240px;
   transform: rotate(-11deg);
 }
 
 .green-background-2 {
-  background-color: $color-green-contrast-2;
+  background-color: vv.$color-green-contrast-2;
   bottom: -310px;
   transform: rotate(-6deg);
 }
 
 // Dashboard
-
 .dashboard {
-  background-color: #ffffff !important;
+  background-color: vv.$white !important;
 
   .card {
-    background-color: #f5f5f5;
+    background-color: vv.$color-white-smoke !important;
   }
 }
 
@@ -328,37 +351,37 @@ fieldset[disabled] .btn-secondary.active {
 @mixin suse-nav-link {
   .nav-link,
   a {
-    background-color: #f5f5f5 !important;
+    background-color: vv.$color-white-smoke !important;
     border-left: 5px solid transparent !important;
-    color: $body-color !important;
+    color: vv.$body-color !important;
     margin: 0 16px 0 0 !important;
     padding: 8px 0 8px 21px !important;
 
     &:hover {
       background-color: transparent !important;
-      border-left: 5px solid $color-primary !important;
+      border-left: 5px solid vv.$primary !important;
     }
   }
 }
 @mixin suse-nav-link-active {
-  background-color: $color-primary !important;
-  border-radius: 0 2px 2px 0;
-  color: #ffffff !important;
+  background-color: vv.$primary !important;
+  border-radius: 0 2px 2px 0 !important;
+  color: vv.$white !important;
 
   &:hover {
-    background-color: $color-primary !important;
+    background-color: vv.$primary !important;
     border-left: 5px solid transparent !important;
   }
 }
 
 nav#sidebar {
-  background-color: #f5f5f5 !important;
+  @include suse-nav-link;
+  background-color: vv.$color-white-smoke !important;
   padding-top: 1.5rem;
 
   .nav-item ul {
-    background-color: #f5f5f5 !important;
-
     @include suse-nav-link;
+    background-color: vv.$color-white-smoke !important;
 
     a {
       padding: 8px 0 8px 33px !important;
@@ -369,18 +392,33 @@ nav#sidebar {
     }
   }
 
-  @include suse-nav-link;
   .active .nav-link {
     @include suse-nav-link-active;
   }
 }
 
 .nav-item.active .fa-heartbeat.health-ok {
-  color: #ffffff !important;
+  color: vv.$white !important;
 }
 
 // Logo
-
 .cd-navbar-top .cd-navbar-brand .navbar-brand > img {
   height: 29px !important;
+}
+
+// Error page
+cd-error {
+  .dashboard,
+  .text-center {
+    background-color: vv.$white !important;
+  }
+}
+
+/* Notification icons */
+.toast-message .custom-icon {
+  /* Display icons in white, regardless of their origin color. */
+  filter: brightness(0) invert(1);
+  -webkit-filter: brightness(0) invert(1);
+  -moz-filter: brightness(0) invert(1);
+  -o-filter: brightness(0) invert(1);
 }
