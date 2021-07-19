@@ -170,7 +170,7 @@ seastar::future<> OSD::_write_superblock()
   return store.open_collection(coll_t::meta()).then([this] (auto ch) {
     if (ch) {
       // if we already have superblock, check if it matches
-      meta_coll = make_unique<OSDMeta>(ch, &store);
+      meta_coll = make_unique<OSDMeta>(ch, store);
       return meta_coll->load_superblock().then([this](OSDSuperblock&& sb) {
         if (sb.cluster_fsid != superblock.cluster_fsid) {
           logger().error("provided cluster fsid {} != superblock's {}",
@@ -191,7 +191,7 @@ seastar::future<> OSD::_write_superblock()
         superblock.cluster_fsid,
         superblock.osd_fsid);
       return store.create_new_collection(coll_t::meta()).then([this] (auto ch) {
-        meta_coll = make_unique<OSDMeta>(ch , &store);
+        meta_coll = make_unique<OSDMeta>(ch, store);
         ceph::os::Transaction t;
         meta_coll->create(t);
         meta_coll->store_superblock(t, superblock);
@@ -253,7 +253,7 @@ seastar::future<> OSD::start()
   }).then([this] {
     return store.open_collection(coll_t::meta());
   }).then([this](auto ch) {
-    meta_coll = make_unique<OSDMeta>(ch, &store);
+    meta_coll = make_unique<OSDMeta>(ch, store);
     return meta_coll->load_superblock();
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
@@ -618,7 +618,7 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
 {
   logger().debug("{}: {}", __func__, pgid);
 
-  return seastar::do_with(PGMeta(&store, pgid), [] (auto& pg_meta) {
+  return seastar::do_with(PGMeta(store, pgid), [](auto& pg_meta) {
     return pg_meta.get_epoch();
   }).then([this](epoch_t e) {
     return get_map(e);
