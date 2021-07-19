@@ -117,24 +117,6 @@ BtreeLBAManager::get_mapping(
   });
 }
 
-BtreeLBAManager::find_hole_ret
-BtreeLBAManager::find_hole(
-  Transaction &t,
-  laddr_t hint,
-  extent_len_t len)
-{
-  return get_root(t
-  ).si_then([this, hint, len, &t](auto extent) {
-    return extent->find_hole(
-      get_context(t),
-      hint,
-      L_ADDR_MAX,
-      len);
-  }).si_then([len](auto addr) {
-    return std::make_pair(addr, len);
-  });
-}
-
 BtreeLBAManager::alloc_extent_ret
 BtreeLBAManager::alloc_extent(
   Transaction &t,
