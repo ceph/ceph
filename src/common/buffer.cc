@@ -1523,16 +1523,15 @@ static ceph::spinlock debug_lock;
    */
   char *buffer::list::c_str()
   {
-    switch (get_num_buffers()) {
-    case 0:
-      // no buffers
-      return nullptr;
-    case 1:
-      // good, we're already contiguous.
-      break;
-    default:
+    if (length() == 0) {
+      return nullptr;                         // no non-empty buffers
+    }
+
+    auto iter = std::cbegin(_buffers);
+    ++iter;
+
+    if (iter != std::cend(_buffers)) {
       rebuild();
-      break;
     }
     return _buffers.front().c_str();
   }
