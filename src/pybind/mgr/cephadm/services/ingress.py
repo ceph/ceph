@@ -192,7 +192,7 @@ class IngressService(CephService):
         deps = sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
 
         host = daemon_spec.host
-        hosts = sorted(list(set([str(d.hostname) for d in daemons])))
+        hosts = sorted(list(set([host] + [str(d.hostname) for d in daemons])))
 
         # interface
         bare_ip = str(spec.virtual_ip).split('/')[0]
