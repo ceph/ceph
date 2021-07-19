@@ -191,6 +191,7 @@ TEST(CommonIPAddr, TestV4_SkipLoopback)
   struct sockaddr_in a_three;
 
   one.ifa_next = &two;
+  one.ifa_flags &= ~IFF_UP;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = lo;
 
@@ -322,6 +323,7 @@ TEST(CommonIPAddr, TestV6_SkipLoopback)
   struct sockaddr_in6 a_three;
 
   one.ifa_next = &two;
+  one.ifa_flags &= ~IFF_UP;
   ipv6(&a_one, "::1");
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = lo;
