@@ -13,11 +13,6 @@
 // member methods.
 namespace ceph::common{
 class ConfigProxy {
-  static ConfigValues get_config_values(const ConfigProxy &config_proxy) {
-    std::lock_guard locker(config_proxy.lock);
-    return config_proxy.values;
-  }
-
   /**
    * The current values of all settings described by the schema
    */
@@ -115,7 +110,7 @@ public:
     : config{values, obs_mgr, is_daemon}
   {}
   explicit ConfigProxy(const ConfigProxy &config_proxy)
-    : values(get_config_values(config_proxy)),
+    : values(config_proxy.get_config_values()),
       config{values, obs_mgr, config_proxy.config.is_daemon}
   {}
   const ConfigValues* operator->() const noexcept {
@@ -124,11 +119,16 @@ public:
   ConfigValues* operator->() noexcept {
     return &values;
   }
-#ifdef WITH_SEASTAR
+  ConfigValues get_config_values() const {
+    std::lock_guard l{lock};
+    return values;
+  }
   void set_config_values(const ConfigValues& val) {
+#ifndef WITH_SEASTAR
+    std::lock_guard l{lock};
+#endif
     values = val;
   }
-#endif
   int get_val(const std::string_view key, char** buf, int len) const {
     std::lock_guard l{lock};
     return config.get_val(values, key, buf, len);
