@@ -133,6 +133,28 @@
                 </div>
               </div>
             </div>
+
+            <!-- Channel perf -->
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="channel_perf">
+                <ng-container i18n>Perf</ng-container>
+                <cd-helper>
+                  <ng-container i18n>Includes performance counter metrics summed across the cluster.</ng-container>
+                </cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox"
+                         class="custom-control-input"
+                         id="channel_perf"
+                         formControlName="channel_perf">
+                  <label class="custom-control-label"
+                         for="channel_perf"></label>
+                </div>
+              </div>
+            </div>
+
             <ng-container *ngIf="showContactInfo">
             <legend>
               <ng-container i18n>Contact Information</ng-container>

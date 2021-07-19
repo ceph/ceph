@@ -4,6 +4,8 @@ Telemetry module for ceph-mgr
 Collect statistics from Ceph cluster and send this back to the Ceph project
 when user has opted-in
 """
+import logging
+import numbers
 import enum
 import errno
 import hashlib
@@ -20,7 +22,7 @@ from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar,
 from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, ServiceInfoT
 
 
-ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
+ALL_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
 
 LICENSE = 'sharing-1-0'
 LICENSE_NAME = 'Community Data License Agreement - Sharing - Version 1.0'
@@ -59,7 +61,6 @@ REVISION = 3
 #   - rbd pool and image count, and rbd mirror mode (pool-level)
 #   - rgw daemons, zones, zonegroups; which rgw frontends
 #   - crush map stats
-
 
 class Module(MgrModule):
     metadata_keys = [
@@ -122,6 +123,10 @@ class Module(MgrModule):
                default=True,
                desc=('Share device health metrics '
                      '(e.g., SMART data, minus potentially identifying info like serial numbers)')),
+        Option(name='channel_perf',
+               type='bool',
+               default=False,
+               desc='Share perf counter metrics summed across the whole cluster'),
     ]
 
     @property
@@ -149,6 +154,7 @@ class Module(MgrModule):
             self.channel_ident = False
             self.channel_crash = True
             self.channel_device = True
+            self.channel_perf = False
 
     def config_notify(self) -> None:
         for opt in self.MODULE_OPTIONS:
@@ -327,6 +333,74 @@ class Module(MgrModule):
             crashlist.append(c)
         return crashlist
 
+    def gather_perf_counters(self) -> Dict[str, dict]:
+        # Extract perf counter data with get_all_perf_counters(), a method
+        # from mgr/mgr_module.py. This method returns a nested dictionary that
+        # looks a lot like perf schema, except with some additional fields.
+        #
+        # Example of output, a snapshot of a mon daemon:
+        #   "mon.b": {
+        #       "bluestore.kv_flush_lat": {
+        #           "count": 2431,
+        #           "description": "Average kv_thread flush latency",
+        #           "nick": "fl_l",
+        #           "priority": 8,
+        #           "type": 5,
+        #           "units": 1,
+        #           "value": 88814109
+        #       },
+        #   },
+        all_perf_counters = self.get_all_perf_counters()
+
+        # Initialize 'result' dict
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
+            lambda: defaultdict(lambda: defaultdict(int))))
+
+        # Condense metrics among like daemons (i.e. 'osd' = 'osd.0' +
+        # 'osd.1' + 'osd.2'), and update the 'result' dict.
+        for daemon in all_perf_counters:
+            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
+            for collection in all_perf_counters[daemon]:
+
+                # Split the collection to avoid redundancy in final report; i.e.:
+                #   bluestore.kv_flush_lat, bluestore.kv_final_lat --> 
+                #   bluestore: kv_flush_lat, kv_final_lat
+                col_0, col_1 = collection.split('.')
+
+                # Debug log for empty keys. This initially was a problem for prioritycache
+                # perf counters, where the col_0 was empty for certain mon counters:
+                #
+                # "mon.a": {                  instead of    "mon.a": {
+                #      "": {                                     "prioritycache": {
+                #        "cache_bytes": {...},                          "cache_bytes": {...},
+                #
+                # This log is here to detect any future instances of a similar issue.
+                if (daemon == "") or (col_0 == "") or (col_1 == ""):
+                    self.log.debug("Instance of an empty key: {}{}".format(daemon, collection))
+
+                # Not every rgw daemon has the same schema. Specifically, each rgw daemon
+                # has a uniquely-named collection that starts off identically (i.e.
+                # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
+                # This bit of code combines these unique counters all under one rgw instance.
+                # Without this check, the schema would remain separeted out in the final report.
+                if col_0[0:11] == "objecter-0x":
+                    col_0 = "objecter-0x"
+
+                # Check that the value can be incremented. In some cases,
+                # the files are of type 'pair' (real-integer-pair, integer-integer pair).
+                # In those cases, the value is a dictionary, and not a number.
+                #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
+                if isinstance(all_perf_counters[daemon][collection]['value'], numbers.Number):
+                    result[daemon_type][col_0][col_1]['value'] += \
+                            all_perf_counters[daemon][collection]['value']
+                
+                # Check that 'count' exists, as not all counters have a count field. 
+                if 'count' in all_perf_counters[daemon][collection]:
+                    result[daemon_type][col_0][col_1]['count'] += \
+                            all_perf_counters[daemon][collection]['count']
+
+        return result
+
     def get_active_channels(self) -> List[str]:
         r = []
         if self.channel_basic:
@@ -337,6 +411,8 @@ class Module(MgrModule):
             r.append('device')
         if self.channel_ident:
             r.append('ident')
+        if self.channel_perf:
+            r.append('perf')
         return r
 
     def gather_device_report(self) -> Dict[str, Dict[str, Dict[str, str]]]:
@@ -652,6 +728,9 @@ class Module(MgrModule):
 
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
+
+        if 'perf' in channels:
+            report['perf_counters'] = self.gather_perf_counters()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
