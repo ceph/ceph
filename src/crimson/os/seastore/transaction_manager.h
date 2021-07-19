@@ -312,20 +312,6 @@ public:
       zero_paddr());
   }
 
-  using find_hole_iertr = LBAManager::find_hole_iertr;
-  using find_hole_ret = LBAManager::find_hole_iertr::future<
-    std::pair<laddr_t, extent_len_t>
-    >;
-  find_hole_ret find_hole(
-    Transaction &t,
-    laddr_t hint,
-    extent_len_t len) {
-    return lba_manager->find_hole(
-      t,
-      hint,
-      len);
-  }
-
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.
