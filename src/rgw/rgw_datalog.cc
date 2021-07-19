@@ -805,6 +805,8 @@ int DataLogBackends::trim_entries(const DoutPrefixProvider *dpp, int shard_id, s
       r = -ENODATA;
     if (r == -ENODATA && be->gen_id < target_gen)
       r = 0;
+    if (be->gen_id == target_gen)
+      break;
     l.lock();
   };
   return r;
