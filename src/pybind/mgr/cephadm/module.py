@@ -1390,6 +1390,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if (
                 self.cache.host_had_daemon_refresh(h.hostname)
                 and h.status.lower() not in ['maintenance', 'offline']
+                and h.hostname not in self.offline_hosts
                 and '_no_schedule' not in h.labels
             )
         ]
