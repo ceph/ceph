@@ -348,7 +348,7 @@ zap`` on the remote host.
 
 .. prompt:: bash #
 
-  orch device zap <hostname> <path>
+  ceph orch device zap <hostname> <path>
 
 Example command:
 
