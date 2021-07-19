@@ -185,11 +185,18 @@ class LSOFetcher(DefaultFetcher):
     def device(self, i: Any) -> Tuple[str, Device]:
         node = i.metadata.labels['kubernetes.io/hostname']
         device_discovery = self.lso_devices[i.metadata.annotations['storage.openshift.com/device-id']]
+        pv_name = i.metadata.name
+        vendor: str = device_discovery['model'].split()[0] if len(device_discovery['model'].split()) >= 1 else ''
+        model: str = ' '.join(device_discovery['model'].split()[1:]) if len(device_discovery['model'].split()) > 1 else ''
         device = Device(
             path = device_discovery['path'],
             sys_api = dict(
                     size = device_discovery['size'],
-                    rotational = '1' if device_discovery['property']=='Rotational' else '0'
+                    rotational = '1' if device_discovery['property']=='Rotational' else '0',
+                    node = node,
+                    pv_name = pv_name,
+                    model = model,
+                    vendor = vendor
                 ),
             available = device_discovery['status']['state']=='Available',
             device_id = device_discovery['deviceID'].split('/')[-1],
