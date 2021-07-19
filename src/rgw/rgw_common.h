@@ -39,7 +39,6 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
-#include "rgw_bucket_encryption.h"
 
 namespace ceph {
   class Formatter;

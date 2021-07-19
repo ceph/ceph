@@ -109,8 +109,7 @@ static constexpr std::uint64_t s3PutBucketPublicAccessBlock = 66;
 static constexpr std::uint64_t s3DeleteBucketPublicAccessBlock = 67;
 static constexpr std::uint64_t s3GetBucketEncryption = 68;
 static constexpr std::uint64_t s3PutBucketEncryption = 69;
-static constexpr std::uint64_t s3DeleteBucketEncryption = 70;
-static constexpr std::uint64_t s3All = 71;
+static constexpr std::uint64_t s3All = 70;
 
 static constexpr std::uint64_t iamPutUserPolicy = s3All + 1;
 static constexpr std::uint64_t iamGetUserPolicy = s3All + 2;
