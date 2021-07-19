@@ -8493,7 +8493,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   // (key=candidate, value=index into results_trackers); as we consume
   // entries from shards, we replace them with the next entries in the
   // shards until we run out
-  map<string, size_t> candidates;
+  std::map<std::string, size_t> candidates;
   size_t tracker_idx = 0;
   for (auto& t : results_trackers) {
     // it's important that the values in the map refer to the index
