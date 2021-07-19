@@ -24,9 +24,6 @@ void ServerSideEncryptionConfiguration::dump_xml(Formatter *f) const {
 
 void RGWBucketEncryptionConfig::decode_xml(XMLObj *obj) {
   rule_exist = RGWXMLDecoder::decode_xml("Rule", rule, obj);
-  if(!rule_exist) {
-    throw RGWXMLDecoder::err("rule must be present in XML");
-  }
 }
 
 void RGWBucketEncryptionConfig::dump_xml(Formatter *f) const {
