@@ -15,6 +15,7 @@ class RGWSI_Finisher;
 
 class RGWWatcher;
 class RGWSI_Notify_ShutdownCB;
+struct RGWCacheNotifyInfo;
 
 class RGWSI_Notify : public RGWServiceInstance
 {
@@ -41,7 +42,7 @@ private:
   bool enabled{false};
 
   double inject_notify_timeout_probability{0};
-  unsigned max_notify_retries{0};
+  static constexpr unsigned max_notify_retries = 10;
 
   string get_control_oid(int i);
   RGWSI_RADOS::Obj pick_control_obj(const string& key);
@@ -77,8 +78,8 @@ private:
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
-                    optional_yield y);
+  int robust_notify(RGWSI_RADOS::Obj& notify_obj,
+		    const RGWCacheNotifyInfo& bl, optional_yield y);
 
   void schedule_context(Context *c);
 public:
@@ -95,7 +96,8 @@ public:
       virtual void set_enabled(bool status) = 0;
   };
 
-  int distribute(const string& key, bufferlist& bl, optional_yield y);
+  int distribute(const string& key, const RGWCacheNotifyInfo& bl,
+		 optional_yield y);
 
   void register_watch_cb(CB *cb);
 };
