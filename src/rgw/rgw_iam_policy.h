@@ -107,7 +107,10 @@ static constexpr std::uint64_t s3DeletePublicAccessBlock = 64;
 static constexpr std::uint64_t s3GetBucketPublicAccessBlock = 65;
 static constexpr std::uint64_t s3PutBucketPublicAccessBlock = 66;
 static constexpr std::uint64_t s3DeleteBucketPublicAccessBlock = 67;
-static constexpr std::uint64_t s3All = 68;
+static constexpr std::uint64_t s3GetBucketEncryption = 68;
+static constexpr std::uint64_t s3PutBucketEncryption = 69;
+static constexpr std::uint64_t s3DeleteBucketEncryption = 70;
+static constexpr std::uint64_t s3All = 71;
 
 static constexpr std::uint64_t iamPutUserPolicy = s3All + 1;
 static constexpr std::uint64_t iamGetUserPolicy = s3All + 2;
@@ -197,6 +200,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetAccelerateConfiguration:
   case s3GetBucketAcl:
   case s3GetBucketCORS:
+  case s3GetBucketEncryption:
   case s3GetBucketLocation:
   case s3GetBucketLogging:
   case s3GetBucketNotification:
@@ -220,6 +224,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutAccelerateConfiguration:
   case s3PutBucketAcl:
   case s3PutBucketCORS:
+  case s3PutBucketEncryption:
   case s3PutBucketLogging:
   case s3PutBucketNotification:
   case s3PutBucketPolicy:

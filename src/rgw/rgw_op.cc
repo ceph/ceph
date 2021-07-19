@@ -8574,3 +8574,133 @@ void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
       return op_ret;
     });
 }
+
+int RGWPutBucketEncryption::get_params(optional_yield y)
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = read_all_input(s, max_size, false);
+  return op_ret;
+}
+
+int RGWPutBucketEncryption::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketEncryption)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWPutBucketEncryption::execute(optional_yield y)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+  op_ret = get_params(y);
+  if (op_ret < 0) {
+    return;
+  }
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    ldpp_dout(this, 0) << "ERROR: malformed XML" << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("ServerSideEncryptionConfiguration", bucket_encryption_conf, &parser, true);
+  } catch (RGWXMLDecoder::err& err) {
+    ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  if(bucket_encryption_conf.kms_master_key_id().compare("") != 0) {
+    ldpp_dout(this, 5) << "encryption not supported with sse-kms" << dendl;
+    op_ret = -ERR_NOT_IMPLEMENTED;
+    s->err.message = "SSE-KMS support is not provided";
+    return;
+  }
+
+  if(bucket_encryption_conf.sse_algorithm().compare("AES256") != 0) {
+    ldpp_dout(this, 5) << "only aes256 algorithm is supported for encryption" << dendl;
+    op_ret = -ERR_NOT_IMPLEMENTED;
+    s->err.message = "Encryption is supported only with AES256 algorithm";
+    return;
+  }
+
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  bufferlist key_id_bl;
+  string bucket_owner_id = s->bucket->get_info().owner.id;
+  key_id_bl.append(bucket_owner_id.c_str(), bucket_owner_id.size() + 1);
+
+  bufferlist conf_bl;
+  bucket_encryption_conf.encode(conf_bl);
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y, &conf_bl, &key_id_bl] {
+    rgw::sal::Attrs attrs = s->bucket->get_attrs();
+    attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY] = conf_bl;
+    attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = key_id_bl;
+    return s->bucket->set_instance_attrs(this, attrs, y);
+  });
+}
+
+int RGWGetBucketEncryption::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketEncryption)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWGetBucketEncryption::execute(optional_yield y)
+{
+  const auto& attrs = s->bucket_attrs;
+  if (auto aiter = attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+      aiter == attrs.end()) {
+    ldpp_dout(this, 0) << "can't find BUCKET ENCRYPTION attr for bucket_name = " << s->bucket_name << dendl;
+    op_ret = -ENOENT;
+    s->err.message = "The server side encryption configuration was not found";
+    return;
+  } else {
+    bufferlist::const_iterator iter{&aiter->second};
+    try {
+      bucket_encryption_conf.decode(iter);
+    } catch (const buffer::error& e) {
+      ldpp_dout(this, 0) << __func__ <<  "decode bucket_encryption_conf failed" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  }
+}
+
+int RGWDeleteBucketEncryption::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketEncryption)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWDeleteBucketEncryption::execute(optional_yield y)
+{
+  bufferlist data;
+  op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    rgw::sal::Attrs attrs = s->bucket->get_attrs();
+    attrs.erase(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+    attrs.erase(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
+    op_ret = s->bucket->set_instance_attrs(this, attrs, y);
+    return op_ret;
+  });
+}

@@ -79,6 +79,7 @@ static const actpair actpairs[] =
  { "s3:GetAccelerateConfiguration", s3GetAccelerateConfiguration },
  { "s3:GetBucketAcl", s3GetBucketAcl },
  { "s3:GetBucketCORS", s3GetBucketCORS },
+ { "s3:GetBucketEncryption", s3GetBucketEncryption },
  { "s3:GetBucketLocation", s3GetBucketLocation },
  { "s3:GetBucketLogging", s3GetBucketLogging },
  { "s3:GetBucketNotification", s3GetBucketNotification },
@@ -111,6 +112,7 @@ static const actpair actpairs[] =
  { "s3:PutAccelerateConfiguration", s3PutAccelerateConfiguration },
  { "s3:PutBucketAcl", s3PutBucketAcl },
  { "s3:PutBucketCORS", s3PutBucketCORS },
+ { "s3:PutBucketEncryption", s3PutBucketEncryption },
  { "s3:PutBucketLogging", s3PutBucketLogging },
  { "s3:PutBucketNotification", s3PutBucketNotification },
  { "s3:PutBucketPolicy", s3PutBucketPolicy },
@@ -1135,6 +1137,12 @@ const char* action_bit_string(uint64_t action) {
 
   case s3PutBucketCORS:
     return "s3:PutBucketCORS";
+
+  case s3GetBucketEncryption:
+    return "s3:GetBucketEncryption";
+
+  case s3PutBucketEncryption:
+    return "s3:PutBucketEncryption";
 
   case s3GetBucketVersioning:
     return "s3:GetBucketVersioning";
