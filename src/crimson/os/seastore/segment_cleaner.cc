@@ -144,9 +144,13 @@ void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
   segment_usage[id].dump_usage(block_size);
 }
 
-SegmentCleaner::SegmentCleaner(config_t config, bool detailed)
+SegmentCleaner::SegmentCleaner(
+  config_t config,
+  ScannerRef&& scr,
+  bool detailed)
   : detailed(detailed),
     config(config),
+    scanner(std::move(scr)),
     gc_process(*this)
 {
   register_metrics();
@@ -304,7 +308,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
     }
     next.offset = 0;
     scan_cursor =
-      std::make_unique<ExtentCallbackInterface::scan_extents_cursor>(
+      std::make_unique<Scanner::scan_extents_cursor>(
 	next);
     logger().debug(
       "SegmentCleaner::do_gc: starting gc on segment {}",
@@ -313,7 +317,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
     ceph_assert(!scan_cursor->is_complete());
   }
 
-  return ecb->scan_extents(
+  return scanner->scan_extents(
     *scan_cursor,
     config.reclaim_bytes_stride
   ).safe_then([this](auto &&_extents) {
@@ -369,6 +373,43 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
     if (scan_cursor->is_complete()) {
       scan_cursor.reset();
     }
+  });
+}
+
+SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
+  return seastar::do_with(
+    std::vector<std::pair<segment_id_t, segment_header_t>>(),
+    [this](auto& segments) {
+    return crimson::do_for_each(
+      boost::make_counting_iterator(segment_id_t{0}),
+      boost::make_counting_iterator(segment_id_t{num_segments}),
+      [this, &segments](auto segment_id) {
+      return scanner->read_segment_header(segment_id)
+      .safe_then([&segments, segment_id, this](auto header) {
+	if (header.out_of_line) {
+	  logger().debug("Scanner::init_segments: out-of-line segment {}", segment_id);
+	  init_mark_segment_closed(
+	    segment_id,
+	    header.journal_segment_seq);
+	} else {
+	  logger().debug("Scanner::init_segments: journal segment {}", segment_id);
+	  segments.emplace_back(std::make_pair(segment_id, std::move(header)));
+	}
+	return seastar::now();
+      }).handle_error(
+	crimson::ct_error::enoent::handle([](auto) {
+	  return init_segments_ertr::now();
+	}),
+	crimson::ct_error::enodata::handle([](auto) {
+	  return init_segments_ertr::now();
+	}),
+	crimson::ct_error::input_output_error::pass_further{}
+      );
+    }).safe_then([&segments] {
+      return seastar::make_ready_future<
+	std::vector<std::pair<segment_id_t, segment_header_t>>>(
+	  std::move(segments));
+    });
   });
 }
 

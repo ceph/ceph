@@ -840,6 +840,38 @@ ceph::bufferlist encode_record(
   segment_off_t committed_to,
   segment_nonce_t current_segment_nonce = 0);
 
+/// scan segment for end incrementally
+struct scan_valid_records_cursor {
+  bool last_valid_header_found = false;
+  paddr_t offset;
+  paddr_t last_committed;
+
+  struct found_record_t {
+    paddr_t offset;
+    record_header_t header;
+    bufferlist mdbuffer;
+
+    found_record_t(
+      paddr_t offset,
+      const record_header_t &header,
+      const bufferlist &mdbuffer)
+      : offset(offset), header(header), mdbuffer(mdbuffer) {}
+  };
+  std::deque<found_record_t> pending_records;
+
+  bool is_complete() const {
+    return last_valid_header_found && pending_records.empty();
+  }
+
+  paddr_t get_offset() const {
+    return offset;
+  }
+
+  scan_valid_records_cursor(
+    paddr_t offset)
+    : offset(offset) {}
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
