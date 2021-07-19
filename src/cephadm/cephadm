@@ -170,8 +170,9 @@ class ContainerEngine:
     def __init__(self) -> None:
         self.path = find_program(self.EXE)
 
+    @classmethod
     @property
-    def EXE(self) -> str:
+    def EXE(cls) -> str:
         raise NotImplementedError()
 
 
@@ -1998,7 +1999,9 @@ def check_container_engine(ctx):
     # type: (CephadmContext) -> None
     engine = ctx.container_engine
     if not isinstance(engine, CONTAINER_PREFERENCE):
-        raise Error('Unable to locate any of %s' % [i.EXE for i in CONTAINER_PREFERENCE])
+        # See https://github.com/python/mypy/issues/8993
+        exes: List[str] = [i.EXE for i in CONTAINER_PREFERENCE]  # type: ignore
+        raise Error('No container engine binary found ({}). Try run `apt/dnf/yum/zypper install <container engine>`'.format(' or '.join(exes)))
     elif isinstance(engine, Podman):
         engine.get_version(ctx)
         if engine.version < MIN_PODMAN_VERSION:
