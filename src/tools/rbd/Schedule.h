@@ -20,6 +20,8 @@ void add_level_spec_options(
   boost::program_options::options_description *options, bool allow_image=true);
 int get_level_spec_args(const boost::program_options::variables_map &vm,
                         std::map<std::string, std::string> *args);
+void normalize_level_spec_args(std::map<std::string, std::string> *args);
+
 void add_schedule_options(
   boost::program_options::options_description *positional);
 int get_schedule_args(const boost::program_options::variables_map &vm,

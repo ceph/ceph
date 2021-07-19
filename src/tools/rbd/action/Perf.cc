@@ -617,6 +617,7 @@ int execute_iostat(const po::variables_map &vm,
     return r;
   }
 
+  utils::normalize_pool_name(&pool);
   std::string pool_spec = format_pool_spec(pool, pool_namespace);
 
   // no point to refreshing faster than the stats period
@@ -679,6 +680,7 @@ int execute_iotop(const po::variables_map &vm,
     return r;
   }
 
+  utils::normalize_pool_name(&pool);
   iotop::MainWindow mainWindow(rados, format_pool_spec(pool, pool_namespace));
   r = mainWindow.run();
   if (r < 0) {

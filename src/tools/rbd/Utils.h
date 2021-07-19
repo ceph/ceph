@@ -99,7 +99,9 @@ int extract_spec(const std::string &spec, std::string *pool_name,
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
 
+void normalize_pool_name(std::string* pool_name);
 std::string get_default_pool_name();
+
 int get_pool_and_namespace_names(
     const boost::program_options::variables_map &vm,
     bool default_empty_pool_name, bool validate_pool_name,
@@ -154,9 +156,9 @@ void init_context();
 
 int init_rados(librados::Rados *rados);
 
-int init(const std::string &pool_name, const std::string& namespace_name,
+int init(const std::string& pool_name, const std::string& namespace_name,
          librados::Rados *rados, librados::IoCtx *io_ctx);
-int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
+int init_io_ctx(librados::Rados &rados, std::string pool_name,
                 const std::string& namespace_name, librados::IoCtx *io_ctx);
 int set_namespace(const std::string& namespace_name, librados::IoCtx *io_ctx);
 
