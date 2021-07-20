@@ -64,9 +64,11 @@ namespace crimson::os {
 
 using crimson::common::get_conf;
 
-AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
+AlienStore::AlienStore(const std::string& path,
+                       const ConfigValues& values,
+                       seastar::alien::instance& alien)
   : path{path},
-    alien{std::make_unique<seastar::alien::instance>()}
+    alien{alien}
 {
   cct = std::make_unique<CephContext>(CEPH_ENTITY_TYPE_OSD);
   g_ceph_context = cct.get();
@@ -420,7 +422,7 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	  assert(tp);
 	  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
 	    [this, ch, id, crimson_wrapper, &txn, &done] {
-	    txn.register_on_commit(new OnCommit(*alien,
+	    txn.register_on_commit(new OnCommit(alien,
 						id, done, crimson_wrapper,
 						txn));
 	    auto c = static_cast<AlienCollection*>(ch.get());
