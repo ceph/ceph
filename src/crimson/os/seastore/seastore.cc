@@ -51,7 +51,7 @@ void SeaStore::register_metrics()
   namespace sm = seastar::metrics;
   using op_type_t = SeaStore::op_type_t;
   auto lat_label = sm::label("latency");
-  std::map<op_type_t, sm::label_instance> labels_by_op_type = {
+  std::pair<op_type_t, sm::label_instance> labels_by_op_type[] = {
     {op_type_t::TRANSACTION,     lat_label("TRANSACTION")},
     {op_type_t::READ,            lat_label("READ")},
     {op_type_t::WRITE,           lat_label("WRITE")},
@@ -70,7 +70,7 @@ void SeaStore::register_metrics()
       {
         sm::make_histogram(
           "op_lat", [this, op_type] {
-          return get_latency(op_type);
+            return get_latency(op_type);
           },
           sm::description(desc),
           {label}
