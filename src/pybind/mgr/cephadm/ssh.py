@@ -1,6 +1,8 @@
 import logging
 import os
+import asyncio
 from tempfile import NamedTemporaryFile
+from threading import Thread
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
@@ -28,6 +30,22 @@ Host *
   UserKnownHostsFile /dev/null
   ConnectTimeout=30
 """
+
+
+class EventLoopThread(Thread):
+
+    def __init__(self) -> None:
+
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+        self._loop.set_debug(True)
+
+        super().__init__(target=self._loop.run_forever)
+        self.start()
+
+    def get_result(self, coro) -> Any:  # type: ignore
+        return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+
 
 class SSHManager:
 
