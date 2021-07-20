@@ -23,9 +23,9 @@ def timeout(seconds):
 """
 introduced by Linux 3.15
 """
-fcntl.F_OFD_GETLK = 36
-fcntl.F_OFD_SETLK = 37
-fcntl.F_OFD_SETLKW = 38
+setattr(fcntl, "F_OFD_GETLK", 36)
+setattr(fcntl, "F_OFD_SETLK", 37)
+setattr(fcntl, "F_OFD_SETLKW", 38)
 
 
 def main():
