@@ -506,6 +506,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         A command handler will typically change the declarative state
         of cephadm. This loop will then attempt to apply this new state.
         """
+        # for ssh in serve
+        self.event_loop = ssh.EventLoopThread()
+
         serve = CephadmServe(self)
         serve.serve()
 
