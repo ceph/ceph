@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
@@ -125,4 +126,30 @@ class SSHManager:
             logger.debug(msg)
             raise OrchestratorError(msg)
         return out
+
+    async def _write_remote_file(self,
+                                 host: str,
+                                 path: str,
+                                 content: bytes,
+                                 mode: Optional[int] = None,
+                                 uid: Optional[int] = None,
+                                 gid: Optional[int] = None,
+                                 addr: Optional[str] = None,
+                                 **kwargs: Any,
+                                 ) -> None:
+        try:
+            dirname = os.path.dirname(path)
+            await self._check_execute_command(host, ['mkdir', '-p', dirname], addr=addr)
+            tmp_path = path + '.new'
+            await self._check_execute_command(host, ['touch', tmp_path], addr=addr)
+            if uid is not None and gid is not None and mode is not None:
+                # shlex quote takes str or byte object, not int
+                await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
+                await self._check_execute_command(host, ['chmod', oct(mode)[2:], tmp_path], addr=addr)
+            await self._check_execute_command(host, ['tee', '-', tmp_path], stdin=content, addr=addr)
+            await self._check_execute_command(host, ['mv', tmp_path, path], addr=addr)
+        except Exception as e:
+            msg = f"Unable to write {host}:{path}: {e}"
+            logger.exception(msg)
+            raise OrchestratorError(msg)
 
