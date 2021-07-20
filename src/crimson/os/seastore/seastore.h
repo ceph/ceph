@@ -128,6 +128,17 @@ public:
   unsigned get_max_attr_name_length() const final {
     return 256;
   }
+  enum class op_type_t : uint8_t {
+    TRANSACTION = 0,
+    READ,
+    WRITE,
+    GET_ATTR,
+    GET_ATTRS,
+    STAT,
+    OMAP_GET_VALUES,
+    OMAP_LIST,
+    MAX
+  };
 
 private:
   struct internal_context_t {
@@ -146,6 +157,7 @@ private:
     std::vector<OnodeRef> onodes;
 
     ceph::os::Transaction::iterator iter;
+    std::chrono::steady_clock::time_point begin_timestamp = std::chrono::steady_clock::now();
 
     template <typename TM>
     void reset_preserve_handle(TM &tm) {
@@ -162,13 +174,14 @@ private:
     CollectionRef ch,
     ceph::os::Transaction &&t,
     Transaction::src_t src,
+    op_type_t op_type,
     F &&f) {
     return seastar::do_with(
       internal_context_t(
 	ch, std::move(t),
 	transaction_manager->create_transaction(src)),
       std::forward<F>(f),
-      [this](auto &ctx, auto &f) {
+      [this, op_type](auto &ctx, auto &f) {
 	return ctx.transaction->get_handle().take_collection_lock(
 	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
 	).then([&, this] {
@@ -181,6 +194,9 @@ private:
 	      on_error(ctx.ext_transaction);
 	    })
 	  );
+	}).then([this, op_type, &ctx] {
+	  add_latency_sample(op_type,
+	      std::chrono::steady_clock::now() - ctx.begin_timestamp);
 	});
       });
   }
@@ -190,7 +206,9 @@ private:
     CollectionRef ch,
     const ghobject_t &oid,
     Transaction::src_t src,
+    op_type_t op_type,
     F &&f) const {
+    auto begin_time = std::chrono::steady_clock::now();
     return seastar::do_with(
       oid,
       Ret{},
@@ -208,7 +226,9 @@ private:
 	  }).safe_then([&ret](auto _ret) {
 	    ret = _ret;
 	  });
-	}).safe_then([&ret] {
+	}).safe_then([&ret, op_type, &t, begin_time, this] {
+	  const_cast<SeaStore*>(this)->add_latency_sample(op_type,
+                     std::chrono::steady_clock::now() - begin_time);
 	  return seastar::make_ready_future<Ret>(ret);
 	});
       });
@@ -310,6 +330,26 @@ private:
     std::map<std::string, ceph::bufferlist>&& kvs);
 
   boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
+
+  static constexpr auto LAT_MAX = static_cast<std::size_t>(op_type_t::MAX);
+  struct {
+    std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
+  } stats;
+
+  seastar::metrics::histogram& get_latency(
+      op_type_t op_type) {
+    assert(static_cast<std::size_t>(op_type) < stats.op_lat.size());
+    return stats.op_lat[static_cast<std::size_t>(op_type)];
+  }
+
+  void add_latency_sample(op_type_t op_type,
+       std::chrono::steady_clock::duration dur) {
+    seastar::metrics::histogram& lat = get_latency(op_type);
+    lat.sample_count++;
+    lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+  }
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 };
 
 std::unique_ptr<SeaStore> make_seastore(
