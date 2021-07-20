@@ -23,12 +23,12 @@ namespace crimson::os {
 class OSDMeta {
   template<typename T> using Ref = boost::intrusive_ptr<T>;
 
-  crimson::os::FuturizedStore* store;
+  crimson::os::FuturizedStore& store;
   Ref<crimson::os::FuturizedCollection> coll;
 
 public:
   OSDMeta(Ref<crimson::os::FuturizedCollection> coll,
-          crimson::os::FuturizedStore* store)
+          crimson::os::FuturizedStore& store)
     : store{store}, coll{coll}
   {}
 

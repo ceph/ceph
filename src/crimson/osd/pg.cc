@@ -419,7 +419,7 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 	crimson::common::system_shutdown_exception());
   }
 
-  return seastar::do_with(PGMeta(store, pgid), [] (auto& pg_meta) {
+  return seastar::do_with(PGMeta(*store, pgid), [] (auto& pg_meta) {
     return pg_meta.load();
   }).then([this, store](auto&& ret) {
     auto [pg_info, past_intervals] = std::move(ret);
