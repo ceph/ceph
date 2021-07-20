@@ -2,6 +2,8 @@
 Cephadm Operations
 ==================
 
+.. _watching_cephadm_logs:
+
 Watching cephadm log messages
 =============================
 
@@ -15,7 +17,7 @@ up. Run the following command to see the logs in real time:
 
 By default, this command shows info-level events and above.  To see
 debug-level messages as well as info-level events, run the following
-command:
+commands:
 
 .. prompt:: bash #
 
