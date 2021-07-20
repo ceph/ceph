@@ -1647,13 +1647,19 @@ def infer_fsid(func):
     """
     If we only find a single fsid in /var/lib/ceph/*, use that
     """
+    @infer_config
     @wraps(func)
     def _infer_fsid(ctx: CephadmContext):
         if ctx.fsid:
             logger.debug('Using specified fsid: %s' % ctx.fsid)
             return func(ctx)
 
-        fsids_set = set()
+        fsids = set()
+
+        cp = read_config(ctx.config)
+        if cp.has_option('global', 'fsid'):
+            fsids.add(cp.get('global', 'fsid'))
+
         daemon_list = list_daemons(ctx, detail=False)
         for daemon in daemon_list:
             if not is_fsid(daemon['fsid']):
@@ -1661,11 +1667,11 @@ def infer_fsid(func):
                 continue
             elif 'name' not in ctx or not ctx.name:
                 # ctx.name not specified
-                fsids_set.add(daemon['fsid'])
+                fsids.add(daemon['fsid'])
             elif daemon['name'] == ctx.name:
                 # ctx.name is a match
-                fsids_set.add(daemon['fsid'])
-        fsids = sorted(fsids_set)
+                fsids.add(daemon['fsid'])
+        fsids = sorted(fsids)
 
         if not fsids:
             # some commands do not always require an fsid
@@ -1686,24 +1692,22 @@ def infer_config(func):
     """
     @wraps(func)
     def _infer_config(ctx: CephadmContext):
+        ctx.config = ctx.config if 'config' in ctx else None
         if ctx.config:
             logger.debug('Using specified config: %s' % ctx.config)
             return func(ctx)
-        config = None
         if ctx.fsid:
-            name = ctx.name
+            name = ctx.name if 'name' in ctx else None
             if not name:
                 daemon_list = list_daemons(ctx, detail=False)
                 for daemon in daemon_list:
-                    if daemon['name'].startswith('mon.'):
+                    if daemon.get('name', '').startswith('mon.'):
                         name = daemon['name']
                         break
             if name:
-                config = '/var/lib/ceph/{}/{}/config'.format(ctx.fsid,
-                                                             name)
-        if config:
-            logger.info('Inferring config %s' % config)
-            ctx.config = config
+                ctx.config = f'/var/lib/ceph/{ctx.fsid}/{name}/config'
+        if ctx.config:
+            logger.info('Inferring config %s' % ctx.config)
         elif os.path.exists(SHELL_DEFAULT_CONF):
             logger.debug('Using default config: %s' % SHELL_DEFAULT_CONF)
             ctx.config = SHELL_DEFAULT_CONF
@@ -4494,24 +4498,15 @@ def command_run(ctx):
 ##################################
 
 
-def fsid_conf_mismatch(ctx):
-    # type: (CephadmContext) -> bool
-    (config, _) = get_config_and_keyring(ctx)
-    if config:
-        for c in config.split('\n'):
-            if 'fsid = ' in c.strip():
-                if 'fsid = ' + ctx.fsid != c.strip():
-                    return True
-    return False
-
-
 @infer_fsid
 @infer_config
 @infer_image
 def command_shell(ctx):
     # type: (CephadmContext) -> int
-    if fsid_conf_mismatch(ctx):
-        raise Error('fsid does not match ceph conf')
+    cp = read_config(ctx.config)
+    if cp.has_option('global', 'fsid') and \
+       cp.get('global', 'fsid') != ctx.fsid:
+        raise Error('fsid does not match ceph.conf')
 
     if ctx.fsid:
         make_log_dir(ctx, ctx.fsid)
