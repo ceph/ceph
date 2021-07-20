@@ -532,6 +532,7 @@ public:
 
   void clear() {
     extent_index.clear();
+    bytes = 0;
   }
 
   void insert(CachedExtent &extent) {
@@ -541,17 +542,25 @@ public:
       extent.get_length());
     ceph_assert(a == b);
 
-    extent_index.insert(extent);
+    [[maybe_unused]] auto [iter, inserted] = extent_index.insert(extent);
+    assert(inserted);
     extent.parent_index = this;
+
+    bytes += extent.get_length();
   }
 
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
-    extent_index.erase(extent);
+    auto erased = extent_index.erase(extent);
     extent.parent_index = nullptr;
+
+    if (erased) {
+      bytes -= extent.get_length();
+    }
   }
 
   void replace(CachedExtent &to, CachedExtent &from) {
+    assert(to.get_length() == from.get_length());
     extent_index.replace_node(extent_index.s_iterator_to(from), to);
     from.parent_index = nullptr;
     to.parent_index = this;
@@ -573,18 +582,21 @@ public:
     return extent_index.end();
   }
 
-  void merge(ExtentIndex &&other) {
-    for (auto it = other.extent_index.begin();
-	 it != other.extent_index.end();
-	 ) {
-      auto &ext = *it;
-      ++it;
-      other.extent_index.erase(ext);
-      extent_index.insert(ext);
-    }
+  auto size() const {
+    return extent_index.size();
   }
 
-  ~ExtentIndex() { assert(extent_index.empty()); }
+  auto get_bytes() const {
+    return bytes;
+  }
+
+  ~ExtentIndex() {
+    assert(extent_index.empty());
+    assert(bytes == 0);
+  }
+
+private:
+  uint64_t bytes = 0;
 };
 
 class LogicalCachedExtent;

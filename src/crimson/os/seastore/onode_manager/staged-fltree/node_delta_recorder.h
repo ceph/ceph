@@ -29,7 +29,6 @@ class DeltaRecorder {
   }
 
   ceph::bufferlist get_delta() {
-    assert(!is_empty());
     return std::move(encoded);
   }
 

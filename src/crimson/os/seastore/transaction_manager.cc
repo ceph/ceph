@@ -315,7 +315,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
   LOG_PREFIX(TransactionManager::get_extent_if_live);
   DEBUGT("type {}, addr {}, laddr {}, len {}", t, type, addr, laddr, len);
 
-  return cache->get_extent_if_cached(t, addr
+  return cache->get_extent_if_cached(t, addr, type
   ).si_then([this, FNAME, &t, type, addr, laddr, len](auto extent)
 	    -> get_extent_if_live_ret {
     if (extent) {
