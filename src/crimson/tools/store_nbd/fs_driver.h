@@ -6,9 +6,17 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
+namespace seastar::alien {
+class instance;
+}
+
 class FSDriver final : public BlockDriver {
 public:
-  FSDriver(config_t config) : config(config) {}
+  FSDriver(config_t config,
+	   seastar::alien::instance& alien)
+  : config(config),
+    alien(alien)
+  {}
   ~FSDriver() final {}
 
   bufferptr get_buffer(size_t size) final {
@@ -34,6 +42,7 @@ public:
 private:
   size_t size = 0;
   const config_t config;
+  seastar::alien::instance& alien;
   std::unique_ptr<crimson::os::FuturizedStore> fs;
   std::map<unsigned, crimson::os::CollectionRef> collections;
 
