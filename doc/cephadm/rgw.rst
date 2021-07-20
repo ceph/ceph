@@ -82,6 +82,41 @@ something like:
 See :ref:`orchestrator-cli-placement-spec` for details of the placement
 specification.  See :ref:`multisite` for more information of setting up multisite RGW.
 
+Setting up HTTPS
+----------------
+
+In order to enable HTTPS for RGW services, apply a spec file following this scheme:
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: myrgw
+  spec:
+    rgw_frontend_ssl_certificate: | 
+      -----BEGIN PRIVATE KEY-----
+      V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
+      ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
+      IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
+      YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
+      ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
+      -----END PRIVATE KEY-----
+      -----BEGIN CERTIFICATE-----
+      V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
+      ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
+      IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
+      YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
+      ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
+      -----END CERTIFICATE-----
+    ssl: true
+
+Then apply this yaml document:
+
+.. prompt:: bash #
+
+  ceph orch apply -i myrgw.yaml
+
+Note the value of ``rgw_frontend_ssl_certificate`` is a literal string as
+indicated by a ``|`` character preserving newline characters. 
 
 .. _orchestrator-haproxy-service-spec:
 
