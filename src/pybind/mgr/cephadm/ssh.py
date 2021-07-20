@@ -117,6 +117,9 @@ class SSHManager:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
 
+    def remote_connection(self, *args: Any) -> "SSHClientConnection":
+        return self.mgr.event_loop.get_result(self._remote_connection(*args))
+
     async def _execute_command(self,
                                host: str,
                                cmd: List[str],
@@ -140,6 +143,9 @@ class SSHManager:
         err = r.stderr.rstrip('\n')
         return out, err, r.returncode
 
+    def execute_command(self, *args: Any, **kwargs: Any) -> Tuple[str, str, int]:
+        return self.mgr.event_loop.get_result(self._execute_command(*args, **kwargs))
+
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: List[str],
@@ -153,6 +159,9 @@ class SSHManager:
             logger.debug(msg)
             raise OrchestratorError(msg)
         return out
+
+    def check_execute_command(self, *args: Any, **kwargs: Any) -> str:
+        return self.mgr.event_loop.get_result(self._check_execute_command(*args, **kwargs))
 
     async def _write_remote_file(self,
                                  host: str,
@@ -179,6 +188,9 @@ class SSHManager:
             msg = f"Unable to write {host}:{path}: {e}"
             logger.exception(msg)
             raise OrchestratorError(msg)
+
+    def write_remote_file(self, *args: Any, **kwargs: Any) -> None:
+        self.mgr.event_loop.get_result(self._write_remote_file(*args, **kwargs))
 
     def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
