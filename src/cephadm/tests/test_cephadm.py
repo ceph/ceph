@@ -30,6 +30,16 @@ with mock.patch('builtins.open', create=True):
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
 
+def get_ceph_conf(
+        fsid='00000000-0000-0000-0000-0000deadbeef',
+        mon_host='[v2:192.168.1.1:3300/0,v1:192.168.1.1:6789/0]'):
+    return f'''
+# minimal ceph.conf for {fsid}
+[global]
+        fsid = {fsid}
+        mon_host = {mon_host}
+'''
+
 class TestCephAdm(object):
 
     def test_docker_unit_file(self):
@@ -541,6 +551,184 @@ docker.io/ceph/daemon-base:octopus
 
         s = 'ceph/ceph:latest'
         assert cd.normalize_image_digest(s) == f'{cd.DEFAULT_REGISTRY}/{s}'
+
+    @pytest.mark.parametrize('fsid, ceph_conf, list_daemons, result, err, ',
+        [
+            (
+                None,
+                None,
+                [],
+                None,
+                None,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                [],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                None,
+                [
+                    {'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                None,
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                None,
+                r'Cannot infer an fsid',
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [
+                    {'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                None,
+                r'Cannot infer an fsid',
+            ),
+        ])
+    @mock.patch('cephadm.call')
+    def test_infer_fsid(self, _call, fsid, ceph_conf, list_daemons, result, err, cephadm_fs):
+        # build the context
+        ctx = cd.CephadmContext()
+        ctx.fsid = fsid
+
+        # mock the decorator
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        infer_fsid = cd.infer_fsid(mock_fn)
+
+        # mock the ceph.conf file content
+        if ceph_conf:
+            f = cephadm_fs.create_file('ceph.conf', contents=ceph_conf)
+            ctx.config = f.path
+
+        # test
+        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+            if err:
+                with pytest.raises(cd.Error, match=err):
+                    infer_fsid(ctx)
+            else:
+                infer_fsid(ctx)
+            assert ctx.fsid == result
+
+    @pytest.mark.parametrize('fsid, config, name, list_daemons, result, ',
+        [
+            (
+                None,
+                '/foo/bar.conf',
+                None,
+                [],
+                '/foo/bar.conf',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [{'name': 'mon.a'}],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [{'name': 'osd.0'}],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                '/foo/bar.conf',
+                'mon.a',
+                [{'name': 'mon.a'}],
+                '/foo/bar.conf',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                'mon.a',
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                'osd.0',
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/osd.0/config',
+            ),
+            (
+                None,
+                None,
+                None,
+                [],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+        ])
+    @mock.patch('cephadm.call')
+    def test_infer_config(self, _call, fsid, config, name, list_daemons, result, cephadm_fs):
+        # build the context
+        ctx = cd.CephadmContext()
+        ctx.fsid = fsid
+        ctx.config = config
+        ctx.name = name
+
+        # mock the decorator
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        infer_config = cd.infer_config(mock_fn)
+
+        # mock the shell config
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+
+        # test
+        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+            infer_config(ctx)
+            assert ctx.config == result
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
@@ -1238,3 +1426,89 @@ class TestBootstrap(object):
             else:
                 retval = cd.command_bootstrap(ctx)
                 assert retval == 0
+
+
+class TestShell(object):
+
+    def test_fsid(self, cephadm_fs):
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+
+        cmd = ['shell', '--fsid', fsid]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.fsid == fsid
+
+        s = get_ceph_conf(fsid=fsid)
+        f = cephadm_fs.create_file('ceph.conf', contents=s)
+
+        cmd = ['shell', '--fsid', fsid, '--config', f.path]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.fsid == fsid
+
+        cmd = ['shell', '--fsid', '10000000-0000-0000-0000-0000deadbeef', '--config', f.path]
+        with with_cephadm_ctx(cmd) as ctx:
+            err = 'fsid does not match ceph.conf'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+                assert ctx.fsid == None
+
+    def test_name(self, cephadm_fs):
+        cmd = ['shell', '--name', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+
+        cmd = ['shell', '--name', 'foo.bar']
+        with with_cephadm_ctx(cmd) as ctx:
+            err = r'must pass --fsid'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+        cmd = ['shell', '--name', 'foo.bar', '--fsid', fsid]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+
+    def test_config(self, cephadm_fs):
+        cmd = ['shell']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == None
+
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == cd.SHELL_DEFAULT_CONF
+
+        cmd = ['shell', '--config', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == 'foo'
+
+    def test_keyring(self, cephadm_fs):
+        cmd = ['shell']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == None
+
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_KEYRING)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == cd.SHELL_DEFAULT_KEYRING
+
+        cmd = ['shell', '--keyring', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == 'foo'
