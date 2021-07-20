@@ -1,6 +1,7 @@
 import logging
 from contextlib import contextmanager
 from io import StringIO
+from shlex import quote
 from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Any, Iterator
 from orchestrator import OrchestratorError
 
@@ -87,4 +88,41 @@ class SSHManager:
         finally:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
+
+    async def _execute_command(self,
+                               host: str,
+                               cmd: List[str],
+                               stdin: Optional[bytes] = b"",
+                               addr: Optional[str] = None,
+                               **kwargs: Any,
+                               ) -> Tuple[str, str, int]:
+        conn = await self._remote_connection(host, addr)
+        cmd = "sudo " + " ".join(quote(x) for x in cmd)
+        logger.debug(f'Running command: {cmd}')
+        try:
+            r = await conn.run(cmd, input=stdin.decode() if stdin else None)
+        # handle these Exceptions otherwise you might get a weird error like TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
+        except (asyncssh.ChannelOpenError, Exception) as e:
+            # SSH connection closed or broken, will create new connection next call
+            logger.debug(f'Connection to {host} failed. {str(e)}')
+            self._reset_con(host)
+            self.mgr.offline_hosts.add(host)
+            raise OrchestratorError(f'Unable to reach remote host {host}. {str(e)}')
+        out = r.stdout.rstrip('\n')
+        err = r.stderr.rstrip('\n')
+        return out, err, r.returncode
+
+    async def _check_execute_command(self,
+                                     host: str,
+                                     cmd: List[str],
+                                     stdin: Optional[bytes] = b"",
+                                     addr: Optional[str] = None,
+                                     **kwargs: Any,
+                                     ) -> str:
+        out, err, code = await self._execute_command(host, cmd, stdin, addr)
+        if code != 0:
+            msg = f'Command {cmd} failed. {err}'
+            logger.debug(msg)
+            raise OrchestratorError(msg)
+        return out
 
