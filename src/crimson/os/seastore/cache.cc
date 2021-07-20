@@ -46,7 +46,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   }
 
   // absent from transaction
-  ext = query_cache(addr);
+  // retiring is not included by the cache hit metrics
+  ext = query_cache(addr, nullptr);
   if (ext) {
     if (ext->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
       t.add_to_read_set(ext);
@@ -112,6 +113,13 @@ void Cache::register_metrics()
     {extent_types_t::TEST_BLOCK_PHYSICAL, ext_label("TEST_BLOCK_PHYSICAL")}
   };
 
+  auto counter_label = sm::label("counter");
+  std::map<std::string, sm::label_instance> labels_by_counter {
+    {"EXTENTS",     counter_label("EXTENTS")},
+    {"BYTES",       counter_label("BYTES")},
+    {"DELTA_BYTES", counter_label("DELTA_BYTES")},
+  };
+
   /*
    * trans_created
    */
@@ -174,9 +182,11 @@ void Cache::register_metrics()
       }
     );
   };
-  for (auto& src : {src_t::MUTATE,
-                    src_t::INIT,
-                    src_t::CLEANER}) {
+  for (auto& [src, label] : labels_by_src) {
+    if (src == src_t::READ) {
+      // READ transaction won't commit
+      continue;
+    }
     register_trans_committed(src);
   }
 
@@ -245,6 +255,236 @@ void Cache::register_metrics()
       ),
     }
   );
+
+  /**
+   * read_transactions_successful
+   */
+  stats.read_transactions_successful = 0;
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "read_trans_successful",
+        stats.read_transactions_successful,
+        sm::description("total number of successful read transactions"),
+        {}
+      ),
+    }
+  );
+
+  /*
+   * cache_query: cache_access and cache_hit
+   */
+  auto register_cache_access =
+    [this, &labels_by_src, &labels_by_ext]
+    (src_t src, const sm::label_instance& src_label,
+     extent_types_t ext, const sm::label_instance& ext_label) {
+      auto m_key = std::make_pair(src, ext);
+      stats.cache_query[m_key] = {0, 0};
+      {
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              "cache_access",
+              stats.cache_query.find(m_key)->second.access,
+              sm::description("total number of cache accesses labeled by "
+                              "transaction source and extent type"),
+              {src_label, ext_label}
+            ),
+            sm::make_counter(
+              "cache_hit",
+              stats.cache_query.find(m_key)->second.hit,
+              sm::description("total number of cache hits labeled by "
+                              "transaction source and extent type"),
+              {src_label, ext_label}
+            ),
+          }
+        );
+      }
+    };
+
+  for (auto& [src, src_label] : labels_by_src) {
+    for (auto& [ext, ext_label] : labels_by_ext) {
+      if (ext != extent_types_t::RETIRED_PLACEHOLDER) {
+        register_cache_access(src, src_label, ext, ext_label);
+      }
+    }
+  }
+
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "cache_access",
+        [this] {
+          uint64_t total = 0;
+          for (auto& [k, v] : stats.cache_query) {
+            total += v.access;
+          }
+          return total;
+        },
+        sm::description("total number of cache accesses"),
+        {src_label("ALL")}
+      ),
+      sm::make_counter(
+        "cache_hit",
+        [this] {
+          uint64_t total = 0;
+          for (auto& [k, v] : stats.cache_query) {
+            total += v.hit;
+          }
+          return total;
+        },
+        sm::description("total number of cache hits"),
+        {src_label("ALL")}
+      ),
+    }
+  );
+
+  {
+    /*
+     * efforts discarded/committed
+     *
+     * XXX: include ext_label if want to measure efforts at the granularity of
+     * sub-components.
+     */
+    auto effort_label = sm::label("effort");
+    std::map<std::string, sm::label_instance> labels_by_effort {
+      {"READ",   effort_label("READ")},
+      {"MUTATE", effort_label("MUTATE")},
+      {"RETIRE", effort_label("RETIRE")},
+      {"FRESH",  effort_label("FRESH")},
+    };
+
+    auto register_effort =
+      [this, &labels_by_src, &labels_by_effort, &labels_by_counter]
+      (const char* category,
+       src_t src,
+       const std::string& effort_name,
+       const char* counter_name,
+       uint64_t& value) {
+        std::ostringstream oss_desc;
+        oss_desc << "total number of " << category
+                 << " transactional efforts labeled by source, effort and counter";
+        std::ostringstream oss_metric;
+        oss_metric << category << "_efforts";
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              oss_metric.str(),
+              value,
+              sm::description(oss_desc.str()),
+              {labels_by_src.find(src)->second,
+               labels_by_effort.find(effort_name)->second,
+               labels_by_counter.find(counter_name)->second}
+            ),
+          }
+        );
+      };
+
+    auto get_efforts_by_category =
+      [this](const char* category) -> auto& {
+        if (strcmp(category, "committed") == 0) {
+          return stats.committed_efforts_by_src;
+        } else {
+          assert(strcmp(category, "invalidated") == 0);
+          return stats.invalidated_efforts_by_src;
+        }
+      };
+
+    for (auto& category : {"committed", "invalidated"}) {
+      auto& efforts_by_src = get_efforts_by_category(category);
+      for (auto& [src, label] : labels_by_src) {
+        if (std::strcmp(category, "committed") == 0 && src == src_t::READ) {
+          // READ transaction won't commit
+          continue;
+        }
+
+        auto& efforts = get_counter(efforts_by_src, src);
+        for (auto& [effort_name, _label] : labels_by_effort) {
+          auto& effort = efforts.get_by_name(effort_name);
+          for (auto& counter_name : {"EXTENTS", "BYTES"}) {
+            auto& value = effort.get_by_name(counter_name);
+            register_effort(category, src, effort_name, counter_name, value);
+          }
+          if (effort_name == "MUTATE") {
+            register_effort(category, src, effort_name, "DELTA_BYTES",
+                            efforts.mutate_delta_bytes);
+          }
+        } // effort_name
+      } // src
+    } // category
+
+    /**
+     * read_effort_successful
+     */
+    stats.read_effort_successful = {};
+    auto register_read_effort_successful =
+      [this, &labels_by_counter]
+      (const char* counter_name, uint64_t& value) {
+        std::ostringstream oss_desc;
+        oss_desc << "total successful read transactional effort labeled by counter";
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              "read_effort_successful",
+              value,
+              sm::description(oss_desc.str()),
+              {labels_by_counter.find(counter_name)->second}
+            ),
+          }
+        );
+      };
+    for (auto& counter_name : {"EXTENTS", "BYTES"}) {
+      auto& value = stats.read_effort_successful.get_by_name(counter_name);
+      register_read_effort_successful(counter_name, value);
+    }
+  }
+
+  /**
+   * Cached extents (including placeholders)
+   *
+   * Dirty extents
+   */
+  stats.dirty_bytes = 0;
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "cached_extents",
+        [this] {
+          return extents.size();
+        },
+        sm::description("total number of cached extents"),
+        {labels_by_counter.find("EXTENTS")->second}
+      ),
+      sm::make_counter(
+        "cached_extents",
+        [this] {
+          return extents.get_bytes();
+        },
+        sm::description("total bytes of cached extents"),
+        {labels_by_counter.find("BYTES")->second}
+      ),
+      sm::make_counter(
+        "dirty_extents",
+        [this] {
+          return dirty.size();
+        },
+        sm::description("total number of dirty extents"),
+        {labels_by_counter.find("EXTENTS")->second}
+      ),
+      sm::make_counter(
+        "dirty_extents",
+        stats.dirty_bytes,
+        sm::description("total bytes of dirty extents"),
+        {labels_by_counter.find("BYTES")->second}
+      ),
+    }
+  );
 }
 
 void Cache::add_extent(CachedExtentRef ref)
@@ -281,12 +521,14 @@ void Cache::add_to_dirty(CachedExtentRef ref)
   assert(!ref->primary_ref_list_hook.is_linked());
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
+  stats.dirty_bytes += ref->get_length();
 }
 
 void Cache::remove_from_dirty(CachedExtentRef ref)
 {
   if (ref->is_dirty()) {
     ceph_assert(ref->primary_ref_list_hook.is_linked());
+    stats.dirty_bytes -= ref->get_length();
     dirty.erase(dirty.s_iterator_to(*ref));
     intrusive_ptr_release(&*ref);
   } else {
@@ -328,6 +570,7 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
   if (prev->get_type() == extent_types_t::ROOT) {
     assert(prev->primary_ref_list_hook.is_linked());
     assert(prev->is_dirty());
+    stats.dirty_bytes -= prev->get_length();
     dirty.erase(dirty.s_iterator_to(*prev));
     intrusive_ptr_release(&*prev);
     add_to_dirty(next);
@@ -346,21 +589,83 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
   invalidate(*prev);
 }
 
-void Cache::invalidate(CachedExtent &extent) {
+void Cache::invalidate(CachedExtent &extent)
+{
   LOG_PREFIX(Cache::invalidate);
   DEBUG("invalidate begin -- extent {}", extent);
   for (auto &&i: extent.transactions) {
     if (!i.t->conflicted) {
-      DEBUGT("set conflict", *i.t);
-      i.t->conflicted = true;
       assert(!i.t->is_weak());
-      auto m_key = std::make_pair(i.t->get_src(), extent.get_type());
-      assert(stats.trans_invalidated.count(m_key));
-      ++(stats.trans_invalidated[m_key]);
+      invalidate(*i.t, extent);
     }
   }
   DEBUG("invalidate end");
   extent.state = CachedExtent::extent_state_t::INVALID;
+}
+
+void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
+{
+  LOG_PREFIX(Cache::invalidate);
+  assert(!t.conflicted);
+  DEBUGT("set conflict", t);
+  t.conflicted = true;
+  auto m_key = std::make_pair(
+      t.get_src(), conflicting_extent.get_type());
+  assert(stats.trans_invalidated.count(m_key));
+  ++(stats.trans_invalidated[m_key]);
+  auto& efforts = get_counter(stats.invalidated_efforts_by_src,
+                              t.get_src());
+  measure_efforts(t, efforts);
+  for (auto &i: t.mutated_block_list) {
+    if (!i->is_valid()) {
+      continue;
+    }
+    ++efforts.mutate.extents;
+    efforts.mutate.bytes += i->get_length();
+    efforts.mutate_delta_bytes += i->get_delta().length();
+  }
+}
+
+void Cache::measure_efforts(Transaction& t, trans_efforts_t& efforts)
+{
+  efforts.read.extents += t.read_set.size();
+  for (auto &i: t.read_set) {
+    efforts.read.bytes += i.ref->get_length();
+  }
+
+  efforts.retire.extents += t.retired_set.size();
+  for (auto &i: t.retired_set) {
+    efforts.retire.bytes += i->get_length();
+  }
+
+  efforts.fresh.extents += t.fresh_block_list.size();
+  for (auto &i: t.fresh_block_list) {
+    efforts.fresh.bytes += i->get_length();
+  }
+
+  /**
+   * Mutated blocks are special because CachedExtent::get_delta() is not
+   * idempotent, so they need to be dealt later.
+   */
+}
+
+void Cache::on_transaction_destruct(Transaction& t)
+{
+  LOG_PREFIX(Cache::on_transaction_destruct);
+  if (t.get_src() == Transaction::src_t::READ &&
+      t.conflicted == false &&
+      !t.is_weak()) {
+    DEBUGT("read is successful", t);
+    ++stats.read_transactions_successful;
+
+    assert(t.retired_set.empty());
+    assert(t.fresh_block_list.empty());
+    assert(t.mutated_block_list.empty());
+    stats.read_effort_successful.extents += t.read_set.size();
+    for (auto &i: t.read_set) {
+      stats.read_effort_successful.bytes += i.ref->get_length();
+    }
+  }
 }
 
 CachedExtentRef Cache::alloc_new_extent_by_type(
@@ -434,6 +739,9 @@ record_t Cache::prepare_record(Transaction &t)
   assert(!t.is_weak());
   assert(t.get_src() != Transaction::src_t::READ);
   ++(get_counter(stats.trans_committed_by_src, t.get_src()));
+  auto& efforts = get_counter(stats.committed_efforts_by_src,
+                              t.get_src());
+  measure_efforts(t, efforts);
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
@@ -454,6 +762,8 @@ record_t Cache::prepare_record(Transaction &t)
       continue;
     }
     DEBUGT("mutating {}", t, *i);
+    ++efforts.mutate.extents;
+    efforts.mutate.bytes += i->get_length();
 
     assert(i->prior_instance);
     replace_extent(i, i->prior_instance);
@@ -493,6 +803,9 @@ record_t Cache::prepare_record(Transaction &t)
 	});
       i->last_committed_crc = final_crc;
     }
+    auto delta_length = record.deltas.back().bl.length();
+    assert(delta_length);
+    efforts.mutate_delta_bytes += delta_length;
   }
 
   // Transaction is now a go, set up in-memory cache state
@@ -626,9 +939,11 @@ Cache::close_ertr::future<> Cache::close()
   root.reset();
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
+    stats.dirty_bytes -= ptr->get_length();
     dirty.erase(i++);
     intrusive_ptr_release(ptr);
   }
+  assert(stats.dirty_bytes == 0);
   return close_ertr::now();
 }
 
@@ -649,7 +964,8 @@ Cache::replay_delta(
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
-      auto ret = query_cache(addr);
+      // replay is not included by the cache hit metrics
+      auto ret = query_cache(addr, nullptr);
       if (ret) {
         // no retired-placeholder should be exist yet because no transaction
         // has been created.
@@ -662,11 +978,13 @@ Cache::replay_delta(
       }
     };
     auto extent_fut = (delta.pversion == 0 ?
+      // replay is not included by the cache hit metrics
       get_extent_by_type(
-	delta.type,
-	delta.paddr,
-	delta.laddr,
-	delta.length) :
+        delta.type,
+        delta.paddr,
+        delta.laddr,
+        delta.length,
+        nullptr) :
       _get_extent_if_cached(
 	delta.paddr)
     ).handle_error(
@@ -764,45 +1082,60 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
   laddr_t laddr,
-  segment_off_t length)
+  segment_off_t length,
+  const Transaction::src_t* p_src)
 {
   return [=] {
+    src_ext_t* p_metric_key = nullptr;
+    src_ext_t metric_key;
+    if (p_src) {
+      metric_key = std::make_pair(*p_src, type);
+      p_metric_key = &metric_key;
+    }
+
     switch (type) {
     case extent_types_t::ROOT:
       assert(0 == "ROOT is never directly read");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::LADDR_INTERNAL:
-      return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
+      return get_extent<lba_manager::btree::LBAInternalNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::LADDR_LEAF:
-      return get_extent<lba_manager::btree::LBALeafNode>(offset, length
+      return get_extent<lba_manager::btree::LBALeafNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_INNER:
-      return get_extent<omap_manager::OMapInnerNode>(offset, length
+      return get_extent<omap_manager::OMapInnerNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_LEAF:
-      return get_extent<omap_manager::OMapLeafNode>(offset, length
+      return get_extent<omap_manager::OMapLeafNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::COLL_BLOCK:
-      return get_extent<collection_manager::CollectionNode>(offset, length
+      return get_extent<collection_manager::CollectionNode>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::ONODE_BLOCK_STAGED:
-      return get_extent<onode::SeastoreNodeExtent>(offset, length
+      return get_extent<onode::SeastoreNodeExtent>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OBJECT_DATA_BLOCK:
-      return get_extent<ObjectDataBlock>(offset, length
+      return get_extent<ObjectDataBlock>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
@@ -810,12 +1143,14 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       ceph_assert(0 == "impossible");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::TEST_BLOCK:
-      return get_extent<TestBlock>(offset, length
+      return get_extent<TestBlock>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::TEST_BLOCK_PHYSICAL:
-      return get_extent<TestBlockPhysical>(offset, length
+      return get_extent<TestBlockPhysical>(
+          offset, length, p_metric_key
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
