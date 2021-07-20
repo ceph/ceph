@@ -2200,7 +2200,9 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
-        config_json: Dict[str, Any] = get_parm(ctx.config_json)
+        config_json: Dict[str, Any] = dict()
+        if 'config_json' in ctx:
+            config_json = get_parm(ctx.config_json)
 
         # Set up directories specific to the monitoring component
         config_dir = ''

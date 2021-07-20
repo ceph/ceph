@@ -1,6 +1,7 @@
 # type: ignore
 
 import errno
+import json
 import mock
 import os
 import pytest
@@ -1168,14 +1169,7 @@ class TestMonitoring(object):
         version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
-    @mock.patch('cephadm.os.fchown')
-    @mock.patch('cephadm.get_parm')
-    @mock.patch('cephadm.makedirs')
-    @mock.patch('cephadm.open')
-    @mock.patch('cephadm.make_log_dir')
-    @mock.patch('cephadm.make_data_dir')
-    def test_create_daemon_dirs_prometheus(self, make_data_dir, make_log_dir, _open, makedirs,
-                                           get_parm, fchown):
+    def test_create_daemon_dirs_prometheus(self, cephadm_fs):
         """
         Ensures the required and optional files given in the configuration are
         created and mapped correctly inside the container. Tests absolute and
@@ -1186,15 +1180,14 @@ class TestMonitoring(object):
         daemon_type = 'prometheus'
         uid, gid = 50, 50
         daemon_id = 'home'
-        ctx = mock.Mock()
+        ctx = cd.CephadmContext()
         ctx.data_dir = '/somedir'
-        files = {
+        ctx.config_json = json.dumps({
             'files': {
                 'prometheus.yml': 'foo',
                 '/etc/prometheus/alerting/ceph_alerts.yml': 'bar'
             }
-        }
-        get_parm.return_value = files
+        })
 
         cd.create_daemon_dirs(ctx,
                               fsid,
@@ -1211,14 +1204,17 @@ class TestMonitoring(object):
             daemon_type=daemon_type,
             daemon_id=daemon_id
         )
-        assert _open.call_args_list == [
-            mock.call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
-                 encoding='utf-8'),
-            mock.call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
-                 encoding='utf-8'),
-        ]
-        assert mock.call().__enter__().write('foo') in _open.mock_calls
-        assert mock.call().__enter__().write('bar') in _open.mock_calls
+
+        expected = {
+            'etc/prometheus/prometheus.yml': 'foo',
+            'etc/prometheus/alerting/ceph_alerts.yml': 'bar',
+        }
+
+        for file,content in expected.items():
+            file = os.path.join(prefix, file)
+            assert os.path.exists(file)
+            with open(file) as f:
+                assert f.read() == content
 
 
 class TestBootstrap(object):
