@@ -1,5 +1,6 @@
 import logging
 import os
+from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
@@ -19,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 asyncssh_logger = logging.getLogger('asyncssh')
 asyncssh_logger.propagate = False
+
+DEFAULT_SSH_CONFIG = """
+Host *
+  User root
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  ConnectTimeout=30
+"""
 
 class SSHManager:
 
@@ -153,3 +162,66 @@ class SSHManager:
             logger.exception(msg)
             raise OrchestratorError(msg)
 
+    def _reset_con(self, host: str) -> None:
+        conn = self.cons.get(host)
+        if conn:
+            logger.debug(f'_reset_con close {host}')
+            conn.close()
+            del self.cons[host]
+
+    def _reset_cons(self) -> None:
+        for host, conn in self.cons.items():
+            logger.debug(f'_reset_cons close {host}')
+            conn.close()
+        self.cons = {}
+
+    def _reconfig_ssh(self) -> None:
+        temp_files = []  # type: list
+        ssh_options = []  # type: List[str]
+
+        # ssh_config
+        self.mgr.ssh_config_fname = self.mgr.ssh_config_file
+        ssh_config = self.mgr.get_store("ssh_config")
+        if ssh_config is not None or self.mgr.ssh_config_fname is None:
+            if not ssh_config:
+                ssh_config = DEFAULT_SSH_CONFIG
+            f = NamedTemporaryFile(prefix='cephadm-conf-')
+            os.fchmod(f.fileno(), 0o600)
+            f.write(ssh_config.encode('utf-8'))
+            f.flush()  # make visible to other processes
+            temp_files += [f]
+            self.mgr.ssh_config_fname = f.name
+        if self.mgr.ssh_config_fname:
+            self.mgr.validate_ssh_config_fname(self.mgr.ssh_config_fname)
+            ssh_options += ['-F', self.mgr.ssh_config_fname]
+        self.mgr.ssh_config = ssh_config
+
+        # identity
+        ssh_key = self.mgr.get_store("ssh_identity_key")
+        ssh_pub = self.mgr.get_store("ssh_identity_pub")
+        self.mgr.ssh_pub = ssh_pub
+        self.mgr.ssh_key = ssh_key
+        if ssh_key and ssh_pub:
+            self.mgr.tkey = NamedTemporaryFile(prefix='cephadm-identity-')
+            self.mgr.tkey.write(ssh_key.encode('utf-8'))
+            os.fchmod(self.mgr.tkey.fileno(), 0o600)
+            self.mgr.tkey.flush()  # make visible to other processes
+            tpub = open(self.mgr.tkey.name + '.pub', 'w')
+            os.fchmod(tpub.fileno(), 0o600)
+            tpub.write(ssh_pub)
+            tpub.flush()  # make visible to other processes
+            temp_files += [self.mgr.tkey, tpub]
+            ssh_options += ['-i', self.mgr.tkey.name]
+
+        self.mgr._temp_files = temp_files
+        if ssh_options:
+            self.mgr._ssh_options = ' '.join(ssh_options)
+        else:
+            self.mgr._ssh_options = None
+
+        if self.mgr.mode == 'root':
+            self.mgr.ssh_user = self.mgr.get_store('ssh_user', default='root')
+        elif self.mgr.mode == 'cephadm-package':
+            self.mgr.ssh_user = 'cephadm'
+
+        self._reset_cons()
