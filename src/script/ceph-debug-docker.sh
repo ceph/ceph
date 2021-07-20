@@ -46,9 +46,9 @@ function main {
 
     if [ -z "$1" ]; then
         printf "specify the branch [default \"master:latest\"]: "
-        read source
-        if [ -z "$source" ]; then
-            source=master:latest
+        read branch
+        if [ -z "$branch" ]; then
+            branch=master:latest
         fi
     else
         branch="$1"
