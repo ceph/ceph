@@ -240,6 +240,11 @@ class TestCephadm(object):
                 style='cephadm',
                 fsid='fsid',
             ),
+            dict(
+                name='haproxy.test.bar',
+                style='cephadm',
+                fsid='fsid',
+            ),
 
         ])
     ))
@@ -248,8 +253,7 @@ class TestCephadm(object):
         with with_host(cephadm_module, 'test'):
             CephadmServe(cephadm_module)._refresh_host_daemons('test')
             dds = wait(cephadm_module, cephadm_module.list_daemons())
-            assert len(dds) == 1
-            assert dds[0].name() == 'rgw.myrgw.foobar'
+            assert {d.name() for d in dds} == {'rgw.myrgw.foobar', 'haproxy.test.bar'}
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_daemon_action(self, cephadm_module: CephadmOrchestrator):
@@ -887,7 +891,8 @@ spec:
                 placement=ps)
             unmanaged_spec = ServiceSpec.from_json(spec.to_json())
             unmanaged_spec.unmanaged = True
-            cephadm_module._mon_command_mock_mgr_module_ls = lambda *args: json.dumps({'enabled_modules': []})
+            cephadm_module._mon_command_mock_mgr_module_ls = lambda *args: json.dumps({
+                                                                                      'enabled_modules': []})
             with with_service(cephadm_module, unmanaged_spec):
 
                 c = cephadm_module.add_daemon(spec)
@@ -1021,7 +1026,8 @@ spec:
     @mock.patch("subprocess.run", mock.MagicMock())
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
-            cephadm_module._mon_command_mock_mgr_module_ls = lambda *args: json.dumps({'enabled_modules': []})
+            cephadm_module._mon_command_mock_mgr_module_ls = lambda *args: json.dumps({
+                                                                                      'enabled_modules': []})
             with with_service(cephadm_module, spec, meth, 'test'):
                 pass
 

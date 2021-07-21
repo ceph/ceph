@@ -65,7 +65,8 @@ class IngressService(CephService):
         spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         assert spec.backend_service
         if spec.backend_service not in self.mgr.spec_store:
-            raise RuntimeError(f'{spec.service_name()} backend service {spec.backend_service} does not exist')
+            raise RuntimeError(
+                f'{spec.service_name()} backend service {spec.backend_service} does not exist')
         backend_spec = self.mgr.spec_store[spec.backend_service].spec
         daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
         deps = [d.name() for d in daemons]
@@ -183,6 +184,11 @@ class IngressService(CephService):
             password = spec.keepalived_password
 
         daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+
+        if not daemons:
+            raise OrchestratorError(
+                f'Failed to generate keepalived.conf: No daemons deployed for {spec.service_name()}')
+
         deps = sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
 
         host = daemon_spec.host

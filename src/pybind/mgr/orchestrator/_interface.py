@@ -736,6 +736,10 @@ def service_to_daemon_types(stype: str) -> List[str]:
     return mapping[stype]
 
 
+KNOWN_DAEMON_TYPES: List[str] = list(
+    sum((service_to_daemon_types(t) for t in ServiceSpec.KNOWN_SERVICE_TYPES), []))
+
+
 class UpgradeStatusSpec(object):
     # Orchestrator's report on what's going on with any ongoing upgrade
     def __init__(self) -> None:
