@@ -659,12 +659,16 @@ class LocalCephFSMount():
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def _run_python(self, pyscript, py_version='python'):
+    def _run_python(self, pyscript, py_version='python', sudo=False):
         """
         Override this to remove the daemon-helper prefix that is used otherwise
         to make the process killable.
         """
-        return self.client_remote.run(args=[py_version, '-c', pyscript],
+        args = []
+        if sudo:
+            args.append('sudo')
+        args += [py_version, '-c', pyscript]
+        return self.client_remote.run(args=args,
                                       wait=False, stdout=StringIO())
 
     def setup_netns(self):
