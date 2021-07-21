@@ -425,11 +425,11 @@ add_library(common-objs OBJECT ${libcommon_files})
 add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
-  include(BuildJaeger)
+  find_package(thrift 0.13.0)
   find_package(yaml-cpp 0.6.0 REQUIRED)
+  include(BuildJaeger)
   list(APPEND jaeger_base
   opentracing::libopentracing
-  thrift::libthrift
   jaegertracing::libjaegertracing)
   target_link_libraries(jaeger-base INTERFACE
   yaml-cpp::yaml-cpp
