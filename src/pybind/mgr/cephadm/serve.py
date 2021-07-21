@@ -5,9 +5,6 @@ import uuid
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
-
-from cephadm import remotes
-
 try:
     import remoto
     import execnet.gateway_bootstrap
@@ -34,7 +31,6 @@ from . import utils
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
-    from remoto.backends import BaseConnection
 
 logger = logging.getLogger(__name__)
 
@@ -310,16 +306,13 @@ class CephadmServe:
                     if match:
                         continue
                 self.log.info(f'Updating {host}:{path}')
-                self._write_remote_file(host, path, content, mode, uid, gid)
+                self.mgr.ssh.write_remote_file(host, path, content, mode, uid, gid)
                 self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
                 updated_files = True
             for path in old_files.keys():
                 self.log.info(f'Removing {host}:{path}')
-                with self._remote_connection(host) as tpl:
-                    conn, connr = tpl
-                    out, err, code = remoto.process.check(
-                        conn,
-                        ['rm', '-f', path])
+                cmd = ['rm', '-f', path]
+                self.mgr.ssh.check_execute_command(host, cmd)
                 updated_files = True
                 self.mgr.cache.removed_client_file(host, path)
             if updated_files:
@@ -1321,25 +1314,6 @@ class CephadmServe:
             msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
             self.log.warning(msg)
             raise OrchestratorError(msg)
-
-    def _write_remote_file(self,
-                           host: str,
-                           path: str,
-                           content: bytes,
-                           mode: int,
-                           uid: int,
-                           gid: int) -> None:
-        with self._remote_connection(host) as tpl:
-            conn, connr = tpl
-            try:
-                errmsg = connr.write_file(path, content, mode, uid, gid)
-                if errmsg is not None:
-                    raise OrchestratorError(errmsg)
-            except Exception as e:
-                msg = f"Unable to write {host}:{path}: {e}"
-                self.log.warning(msg)
-                raise OrchestratorError(msg)
-
     @contextmanager
     def _remote_connection(self,
                            host: str,
