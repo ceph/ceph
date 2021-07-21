@@ -62,20 +62,10 @@ from .utils import CEPH_IMAGE_TYPES, forall_hosts, cephadmNoImage
 from .configchecks import CephadmConfigChecks
 
 try:
-    import remoto
-    # NOTE(mattoliverau) Patch remoto until remoto PR
-    # (https://github.com/alfredodeza/remoto/pull/56) lands
-    from distutils.version import StrictVersion
-    if StrictVersion(remoto.__version__) <= StrictVersion('1.2'):
-        def remoto_has_connection(self: Any) -> bool:
-            return self.gateway.hasreceiver()
-
-        from remoto.backends import BaseConnection
-        BaseConnection.has_connection = remoto_has_connection
-    import remoto.process
+    import asyncssh
 except ImportError as e:
-    remoto = None
-    remoto_import_error = str(e)
+    asyncssh = None
+    asyncssh_import_error = str(e)
 
 logger = logging.getLogger(__name__)
 
@@ -648,11 +638,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @staticmethod
     def can_run() -> Tuple[bool, str]:
-        if remoto is not None:
+        if asyncssh is not None:
             return True, ""
         else:
-            return False, "loading remoto library:{}".format(
-                remoto_import_error)
+            return False, "loading asyncssh library:{}".format(
+                asyncssh_import_error)
 
     def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         """

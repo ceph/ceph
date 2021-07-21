@@ -5,7 +5,6 @@ requests-mock
 pyyaml
 prettytable
 pyOpenSSL
-execnet
-remoto
 Jinja2
 pyfakefs
+asyncssh
