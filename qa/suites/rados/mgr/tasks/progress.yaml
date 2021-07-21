@@ -21,6 +21,7 @@ tasks:
         - \(FS_WITH_FAILED_MDS\)
         - \(FS_DEGRADED\)
         - \(PG_
+        - \(OSDMAP_FLAGS\)
         - replacing it with standby
         - No standby daemons available
   - cephfs_test_runner:
