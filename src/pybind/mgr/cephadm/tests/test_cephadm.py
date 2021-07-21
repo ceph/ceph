@@ -1131,14 +1131,15 @@ spec:
                             assert len(cephadm_module.cache.get_daemons_by_type('mgr')) == 3
                             assert len(cephadm_module.cache.get_daemons_by_type('crash')) == 1
 
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("remoto.process.check")
-    @mock.patch("cephadm.module.CephadmServe._write_remote_file")
-    def test_etc_ceph(self, _write_file, _check, _get_connection, cephadm_module):
-        _get_connection.return_value = mock.Mock(), mock.Mock()
-        _check.return_value = '{}', '', 0
+    @mock.patch("cephadm.ssh.SSHManager.remote_connection")
+    @mock.patch("cephadm.ssh.SSHManager.execute_command")
+    @mock.patch("cephadm.ssh.SSHManager.check_execute_command")
+    @mock.patch("cephadm.ssh.SSHManager.write_remote_file")
+    def test_etc_ceph(self, _write_file, check_execute_command, execute_command, remote_connection, cephadm_module):
         _write_file.return_value = None
+        check_execute_command.return_value = ''
+        execute_command.return_value = '{}', '', 0
+        remote_connection.return_value = mock.Mock()
 
         assert cephadm_module.manage_etc_ceph_ceph_conf is False
 
