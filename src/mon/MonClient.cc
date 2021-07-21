@@ -1097,10 +1097,11 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
 
   ldout(cct, 10) << __func__ << " waiting for " << timeout << dendl;
-  utime_t now = ceph_clock_now();
-  if (auth_cond.wait_for(l, ceph::make_timespan(timeout), [now, this] {
+  utime_t cutoff = ceph_clock_now();
+  cutoff -= std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  if (auth_cond.wait_for(l, ceph::make_timespan(timeout), [this, cutoff] {
     return (!auth_principal_needs_rotating_keys(entity_name) ||
-	    !rotating_secrets->need_new_secrets(now));
+	    !rotating_secrets->need_new_secrets(cutoff));
   })) {
     ldout(cct, 10) << __func__ << " done" << dendl;
     return 0;
