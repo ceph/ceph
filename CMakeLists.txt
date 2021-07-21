@@ -34,8 +34,8 @@ if(WIN32)
 endif()
 
 if(MINGW)
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-allow-multiple-definition")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-allow-multiple-definition")
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,-allow-multiple-definition")
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,-allow-multiple-definition")
 
   # By default, cmake generates import libs for executables. The issue is that
   # for rados and rbd, the executable import lib overrides the library import lib.
@@ -120,15 +120,15 @@ if(WITH_STATIC_LIBSTDCXX)
     message(FATAL_ERROR "Please use GCC to enable WITH_STATIC_LIBSTDCXX")
   endif()
   set(static_linker_flags "-static-libstdc++ -static-libgcc")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${static_linker_flags}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${static_linker_flags}")
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " ${static_linker_flags}")
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " ${static_linker_flags}")
   unset(static_linker_flags)
   set(GPERFTOOLS_USE_STATIC_LIBS TRUE)
 endif()
 include(CheckCxxAtomic)
 if(NOT HAVE_CXX11_ATOMIC)
-  set(CMAKE_CXX_STANDARD_LIBRARIES
-    "${CMAKE_CXX_STANDARD_LIBRARIES} ${LIBATOMIC_LINK_FLAGS}")
+  string(APPEND CMAKE_CXX_STANDARD_LIBRARIES
+    " ${LIBATOMIC_LINK_FLAGS}")
 endif()
 
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
@@ -566,8 +566,8 @@ if(sanitizers)
   find_package(Sanitizers REQUIRED ${sanitizers})
   add_compile_options(${Sanitizers_COMPILE_OPTIONS})
   string(REPLACE ";" " " sanitiers_compile_flags "${Sanitizers_COMPILE_OPTIONS}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${sanitiers_compile_flags}")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${sanitiers_compile_flags}")
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " ${sanitiers_compile_flags}")
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " ${sanitiers_compile_flags}")
 endif()
 
 # Rocksdb
