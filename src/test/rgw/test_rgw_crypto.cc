@@ -44,7 +44,7 @@ public:
   }
 };
 
-class ut_put_sink: public rgw::putobj::DataProcessor
+class ut_put_sink: public rgw::sal::DataProcessor
 {
   std::stringstream sink;
 public:

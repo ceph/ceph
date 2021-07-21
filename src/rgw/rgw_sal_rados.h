@@ -21,6 +21,7 @@
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 #include "rgw_multi.h"
+#include "rgw_putobj_processor.h"
 #include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
 
@@ -424,9 +425,6 @@ class RadosStore : public Store {
     virtual std::unique_ptr<Completions> get_completions(void) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<GCChain> get_gc_chain(rgw::sal::Object* obj) override;
-    virtual std::unique_ptr<Writer> get_writer(Aio* aio, rgw::sal::Bucket* bucket,
-              RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
-              const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
     virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) override;
@@ -480,6 +478,21 @@ class RadosStore : public Store {
 				   const std::string& tenant,
 				   vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id=std::nullopt, ceph::real_time mtime=real_clock::now()) override;
+    virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  const std::string& unique_tag,
+				  uint64_t position,
+				  uint64_t *cur_accounted_size) override;
+    virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  uint64_t olh_epoch,
+				  const std::string& unique_tag) override;
 
     virtual void finalize(void) override;
 
@@ -556,6 +569,13 @@ public:
 		       uint64_t& accounted_size, bool& compressed,
 		       RGWCompressionInfo& cs_info, off_t& ofs) override;
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
+  virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
+			  optional_yield y,
+			  std::unique_ptr<rgw::sal::Object> _head_obj,
+			  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+			  const rgw_placement_rule *ptail_placement_rule,
+			  uint64_t part_num,
+			  const std::string& part_num_str) override;
 };
 
 class MPRadosSerializer : public MPSerializer {
@@ -632,30 +652,130 @@ protected:
     virtual void delete_inline(const DoutPrefixProvider *dpp, const std::string& tag) override;
 };
 
-class RadosWriter : public Writer {
+class RadosAtomicWriter : public Writer {
+protected:
   rgw::sal::RadosStore* store;
-  RGWSI_RADOS::Obj stripe_obj; // current stripe object
+  std::unique_ptr<Aio> aio;
+  rgw::putobj::AtomicObjectProcessor processor;
 
- public:
-  RadosWriter(Aio* aio, rgw::sal::RadosStore* _store,
-	      rgw::sal::Bucket* bucket,
-              RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
-              const DoutPrefixProvider* dpp, optional_yield y)
-    : Writer(aio, bucket, obj_ctx, std::move(_head_obj), dpp, y), store(_store)
+public:
+  RadosAtomicWriter(const DoutPrefixProvider *dpp,
+		    optional_yield y,
+		    std::unique_ptr<rgw::sal::Object> _head_obj,
+		    RadosStore* _store, std::unique_ptr<Aio> _aio,
+		    const rgw_user& owner, RGWObjectCtx& obj_ctx,
+		    const rgw_placement_rule *ptail_placement_rule,
+		    uint64_t olh_epoch,
+		    const std::string& unique_tag) :
+			Writer(dpp, y),
+			store(_store),
+			aio(std::move(_aio)),
+			processor(&*aio, store,
+				  ptail_placement_rule, owner, obj_ctx,
+				  std::move(_head_obj), olh_epoch, unique_tag,
+				  dpp, y)
   {}
+  ~RadosAtomicWriter() = default;
 
-  ~RadosWriter();
+  // prepare to start processing object data
+  virtual int prepare(optional_yield y) override;
 
-  // change the current stripe object
-  virtual int set_stripe_obj(const rgw_raw_obj& obj) override;
+  // Process a bufferlist
+  virtual int process(bufferlist&& data, uint64_t offset) override;
 
-  // write the data at the given offset of the current stripe object
-  virtual int process(bufferlist&& data, uint64_t stripe_offset) override;
+  // complete the operation and make its result visible to clients
+  virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) override;
+};
 
-  // write the data as an exclusive create and wait for it to complete
-  virtual int write_exclusive(const bufferlist& data) override;
+class RadosAppendWriter : public Writer {
+protected:
+  rgw::sal::RadosStore* store;
+  std::unique_ptr<Aio> aio;
+  rgw::putobj::AppendObjectProcessor processor;
 
-  virtual int drain() override;
+public:
+  RadosAppendWriter(const DoutPrefixProvider *dpp,
+		    optional_yield y,
+		    std::unique_ptr<rgw::sal::Object> _head_obj,
+		    RadosStore* _store, std::unique_ptr<Aio> _aio,
+		    const rgw_user& owner, RGWObjectCtx& obj_ctx,
+		    const rgw_placement_rule *ptail_placement_rule,
+		    const std::string& unique_tag,
+		    uint64_t position,
+		    uint64_t *cur_accounted_size) :
+				  Writer(dpp, y),
+				  store(_store),
+				  aio(std::move(_aio)),
+				  processor(&*aio, store,
+					    ptail_placement_rule, owner, obj_ctx,
+					    std::move(_head_obj), unique_tag, position,
+					    cur_accounted_size, dpp, y)
+  {}
+  ~RadosAppendWriter() = default;
+
+  // prepare to start processing object data
+  virtual int prepare(optional_yield y) override;
+
+  // Process a bufferlist
+  virtual int process(bufferlist&& data, uint64_t offset) override;
+
+  // complete the operation and make its result visible to clients
+  virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) override;
+};
+
+class RadosMultipartWriter : public Writer {
+protected:
+  rgw::sal::RadosStore* store;
+  std::unique_ptr<Aio> aio;
+  rgw::putobj::MultipartObjectProcessor processor;
+
+public:
+  RadosMultipartWriter(const DoutPrefixProvider *dpp,
+		       optional_yield y, MultipartUpload* upload,
+		       std::unique_ptr<rgw::sal::Object> _head_obj,
+		       RadosStore* _store, std::unique_ptr<Aio> _aio,
+		       const rgw_user& owner, RGWObjectCtx& obj_ctx,
+		       const rgw_placement_rule *ptail_placement_rule,
+		       uint64_t part_num, const std::string& part_num_str) :
+				  Writer(dpp, y),
+				  store(_store),
+				  aio(std::move(_aio)),
+				  processor(&*aio, store,
+					    ptail_placement_rule, owner, obj_ctx,
+					    std::move(_head_obj), upload->get_upload_id(),
+					    part_num, part_num_str, dpp, y)
+  {}
+  ~RadosMultipartWriter() = default;
+
+  // prepare to start processing object data
+  virtual int prepare(optional_yield y) override;
+
+  // Process a bufferlist
+  virtual int process(bufferlist&& data, uint64_t offset) override;
+
+  // complete the operation and make its result visible to clients
+  virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) override;
 };
 
 class RadosLuaScriptManager : public LuaScriptManager {

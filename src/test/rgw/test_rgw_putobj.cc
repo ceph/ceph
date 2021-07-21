@@ -32,7 +32,7 @@ inline std::ostream& operator<<(std::ostream& out, const Op& op) {
   return out << "{off=" << op.offset << " data='" << op.data << "'}";
 }
 
-struct MockProcessor : rgw::putobj::DataProcessor {
+struct MockProcessor : rgw::sal::DataProcessor {
   std::vector<Op> ops;
 
   int process(bufferlist&& data, uint64_t offset) override {

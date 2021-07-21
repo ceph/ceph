@@ -60,6 +60,113 @@ int HeadObjectProcessor::process(bufferlist&& data, uint64_t logical_offset)
   return processor->process(std::move(data), write_offset);
 }
 
+
+static int process_completed(const AioResultList& completed, RawObjSet *written)
+{
+  std::optional<int> error;
+  for (auto& r : completed) {
+    if (r.result >= 0) {
+      written->insert(r.obj.get_ref().obj);
+    } else if (!error) { // record first error code
+      error = r.result;
+    }
+  }
+  return error.value_or(0);
+}
+
+int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
+{
+  stripe_obj = store->svc()->rados->obj(raw_obj);
+  return stripe_obj.open(dpp);
+}
+
+int RadosWriter::process(bufferlist&& bl, uint64_t offset)
+{
+  bufferlist data = std::move(bl);
+  const uint64_t cost = data.length();
+  if (cost == 0) { // no empty writes, use aio directly for creates
+    return 0;
+  }
+  librados::ObjectWriteOperation op;
+  if (offset == 0) {
+    op.write_full(data);
+  } else {
+    op.write(offset, data);
+  }
+  constexpr uint64_t id = 0; // unused
+  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
+  return process_completed(c, &written);
+}
+
+int RadosWriter::write_exclusive(const bufferlist& data)
+{
+  const uint64_t cost = data.length();
+
+  librados::ObjectWriteOperation op;
+  op.create(true); // exclusive create
+  op.write_full(data);
+
+  constexpr uint64_t id = 0; // unused
+  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
+  auto d = aio->drain();
+  c.splice(c.end(), d);
+  return process_completed(c, &written);
+}
+
+int RadosWriter::drain()
+{
+  return process_completed(aio->drain(), &written);
+}
+
+RadosWriter::~RadosWriter()
+{
+  // wait on any outstanding aio completions
+  process_completed(aio->drain(), &written);
+
+  bool need_to_remove_head = false;
+  std::optional<rgw_raw_obj> raw_head;
+  if (!rgw::sal::Object::empty(head_obj.get())) {
+    raw_head.emplace();
+    rgw::sal::RadosObject* obj = dynamic_cast<rgw::sal::RadosObject*>(head_obj.get());
+    obj->get_raw_obj(&*raw_head);
+  }
+
+  /**
+   * We should delete the object in the "multipart" namespace to avoid race condition.
+   * Such race condition is caused by the fact that the multipart object is the gatekeeper of a multipart
+   * upload, when it is deleted, a second upload would start with the same suffix("2/"), therefore, objects
+   * written by the second upload may be deleted by the first upload.
+   * details is describled on #11749
+   *
+   * The above comment still stands, but instead of searching for a specific object in the multipart
+   * namespace, we just make sure that we remove the object that is marked as the head object after
+   * we remove all the other raw objects. Note that we use different call to remove the head object,
+   * as this one needs to go via the bucket index prepare/complete 2-phase commit scheme.
+   */
+  for (const auto& obj : written) {
+    if (raw_head && obj == *raw_head) {
+      ldpp_dout(dpp, 5) << "NOTE: we should not process the head object (" << obj << ") here" << dendl;
+      need_to_remove_head = true;
+      continue;
+    }
+
+    int r = store->delete_raw_obj(dpp, obj);
+    if (r < 0 && r != -ENOENT) {
+      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+    }
+  }
+
+  if (need_to_remove_head) {
+    std::string version_id;
+    ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
+    int r = head_obj->delete_object(dpp, &obj_ctx, null_yield);
+    if (r < 0 && r != -ENOENT) {
+      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
+    }
+  }
+}
+
+
 // advance to the next stripe
 int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
 {
@@ -76,12 +183,12 @@ int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
   if (r < 0) {
     return r;
   }
-  r = writer->set_stripe_obj(stripe_obj);
+  r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
     return r;
   }
 
-  chunk = ChunkProcessor(writer.get(), chunk_size);
+  chunk = ChunkProcessor(&writer, chunk_size);
   *pstripe_size = manifest_gen.cur_stripe_max_size();
   return 0;
 }
@@ -103,15 +210,15 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t chunk_size = 0;
   uint64_t alignment;
 
-  int r = head_obj->get_max_chunk_size(dpp, bucket->get_placement_rule(),
+  int r = head_obj->get_max_chunk_size(dpp, head_obj->get_bucket()->get_placement_rule(),
 				       &max_head_chunk_size, &alignment);
   if (r < 0) {
     return r;
   }
 
   bool same_pool = true;
-  if (bucket->get_placement_rule() != tail_placement_rule) {
-    if (!head_obj->placement_rules_match(bucket->get_placement_rule(), tail_placement_rule)) {
+  if (head_obj->get_bucket()->get_placement_rule() != tail_placement_rule) {
+    if (!head_obj->placement_rules_match(head_obj->get_bucket()->get_placement_rule(), tail_placement_rule)) {
       same_pool = false;
       r = head_obj->get_max_chunk_size(dpp, tail_placement_rule, &chunk_size);
       if (r < 0) {
@@ -136,7 +243,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   rgw_obj obj = head_obj->get_obj();
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
-                                bucket->get_placement_rule(),
+                                head_obj->get_bucket()->get_placement_rule(),
                                 &tail_placement_rule,
                                 obj.bucket, obj);
   if (r < 0) {
@@ -145,14 +252,14 @@ int AtomicObjectProcessor::prepare(optional_yield y)
 
   rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
 
-  r = writer->set_stripe_obj(stripe_obj);
+  r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
     return r;
   }
 
   set_head_chunk_size(head_max_size);
   // initialize the processors
-  chunk = ChunkProcessor(writer.get(), chunk_size);
+  chunk = ChunkProcessor(&writer, chunk_size);
   stripe = StripeProcessor(&chunk, this, head_max_size);
   return 0;
 }
@@ -169,7 +276,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     rgw_zone_set *zones_trace,
                                     bool *pcanceled, optional_yield y)
 {
-  int r = writer->drain();
+  int r = writer.drain();
   if (r < 0) {
     return r;
   }
@@ -184,7 +291,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
   std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
 
   /* some object types shouldn't be versioned, e.g., multipart parts */
-  obj_op->params.versioning_disabled = !bucket->versioning_enabled();
+  obj_op->params.versioning_disabled = !head_obj->get_bucket()->versioning_enabled();
   obj_op->params.data = &first_chunk;
   obj_op->params.manifest = &manifest;
   obj_op->params.ptag = &unique_tag; /* use req_id as operation tag */
@@ -212,7 +319,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
   }
   if (!obj_op->params.canceled) {
     // on success, clear the set of objects for deletion
-    writer->clear_written();
+    writer.clear_written();
   }
   if (pcanceled) {
     *pcanceled = obj_op->params.canceled;
@@ -226,7 +333,7 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
 {
   // write the first chunk of the head object as part of an exclusive create,
   // then drain to wait for the result in case of EEXIST
-  int r = writer->write_exclusive(data);
+  int r = writer.write_exclusive(data);
   if (r == -EEXIST) {
     // randomize the oid prefix and reprepare the head/manifest
     std::string oid_rand = gen_rand_alphanumeric(store->ctx(), 32);
@@ -239,7 +346,7 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
       return r;
     }
     // resubmit the write op on the new head object
-    r = writer->write_exclusive(data);
+    r = writer.write_exclusive(data);
   }
   if (r < 0) {
     return r;
@@ -265,7 +372,7 @@ int MultipartObjectProcessor::prepare_head()
   manifest.set_multipart_part_rule(stripe_size, part_num);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
-				bucket->get_placement_rule(),
+				head_obj->get_bucket()->get_placement_rule(),
 				&tail_placement_rule,
 				target_obj->get_bucket()->get_key(),
 				target_obj->get_obj());
@@ -277,14 +384,14 @@ int MultipartObjectProcessor::prepare_head()
   head_obj->raw_obj_to_obj(stripe_obj);
   head_obj->set_hash_source(target_obj->get_name());
 
-  r = writer->set_stripe_obj(stripe_obj);
+  r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
     return r;
   }
   stripe_size = manifest_gen.cur_stripe_max_size();
   set_head_chunk_size(stripe_size);
 
-  chunk = ChunkProcessor(writer.get(), chunk_size);
+  chunk = ChunkProcessor(&writer, chunk_size);
   stripe = StripeProcessor(&chunk, this, stripe_size);
   return 0;
 }
@@ -308,7 +415,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        rgw_zone_set *zones_trace,
                                        bool *pcanceled, optional_yield y)
 {
-  int r = writer->drain();
+  int r = writer.drain();
   if (r < 0) {
     return r;
   }
@@ -367,7 +474,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   encode(info, bl);
 
   std::unique_ptr<rgw::sal::Object> meta_obj =
-    bucket->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
+    head_obj->get_bucket()->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
   meta_obj->set_in_extra_data(true);
 
   r = meta_obj->omap_set_val_by_key(dpp, p, bl, true, null_yield);
@@ -377,7 +484,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   if (!obj_op->params.canceled) {
     // on success, clear the set of objects for deletion
-    writer->clear_written();
+    writer.clear_written();
   }
   if (pcanceled) {
     *pcanceled = obj_op->params.canceled;
@@ -385,9 +492,9 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   return 0;
 }
 
-int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::DataProcessor **processor)
+int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::sal::DataProcessor **processor)
 {
-  int r = writer->write_exclusive(data);
+  int r = writer.write_exclusive(data);
   if (r < 0) {
     return r;
   }
@@ -458,7 +565,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
 
   rgw_obj obj = head_obj->get_obj();
 
-  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket->get_placement_rule(), &tail_placement_rule, obj.bucket, obj);
+  r = manifest_gen.create_begin(store->ctx(), &manifest, head_obj->get_bucket()->get_placement_rule(), &tail_placement_rule, obj.bucket, obj);
   if (r < 0) {
     return r;
   }
@@ -469,7 +576,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
   if (r < 0) {
     return r;
   }
-  r = writer->set_stripe_obj(std::move(stripe_obj));
+  r = writer.set_stripe_obj(std::move(stripe_obj));
   if (r < 0) {
     return r;
   }
@@ -480,7 +587,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
   set_head_chunk_size(max_head_size);
 
   // initialize the processors
-  chunk = ChunkProcessor(writer.get(), chunk_size);
+  chunk = ChunkProcessor(&writer, chunk_size);
   stripe = StripeProcessor(&chunk, this, stripe_size);
 
   return 0;
@@ -492,7 +599,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
                                     optional_yield y)
 {
-  int r = writer->drain();
+  int r = writer.drain();
   if (r < 0)
     return r;
   const uint64_t actual_size = get_actual_size();
@@ -554,7 +661,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   }
   if (!obj_op->params.canceled) {
     // on success, clear the set of objects for deletion
-    writer->clear_written();
+    writer.clear_written();
   }
   if (pcanceled) {
     *pcanceled = obj_op->params.canceled;

@@ -791,7 +791,7 @@ int RGWGetObj_BlockDecrypt::flush() {
 }
 
 RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
-                                               rgw::putobj::DataProcessor *next,
+                                               rgw::sal::DataProcessor *next,
                                                std::unique_ptr<BlockCrypt> crypt)
   : Pipe(next),
     cct(cct),

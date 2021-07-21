@@ -2572,8 +2572,8 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
-    std::unique_ptr<rgw::putobj::DataProcessor> *filter,
-    rgw::putobj::DataProcessor *cb)
+    std::unique_ptr<rgw::sal::DataProcessor> *filter,
+    rgw::sal::DataProcessor *cb)
 {
   int res = 0;
   if (!multipart_upload_id.empty()) {
@@ -3125,8 +3125,8 @@ done:
 }
 
 int RGWPostObj_ObjStore_S3::get_encrypt_filter(
-    std::unique_ptr<rgw::putobj::DataProcessor> *filter,
-    rgw::putobj::DataProcessor *cb)
+    std::unique_ptr<rgw::sal::DataProcessor> *filter,
+    rgw::sal::DataProcessor *cb)
 {
   std::unique_ptr<BlockCrypt> block_crypt;
   int res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt,
