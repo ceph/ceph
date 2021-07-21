@@ -18,6 +18,7 @@
 #include "global/global_context.h"
 #include "include/Context.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/memstore/MemStore.h"
 #include "os/ObjectStore.h"
 #include "os/Transaction.h"
 
