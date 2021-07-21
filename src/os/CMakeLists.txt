@@ -93,6 +93,7 @@ if(WITH_LTTNG)
 endif()
 
 if(WITH_JAEGER)
+  add_dependencies(os jaeger-base)
   target_link_libraries(os jaeger-base)
 endif()
 

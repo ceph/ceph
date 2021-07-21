@@ -434,15 +434,18 @@ if(WITH_JAEGER)
 
   build_jaeger()
 
+  include_directories(${CMAKE_BINARY_DIR}/external/include)
+  # for testing jaeger build
+  add_custom_target(jaeger_base DEPENDS ${jaeger_base})
+  add_library(jaeger-base INTERFACE)
+  add_dependencies(common-objs ${jaeger_base})
   target_link_libraries(jaeger-base INTERFACE
-  yaml-cpp::yaml-cpp
-  opentracing::libopentracing
-  thrift::libthrift
-  jaegertracing::libjaegertracing)
-  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  #with CMake 3.12+ the following can be replaced by:
-  #target_link_libraries(common-objs jaeger-base)
-   list(APPEND jaeger_libs
+    yaml-cpp::yaml-cpp
+    opentracing::libopentracing
+    thrift::libthrift
+    jaegertracing::libjaegertracing)
+
+  list(APPEND jaeger_libs
     ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0
     ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0.6.1
     ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0)
