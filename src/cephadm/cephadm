@@ -1205,13 +1205,16 @@ class FileLock(object):
             self._lock_counter -= 1
 
             if self._lock_counter == 0 or force:
-                lock_id = id(self)
-                lock_filename = self._lock_file
+                # lock_id = id(self)
+                # lock_filename = self._lock_file
 
-                logger.debug('Releasing lock %s on %s', lock_id, lock_filename)
+                # Can't log in shutdown:
+                #  File "/usr/lib64/python3.9/logging/__init__.py", line 1175, in _open
+                #    NameError: name 'open' is not defined
+                # logger.debug('Releasing lock %s on %s', lock_id, lock_filename)
                 self._release()
                 self._lock_counter = 0
-                logger.debug('Lock %s released on %s', lock_id, lock_filename)
+                # logger.debug('Lock %s released on %s', lock_id, lock_filename)
 
         return None
 
