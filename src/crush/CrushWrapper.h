@@ -378,13 +378,13 @@ public:
       return type_rmap[name];
     return -1;
   }
-  int get_validated_type_id(const std::string& name, int *id) const {
+  std::optional<int> get_validated_type_id(const std::string& name) const {
     int retval = get_type_id(name);
     if (retval == -1 && !type_rmap.count(name)) {
-      return -1;
+      return {};
+    } else {
+      return retval;
     }
-    *id = retval;
-    return 0;
   }
   const char *get_type_name(int t) const {
     auto p = type_map.find(t);

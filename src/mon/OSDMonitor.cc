@@ -14325,13 +14325,15 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   dout(20) << __func__ << dendl;
   *okay = false;
   CrushWrapper crush = _get_pending_crush();
-  int dividing_id;
-  int retval = crush.get_validated_type_id(dividing_bucket, &dividing_id);
-  if (retval == -1) {
+  int dividing_id = -1;
+  if (auto type_id = crush.get_validated_type_id(dividing_bucket);
+      !type_id.has_value()) {
     ss << dividing_bucket << " is not a valid crush bucket type";
     *errcode = -ENOENT;
-    ceph_assert(!commit || retval != -1);
+    ceph_assert(!commit);
     return;
+  } else {
+    dividing_id = *type_id;
   }
   vector<int> subtrees;
   crush.get_subtree_of_type(dividing_id, &subtrees);
