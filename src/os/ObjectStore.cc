@@ -19,8 +19,8 @@
 
 #ifndef  WITH_SEASTAR
 #include "filestore/FileStore.h"
-#include "memstore/MemStore.h"
 #endif
+#include "memstore/MemStore.h"
 #if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
 #endif
@@ -35,11 +35,9 @@ std::unique_ptr<ObjectStore> ObjectStore::create(
   const string& type,
   const string& data)
 {
-#ifndef WITH_SEASTAR
   if (type == "memstore") {
     return std::make_unique<MemStore>(cct, data);
   }
-#endif
 #if defined(WITH_BLUESTORE)
   if (type == "bluestore" || type == "random") {
     return std::make_unique<BlueStore>(cct, data);
