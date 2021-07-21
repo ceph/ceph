@@ -1131,47 +1131,6 @@ spec:
                             assert len(cephadm_module.cache.get_daemons_by_type('mgr')) == 3
                             assert len(cephadm_module.cache.get_daemons_by_type('crash')) == 1
 
-    def test_stale_connections(self, cephadm_module):
-        class Connection(object):
-            """
-            A mocked connection class that only allows the use of the connection
-            once. If you attempt to use it again via a _check, it'll explode (go
-            boom!).
-
-            The old code triggers the boom. The new code checks the has_connection
-            and will recreate the connection.
-            """
-            fuse = False
-
-            @ staticmethod
-            def has_connection():
-                return False
-
-            def import_module(self, *args, **kargs):
-                return mock.Mock()
-
-            @ staticmethod
-            def exit():
-                pass
-
-        def _check(conn, *args, **kargs):
-            if conn.fuse:
-                raise Exception("boom: connection is dead")
-            else:
-                conn.fuse = True
-            return '{}', [], 0
-        with mock.patch("remoto.Connection", side_effect=[Connection(), Connection(), Connection()]):
-            with mock.patch("remoto.process.check", _check):
-                with with_host(cephadm_module, 'test', refresh_hosts=False):
-                    code, out, err = cephadm_module.check_host('test')
-                    # First should succeed.
-                    assert err == ''
-
-                    # On second it should attempt to reuse the connection, where the
-                    # connection is "down" so will recreate the connection. The old
-                    # code will blow up here triggering the BOOM!
-                    code, out, err = cephadm_module.check_host('test')
-                    assert err == ''
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
