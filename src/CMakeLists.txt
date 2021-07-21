@@ -431,6 +431,9 @@ if(WITH_JAEGER)
   list(APPEND jaeger_base
   opentracing::libopentracing
   jaegertracing::libjaegertracing)
+
+  build_jaeger()
+
   target_link_libraries(jaeger-base INTERFACE
   yaml-cpp::yaml-cpp
   opentracing::libopentracing
