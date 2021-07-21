@@ -1341,6 +1341,9 @@ cmake .. \
 %if 0%{with system_pmdk}
     -DWITH_SYSTEM_PMDK:BOOL=ON \
 %endif
+%if 0%{with jaeger}
+    -DWITH_JAEGER:BOOL=ON \
+%endif
 %if 0%{?suse_version}
     -DBOOST_J:STRING=%{jobs} \
 %else
