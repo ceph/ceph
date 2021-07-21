@@ -128,7 +128,7 @@ class RGWPutObj_BlockEncrypt : public rgw::putobj::Pipe
   const size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
 public:
   RGWPutObj_BlockEncrypt(CephContext* cct,
-                         rgw::putobj::DataProcessor *next,
+                         rgw::sal::DataProcessor *next,
                          std::unique_ptr<BlockCrypt> crypt);
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
