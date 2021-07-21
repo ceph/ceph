@@ -221,6 +221,7 @@ options:
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
 	-f, --filestore use filestore as the osd objectstore backend
 	-K, --kstore use kstore as the osd objectstore backend
+	--cyanstore use cyanstore as the osd objectstore backend
 	--memstore use memstore as the osd objectstore backend
 	--cache <pool>: enable cache tiering on pool
 	--short: short object names only; necessary for ext4 dev
