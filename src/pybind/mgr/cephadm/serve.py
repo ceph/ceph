@@ -3,12 +3,7 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator
-try:
-    import remoto
-    import execnet.gateway_bootstrap
-except ImportError:
-    remoto = None
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
