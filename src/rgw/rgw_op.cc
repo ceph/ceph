@@ -63,6 +63,7 @@
 #include "include/ceph_assert.h"
 
 #include "compressor/Compressor.h"
+#include "common/Throttle.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -3726,13 +3727,49 @@ static CompressorRef get_compressor_plugin(const req_state *s,
   return Compressor::create(s->cct, alg);
 }
 
+class AsyncMD5 {
+  MD5* hash;
+  std::future<void> last;
+  Throttle ongoing_ops;
+public:
+  AsyncMD5(CephContext *cct) : hash(new MD5()), ongoing_ops(cct,
+    "ongoing_md5_ops", cct->_conf->rgw_async_md5_ops) {}
+  ~AsyncMD5() {
+    delete hash;
+    hash = nullptr;
+  }
+
+  // NOTE: data buffer will be freed within this function
+  void Update(char *data, size_t len) {
+    ongoing_ops.get(1);
+
+    last = std::async([&](std::future<void>&& last, char* data,
+      size_t len) {
+      if (last.valid()) {
+        last.get();
+      }
+      hash->Update((const unsigned char*)data, len);
+      delete []data;
+
+      ongoing_ops.put(1);
+    }, std::move(last), data, len);
+  }
+
+  void Final(unsigned char *digest) {
+    if (last.valid()) {
+      last.get();
+    }
+    hash->Final(digest);
+  }
+};
+
 void RGWPutObj::execute(optional_yield y)
 {
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  MD5 hash;
+  AsyncMD5 hash(store->ctx());
   bufferlist bl, aclbl, bs;
   int len;
   
@@ -3958,7 +3995,15 @@ void RGWPutObj::execute(optional_yield y)
     }
 
     if (need_calc_md5) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
+      int data_len = data.length();
+      char* buf = new char[data_len];
+      if (!buf) {
+        op_ret = -ENOMEM;
+        return;
+      }
+
+      data.begin().copy(data_len, buf);
+      hash.Update(buf, data_len);
     }
 
     /* update torrrent */
@@ -4209,7 +4254,7 @@ void RGWPostObj::execute(optional_yield y)
   do {
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    MD5 hash;
+    AsyncMD5 hash(store->ctx());
     ceph::buffer::list bl, aclbl;
     int len = 0;
 
@@ -4292,7 +4337,18 @@ void RGWPostObj::execute(optional_yield y)
         break;
       }
 
-      hash.Update((const unsigned char *)data.c_str(), data.length());
+      {
+        int data_len = data.length();
+        char* buf = new char[data_len];
+        if (!buf) {
+          op_ret = -ENOMEM;
+          return;
+        }
+
+        data.begin().copy(data_len, buf);
+        hash.Update(buf, data_len);
+      }
+
       op_ret = filter->process(std::move(data), ofs);
 
       ofs += len;
@@ -7446,7 +7502,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   /* Upload file content. */
   ssize_t len = 0;
   size_t ofs = 0;
-  MD5 hash;
+  AsyncMD5 hash(store->ctx());
   do {
     ceph::bufferlist data;
     len = body.get_at_most(s->cct->_conf->rgw_max_chunk_size, data);
@@ -7456,7 +7512,17 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
       op_ret = len;
       return op_ret;
     } else if (len > 0) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
+      {
+        int data_len = data.length();
+        char* buf = new char[data_len];
+        if (!buf) {
+          op_ret = -ENOMEM;
+          return op_ret;
+        }
+
+        data.begin().copy(data_len, buf);
+        hash.Update(buf, data_len);
+      }
       op_ret = filter->process(std::move(data), ofs);
       if (op_ret < 0) {
         ldpp_dout(this, 20) << "filter->process() returned ret=" << op_ret << dendl;

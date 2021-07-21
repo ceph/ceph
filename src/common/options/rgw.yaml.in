@@ -1689,6 +1689,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_async_md5_ops
+  type: int
+  level: advanced
+  desc: max number of ongoing async md5 ops
+  default: 4
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_obj_stripe_size
   type: size
   level: advanced
