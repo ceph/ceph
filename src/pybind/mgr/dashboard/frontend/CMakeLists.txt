@@ -13,7 +13,7 @@ function(add_npm_command)
   else()
     string(REGEX REPLACE
       "^([^ ]=[^ ] )*npm (.*)$"
-      "\\1${NPM} \\2"
+      "\\1${NPM_EXECUTABLE} \\2"
       command ${command})
   endif()
   string(REPLACE " " ";" command "${command}")
