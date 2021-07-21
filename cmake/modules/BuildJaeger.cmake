@@ -51,7 +51,8 @@ function(build_jaeger)
 			-Dthrift_HOME=${CMAKE_BINARY_DIR}/external
 			-DOpenTracing_HOME=${CMAKE_BINARY_DIR}/external)
 
-  set(dependencies opentracing thrift)
+  # build these libraries along with jaeger
+  set(dependencies opentracing)
   if(NOT WITH_SYSTEM_BOOST)
     list(APPEND dependencies Boost)
   endif()
@@ -78,7 +79,7 @@ function(build_jaeger)
     BINARY_DIR ${Jaeger_BINARY_DIR}
     BUILD_COMMAND ${make_cmd}
     INSTALL_COMMAND ${install_cmd}
-    DEPENDS "${dependencies}"
+    DEPENDS ${dependencies}
     BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so
     )
 
