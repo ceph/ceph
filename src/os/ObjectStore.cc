@@ -33,46 +33,39 @@ using std::string;
 std::unique_ptr<ObjectStore> ObjectStore::create(
   CephContext *cct,
   const string& type,
-  const string& data,
-  const string& journal,
-  osflagbits_t flags)
+  const string& data)
 {
 #ifndef WITH_SEASTAR
-  if (type == "filestore") {
-    return std::make_unique<FileStore>(cct, data, journal, flags);
-  }
   if (type == "memstore") {
     return std::make_unique<MemStore>(cct, data);
   }
 #endif
 #if defined(WITH_BLUESTORE)
-  if (type == "bluestore") {
+  if (type == "bluestore" || type == "random") {
     return std::make_unique<BlueStore>(cct, data);
   }
-#ifndef WITH_SEASTAR
-  if (type == "random") {
-    if (rand() % 2) {
-      return std::make_unique<FileStore>(cct, data, journal, flags);
-    } else {
-      return std::make_unique<BlueStore>(cct, data);
-    }
-  }
 #endif
-#else
+  return nullptr;
+}
+
 #ifndef WITH_SEASTAR
-  if (type == "random") {
+std::unique_ptr<ObjectStore> ObjectStore::create(
+  CephContext *cct,
+  const string& type,
+  const string& data,
+  const string& journal,
+  osflagbits_t flags)
+{
+  if (type == "filestore" || (type == "random" && rand() % 2)) {
     return std::make_unique<FileStore>(cct, data, journal, flags);
   }
-#endif
-#endif
-#ifndef WITH_SEASTAR
   if (type == "kstore" &&
       cct->check_experimental_feature_enabled("kstore")) {
     return std::make_unique<KStore>(cct, data);
   }
-#endif
-  return NULL;
+  return create(cct, type, data);
 }
+#endif
 
 int ObjectStore::probe_block_device_fsid(
   CephContext *cct,
