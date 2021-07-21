@@ -238,6 +238,9 @@ BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	nasm
 BuildRequires:	lua-devel
+%if 0%{with seastar} || 0%{with jaeger}
+BuildRequires:  yaml-cpp-devel >= 0.6
+%endif
 %if 0%{with amqp_endpoint}
 BuildRequires:  librabbitmq-devel
 %endif
@@ -273,7 +276,6 @@ BuildRequires:  json-devel
 BuildRequires:  nlohmann_json-devel
 %endif
 BuildRequires:  libevent-devel
-BuildRequires:  yaml-cpp-devel
 %endif
 %if 0%{with system_pmdk}
 BuildRequires:  libpmem-devel
@@ -288,7 +290,6 @@ BuildRequires:  lksctp-tools-devel
 BuildRequires:  protobuf-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
-BuildRequires:  yaml-cpp-devel
 %if 0%{?fedora}
 BuildRequires:  libubsan
 BuildRequires:  libasan
