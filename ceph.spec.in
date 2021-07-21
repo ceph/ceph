@@ -269,6 +269,7 @@ BuildRequires:  libzbd-devel
 %if 0%{with jaeger}
 BuildRequires:  bison
 BuildRequires:  flex
+BuildRequires:  thrift-devel >= 0.13.0
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  json-devel
 %endif
@@ -1064,7 +1065,6 @@ Group:		System/Libraries
 %endif
 Provides: 	libjaegertracing.so.0()(64bit)
 Provides:	libopentracing.so.1()(64bit)
-Provides:	libthrift.so.0.13.0()(64bit)
 %description -n libjaeger
 This package contains libraries needed to provide distributed
 tracing for Ceph.
@@ -2294,7 +2294,6 @@ fi
 %if %{with jaeger}
 %files -n libjaeger
 %{_libdir}/libopentracing.so.*
-%{_libdir}/libthrift.so.*
 %{_libdir}/libjaegertracing.so.*
 %post -n libjaeger -p /sbin/ldconfig
 %postun -n libjaeger -p /sbin/ldconfig

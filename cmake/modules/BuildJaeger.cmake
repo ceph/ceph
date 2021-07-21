@@ -1,10 +1,9 @@
 # This module builds Jaeger after it's dependencies are installed and discovered
 # opentracing: is built using cmake/modules/Buildopentracing.cmake
-# Thrift: build using cmake/modules/Buildthrift.cmake
+# Thrift: found using cmake/modules/Findthrift.cmake (not by default)
 # yaml-cpp, nlhomann-json: are installed locally and then discovered using
 # Find<package>.cmake
-# Boost Libraries used for building thrift are build and provided by
-# cmake/modules/BuildBoost.cmake
+# Boost Libraries: uses ceph build boost cmake/modules/BuildBoost.cmake
 
 function(build_jaeger)
   set(Jaeger_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/jaegertracing/jaeger-client-cpp")
