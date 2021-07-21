@@ -8409,6 +8409,69 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
   bstore->mount();
 }
 
+TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+
+  StartDeferred(0x10000);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  int r;
+
+  // initializing
+  cerr << "initializing" << std::endl;
+  {
+    const uint64_t pool = 555;
+    coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
+    auto ch = store->create_new_collection(cid);
+
+    ghobject_t hoid = make_object("Object", pool);
+    ghobject_t hoid_cloned = hoid;
+    hoid_cloned.hobj.snap = 1;
+
+    {
+      ObjectStore::Transaction t;
+      t.create_collection(cid, 0);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append("0123456789012345");
+      t.write(cid, hoid, 0, bl.length(), bl);
+
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.clone(cid, hoid, hoid_cloned);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+  // injecting an error and checking
+  cerr << "injecting" << std::endl;
+  sleep(3); // need some time for the previous write to land
+  bstore->inject_no_shared_blob_key();
+
+  {
+    cerr << "fscking/fixing" << std::endl;
+    bstore->umount();
+    ASSERT_EQ(bstore->fsck(false), 3);
+    ASSERT_LE(bstore->repair(false), 3);
+    ASSERT_EQ(bstore->fsck(false), 0);
+  }
+
+  cerr << "Completing" << std::endl;
+  bstore->mount();
+}
+
 TEST_P(StoreTest, BluestoreRepairGlobalStats) {
   if (string(GetParam()) != "bluestore")
     return;
