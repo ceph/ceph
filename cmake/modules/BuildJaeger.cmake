@@ -5,6 +5,28 @@
 # Find<package>.cmake
 # Boost Libraries: uses ceph build boost cmake/modules/BuildBoost.cmake
 
+include(BuildOpenTracing)
+
+# will do all linking and path setting
+function(set_library_properties_for_external_project _target _lib)
+  # Manually create the directory, it will be created as part of the build,
+  # but this runs in the configuration phase, and CMake generates an error if
+  # we add an include directory that does not exist yet.
+  set(_libfullname "${CMAKE_SHARED_LIBRARY_PREFIX}${_lib}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+  set(_libpath "${CMAKE_BINARY_DIR}/external/lib/${_libfullname}")
+  set(_includepath "${CMAKE_BINARY_DIR}/external/include")
+  message(STATUS "Configuring ${_target} with ${_libpath}")
+  add_library(${_target} SHARED IMPORTED)
+  add_dependencies(${_target} ${_lib})
+
+  file(MAKE_DIRECTORY "${_includepath}")
+  set_target_properties(${_target} PROPERTIES
+    INTERFACE_LINK_LIBRARIES "${_libpath}"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+    IMPORTED_LOCATION "${_libpath}"
+    INTERFACE_INCLUDE_DIRECTORIES "${_includepath}")
+endfunction()
+
 function(build_jaeger)
   set(Jaeger_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/jaegertracing/jaeger-client-cpp")
   set(Jaeger_INSTALL_DIR "${CMAKE_BINARY_DIR}/external")
@@ -55,4 +77,9 @@ function(build_jaeger)
     DEPENDS "${dependencies}"
     BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so
     )
+
+  set_library_properties_for_external_project(opentracing::libopentracing
+  opentracing)
+  set_library_properties_for_external_project(jaegertracing::libjaegertracing
+  jaegertracing)
 endfunction()
