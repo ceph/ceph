@@ -1281,26 +1281,7 @@ class CephadmServe:
             return f"Host {host} failed to login to {url} as {username} with given password"
         return None
 
-    def _deploy_cephadm_binary(self, host: str) -> None:
+    def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        with self._remote_connection(host) as tpl:
-            conn, _connr = tpl
-            return self._deploy_cephadm_binary_conn(conn, host)
-
-    def _deploy_cephadm_binary_conn(self, conn: "BaseConnection", host: str) -> None:
-        _out, _err, code = remoto.process.check(
-            conn,
-            ['mkdir', '-p', f'/var/lib/ceph/{self.mgr._cluster_fsid}'])
-        if code:
-            msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
-            self.log.warning(msg)
-            raise OrchestratorError(msg)
-        _out, _err, code = remoto.process.check(
-            conn,
-            ['tee', '-', self.mgr.cephadm_binary_path],
-            stdin=self.mgr._cephadm.encode('utf-8'))
-        if code:
-            msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
-            self.log.warning(msg)
-            raise OrchestratorError(msg)
+        self.mgr.ssh.write_remote_file(host, self.mgr.cephadm_binary_path, self.mgr._cephadm.encode('utf-8'), addr=addr)
