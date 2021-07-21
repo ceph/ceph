@@ -374,9 +374,12 @@ public:
   }
   int get_type_id(const std::string& name) const {
     build_rmaps();
-    if (type_rmap.count(name))
-      return type_rmap[name];
-    return -1;
+    auto found = type_rmap.find(name);
+    if (found != type_rmap.end()) {
+      return found->second;
+    } else {
+      return -1;
+    }
   }
   std::optional<int> get_validated_type_id(const std::string& name) const {
     int retval = get_type_id(name);
