@@ -7430,8 +7430,11 @@ WantedBy=ceph-{fsid}.target
         # we pick up the file from where the orchestrator placed it - otherwise we'll
         # copy it to the binary location for this cluster
         if not __file__ == '<stdin>':
-            shutil.copy(__file__,
-                        self.binary_path)
+            try:
+                shutil.copy(__file__,
+                            self.binary_path)
+            except shutil.SameFileError:
+                pass
 
         with open(os.path.join(self.daemon_path, 'unit.run'), 'w') as f:
             f.write(self.unit_run)
