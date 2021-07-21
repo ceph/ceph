@@ -8439,9 +8439,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  expected_statfs = &expected_pool_statfs[sbi.pool_id];
 	}
 	errors += _fsck_check_extents(sbi.cid,
-				      p->second.oids.front(),
+				      sbi.oids.front(),
 				      extents,
-				      p->second.compressed,
+				      sbi.compressed,
 				      used_blocks,
 				      fm->get_alloc_size(),
 				      repair ? &repairer : nullptr,
@@ -8667,9 +8667,32 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  bluestore_shared_blob_t persistent(sbid, std::move(sbi.ref_map));
 	  encode(persistent, bl);
 	  dout(20) << __func__ << " " << *sbi.sb
-		   << " is " << bl.length() << " bytes, updating" << dendl;
+		   << " is " << bl.length() << " bytes, updating"
+		   << dendl;
 
 	  repairer.fix_shared_blob(db, sbid, &bl);
+	  // we need to account for shared blob pextents at both
+	  // stats and used blocks to avoid related errors.
+	  PExtentVector extents;
+	  for (auto& r : persistent.ref_map.ref_map) {
+	    extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
+	  }
+	  auto* expected_statfs = &expected_pool_statfs[sbi.pool_id];
+	  int errors = _fsck_check_extents(sbi.cid,
+	    ghobject_t(), // doesn't matter
+	    extents,
+	    sbi.compressed,
+	    used_blocks,
+	    fm->get_alloc_size(),
+	    nullptr,
+	    *expected_statfs,
+	    depth);
+	  if (errors) {
+	    derr << __func__ << " " << errors
+	         << "  unexpected error(s) after missed shared blob repair,"
+	         << " perhaps worth one more repair attempt"
+	         << dendl;
+	  }
         }
       }
     }
@@ -8935,6 +8958,23 @@ void BlueStore::inject_broken_shared_blob_key(const string& key,
   txn->set(PREFIX_SHARED_BLOB, key, bl);
   db->submit_transaction_sync(txn);
 };
+
+void BlueStore::inject_no_shared_blob_key()
+{
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+  ceph_assert(blobid_last > 0);
+  // kill the last used sbid, this can be broken due to blobid preallocation
+  // in rare cases, leaving as-is for the sake of simplicity
+  uint64_t sbid = blobid_last;
+
+  string key;
+  dout(5) << __func__<< " " << sbid << dendl;
+  get_shared_blob_key(sbid, &key);
+  txn->rmkey(PREFIX_SHARED_BLOB, key);
+  db->submit_transaction_sync(txn);
+};
+
 
 void BlueStore::inject_leaked(uint64_t len)
 {

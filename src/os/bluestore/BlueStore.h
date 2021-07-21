@@ -2984,6 +2984,8 @@ public:
   /// methods to inject various errors fsck can repair
   void inject_broken_shared_blob_key(const std::string& key,
 			 const ceph::buffer::list& bl);
+  void inject_no_shared_blob_key();
+
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
   void inject_statfs(const std::string& key, const store_statfs_t& new_statfs);
