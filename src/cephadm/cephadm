@@ -2857,6 +2857,15 @@ def deploy_daemon_units(
         os.rename(data_dir + '/unit.poststop.new',
                   data_dir + '/unit.poststop')
 
+    # post-stop command(s)
+    with open(data_dir + '/unit.stop.new', 'w') as f:
+        f.write('! ' + ' '.join(c.stop_cmd()) + '\n')
+        f.write('! ' + ' '.join(c.stop_cmd(old_cname=True)) + '\n')
+
+        os.fchmod(f.fileno(), 0o600)
+        os.rename(data_dir + '/unit.stop.new',
+                  data_dir + '/unit.stop')
+
     if c:
         with open(data_dir + '/unit.image.new', 'w') as f:
             f.write(c.image + '\n')
@@ -3135,7 +3144,7 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
 ExecStart=/bin/bash {data_dir}/{fsid}/%i/unit.run
-ExecStop=-{container_path} stop ceph-{fsid}-%i
+ExecStop=-/bin/bash -c '{container_path} stop ceph-{fsid}-%i ; bash {data_dir}/{fsid}/%i/unit.stop'
 ExecStopPost=-/bin/bash {data_dir}/{fsid}/%i/unit.poststop
 KillMode=none
 Restart=on-failure
@@ -3391,11 +3400,10 @@ class CephContainer:
             ret.append(self.cname)
         return ret
 
-    def stop_cmd(self):
-        # type: () -> List[str]
+    def stop_cmd(self, old_cname: bool = False) -> List[str]:
         ret = [
             str(self.ctx.container_engine.path),
-            'stop', self.cname,
+            'stop', self.old_cname if old_cname else self.cname,
         ]
         return ret
 
