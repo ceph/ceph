@@ -39,6 +39,8 @@ Commands
 inventory
 ---------
 
+.. program:: ceph-volume inventory
+
 This subcommand provides information about a host's physical disc inventory and
 reports metadata about these discs. Among this metadata one can find disc
 specific data items (like model, size, rotational or solid state) as well as
@@ -65,6 +67,8 @@ Optional arguments:
 lvm
 ---
 
+.. program:: ceph-volume lvm
+
 By making use of LVM tags, the ``lvm`` sub-command is able to store and later
 re-discover and query devices associated with OSDs so that they can later
 activated.
@@ -73,6 +77,8 @@ Subcommands:
 
 batch
 ^^^^^
+
+.. program:: ceph-volume lvm batch
 
 Creates OSDs from a list of devices using a ``filestore``
 or ``bluestore`` (default) setup. It will create all necessary volume groups
@@ -145,11 +151,14 @@ Required positional arguments:
    Full path to a raw device, like ``/dev/sda``. Multiple
    ``<DEVICE>`` paths can be passed in.
 
-.. describe:: **activate**
+activate
+^^^^^^^^
 
-   Enables a systemd unit that persists the OSD ID and its UUID (also called
-   ``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
-   enabled and needs to be mounted.
+.. program:: ceph-volume lvm activate
+
+Enables a systemd unit that persists the OSD ID and its UUID (also called
+``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
+enabled and needs to be mounted.
 
 Usage::
 
@@ -190,6 +199,8 @@ Multiple OSDs can be activated at once by using the (idempotent) ``--all`` flag:
 
 prepare
 ^^^^^^^
+
+.. program:: ceph-volume lvm prepare
 
 Prepares a logical volume to be used as an OSD and journal using a ``filestore``
 or ``bluestore`` (default) setup. It will not create or modify the logical volumes
@@ -357,6 +368,8 @@ Positional arguments:
 new-wal
 ^^^^^^^
 
+.. program:: ceph-volume lvm new-wal
+
 Attaches the given logical volume to OSD as a WAL. Logical volume
 name format is vg/lv. Fails if OSD has already got attached WAL.
 
@@ -379,6 +392,8 @@ Required arguments:
 new-db
 ^^^^^^
 
+.. program:: ceph-volume lvm new-db
+
 Attaches the given logical volume to OSD as a DB. Logical volume
 name format is vg/lv. Fails if OSD has already got attached DB.
 
@@ -400,6 +415,8 @@ Required arguments:
 
 migrate
 ^^^^^^^
+
+.. program:: ceph-volume lvm migrate
 
 Moves BlueFS data from source volume(s) to the target one, source volumes
 (except the main, i.e. data or block one) are removed on success. LVM volumes
@@ -443,6 +460,8 @@ Subcommands:
 activate
 ^^^^^^^^
 
+.. program:: ceph-volume simple activate
+
 Enables a systemd unit that persists the OSD ID and its UUID (also called
 ``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
 enabled and needs to be mounted, while reading information that was previously
@@ -475,6 +494,8 @@ Optional Arguments:
 
 scan
 ^^^^
+
+.. program:: ceph-volume simple scan
 
 Scan a running OSD or data device for an OSD for metadata that can later be
 used to activate and manage the OSD with ceph-volume. The scan method will
