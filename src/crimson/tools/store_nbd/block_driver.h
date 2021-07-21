@@ -13,6 +13,10 @@
 
 #include "include/buffer.h"
 
+namespace seastar::alien {
+class instance;
+}
+
 /**
  * BlockDriver
  *
@@ -92,4 +96,5 @@ public:
 };
 using BlockDriverRef = std::unique_ptr<BlockDriver>;
 
-BlockDriverRef get_backend(BlockDriver::config_t config);
+BlockDriverRef get_backend(BlockDriver::config_t config,
+			   seastar::alien::instance& alien);
