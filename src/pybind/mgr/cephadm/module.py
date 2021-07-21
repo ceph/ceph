@@ -41,7 +41,6 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
-from . import remotes
 from . import utils
 from . import ssh
 from .migrations import Migrations
