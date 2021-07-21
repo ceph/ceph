@@ -1274,22 +1274,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return conn, r
 
-    def _executable_path(self, conn: 'remoto.backends.BaseConnection', executable: str) -> str:
-        """
-        Remote validator that accepts a connection object to ensure that a certain
-        executable is available returning its full path if so.
-
-        Otherwise an exception with thorough details will be raised, informing the
-        user that the executable was not found.
-        """
-        executable_path = conn.remote_module.which(executable)
-        if not executable_path:
-            raise RuntimeError("Executable '{}' not found on host '{}'".format(
-                executable, conn.hostname))
-        self.log.debug("Found executable '{}' at path '{}'".format(executable,
-                                                                   executable_path))
-        return executable_path
-
     def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
         image: Optional[str] = None
