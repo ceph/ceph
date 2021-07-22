@@ -69,18 +69,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor &mon,
 // by ensuring that they are always enabled.
 const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
   {
-    CEPH_RELEASE_NAUTILUS, {
-      "crash",
-      "status",
-      "progress",
-      "balancer",
-      "devicehealth",
-      "orchestrator_cli",
-      "rbd_support",
-      "volumes",
-    }
-  },
-  {
     CEPH_RELEASE_OCTOPUS, {
       "crash",
       "status",
