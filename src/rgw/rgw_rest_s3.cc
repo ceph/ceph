@@ -4948,8 +4948,10 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op, optional_yiel
     return -EINVAL;
   }
 
-  ldpp_dout(s, 10) << "retarget get_effective_key " << s->object << " -> "
-		    << new_obj << dendl;
+  if (!rgw::sal::Object::empty(s->object.get())) {
+    ldpp_dout(s, 10) << "retarget get_effective_key " << s->object << " -> "
+		     << new_obj << dendl;
+  }
 
   RGWBWRoutingRule rrule;
   bool should_redirect =
