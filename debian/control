@@ -373,7 +373,7 @@ Description: debugging symbols for ceph-mgr
 Package: ceph-mon
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         libjaeger,
+         libjaeger <pkg.ceph.jaeger>,
          ${misc:Depends},
          ${shlibs:Depends},
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
@@ -607,8 +607,8 @@ Description: debugging symbols for rbd-nbd
 
 Package: ceph-common
 Architecture: linux-any
-Depends: libjaeger (= ${binary:Version}),
-         librbd1 (= ${binary:Version}),
+Depends: librbd1 (= ${binary:Version}),
+         libjaeger (= ${binary:Version}) <pkg.ceph.jaeger>,
          python3-cephfs (= ${binary:Version}),
          python3-ceph-argparse (= ${binary:Version}),
          python3-ceph-common (= ${binary:Version}),
