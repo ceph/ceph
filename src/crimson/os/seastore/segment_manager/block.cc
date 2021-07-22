@@ -84,23 +84,25 @@ static write_ertr::future<> do_writev(
 static read_ertr::future<> do_read(
   seastar::file &device,
   uint64_t offset,
+  size_t len,
   bufferptr &bptr)
 {
+  assert(len <= bptr.length());
   logger().debug(
     "block: do_read offset {} len {}",
     offset,
-    bptr.length());
+    len);
   return device.dma_read(
     offset,
     bptr.c_str(),
-    bptr.length()
+    len
   ).handle_exception([](auto e) -> read_ertr::future<size_t> {
     logger().error(
       "do_read: dma_read got error {}",
       e);
     return crimson::ct_error::input_output_error::make();
-  }).then([length=bptr.length()](auto result) -> read_ertr::future<> {
-    if (result != length) {
+  }).then([len](auto result) -> read_ertr::future<> {
+    if (result != len) {
       return crimson::ct_error::input_output_error::make();
     }
     return read_ertr::now();
@@ -123,6 +125,7 @@ SegmentStateTracker::read_in(
   return do_read(
     device,
     offset,
+    bptr.length(),
     bptr);
 }
 
@@ -285,6 +288,7 @@ read_superblock(seastar::file &device, seastar::stat_data sd)
       return do_read(
 	device,
 	0,
+	bp.length(),
 	bp
       ).safe_then([=, &bp] {
 	  bufferlist bl;
@@ -500,6 +504,7 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
   return do_read(
     device,
     get_offset(addr),
+    len,
     out);
 }
 
