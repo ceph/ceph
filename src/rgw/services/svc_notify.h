@@ -85,7 +85,8 @@ private:
   void schedule_context(Context *c);
 public:
   RGWSI_Notify(CephContext *cct): RGWServiceInstance(cct) {}
-  ~RGWSI_Notify();
+
+  virtual ~RGWSI_Notify() override;
 
   class CB {
     public:
