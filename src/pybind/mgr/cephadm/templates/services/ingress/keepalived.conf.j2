@@ -19,7 +19,7 @@ vrrp_instance VI_0 {
   }
   unicast_src_ip {{ host_ip }}
   unicast_peer {
-    {% for ip in other_ips  %}
+    {% for ip in other_ips %}
     {{ ip }}
     {% endfor %}
   }
