@@ -5059,7 +5059,22 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   ondisk_status.up = false;
   ondisk_status.last_update = ceph_clock_now();
 
-  int r = cls_get_request_origin(hctx, &ondisk_status.origin);
+  std::string global_id_key = global_key(global_image_id);
+  std::string image_id;
+  int r = read_key(hctx, global_id_key, &image_id);
+  if (r < 0) {
+    return 0;
+  }
+  cls::rbd::MirrorImage mirror_image;
+  r = image_get(hctx, image_id, &mirror_image);
+  if (r < 0) {
+    return 0;
+  }
+  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    return 0;
+  }
+
+  r = cls_get_request_origin(hctx, &ondisk_status.origin);
   ceph_assert(r == 0);
 
   bufferlist bl;
