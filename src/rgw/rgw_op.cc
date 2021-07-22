@@ -958,6 +958,8 @@ int RGWGetObj::verify_permission(optional_yield y)
   return 0;
 }
 
+RGWOp::~RGWOp(){};
+
 int RGWOp::verify_op_mask()
 {
   uint32_t required_mask = op_mask();
