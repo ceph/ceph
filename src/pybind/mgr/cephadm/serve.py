@@ -405,8 +405,8 @@ class CephadmServe:
                 if v:
                     setattr(sd, k, str_to_datetime(d[k]))
             sd.daemon_type = d['name'].split('.')[0]
-            if sd.daemon_type not in ServiceSpec.KNOWN_SERVICE_TYPES:
-                logger.warning(f"Found unknown service type {sd.daemon_type} on host {host}")
+            if sd.daemon_type not in orchestrator.KNOWN_DAEMON_TYPES:
+                logger.warning(f"Found unknown daemon type {sd.daemon_type} on host {host}")
                 continue
 
             sd.daemon_id = '.'.join(d['name'].split('.')[1:])
