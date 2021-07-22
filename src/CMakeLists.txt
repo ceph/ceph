@@ -427,7 +427,7 @@ add_library(common-objs OBJECT ${libcommon_files})
 add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
-  find_package(thrift 0.13.0)
+  find_package(thrift 0.13.0 REQUIRED)
   find_package(yaml-cpp 0.6.0 REQUIRED)
   include(BuildJaeger)
   list(APPEND jaeger_base
