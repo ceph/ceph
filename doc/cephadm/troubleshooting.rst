@@ -118,23 +118,47 @@ cephadm log file called ``ceph.cephadm.log`` on all monitor hosts (see
 Gathering log files
 -------------------
 
-Use journalctl to gather the log files of all daemons:
+General Procedure for Gathering Log Files
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. note:: By default cephadm now stores logs in journald. This means
-   that you will no longer find daemon logs in ``/var/log/ceph/``.
+Use ``journalctl`` to gather the log files of all daemons.
 
-To read the log file of one specific daemon, run::
+.. note:: Since Octopus, cephadm stores logs in journald by default. 
+          Since Octopus, daemon logs are not stored in 
+          ``/var/log/ceph/``.
+
+Reading the log file of a specific daemon
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To read the log file of one specific daemon, run a command of the following
+form:
+
+.. prompt:: bash #
 
     cephadm logs --name <name-of-daemon>
 
-Note: this only works when run on the same host where the daemon is running. To
-get logs of a daemon running on a different host, give the ``--fsid`` option::
+.. note:: This works only when run on the host where the daemon is running.
+          To get the logs of a daemon running on a different host, use the 
+          ``--fsid`` option.
 
-    cephadm logs --fsid <fsid> --name <name-of-daemon>
+To read the log file of a specific daemon that is running on a different 
+host than the one whose command line you are currently using, run a
+command of the following form:
 
-where the ``<fsid>`` corresponds to the cluster ID printed by ``ceph status``.
+.. prompt:: bash #
 
-To fetch all log files of all daemons on a given host, run::
+  cephadm logs --fsid <fsid> --name <name-of-daemon>
+
+where ``<fsid>`` corresponds to the cluster ID returned by 
+the command ``ceph status``.
+
+Fetching all log files of all daemons on a host
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To fetch all log files of all daemons on a particular host, run a command
+of the following form:
+
+.. prompt:: bash #
 
     for name in $(cephadm ls | jq -r '.[].name') ; do
       cephadm logs --fsid <fsid> --name "$name" > $name;
