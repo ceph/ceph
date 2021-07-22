@@ -6,8 +6,8 @@
 #include "rgw_sal_rados.h"
 #include "rgw_lua.h"
 #ifdef WITH_RADOSGW_LUA_PACKAGES
+#include <filesystem>
 #include <boost/process.hpp>
-#include <boost/filesystem.hpp>
 #include "rgw_lua_version.h"
 #endif
 
@@ -196,10 +196,10 @@ int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optiona
 
 int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& failed_packages, std::string& output) {
   // luarocks directory cleanup
-  boost::system::error_code ec;
+  std::error_code ec;
   const auto& luarocks_path = store->get_luarocks_path();
-  boost::filesystem::remove_all(luarocks_path, ec);
-  if (ec.value() != 0 && ec.value() != ENOENT) {
+  if (!std::filesystem::remove_all(luarocks_path, ec) &&
+      ec != std::errc::no_such_file_or_directory) {
     output.append("failed to clear luarock directory: ");
     output.append(ec.message());
     output.append("\n");
