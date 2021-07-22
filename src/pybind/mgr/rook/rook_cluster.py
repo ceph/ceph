@@ -562,17 +562,15 @@ class RookCluster(object):
     def rook_api_post(self, path: str, **kwargs: Any) -> Any:
         return self.rook_api_call("POST", path, **kwargs)
 
-    def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, List[Device]]:
-        def predicate(item: client.V1ConfigMapList) -> bool:
-            if nodenames is not None:
-                return item['spec']['nodeName'] in nodenames
-            else:
-                return True
+    def get_storage_class(self) -> 'client.V1StorageClass':
         matching_sc = [i for i in self.storage_classes.items if self.storage_class == i.metadata.name]
         if len(matching_sc) == 0:
             log.error(f"No storage class exists matching configured Rook orchestrator storage class which currently is <{self.storage_class}>. This storage class can be set in ceph config (mgr/rook/storage_class)")
             raise Exception('No storage class exists matching name provided in ceph config at mgr/rook/storage_class')
-        storage_class = matching_sc[0]
+        return matching_sc[0]
+
+    def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, List[Device]]:
+        storage_class = self.get_storage_class()
         self.fetcher: Optional[DefaultFetcher] = None
         if storage_class.metadata.labels and ('local.storage.openshift.io/owner-name' in storage_class.metadata.labels):
             self.fetcher = LSOFetcher(self.storage_class, self.coreV1_api, self.customObjects_api, nodenames)
