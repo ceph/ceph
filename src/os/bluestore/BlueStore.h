@@ -144,6 +144,7 @@ enum {
   l_bluestore_omap_get_values_lat,
   l_bluestore_clist_lat,
   l_bluestore_remove_lat,
+  l_bluestore_allocate_hist,
   l_bluestore_last
 };
 
@@ -3357,7 +3358,7 @@ private:
 			unsigned bits);
 
   void _collect_allocation_stats(uint64_t need, uint32_t alloc_size,
-                                 size_t extents);
+                                 const PExtentVector&);
   void _record_allocation_stats();
 private:
   uint64_t probe_count = 0;
