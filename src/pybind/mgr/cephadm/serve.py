@@ -177,6 +177,7 @@ class CephadmServe:
     def _refresh_hosts_and_daemons(self) -> None:
         bad_hosts = []
         failures = []
+        osd_metadata = self.mgr.osd_service.get_osd_metadata()
 
         # host -> path -> (mode, uid, gid, content, digest)
         client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]] = {}
@@ -255,7 +256,7 @@ class CephadmServe:
                     bad_hosts.append(r)
             if self.mgr.cache.host_needs_daemon_refresh(host):
                 self.log.debug('refreshing %s daemons' % host)
-                r = self._refresh_host_daemons(host)
+                r = self._refresh_host_daemons(host, osd_metadata)
                 if r:
                     failures.append(r)
 
@@ -382,7 +383,7 @@ class CephadmServe:
             return 'host %s (%s) failed check: %s' % (host, addr, e)
         return None
 
-    def _refresh_host_daemons(self, host: str) -> Optional[str]:
+    def _refresh_host_daemons(self, host: str, osd_metadata: dict) -> Optional[str]:
         try:
             ls = self._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True)
         except OrchestratorError as e:
@@ -427,7 +428,7 @@ class CephadmServe:
             sd.rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
             if sd.daemon_type == 'osd':
-                sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
+                sd.osdspec_affinity = osd_metadata.get(sd.daemon_id, {}).get('osdspec_affinity', '')
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {

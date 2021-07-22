@@ -303,8 +303,8 @@ class OSDService(CephService):
             error_ok=True)
         return out, err, code
 
-    def get_osdspec_affinity(self, osd_id: str) -> str:
-        return self.mgr.get('osd_metadata').get(osd_id, {}).get('osdspec_affinity', '')
+    def get_osd_metadata(self) -> dict:
+        return self.mgr.get('osd_metadata')
 
 
 class OsdIdClaims(object):
