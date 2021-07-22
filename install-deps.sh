@@ -30,6 +30,8 @@ function munge_ceph_spec_in {
     shift
     local for_make_check=$1
     shift
+    local with_jaeger=$1
+    shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
@@ -351,6 +353,9 @@ else
 	if $with_seastar; then
 	    build_profiles+=",pkg.ceph.crimson"
 	fi
+	if $with_jaeger; then
+	    build_profiles+=",pkg.ceph.jaeger"
+	fi
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
 	      --build-profiles "${build_profiles#,}" \
 	      --install --remove \
@@ -385,7 +390,7 @@ else
                 fi
                 ;;
         esac
-        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $with_jaeger $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
@@ -397,7 +402,7 @@ else
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
-        munge_ceph_spec_in $with_seastar false $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar false $for_make_check $with_jaeger $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)

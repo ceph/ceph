@@ -239,6 +239,9 @@ BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	nasm
 BuildRequires:	lua-devel
+%if 0%{with seastar} || 0%{with jaeger}
+BuildRequires:  yaml-cpp-devel >= 0.6
+%endif
 %if 0%{with amqp_endpoint}
 BuildRequires:  librabbitmq-devel
 %endif
@@ -267,6 +270,7 @@ BuildRequires:  libzbd-devel
 %if 0%{with jaeger}
 BuildRequires:  bison
 BuildRequires:  flex
+BuildRequires:  thrift-devel >= 0.13.0
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  json-devel
 %endif
@@ -274,7 +278,6 @@ BuildRequires:  json-devel
 BuildRequires:  nlohmann_json-devel
 %endif
 BuildRequires:  libevent-devel
-BuildRequires:  yaml-cpp-devel
 %endif
 %if 0%{with system_pmdk}
 BuildRequires:  libpmem-devel
@@ -288,7 +291,6 @@ BuildRequires:  libpciaccess-devel
 BuildRequires:  lksctp-tools-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
-BuildRequires:  yaml-cpp-devel
 %if 0%{?fedora}
 BuildRequires:  libubsan
 BuildRequires:  libasan
@@ -1062,7 +1064,6 @@ Group:		System/Libraries
 %endif
 Provides: 	libjaegertracing.so.0()(64bit)
 Provides:	libopentracing.so.1()(64bit)
-Provides:	libthrift.so.0.13.0()(64bit)
 %description -n libjaeger
 This package contains libraries needed to provide distributed
 tracing for Ceph.
@@ -1338,6 +1339,9 @@ cmake .. \
 %endif
 %if 0%{with system_pmdk}
     -DWITH_SYSTEM_PMDK:BOOL=ON \
+%endif
+%if 0%{with jaeger}
+    -DWITH_JAEGER:BOOL=ON \
 %endif
 %if 0%{?suse_version}
     -DBOOST_J:STRING=%{jobs} \
@@ -2289,7 +2293,6 @@ fi
 %if %{with jaeger}
 %files -n libjaeger
 %{_libdir}/libopentracing.so.*
-%{_libdir}/libthrift.so.*
 %{_libdir}/libjaegertracing.so.*
 %post -n libjaeger -p /sbin/ldconfig
 %postun -n libjaeger -p /sbin/ldconfig
