@@ -19,6 +19,10 @@
 
 #include "PyModule.h"
 
+#include "include/stringify.h"
+#include "common/BackTrace.h"
+#include "global/signal_handler.h"
+
 #include "common/debug.h"
 #include "common/errno.h"
 #define dout_context g_ceph_context
@@ -40,49 +44,82 @@ std::string PyModule::mgr_store_prefix = "mgr/";
 #undef BOOST_BIND_GLOBAL_PLACEHOLDERS
 #include <boost/algorithm/string/predicate.hpp>
 #include "include/ceph_assert.h"  // boost clobbers this
-// decode a Python exception into a string
-std::string handle_pyerror()
-{
-    using namespace boost::python;
-    using namespace boost;
 
-    PyObject *exc, *val, *tb;
-    object formatted_list, formatted;
-    PyErr_Fetch(&exc, &val, &tb);
-    PyErr_NormalizeException(&exc, &val, &tb);
-    handle<> hexc(exc), hval(allow_null(val)), htb(allow_null(tb));
-    object traceback(import("traceback"));
-    if (!tb) {
-        object format_exception_only(traceback.attr("format_exception_only"));
-        try {
-          formatted_list = format_exception_only(hexc, hval);
-        } catch (error_already_set const &) {
-          // error while processing exception object
-          // returning only the exception string value
-          PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
-          std::stringstream ss;
-          ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
-          Py_XDECREF(name_attr);
-          ss << "\nError processing exception object: " << peek_pyerror();
-          return ss.str();
-        }
-    } else {
-        object format_exception(traceback.attr("format_exception"));
-        try {
-          formatted_list = format_exception(hexc, hval, htb);
-        } catch (error_already_set const &) {
-          // error while processing exception object
-          // returning only the exception string value
-          PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
-          std::stringstream ss;
-          ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
-          Py_XDECREF(name_attr);
-          ss << "\nError processing exception object: " << peek_pyerror();
-          return ss.str();
-        }
+
+// decode a Python exception into a string
+std::string handle_pyerror(
+  bool crash_dump,
+  std::string module,
+  std::string caller)
+{
+  using namespace boost::python;
+  using namespace boost;
+
+  PyObject *exc, *val, *tb;
+  object formatted_list, formatted;
+  PyErr_Fetch(&exc, &val, &tb);
+  PyErr_NormalizeException(&exc, &val, &tb);
+  handle<> hexc(exc), hval(allow_null(val)), htb(allow_null(tb));
+
+  object traceback(import("traceback"));
+  if (!tb) {
+    object format_exception_only(traceback.attr("format_exception_only"));
+    try {
+      formatted_list = format_exception_only(hexc, hval);
+    } catch (error_already_set const &) {
+      // error while processing exception object
+      // returning only the exception string value
+      PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
+      std::stringstream ss;
+      ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
+      Py_XDECREF(name_attr);
+      ss << "\nError processing exception object: " << peek_pyerror();
+      return ss.str();
     }
-    formatted = str("").join(formatted_list);
-    return extract<std::string>(formatted);
+  } else {
+    object format_exception(traceback.attr("format_exception"));
+    try {
+      formatted_list = format_exception(hexc, hval, htb);
+    } catch (error_already_set const &) {
+      // error while processing exception object
+      // returning only the exception string value
+      PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
+      std::stringstream ss;
+      ss << PyUnicode_AsUTF8(name_attr) << ": " << PyUnicode_AsUTF8(val);
+      Py_XDECREF(name_attr);
+      ss << "\nError processing exception object: " << peek_pyerror();
+      return ss.str();
+    }
+  }
+  formatted = str("").join(formatted_list);
+
+  if (!module.empty()) {
+    std::list<std::string> bt_strings;
+    std::map<std::string, std::string> extra;
+    
+    extra["mgr_module"] = module;
+    extra["mgr_module_caller"] = caller;
+    PyObject *name_attr = PyObject_GetAttrString(exc, "__name__");
+    extra["mgr_python_exception"] = stringify(PyUnicode_AsUTF8(name_attr));
+    Py_XDECREF(name_attr);
+
+    PyObject *l = get_managed_object(formatted_list, boost::python::tag);
+    if (PyList_Check(l)) {
+      // skip first line, which is: "Traceback (most recent call last):\n"
+      for (unsigned i = 1; i < PyList_Size(l); ++i) {
+	PyObject *val = PyList_GET_ITEM(l, i);
+	std::string s = PyUnicode_AsUTF8(val);
+	s.resize(s.size() - 1);  // strip off newline character
+	bt_strings.push_back(s);
+      }
+    }
+    PyBackTrace bt(bt_strings);
+    
+    char crash_path[PATH_MAX];
+    generate_crash_dump(crash_path, bt, &extra);
+  }
+  
+  return extract<std::string>(formatted);
 }
 
 /**
@@ -148,7 +185,7 @@ PyModuleConfig::~PyModuleConfig() = default;
 std::pair<int, std::string> PyModuleConfig::set_config(
     MonClient *monc,
     const std::string &module_name,
-    const std::string &key, const boost::optional<std::string>& val)
+    const std::string &key, const std::optional<std::string>& val)
 {
   const std::string global_key = "mgr/" + module_name + "/" + key;
   Command set_cmd;
@@ -405,7 +442,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       Py_DECREF(pCanRunTuple);
     } else {
       derr << "Exception calling can_run on " << get_name() << dendl;
-      derr << handle_pyerror() << dendl;
+      derr << handle_pyerror(true, get_name(), "PyModule::load") << dendl;
       can_run = false;
     }
   }
@@ -464,7 +501,7 @@ int PyModule::register_options(PyObject *cls)
   } else {
     derr << "Exception calling _register_options on " << get_name()
          << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::register_options") << dendl;
   }
   return 0;
 }
@@ -479,7 +516,7 @@ int PyModule::load_commands()
   } else {
     derr << "Exception calling _register_commands on " << get_name()
          << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_commands") << dendl;
   }
 
   int r = walk_dict_list("COMMANDS", [this](PyObject *pCommand) -> int {
@@ -633,7 +670,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   if (!mgr_module) {
     error_string = peek_pyerror();
     derr << "Module not found: 'mgr_module'" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_subclass_of") << dendl;
     return -EINVAL;
   }
   auto mgr_module_type = PyObject_GetAttrString(mgr_module, base_class);
@@ -641,7 +678,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   if (!mgr_module_type) {
     error_string = peek_pyerror();
     derr << "Unable to import MgrModule from mgr_module" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_subclass_of") << dendl;
     return -EINVAL;
   }
 
@@ -650,7 +687,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
   if (!plugin_module) {
     error_string = peek_pyerror();
     derr << "Module not found: '" << module_name << "'" << dendl;
-    derr << handle_pyerror() << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_subclass_of") << dendl;
     return -ENOENT;
   }
   auto locals = PyModule_GetDict(plugin_module);

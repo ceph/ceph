@@ -41,7 +41,7 @@ public:
     std::is_same_v<T, ::crimson::common::actingset_changed>
     || std::is_same_v<T, ::crimson::common::system_shutdown_exception>;
 
-  bool is_interruption(std::exception_ptr& eptr) {
+  static bool is_interruption(std::exception_ptr& eptr) {
     return (*eptr.__cxa_exception_type() ==
             typeid(::crimson::common::actingset_changed) ||
             *eptr.__cxa_exception_type() ==

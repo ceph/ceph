@@ -15,6 +15,8 @@ releases:
   pacific:
     target_eol: 2023-06-01
     releases:
+      - version: 16.2.5
+        released: 2021-07-08
       - version: 16.2.4
         released: 2021-05-13
       - version: 16.2.3
@@ -29,6 +31,8 @@ releases:
   octopus:
     target_eol: 2022-06-01
     releases:
+      - version: 15.2.13
+        released: 2021-05-26
       - version: 15.2.12
         released: 2021-05-13
       - version: 15.2.11
@@ -59,6 +63,8 @@ releases:
   nautilus:
     target_eol: 2021-06-01
     releases:
+      - version: 14.2.22
+        released: 2021-06-30
       - version: 14.2.21
         released: 2021-05-13
       - version: 14.2.20

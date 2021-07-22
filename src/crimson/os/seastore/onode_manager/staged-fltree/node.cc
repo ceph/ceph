@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "common/likely.h"
+#include "crimson/common/utility.h"
 #include "crimson/os/seastore/logging.h"
 
 #include "node_extent_manager.h"
@@ -311,12 +312,19 @@ eagain_future<Node::search_result_t> Node::lower_bound(
 }
 
 eagain_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
-    context_t c, const key_hobj_t& key, value_config_t vconf)
+    context_t c,
+    const key_hobj_t& key,
+    value_config_t vconf,
+    Ref<Node>&& this_ref)
 {
   return seastar::do_with(
-    MatchHistory(), [this, c, &key, vconf](auto& history) {
+    MatchHistory(), [this, c, &key, vconf,
+                     this_ref = std::move(this_ref)] (auto& history) mutable {
       return lower_bound_tracked(c, key, history
-      ).safe_then([c, &key, vconf, &history](auto result) {
+      ).safe_then([c, &key, vconf, &history,
+                   this_ref = std::move(this_ref)] (auto result) mutable {
+        // the cursor in the result should already hold the root node upwards
+        this_ref.reset();
         if (result.match() == MatchKindBS::EQ) {
           return eagain_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
               std::make_pair(result.p_cursor, false));
@@ -335,9 +343,14 @@ eagain_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
 }
 
 eagain_future<std::size_t> Node::erase(
-    context_t c, const key_hobj_t& key)
+    context_t c,
+    const key_hobj_t& key,
+    Ref<Node>&& this_ref)
 {
-  return lower_bound(c, key).safe_then([c] (auto result) {
+  return lower_bound(c, key
+  ).safe_then([c, this_ref = std::move(this_ref)] (auto result) mutable {
+    // the cursor in the result should already hold the root node upwards
+    this_ref.reset();
     if (result.match() != MatchKindBS::EQ) {
       return eagain_ertr::make_ready_future<std::size_t>(0);
     }
@@ -684,7 +697,12 @@ eagain_future<Ref<Node>> Node::load(
              c.t, addr, expect_is_level_tail);
       ceph_abort("fatal error");
     })
-  ).safe_then([FNAME, c, addr, expect_is_level_tail](auto extent) {
+  ).safe_then([FNAME, c, addr, expect_is_level_tail](auto extent)
+	      -> eagain_future<Ref<Node>> {
+    if (c.t.is_conflicted()) {
+      return crimson::ct_error::eagain::make();
+    }
+    assert(extent->is_valid());
     auto header = extent->get_header();
     auto field_type = header.get_field_type();
     if (!field_type) {
@@ -709,7 +727,8 @@ eagain_future<Ref<Node>> Node::load(
         ceph_abort("fatal error");
       }
       auto impl = LeafNodeImpl::load(extent, *field_type);
-      return Ref<Node>(new LeafNode(impl.get(), std::move(impl)));
+      return eagain_ertr::make_ready_future<Ref<Node>>(
+	new LeafNode(impl.get(), std::move(impl)));
     } else if (node_type == node_type_t::INTERNAL) {
       if (extent->get_length() != c.vb.get_internal_node_size()) {
         ERRORT("load addr={:x}, is_level_tail={} error, "
@@ -718,7 +737,8 @@ eagain_future<Ref<Node>> Node::load(
         ceph_abort("fatal error");
       }
       auto impl = InternalNodeImpl::load(extent, *field_type);
-      return Ref<Node>(new InternalNode(impl.get(), std::move(impl)));
+      return eagain_ertr::make_ready_future<Ref<Node>>(
+	new InternalNode(impl.get(), std::move(impl)));
     } else {
       ceph_abort("impossible path");
     }
@@ -1272,25 +1292,26 @@ eagain_future<> InternalNode::do_get_tree_stats(
     [this, this_ref, c, &stats](auto& pos, auto& p_child_addr) {
       pos = search_position_t::begin();
       impl->get_slot(pos, nullptr, &p_child_addr);
-      return crimson::do_until(
-          [this, this_ref, c, &stats, &pos, &p_child_addr]() -> eagain_future<bool> {
+      return crimson::repeat(
+        [this, this_ref, c, &stats, &pos, &p_child_addr]()
+        -> eagain_future<seastar::stop_iteration> {
         return get_or_track_child(c, pos, p_child_addr->value
         ).safe_then([c, &stats](auto child) {
           return child->do_get_tree_stats(c, stats);
         }).safe_then([this, this_ref, &pos, &p_child_addr] {
           if (pos.is_end()) {
-            return seastar::make_ready_future<bool>(true);
+            return seastar::stop_iteration::yes;
           } else {
             impl->get_next_slot(pos, nullptr, &p_child_addr);
             if (pos.is_end()) {
               if (impl->is_level_tail()) {
                 p_child_addr = impl->get_tail_value();
-                return seastar::make_ready_future<bool>(false);
+                return seastar::stop_iteration::no;
               } else {
-                return seastar::make_ready_future<bool>(true);
+                return seastar::stop_iteration::yes;
               }
             } else {
-              return seastar::make_ready_future<bool>(false);
+              return seastar::stop_iteration::no;
             }
           }
         });
@@ -1801,13 +1822,14 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
       return eagain_ertr::make_ready_future<Ref<tree_cursor_t>>();
     }
   }).safe_then([c, &pos, this_ref = std::move(this_ref),
-                this, FNAME] (Ref<tree_cursor_t> next_cursor) {
+                this, FNAME] (Ref<tree_cursor_t> next_cursor) mutable {
     if (next_cursor && next_cursor->is_end()) {
       // reset the node reference from the end cursor
       next_cursor.reset();
     }
     return seastar::now().then(
         [c, &pos, this_ref = std::move(this_ref), this, FNAME] () mutable {
+      assert_moveable(this_ref);
 #ifndef NDEBUG
       assert(!impl->is_keys_empty());
       if (impl->has_single_value()) {

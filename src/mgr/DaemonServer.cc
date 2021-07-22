@@ -2816,7 +2816,7 @@ void DaemonServer::adjust_pgs()
 	    // single adjustment that's more than half of the
 	    // max_misplaced, to somewhat limit the magnitude of
 	    // our potential error here.
-	    int next;
+	    unsigned next;
 	    static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
 	    pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
 	    if (aggro ||
@@ -2859,11 +2859,13 @@ void DaemonServer::adjust_pgs()
 		}
 	      }
 	    }
-	    dout(10) << "pool " << i.first
-		     << " pgp_num_target " << p.get_pgp_num_target()
-		     << " pgp_num " << p.get_pgp_num()
-		     << " -> " << next << dendl;
-	    pgp_num_to_set[osdmap.get_pool_name(i.first)] = next;
+	    if (next != p.get_pgp_num()) {
+	      dout(10) << "pool " << i.first
+		       << " pgp_num_target " << p.get_pgp_num_target()
+		       << " pgp_num " << p.get_pgp_num()
+		       << " -> " << next << dendl;
+	      pgp_num_to_set[osdmap.get_pool_name(i.first)] = next;
+	    }
 	  }
 	}
 	if (left == 0) {

@@ -131,11 +131,18 @@ void RGWCreateRole::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
+  std::string user_tenant = s->user->get_tenant();
   std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(role_name,
-							    s->user->get_tenant(),
+							    user_tenant,
 							    role_path,
 							    trust_policy,
 							    max_session_duration);
+  if (!user_tenant.empty() && role->get_tenant() != user_tenant) {
+    ldpp_dout(this, 20) << "ERROR: the tenant provided in the role name does not match with the tenant of the user creating the role"
+    << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
   op_ret = role->create(s, true, y);
 
   if (op_ret == -EEXIST) {
@@ -180,12 +187,13 @@ void RGWDeleteRole::execute(optional_yield y)
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
   }
-
-  s->formatter->open_object_section("DeleteRoleResponse");
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
-  s->formatter->close_section();
+  if (!op_ret) {
+    s->formatter->open_object_section("DeleteRoleResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
 }
 
 int RGWGetRole::verify_permission(optional_yield y)

@@ -29,6 +29,7 @@ describe('TelemetryComponent', () => {
     'channel_crash',
     'channel_device',
     'channel_ident',
+    'channel_perf',
     'contact',
     'description',
     'device_url',
@@ -78,6 +79,29 @@ describe('TelemetryComponent', () => {
 
     it('should create', () => {
       expect(component).toBeTruthy();
+    });
+
+    it('should show/hide ident fields on checking/unchecking', () => {
+      const getContactField = () =>
+        fixture.debugElement.nativeElement.querySelector('input[id=contact]');
+      const getDescriptionField = () =>
+        fixture.debugElement.nativeElement.querySelector('input[id=description]');
+
+      // Initially hidden.
+      expect(getContactField()).toBeFalsy();
+      expect(getDescriptionField()).toBeFalsy();
+
+      // Show fields.
+      component.toggleIdent();
+      fixture.detectChanges();
+      expect(getContactField()).toBeTruthy();
+      expect(getDescriptionField()).toBeTruthy();
+
+      // Hide fields.
+      component.toggleIdent();
+      fixture.detectChanges();
+      expect(getContactField()).toBeFalsy();
+      expect(getDescriptionField()).toBeFalsy();
     });
 
     it('should set module enability to true correctly', () => {

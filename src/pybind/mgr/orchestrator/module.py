@@ -352,6 +352,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_cli_write_command('orch host drain')
+    def _drain_host(self, hostname: str) -> HandleCommandResult:
+        """drain all daemons from a host"""
+        completion = self.drain_host(hostname)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_write_command('orch host set-addr')
     def _update_set_addr(self, hostname: str, addr: str) -> HandleCommandResult:
         """Update a host address"""
@@ -921,8 +928,6 @@ Usage:
     @_cli_write_command('orch daemon add nfs')
     def _nfs_add(self,
                  svc_id: str,
-                 pool: str,
-                 namespace: Optional[str] = None,
                  placement: Optional[str] = None,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start NFS daemon(s)"""
@@ -931,8 +936,6 @@ Usage:
 
         spec = NFSServiceSpec(
             service_id=svc_id,
-            pool=pool,
-            namespace=namespace,
             placement=PlacementSpec.from_string(placement),
         )
         return self._daemon_add_misc(spec)
@@ -1132,8 +1135,6 @@ Usage:
                    svc_id: str,
                    placement: Optional[str] = None,
                    format: Format = Format.plain,
-                   pool: Optional[str] = None,
-                   namespace: Optional[str] = None,
                    port: Optional[int] = None,
                    dry_run: bool = False,
                    unmanaged: bool = False,
@@ -1145,8 +1146,6 @@ Usage:
 
         spec = NFSServiceSpec(
             service_id=svc_id,
-            pool=pool,
-            namespace=namespace,
             port=port,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,

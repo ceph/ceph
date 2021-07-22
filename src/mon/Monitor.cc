@@ -493,9 +493,13 @@ abort:
 
 void Monitor::handle_signal(int signum)
 {
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got Signal " << sig_str(signum) << " ***" << dendl;
-  shutdown();
+  if (signum == SIGHUP) {
+    sighup_handler(signum);
+  } else {
+    ceph_assert(signum == SIGINT || signum == SIGTERM);
+    shutdown();
+  }
 }
 
 CompatSet Monitor::get_initial_supported_features()
@@ -607,6 +611,7 @@ const char** Monitor::get_tracked_conf_keys() const
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
+    "mon_cluster_log_to_file",
     "host",
     "fsid",
     // periodic health to clog

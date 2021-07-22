@@ -16,6 +16,7 @@ namespace crimson::os::seastore {
 
 struct retired_extent_gate_t;
 class SeaStore;
+class Transaction;
 
 /**
  * Transaction
@@ -24,9 +25,8 @@ class SeaStore;
  */
 class Transaction {
 public:
-  OrderingHandle handle;
-
   using Ref = std::unique_ptr<Transaction>;
+  using on_destruct_func_t = std::function<void(Transaction&)>;
   enum class get_extent_ret {
     PRESENT,
     ABSENT,
@@ -43,8 +43,11 @@ public:
     } else if (
       auto iter = read_set.find(addr);
       iter != read_set.end()) {
+      // placeholder in read-set should be in the retired-set
+      // at the same time.
+      assert(iter->ref->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
       if (out)
-	*out = CachedExtentRef(*iter);
+	*out = iter->ref;
       return get_extent_ret::PRESENT;
     } else {
       return get_extent_ret::ABSENT;
@@ -53,28 +56,32 @@ public:
 
   void add_to_retired_set(CachedExtentRef ref) {
     ceph_assert(!is_weak());
-    if (!ref->is_initial_pending()) {
+    if (ref->is_initial_pending()) {
+      // We decide not to remove it from fresh_block_list because touching this
+      // will affect relative paddrs, and it should be rare to retire a fresh
+      // extent.
+      ref->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*ref);
+    } else if (ref->is_mutation_pending()) {
+      ref->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*ref);
+      assert(ref->prior_instance);
+      retired_set.insert(ref->prior_instance);
+      assert(read_set.count(ref->prior_instance->get_paddr()));
+      ref->prior_instance.reset();
+    } else {
       // && retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
       retired_set.insert(ref);
-    } else {
-      ref->state = CachedExtent::extent_state_t::INVALID;
     }
-    if (ref->is_pending()) {
-      write_set.erase(*ref);
-    }
-  }
-
-  void add_to_retired_uncached(paddr_t addr, extent_len_t length) {
-    retired_uncached.emplace_back(std::make_pair(addr, length));
   }
 
   void add_to_read_set(CachedExtentRef ref) {
     if (is_weak()) return;
 
-    ceph_assert(read_set.count(ref) == 0);
-    read_set.insert(ref);
+    auto [iter, inserted] = read_set.emplace(this, ref);
+    ceph_assert(inserted);
   }
 
   void add_fresh_extent(CachedExtentRef ref) {
@@ -89,6 +96,29 @@ public:
     ceph_assert(!is_weak());
     mutated_block_list.push_back(ref);
     write_set.insert(*ref);
+  }
+
+  void replace_placeholder(CachedExtent& placeholder, CachedExtent& extent) {
+    ceph_assert(!is_weak());
+
+    assert(placeholder.get_type() == extent_types_t::RETIRED_PLACEHOLDER);
+    assert(extent.get_type() != extent_types_t::RETIRED_PLACEHOLDER);
+    assert(extent.get_type() != extent_types_t::ROOT);
+    assert(extent.get_paddr() == placeholder.get_paddr());
+    {
+      auto where = read_set.find(placeholder.get_paddr());
+      assert(where != read_set.end());
+      assert(where->ref.get() == &placeholder);
+      where = read_set.erase(where);
+      read_set.emplace_hint(where, this, &extent);
+    }
+    {
+      auto where = retired_set.find(&placeholder);
+      assert(where != retired_set.end());
+      assert(where->get() == &placeholder);
+      where = retired_set.erase(where);
+      retired_set.emplace_hint(where, &extent);
+    }
   }
 
   void mark_segment_to_release(segment_id_t segment) {
@@ -112,8 +142,76 @@ public:
     return retired_set;
   }
 
+  enum class src_t : uint8_t {
+    // normal IO operations at seastore boundary or within a test
+    MUTATE = 0,
+    READ,
+    // transaction manager level operations
+    INIT,
+    CLEANER,
+    MAX
+  };
+  static constexpr auto SRC_MAX = static_cast<std::size_t>(src_t::MAX);
+  src_t get_src() const {
+    return src;
+  }
+
   bool is_weak() const {
     return weak;
+  }
+
+  bool is_conflicted() const {
+    return conflicted;
+  }
+
+  auto &get_handle() {
+    return handle;
+  }
+
+  Transaction(
+    OrderingHandle &&handle,
+    bool weak,
+    src_t src,
+    journal_seq_t initiated_after,
+    on_destruct_func_t&& f
+  ) : weak(weak),
+      retired_gate_token(initiated_after),
+      handle(std::move(handle)),
+      on_destruct(std::move(f)),
+      src(src)
+  {}
+
+
+  ~Transaction() {
+    on_destruct(*this);
+    for (auto i = write_set.begin();
+	 i != write_set.end();) {
+      i->state = CachedExtent::extent_state_t::INVALID;
+      write_set.erase(*i++);
+    }
+  }
+
+  friend class crimson::os::seastore::SeaStore;
+  friend class TransactionConflictCondition;
+
+  void reset_preserve_handle(journal_seq_t initiated_after) {
+    root.reset();
+    offset = 0;
+    read_set.clear();
+    write_set.clear();
+    fresh_block_list.clear();
+    mutated_block_list.clear();
+    retired_set.clear();
+    to_release = NULL_SEG_ID;
+    retired_gate_token.reset(initiated_after);
+    conflicted = false;
+    if (!has_reset) {
+      has_reset = true;
+    }
+  }
+
+  bool did_reset() const {
+    return has_reset;
   }
 
 private:
@@ -130,8 +228,8 @@ private:
 
   segment_off_t offset = 0; ///< relative offset of next block
 
-  pextent_set_t read_set;   ///< set of extents read by paddr
-  ExtentIndex write_set;    ///< set of extents written by paddr
+  read_set_t<Transaction> read_set; ///< set of extents read by paddr
+  ExtentIndex write_set;            ///< set of extents written by paddr
 
   std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
   std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
@@ -141,39 +239,116 @@ private:
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;
 
-  std::vector<std::pair<paddr_t, extent_len_t>> retired_uncached;
-
-  journal_seq_t initiated_after;
-
   retired_extent_gate_t::token_t retired_gate_token;
 
-public:
-  Transaction(
-    OrderingHandle &&handle,
-    bool weak,
-    journal_seq_t initiated_after
-  ) : handle(std::move(handle)), weak(weak),
-      retired_gate_token(initiated_after) {}
+  bool conflicted = false;
 
-  ~Transaction() {
-    for (auto i = write_set.begin();
-	 i != write_set.end();) {
-      i->state = CachedExtent::extent_state_t::INVALID;
-      write_set.erase(*i++);
-    }
-  }
+  bool has_reset = false;
 
-  friend class crimson::os::seastore::SeaStore;
+  OrderingHandle handle;
+
+  on_destruct_func_t on_destruct;
+
+  const src_t src;
 };
 using TransactionRef = Transaction::Ref;
+
+inline std::ostream& operator<<(std::ostream& os,
+                                const Transaction::src_t& src) {
+  switch (src) {
+  case Transaction::src_t::MUTATE:
+    return os << "MUTATE";
+  case Transaction::src_t::READ:
+    return os << "READ";
+  case Transaction::src_t::INIT:
+    return os << "INIT";
+  case Transaction::src_t::CLEANER:
+    return os << "CLEANER";
+  default:
+    ceph_abort("impossible");
+  }
+}
 
 /// Should only be used with dummy staged-fltree node extent manager
 inline TransactionRef make_test_transaction() {
   return std::make_unique<Transaction>(
     get_dummy_ordering_handle(),
     false,
-    journal_seq_t{}
+    Transaction::src_t::MUTATE,
+    journal_seq_t{},
+    [](Transaction&) {}
   );
 }
+
+struct TransactionConflictCondition {
+  class transaction_conflict final : public std::exception {
+  public:
+    const char* what() const noexcept final {
+      return "transaction conflict detected";
+    }
+  };
+
+public:
+  TransactionConflictCondition(Transaction &t) : t(t) {}
+
+  template <typename Fut>
+  std::pair<bool, std::optional<Fut>> may_interrupt() {
+    if (t.conflicted) {
+      return {
+	true,
+	seastar::futurize<Fut>::make_exception_future(
+	  transaction_conflict())};
+    } else {
+      return {false, std::optional<Fut>()};
+    }
+  }
+
+  template <typename T>
+  static constexpr bool is_interruption_v =
+    std::is_same_v<T, transaction_conflict>;
+
+
+  static bool is_interruption(std::exception_ptr& eptr) {
+    return *eptr.__cxa_exception_type() == typeid(transaction_conflict);
+  }
+
+private:
+  Transaction &t;
+};
+
+using trans_intr = crimson::interruptible::interruptor<
+  TransactionConflictCondition
+  >;
+
+template <typename E>
+using trans_iertr =
+  crimson::interruptible::interruptible_errorator<
+    TransactionConflictCondition,
+    E
+  >;
+
+template <typename F, typename... Args>
+auto with_trans_intr(Transaction &t, F &&f, Args&&... args) {
+  return trans_intr::with_interruption_to_error<crimson::ct_error::eagain>(
+    std::move(f),
+    TransactionConflictCondition(t),
+    t,
+    std::forward<Args>(args)...);
+}
+
+template <typename T>
+using with_trans_ertr = typename T::base_ertr::template extend<crimson::ct_error::eagain>;
+
+}
+
+namespace std {
+
+template<>
+struct hash<::crimson::os::seastore::Transaction::src_t> {
+  std::size_t operator()(
+      const ::crimson::os::seastore::Transaction::src_t& src) const noexcept {
+    return std::hash<uint8_t>{}((uint8_t)src);
+  }
+};
 
 }

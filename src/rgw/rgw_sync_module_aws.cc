@@ -1108,7 +1108,7 @@ public:
       }
 
       if (!(static_cast<RGWAWSStreamPutCRF *>(out_crf.get()))->get_etag(petag)) {
-        ldout(sc->cct, 0) << "ERROR: failed to get etag from PUT request" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to get etag from PUT request" << dendl;
         return set_cr_error(-EIO);
       }
 
@@ -1218,13 +1218,13 @@ public:
          */
         RGWXMLDecoder::XMLParser parser;
         if (!parser.init()) {
-          ldout(sc->cct, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
           return set_cr_error(-EIO);
         }
 
         if (!parser.parse(out_bl.c_str(), out_bl.length(), 1)) {
           string str(out_bl.c_str(), out_bl.length());
-          ldout(sc->cct, 5) << "ERROR: failed to parse xml: " << str << dendl;
+          ldpp_dout(dpp, 5) << "ERROR: failed to parse xml: " << str << dendl;
           return set_cr_error(-EIO);
         }
 
@@ -1232,7 +1232,7 @@ public:
           RGWXMLDecoder::decode_xml("InitiateMultipartUploadResult", result, &parser, true);
         } catch (RGWXMLDecoder::err& err) {
           string str(out_bl.c_str(), out_bl.length());
-          ldout(sc->cct, 5) << "ERROR: unexpected xml: " << str << dendl;
+          ldpp_dout(dpp, 5) << "ERROR: unexpected xml: " << str << dendl;
           return set_cr_error(-EIO);
         }
       }
@@ -1329,13 +1329,13 @@ public:
          */
         RGWXMLDecoder::XMLParser parser;
         if (!parser.init()) {
-          ldout(sc->cct, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
           return set_cr_error(-EIO);
         }
 
         if (!parser.parse(out_bl.c_str(), out_bl.length(), 1)) {
           string str(out_bl.c_str(), out_bl.length());
-          ldout(sc->cct, 5) << "ERROR: failed to parse xml: " << str << dendl;
+          ldpp_dout(dpp, 5) << "ERROR: failed to parse xml: " << str << dendl;
           return set_cr_error(-EIO);
         }
 
@@ -1343,7 +1343,7 @@ public:
           RGWXMLDecoder::decode_xml("CompleteMultipartUploadResult", result, &parser, true);
         } catch (RGWXMLDecoder::err& err) {
           string str(out_bl.c_str(), out_bl.length());
-          ldout(sc->cct, 5) << "ERROR: unexpected xml: " << str << dendl;
+          ldpp_dout(dpp, 5) << "ERROR: unexpected xml: " << str << dendl;
           return set_cr_error(-EIO);
         }
       }
@@ -1517,7 +1517,7 @@ public:
           ldpp_dout(dpp, 0) << "ERROR: failed to store multipart upload state, retcode=" << retcode << dendl;
           /* continue with upload anyway */
         }
-        ldout(sc->cct, 20) << "sync of object=" << src_obj << " via multipart upload, finished sending part #" << status.cur_part << " etag=" << pcur_part_info->etag << dendl;
+        ldpp_dout(dpp, 20) << "sync of object=" << src_obj << " via multipart upload, finished sending part #" << status.cur_part << " etag=" << pcur_part_info->etag << dendl;
       }
 
       yield call(new RGWAWSCompleteMultipartCR(sc, target->conn.get(), dest_obj, status.upload_id, status.parts));
@@ -1608,11 +1608,11 @@ public:
     reenter(this) {
       ret = decode_attr(attrs, RGW_ATTR_PG_VER, &src_pg_ver, (uint64_t)0);
       if (ret < 0) {
-        ldout(sc->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
       } else {
         ret = decode_attr(attrs, RGW_ATTR_SOURCE_ZONE, &src_zone_short_id, (uint32_t)0);
         if (ret < 0) {
-          ldout(sc->cct, 0) << "ERROR: failed to decode source zone short_id attr, ignoring" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: failed to decode source zone short_id attr, ignoring" << dendl;
           src_pg_ver = 0; /* all or nothing */
         }
       }
@@ -1624,7 +1624,7 @@ public:
 
       source_conn = sync_env->svc->zone->get_zone_conn(sc->source_zone);
       if (!source_conn) {
-        ldout(sc->cct, 0) << "ERROR: cannot find http connection to zone " << sc->source_zone << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: cannot find http connection to zone " << sc->source_zone << dendl;
         return set_cr_error(-EINVAL);
       }
 
@@ -1633,7 +1633,7 @@ public:
 
       if (bucket_created.find(target_bucket_name) == bucket_created.end()){
         yield {
-          ldout(sc->cct,0) << "AWS: creating bucket " << target_bucket_name << dendl;
+          ldpp_dout(dpp, 0) << "AWS: creating bucket " << target_bucket_name << dendl;
           bufferlist bl;
           call(new RGWPutRawRESTResourceCR <bufferlist> (sc->cct, target->conn.get(),
                                                   sync_env->http_manager,
@@ -1642,13 +1642,13 @@ public:
         if (retcode < 0 ) {
           RGWXMLDecoder::XMLParser parser;
           if (!parser.init()) {
-            ldout(sc->cct, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
+            ldpp_dout(dpp, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
             return set_cr_error(retcode);
           }
 
           if (!parser.parse(out_bl.c_str(), out_bl.length(), 1)) {
             string str(out_bl.c_str(), out_bl.length());
-            ldout(sc->cct, 5) << "ERROR: failed to parse xml: " << str << dendl;
+            ldpp_dout(dpp, 5) << "ERROR: failed to parse xml: " << str << dendl;
             return set_cr_error(retcode);
           }
 
@@ -1656,7 +1656,7 @@ public:
             RGWXMLDecoder::decode_xml("Error", result, &parser, true);
           } catch (RGWXMLDecoder::err& err) {
             string str(out_bl.c_str(), out_bl.length());
-            ldout(sc->cct, 5) << "ERROR: unexpected xml: " << str << dendl;
+            ldpp_dout(dpp, 5) << "ERROR: unexpected xml: " << str << dendl;
             return set_cr_error(retcode);
           }
 
@@ -1696,7 +1696,7 @@ public:
           rgw_rest_obj rest_obj;
           rest_obj.init(key);
           if (do_decode_rest_obj(sc->cct, attrs, headers, &rest_obj)) {
-            ldout(sc->cct, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
+            ldpp_dout(dpp, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
             return set_cr_error(-EINVAL);
           }
           call(new RGWAWSStreamObjToCloudMultipartCR(sc, sync_pipe, instance.conf, source_conn, &src_obj,
@@ -1749,12 +1749,12 @@ public:
                                                         mtime(_mtime), instance(_instance) {}
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      ldout(sc->cct, 0) << ": remove remote obj: z=" << sc->source_zone
+      ldpp_dout(dpp, 0) << ": remove remote obj: z=" << sc->source_zone
                               << " b=" <<sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
         instance.get_profile(sync_pipe.info.source_bs.bucket, &target);
         string path =  instance.conf.get_path(target, sync_pipe.dest_bucket_info, key);
-        ldout(sc->cct, 0) << "AWS: removing aws object at" << path << dendl;
+        ldpp_dout(dpp, 0) << "AWS: removing aws object at" << path << dendl;
 
         call(new RGWDeleteRESTResourceCR(sc->cct, target->conn.get(),
                                          sc->env->http_manager,

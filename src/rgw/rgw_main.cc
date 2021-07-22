@@ -311,7 +311,8 @@ int radosgw_Main(int argc, const char **argv)
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(g_ceph_context);
 
-  int r = rgw_tools_init(g_ceph_context);
+  const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
+  int r = rgw_tools_init(&dp, g_ceph_context);
   if (r < 0) {
     derr << "ERROR: unable to initialize rgw tools" << dendl;
     return -r;
@@ -322,10 +323,33 @@ int radosgw_Main(int argc, const char **argv)
   rgw_http_client_init(g_ceph_context);
   rgw_kmip_client_init(*new RGWKMIPManagerImpl(g_ceph_context));
   
-  const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
+  lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_local_datacache_enabled=" << cct->_conf->rgw_d3n_l1_local_datacache_enabled << dendl;
+  if (cct->_conf->rgw_d3n_l1_local_datacache_enabled) {
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_enable_ops_log=" << cct->_conf->rgw_enable_ops_log << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_persistent_path='" << cct->_conf->rgw_d3n_l1_datacache_persistent_path << "'" << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_size=" << cct->_conf->rgw_d3n_l1_datacache_size << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_evict_cache_on_start=" << cct->_conf->rgw_d3n_l1_evict_cache_on_start << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_fadvise=" << cct->_conf->rgw_d3n_l1_fadvise << dendl;
+    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_eviction_policy=" << cct->_conf->rgw_d3n_l1_eviction_policy << dendl;
+  }
+  bool rgw_d3n_datacache_enabled = cct->_conf->rgw_d3n_l1_local_datacache_enabled;
+  if (rgw_d3n_datacache_enabled && !cct->_conf->rgw_enable_ops_log) {
+    lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that rgw_enable_ops_log will be enabled also)" << dendl;
+    rgw_d3n_datacache_enabled = false;
+  }
+  if (rgw_d3n_datacache_enabled && (cct->_conf->rgw_max_chunk_size != cct->_conf->rgw_obj_stripe_size)) {
+    lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that the chunk_size equals stripe_size)" << dendl;
+    rgw_d3n_datacache_enabled = false;
+  }
+  if (rgw_d3n_datacache_enabled && !cct->_conf->rgw_beast_enable_async) {
+    lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires yield context - rgw_beast_enable_async=true)" << dendl;
+    rgw_d3n_datacache_enabled = false;
+  }
+  lsubdout(cct, rgw, 1) << "D3N datacache enabled: " << rgw_d3n_datacache_enabled << dendl;
+
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
-				 "rados",
+				 (!rgw_d3n_datacache_enabled) ? "rados" : "d3n",
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,
@@ -592,7 +616,7 @@ int radosgw_Main(int argc, const char **argv)
     fes.push_back(fe);
   }
 
-  r = store->register_to_service_map("rgw", service_map_meta);
+  r = store->register_to_service_map(&dp, "rgw", service_map_meta);
   if (r < 0) {
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 

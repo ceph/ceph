@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <seastar/core/shared_mutex.hh>
+
 #include "crimson/common/operation.h"
 
 namespace crimson::os::seastore {
@@ -35,6 +37,27 @@ private:
 struct OrderingHandle {
   OperationRef op;
   PipelineHandle phase_handle;
+  seastar::shared_mutex *collection_ordering_lock = nullptr;
+
+  OrderingHandle(OperationRef &&op) : op(std::move(op)) {}
+  OrderingHandle(OrderingHandle &&other)
+    : op(std::move(other.op)), phase_handle(std::move(other.phase_handle)),
+      collection_ordering_lock(other.collection_ordering_lock) {
+    other.collection_ordering_lock = nullptr;
+  }
+
+  seastar::future<> take_collection_lock(seastar::shared_mutex &mutex) {
+    ceph_assert(!collection_ordering_lock);
+    collection_ordering_lock = &mutex;
+    return collection_ordering_lock->lock();
+  }
+
+  void maybe_release_collection_lock() {
+    if (collection_ordering_lock) {
+      collection_ordering_lock->unlock();
+      collection_ordering_lock = nullptr;
+    }
+  }
 
   template <typename T>
   seastar::future<> enter(T &t) {
@@ -48,24 +71,25 @@ struct OrderingHandle {
   seastar::future<> complete() {
     return phase_handle.complete();
   }
+
+  ~OrderingHandle() {
+    maybe_release_collection_lock();
+  }
 };
 
 inline OrderingHandle get_dummy_ordering_handle() {
-  return OrderingHandle{new PlaceholderOperation, {}};
+  return OrderingHandle{new PlaceholderOperation};
 }
 
 struct WritePipeline {
-  OrderedExclusivePhase wait_throttle{
-    "TransactionManager::wait_throttle"
-  };
   OrderedExclusivePhase prepare{
-    "TransactionManager::prepare_phase"
+    "WritePipeline::prepare_phase"
   };
   OrderedConcurrentPhase device_submission{
-    "TransactionManager::journal_phase"
+    "WritePipeline::device_submission_phase"
   };
   OrderedExclusivePhase finalize{
-    "TransactionManager::finalize_phase"
+    "WritePipeline::finalize_phase"
   };
 };
 

@@ -166,7 +166,7 @@ Features Support
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | non AWS casting operator        | select float(1.2) from s3object;                                                        |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
-| not AWS casting operator        | select timestamp('1999:10:10-12:23:44') from s3object;                                  |
+| not AWS casting operator        | select to_timestamp('1999-10-10T12:23:44Z') from s3object;                              |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | Aggregation Function            | sum             | select sum(int(_1)) from s3object;                                    |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
@@ -179,17 +179,18 @@ Features Support
 | Aggregation Function            | count           | select count(*) from s3object where (int(_1)+int(_3))>int(_5);        |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | Timestamp Functions             | extract         | select count(*) from s3object where                                   |
-|                                 |                 | extract(year,to_timestamp(_2)) > 1950                                 |    
-|                                 |                 | and extract(year,to_timestamp(_1)) < 1960;                            |
+|                                 |                 | extract(year from to_timestamp(_2)) > 1950                            |
+|                                 |                 | and extract(year from to_timestamp(_1)) < 1960;                       |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
-| Timestamp Functions             | dateadd         | select count(0) from s3object where                                   |
-|                                 |                 | datediff(year,to_timestamp(_1),dateadd(day,366,to_timestamp(_1))) = 1;|  
+| Timestamp Functions             | date_add        | select count(0) from s3object where                                   |
+|                                 |                 | date_diff(year,to_timestamp(_1),date_add(day,366,                     |
+|                                 |                 | to_timestamp(_1))) = 1;                                               |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
-| Timestamp Functions             | datediff        | select count(0) from s3object where                                   |  
-|                                 |                 | datediff(month,to_timestamp(_1),to_timestamp(_2))) = 2;               | 
+| Timestamp Functions             | date_diff       | select count(0) from s3object where                                   |
+|                                 |                 | date_diff(month,to_timestamp(_1),to_timestamp(_2))) = 2;              |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | Timestamp Functions             | utcnow          | select count(0) from s3object where                                   |
-|                                 |                 | datediff(hours,utcnow(),dateadd(day,1,utcnow())) = 24;                |
+|                                 |                 | date_diff(hours,utcnow(),date_add(day,1,utcnow())) = 24;              |
 +---------------------------------+-----------------+-----------------------------------------------------------------------+
 | Timestamp Functions             | to_string       | select to_string(                                                     |
 |                                 |                 | to_timestamp("2009-09-17T17:56:06.234567Z"),                          |
@@ -261,25 +262,24 @@ s3-select function interfaces
 Timestamp functions
 ~~~~~~~~~~~~~~~~~~~
     | The timestamp functionalities as described in `AWS-specs <https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-glacier-select-sql-reference-date.html>`_  is fully implemented.
-    | the casting operator( ``to_timestamp( string )`` ), converts string to timestamp basic type.
-    | to_timestamp operator able to convert the following ``YYYY-MM-DD-HH-MI-SS.sssss(micro secs)+-HH:MI`` string format into timestamp
-    | upon time(or part of it) is missing, zero's are replacing the missing parts.
-    | +/- HH:MI is also optional, in the case it's missing, it's considere as 00:00. 
-    | values between -12:00 and 14:00 set the timezone of the timestamp value. 
 
-    | ``extract(date-part, timestamp)`` : function return integer according to date-part extract from input timestamp.
-    | supported date-part : year,month,week,day,hour,minute,second,timezone_hour,timezone_minute.
+    | ``to_timestamp( string )`` : The casting operator converts string to timestamp basic type.
+    | to_timestamp operator is able to convert the following ``YYYY-MM-DDTHH:mm:ss.SSSSSS+/-HH:mm`` , ``YYYY-MM-DDTHH:mm:ss.SSSSSSZ`` , ``YYYY-MM-DDTHH:mm:ss+/-HH:mm`` , ``YYYY-MM-DDTHH:mm:ssZ`` , ``YYYY-MM-DDTHH:mm+/-HH:mm`` , ``YYYY-MM-DDTHH:mmZ`` , ``YYYY-MM-DDT`` or ``YYYYT`` string formats into timestamp.
+    | Where time (or part of it) is missing in the string format, zero's are replacing the missing parts. And for missing month and day, 1 is default value for them.
+    | Timezone part is in format ``+/-HH:mm`` or ``Z`` , where the letter "Z" indicates Coordinated Universal Time (UTC). Value of timezone can range between -12:00 and +14:00.
 
-    | ``dateadd(date-part, integer, timestamp)`` : function returns timestamp, a calculation results of input timestamp and date-part.
-    | supported data-part : year,month,day,hour,minute,second.
-    | dateadd operator includes timezone in calculation.
+    | ``extract(date-part from timestamp)`` : The function extracts date-part from input timestamp and returns it as integer.
+    | Supported date-part : year, month, week, day, hour, minute, second, timezone_hour, timezone_minute.
 
-    | ``datediff(date-part, timestamp, timestamp)`` : function returns an integer, a calculated result for difference between 2 timestamps according to date-part.
-    | supported date-part : year,month,day,hour,minute,second.
-    | datediff operator includes timezone in calculation.
+    | ``date_add(date-part, quantity, timestamp)`` : The function adds quantity (integer) to date-part of timestamp and returns result as timestamp. It also includes timezone in calculation.
+    | Supported data-part : year, month, day, hour, minute, second.
+
+    | ``date_diff(date-part, timestamp, timestamp)`` : The function returns an integer, a calculated result for difference between 2 timestamps according to date-part. It includes timezone in calculation.
+    | supported date-part : year, month, day, hour, minute, second.
 
     | ``utcnow()`` : return timestamp of current time.
-    | ``to_string(timestamp format_pattern)`` : formating timestamp
+
+    | ``to_string(timestamp, format_pattern)`` : returns a string representation of the input timestamp in the given input string format.
 
 to_string parameters
 ~~~~~~~~~~~~~~~~~~~~

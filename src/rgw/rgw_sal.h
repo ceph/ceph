@@ -170,7 +170,8 @@ class Store {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
     virtual std::unique_ptr<Completions> get_completions(void) = 0;
-    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, rgw::notify::EventType event_type) = 0;
+    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, 
+        rgw::notify::EventType event_type, const std::string* object_name=nullptr) = 0;
     virtual std::unique_ptr<GCChain> get_gc_chain(rgw::sal::Object* obj) = 0;
     virtual std::unique_ptr<Writer> get_writer(Aio* aio, rgw::sal::Bucket* bucket,
               RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
@@ -184,7 +185,7 @@ class Store {
 
     virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) = 0;
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) = 0;
-    virtual int register_to_service_map(const std::string& daemon_type,
+    virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
 					const map<std::string, std::string>& meta) = 0;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) = 0;
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled) = 0;
@@ -196,7 +197,7 @@ class Store {
 					optional_yield y) = 0;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;
     virtual void wakeup_meta_sync_shards(set<int>& shard_ids) = 0;
-    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) = 0;
+    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) = 0;
     virtual int clear_usage(const DoutPrefixProvider *dpp) = 0;
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
@@ -205,7 +206,7 @@ class Store {
     virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual int get_config_key_val(std::string name, bufferlist* bl) = 0;
     virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) = 0;
-    virtual int meta_list_keys_next(void* handle, int max, list<std::string>& keys, bool* truncated) = 0;
+    virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<std::string>& keys, bool* truncated) = 0;
     virtual void meta_list_keys_complete(void* handle) = 0;
     virtual std::string meta_get_marker(void* handle) = 0;
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) = 0;
@@ -397,7 +398,7 @@ class Bucket {
     virtual User* get_owner(void) { return owner; };
     virtual ACLOwner get_acl_owner(void) { return ACLOwner(info.owner); };
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
+    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
     virtual int set_instance_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) = 0;
     virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) = 0;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -569,6 +570,10 @@ class Object {
 	bool completeMultipart{false};
 	bool appendable{false};
 	Attrs* attrs{nullptr};
+	// In MultipartObjectProcessor::complete, we need this parameter
+	// to tell the exact placement rule since it may be different from
+	// bucket.placement_rule when Storage Class is specified explicitly
+	const rgw_placement_rule *pmeta_placement_rule{nullptr};
       } params;
 
       virtual ~WriteOp() = default;
@@ -615,7 +620,7 @@ class Object {
       virtual ~StatOp() = default;
 
       virtual int stat_async(const DoutPrefixProvider *dpp) = 0;
-      virtual int wait() = 0;
+      virtual int wait(const DoutPrefixProvider *dpp) = 0;
     };
 
     Object()
@@ -845,7 +850,7 @@ protected:
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) = 0;
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			       const ceph::real_time& mtime, const std::string& etag) = 0;
+			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) = 0;
 };
 
 class GCChain {

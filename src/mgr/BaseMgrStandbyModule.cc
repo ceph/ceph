@@ -15,6 +15,7 @@
 #include "BaseMgrStandbyModule.h"
 
 #include "StandbyPyModules.h"
+#include "PyFormatter.h"
 
 
 #define dout_context g_ceph_context
@@ -164,7 +165,46 @@ ceph_log(BaseMgrStandbyModule *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject*
+ceph_standby_state_get(BaseMgrStandbyModule *self, PyObject *args)
+{
+  char *whatc = NULL;
+  if (!PyArg_ParseTuple(args, "s:ceph_state_get", &whatc)) {
+    return NULL;
+  }
+  std::string what(whatc);
+
+  PyFormatter f;
+
+  // Drop the GIL, as most of the following blocks will block on
+  // a mutex -- they are all responsible for re-taking the GIL before
+  // touching the PyFormatter instance or returning from the function.
+  without_gil_t no_gil;
+
+  if (what == "mgr_ips") {
+    entity_addrvec_t myaddrs = self->this_module->get_myaddrs();
+    with_gil_t with_gil{no_gil};
+    f.open_array_section("ips");
+    std::set<std::string> did;
+    for (auto& i : myaddrs.v) {
+      std::string ip = i.ip_only_to_str();
+      if (auto [where, inserted] = did.insert(ip); inserted) {
+	f.dump_string("ip", ip);
+      }
+    }
+    f.close_section();
+    return f.get();
+  } else {
+    derr << "Python module requested unknown data '" << what << "'" << dendl;
+    with_gil_t with_gil{no_gil};
+    Py_RETURN_NONE;
+  }
+}
+
+
 PyMethodDef BaseMgrStandbyModule_methods[] = {
+  {"_ceph_get", (PyCFunction)ceph_standby_state_get, METH_VARARGS,
+   "Get a cluster object (standby)"},
 
   {"_ceph_get_mgr_id", (PyCFunction)ceph_get_mgr_id, METH_NOARGS,
    "Get the name of the Mgr daemon where we are running"},

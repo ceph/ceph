@@ -663,8 +663,6 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
-    DEFAULT_POOL = 'nfs-ganesha'
-
     def __init__(self,
                  service_type: str = 'nfs',
                  service_id: Optional[str] = None,
@@ -673,8 +671,6 @@ class NFSServiceSpec(ServiceSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
-                 pool: Optional[str] = None,
-                 namespace: Optional[str] = None,
                  port: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
@@ -683,12 +679,6 @@ class NFSServiceSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged, preview_only=preview_only,
             config=config, networks=networks)
 
-        #: RADOS pool where NFS client recovery data is stored.
-        self.pool = pool or self.DEFAULT_POOL
-
-        #: RADOS namespace where NFS client recovery data is stored in the pool.
-        self.namespace = namespace or self.service_id
-
         self.port = port
 
     def get_port_start(self) -> List[int]:
@@ -696,26 +686,9 @@ class NFSServiceSpec(ServiceSpec):
             return [self.port]
         return []
 
-    def validate(self) -> None:
-        super(NFSServiceSpec, self).validate()
-
-        if not self.pool:
-            raise SpecValidationError(
-                'Cannot add NFS: No Pool specified')
-
     def rados_config_name(self):
         # type: () -> str
         return 'conf-' + self.service_name()
-
-    def rados_config_location(self):
-        # type: () -> str
-        url = ''
-        if self.pool:
-            url += 'rados://' + self.pool + '/'
-            if self.namespace:
-                url += self.namespace + '/'
-            url += self.rados_config_name()
-        return url
 
 
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)

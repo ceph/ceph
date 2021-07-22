@@ -27,7 +27,7 @@ using ceph::Formatter;
 using ceph::parse_timespan;
 
 namespace {
-class printer : public boost::static_visitor<> {
+class printer {
   ostream& out;
 public:
   explicit printer(ostream& os)
@@ -36,7 +36,7 @@ public:
   void operator()(const T& v) const {
     out << v;
   }
-  void operator()(boost::blank blank) const {
+  void operator()(std::monostate) const {
     return;
   }
   void operator()(bool v) const {
@@ -59,29 +59,29 @@ public:
 
 ostream& operator<<(ostream& os, const Option::value_t& v) {
   printer p{os};
-  v.apply_visitor(p);
+  std::visit(p, v);
   return os;
 }
 
 void Option::dump_value(const char *field_name,
     const Option::value_t &v, Formatter *f) const
 {
-  if (boost::get<boost::blank>(&v)) {
+  if (v == value_t{}) {
     // This should be nil but Formatter doesn't allow it.
     f->dump_string(field_name, "");
     return;
   }
   switch (type) {
   case TYPE_INT:
-    f->dump_int(field_name, boost::get<int64_t>(v)); break;
+    f->dump_int(field_name, std::get<int64_t>(v)); break;
   case TYPE_UINT:
-    f->dump_unsigned(field_name, boost::get<uint64_t>(v)); break;
+    f->dump_unsigned(field_name, std::get<uint64_t>(v)); break;
   case TYPE_STR:
-    f->dump_string(field_name, boost::get<std::string>(v)); break;
+    f->dump_string(field_name, std::get<std::string>(v)); break;
   case TYPE_FLOAT:
-    f->dump_float(field_name, boost::get<double>(v)); break;
+    f->dump_float(field_name, std::get<double>(v)); break;
   case TYPE_BOOL:
-    f->dump_bool(field_name, boost::get<bool>(v)); break;
+    f->dump_bool(field_name, std::get<bool>(v)); break;
   default:
     f->dump_stream(field_name) << v; break;
   }
@@ -99,7 +99,7 @@ int Option::pre_validate(std::string *new_value, std::string *err) const
 int Option::validate(const Option::value_t &new_value, std::string *err) const
 {
   // Generic validation: min
-  if (!boost::get<boost::blank>(&(min))) {
+  if (min != value_t{}) {
     if (new_value < min) {
       std::ostringstream oss;
       oss << "Value '" << new_value << "' is below minimum " << min;
@@ -109,7 +109,7 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
   }
 
   // Generic validation: max
-  if (!boost::get<boost::blank>(&(max))) {
+  if (max != value_t{}) {
     if (new_value > max) {
       std::ostringstream oss;
       oss << "Value '" << new_value << "' exceeds maximum " << max;
@@ -121,7 +121,7 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
   // Generic validation: enum
   if (!enum_allowed.empty() && type == Option::TYPE_STR) {
     auto found = std::find(enum_allowed.begin(), enum_allowed.end(),
-                           boost::get<std::string>(new_value));
+                           std::get<std::string>(new_value));
     if (found == enum_allowed.end()) {
       std::ostringstream oss;
       oss << "'" << new_value << "' is not one of the permitted "
@@ -210,8 +210,8 @@ int Option::parse_value(
     }
   } else if (type == Option::TYPE_MILLISECS) {
     try {
-      *out = boost::lexical_cast<uint64_t>(val);
-    } catch (const boost::bad_lexical_cast& e) {
+      *out = std::chrono::milliseconds(std::stoull(val));
+    } catch (const std::logic_error& e) {
       *error_message = e.what();
       return -EINVAL;
     }
@@ -303,7 +303,7 @@ void Option::print(ostream *out) const
 {
   *out << name << " - " << desc << "\n";
   *out << "  (" << type_to_str(type) << ", " << level_to_str(level) << ")\n";
-  if (!boost::get<boost::blank>(&daemon_value)) {
+  if (daemon_value != value_t{}) {
     *out << "  Default (non-daemon): " << stringify(value) << "\n";
     *out << "  Default (daemon): " << stringify(daemon_value) << "\n";
   } else {
@@ -316,7 +316,7 @@ void Option::print(ostream *out) const
     }
     *out << "\n";
   }
-  if (!boost::get<boost::blank>(&min)) {
+  if (min != value_t{}) {
     *out << "  Minimum: " << stringify(min) << "\n"
 	 << "  Maximum: " << stringify(max) << "\n";
   }

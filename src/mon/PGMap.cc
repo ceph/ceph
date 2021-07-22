@@ -692,7 +692,7 @@ void PGMapDigest::pool_cache_io_rate_summary(ceph::Formatter *f, ostream *out,
 }
 
 ceph_statfs PGMapDigest::get_statfs(OSDMap &osdmap,
-				    boost::optional<int64_t> data_pool) const
+				    std::optional<int64_t> data_pool) const
 {
   ceph_statfs statfs;
   bool filter = false;
@@ -771,9 +771,7 @@ void PGMapDigest::dump_pool_stats_full(
     const pool_stat_t &stat = pg_pool_sum.at(pool_id);
 
     const pg_pool_t *pool = osd_map.get_pg_pool(pool_id);
-    int ruleno = osd_map.crush->find_rule(pool->get_crush_rule(),
-                                         pool->get_type(),
-                                         pool->get_size());
+    int ruleno = pool->get_crush_rule();
     int64_t avail;
     if (avail_by_rule.count(ruleno) == 0) {
       // FIXME: we don't guarantee avail_space_by_rule is up-to-date before this function is invoked
@@ -975,9 +973,7 @@ int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
 					 int64_t poolid) const
 {
   const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
-  int ruleno = osd_map.crush->find_rule(pool->get_crush_rule(),
-					pool->get_type(),
-					pool->get_size());
+  int ruleno = pool->get_crush_rule();
   int64_t avail;
   avail = get_rule_avail(ruleno);
   if (avail < 0)
@@ -1039,9 +1035,7 @@ void PGMap::get_rules_avail(const OSDMap& osdmap,
     if ((pool_id < 0) || (pg_pool_sum.count(pool_id) == 0))
       continue;
     const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
-    int ruleno = osdmap.crush->find_rule(pool->get_crush_rule(),
-					 pool->get_type(),
-					 pool->get_size());
+    int ruleno = pool->get_crush_rule();
     if (avail_map->count(ruleno) == 0)
       (*avail_map)[ruleno] = get_rule_avail(osdmap, ruleno);
   }
@@ -1921,57 +1915,6 @@ void PGMap::get_stuck_stats(
       stuck_pgs[i->first] = i->second;
     }
   }
-}
-
-bool PGMap::get_stuck_counts(const utime_t cutoff, map<string, int>& note) const
-{
-  int inactive = 0;
-  int unclean = 0;
-  int degraded = 0;
-  int undersized = 0;
-  int stale = 0;
-
-  for (auto i = pg_stat.begin();
-       i != pg_stat.end();
-       ++i) {
-    if (! (i->second.state & PG_STATE_ACTIVE)) {
-      if (i->second.last_active < cutoff)
-        ++inactive;
-    }
-    if (! (i->second.state & PG_STATE_CLEAN)) {
-      if (i->second.last_clean < cutoff)
-        ++unclean;
-    }
-    if (i->second.state & PG_STATE_DEGRADED) {
-      if (i->second.last_undegraded < cutoff)
-        ++degraded;
-    }
-    if (i->second.state & PG_STATE_UNDERSIZED) {
-      if (i->second.last_fullsized < cutoff)
-        ++undersized;
-    }
-    if (i->second.state & PG_STATE_STALE) {
-      if (i->second.last_unstale < cutoff)
-        ++stale;
-    }
-  }
-
-  if (inactive)
-    note["stuck inactive"] = inactive;
-
-  if (unclean)
-    note["stuck unclean"] = unclean;
-
-  if (undersized)
-    note["stuck undersized"] = undersized;
-
-  if (degraded)
-    note["stuck degraded"] = degraded;
-
-  if (stale)
-    note["stuck stale"] = stale;
-
-  return inactive || unclean || undersized || degraded || stale;
 }
 
 void PGMap::dump_stuck(ceph::Formatter *f, int types, utime_t cutoff) const

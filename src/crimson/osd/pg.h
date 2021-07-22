@@ -555,9 +555,6 @@ private:
     const hobject_t &oid,
     RWState::State type);
 
-  void do_peering_event(
-    const boost::statechart::event_base &evt,
-    PeeringCtx &rctx);
   void fill_op_params_bump_pg_version(
     osd_op_params_t& osd_op_p,
     const bool user_modify);

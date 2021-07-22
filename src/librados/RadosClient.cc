@@ -646,7 +646,7 @@ int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
   int ret = 0;
   {
     std::lock_guard l{mylock};
-    objecter->get_fs_stats(stats, boost::optional<int64_t> (),
+    objecter->get_fs_stats(stats, std::optional<int64_t> (),
 			   new C_SafeCond(mylock, cond, &done, &ret));
   }
   {

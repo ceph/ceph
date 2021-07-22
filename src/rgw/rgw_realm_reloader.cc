@@ -154,7 +154,7 @@ void RGWRealmReloader::reload()
     }
   }
 
-  int r = store->register_to_service_map("rgw", service_map_meta);
+  int r = store->register_to_service_map(&dp, "rgw", service_map_meta);
   if (r < 0) {
     ldpp_dout(&dp, -1) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 

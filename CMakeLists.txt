@@ -1,25 +1,19 @@
-cmake_minimum_required(VERSION 3.10.2)
-# remove cmake/modules/FindPython* once 3.12 is required
+cmake_minimum_required(VERSION 3.16)
 
 project(ceph
   VERSION 17.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy
-    CMP0028
-    CMP0046
-    CMP0048
-    CMP0051
-    CMP0054
-    CMP0056
-    CMP0065
-    CMP0074
-    CMP0075
-    CMP0093)
-  if(POLICY ${policy})
-    cmake_policy(SET ${policy} NEW)
-  endif()
-endforeach()
+cmake_policy(SET CMP0028 NEW)
+cmake_policy(SET CMP0046 NEW)
+cmake_policy(SET CMP0048 NEW)
+cmake_policy(SET CMP0051 NEW)
+cmake_policy(SET CMP0054 NEW)
+cmake_policy(SET CMP0056 NEW)
+cmake_policy(SET CMP0065 NEW)
+cmake_policy(SET CMP0074 NEW)
+cmake_policy(SET CMP0075 NEW)
+cmake_policy(SET CMP0093 NEW)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -40,8 +34,8 @@ if(WIN32)
 endif()
 
 if(MINGW)
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-allow-multiple-definition")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-allow-multiple-definition")
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,-allow-multiple-definition")
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,-allow-multiple-definition")
 
   # By default, cmake generates import libs for executables. The issue is that
   # for rados and rbd, the executable import lib overrides the library import lib.
@@ -86,10 +80,10 @@ if(WIN32)
   include_directories(
     ${PROJECT_SOURCE_DIR}/src/include/win32)
   # Boost complains if winsock2.h (or windows.h) is included before asio.hpp.
-  add_definitions(-include winsock_wrapper.h)
+  add_compile_options("SHELL:-include winsock_wrapper.h")
   # Boost is also defining some of the errno values, we'll have
   # to avoid mismatches.
-  add_definitions(-include win32_errno.h)
+  add_compile_options("SHELL:-include win32_errno.h")
 endif()
 
 if(FREEBSD)
@@ -126,15 +120,15 @@ if(WITH_STATIC_LIBSTDCXX)
     message(FATAL_ERROR "Please use GCC to enable WITH_STATIC_LIBSTDCXX")
   endif()
   set(static_linker_flags "-static-libstdc++ -static-libgcc")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${static_linker_flags}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${static_linker_flags}")
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " ${static_linker_flags}")
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " ${static_linker_flags}")
   unset(static_linker_flags)
   set(GPERFTOOLS_USE_STATIC_LIBS TRUE)
 endif()
 include(CheckCxxAtomic)
 if(NOT HAVE_CXX11_ATOMIC)
-  set(CMAKE_CXX_STANDARD_LIBRARIES
-    "${CMAKE_CXX_STANDARD_LIBRARIES} ${LIBATOMIC_LINK_FLAGS}")
+  string(APPEND CMAKE_CXX_STANDARD_LIBRARIES
+    " ${LIBATOMIC_LINK_FLAGS}")
 endif()
 
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
@@ -572,8 +566,8 @@ if(sanitizers)
   find_package(Sanitizers REQUIRED ${sanitizers})
   add_compile_options(${Sanitizers_COMPILE_OPTIONS})
   string(REPLACE ";" " " sanitiers_compile_flags "${Sanitizers_COMPILE_OPTIONS}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${sanitiers_compile_flags}")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${sanitiers_compile_flags}")
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " ${sanitiers_compile_flags}")
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " ${sanitiers_compile_flags}")
 endif()
 
 # Rocksdb
@@ -706,5 +700,3 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
-
-set(VERSION 15.2.0)

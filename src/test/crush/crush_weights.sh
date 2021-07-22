@@ -33,10 +33,8 @@ domain root {
 }
 # rules
 rule data {
-    ruleset 0
+    id 0
     type replicated
-    min_size 1
-    max_size 10
     step take root
     step choose firstn 0 type osd
     step emit

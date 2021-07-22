@@ -24,8 +24,7 @@
 #define CRUSH_MAGIC 0x00010000ul   /* for detecting algorithm revisions */
 
 #define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
-#define CRUSH_MAX_RULESET (1<<8)  /* max crush ruleset number */
-#define CRUSH_MAX_RULES CRUSH_MAX_RULESET  /* should be the same as max rulesets */
+#define CRUSH_MAX_RULES (1<<8)  /* max crush rule id */
 
 #define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
@@ -76,21 +75,12 @@ enum crush_opcodes {
 #define CRUSH_CHOOSE_N            0
 #define CRUSH_CHOOSE_N_MINUS(x)   (-(x))
 
-/*
- * The rule mask is used to describe what the rule is intended for.
- * Given a ruleset and size of output set, we search through the
- * rule list for a matching rule_mask.
- */
-struct crush_rule_mask {
-	__u8 ruleset;
-	__u8 type;
-	__u8 min_size;
-	__u8 max_size;
-};
-
 struct crush_rule {
 	__u32 len;
-	struct crush_rule_mask mask;
+	__u8 __unused_was_rule_mask_ruleset;
+	__u8 type;
+	__u8 deprecated_min_size;
+	__u8 deprecated_max_size;
 	struct crush_rule_step steps[0];
 };
 

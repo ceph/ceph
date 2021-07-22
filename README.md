@@ -6,7 +6,7 @@ Please see http://ceph.com/ for current info.
 ## Contributing Code
 
 Most of Ceph is dual licensed under the LGPL version 2.1 or 3.0.  Some
-miscellaneous code is under BSD-style license or is public domain.
+miscellaneous code is under a BSD-style license or is public domain.
 The documentation is licensed under Creative Commons
 Attribution Share Alike 3.0 (CC-BY-SA-3.0).  There are a handful of headers
 included here that are licensed under the GPL.  Please see the file
@@ -47,7 +47,7 @@ The list of Debian or RPM packages dependencies can be installed with:
 
 Note that these instructions are meant for developers who are
 compiling the code for development and testing.  To build binaries
-suitable for installation we recommend you build deb or rpm packages,
+suitable for installation we recommend you build deb or rpm packages
 or refer to the `ceph.spec.in` or `debian/rules` to see which
 configuration options are specified for production builds.
 
@@ -69,7 +69,7 @@ if the build jobs are running out of memory. On average, each job takes around
 
 This assumes you make your build dir a subdirectory of the ceph.git
 checkout. If you put it elsewhere, just point `CEPH_GIT_DIR` to the correct
-path to the checkout. Any additional CMake args can be specified setting ARGS
+path to the checkout. Any additional CMake args can be specified by setting ARGS
 before invoking do_cmake. See [cmake options](#cmake-options)
 for more details. Eg.
 
@@ -86,16 +86,16 @@ To install:
 ### CMake Options
 
 If you run the `cmake` command by hand, there are many options you can
-set with "-D". For example the option to build the RADOS Gateway is
+set with "-D". For example, the option to build the RADOS Gateway is
 defaulted to ON. To build without the RADOS Gateway:
 
-	cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
+	cmake -DWITH_RADOSGW=OFF [path to top-level ceph directory]
 
 Another example below is building with debugging and alternate locations 
 for a couple of external dependencies:
 
 	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" \
-	-DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
+	-DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-Og -g3 -gdwarf-4" \
 	..
 
 To view an exhaustive list of -D options, you can invoke `cmake` with:
@@ -106,7 +106,7 @@ If you often pipe `ninja` to `less` and would like to maintain the
 diagnostic colors for errors and warnings (and if your compiler
 supports it), you can invoke `cmake` with:
 
-	cmake -DDIAGNOSTICS_COLOR=always ..
+	cmake -DDIAGNOSTICS_COLOR=always ...
 
 Then you'll get the diagnostic colors when you execute:
 
@@ -186,7 +186,7 @@ To run an individual test manually and see all the tests output, run
 
 	ctest -V -R [regex matching test name(s)]
 
-To run an tests manually and run the jobs in parallel, run `ctest` with 
+To run tests manually and run the jobs in parallel, run `ctest` with 
 the `-j` flag:
 
 	ctest -j [number of jobs]

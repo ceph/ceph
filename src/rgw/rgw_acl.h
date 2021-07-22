@@ -337,7 +337,7 @@ public:
                     const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
   uint32_t get_group_perm(const DoutPrefixProvider *dpp, ACLGroupTypeEnum group, uint32_t perm_mask) const;
-  uint32_t get_referer_perm(uint32_t current_perm,
+  uint32_t get_referer_perm(const DoutPrefixProvider *dpp, uint32_t current_perm,
                             std::string http_referer,
                             uint32_t perm_mask);
   void encode(bufferlist& bl) const {

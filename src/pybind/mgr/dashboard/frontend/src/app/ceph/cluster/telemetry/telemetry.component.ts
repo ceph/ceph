@@ -32,6 +32,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
     'channel_crash',
     'channel_device',
     'channel_ident',
+    'channel_perf',
     'interval',
     'proxy',
     'contact',
@@ -42,6 +43,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
   sendToUrl = '';
   sendToDeviceUrl = '';
   step = 1;
+  showContactInfo = false;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -135,6 +137,10 @@ export class TelemetryComponent extends CdForm implements OnInit {
         this.loadingError();
       }
     );
+  }
+
+  toggleIdent() {
+    this.showContactInfo = !this.showContactInfo;
   }
 
   updateConfig() {

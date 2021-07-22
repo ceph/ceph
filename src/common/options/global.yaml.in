@@ -449,6 +449,7 @@ options:
   type: str
   level: basic
   desc: path to log file
+  fmt_desc: The location of the logging file for your cluster.
   daemon_default: /var/log/ceph/$cluster-$name.log
   see_also:
   - log_to_file
@@ -462,6 +463,7 @@ options:
   type: int
   level: advanced
   desc: max unwritten log entries to allow before waiting to flush to the log
+  fmt_desc: The maximum number of new log files.
   default: 1000
   see_also:
   - log_max_recent
@@ -485,6 +487,7 @@ options:
   type: bool
   level: basic
   desc: send log lines to a file
+  fmt_desc: Determines if logging messages should appear in a file.
   default: true
   see_also:
   - log_file
@@ -493,6 +496,7 @@ options:
   type: bool
   level: basic
   desc: send log lines to stderr
+  fmt_desc: Determines if logging messages should appear in ``stderr``.
   default: true
   daemon_default: false
   with_legacy: true
@@ -500,6 +504,7 @@ options:
   type: bool
   level: basic
   desc: send critical error log lines to stderr
+  fmt_desc: Determines if error messages should appear in ``stderr``.
   default: false
   daemon_default: true
   with_legacy: true
@@ -516,18 +521,21 @@ options:
   type: bool
   level: basic
   desc: send log lines to syslog facility
+  fmt_desc: Determines if logging messages should appear in ``syslog``.
   default: false
   with_legacy: true
 - name: err_to_syslog
   type: bool
   level: basic
   desc: send critical error log lines to syslog facility
+  fmt_desc: Determines if error messages should appear in ``syslog``.
   default: false
   with_legacy: true
 - name: log_flush_on_exit
   type: bool
   level: advanced
   desc: set a process exit handler to ensure the log is flushed on exit
+  fmt_desc: Determines if Ceph should flush the log files after exit.
   default: false
   with_legacy: true
 - name: log_stop_at_utilization
@@ -611,6 +619,7 @@ options:
   type: str
   level: advanced
   desc: Make daemons send cluster log messages to monitors
+  fmt_desc: Determines if ``clog`` messages should be sent to monitors.
   default: default=true
   flags:
   - runtime
@@ -623,6 +632,7 @@ options:
   type: str
   level: advanced
   desc: Make daemons send cluster log messages to syslog
+  fmt_desc: Determines if ``clog`` messages should be sent to syslog.
   default: 'false'
   flags:
   - runtime
@@ -1127,7 +1137,7 @@ options:
   level: advanced
   desc: Highest port number to bind daemon(s) to
   fmt_desc: The maximum port number to which an OSD or MDS daemon will bind.
-  default: 7300
+  default: 7568
   with_legacy: true
 # FreeBSD does not use SO_REAUSEADDR so allow for a bit more time per default
 - name: ms_bind_retry_count
@@ -3035,11 +3045,13 @@ options:
   default: 0.1
   with_legacy: true
 - name: osd_debug_drop_ping_probability
+  desc: N/A
   type: float
   level: dev
   default: 0
   with_legacy: true
 - name: osd_debug_drop_ping_duration
+  desc: N/A
   type: int
   level: dev
   default: 0
@@ -5029,6 +5041,18 @@ options:
   - hdd
   - ssd
   with_legacy: true
+- name: bluestore_avl_alloc_ff_max_search_count
+  type: uint
+  level: dev
+  desc: Search for this many ranges in first-fit mode before switching over to
+    to best-fit mode. 0 to iterate through all ranges for required chunk.
+  default: 100
+- name: bluestore_avl_alloc_ff_max_search_bytes
+  type: size
+  level: dev
+  desc: Maximum distance to search in first-fit mode before switching over to
+    to best-fit mode. 0 to iterate through all ranges for required chunk.
+  default: 16_M
 - name: bluestore_avl_alloc_bf_threshold
   type: uint
   level: dev
@@ -5314,6 +5338,8 @@ options:
   type: bool
   level: dev
   default: false
+  fmt_desc: Debugging check on synchronization. This is an expensive operation.
+
   with_legacy: true
 - name: filestore_omap_header_cache_size
   type: size

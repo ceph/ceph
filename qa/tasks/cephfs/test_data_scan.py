@@ -82,8 +82,8 @@ class SimpleWorkload(Workload):
         self._initial_state = self._mount.stat("subdir/sixmegs")
 
     def validate(self):
-        self._mount.run_shell(["ls", "subdir"])
-        st = self._mount.stat("subdir/sixmegs")
+        self._mount.run_shell(["ls", "subdir"], sudo=True)
+        st = self._mount.stat("subdir/sixmegs", sudo=True)
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
         return self._errors
 
@@ -104,8 +104,8 @@ class MovedFile(Workload):
         pass
 
     def validate(self):
-        self.assert_equal(self._mount.ls(), ["subdir_alpha"])
-        st = self._mount.stat("subdir_alpha/sixmegs")
+        self.assert_equal(self._mount.ls(sudo=True), ["subdir_alpha"])
+        st = self._mount.stat("subdir_alpha/sixmegs", sudo=True)
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
         return self._errors
 
@@ -124,9 +124,9 @@ class BacktracelessFile(Workload):
         ino_name = "%x" % self._initial_state["st_ino"]
 
         # The inode should be linked into lost+found because we had no path for it
-        self.assert_equal(self._mount.ls(), ["lost+found"])
-        self.assert_equal(self._mount.ls("lost+found"), [ino_name])
-        st = self._mount.stat("lost+found/{ino_name}".format(ino_name=ino_name))
+        self.assert_equal(self._mount.ls(sudo=True), ["lost+found"])
+        self.assert_equal(self._mount.ls("lost+found", sudo=True), [ino_name])
+        st = self._mount.stat(f"lost+found/{ino_name}", sudo=True)
 
         # We might not have got the name or path, but we should still get the size
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
@@ -200,7 +200,7 @@ class StripedStashedLayout(Workload):
         # The unflushed file should have been recovered into lost+found without
         # the correct layout: read back junk
         ino_name = "%x" % self._initial_state["unflushed_ino"]
-        self.assert_equal(self._mount.ls("lost+found"), [ino_name])
+        self.assert_equal(self._mount.ls("lost+found", sudo=True), [ino_name])
         try:
             self._mount.validate_test_pattern(os.path.join("lost+found", ino_name), 1024 * 512)
         except CommandFailedError:
@@ -259,8 +259,8 @@ class MovedDir(Workload):
         self.assert_equal(len(root_files), 1)
         self.assert_equal(root_files[0] in ["grandfather", "grandmother"], True)
         winner = root_files[0]
-        st_opf = self._mount.stat("{0}/parent/orig_pos_file".format(winner))
-        st_npf = self._mount.stat("{0}/parent/new_pos_file".format(winner))
+        st_opf = self._mount.stat(f"{winner}/parent/orig_pos_file", sudo=True)
+        st_npf = self._mount.stat(f"{winner}/parent/new_pos_file", sudo=True)
 
         self.assert_equal(st_opf['st_size'], self._initial_state[0]['st_size'])
         self.assert_equal(st_npf['st_size'], self._initial_state[1]['st_size'])
@@ -278,7 +278,8 @@ class MissingZerothObject(Workload):
         self._filesystem.rados(["rm", zeroth_id], pool=self._filesystem.get_data_pool_name())
 
     def validate(self):
-        st = self._mount.stat("lost+found/{0:x}".format(self._initial_state['st_ino']))
+        ino = self._initial_state['st_ino']
+        st = self._mount.stat(f"lost+found/{ino:x}", sudo=True)
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
 
 
@@ -295,12 +296,11 @@ class NonDefaultLayout(Workload):
 
     def validate(self):
         # Check we got the layout reconstructed properly
-        object_size = int(self._mount.getfattr(
-            "./datafile", "ceph.file.layout.object_size"))
+        object_size = int(self._mount.getfattr("./datafile", "ceph.file.layout.object_size", sudo=True))
         self.assert_equal(object_size, 8388608)
 
         # Check we got the file size reconstructed properly
-        st = self._mount.stat("datafile")
+        st = self._mount.stat("datafile", sudo=True)
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
 
 
@@ -490,7 +490,9 @@ class TestDataScan(CephFSTestCase):
         self.fs.set_joinable()
         self.fs.wait_for_daemons()
         self.mount_a.mount_wait()
-        out = self.mount_a.run_shell(["cat", "subdir/{0}".format(victim_dentry)]).stdout.getvalue().strip()
+        self.mount_a.run_shell(["ls", "-l", "subdir/"]) # debugging
+        # Use sudo because cephfs-data-scan will reinsert the dentry with root ownership, it can't know the real owner.
+        out = self.mount_a.run_shell_payload(f"cat subdir/{victim_dentry}", sudo=True).stdout.getvalue().strip()
         self.assertEqual(out, victim_dentry)
 
         # Finally, close the loop by checking our injected dentry survives a merge

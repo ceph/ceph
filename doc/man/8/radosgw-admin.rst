@@ -600,7 +600,7 @@ Options
 
 .. option:: --max-entries=<entries>
 
-	Optional for listing operations to specify the max entires
+	Optional for listing operations to specify the max entries.
 
 .. option:: --purge-data
 

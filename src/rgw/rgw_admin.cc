@@ -2446,7 +2446,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
   set<rgw_zone_id> source_zones;
   set<rgw_zone_id> target_zones;
 
-  zone_policy_handler->reflect(nullptr, nullptr,
+  zone_policy_handler->reflect(dpp(), nullptr, nullptr,
                                nullptr, nullptr,
                                &source_zones,
                                &target_zones,
@@ -6045,7 +6045,7 @@ int main(int argc, const char **argv)
       }
 
       do {
-	ret = store->meta_list_keys_next(handle, max, user_ids,
+	ret = store->meta_list_keys_next(dpp(), handle, max, user_ids,
 					      &truncated);
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "ERROR: buckets limit check lists_keys_next(): "
@@ -6280,7 +6280,7 @@ int main(int argc, const char **argv)
       struct rgw_log_entry entry;
 
       // peek at first entry to get bucket metadata
-      r = static_cast<rgw::sal::RadosStore*>(store)->getRados()->log_show_next(h, &entry);
+      r = static_cast<rgw::sal::RadosStore*>(store)->getRados()->log_show_next(dpp(), h, &entry);
       if (r < 0) {
 	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
 	return -r;
@@ -6316,7 +6316,7 @@ int main(int argc, const char **argv)
 	  formatter->flush(cout);
         }
 next:
-	r = static_cast<rgw::sal::RadosStore*>(store)->getRados()->log_show_next(h, &entry);
+	r = static_cast<rgw::sal::RadosStore*>(store)->getRados()->log_show_next(dpp(), h, &entry);
       } while (r > 0);
 
       if (r < 0) {
@@ -6988,7 +6988,7 @@ next:
       string marker;
       do {
         entries.clear();
-        ret = reshard.list(i, marker, max_entries - count, entries, &is_truncated);
+        ret = reshard.list(dpp(), i, marker, max_entries - count, entries, &is_truncated);
         if (ret < 0) {
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
           return ret;
@@ -7566,7 +7566,7 @@ next:
     do {
       list<string> keys;
       left = (max_entries_specified ? max_entries - count : max);
-      ret = store->meta_list_keys_next(handle, left, keys, &truncated);
+      ret = store->meta_list_keys_next(dpp(), handle, left, keys, &truncated);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;

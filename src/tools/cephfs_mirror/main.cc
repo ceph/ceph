@@ -77,6 +77,7 @@ int main(int argc, const char **argv) {
   }
 
   init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, handle_signal);
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
@@ -114,6 +115,7 @@ cleanup_messenger:
   msgr->wait();
   delete msgr;
 
+  unregister_async_signal_handler(SIGHUP, handle_signal);
   unregister_async_signal_handler(SIGINT, handle_signal);
   unregister_async_signal_handler(SIGTERM, handle_signal);
   shutdown_async_signal_handler();

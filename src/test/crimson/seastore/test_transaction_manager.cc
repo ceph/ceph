@@ -351,11 +351,11 @@ struct transaction_manager_test_t :
   };
 
   test_transaction_t create_transaction() {
-    return { tm->create_transaction(), {} };
+    return { create_mutate_transaction(), {} };
   }
 
-  test_transaction_t create_weak_transaction() {
-    return { tm->create_weak_transaction(), {} };
+  test_transaction_t create_weak_test_transaction() {
+    return { create_weak_transaction(), {} };
   }
 
   TestBlockRef alloc_extent(
@@ -363,7 +363,7 @@ struct transaction_manager_test_t :
     laddr_t hint,
     extent_len_t len,
     char contents) {
-    auto extent = tm->alloc_extent<TestBlock>(
+    auto extent = itm.alloc_extent<TestBlock>(
       *(t.t),
       hint,
       len).unsafe_get0();
@@ -386,15 +386,19 @@ struct transaction_manager_test_t :
   }
 
   bool check_usage() {
-    auto t = create_weak_transaction();
+    auto t = create_weak_test_transaction();
     SpaceTrackerIRef tracker(segment_cleaner->get_empty_space_tracker());
-    lba_manager->scan_mapped_space(
+    with_trans_intr(
       *t.t,
-      [&tracker](auto offset, auto len) {
-	tracker->allocate(
-	  offset.segment,
-	  offset.offset,
-	  len);
+      [this, &tracker](auto &t) {
+	return lba_manager->scan_mapped_space(
+	  t,
+	  [&tracker](auto offset, auto len) {
+	    tracker->allocate(
+	      offset.segment,
+	      offset.offset,
+	      len);
+	  });
       }).unsafe_get0();
     return segment_cleaner->debug_check_space(*tracker);
   }
@@ -412,7 +416,7 @@ struct transaction_manager_test_t :
   }
 
   void check_mappings() {
-    auto t = create_weak_transaction();
+    auto t = create_weak_test_transaction();
     check_mappings(t);
   }
 
@@ -423,7 +427,7 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
     ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
 
-    auto ext = tm->read_extent<TestBlock>(
+    auto ext = itm.read_extent<TestBlock>(
       *t.t, addr, len
     ).unsafe_get0();
     EXPECT_EQ(addr, ext->get_laddr());
@@ -437,9 +441,9 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(addr, t.mapping_delta));
     ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
 
-    using ertr = TransactionManager::read_extent_ertr;
+    using ertr = with_trans_ertr<TransactionManager::read_extent_iertr>;
     using ret = ertr::future<TestBlockRef>;
-    auto ext = tm->read_extent<TestBlock>(
+    auto ext = itm.read_extent<TestBlock>(
       *t.t, addr, len
     ).safe_then([](auto ext) -> ret {
       return ertr::make_ready_future<TestBlockRef>(ext);
@@ -466,7 +470,7 @@ struct transaction_manager_test_t :
       test_mappings.get(ref->get_laddr(), t.mapping_delta).desc.len ==
       ref->get_length());
 
-    auto ext = tm->get_mutable_extent(*t.t, ref)->cast<TestBlock>();
+    auto ext = itm.get_mutable_extent(*t.t, ref)->cast<TestBlock>();
     EXPECT_EQ(ext->get_laddr(), ref->get_laddr());
     EXPECT_EQ(ext->get_desc(), ref->get_desc());
     mutator.mutate(*ext, gen);
@@ -488,7 +492,7 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(offset, t.mapping_delta));
     ceph_assert(test_mappings.get(offset, t.mapping_delta).refcount > 0);
 
-    auto refcnt = tm->inc_ref(*t.t, offset).unsafe_get0();
+    auto refcnt = itm.inc_ref(*t.t, offset).unsafe_get0();
     auto check_refcnt = test_mappings.inc_ref(offset, t.mapping_delta);
     EXPECT_EQ(refcnt, check_refcnt);
   }
@@ -497,7 +501,7 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(offset, t.mapping_delta));
     ceph_assert(test_mappings.get(offset, t.mapping_delta).refcount > 0);
 
-    auto refcnt = tm->dec_ref(*t.t, offset).unsafe_get0();
+    auto refcnt = itm.dec_ref(*t.t, offset).unsafe_get0();
     auto check_refcnt = test_mappings.dec_ref(offset, t.mapping_delta);
     EXPECT_EQ(refcnt, check_refcnt);
     if (refcnt == 0)
@@ -511,24 +515,28 @@ struct transaction_manager_test_t :
       auto ext = get_extent(t, i.first, i.second.desc.len);
       EXPECT_EQ(i.second, ext->get_desc());
     }
-    lba_manager->scan_mappings(
+    with_trans_intr(
       *t.t,
-      0,
-      L_ADDR_MAX,
-      [iter=overlay.begin(), &overlay](auto l, auto p, auto len) mutable {
-	EXPECT_NE(iter, overlay.end());
-	logger().debug(
-	  "check_mappings: scan {}",
-	  l);
-	EXPECT_EQ(l, iter->first);
-	++iter;
+      [this, &overlay](auto &t) {
+	return lba_manager->scan_mappings(
+	  t,
+	  0,
+	  L_ADDR_MAX,
+	  [iter=overlay.begin(), &overlay](auto l, auto p, auto len) mutable {
+	    EXPECT_NE(iter, overlay.end());
+	    logger().debug(
+	      "check_mappings: scan {}",
+	      l);
+	    EXPECT_EQ(l, iter->first);
+	    ++iter;
+	  });
       }).unsafe_get0();
   }
 
   bool try_submit_transaction(test_transaction_t t) {
-    using ertr = TransactionManager::submit_transaction_ertr;
+    using ertr = with_trans_ertr<TransactionManager::submit_transaction_iertr>;
     using ret = ertr::future<bool>;
-    bool success = tm->submit_transaction(std::move(t.t)
+    bool success = itm.submit_transaction(*t.t
     ).safe_then([]() -> ret {
       return ertr::make_ready_future<bool>(true);
     }).handle_error(

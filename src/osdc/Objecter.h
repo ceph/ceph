@@ -1028,7 +1028,7 @@ struct ObjectOperation {
     object_copy_cursor_t *cursor;
     uint64_t *out_size;
     ceph::real_time *out_mtime;
-    std::map<std::string,ceph::buffer::list> *out_attrs;
+    std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs;
     ceph::buffer::list *out_data, *out_omap_header, *out_omap_data;
     std::vector<snapid_t> *out_snaps;
     snapid_t *out_snap_seq;
@@ -1043,7 +1043,7 @@ struct ObjectOperation {
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
 			      ceph::real_time *m,
-			      std::map<std::string,ceph::buffer::list> *a,
+			      std::map<std::string,ceph::buffer::list,std::less<>> *a,
 			      ceph::buffer::list *d, ceph::buffer::list *oh,
 			      ceph::buffer::list *o,
 			      std::vector<snapid_t> *osnaps,
@@ -1122,7 +1122,7 @@ struct ObjectOperation {
 		uint64_t max,
 		uint64_t *out_size,
 		ceph::real_time *out_mtime,
-		std::map<std::string,ceph::buffer::list> *out_attrs,
+		std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs,
 		ceph::buffer::list *out_data,
 		ceph::buffer::list *out_omap_header,
 		ceph::buffer::list *out_omap_data,
@@ -1666,8 +1666,8 @@ private:
     int acting_primary = -1;
 
     pg_mapping_t() {}
-    pg_mapping_t(epoch_t epoch, std::vector<int> up, int up_primary,
-                 std::vector<int> acting, int acting_primary)
+    pg_mapping_t(epoch_t epoch, const std::vector<int>& up, int up_primary,
+                 const std::vector<int>& acting, int acting_primary)
                : epoch(epoch), up(up), up_primary(up_primary),
                  acting(acting), acting_primary(acting_primary) {}
   };
@@ -1677,7 +1677,9 @@ private:
   std::map<int64_t, std::vector<pg_mapping_t>> pg_mappings;
 
   // convenient accessors
-  bool lookup_pg_mapping(const pg_t& pg, pg_mapping_t* pg_mapping) {
+  bool lookup_pg_mapping(const pg_t& pg, epoch_t epoch, std::vector<int> *up,
+                         int *up_primary, std::vector<int> *acting,
+                         int *acting_primary) {
     std::shared_lock l{pg_mapping_lock};
     auto it = pg_mappings.find(pg.pool());
     if (it == pg_mappings.end())
@@ -1685,9 +1687,13 @@ private:
     auto& mapping_array = it->second;
     if (pg.ps() >= mapping_array.size())
       return false;
-    if (mapping_array[pg.ps()].epoch != pg_mapping->epoch) // stale
+    if (mapping_array[pg.ps()].epoch != epoch) // stale
       return false;
-    *pg_mapping = mapping_array[pg.ps()];
+    auto& pg_mapping = mapping_array[pg.ps()];
+    *up = pg_mapping.up;
+    *up_primary = pg_mapping.up_primary;
+    *acting = pg_mapping.acting;
+    *acting_primary = pg_mapping.acting_primary;
     return true;
   }
   void update_pg_mapping(const pg_t& pg, pg_mapping_t&& pg_mapping) {
@@ -1793,7 +1799,7 @@ public:
 
     epoch_t last_force_resend = 0;
 
-    op_target_t(object_t oid, object_locator_t oloc, int flags)
+    op_target_t(const object_t& oid, const object_locator_t& oloc, int flags)
       : flags(flags),
 	base_oid(oid),
 	base_oloc(oloc)
@@ -2164,7 +2170,7 @@ public:
 
   struct StatfsOp {
     ceph_tid_t tid;
-    boost::optional<int64_t> data_pool;
+    std::optional<int64_t> data_pool;
     using OpSig = void(boost::system::error_code,
 		       const struct ceph_statfs);
     using OpComp = ceph::async::Completion<OpSig>;
@@ -3783,10 +3789,10 @@ private:
   void _fs_stats_submit(StatfsOp *op);
 public:
   void handle_fs_stats_reply(MStatfsReply *m);
-  void get_fs_stats(boost::optional<int64_t> poolid,
+  void get_fs_stats(std::optional<int64_t> poolid,
 		    decltype(StatfsOp::onfinish)&& onfinish);
   template<typename CompletionToken>
-  auto get_fs_stats(boost::optional<int64_t> poolid,
+  auto get_fs_stats(std::optional<int64_t> poolid,
 		    CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, StatfsOp::OpSig> init(token);
     get_fs_stats(poolid,
@@ -3794,7 +3800,7 @@ public:
 					  std::move(init.completion_handler)));
     return init.result.get();
   }
-  void get_fs_stats(struct ceph_statfs& result, boost::optional<int64_t> poolid,
+  void get_fs_stats(struct ceph_statfs& result, std::optional<int64_t> poolid,
 		    Context *onfinish) {
     get_fs_stats(poolid, OpContextVert(onfinish, result));
   }

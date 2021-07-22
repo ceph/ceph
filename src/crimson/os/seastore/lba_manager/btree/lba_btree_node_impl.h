@@ -78,7 +78,7 @@ struct LBAInternalNode
     LBANode(std::forward<T>(t)...),
     FixedKVNodeLayout(get_bptr().c_str()) {}
 
-  static constexpr extent_types_t type = extent_types_t::LADDR_INTERNAL;
+  static constexpr extent_types_t TYPE = extent_types_t::LADDR_INTERNAL;
 
   lba_node_meta_t get_node_meta() const final { return get_meta(); }
 
@@ -170,7 +170,7 @@ struct LBAInternalNode
     op_context_t c,
     LBANodeRef &_right,
     bool prefer_left) final {
-    ceph_assert(_right->get_type() == type);
+    ceph_assert(_right->get_type() == TYPE);
     auto &right = *_right->cast<LBAInternalNode>();
     auto replacement_left = c.cache.alloc_new_extent<LBAInternalNode>(
       c.trans, LBA_BLOCK_SIZE);
@@ -224,7 +224,7 @@ struct LBAInternalNode
   }
 
   extent_types_t get_type() const final {
-    return type;
+    return TYPE;
   }
 
   std::ostream &print_detail(std::ostream &out) const final;
@@ -275,16 +275,16 @@ struct LBAInternalNode
     return std::make_pair(retl, retr);
   }
 
-  using split_ertr = base_ertr;
-  using split_ret = split_ertr::future<LBANodeRef>;
+  using split_iertr = base_iertr;
+  using split_ret = split_iertr::future<LBANodeRef>;
   split_ret split_entry(
     op_context_t c,
     laddr_t addr,
     internal_iterator_t,
     LBANodeRef entry);
 
-  using merge_ertr = base_ertr;
-  using merge_ret = merge_ertr::future<LBANodeRef>;
+  using merge_iertr = base_iertr;
+  using merge_ret = merge_iertr::future<LBANodeRef>;
   merge_ret merge_entry(
     op_context_t c,
     laddr_t addr,
@@ -352,7 +352,7 @@ struct LBALeafNode
     LBANode(std::forward<T>(t)...),
     FixedKVNodeLayout(get_bptr().c_str()) {}
 
-  static constexpr extent_types_t type = extent_types_t::LADDR_LEAF;
+  static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
 
   lba_node_meta_t get_node_meta() const final { return get_meta(); }
 
@@ -369,7 +369,7 @@ struct LBALeafNode
   lookup_ret lookup(op_context_t c, laddr_t addr, depth_t depth) final
   {
     return lookup_ret(
-      lookup_ertr::ready_future_marker{},
+      interruptible::ready_future_marker{},
       this);
   }
 
@@ -449,7 +449,7 @@ struct LBALeafNode
     op_context_t c,
     LBANodeRef &_right,
     bool prefer_left) final {
-    ceph_assert(_right->get_type() == type);
+    ceph_assert(_right->get_type() == TYPE);
     auto &right = *_right->cast<LBALeafNode>();
     auto replacement_left = c.cache.alloc_new_extent<LBALeafNode>(
       c.trans, LBA_BLOCK_SIZE);
@@ -521,7 +521,7 @@ struct LBALeafNode
   }
 
   extent_types_t get_type() const final {
-    return type;
+    return TYPE;
   }
 
   std::ostream &print_detail(std::ostream &out) const final;

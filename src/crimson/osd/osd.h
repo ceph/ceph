@@ -77,7 +77,7 @@ class OSD final : public crimson::net::Dispatcher,
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
   cached_map_t osdmap;
   // TODO: use a wrapper for ObjectStore
-  std::unique_ptr<crimson::os::FuturizedStore> store;
+  crimson::os::FuturizedStore& store;
   std::unique_ptr<OSDMeta> meta_coll;
 
   OSDState state;
@@ -121,6 +121,7 @@ class OSD final : public crimson::net::Dispatcher,
 
 public:
   OSD(int id, uint32_t nonce,
+      crimson::os::FuturizedStore& store,
       crimson::net::MessengerRef cluster_msgr,
       crimson::net::MessengerRef client_msgr,
       crimson::net::MessengerRef hb_front_msgr,
@@ -224,6 +225,15 @@ private:
     stop_acked.set_value();
   }
   seastar::future<> prepare_to_stop();
+  bool should_restart() const;
+  seastar::future<> restart();
+  seastar::future<> shutdown();
+  void update_heartbeat_peers();
+  friend class PGAdvanceMap;
+
+  RemotePeeringEvent::OSDPipeline peering_request_osd_pipeline;
+  friend class RemotePeeringEvent;
+
 public:
   blocking_future<Ref<PG>> get_or_create_pg(
     spg_t pgid,
@@ -232,15 +242,7 @@ public:
   blocking_future<Ref<PG>> wait_for_pg(
     spg_t pgid);
   Ref<PG> get_pg(spg_t pgid);
-
-  bool should_restart() const;
-  seastar::future<> restart();
-  seastar::future<> shutdown();
-
   seastar::future<> send_beacon();
-  void update_heartbeat_peers();
-
-  friend class PGAdvanceMap;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const OSD& osd) {

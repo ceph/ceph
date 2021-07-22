@@ -595,7 +595,7 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="iostat"
+    local mgr_modules="iostat nfs"
     if $with_mgr_dashboard; then
         mgr_modules+=" dashboard"
     fi
@@ -1458,7 +1458,6 @@ fi
 # Ganesha Daemons
 if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
     pseudo_path="/cephfs"
-    ceph_adm mgr module enable nfs
     if [ "$cephadm" -gt 0 ]; then
         cluster_id="vstart"
         prun ceph_adm nfs cluster create $cluster_id
@@ -1559,6 +1558,11 @@ do_rgw()
         fi
     fi
     # Start server
+    if [ "$cephadm" -gt 0 ]; then
+        ceph_adm orch apply rgw rgwTest
+        return
+    fi
+
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20 --debug-ms=1"

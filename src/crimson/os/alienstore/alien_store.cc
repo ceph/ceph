@@ -26,10 +26,11 @@
 #include "crimson/os/futurized_store.h"
 
 namespace {
-  seastar::logger& logger()
-  {
-    return crimson::get_logger(ceph_subsys_bluestore);
-  }
+
+seastar::logger& logger()
+{
+  return crimson::get_logger(ceph_subsys_alienstore);
+}
 
 class OnCommit final: public Context
 {
@@ -63,9 +64,11 @@ namespace crimson::os {
 
 using crimson::common::get_conf;
 
-AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
+AlienStore::AlienStore(const std::string& path,
+                       const ConfigValues& values,
+                       seastar::alien::instance& alien)
   : path{path},
-    alien{std::make_unique<seastar::alien::instance>()}
+    alien{alien}
 {
   cct = std::make_unique<CephContext>(CEPH_ENTITY_TYPE_OSD);
   g_ceph_context = cct.get();
@@ -338,8 +341,8 @@ AlienStore::get_attrs(CollectionRef ch,
   return seastar::do_with(attrs_t{}, [=] (auto &aset) {
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, &aset] {
       auto c = static_cast<AlienCollection*>(ch.get());
-      return store->getattrs(c->collection, oid,
-		             reinterpret_cast<map<string,bufferptr>&>(aset));
+      const auto r = store->getattrs(c->collection, oid, aset);
+      return r;
     }).then([&aset] (int r) -> get_attrs_ertr::future<attrs_t> {
       if (r == -ENOENT) {
         return crimson::ct_error::enoent::make();
@@ -419,7 +422,7 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
 	  assert(tp);
 	  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
 	    [this, ch, id, crimson_wrapper, &txn, &done] {
-	    txn.register_on_commit(new OnCommit(*alien,
+	    txn.register_on_commit(new OnCommit(alien,
 						id, done, crimson_wrapper,
 						txn));
 	    auto c = static_cast<AlienCollection*>(ch.get());

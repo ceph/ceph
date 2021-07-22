@@ -39,6 +39,13 @@ options:
   default: 5
   services:
   - mon
+- name: mon_down_mkfs_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds that the cluster may have a mon down after cluster creation
+  default: 1_min
+  services:
+  - mon
 - name: mon_mgr_beacon_grace
   type: secs
   level: advanced
@@ -89,6 +96,7 @@ options:
   type: str
   level: advanced
   desc: Make monitor send cluster log messages to syslog
+  fmt_desc: Determines if the cluster log should be output to the syslog.
   default: default=false
   services:
   - mon
@@ -138,6 +146,15 @@ options:
   long_desc: This can either be a simple file name to receive all messages, or a list
     of key/value pairs where the key is the log channel and the value is the filename,
     which may include $cluster and $channel metavariables
+  fmt_desc: |
+    The locations of the cluster's log files. There are two channels in
+    Ceph: ``cluster`` and ``audit``. This option represents a mapping
+    from channels to log files, where the log entries of that
+    channel are sent to. The ``default`` entry is a fallback
+    mapping for channels not explicitly specified. So, the following
+    default setting will send cluster log to ``$cluster.log``, and
+    send audit log to ``$cluster.audit.log``, where ``$cluster`` will
+    be replaced with the actual cluster name.
   default: default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log
   services:
   - mon
@@ -201,13 +218,28 @@ options:
   - mon
   flags:
   - runtime
-- name: mon_log_max_summary
+- name: mon_log_max
   type: uint
   level: advanced
   desc: number of recent cluster log messages to retain
+  default: 10000
+  services:
+  - mon
+  with_legacy: true
+- name: mon_log_max_summary
+  type: uint
+  level: advanced
+  desc: number of recent cluster log messages to dedup against
   default: 50
   services:
   - mon
+  with_legacy: true
+- name: mon_log_full_interval
+  type: uint
+  level: advanced
+  desc: how many epochs before we encode a full copy of recent log keys
+  default: 50
+  services: [mon]
   with_legacy: true
 - name: mon_max_log_entries_per_event
   type: int

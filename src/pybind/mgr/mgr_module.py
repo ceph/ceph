@@ -79,6 +79,8 @@ PG_STATES = [
     "wait",
 ]
 
+NFS_POOL_NAME = '.nfs'
+
 
 class CommandResult(object):
     """
@@ -176,6 +178,10 @@ class OSDMap(ceph_module.BasePyOSDMap):
 
     def pool_raw_used_rate(self, pool_id: int) -> float:
         return self._pool_raw_used_rate(pool_id)
+
+    @classmethod
+    def build_simple(cls, epoch: int = 1, uuid: Optional[str] = None, num_osd: int = -1):
+        return cls._build_simple(epoch, uuid, num_osd)
 
     def get_ec_profile(self, name: str) -> Optional[List[Dict[str, str]]]:
         # FIXME: efficient implementation
@@ -822,9 +828,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_active_uri(self) -> str:
         return self._ceph_get_active_uri()
 
+    def get(self, data_name: str):
+        return self._ceph_get(data_name)
+
     def get_mgr_ip(self) -> str:
-        # we don't have get() for standby modules; make do with the hostname
-        return socket.gethostname()
+        ips = self.get("mgr_ips").get('ips', [])
+        if not ips:
+            return socket.gethostname()
+        return ips[0]
 
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())

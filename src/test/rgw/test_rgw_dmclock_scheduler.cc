@@ -18,7 +18,7 @@
 #include "rgw/rgw_dmclock_async_scheduler.h"
 
 #include <optional>
-#include <boost/asio/spawn.hpp>
+#include <spawn/spawn.hpp>
 #include <gtest/gtest.h>
 #include "acconfig.h"
 #include "global/global_context.h"
@@ -105,7 +105,7 @@ TEST(Queue, RateLimit)
   EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
   EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
-  context.poll();
+  context.run_for(std::chrono::milliseconds(1));
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -163,7 +163,7 @@ TEST(Queue, AsyncRequest)
   EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
   EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
-  context.poll();
+  context.run_for(std::chrono::milliseconds(1));
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -217,7 +217,7 @@ TEST(Queue, Cancel)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  context.poll();
+  context.run_for(std::chrono::milliseconds(1));
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -265,7 +265,7 @@ TEST(Queue, CancelClient)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  context.poll();
+  context.run_for(std::chrono::milliseconds(1));
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -315,7 +315,7 @@ TEST(Queue, CancelOnDestructor)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  context.poll();
+  context.run_for(std::chrono::milliseconds(1));
   EXPECT_TRUE(context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -369,20 +369,20 @@ TEST(Queue, CrossExecutorRequest)
   EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
   EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
-  callback_context.poll();
+  callback_context.run_for(std::chrono::milliseconds(1));
   // maintains work on callback executor while in queue
   EXPECT_FALSE(callback_context.stopped());
 
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  queue_context.poll();
+  queue_context.run_for(std::chrono::milliseconds(1));
   EXPECT_TRUE(queue_context.stopped());
 
   EXPECT_FALSE(ec1); // no callbacks until callback executor runs
   EXPECT_FALSE(ec2);
 
-  callback_context.poll();
+  callback_context.run_for(std::chrono::milliseconds(1));
   EXPECT_TRUE(callback_context.stopped());
 
   ASSERT_TRUE(ec1);
@@ -400,7 +400,7 @@ TEST(Queue, SpawnAsyncRequest)
 {
   boost::asio::io_context context;
 
-  boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
+  spawn::spawn(context, [&] (spawn::yield_context yield) {
     ClientCounters counters(g_ceph_context);
     AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
                     [] (client_id client) -> ClientInfo* {
@@ -421,7 +421,7 @@ TEST(Queue, SpawnAsyncRequest)
     EXPECT_EQ(PhaseType::priority, p2);
   });
 
-  context.poll();
+  context.run_for(std::chrono::milliseconds(1));
   EXPECT_TRUE(context.stopped());
 }
 

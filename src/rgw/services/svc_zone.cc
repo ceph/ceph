@@ -184,7 +184,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   set<rgw_zone_id> source_zones;
   set<rgw_zone_id> target_zones;
 
-  sync_policy_handler->reflect(nullptr, nullptr,
+  sync_policy_handler->reflect(dpp, nullptr, nullptr,
                                nullptr, nullptr,
                                &source_zones,
                                &target_zones,
@@ -1170,7 +1170,7 @@ read_omap:
     pools.push_back(rgw_pool(s));
     vector<int> retcodes;
     bufferlist bl;
-    ret = rados_svc->pool().create(pools, &retcodes);
+    ret = rados_svc->pool().create(dpp, pools, &retcodes);
     if (ret < 0)
       return ret;
     ret = sysobj.omap().set(dpp, s, bl, y);

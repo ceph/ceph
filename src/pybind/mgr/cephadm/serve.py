@@ -368,20 +368,21 @@ class CephadmServe:
             return None
         self.log.debug(' checking %s' % host)
         try:
+            addr = self.mgr.inventory.get_addr(host) if host in self.mgr.inventory else host
             out, err, code = self._run_cephadm(
                 host, cephadmNoImage, 'check-host', [],
                 error_ok=True, no_fsid=True)
             self.mgr.cache.update_last_host_check(host)
             self.mgr.cache.save_host(host)
             if code:
-                self.log.debug(' host %s failed check' % host)
+                self.log.debug(' host %s (%s) failed check' % (host, addr))
                 if self.mgr.warn_on_failed_host_check:
-                    return 'host %s failed check: %s' % (host, err)
+                    return 'host %s (%s) failed check: %s' % (host, addr, err)
             else:
-                self.log.debug(' host %s ok' % host)
+                self.log.debug(' host %s (%s) ok' % (host, addr))
         except Exception as e:
-            self.log.debug(' host %s failed check' % host)
-            return 'host %s failed check: %s' % (host, e)
+            self.log.debug(' host %s (%s) failed check' % (host, addr))
+            return 'host %s (%s) failed check: %s' % (host, addr, e)
         return None
 
     def _refresh_host_daemons(self, host: str) -> Optional[str]:
@@ -404,6 +405,10 @@ class CephadmServe:
                 if v:
                     setattr(sd, k, str_to_datetime(d[k]))
             sd.daemon_type = d['name'].split('.')[0]
+            if sd.daemon_type not in ServiceSpec.KNOWN_SERVICE_TYPES:
+                logger.warning(f"Found unknown service type {sd.daemon_type} on host {host}")
+                continue
+
             sd.daemon_id = '.'.join(d['name'].split('.')[1:])
             sd.hostname = host
             sd.container_id = d.get('container_id')
@@ -422,7 +427,8 @@ class CephadmServe:
             sd.ports = d.get('ports')
             sd.ip = d.get('ip')
             sd.rank = int(d['rank']) if d.get('rank') is not None else None
-            sd.rank_generation = int(d['rank_generation']) if d.get('rank_generation') is not None else None
+            sd.rank_generation = int(d['rank_generation']) if d.get(
+                'rank_generation') is not None else None
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:

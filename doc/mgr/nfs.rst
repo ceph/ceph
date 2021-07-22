@@ -1,11 +1,12 @@
-.. _cephfs-nfs:
+.. _mgr-nfs:
 
 
-=======================
-CephFS Exports over NFS
-=======================
+=============================
+CephFS & RGW Exports over NFS
+=============================
 
-CephFS namespaces can be exported over NFS protocol using the `NFS-Ganesha NFS server`_
+CephFS namespaces and RGW buckets can be exported over NFS protocol using the
+`NFS-Ganesha NFS server`_
 
 Requirements
 ============
@@ -21,7 +22,7 @@ Ganesha Configuration Hierarchy
 
 Cephadm and rook starts nfs-ganesha daemon with `bootstrap configuration`
 containing minimal ganesha configuration, creates empty rados `common config`
-object in `nfs-ganesha` pool and watches this config object. The `mgr/nfs`
+object in `.nfs` pool and watches this config object. The `mgr/nfs`
 module adds rados export object urls to the common config object. If cluster
 config is set, it creates `user config` object containing custom ganesha
 configuration and adds it url to common config object.
@@ -68,10 +69,10 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <clusterid> [<placement>] [--ingress --virtual-ip <ip>]
+    $ ceph nfs cluster create <cluster_id> [<placement>] [--ingress --virtual-ip <ip>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
-``clusterid``, and a common NFS Ganesha config RADOS object.
+``cluster_id``, and a common NFS Ganesha config RADOS object.
 
 .. note:: Since this command also brings up NFS Ganesha daemons using a ceph-mgr
    orchestrator module (see :doc:`/mgr/orchestrator`) such as "mgr/cephadm", at
@@ -80,7 +81,7 @@ This creates a common recovery pool for all NFS Ganesha daemons, new user based 
    Currently, NFS Ganesha daemon deployed by cephadm listens on the standard
    port. So only one daemon will be deployed on a host.
 
-``<clusterid>`` is an arbitrary string by which this NFS Ganesha cluster will be
+``<cluster_id>`` is an arbitrary string by which this NFS Ganesha cluster will be
 known.
 
 ``<placement>`` is an optional string signifying which hosts should have NFS Ganesha
@@ -110,7 +111,7 @@ Delete NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster rm <clusterid>
+    $ ceph nfs cluster rm <cluster_id>
 
 This deletes the deployed cluster.
 
@@ -128,7 +129,7 @@ Show NFS Ganesha Cluster Information
 
 .. code:: bash
 
-    $ ceph nfs cluster info [<clusterid>]
+    $ ceph nfs cluster info [<cluster_id>]
 
 This displays ip and port of deployed cluster.
 
@@ -144,7 +145,7 @@ Set Customized NFS Ganesha Configuration
 
 .. code:: bash
 
-    $ ceph nfs cluster config set <clusterid> -i <config_file>
+    $ ceph nfs cluster config set <cluster_id> -i <config_file>
 
 With this the nfs cluster will use the specified config and it will have
 precedence over default config blocks.
@@ -187,14 +188,14 @@ Example use cases
    daemons to access ceph cluster. User can be created in following way using
    `auth get-or-create`::
 
-         # ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=nfs-ganesha namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
+         # ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=.nfs namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
 
 Reset NFS Ganesha Configuration
 ===============================
 
 .. code:: bash
 
-    $ ceph nfs cluster config reset <clusterid>
+    $ ceph nfs cluster config reset <cluster_id>
 
 This removes the user defined configuration.
 
@@ -211,17 +212,16 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
+    $ ceph nfs export create cephfs <fsname> <cluster_id> <pseudo_path> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>]
 
 This creates export RADOS objects containing the export block, where
 
 ``<fsname>`` is the name of the FS volume used by the NFS Ganesha cluster
 that will serve this export.
 
-``<clusterid>`` is the NFS Ganesha cluster ID.
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<binding>`` is the pseudo root path (must be an absolute path and unique).
-It specifies the export position within the NFS v4 Pseudo Filesystem.
+``<pseudo_path>`` is the export position within the NFS v4 Pseudo Filesystem where the export will be available on the server. It must be an absolute path and unique.
 
 ``<path>`` is the path within cephfs. Valid path should be given and default
 path is '/'. It need not be unique. Subvolume path can be fetched using:
@@ -230,65 +230,99 @@ path is '/'. It need not be unique. Subvolume path can be fetched using:
 
    $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
+``<client_addr>`` is the list of client address for which these export
+permissions will be applicable. By default all clients can access the export
+according to specified export permissions. See the `NFS-Ganesha Export Sample`_
+for permissible values.
+
+``<squash>`` defines the kind of user id squashing to be performed. The default
+value is `no_root_squash`. See the `NFS-Ganesha Export Sample`_ for
+permissible values.
+
 .. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
 
-Delete CephFS Export
-====================
+Create RGW Export
+=================
+
+To export a bucket
+
+.. code::
+
+   $ ceph nfs export create rgw <bucket_name> <cluster_id> <pseudo_path> [--readonly] [--client_addr <value>...] [--realm <value>]
+
+For example, to export *mybucket* via NFS cluster *mynfs* at the pseudo-path */bucketdata* to any host in the ``192.168.10.0/24`` network
+
+.. code::
+
+   $ ceph nfs export create rgw mybucket mynfs /bucketdata --client_addr 192.168.10.0/24
+
+.. note:: Export creation is supported only for NFS Ganesha clusters deployed using nfs interface.
+
+Delete Export
+=============
 
 .. code:: bash
 
-    $ ceph nfs export rm <clusterid> <binding>
+    $ ceph nfs export rm <cluster_id> <pseudo_path>
 
 This deletes an export in an NFS Ganesha cluster, where:
 
-``<clusterid>`` is the NFS Ganesha cluster ID.
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<binding>`` is the pseudo root path (must be an absolute path).
+``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
-List CephFS Exports
-===================
+List Exports
+============
 
 .. code:: bash
 
-    $ ceph nfs export ls <clusterid> [--detailed]
+    $ ceph nfs export ls <cluster_id> [--detailed]
 
 It lists exports for a cluster, where:
 
-``<clusterid>`` is the NFS Ganesha cluster ID.
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
 With the ``--detailed`` option enabled it shows entire export block.
 
-Get CephFS Export
-=================
+Get Export
+==========
 
 .. code:: bash
 
-    $ ceph nfs export get <clusterid> <binding>
+    $ ceph nfs export info <cluster_id> <pseudo_path>
 
-This displays export block for a cluster based on pseudo root name (binding),
+This displays export block for a cluster based on pseudo root name,
 where:
 
-``<clusterid>`` is the NFS Ganesha cluster ID.
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<binding>`` is the pseudo root path (must be an absolute path).
+``<pseudo_path>`` is the pseudo root path (must be an absolute path).
 
 
-Update CephFS Export
-====================
+Create or update Export via JSON specification
+==============================================
 
-.. code:: bash
+An existing export can be dumped in JSON format with:
 
-    $ ceph nfs export update -i <json_file>
+.. prompt:: bash #
 
-This updates the cephfs export specified in the json file. Export in json
-format can be fetched with above get command. For example::
+    ceph nfs export info *<cluster_id>* *<pseudo_path>*
 
-   $ ceph nfs export get vstart /cephfs > update_cephfs_export.json
+An export can be created or modified by importing a JSON description in the
+same format:
+
+.. prompt:: bash #
+
+    ceph nfs export apply *<cluster_id>* -i <json_file>
+
+For example,::
+
+   $ ceph nfs export info mynfs /cephfs > update_cephfs_export.json
    $ cat update_cephfs_export.json
    {
      "export_id": 1,
      "path": "/",
-     "cluster_id": "vstart",
+     "cluster_id": "mynfs",
      "pseudo": "/cephfs",
      "access_type": "RW",
      "squash": "no_root_squash",
@@ -301,19 +335,31 @@ format can be fetched with above get command. For example::
      ],
      "fsal": {
        "name": "CEPH",
-       "user_id": "vstart1",
+       "user_id": "nfs.mynfs.1",
        "fs_name": "a",
        "sec_label_xattr": ""
      },
      "clients": []
    }
-   # Here in the fetched export, pseudo and access_type is modified. Then the modified file is passed to update interface
-   $ ceph nfs export update -i update_cephfs_export.json
+
+The imported JSON can be a single dict describing a single export, or a JSON list
+containing multiple export dicts.
+
+The exported JSON can be modified and then reapplied.  Below, *pseudo*
+and *access_type* are modified.  When modifying an export, the
+provided JSON should fully describe the new state of the export (just
+as when creating a new export), with the exception of the
+authentication credentials, which will be carried over from the
+previous state of the export where possible.
+
+::
+
+   $ ceph nfs export apply mynfs -i update_cephfs_export.json
    $ cat update_cephfs_export.json
    {
      "export_id": 1,
      "path": "/",
-     "cluster_id": "vstart",
+     "cluster_id": "mynfs",
      "pseudo": "/cephfs_testing",
      "access_type": "RO",
      "squash": "no_root_squash",
@@ -326,36 +372,34 @@ format can be fetched with above get command. For example::
      ],
      "fsal": {
        "name": "CEPH",
-       "user_id": "vstart1",
+       "user_id": "nfs.mynfs.1",
        "fs_name": "a",
        "sec_label_xattr": ""
      },
      "clients": []
    }
 
+An export can also be created or updated by injecting a Ganesha NFS EXPORT config
+fragment.  For example,::
 
-Configuring NFS Ganesha to export CephFS with vstart
-====================================================
+   $ ceph nfs export apply mynfs -i update_cephfs_export.conf
+   $ cat update_cephfs_export.conf
+   EXPORT {
+       FSAL {
+           name = "CEPH";
+           filesystem = "a";
+       }
+       export_id = 1;
+       path = "/";
+       pseudo = "/a";
+       access_type = "RW";
+       squash = "none";
+       attr_expiration_time = 0;
+       security_label = true;
+       protocols = 4;
+       transports = "TCP";
+   }
 
-1) Using ``cephadm``
-
-    .. code:: bash
-
-        $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d --cephadm
-
-    This will deploy a single NFS Ganesha daemon using ``vstart.sh``, where
-    the daemon will listen on the default NFS Ganesha port.
-
-2) Using test orchestrator
-
-    .. code:: bash
-
-       $ MDS=1 MON=1 OSD=3 NFS=1 ../src/vstart.sh -n -d
-
-    Environment variable ``NFS`` is the number of NFS Ganesha daemons to be
-    deployed, each listening on a random port.
-
-    .. note:: NFS Ganesha packages must be pre-installed for this to work.
 
 Mount
 =====
@@ -365,7 +409,7 @@ grace period. The exports can be mounted by
 
 .. code:: bash
 
-    $ mount -t nfs -o port=<ganesha-port> <ganesha-host-name>:<ganesha-pseudo-path> <mount-point>
+    $ mount -t nfs -o port=<ganesha-port> <ganesha-host-name>:<ganesha-pseudo_path> <mount-point>
 
 .. note:: Only NFS v4.0+ is supported.
 
@@ -389,3 +433,4 @@ Checking NFS-Ganesha logs with
 Log level can be changed using `nfs cluster config set` command.
 
 .. _NFS-Ganesha NFS Server: https://github.com/nfs-ganesha/nfs-ganesha/wiki
+.. _NFS-Ganesha Export Sample: https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/config_samples/export.txt

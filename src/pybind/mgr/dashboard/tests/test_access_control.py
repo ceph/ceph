@@ -687,6 +687,115 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.validate_persistent_user('admin', ['read-only'], pass_hash,
                                       'admin User', 'admin@user.com')
 
+    def test_load_v1(self):
+        self.CONFIG_KEY_DICT['accessdb_v1'] = '''
+            {{
+                "users": {{
+                    "admin": {{
+                        "username": "admin",
+                        "password":
+                "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
+                        "roles": ["block-manager", "test_role"],
+                        "name": "admin User",
+                        "email": "admin@user.com",
+                        "lastUpdate": {}
+                    }}
+                }},
+                "roles": {{
+                    "test_role": {{
+                        "name": "test_role",
+                        "description": "Test Role",
+                        "scopes_permissions": {{
+                            "{}": ["{}", "{}"],
+                            "{}": ["{}"]
+                        }}
+                    }}
+                }},
+                "version": 1
+            }}
+        '''.format(int(round(time.time())), Scope.ISCSI, Permission.READ,
+                   Permission.UPDATE, Scope.POOL, Permission.CREATE)
+
+        load_access_control_db()
+        role = self.exec_cmd('ac-role-show', rolename="test_role")
+        self.assertDictEqual(role, {
+            'name': 'test_role',
+            'description': "Test Role",
+            'scopes_permissions': {
+                Scope.ISCSI: [Permission.READ, Permission.UPDATE],
+                Scope.POOL: [Permission.CREATE]
+            }
+        })
+        user = self.exec_cmd('ac-user-show', username="admin")
+        self.assertDictEqual(user, {
+            'username': 'admin',
+            'lastUpdate': user['lastUpdate'],
+            'password':
+                "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
+            'name': 'admin User',
+            'email': 'admin@user.com',
+            'roles': ['block-manager', 'test_role'],
+            'enabled': True
+        })
+
+    def test_load_v2(self):
+        self.CONFIG_KEY_DICT['accessdb_v2'] = '''
+            {{
+                "users": {{
+                    "admin": {{
+                        "username": "admin",
+                        "password":
+                "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
+                        "pwdExpirationDate": null,
+                        "pwdUpdateRequired": false,
+                        "roles": ["block-manager", "test_role"],
+                        "name": "admin User",
+                        "email": "admin@user.com",
+                        "lastUpdate": {},
+                        "enabled": true
+                    }}
+                }},
+                "roles": {{
+                    "test_role": {{
+                        "name": "test_role",
+                        "description": "Test Role",
+                        "scopes_permissions": {{
+                            "{}": ["{}", "{}"],
+                            "{}": ["{}"]
+                        }}
+                    }}
+                }},
+                "version": 2
+            }}
+        '''.format(int(round(time.time())), Scope.ISCSI, Permission.READ,
+                   Permission.UPDATE, Scope.POOL, Permission.CREATE)
+
+        load_access_control_db()
+        role = self.exec_cmd('ac-role-show', rolename="test_role")
+        self.assertDictEqual(role, {
+            'name': 'test_role',
+            'description': "Test Role",
+            'scopes_permissions': {
+                Scope.ISCSI: [Permission.READ, Permission.UPDATE],
+                Scope.POOL: [Permission.CREATE]
+            }
+        })
+        user = self.exec_cmd('ac-user-show', username="admin")
+        self.assertDictEqual(user, {
+            'username': 'admin',
+            'lastUpdate': user['lastUpdate'],
+            'password':
+                "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
+            'name': 'admin User',
+            'email': 'admin@user.com',
+            'roles': ['block-manager', 'test_role'],
+            'enabled': True
+        })
+
     def test_password_policy_pw_length(self):
         Settings.PWD_POLICY_CHECK_LENGTH_ENABLED = True
         Settings.PWD_POLICY_MIN_LENGTH = 3

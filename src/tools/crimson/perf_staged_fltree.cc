@@ -34,34 +34,31 @@ class PerfTree : public TMTestState {
             (is_dummy ? NodeExtentManager::create_dummy(true)
                       : NodeExtentManager::create_seastore(*tm)));
         {
-          auto t = tm->create_transaction();
+          auto t = create_mutate_transaction();
           tree->bootstrap(*t).unsafe_get();
-          tm->submit_transaction(std::move(t)).unsafe_get();
-          segment_cleaner->run_until_halt().get0();
+          submit_transaction(std::move(t));
         }
         {
-          auto t = tm->create_transaction();
+          auto t = create_mutate_transaction();
           tree->insert(*t).unsafe_get();
           auto start_time = mono_clock::now();
-          tm->submit_transaction(std::move(t)).unsafe_get();
-          segment_cleaner->run_until_halt().get0();
+          submit_transaction(std::move(t));
           std::chrono::duration<double> duration = mono_clock::now() - start_time;
           logger().warn("submit_transaction() done! {}s", duration.count());
         }
         {
-          // Note: tm->create_weak_transaction() can also work, but too slow.
-          auto t = tm->create_transaction();
+          // Note: create_weak_transaction() can also work, but too slow.
+          auto t = create_read_transaction();
           tree->get_stats(*t).unsafe_get();
           tree->validate(*t).unsafe_get();
         }
         {
-          auto t = tm->create_transaction();
+          auto t = create_mutate_transaction();
           tree->erase(*t, kvs.size() * erase_ratio).unsafe_get();
-          tm->submit_transaction(std::move(t)).unsafe_get();
-          segment_cleaner->run_until_halt().get0();
+          submit_transaction(std::move(t));
         }
         {
-          auto t = tm->create_transaction();
+          auto t = create_read_transaction();
           tree->get_stats(*t).unsafe_get();
           tree->validate(*t).unsafe_get();
         }

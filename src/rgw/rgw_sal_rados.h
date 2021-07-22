@@ -134,7 +134,7 @@ class RadosObject : public Object {
       RadosStatOp(RadosObject* _source, RGWObjectCtx* _rctx);
 
       virtual int stat_async(const DoutPrefixProvider *dpp) override;
-      virtual int wait() override;
+      virtual int wait(const DoutPrefixProvider *dpp) override;
     };
 
     RadosObject() = default;
@@ -310,7 +310,7 @@ class RadosBucket : public Bucket {
     virtual int remove_metadata(const DoutPrefixProvider* dpp, RGWObjVersionTracker* objv, optional_yield y) override;
     virtual bool is_owner(User* user) override;
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
+    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
     virtual int set_instance_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
     virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) override;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -402,7 +402,7 @@ class RadosStore : public Store {
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Completions> get_completions(void) override;
-    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, rgw::notify::EventType event_type) override;
+    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<GCChain> get_gc_chain(rgw::sal::Object* obj) override;
     virtual std::unique_ptr<Writer> get_writer(Aio* aio, rgw::sal::Bucket* bucket,
               RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
@@ -416,7 +416,7 @@ class RadosStore : public Store {
 
     virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
-    virtual int register_to_service_map(const std::string& daemon_type,
+    virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
 				const map<std::string, std::string>& meta) override;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled) override;
@@ -428,7 +428,7 @@ class RadosStore : public Store {
 					optional_yield y) override;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
     virtual void wakeup_meta_sync_shards(set<int>& shard_ids) override { rados->wakeup_meta_sync_shards(shard_ids); }
-    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) override { rados->wakeup_data_sync_shards(source_zone, shard_ids); }
+    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) override { rados->wakeup_data_sync_shards(dpp, source_zone, shard_ids); }
     virtual int clear_usage(const DoutPrefixProvider *dpp) override { return rados->clear_usage(dpp); }
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
@@ -437,7 +437,7 @@ class RadosStore : public Store {
     virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override;
     virtual int get_config_key_val(std::string name, bufferlist* bl) override;
     virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
-    virtual int meta_list_keys_next(void* handle, int max, list<std::string>& keys, bool* truncated) override;
+    virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<std::string>& keys, bool* truncated) override;
     virtual void meta_list_keys_complete(void* handle) override;
     virtual std::string meta_get_marker(void* handle) override;
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override;
@@ -537,12 +537,14 @@ class RadosNotification : public Notification {
   rgw::notify::reservation_t res;
 
   public:
-    RadosNotification(const DoutPrefixProvider *_dpp, RadosStore* _store, Object* _obj, req_state* _s, rgw::notify::EventType _type) : Notification(_obj, _type), store(_store), res(_dpp, _store, _s, _obj) { }
+    RadosNotification(const DoutPrefixProvider *_dpp, RadosStore* _store, Object* _obj, req_state* _s, 
+        rgw::notify::EventType _type, const std::string* object_name=nullptr) : 
+      Notification(_obj, _type), store(_store), res(_dpp, _store, _s, _obj, object_name) { }
     ~RadosNotification() = default;
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
-			       const ceph::real_time& mtime, const std::string& etag) override;
+			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
 };
 
 class RadosGCChain : public GCChain {

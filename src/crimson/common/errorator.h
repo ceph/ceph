@@ -13,6 +13,9 @@
 namespace crimson::interruptible {
 
 template <typename, typename>
+class parallel_for_each_state;
+
+template <typename, typename>
 class interruptible_future_detail;
 
 }
@@ -55,7 +58,7 @@ inline auto do_for_each(Container& c, AsyncAction action) {
 }
 
 template<typename AsyncAction>
-inline auto do_until(AsyncAction action) {
+inline auto repeat(AsyncAction action) {
   using errorator_t =
     typename ::seastar::futurize_t<std::invoke_result_t<AsyncAction>>::errorator_type;
 
@@ -71,11 +74,11 @@ inline auto do_until(AsyncAction action) {
       }
     } else {
       return std::move(f)._then(
-        [action = std::move(action)] (auto &&done) mutable {
-          if (done) {
+        [action = std::move(action)] (auto stop) mutable {
+          if (stop == seastar::stop_iteration::yes) {
             return errorator_t::template make_ready_future<>();
           }
-          return ::crimson::do_until(
+          return ::crimson::repeat(
             std::move(action));
         });
     }
@@ -280,9 +283,9 @@ public:
         std::invoke(std::forward<ErrorVisitorT>(errfunc),
                     ErrorT::error_t::from_exception_ptr(std::move(ep)));
       } else {
-        static_assert(_impl::always_false<return_t>::value,
-                      "return of Error Visitor is not assignable to future");
-        // do nothing with `ep`.
+        result = FuturatorT::type::errorator_type::template make_ready_future<return_t>(
+          std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                      ErrorT::error_t::from_exception_ptr(std::move(ep))));
       }
     }
   }
@@ -369,7 +372,7 @@ private:
     // any `seastar::futurize` specialization must be able to access the base.
     // see : `satisfy_with_result_of()` far below.
     template <typename>
-    friend class seastar::futurize;
+    friend struct seastar::futurize;
 
     template <typename T1, typename T2, typename... More>
     friend auto seastar::internal::do_with_impl(T1&& rv1, T2&& rv2, More&&... more);
@@ -439,6 +442,8 @@ private:
       return std::move(maybe_handle_error).get_result();
     }
 
+  protected:
+    using base_t::get_exception;
   public:
     using errorator_type = ::crimson::errorator<AllowedErrors...>;
     using promise_type = seastar::promise<ValueT>;
@@ -636,6 +641,11 @@ private:
       });
     }
 
+    _future<::crimson::errorated_future_marker<void>>
+    discard_result() noexcept {
+      return safe_then([](auto&&) {});
+    }
+
     // taking ErrorFuncOne and ErrorFuncTwo separately from ErrorFuncTail
     // to avoid SFINAE
     template <class ValueFunc,
@@ -704,7 +714,7 @@ private:
                                               AsyncAction action);
 
     template<typename AsyncAction>
-    friend inline auto ::crimson::do_until(AsyncAction action);
+    friend inline auto ::crimson::repeat(AsyncAction action);
 
     template <typename Result>
     friend class ::seastar::future;
@@ -717,6 +727,8 @@ private:
     template<typename, typename>
     friend class ::crimson::interruptible::interruptible_future_detail;
     friend class ::crimson::parallel_for_each_state<AllowedErrors...>;
+    template <typename IC, typename FT>
+    friend class ::crimson::interruptible::parallel_for_each_state;
   };
 
   class Enabler {};
@@ -1210,6 +1222,18 @@ struct futurize<Container<::crimson::errorated_future_marker<Value>>> {
 
   using type = typename errorator_type::template future<Value>;
   using value_type = seastar::internal::future_stored_type_t<Value>;
+
+  template<typename Func, typename... FuncArgs>
+  [[gnu::always_inline]]
+  static type apply(Func&& func, std::tuple<FuncArgs...>&& args) noexcept {
+    try {
+      return std::apply(
+	std::forward<Func>(func),
+	std::forward<std::tuple<FuncArgs...>>(args));
+    } catch (...) {
+      return make_exception_future(std::current_exception());
+    }
+  }
 
   template<typename Func, typename... FuncArgs>
   [[gnu::always_inline]]

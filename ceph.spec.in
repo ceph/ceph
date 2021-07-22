@@ -30,15 +30,14 @@
 %bcond_without tcmalloc
 %endif
 %bcond_with system_pmdk
-%if 0%{?fedora} || 0%{?rhel}
-%bcond_without selinux
-%ifarch x86_64 ppc64le
-%bcond_without rbd_rwl_cache
 %bcond_without rbd_ssd_cache
+%ifarch x86_64
+%bcond_without rbd_rwl_cache
 %else
 %bcond_with rbd_rwl_cache
-%bcond_with rbd_ssd_cache
 %endif
+%if 0%{?fedora} || 0%{?rhel}
+%bcond_without selinux
 %if 0%{?rhel} >= 8
 %bcond_with cephfs_java
 %else
@@ -60,12 +59,8 @@
 %bcond_with libradosstriper
 %ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
-%bcond_without rbd_rwl_cache
-%bcond_without rbd_ssd_cache
 %else
 %bcond_with lttng
-%bcond_with rbd_rwl_cache
-%bcond_with rbd_ssd_cache
 %endif
 %bcond_with ocf
 %bcond_with selinux
@@ -138,6 +133,9 @@
 %global _smp_ncpus_max 1
 %else
 # 3.0 GiB mem per job
+# SUSE distros use limit_build in the place of smp_limit_mem_per_job, please
+# be sure to update it (in the build section, below) as well when changing this
+# number.
 %global _smp_ncpus_max %{smp_limit_mem_per_job 3000000}
 %endif
 %endif
@@ -288,7 +286,6 @@ BuildRequires:  gnutls-devel
 BuildRequires:  hwloc-devel
 BuildRequires:  libpciaccess-devel
 BuildRequires:  lksctp-tools-devel
-BuildRequires:  protobuf-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  yaml-cpp-devel
@@ -410,7 +407,6 @@ BuildRequires:  redhat-rpm-config
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  cryptopp-devel
 BuildRequires:  numactl-devel
-BuildRequires:  protobuf-compiler
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libcryptopp-devel
@@ -450,7 +446,6 @@ Requires:      grep
 Requires:      logrotate
 Requires:      parted
 Requires:      psmisc
-Requires:      python%{python3_pkgversion}-setuptools
 Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
@@ -810,6 +805,8 @@ Requires:	lvm2
 Requires:	sudo
 Requires:	libstoragemgmt
 Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{python3_pkgversion}-setuptools
+
 %if 0%{?weak_deps}
 Recommends:	nvme-cli
 %if 0%{?suse_version}
@@ -1253,7 +1250,7 @@ done
 %endif
 
 %if 0%{?suse_version}
-%limit_build -m 2600
+%limit_build -m 3000
 %endif
 
 export CPPFLAGS="$java_inc"
@@ -1498,10 +1495,6 @@ rm -rf %{buildroot}
 %{_fillupdir}/sysconfig.*
 %endif
 %{_unitdir}/ceph.target
-%dir %{python3_sitelib}/ceph_volume
-%{python3_sitelib}/ceph_volume/*
-%{python3_sitelib}/ceph_volume-*
-%{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-create-keys.8*
 %{_mandir}/man8/ceph-run.8*
 %{_mandir}/man8/crushtool.8*
@@ -2092,6 +2085,9 @@ fi
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %{_sbindir}/ceph-volume
 %{_sbindir}/ceph-volume-systemd
+%dir %{python3_sitelib}/ceph_volume
+%{python3_sitelib}/ceph_volume/*
+%{python3_sitelib}/ceph_volume-*
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-osd.8*
 %{_mandir}/man8/ceph-bluestore-tool.8*

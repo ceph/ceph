@@ -24,7 +24,7 @@ from prettytable import PrettyTable
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
-    NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
+    ServiceSpec, PlacementSpec, assert_valid_host, \
     HostPlacementSpec, IngressSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
@@ -1230,6 +1230,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @orchestrator._cli_read_command('orch client-keyring ls')
     def _client_keyring_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        """
+        List client keyrings under cephadm management
+        """
         if format != Format.plain:
             output = to_format(self.keys.keys.values(), format, many=True, cls=ClientKeyringSpec)
         else:
@@ -1257,6 +1260,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             owner: Optional[str] = None,
             mode: Optional[str] = None,
     ) -> HandleCommandResult:
+        """
+        Add or update client keyring under cephadm management
+        """
         if not entity.startswith('client.'):
             raise OrchestratorError('entity must start with client.')
         if owner:
@@ -1285,6 +1291,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self,
             entity: str,
     ) -> HandleCommandResult:
+        """
+        Remove client keyring from cephadm management
+        """
         self.keys.rm(entity)
         self._kick_serve_loop()
         return HandleCommandResult()
@@ -1463,6 +1472,22 @@ Then run the following:
 
         :param host: host name
         """
+        # Verify if it is possible to remove the host safely
+        daemons = self.cache.get_daemons_by_host(host)
+        if daemons:
+            self.log.warning(f"Blocked {host} removal. Daemons running: {daemons}")
+
+            daemons_table = ""
+            daemons_table += "{:<20} {:<15}\n".format("type", "id")
+            daemons_table += "{:<20} {:<15}\n".format("-" * 20, "-" * 15)
+            for d in daemons:
+                daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
+
+            return "Not allowed to remove %s from cluster. " \
+                "The following daemons are running in the host:" \
+                "\n%s\nPlease run 'ceph orch host drain %s' to remove daemons from host" % (
+                    host, daemons_table, host)
+
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
         self._reset_con(host)
@@ -1730,9 +1755,6 @@ Then run the following:
                 virtual_ip=spec.get_virtual_ip(),
                 ports=spec.get_port_start(),
             )
-            if service_type == 'nfs':
-                spec = cast(NFSServiceSpec, spec)
-                sm[nm].rados_config_location = spec.rados_config_location()
             if spec.service_type == 'ingress':
                 # ingress has 2 daemons running per host
                 sm[nm].size *= 2
@@ -2564,3 +2586,25 @@ Then run the following:
         The CLI call to retrieve an osd removal report
         """
         return self.to_remove_osds.all_osds()
+
+    @handle_orch_error
+    def drain_host(self, hostname):
+        # type: (str) -> str
+        """
+        Drain all daemons from a host.
+        :param host: host name
+        """
+        self.add_host_label(hostname, '_no_schedule')
+
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_host(hostname)
+
+        osds_to_remove = [d.daemon_id for d in daemons if d.daemon_type == 'osd']
+        self.remove_osds(osds_to_remove)
+
+        daemons_table = ""
+        daemons_table += "{:<20} {:<15}\n".format("type", "id")
+        daemons_table += "{:<20} {:<15}\n".format("-" * 20, "-" * 15)
+        for d in daemons:
+            daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
+
+        return "Scheduled to remove the following daemons from host '{}'\n{}".format(hostname, daemons_table)

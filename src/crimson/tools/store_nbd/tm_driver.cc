@@ -23,7 +23,7 @@ seastar::future<> TMDriver::write(
   assert((ptr.length() % (size_t)segment_manager->get_block_size()) == 0);
   return repeat_eagain([this, offset, ptr=std::move(ptr)] {
     return seastar::do_with(
-      tm->create_transaction(),
+      tm->create_transaction(Transaction::src_t::MUTATE),
       ptr,
       [this, offset](auto &t, auto &ptr) mutable {
 	return tm->dec_ref(
@@ -43,7 +43,7 @@ seastar::future<> TMDriver::write(
 	  assert(ext->get_bptr().length() == ptr.length());
 	  ext->get_bptr().swap(ptr);
 	  logger().debug("submitting transaction");
-	  return tm->submit_transaction(std::move(t));
+	  return tm->submit_transaction(*t);
 	});
       });
   }).handle_error(
@@ -101,7 +101,7 @@ seastar::future<bufferlist> TMDriver::read(
   auto &blret = *blptrret;
   return repeat_eagain([=, &blret] {
     return seastar::do_with(
-      tm->create_transaction(),
+      tm->create_transaction(Transaction::src_t::READ),
       [=, &blret](auto &t) {
 	return read_extents(*t, offset, size
 	).safe_then([=, &blret](auto ext_list) mutable {
@@ -141,7 +141,7 @@ void TMDriver::init()
 
   journal->set_segment_provider(&*segment_cleaner);
 
-  tm = std::make_unique<TransactionManager>(
+  tm = InterruptedTMRef(
     *segment_manager,
     std::move(segment_cleaner),
     std::move(journal),
@@ -214,12 +214,9 @@ seastar::future<> TMDriver::mount()
 
 seastar::future<> TMDriver::close()
 {
-  return segment_manager->close(
-  ).safe_then([this] {
-    return tm->close();
-  }).safe_then([this] {
+  return tm->close().safe_then([this] {
     clear();
-    return seastar::now();
+    return segment_manager->close();
   }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid errror during TMDriver::close"

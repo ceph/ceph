@@ -17,6 +17,7 @@
 
 namespace crimson::os::seastore {
 
+class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
 
@@ -38,6 +39,40 @@ namespace onode {
   class DummyNodeExtent;
   class TestReplayExtent;
 }
+
+template <typename T>
+class read_set_item_t {
+  boost::intrusive::list_member_hook<> list_hook;
+  using list_hook_options = boost::intrusive::member_hook<
+    read_set_item_t,
+    boost::intrusive::list_member_hook<>,
+    &read_set_item_t::list_hook>;
+
+public:
+  struct cmp_t {
+    using is_transparent = paddr_t;
+    bool operator()(const read_set_item_t<T> &lhs, const read_set_item_t &rhs) const;
+    bool operator()(const paddr_t &lhs, const read_set_item_t<T> &rhs) const;
+    bool operator()(const read_set_item_t<T> &lhs, const paddr_t &rhs) const;
+  };
+
+  using list =  boost::intrusive::list<
+    read_set_item_t,
+    list_hook_options>;
+
+  T *t = nullptr;
+  CachedExtentRef ref;
+
+  read_set_item_t(T *t, CachedExtentRef ref);
+  read_set_item_t(const read_set_item_t &) = delete;
+  read_set_item_t(read_set_item_t &&) = default;
+  ~read_set_item_t();
+};
+template <typename T>
+using read_set_t = std::set<
+  read_set_item_t<T>,
+  typename read_set_item_t<T>::cmp_t>;
+
 class ExtentIndex;
 class CachedExtent : public boost::intrusive_ref_counter<
   CachedExtent, boost::thread_unsafe_counter> {
@@ -286,6 +321,9 @@ public:
   virtual ~CachedExtent();
 
 private:
+  template <typename T>
+  friend class read_set_item_t;
+
   friend struct paddr_cmp;
   friend struct ref_paddr_cmp;
   friend class ExtentIndex;
@@ -350,6 +388,8 @@ private:
       return io_wait_promise->get_shared_future();
     }
   }
+
+  read_set_item_t<Transaction>::list transactions;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;
@@ -492,6 +532,7 @@ public:
 
   void clear() {
     extent_index.clear();
+    bytes = 0;
   }
 
   void insert(CachedExtent &extent) {
@@ -501,17 +542,25 @@ public:
       extent.get_length());
     ceph_assert(a == b);
 
-    extent_index.insert(extent);
+    [[maybe_unused]] auto [iter, inserted] = extent_index.insert(extent);
+    assert(inserted);
     extent.parent_index = this;
+
+    bytes += extent.get_length();
   }
 
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
-    extent_index.erase(extent);
+    auto erased = extent_index.erase(extent);
     extent.parent_index = nullptr;
+
+    if (erased) {
+      bytes -= extent.get_length();
+    }
   }
 
   void replace(CachedExtent &to, CachedExtent &from) {
+    assert(to.get_length() == from.get_length());
     extent_index.replace_node(extent_index.s_iterator_to(from), to);
     from.parent_index = nullptr;
     to.parent_index = this;
@@ -533,18 +582,21 @@ public:
     return extent_index.end();
   }
 
-  void merge(ExtentIndex &&other) {
-    for (auto it = other.extent_index.begin();
-	 it != other.extent_index.end();
-	 ) {
-      auto &ext = *it;
-      ++it;
-      other.extent_index.erase(ext);
-      extent_index.insert(ext);
-    }
+  auto size() const {
+    return extent_index.size();
   }
 
-  ~ExtentIndex() { assert(extent_index.empty()); }
+  auto get_bytes() const {
+    return bytes;
+  }
+
+  ~ExtentIndex() {
+    assert(extent_index.empty());
+    assert(bytes == 0);
+  }
+
+private:
+  uint64_t bytes = 0;
 };
 
 class LogicalCachedExtent;
@@ -595,7 +647,22 @@ public:
       list_hook_options>;
   public:
     token_t(journal_seq_t created_after) : created_after(created_after) {}
-    ~token_t();
+
+    void drop_self();
+    void add_self();
+
+    void reset(journal_seq_t _created_after) {
+      drop_self();
+      created_after = _created_after;
+      add_self();
+    }
+
+    ~token_t() {
+      if (parent) {
+	drop_self();
+	parent = nullptr;
+      }
+    }
   };
 
   void prune() {
@@ -611,7 +678,7 @@ public:
 
   void add_token(token_t &t) {
     t.parent = this;
-    live_tokens.push_back(t);
+    t.add_self();
   }
 
   void add_extent(CachedExtent &extent) {
@@ -624,33 +691,33 @@ private:
   CachedExtent::list retired_extents;
 };
 
-inline retired_extent_gate_t::token_t::~token_t() {
-  if (parent) {
-    parent->live_tokens.erase(
-      parent->live_tokens.s_iterator_to(*this));
-    parent->prune();
-    parent = nullptr;
-  }
+inline void retired_extent_gate_t::token_t::add_self() {
+  assert(parent);
+  parent->live_tokens.push_back(*this);
+}
+
+inline void retired_extent_gate_t::token_t::drop_self() {
+  assert(parent);
+  parent->live_tokens.erase(
+    parent->live_tokens.s_iterator_to(*this));
+  parent->prune();
 }
 
 /**
  * RetiredExtentPlaceholder
  *
- * Cache::retire_extent(Transaction&, paddr_t, extent_len_t) can retire
- * an extent not currently in cache.  In that case, we need to add a
- * placeholder to the cache until transactions that might reference
- * the extent complete as in the case where the extent is already cached.
- * Cache::complete_commit thus creates a RetiredExtentPlaceholder to
- * serve that purpose.  ptr is not populated, and state is set to
- * RETIRED.  Cache interfaces check for RETIRED and return EAGAIN if
- * encountered, so references to these placeholder extents should not
- * escape the Cache interface boundary.
+ * Cache::retire_extent_addr(Transaction&, paddr_t, extent_len_t) can retire an
+ * extent not currently in cache. In that case, in order to detect transaction
+ * invalidation, we need to add a placeholder to the cache to create the
+ * mapping back to the transaction. And whenever there is a transaction tries
+ * to read the placeholder extent out, Cache is responsible to replace the
+ * placeholder by the real one. Anyway, No placeholder extents should escape
+ * the Cache interface boundary.
  */
 class RetiredExtentPlaceholder : public CachedExtent {
   extent_len_t length;
 
 public:
-  template <typename... T>
   RetiredExtentPlaceholder(extent_len_t length)
     : CachedExtent(CachedExtent::retired_placeholder_t{}),
       length(length) {}
@@ -682,7 +749,7 @@ public:
   }
 
   std::ostream &print_detail(std::ostream &out) const final {
-    return out << "RetiredExtentPlaceholder";
+    return out << ", RetiredExtentPlaceholder";
   }
 
   void on_delta_write(paddr_t record_block_offset) final {
@@ -774,6 +841,35 @@ struct ref_laddr_cmp {
     return lhs->get_laddr() < rhs;
   }
 };
+
+template <typename T>
+read_set_item_t<T>::read_set_item_t(T *t, CachedExtentRef ref)
+  : t(t), ref(ref)
+{
+  ref->transactions.push_back(*this);
+}
+
+template <typename T>
+read_set_item_t<T>::~read_set_item_t()
+{
+  ref->transactions.erase(ref->transactions.s_iterator_to(*this));
+}
+
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const read_set_item_t<T> &lhs, const read_set_item_t<T> &rhs) const {
+  return lhs.ref->poffset < rhs.ref->poffset;
+}
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const paddr_t &lhs, const read_set_item_t<T> &rhs) const {
+  return lhs < rhs.ref->poffset;
+}
+template <typename T>
+inline bool read_set_item_t<T>::cmp_t::operator()(
+  const read_set_item_t<T> &lhs, const paddr_t &rhs) const {
+  return lhs.ref->poffset < rhs;
+}
 
 using lextent_set_t = addr_extent_set_base_t<
   laddr_t,

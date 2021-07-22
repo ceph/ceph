@@ -19,8 +19,8 @@ class FlatCollectionManager : public CollectionManager {
     return coll_context_t{tm, t};
   }
 
-  using get_root_ertr = TransactionManager::read_extent_ertr;
-  using get_root_ret = get_root_ertr::future<CollectionNodeRef>;
+  using get_root_iertr = base_iertr;
+  using get_root_ret = get_root_iertr::future<CollectionNodeRef>;
   get_root_ret get_coll_root(const coll_root_t &coll_root, Transaction &t);
 
 public:

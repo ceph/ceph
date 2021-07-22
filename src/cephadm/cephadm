@@ -1647,13 +1647,19 @@ def infer_fsid(func):
     """
     If we only find a single fsid in /var/lib/ceph/*, use that
     """
+    @infer_config
     @wraps(func)
     def _infer_fsid(ctx: CephadmContext):
         if ctx.fsid:
             logger.debug('Using specified fsid: %s' % ctx.fsid)
             return func(ctx)
 
-        fsids_set = set()
+        fsids = set()
+
+        cp = read_config(ctx.config)
+        if cp.has_option('global', 'fsid'):
+            fsids.add(cp.get('global', 'fsid'))
+
         daemon_list = list_daemons(ctx, detail=False)
         for daemon in daemon_list:
             if not is_fsid(daemon['fsid']):
@@ -1661,11 +1667,11 @@ def infer_fsid(func):
                 continue
             elif 'name' not in ctx or not ctx.name:
                 # ctx.name not specified
-                fsids_set.add(daemon['fsid'])
+                fsids.add(daemon['fsid'])
             elif daemon['name'] == ctx.name:
                 # ctx.name is a match
-                fsids_set.add(daemon['fsid'])
-        fsids = sorted(fsids_set)
+                fsids.add(daemon['fsid'])
+        fsids = sorted(fsids)
 
         if not fsids:
             # some commands do not always require an fsid
@@ -1686,24 +1692,22 @@ def infer_config(func):
     """
     @wraps(func)
     def _infer_config(ctx: CephadmContext):
+        ctx.config = ctx.config if 'config' in ctx else None
         if ctx.config:
             logger.debug('Using specified config: %s' % ctx.config)
             return func(ctx)
-        config = None
         if ctx.fsid:
-            name = ctx.name
+            name = ctx.name if 'name' in ctx else None
             if not name:
                 daemon_list = list_daemons(ctx, detail=False)
                 for daemon in daemon_list:
-                    if daemon['name'].startswith('mon.'):
+                    if daemon.get('name', '').startswith('mon.'):
                         name = daemon['name']
                         break
             if name:
-                config = '/var/lib/ceph/{}/{}/config'.format(ctx.fsid,
-                                                             name)
-        if config:
-            logger.info('Inferring config %s' % config)
-            ctx.config = config
+                ctx.config = f'/var/lib/ceph/{ctx.fsid}/{name}/config'
+        if ctx.config:
+            logger.info('Inferring config %s' % ctx.config)
         elif os.path.exists(SHELL_DEFAULT_CONF):
             logger.debug('Using default config: %s' % SHELL_DEFAULT_CONF)
             ctx.config = SHELL_DEFAULT_CONF
@@ -2196,7 +2200,9 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
-        config_json: Dict[str, Any] = get_parm(ctx.config_json)
+        config_json: Dict[str, Any] = dict()
+        if 'config_json' in ctx:
+            config_json = get_parm(ctx.config_json)
 
         # Set up directories specific to the monitoring component
         config_dir = ''
@@ -2387,6 +2393,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             ceph_folder = pathify(ctx.shared_ceph_folder)
             if os.path.exists(ceph_folder):
                 mounts[ceph_folder + '/src/ceph-volume/ceph_volume'] = '/usr/lib/python3.6/site-packages/ceph_volume'
+                mounts[ceph_folder + '/src/cephadm/cephadm'] = '/usr/sbin/cephadm'
                 mounts[ceph_folder + '/src/pybind/mgr'] = '/usr/share/ceph/mgr'
                 mounts[ceph_folder + '/src/python-common/ceph'] = '/usr/lib/python3.6/site-packages/ceph'
                 mounts[ceph_folder + '/monitoring/grafana/dashboards'] = '/etc/grafana/dashboards/ceph-dashboard'
@@ -2487,6 +2494,7 @@ def get_container(ctx: CephadmContext,
         envs.extend(NFSGanesha.get_container_envs())
     elif daemon_type == HAproxy.daemon_type:
         name = '%s.%s' % (daemon_type, daemon_id)
+        container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
     elif daemon_type == Keepalived.daemon_type:
         name = '%s.%s' % (daemon_type, daemon_id)
         envs.extend(Keepalived.get_container_envs())
@@ -2708,6 +2716,35 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
         + (' &' if background else '') + '\n')
 
 
+def clean_cgroup(ctx: CephadmContext, unit_name: str):
+    # systemd may fail to cleanup cgroups from previous stopped unit, which will cause next "systemctl start" to fail.
+    # see https://tracker.ceph.com/issues/50998
+
+    # In bootstrap we set the context fsid at the end.
+    if not ctx.fsid:
+        return
+
+    CGROUPV2_PATH = Path('/sys/fs/cgroup')
+    if not (CGROUPV2_PATH / 'system.slice').exists():
+        # Only unified cgroup is affected, skip if not the case
+        return
+
+    slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
+    cg_path = CGROUPV2_PATH / 'system.slice' / slice_name / f'{unit_name}.service'
+    if not cg_path.exists():
+        return
+
+    def cg_trim(path: Path):
+        for p in path.iterdir():
+            if p.is_dir():
+                cg_trim(p)
+        path.rmdir()
+    try:
+        cg_trim(cg_path)
+    except OSError:
+        logger.warning(f'Failed to trim old cgroups {cg_path}')
+
+
 def deploy_daemon_units(
     ctx: CephadmContext,
     fsid: str,
@@ -2844,6 +2881,7 @@ def deploy_daemon_units(
     if enable:
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
+        clean_cgroup(ctx, unit_name)
         call_throws(ctx, ['systemctl', 'start', unit_name])
 
 
@@ -2986,6 +3024,7 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
 
     # apply the sysctl settings
     if lines:
+        Path(ctx.sysctl_dir).mkdir(mode=0o755, exist_ok=True)
         _write(conf, lines)
         call_throws(ctx, ['sysctl', '--system'])
 
@@ -3371,7 +3410,7 @@ def normalize_image_digest(digest):
     #   quay.ceph.io/ceph/ceph -> ceph
     #   docker.io/ubuntu -> no change
     bits = digest.split('/')
-    if '.' not in bits[0] or len(bits) < 3:
+    if '.' not in bits[0] and len(bits) < 3:
         digest = DEFAULT_REGISTRY + '/' + digest
     return digest
 
@@ -3492,7 +3531,7 @@ def prepare_mon_addresses(
                             addr_arg)
             port = int(hasport[0])
             # strip off v1: or v2: prefix
-            addr = re.sub(r'^\w+:', '', addr)
+            addr = re.sub(r'^v\d+:', '', addr)
             base_ip = addr[0:-(len(str(port))) - 1]
             check_ip_port(ctx, base_ip, port)
     else:
@@ -3930,6 +3969,13 @@ def prepare_bootstrap_config(
                 and not cp.has_option('mgr', 'mgr standby modules')
         ):
             cp.set('mgr', 'mgr_standby_modules', 'false')
+    if ctx.log_to_file:
+        cp.set('global', 'log_to_file', 'true')
+        cp.set('global', 'log_to_stderr', 'false')
+        cp.set('global', 'log_to_journald', 'false')
+        cp.set('global', 'mon_cluster_log_to_file', 'true')
+        cp.set('global', 'mon_cluster_log_to_stderr', 'false')
+        cp.set('global', 'mon_cluster_log_to_journald', 'false')
 
     cpf = StringIO()
     cp.write(cpf)
@@ -4455,24 +4501,15 @@ def command_run(ctx):
 ##################################
 
 
-def fsid_conf_mismatch(ctx):
-    # type: (CephadmContext) -> bool
-    (config, _) = get_config_and_keyring(ctx)
-    if config:
-        for c in config.split('\n'):
-            if 'fsid = ' in c.strip():
-                if 'fsid = ' + ctx.fsid != c.strip():
-                    return True
-    return False
-
-
 @infer_fsid
 @infer_config
 @infer_image
 def command_shell(ctx):
     # type: (CephadmContext) -> int
-    if fsid_conf_mismatch(ctx):
-        raise Error('fsid does not match ceph conf')
+    cp = read_config(ctx.config)
+    if cp.has_option('global', 'fsid') and \
+       cp.get('global', 'fsid') != ctx.fsid:
+        raise Error('fsid does not match ceph.conf')
 
     if ctx.fsid:
         make_log_dir(ctx, ctx.fsid)
@@ -5547,7 +5584,7 @@ def command_rm_cluster(ctx):
         call(ctx, ['systemctl', 'disable', unit_name],
              verbosity=CallVerbosity.DEBUG)
 
-    slice_name = 'system-%s.slice' % (('ceph-%s' % ctx.fsid).replace('-', '\\x2d'))
+    slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
     call(ctx, ['systemctl', 'stop', slice_name],
          verbosity=CallVerbosity.DEBUG)
 
@@ -6322,7 +6359,6 @@ def read_file(path_list, file_name=''):
 class HostFacts():
     _dmi_path_list = ['/sys/class/dmi/id']
     _nic_path_list = ['/sys/class/net']
-    _selinux_path_list = ['/etc/selinux/config']
     _apparmor_path_list = ['/etc/apparmor']
     _disk_vendor_workarounds = {
         '0x1af4': 'Virtio Block Device'
@@ -6679,23 +6715,30 @@ class HostFacts():
         # type: () -> Dict[str, str]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
         def _fetch_selinux() -> Dict[str, str]:
-            """Read the selinux config file to determine state"""
+            """Get the selinux status"""
             security = {}
-            for selinux_path in HostFacts._selinux_path_list:
-                if os.path.exists(selinux_path):
-                    selinux_config = read_file([selinux_path]).splitlines()
-                    security['type'] = 'SELinux'
-                    for line in selinux_config:
-                        if line.strip().startswith('#'):
-                            continue
-                        k, v = line.split('=')
-                        security[k] = v
-                    if security['SELINUX'].lower() == 'disabled':
-                        security['description'] = 'SELinux: Disabled'
-                    else:
-                        security['description'] = 'SELinux: Enabled({}, {})'.format(security['SELINUX'], security['SELINUXTYPE'])
-                    return security
-            return {}
+            try:
+                out, err, code = call(self.ctx, ['sestatus'],
+                                      verbosity=CallVerbosity.DEBUG)
+                security['type'] = 'SELinux'
+                status, mode, policy = '', '', ''
+                for line in out.split('\n'):
+                    if line.startswith('SELinux status:'):
+                        k, v = line.split(':')
+                        status = v.strip()
+                    elif line.startswith('Current mode:'):
+                        k, v = line.split(':')
+                        mode = v.strip()
+                    elif line.startswith('Loaded policy name:'):
+                        k, v = line.split(':')
+                        policy = v.strip()
+                if status == 'disabled':
+                    security['description'] = 'SELinux: Disabled'
+                else:
+                    security['description'] = 'SELinux: Enabled({}, {})'.format(mode, policy)
+            except Exception as e:
+                logger.info('unable to get selinux status: %s' % e)
+            return security
 
         def _fetch_apparmor() -> Dict[str, str]:
             """Read the apparmor profiles directly, returning an overview of AppArmor status"""
@@ -7900,7 +7943,6 @@ def _get_parser():
         '--ssh-user',
         default='root',
         help='set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
-
     parser_bootstrap.add_argument(
         '--skip-mon-network',
         action='store_true',
@@ -7956,7 +7998,6 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
-
     parser_bootstrap.add_argument(
         '--shared_ceph_folder',
         metavar='CEPH_SOURCE_FOLDER',
@@ -7994,6 +8035,10 @@ def _get_parser():
         '--single-host-defaults',
         action='store_true',
         help='adjust configuration defaults to suit a single-host cluster')
+    parser_bootstrap.add_argument(
+        '--log-to-file',
+        action='store_true',
+        help='configure cluster to log to traditional log files in /var/log/ceph/$fsid')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')

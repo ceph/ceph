@@ -234,15 +234,22 @@ class TestCephadm(object):
                 container_id='container_id',
                 version='version',
                 state='running',
-            )
+            ),
+            dict(
+                name='something.foo.bar',
+                style='cephadm',
+                fsid='fsid',
+            ),
+
         ])
     ))
     def test_list_daemons(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
             CephadmServe(cephadm_module)._refresh_host_daemons('test')
-            c = cephadm_module.list_daemons()
-            assert wait(cephadm_module, c)[0].name() == 'rgw.myrgw.foobar'
+            dds = wait(cephadm_module, cephadm_module.list_daemons())
+            assert len(dds) == 1
+            assert dds[0].name() == 'rgw.myrgw.foobar'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_daemon_action(self, cephadm_module: CephadmOrchestrator):
@@ -856,8 +863,6 @@ spec:
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = NFSServiceSpec(
                 service_id='name',
-                pool='pool',
-                namespace='namespace',
                 placement=ps)
             unmanaged_spec = ServiceSpec.from_json(spec.to_json())
             unmanaged_spec.unmanaged = True
@@ -882,6 +887,7 @@ spec:
                 placement=ps)
             unmanaged_spec = ServiceSpec.from_json(spec.to_json())
             unmanaged_spec.unmanaged = True
+            cephadm_module._mon_command_mock_mgr_module_ls = lambda *args: json.dumps({'enabled_modules': []})
             with with_service(cephadm_module, unmanaged_spec):
 
                 c = cephadm_module.add_daemon(spec)
@@ -974,8 +980,6 @@ spec:
             ), CephadmOrchestrator.apply_rgw),
             (NFSServiceSpec(
                 service_id='name',
-                pool='pool',
-                namespace='namespace'
             ), CephadmOrchestrator.apply_nfs),
             (IscsiServiceSpec(
                 service_id='name',
@@ -1017,6 +1021,7 @@ spec:
     @mock.patch("subprocess.run", mock.MagicMock())
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
+            cephadm_module._mon_command_mock_mgr_module_ls = lambda *args: json.dumps({'enabled_modules': []})
             with with_service(cephadm_module, spec, meth, 'test'):
                 pass
 

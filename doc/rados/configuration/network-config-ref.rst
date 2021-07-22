@@ -21,7 +21,7 @@ network.  However, this approach
 complicates network configuration (both hardware and software) and does not usually
 have a significant impact on overall performance.  For this reason, we recommend
 that for resilience and capacity dual-NIC systems either active/active bond
-these interfaces or implemebnt a layer 3 multipath strategy with eg. FRR.
+these interfaces or implement a layer 3 multipath strategy with eg. FRR.
 
 If, despite the complexity, one still wishes to use two networks, each
 :term:`Ceph Node` will need to have more than one network interface or VLAN. See `Hardware

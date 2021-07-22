@@ -64,6 +64,12 @@
 #define  WRITE_LIFE_MAX  	1
 #endif
 
+enum struct blk_access_mode_t {
+  DIRECT,
+  BUFFERED
+};
+blk_access_mode_t buffermode(bool buffered);
+std::ostream& operator<<(std::ostream& os, const blk_access_mode_t buffered);
 
 /// track in-flight io
 struct IOContext {
@@ -198,6 +204,9 @@ public:
   virtual uint64_t get_conventional_region_size() const {
     ceph_assert(is_smr());
     return conventional_region_size;
+  }
+  virtual void reset_zones(const std::set<uint64_t>& zones) {
+    ceph_assert(is_smr());
   }
 
   virtual void aio_submit(IOContext *ioc) = 0;

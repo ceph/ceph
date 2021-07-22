@@ -13,7 +13,7 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-using base_ertr = LBAManager::base_ertr;
+using base_iertr = LBAManager::base_iertr;
 
 struct op_context_t {
   Cache &cache;
@@ -65,8 +65,8 @@ struct LBANode : CachedExtent {
    * Returns the node at the specified depth responsible
    * for laddr
    */
-  using lookup_ertr = base_ertr;
-  using lookup_ret = lookup_ertr::future<LBANodeRef>;
+  using lookup_iertr = base_iertr;
+  using lookup_ret = lookup_iertr::future<LBANodeRef>;
   virtual lookup_ret lookup(
     op_context_t c,
     laddr_t addr,
@@ -77,7 +77,7 @@ struct LBANode : CachedExtent {
    *
    * Returns mappings within range [addr, addr+len)
    */
-  using lookup_range_ertr = LBAManager::get_mappings_ertr;
+  using lookup_range_iertr = LBAManager::get_mappings_iertr;
   using lookup_range_ret = LBAManager::get_mappings_ret;
   virtual lookup_range_ret lookup_range(
     op_context_t c,
@@ -89,7 +89,7 @@ struct LBANode : CachedExtent {
    *
    * Returns the mapping at addr
    */
-  using lookup_pin_ertr = LBAManager::get_mapping_ertr;
+  using lookup_pin_iertr = LBAManager::get_mapping_iertr;
   using lookup_pin_ret = LBAManager::get_mapping_ret;
   virtual lookup_pin_ret lookup_pin(
     op_context_t c,
@@ -103,8 +103,8 @@ struct LBANode : CachedExtent {
    *
    * Precondition: !at_max_capacity()
    */
-  using insert_ertr = base_ertr;
-  using insert_ret = insert_ertr::future<LBAPinRef>;
+  using insert_iertr = base_iertr;
+  using insert_ret = insert_iertr::future<LBAPinRef>;
   virtual insert_ret insert(
     op_context_t c,
     laddr_t laddr,
@@ -117,8 +117,8 @@ struct LBANode : CachedExtent {
    *
    * @return addr of hole, L_ADDR_NULL if unfound
    */
-  using find_hole_ertr = base_ertr;
-  using find_hole_ret = find_hole_ertr::future<laddr_t>;
+  using find_hole_iertr = base_iertr;
+  using find_hole_ret = find_hole_iertr::future<laddr_t>;
   virtual find_hole_ret find_hole(
     op_context_t c,
     laddr_t min,
@@ -130,7 +130,7 @@ struct LBANode : CachedExtent {
    *
    * Call f for all mappings in [begin, end)
    */
-  using scan_mappings_ertr = LBAManager::scan_mappings_ertr;
+  using scan_mappings_iertr = LBAManager::scan_mappings_iertr;
   using scan_mappings_ret = LBAManager::scan_mappings_ret;
   using scan_mappings_func_t = LBAManager::scan_mappings_func_t;
   virtual scan_mappings_ret scan_mappings(
@@ -139,7 +139,7 @@ struct LBANode : CachedExtent {
     laddr_t end,
     scan_mappings_func_t &f) = 0;
 
-  using scan_mapped_space_ertr = LBAManager::scan_mapped_space_ertr;
+  using scan_mapped_space_iertr = LBAManager::scan_mapped_space_iertr;
   using scan_mapped_space_ret = LBAManager::scan_mapped_space_ret;
   using scan_mapped_space_func_t = LBAManager::scan_mapped_space_func_t;
   virtual scan_mapped_space_ret scan_mapped_space(
@@ -157,10 +157,10 @@ struct LBANode : CachedExtent {
    *
    * Precondition: !at_min_capacity()
    */
-  using mutate_mapping_ertr = base_ertr::extend<
+  using mutate_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent             ///< mapping does not exist
     >;
-  using mutate_mapping_ret = mutate_mapping_ertr::future<
+  using mutate_mapping_ret = mutate_mapping_iertr::future<
     lba_map_val_t>;
   using mutate_func_t = std::function<
     lba_map_val_t(const lba_map_val_t &v)
@@ -182,10 +182,10 @@ struct LBANode : CachedExtent {
    * updates the mapping to paddr.  Returns previous paddr
    * (for debugging purposes).
    */
-  using mutate_internal_address_ertr = base_ertr::extend<
+  using mutate_internal_address_iertr = base_iertr::extend<
     crimson::ct_error::enoent             ///< mapping does not exist
     >;
-  using mutate_internal_address_ret = mutate_internal_address_ertr::future<
+  using mutate_internal_address_ret = mutate_internal_address_iertr::future<
     paddr_t>;
   virtual mutate_internal_address_ret mutate_internal_address(
     op_context_t c,
@@ -265,8 +265,8 @@ using LBANodeRef = LBANode::LBANodeRef;
  *
  * Fetches node at depth of the appropriate type.
  */
-using get_lba_node_ertr = base_ertr;
-using get_lba_node_ret = get_lba_node_ertr::future<LBANodeRef>;
+using get_lba_node_iertr = base_iertr;
+using get_lba_node_ret = get_lba_node_iertr::future<LBANodeRef>;
 get_lba_node_ret get_lba_btree_extent(
   op_context_t c, ///< [in] context structure
   CachedExtentRef parent, ///< [in] paddr ref source

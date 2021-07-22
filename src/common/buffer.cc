@@ -1258,8 +1258,12 @@ static ceph::spinlock debug_lock;
             buffer::create_aligned(unaligned._len, align_memory)));
         had_to_rebuild = true;
       }
-      _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
-      _num += 1;
+      if (unaligned.get_num_buffers()) {
+        _buffers.insert_after(p_prev, *ptr_node::create(unaligned._buffers.front()).release());
+        _num += 1;
+      } else {
+        // a bufferlist containing only 0-length bptrs is rebuilt as empty
+      }
       ++p_prev;
     }
     return had_to_rebuild;
@@ -1519,16 +1523,18 @@ static ceph::spinlock debug_lock;
    */
   char *buffer::list::c_str()
   {
-    if (_buffers.empty())
-      return 0;                         // no buffers
-
-    auto iter = std::cbegin(_buffers);
-    ++iter;
-
-    if (iter != std::cend(_buffers)) {
+    switch (get_num_buffers()) {
+    case 0:
+      // no buffers
+      return nullptr;
+    case 1:
+      // good, we're already contiguous.
+      break;
+    default:
       rebuild();
+      break;
     }
-    return _buffers.front().c_str();  // good, we're already contiguous.
+    return _buffers.front().c_str();
   }
 
   string buffer::list::to_str() const {

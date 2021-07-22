@@ -64,3 +64,10 @@ class HomeTest(ControllerTestCase, FakeFsMixin):
         self.assertStatus(200)
         logger.info(self.body)
         self.assertIn('<html lang="en">', self.body.decode('utf-8'))
+
+    @mock.patch(FakeFsMixin.builtins_open, new=FakeFsMixin.f_open)
+    @mock.patch('os.stat', new=FakeFsMixin.f_os.stat)
+    @mock.patch('os.listdir', new=FakeFsMixin.f_os.listdir)
+    def test_home_multiple_subtags_lang(self):
+        self._get('/', headers=[('Accept-Language', 'zh-Hans-CN')])
+        self.assertStatus(200)

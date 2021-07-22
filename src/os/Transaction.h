@@ -912,7 +912,9 @@ public:
     data.ops = data.ops + 1;
   }
   /// Set multiple xattrs of an object
-  void setattrs(const coll_t& cid, const ghobject_t& oid, const std::map<std::string,ceph::buffer::ptr>& attrset) {
+  void setattrs(const coll_t& cid,
+		const ghobject_t& oid,
+		const std::map<std::string,ceph::buffer::ptr,std::less<>>& attrset) {
     using ceph::encode;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTRS;
@@ -922,7 +924,9 @@ public:
     data.ops = data.ops + 1;
   }
   /// Set multiple xattrs of an object
-  void setattrs(const coll_t& cid, const ghobject_t& oid, const std::map<std::string,ceph::buffer::list>& attrset) {
+  void setattrs(const coll_t& cid,
+		const ghobject_t& oid,
+		const std::map<std::string,ceph::buffer::list,std::less<>>& attrset) {
     using ceph::encode;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTRS;

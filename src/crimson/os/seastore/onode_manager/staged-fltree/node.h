@@ -336,7 +336,7 @@ class Node
    * - If false, the returned cursor points to the conflicting element in tree;
    */
   eagain_future<std::pair<Ref<tree_cursor_t>, bool>> insert(
-      context_t, const key_hobj_t&, value_config_t);
+      context_t, const key_hobj_t&, value_config_t, Ref<Node>&&);
 
   /**
    * erase
@@ -345,7 +345,7 @@ class Node
    *
    * Returns the number of erased key-value pairs (0 or 1).
    */
-  eagain_future<std::size_t> erase(context_t, const key_hobj_t&);
+  eagain_future<std::size_t> erase(context_t, const key_hobj_t&, Ref<Node>&&);
 
   /// Recursively collects the statistics of the sub-tree formed by this node
   eagain_future<tree_stats_t> get_tree_stats(context_t);

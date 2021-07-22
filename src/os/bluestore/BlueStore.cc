@@ -7281,7 +7281,7 @@ void BlueStore::_fsck_check_pool_statfs(
 	  ++errors;
 	}
 	if (repairer) {
-	  repairer->remove_key(db, PREFIX_SHARED_BLOB, key);
+	  repairer->remove_key(db, PREFIX_STAT, key);
 	}
 	continue;
       }
@@ -7888,6 +7888,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
       }
       db->submit_transaction_sync(txn);
       repairer->inc_repaired();
+      repairer->request_compaction();
     }
   }
 }
@@ -10431,7 +10432,7 @@ int BlueStore::getattr(
 int BlueStore::getattrs(
   CollectionHandle &c_,
   const ghobject_t& oid,
-  map<string,bufferptr>& aset)
+  map<string,bufferptr,less<>>& aset)
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
@@ -12376,6 +12377,19 @@ void BlueStore::_kv_finalize_thread()
 void BlueStore::_zoned_cleaner_start() {
   dout(10) << __func__ << dendl;
 
+  auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+  ceph_assert(f);
+
+  auto zones_to_clean = f->get_cleaning_in_progress_zones(db);
+  if (!zones_to_clean.empty()) {
+    dout(10) << __func__ << " resuming cleaning after unclean shutdown." << dendl;
+    for (auto zone_num : zones_to_clean) {
+      _zoned_clean_zone(zone_num);
+    }
+    bdev->reset_zones(zones_to_clean);
+    f->mark_zones_to_clean_free(zones_to_clean, db);
+  }
+
   zoned_cleaner_thread.create("bstore_zcleaner");
 }
 
@@ -12418,10 +12432,12 @@ void BlueStore::_zoned_cleaner_thread() {
       dout(20) << __func__ << " wake" << dendl;
     } else {
       l.unlock();
+      f->mark_zones_to_clean_in_progress(*zones_to_clean, db);
       for (auto zone_num : *zones_to_clean) {
 	_zoned_clean_zone(zone_num);
       }
-      f->mark_zones_to_clean_free(zones_to_clean, db);
+      bdev->reset_zones(*zones_to_clean);
+      f->mark_zones_to_clean_free(*zones_to_clean, db);
       a->mark_zones_to_clean_free();
       l.lock();
     }
@@ -16052,7 +16068,8 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
 
-  if (!spurious_read_errors_alert.empty()) {
+  if (!spurious_read_errors_alert.empty() &&
+      cct->_conf->bluestore_warn_on_spurious_read_errors) {
     alerts.emplace(
       "BLUESTORE_SPURIOUS_READ_ERRORS",
       spurious_read_errors_alert);
@@ -16359,6 +16376,10 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
     auto ok = db->submit_transaction_sync(fix_statfs_txn) == 0;
     ceph_assert(ok);
     fix_statfs_txn = nullptr;
+  }
+  if (need_compact) {
+    db->compact();
+    need_compact = false;
   }
   unsigned repaired = to_repair_cnt;
   to_repair_cnt = 0;

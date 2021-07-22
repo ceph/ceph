@@ -546,26 +546,19 @@ export class Mocks {
   static getCrushRule({
     id = 0,
     name = 'somePoolName',
-    min = 1,
-    max = 10,
     type = 'replicated',
     failureDomain = 'osd',
     itemName = 'default' // This string also sets the device type - "default~ssd" <- ssd usage only
   }: {
-    max?: number;
-    min?: number;
     id?: number;
     name?: string;
     type?: string;
     failureDomain?: string;
     itemName?: string;
   }): CrushRule {
-    const typeNumber = type === 'erasure' ? 3 : 1;
     const rule = new CrushRule();
-    rule.max_size = max;
-    rule.min_size = min;
+    rule.type = type === 'erasure' ? 3 : 1;
     rule.rule_id = id;
-    rule.ruleset = typeNumber;
     rule.rule_name = name;
     rule.steps = [
       {

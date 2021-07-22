@@ -63,7 +63,8 @@ int RGWSI_RADOS::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& po
                         params.mostly_omap);
 }
 
-int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
+int RGWSI_RADOS::pool_iterate(const DoutPrefixProvider *dpp,
+                              librados::IoCtx& io_ctx,
                               librados::NObjectIterator& iter,
                               uint32_t num, vector<rgw_bucket_dir_entry>& objs,
                               RGWAccessListFilter *filter,
@@ -78,7 +79,7 @@ int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
     rgw_bucket_dir_entry e;
 
     string oid = iter->get_oid();
-    ldout(cct, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
+    ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
     // fill it in with initial values; we may correct later
     if (filter && !filter->filter(oid, oid))
@@ -174,29 +175,29 @@ uint64_t RGWSI_RADOS::Obj::get_last_version()
   return ref.pool.ioctx().get_last_version();
 }
 
-int RGWSI_RADOS::Pool::create()
+int RGWSI_RADOS::Pool::create(const DoutPrefixProvider *dpp)
 {
   librados::Rados *rad = rados_svc->get_rados_handle();
   int r = rad->pool_create(pool.name.c_str());
   if (r < 0) {
-    ldout(rados_svc->cct, 0) << "WARNING: pool_create returned " << r << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: pool_create returned " << r << dendl;
     return r;
   }
   librados::IoCtx io_ctx;
   r = rad->ioctx_create(pool.name.c_str(), io_ctx);
   if (r < 0) {
-    ldout(rados_svc->cct, 0) << "WARNING: ioctx_create returned " << r << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: ioctx_create returned " << r << dendl;
     return r;
   }
   r = io_ctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
   if (r < 0) {
-    ldout(rados_svc->cct, 0) << "WARNING: application_enable returned " << r << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: application_enable returned " << r << dendl;
     return r;
   }
   return 0;
 }
 
-int RGWSI_RADOS::Pool::create(const vector<rgw_pool>& pools, vector<int> *retcodes)
+int RGWSI_RADOS::Pool::create(const DoutPrefixProvider *dpp, const vector<rgw_pool>& pools, vector<int> *retcodes)
 {
   vector<librados::PoolAsyncCompletion *> completions;
   vector<int> rets;
@@ -222,7 +223,7 @@ int RGWSI_RADOS::Pool::create(const vector<rgw_pool>& pools, vector<int> *retcod
       c->wait();
       r = c->get_return_value();
       if (r < 0) {
-        ldout(rados_svc->cct, 0) << "WARNING: async pool_create returned " << r << dendl;
+        ldpp_dout(dpp, 0) << "WARNING: async pool_create returned " << r << dendl;
         error = true;
       }
     }
@@ -239,7 +240,7 @@ int RGWSI_RADOS::Pool::create(const vector<rgw_pool>& pools, vector<int> *retcod
     io_ctxs.emplace_back();
     int ret = rad->ioctx_create(pool.name.c_str(), io_ctxs.back());
     if (ret < 0) {
-      ldout(rados_svc->cct, 0) << "WARNING: ioctx_create returned " << ret << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: ioctx_create returned " << ret << dendl;
       error = true;
     }
     retcodes->push_back(ret);
@@ -265,7 +266,7 @@ int RGWSI_RADOS::Pool::create(const vector<rgw_pool>& pools, vector<int> *retcod
     if (ret == -EOPNOTSUPP) {
       ret = 0;
     } else if (ret < 0) {
-      ldout(rados_svc->cct, 0) << "WARNING: async application_enable returned " << ret
+      ldpp_dout(dpp, 0) << "WARNING: async application_enable returned " << ret
                     << dendl;
       error = true;
     }
@@ -319,7 +320,8 @@ int RGWSI_RADOS::Pool::List::init(const DoutPrefixProvider *dpp, const string& m
   return 0;
 }
 
-int RGWSI_RADOS::Pool::List::get_next(int max,
+int RGWSI_RADOS::Pool::List::get_next(const DoutPrefixProvider *dpp,
+                                      int max,
                                       std::vector<string> *oids,
                                       bool *is_truncated)
 {
@@ -327,10 +329,10 @@ int RGWSI_RADOS::Pool::List::get_next(int max,
     return -EINVAL;
   }
   vector<rgw_bucket_dir_entry> objs;
-  int r = pool->rados_svc->pool_iterate(ctx.ioctx, ctx.iter, max, objs, ctx.filter, is_truncated);
+  int r = pool->rados_svc->pool_iterate(dpp, ctx.ioctx, ctx.iter, max, objs, ctx.filter, is_truncated);
   if (r < 0) {
     if(r != -ENOENT) {
-      ldout(pool->rados_svc->cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
+      ldpp_dout(dpp, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
     }
     return r;
   }
@@ -385,7 +387,7 @@ int RGWSI_RADOS::clog_warn(const string& msg)
   return h.mon_command(cmd, inbl, nullptr, nullptr);
 }
 
-bool RGWSI_RADOS::check_secure_mon_conn() const
+bool RGWSI_RADOS::check_secure_mon_conn(const DoutPrefixProvider *dpp) const
 {
   AuthRegistry reg(cct);
 
@@ -395,18 +397,18 @@ bool RGWSI_RADOS::check_secure_mon_conn() const
   std::vector<uint32_t> modes;
 
   reg.get_supported_methods(CEPH_ENTITY_TYPE_MON, &methods, &modes);
-  ldout(cct, 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
+  ldpp_dout(dpp, 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
 
   for (auto method : methods) {
     if (!reg.is_secure_method(method)) {
-      ldout(cct, 20) << __func__ << "(): method " << method << " is insecure" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): method " << method << " is insecure" << dendl;
       return false;
     }
   }
 
   for (auto mode : modes) {
     if (!reg.is_secure_mode(mode)) {
-      ldout(cct, 20) << __func__ << "(): mode " << mode << " is insecure" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): mode " << mode << " is insecure" << dendl;
       return false;
     }
   }

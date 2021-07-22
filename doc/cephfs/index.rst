@@ -84,7 +84,6 @@ Administration
     MDS Configuration Settings <mds-config-ref>
     Manual: ceph-mds <../../man/8/ceph-mds>
     Export over NFS <nfs>
-    Export over NFS with volume nfs interface <fs-nfs-exports>
     Application best practices <app-best-practices>
     FS volume and subvolumes <fs-volumes>
     CephFS Quotas <quota>
@@ -170,6 +169,7 @@ Troubleshooting and Disaster Recovery
     Troubleshooting <troubleshooting>
     Disaster recovery <disaster-recovery>
     cephfs-journal-tool <cephfs-journal-tool>
+    Recovering file system after monitor store loss <recover-fs-after-mon-store-loss>
 
 
 .. raw:: html

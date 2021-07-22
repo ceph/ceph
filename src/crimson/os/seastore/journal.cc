@@ -648,18 +648,18 @@ Journal::scan_extents_ret Journal::scan_extents(
   extent_len_t bytes_to_read)
 {
   auto ret = std::make_unique<scan_extents_ret_bare>();
-  auto &retref = *ret;
+  auto* extents = ret.get();
   return read_segment_header(cursor.get_offset().segment
   ).handle_error(
     scan_extents_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error in Journal::scan_extents"
     }
-  ).safe_then([&](auto segment_header) {
+  ).safe_then([bytes_to_read, extents, &cursor, this](auto segment_header) {
     auto segment_nonce = segment_header.segment_nonce;
     return seastar::do_with(
       found_record_handler_t(
-	[&](
+	[extents, this](
 	  paddr_t base,
 	  const record_header_t &header,
 	  const bufferlist &mdbuf) mutable {
@@ -677,7 +677,7 @@ Journal::scan_extents_ret Journal::scan_extents(
 
 	  paddr_t extent_offset = base.add_offset(header.mdlength);
 	  for (const auto &i : *infos) {
-	    retref.emplace_back(extent_offset, i);
+	    extents->emplace_back(extent_offset, i);
 	    extent_offset.offset += i.len;
 	  }
 	  return scan_extents_ertr::now();
@@ -687,7 +687,7 @@ Journal::scan_extents_ret Journal::scan_extents(
 	  cursor,
 	  segment_nonce,
 	  bytes_to_read,
-	  dhandler).safe_then([](auto){});
+	  dhandler).discard_result();
       });
   }).safe_then([ret=std::move(ret)] {
     return std::move(*ret);
@@ -705,9 +705,9 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
   }
   auto retref = std::make_unique<size_t>(0);
   auto budget_used = *retref;
-  return crimson::do_until(
+  return crimson::repeat(
     [=, &cursor, &budget_used, &handler]() mutable
-    -> scan_valid_records_ertr::future<bool> {
+    -> scan_valid_records_ertr::future<seastar::stop_iteration> {
       return [=, &handler, &cursor, &budget_used] {
 	if (!cursor.last_valid_header_found) {
 	  return read_validate_record_metadata(cursor.offset, nonce
@@ -737,7 +737,7 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
 	      return scan_valid_records_ertr::now();
 	    }
 	  }).safe_then([=, &cursor, &budget_used, &handler] {
-	    return crimson::do_until(
+	    return crimson::repeat(
 	      [=, &budget_used, &cursor, &handler] {
 		logger().debug(
 		  "Journal::scan_valid_records: valid record read, processing queue");
@@ -747,11 +747,13 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
 		   * location since it itself cannot yet have been committed
 		   * at its own time of submission.  Thus, the most recently
 		   * read record must always fall after cursor.last_committed */
-		  return scan_valid_records_ertr::make_ready_future<bool>(true);
+		  return scan_valid_records_ertr::make_ready_future<
+		    seastar::stop_iteration>(seastar::stop_iteration::yes);
 		}
 		auto &next = cursor.pending_records.front();
 		if (next.offset > cursor.last_committed) {
-		  return scan_valid_records_ertr::make_ready_future<bool>(true);
+		  return scan_valid_records_ertr::make_ready_future<
+		    seastar::stop_iteration>(seastar::stop_iteration::yes);
 		}
 		budget_used +=
 		  next.header.dlength + next.header.mdlength;
@@ -761,7 +763,8 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
 		  next.mdbuffer
 		).safe_then([&cursor] {
 		  cursor.pending_records.pop_front();
-		  return scan_valid_records_ertr::make_ready_future<bool>(false);
+		  return scan_valid_records_ertr::make_ready_future<
+		    seastar::stop_iteration>(seastar::stop_iteration::no);
 		});
 	      });
 	  });
@@ -787,8 +790,11 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
 	  });
 	}
       }().safe_then([=, &budget_used, &cursor] {
-	return scan_valid_records_ertr::make_ready_future<bool>(
-	  cursor.is_complete() || budget_used >= budget);
+	if (cursor.is_complete() || budget_used >= budget) {
+	  return seastar::stop_iteration::yes;
+	} else {
+	  return seastar::stop_iteration::no;
+	}
       });
     }).safe_then([retref=std::move(retref)]() mutable -> scan_valid_records_ret {
       return scan_valid_records_ret(

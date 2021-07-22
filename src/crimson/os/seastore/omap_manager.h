@@ -27,7 +27,7 @@ class OMapManager {
   * until these functions future resolved.
   */
 public:
-  using base_ertr = TransactionManager::base_ertr;
+  using base_iertr = TransactionManager::base_iertr;
 
   /**
    * allocate omap tree root node
@@ -35,8 +35,8 @@ public:
    * @param Transaction &t, current transaction
    * @retval return the omap_root_t structure.
    */
-  using initialize_omap_ertr = base_ertr;
-  using initialize_omap_ret = initialize_omap_ertr::future<omap_root_t>;
+  using initialize_omap_iertr = base_iertr;
+  using initialize_omap_ret = initialize_omap_iertr::future<omap_root_t>;
   virtual initialize_omap_ret initialize_omap(Transaction &t) = 0;
 
   /**
@@ -47,8 +47,8 @@ public:
    * @param string &key, omap string key
    * @retval return string key->string value mapping pair.
    */
-  using omap_get_value_ertr = base_ertr;
-  using omap_get_value_ret = omap_get_value_ertr::future<
+  using omap_get_value_iertr = base_iertr;
+  using omap_get_value_ret = omap_get_value_iertr::future<
     std::optional<bufferlist>>;
   virtual omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
@@ -63,16 +63,16 @@ public:
    * @param string &key, omap string key
    * @param string &value, mapped value corresponding key
    */
-  using omap_set_key_ertr = base_ertr;
-  using omap_set_key_ret = omap_set_key_ertr::future<>;
+  using omap_set_key_iertr = base_iertr;
+  using omap_set_key_ret = omap_set_key_iertr::future<>;
   virtual omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &key,
     const ceph::bufferlist &value) = 0;
 
-  using omap_set_keys_ertr = base_ertr;
-  using omap_set_keys_ret = omap_set_keys_ertr::future<>;
+  using omap_set_keys_iertr = base_iertr;
+  using omap_set_keys_ret = omap_set_keys_iertr::future<>;
   virtual omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,
     Transaction &t,
@@ -85,8 +85,8 @@ public:
    * @param Transaction &t,  current transaction
    * @param string &key, omap string key
    */
-  using omap_rm_key_ertr = base_ertr;
-  using omap_rm_key_ret = omap_rm_key_ertr::future<>;
+  using omap_rm_key_iertr = base_iertr;
+  using omap_rm_key_ret = omap_rm_key_iertr::future<>;
   virtual omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
     Transaction &t,
@@ -142,11 +142,11 @@ public:
       );
     }
   };
-  using omap_list_ertr = base_ertr;
+  using omap_list_iertr = base_iertr;
   using omap_list_bare_ret = std::tuple<
     bool,
     std::map<std::string, bufferlist, std::less<>>>;
-  using omap_list_ret = omap_list_ertr::future<omap_list_bare_ret>;
+  using omap_list_ret = omap_list_iertr::future<omap_list_bare_ret>;
   virtual omap_list_ret omap_list(
     const omap_root_t &omap_root,
     Transaction &t,
@@ -159,8 +159,8 @@ public:
    * @param omap_root_t &omap_root,  omap btree root information
    * @param Transaction &t,  current transaction
    */
-  using omap_clear_ertr = base_ertr;
-  using omap_clear_ret = omap_clear_ertr::future<>;
+  using omap_clear_iertr = base_iertr;
+  using omap_clear_ret = omap_clear_iertr::future<>;
   virtual omap_clear_ret omap_clear(omap_root_t &omap_root, Transaction &t) = 0;
 
   virtual ~OMapManager() {}

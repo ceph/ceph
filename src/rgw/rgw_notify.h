@@ -58,9 +58,12 @@ struct reservation_t {
   const req_state* const s;
   size_t size;
   rgw::sal::Object* const object;
+  const std::string* const object_name;
+  KeyValueMap cached_metadata;
 
-  reservation_t(const DoutPrefixProvider *_dpp, rgw::sal::RadosStore* _store, const req_state* _s, rgw::sal::Object* _object) :
-      dpp(_dpp), store(_store), s(_s), object(_object) {}
+  reservation_t(const DoutPrefixProvider *_dpp, rgw::sal::RadosStore* _store, const req_state* _s, 
+      rgw::sal::Object* _object, const std::string* _object_name) :
+      dpp(_dpp), store(_store), s(_s), object(_object), object_name(_object_name) {}
 
   // dtor doing resource leak guarding
   // aborting the reservation if not already committed or aborted
@@ -78,6 +81,7 @@ int publish_commit(rgw::sal::Object* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
         const std::string& etag, 
+        const std::string& version,
         EventType event_type,
         reservation_t& reservation,
         const DoutPrefixProvider *dpp);

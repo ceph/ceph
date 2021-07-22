@@ -761,6 +761,12 @@ struct RequestMetaTable : public EmptyMetaTable {
       pushstring(L, s->trans_id);
     } else if (strcasecmp(index, "Tags") == 0) {
       create_metatable<StringMapMetaTable<RGWObjTags::tag_map_t>>(L, false, &(s->tagset.get_tags()));
+    } else if (strcasecmp(index, "User") == 0) {
+      if (!s->user) {
+        lua_pushnil(L);
+      } else {
+        create_metatable<UserMetaTable>(L, false, const_cast<rgw_user*>(&(s->user->get_id())));
+      }
     } else {
       return error_unknown_field(L, index, TableName());
     }

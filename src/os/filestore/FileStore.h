@@ -646,8 +646,8 @@ public:
   int _remove(const coll_t& cid, const ghobject_t& oid, const SequencerPosition &spos);
 
   int _fgetattr(int fd, const char *name, ceph::bufferptr& bp);
-  int _fgetattrs(int fd, std::map<std::string, ceph::bufferptr>& aset);
-  int _fsetattrs(int fd, std::map<std::string, ceph::bufferptr> &aset);
+  int _fgetattrs(int fd, std::map<std::string, ceph::bufferptr,std::less<>>& aset);
+  int _fsetattrs(int fd, std::map<std::string, ceph::bufferptr,std::less<>>& aset);
 
   void do_force_sync();
   void start_sync(Context *onsafe);
@@ -692,7 +692,7 @@ public:
   using ObjectStore::getattr;
   using ObjectStore::getattrs;
   int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, ceph::bufferptr &bp) override;
-  int getattrs(CollectionHandle& c, const ghobject_t& oid, std::map<std::string,ceph::bufferptr>& aset) override;
+  int getattrs(CollectionHandle& c, const ghobject_t& oid, std::map<std::string,ceph::bufferptr,std::less<>>& aset) override;
 
   int _setattrs(const coll_t& cid, const ghobject_t& oid, std::map<std::string,ceph::bufferptr>& aset,
 		const SequencerPosition &spos);

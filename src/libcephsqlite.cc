@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <regex>
@@ -87,6 +88,7 @@ struct cephsqlite_appdata {
     if (striper_logger) {
       cct->get_perfcounters_collection()->remove(striper_logger.get());
     }
+    cluster.shutdown();
   }
   int setup_perf() {
     ceph_assert(cct);
@@ -136,7 +138,6 @@ struct cephsqlite_appdata {
   std::unique_ptr<PerfCounters> logger;
   std::shared_ptr<PerfCounters> striper_logger;
   librados::Rados cluster;
-  struct sqlite3_vfs vfs{};
 };
 
 struct cephsqlite_fileloc {
@@ -789,14 +790,49 @@ static int autoreg(sqlite3* db, char** err, const struct sqlite3_api_routines* t
   return SQLITE_OK;
 }
 
+/* You may wonder why we have an atexit handler? After all, atexit/exit creates
+ * a mess for multithreaded programs. Well, sqlite3 does not have an API for
+ * orderly removal of extensions. And, in fact, any API we might make
+ * unofficially (such as "sqlite3_cephsqlite_fini") would potentially race with
+ * other threads interacting with sqlite3 + the "ceph" VFS. There is a method
+ * for removing a VFS but it's not called by sqlite3 in any error scenario and
+ * there is no mechanism within sqlite3 to tell a VFS to unregister itself.
+ *
+ * This all would be mostly okay if /bin/sqlite3 did not call exit(3), but it
+ * does. (This occurs only for the sqlite3 binary, not when used as a library.)
+ * exit(3) calls destructors on all static-duration structures for the program.
+ * This breaks any outstanding threads created by the librados handle in all
+ * sorts of fantastic ways from C++ exceptions to memory faults.  In general,
+ * Ceph libraries are not tolerant of exit(3) (_exit(3) is okay!). Applications
+ * must clean up after themselves or _exit(3).
+ *
+ * So, we have an atexit handler for libcephsqlite. This simply shuts down the
+ * RADOS handle. We can be assured that this occurs before any ceph library
+ * static-duration structures are destructed due to ordering guarantees by
+ * exit(3). Generally, we only see this called when the VFS is used by
+ * /bin/sqlite3 and only during sqlite3 error scenarios (like I/O errors
+ * arrising from blocklisting).
+ */
+
+static void cephsqlite_atexit()
+{
+  if (auto vfs = sqlite3_vfs_find("ceph"); vfs) {
+    if (vfs->pAppData) {
+      auto&& appd = getdata(vfs);
+      delete &appd;
+      vfs->pAppData = nullptr;
+    }
+  }
+}
+
 LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sqlite3_api_routines* api)
 {
   SQLITE_EXTENSION_INIT2(api);
 
   auto vfs = sqlite3_vfs_find("ceph");
   if (!vfs) {
+    vfs = (sqlite3_vfs*) calloc(1, sizeof(sqlite3_vfs));
     auto appd = new cephsqlite_appdata;
-    vfs = &appd->vfs;
     vfs->iVersion = 2;
     vfs->szOsFile = sizeof(struct cephsqlite_file);
     vfs->mxPathname = 4096;
@@ -807,8 +843,15 @@ LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sql
     vfs->xAccess = Access;
     vfs->xFullPathname = FullPathname;
     vfs->xCurrentTimeInt64 = CurrentTime;
-    appd->cct = nullptr;
-    sqlite3_vfs_register(vfs, 0);
+    if (int rc = sqlite3_vfs_register(vfs, 0); rc) {
+      delete appd;
+      free(vfs);
+      return rc;
+    }
+  }
+
+  if (int rc = std::atexit(cephsqlite_atexit); rc) {
+    return SQLITE_INTERNAL;
   }
 
   if (int rc = sqlite3_auto_extension((void(*)(void))autoreg); rc) {

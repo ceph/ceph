@@ -419,7 +419,7 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 	crimson::common::system_shutdown_exception());
   }
 
-  return seastar::do_with(PGMeta(store, pgid), [] (auto& pg_meta) {
+  return seastar::do_with(PGMeta(*store, pgid), [] (auto& pg_meta) {
     return pg_meta.load();
   }).then([this, store](auto&& ret) {
     auto [pg_info, past_intervals] = std::move(ret);
@@ -461,23 +461,17 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 }
 
 void PG::do_peering_event(
-  const boost::statechart::event_base &evt,
-  PeeringCtx &rctx)
-{
-  peering_state.handle_event(
-    evt,
-    &rctx);
-  peering_state.write_if_dirty(rctx.transaction);
-}
-
-void PG::do_peering_event(
   PGPeeringEvent& evt, PeeringCtx &rctx)
 {
-  if (!peering_state.pg_has_reset_since(evt.get_epoch_requested())) {
-    logger().debug("{} handling {} for pg: {}", __func__, evt.get_desc(), pgid);
-    do_peering_event(evt.get_event(), rctx);
-  } else {
+  if (peering_state.pg_has_reset_since(evt.get_epoch_requested()) ||
+      peering_state.pg_has_reset_since(evt.get_epoch_sent())) {
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
+  } else {
+    logger().debug("{} handling {} for pg: {}", __func__, evt.get_desc(), pgid);
+    peering_state.handle_event(
+      evt.get_event(),
+      &rctx);
+    peering_state.write_if_dirty(rctx.transaction);
   }
 }
 
@@ -508,8 +502,7 @@ void PG::handle_activate_map(PeeringCtx &rctx)
 
 void PG::handle_initialize(PeeringCtx &rctx)
 {
-  PeeringState::Initialize evt;
-  peering_state.handle_event(evt, &rctx);
+  peering_state.handle_event(PeeringState::Initialize{}, &rctx);
 }
 
 
@@ -982,8 +975,7 @@ PG::with_existing_clone_obc(ObjectContextRef clone, with_obc_func_t&& func)
 PG::load_obc_iertr::future<crimson::osd::ObjectContextRef>
 PG::load_head_obc(ObjectContextRef obc)
 {
-  hobject_t oid = obc->get_oid();
-  return backend->load_metadata(oid).safe_then_interruptible(
+  return backend->load_metadata(obc->get_oid()).safe_then_interruptible(
     [obc=std::move(obc)](auto md)
     -> load_obc_ertr::future<crimson::osd::ObjectContextRef> {
     const hobject_t& oid = md->os.oi.soid;

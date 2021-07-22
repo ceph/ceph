@@ -2142,6 +2142,7 @@ int OSD::mkfs(CephContext *cct,
 	   << "queue_transaction returned " << cpp_strerror(ret) << dendl;
       return ret;
     }
+    ch->flush();
   }
 
   ret = write_meta(cct, store.get(), sb.cluster_fsid, sb.osd_fsid, whoami, osdspec_affinity);
@@ -2520,6 +2521,70 @@ std::set<int64_t> OSD::get_mapped_pools()
   return pools;
 }
 
+OSD::PGRefOrError OSD::locate_asok_target(const cmdmap_t& cmdmap,
+				     stringstream& ss,
+				     bool only_primary)
+{
+  string pgidstr;
+  if (!cmd_getval(cmdmap, "pgid", pgidstr)) {
+    ss << "no pgid specified";
+    return OSD::PGRefOrError{std::nullopt, -EINVAL};
+  }
+
+  pg_t pgid;
+  if (!pgid.parse(pgidstr.c_str())) {
+    ss << "couldn't parse pgid '" << pgidstr << "'";
+    return OSD::PGRefOrError{std::nullopt, -EINVAL};
+  }
+
+  spg_t pcand;
+  PGRef pg;
+  if (get_osdmap()->get_primary_shard(pgid, &pcand) && (pg = _lookup_lock_pg(pcand))) {
+    if (pg->is_primary() || !only_primary) {
+      return OSD::PGRefOrError{pg, 0};
+    }
+
+    ss << "not primary for pgid " << pgid;
+    pg->unlock();
+    return OSD::PGRefOrError{std::nullopt, -EAGAIN};
+  } else {
+    ss << "i don't have pgid " << pgid;
+    return OSD::PGRefOrError{std::nullopt, -ENOENT};
+  }
+}
+
+// note that the cmdmap is explicitly copied into asok_route_to_pg()
+int OSD::asok_route_to_pg(
+  bool only_primary,
+  std::string_view prefix,
+  cmdmap_t cmdmap,
+  Formatter* f,
+  stringstream& ss,
+  const bufferlist& inbl,
+  bufferlist& outbl,
+  std::function<void(int, const std::string&, bufferlist&)> on_finish)
+{
+  auto [target_pg, ret] = locate_asok_target(cmdmap, ss, only_primary);
+
+  if (!target_pg.has_value()) {
+    // 'ss' and 'ret' already contain the error information
+    on_finish(ret, ss.str(), outbl);
+    return ret;
+  }
+
+  //  the PG was locked by locate_asok_target()
+  try {
+    (*target_pg)->do_command(prefix, cmdmap, inbl, on_finish);
+    (*target_pg)->unlock();
+    return 0;  // the pg handler calls on_finish directly
+  } catch (const TOPNSPC::common::bad_cmd_get& e) {
+    (*target_pg)->unlock();
+    ss << e.what();
+    on_finish(ret, ss.str(), outbl);
+    return -EINVAL;
+  }
+}
+
 void OSD::asok_command(
   std::string_view prefix, const cmdmap_t& cmdmap,
   Formatter *f,
@@ -2578,6 +2643,13 @@ void OSD::asok_command(
       ss << "i don't have pgid " << pgid;
       ret = -ENOENT;
     }
+  }
+
+  // --- PG commands that will be answered even if !primary ---
+
+  else if (prefix == "scrubdebug") {
+    asok_route_to_pg(false, prefix, cmdmap, f, ss, inbl, outbl, on_finish);
+    return;
   }
 
   // --- OSD commands follow ---
@@ -4138,6 +4210,14 @@ void OSD::final_init()
     "scrub_purged_snaps",
     asok_hook,
     "Scrub purged_snaps vs snapmapper index");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "scrubdebug "						\
+    "name=pgid,type=CephPgid "	                                \
+    "name=cmd,type=CephChoices,strings=block|unblock "          \
+    "name=value,type=CephString,req=false",
+    asok_hook,
+    "debug the scrubber");
   ceph_assert(r == 0);
 
   // -- pg commands --
