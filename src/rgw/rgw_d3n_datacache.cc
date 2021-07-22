@@ -97,12 +97,14 @@ void D3nDataCache::init(CephContext *_cct) {
   if (conf_eviction_policy == "random")
     eviction_policy = _eviction_policy::RANDOM;
 
+#if defined(HAVE_LIBAIO)
   // libaio setup
   struct aioinit ainit{0};
-  ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_threads");;
+  ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_threads");
   ainit.aio_num = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_num");
   ainit.aio_idle_time = 120;
   aio_init(&ainit);
+#endif
 }
 
 int D3nDataCache::d3n_io_write(bufferlist& bl, unsigned int len, std::string oid)
