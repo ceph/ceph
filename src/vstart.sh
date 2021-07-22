@@ -1642,9 +1642,8 @@ if [ $with_jaeger -eq 1 ]; then
   -p 16686:16686 \
   -p 14268:14268 \
   -p 14250:14250 \
-  jaegertracing/all-in-one:1.20
+  quay.io/jaegertracing/all-in-one
 fi
-
 
 debug echo "vstart cluster complete. Use stop.sh to stop. See out/* (e.g. 'tail -f out/????') for debug output."
 

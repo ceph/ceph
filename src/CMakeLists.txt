@@ -427,38 +427,30 @@ add_library(common-objs OBJECT ${libcommon_files})
 add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
-  find_package(yaml-cpp 0.6.0)
-  if(NOT yaml-cpp_FOUND)
-    set(jaeger_libs ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so
-		    ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6
-		    ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6.2)
-    #customize libjaeger.install
-    execute_process(COMMAND bash -c "sed -i 's/#//' debian/libjaeger.install"
-		    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    execute_process(COMMAND bash -c "grep -q 'yaml-cpp' debian/libjaeger.install || echo 'usr/lib/libyaml-cpp.so.*' >> debian/libjaeger.install"
-		    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-  endif()
-  include(IncludeJaeger)
+  find_package(thrift 0.13.0)
+  find_package(yaml-cpp 0.6.0 REQUIRED)
+  include(BuildJaeger)
+  list(APPEND jaeger_base
+  opentracing::libopentracing
+  jaegertracing::libjaegertracing)
+
+  build_jaeger()
+
+  include_directories(${CMAKE_BINARY_DIR}/external/include)
+  # for testing jaeger build
+  add_custom_target(jaeger_base DEPENDS ${jaeger_base})
   add_library(jaeger-base INTERFACE)
-  add_dependencies(common-objs
-  yaml-cpp::yaml-cpp
-  opentracing::libopentracing
-  thrift::libthrift
-  jaegertracing::libjaegertracing)
+  add_dependencies(common-objs ${jaeger_base})
   target_link_libraries(jaeger-base INTERFACE
-  yaml-cpp::yaml-cpp
-  opentracing::libopentracing
-  thrift::libthrift
-  jaegertracing::libjaegertracing)
-  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  #with CMake 3.12+ the following can be replaced by:
-  #target_link_libraries(common-objs jaeger-base)
-   list(APPEND jaeger_libs
+    yaml-cpp::yaml-cpp
+    opentracing::libopentracing
+    thrift::libthrift
+    jaegertracing::libjaegertracing)
+
+  list(APPEND jaeger_libs
     ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0
     ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0.6.1
-    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1
-    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0
-    ${CMAKE_BINARY_DIR}/external/lib/libthrift.so.0.13.0)
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0)
   install(FILES ${jaeger_libs}
     DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
