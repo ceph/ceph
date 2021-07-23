@@ -29,7 +29,7 @@ manual administration of the ceph monitor daemons is not necessary.
 needed, as new hosts are added to the cluster.
 
 By default, cephadm will deploy 5 daemons on arbitrary hosts. See
-:ref:`orchestrator-cli-placement-spec`_ for details of specifying
+:ref:`orchestrator-cli-placement-spec` for details of specifying
 the placement of daemons.
 
 Designating a Particular Subnet for Monitors
@@ -80,7 +80,7 @@ run this command:
 
   .. prompt:: bash #
 
-    ceph orch daemon add mon *<host1:ip-or-network1> [<host1:ip-or-network-2>...]*
+    ceph orch daemon add mon *<host1:ip-or-network1>
 
   For example, to deploy a second monitor on ``newhost1`` using an IP
   address ``10.1.2.123`` and a third monitor on ``newhost2`` in
@@ -91,3 +91,81 @@ run this command:
     ceph orch apply mon --unmanaged
     ceph orch daemon add mon newhost1:10.1.2.123
     ceph orch daemon add mon newhost2:10.1.2.0/24
+
+  Now, enable automatic placement of Daemons
+
+  .. prompt:: bash #
+
+    ceph orch apply mon --placement="newhost1,newhost2,newhost3" --dry-run
+
+  See :ref:`orchestrator-cli-placement-spec` for details of specifying
+  the placement of daemons.
+
+  Finally apply this new placement by dropping ``--dry-run``
+
+  .. prompt:: bash #
+
+    ceph orch apply mon --placement="newhost1,newhost2,newhost3"
+
+
+Moving Monitors to a Different Network
+--------------------------------------
+
+To move Monitors to a new network, deploy new monitors on the new network and
+subsequently remove monitors from the old network. It is not advised to
+modify and inject the ``monmap`` manually.
+
+First, disable the automated placement of daemons:
+
+  .. prompt:: bash #
+
+    ceph orch apply mon --unmanaged
+
+To deploy each additional monitor:
+
+  .. prompt:: bash #
+
+    ceph orch daemon add mon *<newhost1:ip-or-network1>*
+
+For example, to deploy a second monitor on ``newhost1`` using an IP
+address ``10.1.2.123`` and a third monitor on ``newhost2`` in
+network ``10.1.2.0/24``, run the following commands:
+
+  .. prompt:: bash #
+
+    ceph orch apply mon --unmanaged
+    ceph orch daemon add mon newhost1:10.1.2.123
+    ceph orch daemon add mon newhost2:10.1.2.0/24
+
+  Subsequently remove monitors from the old network:
+
+  .. prompt:: bash #
+
+    ceph orch daemon rm *mon.<oldhost1>*
+
+  Update the ``public_network``:
+
+  .. prompt:: bash #
+
+     ceph config set mon public_network *<mon-cidr-network>*
+
+  For example:
+
+  .. prompt:: bash #
+
+     ceph config set mon public_network 10.1.2.0/24
+
+  Now, enable automatic placement of Daemons
+
+  .. prompt:: bash #
+
+    ceph orch apply mon --placement="newhost1,newhost2,newhost3" --dry-run
+
+  See :ref:`orchestrator-cli-placement-spec` for details of specifying
+  the placement of daemons.
+
+  Finally apply this new placement by dropping ``--dry-run``
+
+  .. prompt:: bash #
+
+    ceph orch apply mon --placement="newhost1,newhost2,newhost3" 
