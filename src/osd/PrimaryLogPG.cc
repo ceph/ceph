@@ -4809,7 +4809,7 @@ int PrimaryLogPG::trim_object(
 	ctx->mtime,
 	0)
       );
-    derr << "removing snap head" << dendl;
+    dout(10) << "removing snap head" << dendl;
     object_info_t& oi = head_obc->obs.oi;
     ctx->delta_stats.num_objects--;
     if (oi.is_dirty()) {
