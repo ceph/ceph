@@ -346,6 +346,92 @@ class Module(MgrModule):
             'active_changed': sorted(list(active)),
         }
 
+    def get_stat_sum_per_pool(self) -> List[dict]:
+        # Initialize 'result' list
+        result: List[dict] = []
+
+        # Create a list of tuples containing pool ids and their associated names
+        # that will later act as a queue, i.e.:
+        #   pool_queue = [('1', '.mgr'), ('2', 'cephfs.a.meta'), ('3', 'cephfs.a.data')]
+        osd_map = self.get('osd_map')
+        pool_queue: List[tuple] = []
+        for pool in osd_map['pools']:
+            pool_queue.append((str(pool['pool']), pool['pool_name']))
+
+        # Populate 'result', i.e.:
+        #   {
+        #       'pool_id': '1'
+        #       'pool_name': '.mgr'
+        #       'stats_sum': {
+        #           'num_bytes': 36,
+        #           'num_bytes_hit_set_archive': 0,
+        #           ...
+        #           'num_write_kb': 0
+        #           }
+        #       }
+        #   }
+        while pool_queue:
+            # Pop a pool out of pool_queue
+            curr_pool = pool_queue.pop(0)
+
+            # Get the current pool's id and name
+            curr_pool_id, curr_pool_name = curr_pool[0], curr_pool[1]
+
+            # Initialize a dict that will hold aggregated stats for the current pool
+            compiled_stats_dict: Dict[str, dict] = defaultdict(lambda: defaultdict(int))
+
+            # Find out which pgs belong to the current pool and add up
+            # their stats
+            pg_dump = self.get('pg_dump')
+            for pg in pg_dump['pg_stats']:
+                pool_id = pg['pgid'][0:1]
+                if pool_id == curr_pool_id:
+                    for metric in pg['stat_sum']:
+                        compiled_stats_dict['pool_id'] = int(pool_id)
+                        compiled_stats_dict['pool_name'] = curr_pool_name
+                        compiled_stats_dict['stats_sum'][metric] += pg['stat_sum'][metric]
+                else:
+                    continue
+            # 'compiled_stats_dict' now holds all stats pertaining to
+            # the current pool. Adding it to the list of results.
+            result.append(compiled_stats_dict)
+
+        return result
+
+    def get_osd_histograms(self) -> Dict[str, dict]:
+        # Initialize result dict
+        result: Dict[str, dict] = defaultdict()
+
+        # You can get a list of osd ids from the metadata
+        osd_metadata = self.get('osd_metadata')
+        
+        # Grab output from the "osd.x perf histogram dump" command
+        for osd_id in osd_metadata:
+            cmd_dict = {
+                'prefix': 'perf histogram dump',
+                'id': str(osd_id),
+                'format': 'json'
+            }
+            r, outb, outs = self.osd_command(cmd_dict)
+            # Check for invalid calls
+            if r != 0:
+                continue
+            else:
+                try:
+                    # This is where the histograms will land
+                    # if there are any
+                    dump = json.loads(outb)
+                    result['osd.'+osd_id] = dump
+                # Sometimes, json errors occur if
+                # you give it an empty string
+                except json.decoder.JSONDecodeError:
+                    continue
+
+        return result
+
+    def get_io_rate(self) -> dict:
+        return self.get('io_rate')
+
     def gather_crashinfo(self):
         crashlist = list()
         errno, crashids, err = self.remote('crash', 'ls')
@@ -763,6 +849,9 @@ class Module(MgrModule):
 
         if 'perf' in channels:
             report['perf_counters'] = self.gather_perf_counters()
+            report['stat_sum_per_pool'] = self.get_stat_sum_per_pool()
+            report['io_rate'] = self.get_io_rate()
+            report['osd_perf_histograms'] = self.get_osd_histograms()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
