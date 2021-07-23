@@ -3,6 +3,7 @@
 
 import errno
 import json
+import tempfile
 import time
 import unittest
 from datetime import datetime, timedelta
@@ -586,7 +587,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_sanitize_password(self):
         self.test_create_user()
         password = 'myPass\\n\\r\\n'
-        with open('/tmp/test_sanitize_password.txt', 'w+') as pwd_file:
+        with tempfile.TemporaryFile(mode='w+') as pwd_file:
             # Add new line separators (like some text editors when a file is saved).
             pwd_file.write('{}{}'.format(password, '\n\r\n\n'))
             pwd_file.seek(0)
