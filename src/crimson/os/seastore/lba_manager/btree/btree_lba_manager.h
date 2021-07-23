@@ -103,6 +103,12 @@ public:
     Transaction &t,
     CachedExtentRef extent) final;
 
+  update_le_mapping_ret update_mapping(
+    Transaction& t,
+    laddr_t laddr,
+    paddr_t prev_addr,
+    paddr_t paddr) final;
+
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
     extent_types_t type,

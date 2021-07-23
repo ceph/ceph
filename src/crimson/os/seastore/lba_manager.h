@@ -162,6 +162,18 @@ public:
     CachedExtentRef extent) = 0;
 
   /**
+   * delayed_update_mapping
+   *
+   * update lba mapping for delayed allocated extents
+   */
+  using update_le_mapping_iertr = base_iertr;
+  using update_le_mapping_ret = base_iertr::future<>;
+  virtual update_le_mapping_ret update_mapping(
+    Transaction& t,
+    laddr_t laddr,
+    paddr_t prev_addr,
+    paddr_t paddr) = 0;
+  /**
    * get_physical_extent_if_live
    *
    * Returns extent at addr/laddr if still live (if laddr
