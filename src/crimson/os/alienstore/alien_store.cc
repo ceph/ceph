@@ -17,7 +17,6 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/Context.h"
-#include "os/bluestore/BlueStore.h"
 #include "os/ObjectStore.h"
 #include "os/Transaction.h"
 
@@ -64,10 +63,12 @@ namespace crimson::os {
 
 using crimson::common::get_conf;
 
-AlienStore::AlienStore(const std::string& path,
+AlienStore::AlienStore(const std::string& type,
+                       const std::string& path,
                        const ConfigValues& values,
                        seastar::alien::instance& alien)
-  : path{path},
+  : type(type),
+    path{path},
     alien{alien}
 {
   cct = std::make_unique<CephContext>(CEPH_ENTITY_TYPE_OSD);
@@ -77,7 +78,10 @@ AlienStore::AlienStore(const std::string& path,
 
 seastar::future<> AlienStore::start()
 {
-  store = std::make_unique<BlueStore>(cct.get(), path);
+  store = ObjectStore::create(cct.get(), type, path);
+  if (!store) {
+    ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
+  }
   std::vector<uint64_t> cpu_cores = _parse_cpu_cores();
   // cores except the first "N_CORES_FOR_SEASTAR" ones will
   // be used for alien threads scheduling:

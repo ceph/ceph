@@ -3622,6 +3622,7 @@ options:
   - memstore
   - kstore
   - seastore
+  - cyanstore
   flags:
   - create
   with_legacy: true
