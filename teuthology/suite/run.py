@@ -121,6 +121,7 @@ class Run(object):
             archive_upload_key=config.archive_upload_key,
             suite_repo=config.get_ceph_qa_suite_git_url(),
             suite_relpath=self.args.suite_relpath,
+            flavor=self.args.flavor,
         )
         return self.build_base_config()
 
