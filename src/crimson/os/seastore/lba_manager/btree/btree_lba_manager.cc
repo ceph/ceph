@@ -338,50 +338,14 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
     ERRORT("{} has been invalidated", t, *extent);
   }
   assert(!extent->has_been_invalidated());
+  assert(!extent->is_logical());
 
   logger().debug(
     "{}: rewriting {}", 
     __func__,
     *extent);
 
-  if (extent->is_logical()) {
-    auto lextent = extent->cast<LogicalCachedExtent>();
-    cache.retire_extent(t, extent);
-    auto nlextent = cache.alloc_new_extent_by_type(
-      t,
-      lextent->get_type(),
-      lextent->get_length())->cast<LogicalCachedExtent>();
-    lextent->get_bptr().copy_out(
-      0,
-      lextent->get_length(),
-      nlextent->get_bptr().c_str());
-    nlextent->set_laddr(lextent->get_laddr());
-    nlextent->set_pin(lextent->get_pin().duplicate());
-
-    logger().debug(
-      "{}: rewriting {} into {}",
-      __func__,
-      *lextent,
-      *nlextent);
-
-    return update_mapping(
-      t,
-      lextent->get_laddr(),
-      [prev_addr = lextent->get_paddr(), addr = nlextent->get_paddr()](
-	const lba_map_val_t &in) {
-	lba_map_val_t ret = in;
-	ceph_assert(in.paddr == prev_addr);
-	ret.paddr = addr;
-	return ret;
-      }).si_then(
-	[nlextent](auto) {},
-	rewrite_extent_iertr::pass_further{},
-        /* ENOENT in particular should be impossible */
-	crimson::ct_error::assert_all{
-	  "Invalid error in BtreeLBAManager::rewrite_extent after update_mapping"
-	}
-      );
-  } else if (is_lba_node(*extent)) {
+  if (is_lba_node(*extent)) {
     auto c = get_context(t);
     return with_btree(
       c,
@@ -391,6 +355,33 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   } else {
     return rewrite_extent_iertr::now();
   }
+}
+
+BtreeLBAManager::update_le_mapping_ret
+BtreeLBAManager::update_mapping(
+  Transaction& t,
+  laddr_t laddr,
+  paddr_t prev_addr,
+  paddr_t addr)
+{
+  return update_mapping(
+    t,
+    laddr,
+    [prev_addr, addr](
+      const lba_map_val_t &in) {
+      assert(!addr.is_null());
+      lba_map_val_t ret = in;
+      ceph_assert(in.paddr == prev_addr);
+      ret.paddr = addr;
+      return ret;
+    }).si_then(
+      [](auto) {},
+      update_le_mapping_iertr::pass_further{},
+      /* ENOENT in particular should be impossible */
+      crimson::ct_error::assert_all{
+	"Invalid error in BtreeLBAManager::rewrite_extent after update_mapping"
+      }
+    );
 }
 
 BtreeLBAManager::get_physical_extent_if_live_ret

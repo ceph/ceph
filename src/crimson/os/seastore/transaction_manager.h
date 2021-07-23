@@ -511,6 +511,9 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
+  rewrite_extent_ret rewrite_logical_extent(
+    Transaction& t,
+    LogicalCachedExtentRef extent);
 public:
   // Testing interfaces
   auto get_segment_cleaner() {
