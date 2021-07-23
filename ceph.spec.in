@@ -215,7 +215,6 @@ BuildRequires:	libxml2-devel
 BuildRequires:	make
 BuildRequires:	ncurses-devel
 BuildRequires:	libicu-devel
-BuildRequires:	parted
 BuildRequires:	patch
 BuildRequires:	perl
 BuildRequires:	pkgconfig
@@ -800,6 +799,7 @@ Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	lvm2
 Requires:	sudo
 Requires:	libstoragemgmt
+Requires:	parted
 Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-setuptools
 %description osd
