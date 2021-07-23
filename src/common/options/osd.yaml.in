@@ -629,7 +629,7 @@ options:
   type: uint
   level: advanced
   desc: maximum number of in-flight client requests
-  default: 0
+  default: 256
   with_legacy: true
 - name: osd_crush_update_on_start
   type: bool
