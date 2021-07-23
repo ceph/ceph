@@ -129,7 +129,7 @@ libboost
     .. prompt:: bash $
 
        tar xjf boost_1_76_0.tar.bz2
-       git clone https://github.com/tchaikov/ceph-boost
+       git clone https://github.com/ceph/ceph-boost
        cp -ra ceph-boost/debian boost_1_76_0/
        export DEB_BUILD_OPTIONS='parallel=6 nodoc'
        dpkg-buildpackage -us -uc -b
@@ -140,7 +140,7 @@ libzbd
 libpmem
     packages `pmdk`_ . Please note, ``ndctl`` is one of the build dependencies of
     pmdk, for an updated debian packaging, please see
-    https://github.com/tchaikov/ceph-ndctl .
+    https://github.com/ceph/ceph-ndctl .
 
 .. _boost: https://www.boost.org
 .. _libzbd: https://github.com/westerndigitalcorporation/libzbd
