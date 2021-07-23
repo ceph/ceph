@@ -327,6 +327,7 @@ def test_alertmanager_spec_1():
     assert spec.service_type == 'alertmanager'
     assert isinstance(spec.user_data, dict)
     assert len(spec.user_data.keys()) == 0
+    assert spec.get_port_start() == [9093, 9094]
 
 
 def test_alertmanager_spec_2():
