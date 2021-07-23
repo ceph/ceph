@@ -58,8 +58,7 @@ function(build_jaeger)
   endif()
   include(BuildOpenTracing)
   build_opentracing()
-  include(Buildthrift)
-  build_thrift()
+  include(Findthrift)
 
   if(CMAKE_MAKE_PROGRAM MATCHES "make")
     # try to inherit command line arguments passed by parent "make" job
