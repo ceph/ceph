@@ -37,7 +37,8 @@ else:
     import logging
     logging.basicConfig(level=logging.DEBUG)
     logging.root.handlers[0].setLevel(logging.DEBUG)
-    os.environ['PATH'] = '{}:{}'.format(os.path.abspath('../../../../build/bin'),
+    build_dir = os.path.abspath('../../../../build')
+    os.environ['PATH'] = '{}:{}'.format(os.path.join(build_dir, 'bin'),
                                         os.environ['PATH'])
     import sys
 
@@ -48,7 +49,10 @@ else:
     from tests import mock  # type: ignore
 
     mgr = mock.Mock()
-    mgr.get_frontend_path.side_effect = lambda: os.path.abspath("./frontend/dist")
+    mgr.get_frontend_path.side_effect = \
+        lambda: os.path.join(build_dir,
+                             'src/pybind/mgr/dashboard',
+                             'frontend/dist')
 
 # DO NOT REMOVE: required for ceph-mgr to load a module
 from .module import Module, StandbyModule  # noqa: F401

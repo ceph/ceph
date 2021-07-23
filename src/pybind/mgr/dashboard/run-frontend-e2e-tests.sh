@@ -83,7 +83,7 @@ DASH_DIR=`pwd`
 cd ../../../../${BUILD_DIR}
 FULL_PATH_BUILD_DIR=`pwd`
 
-[[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
+[[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/frontend/node-env/bin/activate
 
 : ${CYPRESS_CACHE_FOLDER:="${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/cypress"}
 
