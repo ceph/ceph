@@ -493,6 +493,12 @@ int GroupSnapshot_to_group_snap_info2(
   return 0;
 }
 
+bool is_user_snapshot(const cls::rbd::GroupSnapshot &group_snap) {
+  auto ns = std::get_if<cls::rbd::UserGroupSnapshotNamespace>(
+      &group_snap.snapshot_namespace);
+  return ns != nullptr;
+}
+
 } // anonymous namespace
 
 template <typename I>
@@ -1182,7 +1188,7 @@ int Group<I>::snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
 
   cls::rbd::GroupSnapshot *group_snap = nullptr;
   for (auto &snap : snaps) {
-    if (snap.name == string(snap_name)) {
+    if (is_user_snapshot(snap) && snap.name == string(snap_name)) {
       group_snap = &snap;
       break;
     }
@@ -1223,7 +1229,7 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
 
   cls::rbd::GroupSnapshot group_snap;
   for (auto &snap : group_snaps) {
-    if (snap.name == old_snap_name) {
+    if (is_user_snapshot(snap) && snap.name == old_snap_name) {
       group_snap = snap;
       break;
     }
@@ -1346,7 +1352,7 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
 
   cls::rbd::GroupSnapshot *group_snap = nullptr;
   for (auto &snap : snaps) {
-    if (snap.name == string(snap_name)) {
+    if (is_user_snapshot(snap) && snap.name == string(snap_name)) {
       group_snap = &snap;
       break;
     }
