@@ -13,3 +13,8 @@ ExternalProject_Add(mgr-rook-client
   INSTALL_COMMAND "")
 
 add_dependencies(ceph-mgr mgr-rook-client)
+
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  DESTINATION ${CEPH_INSTALL_DATADIR}/mgr
+  ${mgr_module_install_excludes}
+  REGEX "rook-client-python.*" EXCLUDE)
