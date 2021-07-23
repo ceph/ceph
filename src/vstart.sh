@@ -1128,7 +1128,7 @@ start_ganesha() {
     GANESHA_PORT=$(($CEPH_PORT + 4000))
     local ganesha=0
     test_user="$cluster_id"
-    pool_name="nfs-ganesha"
+    pool_name=".nfs"
     namespace=$cluster_id
     url="rados://$pool_name/$namespace/conf-nfs.$test_user"
 
@@ -1171,7 +1171,7 @@ start_ganesha() {
         }
 
         RADOS_KV {
-           pool = $pool_name;
+           pool = '$pool_name';
            namespace = $namespace;
            UserId = $test_user;
            nodeid = $name;
