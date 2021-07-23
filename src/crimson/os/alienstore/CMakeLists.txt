@@ -58,7 +58,8 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/FreelistManager.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/HybridAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/StupidAllocator.cc
-  ${PROJECT_SOURCE_DIR}/src/os/bluestore/BitmapAllocator.cc)
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/BitmapAllocator.cc
+  ${PROJECT_SOURCE_DIR}/src/os/memstore/MemStore.cc)
 if(WITH_ZBD)
   list(APPEND alien_store_srcs
     ${PROJECT_SOURCE_DIR}/src/os/bluestore/zoned_types.cc
