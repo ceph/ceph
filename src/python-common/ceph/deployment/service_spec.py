@@ -1020,7 +1020,7 @@ class MonitoringSpec(ServiceSpec):
                  preview_only: bool = False,
                  port: Optional[int] = None,
                  ):
-        assert service_type in ['grafana', 'node-exporter', 'prometheus']
+        assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager']
 
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
@@ -1040,13 +1040,14 @@ class MonitoringSpec(ServiceSpec):
         else:
             return {'prometheus': 9095,
                     'node-exporter': 9100,
+                    'alertmanager': 9093,
                     'grafana': 3000}[self.service_type]
 
 
 yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
 
 
-class AlertManagerSpec(ServiceSpec):
+class AlertManagerSpec(MonitoringSpec):
     def __init__(self,
                  service_type: str = 'alertmanager',
                  service_id: Optional[str] = None,
@@ -1062,7 +1063,7 @@ class AlertManagerSpec(ServiceSpec):
         super(AlertManagerSpec, self).__init__(
             'alertmanager', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks)
+            preview_only=preview_only, config=config, networks=networks, port=port)
 
         # Custom configuration.
         #
@@ -1079,16 +1080,9 @@ class AlertManagerSpec(ServiceSpec):
         #                        added to the default receivers'
         #                        <webhook_configs> configuration.
         self.user_data = user_data or {}
-        self.port = port
 
     def get_port_start(self) -> List[int]:
         return [self.get_port(), 9094]
-
-    def get_port(self) -> int:
-        if self.port:
-            return self.port
-        else:
-            return 9093
 
     def validate(self) -> None:
         super(AlertManagerSpec, self).validate()
