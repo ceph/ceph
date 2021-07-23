@@ -4,9 +4,11 @@ import json
 import logging
 from textwrap import dedent
 from ceph_volume import decorators, process
+from ceph_volume.util import disk
 
 
 logger = logging.getLogger(__name__)
+
 
 def direct_report(devices):
     """
@@ -18,6 +20,40 @@ def direct_report(devices):
     _list = List([])
     return _list.generate(devices)
 
+def _get_bluestore_info(dev):
+    out, err, rc = process.call([
+        'ceph-bluestore-tool', 'show-label',
+        '--dev', dev], verbose_on_failure=False)
+    if rc:
+        # ceph-bluestore-tool returns an error (below) if device is not bluestore OSD
+        #   > unable to read label for <device>: (2) No such file or directory
+        # but it's possible the error could be for a different reason (like if the disk fails)
+        logger.debug('assuming device {} is not BlueStore; ceph-bluestore-tool failed to get info from device: {}\n{}'.format(dev, out, err))
+        return None
+    oj = json.loads(''.join(out))
+    if dev not in oj:
+        # should be impossible, so warn
+        logger.warning('skipping device {} because it is not reported in ceph-bluestore-tool output: {}'.format(dev, out))
+        return None
+    try:
+        if oj[dev]['description'] != 'main':
+            # ignore non-main devices, for now
+            logger.info('ignoring non-main device {}'.format(dev))
+            return None
+        whoami = oj[dev]['whoami']
+        return {
+            'type': 'bluestore',
+            'osd_id': int(whoami),
+            'osd_uuid': oj[dev]['osd_uuid'],
+            'ceph_fsid': oj[dev]['ceph_fsid'],
+            'device': dev
+        }
+    except KeyError as e:
+        # this will appear for devices that have a bluestore header but aren't valid OSDs
+        # for example, due to incomplete rollback of OSDs: https://tracker.ceph.com/issues/51869
+        logger.error('device {} does not have all BlueStore data needed to be a valid OSD: {}\n{}'.format(dev, out, e))
+        return None
+
 
 class List(object):
 
@@ -27,64 +63,53 @@ class List(object):
         self.argv = argv
 
     def generate(self, devs=None):
-        if not devs:
-            logger.debug('Listing block devices via lsblk...')
+        logger.debug('Listing block devices via lsblk...')
+
+        if devs is None or devs == []:
             devs = []
-            # adding '--inverse' allows us to get the mapper devices list in that command output.
-            # not listing root devices containing partitions shouldn't have side effect since we are
-            # in `ceph-volume raw` context.
-            #
-            #   example:
-            #   running `lsblk --paths --nodeps --output=NAME --noheadings` doesn't allow to get the mapper list
-            #   because the output is like following :
-            #
-            #   $ lsblk --paths --nodeps --output=NAME --noheadings
-            #   /dev/sda
-            #   /dev/sdb
-            #   /dev/sdc
-            #   /dev/sdd
-            #
-            #   the dmcrypt mappers are hidden because of the `--nodeps` given they are displayed as a dependency.
-            #
-            #   $ lsblk --paths --output=NAME --noheadings
-            #   /dev/sda
-            #   |-/dev/mapper/ceph-3b52c90d-6548-407d-bde1-efd31809702f-sda-block-dmcrypt
-            #   `-/dev/mapper/ceph-3b52c90d-6548-407d-bde1-efd31809702f-sda-db-dmcrypt
-            #   /dev/sdb
-            #   /dev/sdc
-            #   /dev/sdd
-            #
-            #   adding `--inverse` is a trick to get around this issue, the counterpart is that we can't list root devices if they contain
-            #   at least one partition but this shouldn't be an issue in `ceph-volume raw` context given we only deal with raw devices.
+            # If no devs are given initially, we want to list ALL devices including children and
+            # parents. Parent disks with child partitions may be the appropriate device to return if
+            # the parent disk has a bluestore header, but children may be the most appropriate
+            # devices to return if the parent disk does not have a bluestore header.
             out, err, ret = process.call([
-                'lsblk', '--paths', '--nodeps', '--output=NAME', '--noheadings', '--inverse'
+                'lsblk', '--paths', '--output=NAME', '--noheadings',
             ])
             assert not ret
             devs = out
+
         result = {}
+        logger.debug('inspecting devices: {}'.format(devs))
         for dev in devs:
-            logger.debug('Examining %s' % dev)
-            # bluestore?
-            out, err, ret = process.call([
-                'ceph-bluestore-tool', 'show-label',
-                '--dev', dev], verbose_on_failure=False)
-            if ret:
-                logger.debug('No label on %s' % dev)
+            info = disk.lsblk(dev, abspath=True)
+            # Linux kernels built with CONFIG_ATARI_PARTITION enabled can falsely interpret
+            # bluestore's on-disk format as an Atari partition table. These false Atari partitions
+            # can be interpreted as real OSDs if a bluestore OSD was previously created on the false
+            # partition. See https://tracker.ceph.com/issues/52060 for more info. If a device has a
+            # parent, it is a child. If the parent is a valid bluestore OSD, the child will only
+            # exist if it is a phantom Atari partition, and the child should be ignored. If the
+            # parent isn't bluestore, then the child could be a valid bluestore OSD. If we fail to
+            # determine whether a parent is bluestore, we should err on the side of not reporting
+            # the child so as not to give a false negative.
+            if 'PKNAME' in info and info['PKNAME'] != "":
+                parent = info['PKNAME']
+                try:
+                    if disk.has_bluestore_label(parent):
+                        logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(dev, parent),
+                                        'device is likely a phantom Atari partition. device info: {}'.format(info)))
+                        continue
+                except OSError as e:
+                    logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(dev),
+                                  'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
+                    continue
+
+            bs_info = _get_bluestore_info(dev)
+            if bs_info is None:
+                # None is also returned in the rare event that there is an issue reading info from
+                # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
+                logger.info('device {} does not have BlueStore information'.format(dev))
                 continue
-            oj = json.loads(''.join(out))
-            if dev not in oj:
-                continue
-            if oj[dev]['description'] != 'main':
-                # ignore non-main devices, for now
-                continue
-            whoami = oj[dev]['whoami']
-            result[oj[dev]['osd_uuid']] = {
-                'type': 'bluestore',
-                'osd_id': int(whoami),
-                'osd_uuid': oj[dev]['osd_uuid'],
-                'ceph_fsid': oj[dev]['ceph_fsid'],
-                'device': dev
-            }
+            result[bs_info['osd_uuid']] = bs_info
+
         return result
 
     @decorators.needs_root
