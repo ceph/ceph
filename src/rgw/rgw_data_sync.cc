@@ -4212,6 +4212,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   rgw_bucket_sync_pipe& sync_pipe;
   RGWBucketSyncFlowManager::pipe_rules_ref rules;
   rgw_bucket_shard& bs;
+  string shard_status_oid;
   const rgw_raw_obj& bucket_status_obj;
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
   bilog_list_result extended_result;
@@ -4237,6 +4238,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
   RGWBucketIncSyncShardMarkerTrack marker_tracker;
+  librados::IoCtx ioctx;
 
 public:
   RGWBucketShardIncrementalSyncCR(RGWDataSyncCtx *_sc,
@@ -4250,7 +4252,7 @@ public:
                                   RGWObjVersionTracker& objv_tracker,
                                   ceph::real_time* stable_timestamp)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs),
+      sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs), shard_status_oid(shard_status_oid),
       bucket_status_obj(_bucket_status_obj), lease_cr(std::move(lease_cr)),
       sync_info(sync_info), generation(generation), zone_id(sync_env->svc->zone->get_zone().id),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "inc_sync",
@@ -4512,6 +4514,20 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
         drain_all();
         return set_cr_error(retcode);
       }
+    }
+
+    yield {
+      const rgw_pool& log_pool = sync_env->store->get_zone()->get_params().log_pool;
+      int r = rgw_init_ioctx(dpp, sync_env->store->getRados()->get_rados_handle(), log_pool, ioctx);
+      if (r < 0) {
+        ldout(cct, 20) << "ERROR: failed to open log pool: " << log_pool << " ret=" << cpp_strerror(-r) << dendl;
+        return r;
+      }
+      call(new RGWRadosRemoveOidCR(sync_env->store, std::move(ioctx), shard_status_oid, nullptr));
+    }
+    if (retcode < 0) {
+      ldout(cct, 20) << "failed to remove shard status object: " << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
     }
 
     return set_cr_done();
