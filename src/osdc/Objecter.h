@@ -2304,11 +2304,7 @@ public:
       watch_pending_async.pop_front();
     }
 
-    explicit LingerOp(Objecter *o, uint64_t linger_id)
-      : objecter(o), linger_id(linger_id),
-	watch_lock(ceph::make_shared_mutex(
-		     fmt::format("LingerOp::watch_lock #{}", linger_id))) {}
-
+    LingerOp(Objecter *o, uint64_t linger_id);
     const LingerOp& operator=(const LingerOp& r) = delete;
     LingerOp(const LingerOp& o) = delete;
 
