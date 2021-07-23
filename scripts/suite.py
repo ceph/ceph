@@ -49,9 +49,9 @@ Standard arguments:
                               use 'none' to bypass kernel task.
                               [default: distro]
   -f <flavor>, --flavor <flavor>
-                              The kernel flavor to run against: ('basic',
-                              'gcov', 'notcmalloc')
-                              [default: basic]
+                              The ceph packages shaman flavor to run with:
+                              ('default', 'crimson', 'notcmalloc', 'jaeger')
+                              [default=default]
   -t <branch>, --teuthology-branch <branch>
                               The teuthology branch to run against.
                               Default value is determined in the next order.
