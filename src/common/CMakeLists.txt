@@ -189,6 +189,7 @@ target_compile_definitions(common-common-objs PRIVATE
   "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
+compile_with_fmt(common-common-objs)
 add_dependencies(common-common-objs legacy-option-headers)
 
 set(common_mountcephfs_srcs
