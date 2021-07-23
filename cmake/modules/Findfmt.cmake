@@ -35,9 +35,27 @@ mark_as_advanced(
   fmt_VERSION_STRING)
 
 if(fmt_FOUND AND NOT (TARGET fmt::fmt))
-  add_library(fmt::fmt UNKNOWN IMPORTED)
-  set_target_properties(fmt::fmt PROPERTIES
+  add_library(fmt-header-only INTERFACE)
+  set_target_properties(fmt-header-only PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${fmt_INCLUDE_DIR}"
+    INTERFACE_COMPILE_DEFINITIONS FMT_HEADER_ONLY=1
+    INTERFACE_COMPILE_FEATURES cxx_std_11)
+
+  add_library(fmt UNKNOWN IMPORTED GLOBAL)
+  set_target_properties(fmt PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${fmt_INCLUDE_DIR}"
+    INTERFACE_COMPILE_FEATURES cxx_std_11
     IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
     IMPORTED_LOCATION "${fmt_LIBRARY}")
+
+  if(WITH_FMT_HEADER_ONLY)
+    # please note, this is different from how upstream defines fmt::fmt.
+    # in order to force 3rd party libraries to link against fmt-header-only if
+    # WITH_FMT_HEADER_ONLY is ON, we have to point fmt::fmt to fmt-header-only
+    # in this case.
+    add_library(fmt::fmt ALIAS fmt-header-only)
+  else()
+    add_library(fmt::fmt ALIAS fmt)
+  endif()
+
 endif()
