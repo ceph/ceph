@@ -869,61 +869,6 @@ class IscsiServiceSpec(ServiceSpec):
 yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
 
 
-class AlertManagerSpec(ServiceSpec):
-    def __init__(self,
-                 service_type: str = 'alertmanager',
-                 service_id: Optional[str] = None,
-                 placement: Optional[PlacementSpec] = None,
-                 unmanaged: bool = False,
-                 preview_only: bool = False,
-                 user_data: Optional[Dict[str, Any]] = None,
-                 config: Optional[Dict[str, str]] = None,
-                 networks: Optional[List[str]] = None,
-                 port: Optional[int] = None,
-                 ):
-        assert service_type == 'alertmanager'
-        super(AlertManagerSpec, self).__init__(
-            'alertmanager', service_id=service_id,
-            placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks)
-
-        # Custom configuration.
-        #
-        # Example:
-        # service_type: alertmanager
-        # service_id: xyz
-        # user_data:
-        #   default_webhook_urls:
-        #   - "https://foo"
-        #   - "https://bar"
-        #
-        # Documentation:
-        # default_webhook_urls - A list of additional URL's that are
-        #                        added to the default receivers'
-        #                        <webhook_configs> configuration.
-        self.user_data = user_data or {}
-        self.port = port
-
-    def get_port_start(self) -> List[int]:
-        return [self.get_port(), 9094]
-
-    def get_port(self) -> int:
-        if self.port:
-            return self.port
-        else:
-            return 9093
-
-    def validate(self) -> None:
-        super(AlertManagerSpec, self).validate()
-
-        if self.port == 9094:
-            raise SpecValidationError(
-                'Port 9094 is reserved for AlertManager cluster listen address')
-
-
-yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
-
-
 class IngressSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'ingress',
@@ -1099,3 +1044,58 @@ class MonitoringSpec(ServiceSpec):
 
 
 yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
+
+
+class AlertManagerSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'alertmanager',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 user_data: Optional[Dict[str, Any]] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 port: Optional[int] = None,
+                 ):
+        assert service_type == 'alertmanager'
+        super(AlertManagerSpec, self).__init__(
+            'alertmanager', service_id=service_id,
+            placement=placement, unmanaged=unmanaged,
+            preview_only=preview_only, config=config, networks=networks)
+
+        # Custom configuration.
+        #
+        # Example:
+        # service_type: alertmanager
+        # service_id: xyz
+        # user_data:
+        #   default_webhook_urls:
+        #   - "https://foo"
+        #   - "https://bar"
+        #
+        # Documentation:
+        # default_webhook_urls - A list of additional URL's that are
+        #                        added to the default receivers'
+        #                        <webhook_configs> configuration.
+        self.user_data = user_data or {}
+        self.port = port
+
+    def get_port_start(self) -> List[int]:
+        return [self.get_port(), 9094]
+
+    def get_port(self) -> int:
+        if self.port:
+            return self.port
+        else:
+            return 9093
+
+    def validate(self) -> None:
+        super(AlertManagerSpec, self).validate()
+
+        if self.port == 9094:
+            raise SpecValidationError(
+                'Port 9094 is reserved for AlertManager cluster listen address')
+
+
+yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
