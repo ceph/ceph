@@ -194,8 +194,9 @@ def test_osd_unmanaged():
     dg_spec = ServiceSpec.from_json(osd_spec)
     assert dg_spec.unmanaged == True
 
-def test_yaml():
-    y = """service_type: crash
+
+@pytest.mark.parametrize("y",
+"""service_type: crash
 service_name: crash
 placement:
   host_pattern: '*'
@@ -247,14 +248,79 @@ service_type: grafana
 service_name: grafana
 spec:
   port: 1234
-"""
+---
+service_type: ingress
+service_id: rgw.foo
+service_name: ingress.rgw.foo
+placement:
+  hosts:
+  - host1
+  - host2
+  - host3
+spec:
+  backend_service: rgw.foo
+  frontend_port: 8080
+  monitor_port: 8081
+  virtual_ip: 192.168.20.1/24
+---
+service_type: nfs
+service_id: mynfs
+service_name: nfs.mynfs
+spec:
+  port: 1234
+---
+service_type: iscsi
+service_id: iscsi
+service_name: iscsi.iscsi
+networks:
+- ::0/8
+spec:
+  api_user: api_user
+  pool: pool
+  trusted_ip_list:
+  - ::1
+  - ::2
+---
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
 
-    for y in y.split('---\n'):
-        data = yaml.safe_load(y)
-        object = ServiceSpec.from_json(data)
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+""".split('---\n'))
+def test_yaml(y):
+    data = yaml.safe_load(y)
+    object = ServiceSpec.from_json(data)
 
-        assert yaml.dump(object) == y
-        assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+    assert yaml.dump(object) == y
+    assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+
 
 def test_alertmanager_spec_1():
     spec = AlertManagerSpec()
