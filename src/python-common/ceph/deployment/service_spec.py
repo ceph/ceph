@@ -1045,3 +1045,6 @@ class MonitoringSpec(ServiceSpec):
             return {'prometheus': 9095,
                     'node-exporter': 9100,
                     'grafana': 3000}[self.service_type]
+
+
+yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
