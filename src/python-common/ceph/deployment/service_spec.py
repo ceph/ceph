@@ -618,7 +618,8 @@ class ServiceSpec(object):
         if self.service_id:
             ret['service_id'] = self.service_id
         ret['service_name'] = self.service_name()
-        ret['placement'] = self.placement.to_json()
+        if self.placement.to_json():
+            ret['placement'] = self.placement.to_json()
         if self.unmanaged:
             ret['unmanaged'] = self.unmanaged
         if self.networks:
@@ -1095,3 +1096,6 @@ class MonitoringSpec(ServiceSpec):
             return {'prometheus': 9095,
                     'node-exporter': 9100,
                     'grafana': 3000}[self.service_type]
+
+
+yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)

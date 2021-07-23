@@ -234,6 +234,19 @@ spec:
   objectstore: bluestore
   wal_devices:
     model: NVME-QQQQ-987
+---
+service_type: alertmanager
+service_name: alertmanager
+spec:
+  port: 1234
+  user_data:
+    default_webhook_urls:
+    - foo
+---
+service_type: grafana
+service_name: grafana
+spec:
+  port: 1234
 """
 
     for y in y.split('---\n'):
