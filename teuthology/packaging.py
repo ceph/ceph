@@ -879,8 +879,6 @@ class ShamanProject(GitbuilderProject):
     @property
     def _search_uri(self):
         flavor = self.flavor
-        if flavor == 'basic':
-            flavor = 'default'
         req_obj = OrderedDict()
         req_obj['status'] = 'ready'
         req_obj['project'] = self.project

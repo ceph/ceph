@@ -37,12 +37,12 @@ class TestSuiteOnline(object):
             suite.create_initial_config('s', None, 'master', 't',
                                         'bogus_kernel_branch', 'f', 'd', 'm')
 
-    def test_config_bogus_kernel_flavor(self):
+    def test_config_bogus_flavor(self):
         # Don't attempt to send email
         config.results_email = None
         with raises(suite.ScheduleFailError):
             suite.create_initial_config('s', None, 'master', 't', 'k',
-                                        'bogus_kernel_flavor', 'd', 'm')
+                                        'bogus_flavor', 'd', 'm')
 
     def test_config_bogus_ceph_branch(self):
         # Don't attempt to send email

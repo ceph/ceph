@@ -259,7 +259,7 @@ def install_hadoop(ctx, config):
                 format = "jar",
                 dist = "precise",
                 arch = "x86_64",
-                flavor = "basic",
+                flavor = "default",
                 branch = "master")
 
         run.wait(
