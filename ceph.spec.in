@@ -1348,6 +1348,9 @@ cmake .. \
 %else
     -DBOOST_J:STRING=%{_smp_build_ncpus} \
 %endif
+%if 0%{?rhel}
+    -DWITH_FMT_HEADER_ONLY:BOOL=ON \
+%endif
     -DWITH_GRAFANA:BOOL=ON
 
 %if %{with cmake_verbose_logging}
