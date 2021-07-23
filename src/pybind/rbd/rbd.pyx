@@ -4642,7 +4642,7 @@ written." % (self.name, ret, length))
                 if mirror_uuid == '':
                     local_status = site_status
                 else:
-                    site_statuses['mirror_uuid'] = mirror_uuid
+                    site_status['mirror_uuid'] = mirror_uuid
                     site_statuses += site_status
             status = {
                 'name': decode_cstr(c_status.name),
