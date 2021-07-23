@@ -16,6 +16,7 @@ import { ClickOutsideModule } from 'ng-click-outside';
 import { ChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
+import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { AlertPanelComponent } from './alert-panel/alert-panel.component';
@@ -91,7 +92,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     DocComponent,
     Copy2ClipboardButtonComponent,
     DownloadButtonComponent,
-    FormButtonPanelComponent
+    FormButtonPanelComponent,
+    MotdComponent
   ],
   providers: [],
   exports: [
@@ -117,7 +119,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
     DocComponent,
     Copy2ClipboardButtonComponent,
     DownloadButtonComponent,
-    FormButtonPanelComponent
+    FormButtonPanelComponent,
+    MotdComponent
   ]
 })
 export class ComponentsModule {}
