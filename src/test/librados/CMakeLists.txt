@@ -12,7 +12,7 @@ target_link_libraries(radostest PUBLIC
   GTest::GTest
   ceph-common
   json_spirit
-  ${GSSAPI_LIBRARIES} ${OpenLDAP_LIBRARIES} ${EXTRALIBS})
+  ${GSSAPI_LIBRARIES} ${EXTRALIBS})
 add_library(radostest-cxx STATIC
   testcase_cxx.cc
   test_cxx.cc
@@ -181,7 +181,7 @@ add_executable(unittest_librados
   )
 add_ceph_unittest(unittest_librados)
 target_link_libraries(unittest_librados librados ${BLKID_LIBRARIES}
-	${GSSAPI_LIBRARIES} ${OpenLDAP_LIBRARIES})
+	${GSSAPI_LIBRARIES})
 
 # unittest_librados_config
 add_executable(unittest_librados_config
@@ -190,7 +190,7 @@ add_executable(unittest_librados_config
 add_ceph_unittest(unittest_librados_config)
 target_link_libraries(unittest_librados_config
   librados
-  ${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES} ${OpenLDAP_LIBRARIES})
+  ${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES})
 
 # Removing this test. We can't shove it into Finisher as it's not a
 # Context any more, and wrapping it to adapt it would be less fair.
