@@ -173,14 +173,6 @@ target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 target_include_directories(rgw_common PRIVATE "${LUA_INCLUDE_DIR}")
 target_include_directories(rgw_common SYSTEM PRIVATE "${ICU_INCLUDE_DIRS}")
 
-
-set(librgw_kmip_srcs
-  rgw_kmip_client_impl.cc)
-
-add_library(rgw_kmip OBJECT ${librgw_kmip_srcs})
-
-target_include_directories(rgw_kmip PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
-
 target_include_directories(rgw_common PRIVATE
   $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
 target_compile_definitions(rgw_common PRIVATE
@@ -298,11 +290,16 @@ add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock spawn)
 
-add_library(radosgw SHARED ${radosgw_srcs} ${rgw_a_srcs} rgw_main.cc
-  $<TARGET_OBJECTS:rgw_kmip>)
+add_library(radosgw SHARED
+  ${radosgw_srcs}
+  ${rgw_a_srcs}
+  rgw_main.cc
+  rgw_kmip_client_impl.cc)
 
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
-target_include_directories(radosgw PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+target_include_directories(radosgw
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
 target_link_libraries(radosgw
