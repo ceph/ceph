@@ -188,7 +188,6 @@ target_link_libraries(rgw_common
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
     ${LUA_LIBRARIES}
-    ${OpenLDAP_LIBRARIES}
   PUBLIC
     spawn)
 target_include_directories(rgw_common
@@ -207,6 +206,11 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
     PRIVATE
       RabbitMQ::RabbitMQ
       OpenSSL::SSL)
+endif()
+if(WITH_OPENLDAP)
+  target_link_libraries(rgw_common
+    PRIVATE
+      OpenLDAP::OpenLDAP)
 endif()
 if(WITH_RADOSGW_LUA_PACKAGES)
   target_link_libraries(rgw_common

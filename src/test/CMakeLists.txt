@@ -1,7 +1,7 @@
 include(AddCephTest)
 
 set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} 
-    ${GSSAPI_LIBRARIES} ${OpenLDAP_LIBRARIES} ${CMAKE_DL_LIBS})
+    ${GSSAPI_LIBRARIES} ${CMAKE_DL_LIBS})
 
 if(WIN32)
   # Needed by Boost.
@@ -386,9 +386,11 @@ add_executable(test_rgw_ldap
 target_link_libraries(test_rgw_ldap
   librados
   ceph-common
-  ${OpenLDAP_LIBRARIES}
-  ${UNITTEST_LIBS}
-  )
+  ${UNITTEST_LIBS})
+if(WITH_OPENLDAP)
+  target_link_libraries(test_rgw_ldap
+    OpenLDAP::OpenLDAP)
+endif()
 endif(${WITH_RADOSGW})
 
 # ceph_multi_stress_watch
