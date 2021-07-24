@@ -326,6 +326,7 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
 find_package(fmt 6.0.0 QUIET)
 if(fmt_FOUND)
   include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
@@ -387,6 +388,15 @@ set(CMAKE_EXTRA_INCLUDE_FILES "sys/time.h")
 CHECK_TYPE_SIZE(suseconds_t SUSECONDS_T)
 unset(CMAKE_EXTRA_INCLUDE_FILES)
 
+function(compile_with_fmt target)
+  get_target_property(fmt_compile_definitions
+    fmt::fmt INTERFACE_COMPILE_DEFINITIONS)
+  if(fmt_compile_definitions)
+    target_compile_definitions(${target} PUBLIC
+      ${fmt_compile_definitions})
+  endif()
+endfunction()
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
@@ -424,6 +434,7 @@ endif()
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
+compile_with_fmt(common-objs)
 add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
