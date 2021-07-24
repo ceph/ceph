@@ -49,10 +49,11 @@ class GrafanaService(CephadmService):
             cert, pkey = create_self_signed_cert('Ceph', 'cephadm')
             self.mgr.set_store('grafana_crt', cert)
             self.mgr.set_store('grafana_key', pkey)
-            self.mgr.check_mon_command({
-                'prefix': 'dashboard set-grafana-api-ssl-verify',
-                'value': 'false',
-            })
+            if 'dashboard' in self.mgr.get('mgr_map')['modules']:
+                self.mgr.check_mon_command({
+                    'prefix': 'dashboard set-grafana-api-ssl-verify',
+                    'value': 'false',
+                })
 
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
