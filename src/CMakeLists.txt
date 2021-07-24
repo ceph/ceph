@@ -438,7 +438,7 @@ compile_with_fmt(common-objs)
 add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
-  find_package(thrift 0.13.0)
+  find_package(thrift 0.13.0 REQUIRED)
   find_package(yaml-cpp 0.6.0 REQUIRED)
   include(BuildJaeger)
   list(APPEND jaeger_base
@@ -461,6 +461,7 @@ if(WITH_JAEGER)
   list(APPEND jaeger_libs
     ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0
     ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0.6.1
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1
     ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0)
   install(FILES ${jaeger_libs}
     DESTINATION ${CMAKE_INSTALL_LIBDIR})
