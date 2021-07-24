@@ -164,23 +164,54 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_kafka.cc)
 endif()
 
-add_library(rgw_common OBJECT ${librgw_common_srcs})
-
-target_include_directories(rgw_common SYSTEM PUBLIC "services")
-target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
-target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
-target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
-target_include_directories(rgw_common PRIVATE "${LUA_INCLUDE_DIR}")
-target_include_directories(rgw_common SYSTEM PRIVATE "${ICU_INCLUDE_DIRS}")
-
-target_include_directories(rgw_common PRIVATE
-  $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
-target_compile_definitions(rgw_common PRIVATE
-  $<TARGET_PROPERTY:spawn,INTERFACE_COMPILE_DEFINITIONS>)
-target_include_directories(rgw_kmip PRIVATE
-  $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
-target_compile_definitions(rgw_kmip PRIVATE
-  $<TARGET_PROPERTY:spawn,INTERFACE_COMPILE_DEFINITIONS>)
+add_library(rgw_common STATIC ${librgw_common_srcs})
+target_link_libraries(rgw_common
+  PRIVATE
+    ceph-common
+    cls_2pc_queue_client
+    cls_cmpomap_client
+    cls_lock_client
+    cls_log_client
+    cls_otp_client
+    cls_refcount_client
+    cls_rgw_client
+    cls_rgw_gc_client
+    cls_timeindex_client
+    cls_user_client
+    cls_version_client
+    librados
+    rt
+    fmt::fmt
+    ICU::uc
+    OATH::OATH
+    dmclock::dmclock
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
+    ${LUA_LIBRARIES}
+    ${OPENLDAP_LIBRARIES}
+  PUBLIC
+    spawn)
+target_include_directories(rgw_common
+  SYSTEM PUBLIC "services"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PRIVATE "${LUA_INCLUDE_DIR}")
+if(WITH_RADOSGW_KAFKA_ENDPOINT)
+  # used by rgw_kafka.cc
+  target_link_libraries(rgw_common
+    PRIVATE
+      RDKafka::RDKafka)
+endif()
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  # used by rgw_amqp.cc
+  target_link_libraries(rgw_common
+    PRIVATE
+      RabbitMQ::RabbitMQ
+      OpenSSL::SSL)
+endif()
+if(WITH_RADOSGW_LUA_PACKAGES)
+  target_link_libraries(rgw_common
+    PRIVATE Boost::filesystem StdFilesystem::filesystem)
+endif()
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -226,8 +257,7 @@ set_source_files_properties(rgw_iam_policy.cc PROPERTIES
 
 
 add_library(rgw_a STATIC
-    ${rgw_a_srcs}
-    $<TARGET_OBJECTS:rgw_common>)
+    ${rgw_a_srcs})
 
 target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
@@ -243,39 +273,22 @@ endif()
 
 target_link_libraries(rgw_a
   PRIVATE
-  librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
-  cls_log_client cls_timeindex_client cls_version_client cls_cmpomap_client
-  cls_user_client cls_rgw_gc_client cls_2pc_queue_client ceph-common common_utf8 global
-  ${CURL_LIBRARIES}
-  ${EXPAT_LIBRARIES}
-  ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
-  ICU::uc
-  OATH::OATH)
+    common_utf8 global
+    ${CRYPTO_LIBS}
+    ${LUA_LIBRARIES}
+    OATH::OATH
+  PUBLIC
+    rgw_common
+    spawn)
 
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc
   target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
 endif()
 
-target_link_libraries(rgw_a PRIVATE ${LUA_LIBRARIES})
-target_link_libraries(rgw_a PUBLIC spawn)
-
 set(rgw_libs rgw_a)
-if(WITH_RADOSGW_AMQP_ENDPOINT)
-  # used by rgw_amqp.cc
-  list(APPEND rgw_libs RabbitMQ::RabbitMQ)
-  list(APPEND rgw_libs OpenSSL::SSL)
-endif()
-if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  # used by rgw_kafka.cc
-  list(APPEND rgw_libs RDKafka::RDKafka)
-endif()
 
 list(APPEND rgw_libs ${LUA_LIBRARIES})
-
-if(WITH_RADOSGW_LUA_PACKAGES)
-  list(APPEND rgw_libs Boost::filesystem StdFilesystem::filesystem)
-endif()
 
 set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
@@ -336,6 +349,7 @@ target_link_libraries(radosgw-admin ${rgw_libs} librados
   cls_log_client cls_timeindex_client neorados_cls_fifo
   cls_version_client cls_user_client
   global ${LIB_RESOLV}
+  OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
