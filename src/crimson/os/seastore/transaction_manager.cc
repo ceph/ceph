@@ -16,12 +16,14 @@ TransactionManager::TransactionManager(
   SegmentCleanerRef _segment_cleaner,
   JournalRef _journal,
   CacheRef _cache,
-  LBAManagerRef _lba_manager)
+  LBAManagerRef _lba_manager,
+  ExtentPlacementManagerRef&& epm)
   : segment_manager(_segment_manager),
     segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
-    journal(std::move(_journal))
+    journal(std::move(_journal)),
+    epm(std::move(epm))
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -232,10 +234,15 @@ TransactionManager::submit_transaction_direct(
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   DEBUGT("about to prepare", tref);
-  return trans_intr::make_interruptible(
-    tref.get_handle().enter(write_pipeline.prepare)
-  ).then_interruptible([this, FNAME, &tref]() mutable
-		       -> submit_transaction_iertr::future<> {
+
+  return epm->delayed_alloc_or_ool_write(tref)
+  .handle_error_interruptible(
+    crimson::ct_error::input_output_error::pass_further(),
+    crimson::ct_error::assert_all("invalid error")
+  ).si_then([&tref, this] {
+    return tref.get_handle().enter(write_pipeline.prepare);
+  }).si_then([this, FNAME, &tref]() mutable
+	      -> submit_transaction_iertr::future<> {
     auto record = cache->prepare_record(tref);
 
     tref.get_handle().maybe_release_collection_lock();
@@ -295,7 +302,7 @@ TransactionManager::rewrite_logical_extent(
 
   auto lextent = extent->cast<LogicalCachedExtent>();
   cache->retire_extent(t, extent);
-  auto nlextent = cache->alloc_new_extent_by_type(
+  auto nlextent = epm->alloc_new_extent_by_type(
     t,
     lextent->get_type(),
     lextent->get_length())->cast<LogicalCachedExtent>();
@@ -312,6 +319,11 @@ TransactionManager::rewrite_logical_extent(
     *lextent,
     *nlextent);
 
+  if (need_delayed_allocation(extent->backend_type)) {
+    // hold old poffset for later mapping updating assert check
+    nlextent->set_paddr(lextent->get_paddr());
+    return rewrite_extent_iertr::now();
+  }
   return lba_manager->update_mapping(
     t,
     lextent->get_laddr(),

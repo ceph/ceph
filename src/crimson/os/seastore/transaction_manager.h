@@ -27,6 +27,7 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
 
 namespace crimson::os::seastore {
 class Journal;
@@ -69,7 +70,8 @@ public:
     SegmentCleanerRef segment_cleaner,
     JournalRef journal,
     CacheRef cache,
-    LBAManagerRef lba_manager);
+    LBAManagerRef lba_manager,
+    ExtentPlacementManagerRef&& epm);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -497,6 +499,7 @@ private:
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
+  ExtentPlacementManagerRef epm;
 
   WritePipeline write_pipeline;
 
