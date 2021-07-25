@@ -329,7 +329,7 @@ public:
   /// hint for allocators
   ool_placement_hint_t hint;
 
-  bool is_relative() const {
+  bool is_inline() const {
     return poffset.is_relative();
   }
 private:
