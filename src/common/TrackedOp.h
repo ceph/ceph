@@ -22,6 +22,10 @@
 #include "include/spinlock.h"
 #include "msg/Message.h"
 
+#ifdef HAVE_JAEGER
+#include "common/tracer.h"
+#endif
+
 #define OPTRACKER_PREALLOC_EVENTS 20
 
 class TrackedOp;
@@ -286,6 +290,38 @@ public:
   ZTracer::Trace pg_trace;
   ZTracer::Trace store_trace;
   ZTracer::Trace journal_trace;
+
+#ifdef HAVE_JAEGER
+  jspan osd_parent_span = nullptr;
+  void set_osd_parent_span(jspan& span) {
+    if(osd_parent_span){
+      jaeger_tracing::finish_span(osd_parent_span);
+    }
+    osd_parent_span = move(span);
+  }
+#else
+  void set_osd_parent_span(...) {}
+#endif
+
+  void mark_tracepoint(const char* name) {
+#ifdef HAVE_JAEGER
+      if (osd_parent_span) {
+        jaeger_tracing::child_span(name, osd_parent_span);
+      }
+#endif
+  }
+
+  void mark_tracepoint(const char* name,
+                       std::map<const char*, int64_t> kvs) {
+#ifdef HAVE_JAEGER
+      if (osd_parent_span) {
+        auto sp = jaeger_tracing::child_span(name, osd_parent_span);
+        for (auto i : kvs) {
+          sp->Log({{i.first, i.second}});
+        }
+      }
+#endif
+  }
 
   virtual ~TrackedOp() {}
 

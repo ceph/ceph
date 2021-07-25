@@ -1559,6 +1559,9 @@ public:
 
     inline void set_state(state_t s) {
        state = s;
+       if (tracer) {
+         tracer->mark_tracepoint(get_state_name());
+       }
     }
     inline state_t get_state() {
       return state;
@@ -1614,6 +1617,8 @@ public:
     bool tracing = false;
 #endif
 
+    TrackedOpRef  tracer = nullptr;
+
     explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o,
 			  std::list<Context*> *on_commits)
       : ch(c),
@@ -1626,6 +1631,9 @@ public:
       }
     }
     ~TransContext() {
+      if (tracer) {
+        tracer->mark_tracepoint("txc destruct");
+      }
       delete deferred_txn;
     }
 
