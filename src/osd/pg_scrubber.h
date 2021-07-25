@@ -54,6 +54,8 @@ class ReplicaReservations {
   void send_reject();
 
  public:
+  std::string m_log_msg_prefix;
+
   /**
    *  quietly discard all knowledge about existing reservations. No messages
    *  are sent to peers.
@@ -69,18 +71,19 @@ class ReplicaReservations {
   void handle_reserve_grant(OpRequestRef op, pg_shard_t from);
 
   void handle_reserve_reject(OpRequestRef op, pg_shard_t from);
+
+  std::ostream& gen_prefix(std::ostream& out) const;
 };
 
 /**
  *  wraps the local OSD scrub resource reservation in an RAII wrapper
  */
 class LocalReservation {
-  PG* m_pg;
   OSDService* m_osds;
   bool m_holding_local_reservation{false};
 
  public:
-  LocalReservation(PG* pg, OSDService* osds);
+  LocalReservation(OSDService* osds);
   ~LocalReservation();
   bool is_reserved() const { return m_holding_local_reservation; }
 };
@@ -89,18 +92,21 @@ class LocalReservation {
  *  wraps the OSD resource we are using when reserved as a replica by a scrubbing master.
  */
 class ReservedByRemotePrimary {
+  const PgScrubber* m_scrubber; ///< we will be using its gen_prefix()
   PG* m_pg;
   OSDService* m_osds;
   bool m_reserved_by_remote_primary{false};
   const epoch_t m_reserved_at;
 
  public:
-  ReservedByRemotePrimary(PG* pg, OSDService* osds, epoch_t epoch);
+  ReservedByRemotePrimary(const PgScrubber* scrubber, PG* pg, OSDService* osds, epoch_t epoch);
   ~ReservedByRemotePrimary();
   [[nodiscard]] bool is_reserved() const { return m_reserved_by_remote_primary; }
 
   /// compare the remembered reserved-at epoch to the current interval
   [[nodiscard]] bool is_stale() const;
+
+  std::ostream& gen_prefix(std::ostream& out) const;
 };
 
 /**
@@ -401,6 +407,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   [[nodiscard]] bool are_all_maps_available() const final;
 
   std::string dump_awaited_maps() const final;
+
+  std::ostream& gen_prefix(std::ostream& out) const final;
 
  protected:
   bool state_test(uint64_t m) const { return m_pg->state_test(m); }
