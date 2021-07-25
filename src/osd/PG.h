@@ -176,8 +176,6 @@ class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend struct NamedState;
   friend class PeeringState;
   friend class PgScrubber;
-  friend class Scrub::LocalReservation;  // dout()-only friendship
-  friend class Scrub::ReservedByRemotePrimary;  //  dout()-only friendship
 
 public:
   const pg_shard_t pg_whoami;

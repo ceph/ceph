@@ -10,16 +10,17 @@
 #include "osd/PrimaryLogPG.h"
 #include "scrub_machine.h"
 
-#define dout_context (m_pg->get_cct())
+#define dout_context (m_osds->cct)
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, this->m_pg)
+#define dout_prefix _prefix(_dout, this)
 
 using std::vector;
 
-template <class T> static ostream& _prefix(std::ostream* _dout, T* t)
+template <class T>
+static ostream& _prefix(std::ostream* _dout, T* t)
 {
-  return t->gen_prefix(*_dout) << " PrimaryLog scrubber pg(" << t->pg_id << ") ";
+  return t->gen_prefix(*_dout);
 }
 
 using namespace Scrub;
