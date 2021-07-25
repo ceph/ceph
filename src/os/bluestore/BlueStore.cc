@@ -11272,7 +11272,7 @@ BlueStore::TransContext *BlueStore::_txc_create(
 
   if (osd_op) {
     osd_op->mark_tracepoint("txc create", {{"txc seq", txc->seq}});
-    txc->tracer = osd_op;
+    txc->tracer_op = osd_op;
   }
 
   return txc;
@@ -11668,8 +11668,8 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
     auto start = mono_clock::now();
 #endif
 
-    if (txc->tracer) {
-      txc->tracer->mark_tracepoint("db async submit");
+    if (txc->tracer_op) {
+      txc->tracer_op->mark_tracepoint("db async submit");
     }
 
     int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
@@ -12208,8 +12208,8 @@ void BlueStore::_kv_sync_thread()
       ceph_assert(r == 0);
 
       for (auto txc : kv_committing) {
-        if (txc->tracer) {
-          txc->tracer->mark_tracepoint("db sync submit",
+        if (txc->tracer_op) {
+          txc->tracer_op->mark_tracepoint("db sync submit",
                                        {{"kv_commiting size",
                                          kv_committing.size()}});
         }
@@ -12767,8 +12767,8 @@ int BlueStore::queue_transactions(
 
   _txc_finalize_kv(txc, txc->t);
 
-  if (txc->tracer) {
-    txc->tracer->mark_tracepoint("txc encode finished");
+  if (txc->tracer_op) {
+    txc->tracer_op->mark_tracepoint("txc encode finished");
   }
 
   if (handle)
@@ -12822,8 +12822,8 @@ int BlueStore::queue_transactions(
     }
   }
 
-  if (txc->tracer) {
-    txc->tracer->mark_tracepoint("txc applied");
+  if (txc->tracer_op) {
+    txc->tracer_op->mark_tracepoint("txc applied");
   }
 
   log_latency("submit_transact",
