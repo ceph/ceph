@@ -2707,7 +2707,8 @@ public:
     uint64_t offset,
     size_t len,
     ceph::buffer::list& bl,
-    uint32_t op_flags = 0) override;
+    uint32_t op_flags = 0,
+    TrackedOpRef op = TrackedOpRef()) override;
 
 private:
 
@@ -2790,7 +2791,8 @@ private:
     size_t len,
     ceph::buffer::list& bl,
     uint32_t op_flags = 0,
-    uint64_t retry_count = 0);
+    uint64_t retry_count = 0,
+    TrackedOpRef op = TrackedOpRef());
 
   int _do_readv(
     Collection *c,

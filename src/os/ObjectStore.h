@@ -475,7 +475,8 @@ public:
      uint64_t offset,
      size_t len,
      ceph::buffer::list& bl,
-     uint32_t op_flags = 0) = 0;
+     uint32_t op_flags = 0,
+     TrackedOpRef op = TrackedOpRef()) = 0;
 
   /**
    * fiemap -- get extent std::map of data of an object

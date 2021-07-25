@@ -5798,7 +5798,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       new ReadFinisher(osd_op));
   } else {
     int r = pgbackend->objects_read_sync(
-      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
+      ctx->op);
     // whole object?  can we verify the checksum?
     if (r >= 0 && op.extent.offset == 0 &&
         (uint64_t)r == oi.size && oi.is_data_digest()) {

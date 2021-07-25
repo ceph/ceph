@@ -311,7 +311,8 @@ int MemStore::read(
   uint64_t offset,
   size_t len,
   ceph::buffer::list& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  TrackedOpRef op)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << " "

@@ -3404,7 +3404,8 @@ int FileStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  TrackedOpRef op)
 {
   int got;
   tracepoint(objectstore, read_enter, ch->cid.c_str(), offset, len);

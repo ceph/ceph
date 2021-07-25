@@ -621,7 +621,8 @@ public:
     uint64_t offset,
     size_t len,
     ceph::buffer::list& bl,
-    uint32_t op_flags = 0) override;
+    uint32_t op_flags = 0,
+    TrackedOpRef op = TrackedOpRef()) override;
   int _do_fiemap(int fd, uint64_t offset, size_t len,
                  std::map<uint64_t, uint64_t> *m);
   int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
