@@ -1539,6 +1539,23 @@ public:
       return "???";
     }
 
+    std::string_view get_state_name_sv() {
+      switch (state) {
+      case STATE_PREPARE: return "prepare";
+      case STATE_AIO_WAIT: return "aio_wait";
+      case STATE_IO_DONE: return "io_done";
+      case STATE_KV_QUEUED: return "kv_queued";
+      case STATE_KV_SUBMITTED: return "kv_submitted";
+      case STATE_KV_DONE: return "kv_done";
+      case STATE_DEFERRED_QUEUED: return "deferred_queued";
+      case STATE_DEFERRED_CLEANUP: return "deferred_cleanup";
+      case STATE_DEFERRED_DONE: return "deferred_done";
+      case STATE_FINISHING: return "finishing";
+      case STATE_DONE: return "done";
+      }
+      return "???";
+    }
+
 #if defined(WITH_LTTNG)
     const char *get_state_latency_name(int state) {
       switch (state) {
@@ -1560,7 +1577,7 @@ public:
     inline void set_state(state_t s) {
        state = s;
        if (tracer_op) {
-         tracer_op->mark_tracepoint(get_state_name());
+         tracer_op->mark_tracepoint(get_state_name_sv());
        }
     }
     inline state_t get_state() {
