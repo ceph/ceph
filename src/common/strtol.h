@@ -89,7 +89,7 @@ T strict_iec_cast(std::string_view str, std::string *err);
 uint64_t strict_sistrtoll(const char *str, std::string *err);
 
 template<typename T>
-T strict_si_cast(const char *str, std::string *err);
+T strict_si_cast(std::string_view str, std::string *err);
 
 /* On enter buf points to the end of the buffer, e.g. where the least
  * significant digit of the input number will be printed. Returns pointer to
