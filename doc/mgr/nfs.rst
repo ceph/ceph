@@ -21,8 +21,8 @@ see :ref:`nfs-ganesha-config`.
 
 .. note:: Starting with Ceph Pacific, the ``nfs`` mgr module must be enabled.
 
-NFS Cluster managemnt
-=====================
+NFS Cluster management
+======================
 
 Create NFS Ganesha Cluster
 --------------------------
