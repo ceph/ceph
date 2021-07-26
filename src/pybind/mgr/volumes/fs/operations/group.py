@@ -13,6 +13,7 @@ from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
 
+
 class Group(GroupTemplate):
     # Reserved subvolume group name which we use in paths for subvolumes
     # that are not assigned to a group (i.e. created with group=None)
@@ -87,6 +88,7 @@ class Group(GroupTemplate):
                 return []
             raise
 
+
 def create_group(fs, vol_spec, groupname, pool, mode, uid, gid):
     """
     create a subvolume group.
@@ -141,6 +143,7 @@ def create_group(fs, vol_spec, groupname, pool, mode, uid, gid):
             e = VolumeException(-e.args[0], e.args[1])
         raise e
 
+
 def remove_group(fs, vol_spec, groupname):
     """
     remove a subvolume group.
@@ -157,6 +160,7 @@ def remove_group(fs, vol_spec, groupname):
         if e.args[0] == errno.ENOENT:
             raise VolumeException(-errno.ENOENT, "subvolume group '{0}' does not exist".format(groupname))
         raise VolumeException(-e.args[0], e.args[1])
+
 
 @contextmanager
 def open_group(fs, vol_spec, groupname):
@@ -180,6 +184,7 @@ def open_group(fs, vol_spec, groupname):
         else:
             raise VolumeException(-e.args[0], e.args[1])
     yield group
+
 
 @contextmanager
 def open_group_unique(fs, vol_spec, groupname, c_group, c_groupname):
