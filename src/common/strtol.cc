@@ -282,13 +282,3 @@ template long strict_si_cast<long>(std::string_view str, std::string *err);
 template long long strict_si_cast<long long>(std::string_view str, std::string *err);
 template uint64_t strict_si_cast<uint64_t>(std::string_view str, std::string *err);
 template uint32_t strict_si_cast<uint32_t>(std::string_view str, std::string *err);
-
-uint64_t strict_sistrtoll(std::string_view str, std::string *err)
-{
-  return strict_si_cast<uint64_t>(str, err);
-}
-
-uint64_t strict_sistrtoll(const char *str, std::string *err)
-{
-  return strict_si_cast<uint64_t>(str, err);
-}
