@@ -2,6 +2,7 @@ import pytest
 from copy import deepcopy
 from ceph_volume.util import device
 from ceph_volume.api import lvm as api
+from mock.mock import patch, mock_open
 
 
 class TestDevice(object):
@@ -258,6 +259,14 @@ class TestDevice(object):
         assert not disk.available
         assert "Has BlueStore device label" in disk.rejected_reasons
 
+    def test_reject_device_with_oserror(self, monkeypatch, patch_bluestore_label, device_info):
+        patch_bluestore_label.side_effect = OSError('test failure')
+        lsblk = {"TYPE": "disk"}
+        device_info(lsblk=lsblk)
+        disk = device.Device("/dev/sda")
+        assert not disk.available
+        assert "Failed to determine if device is BlueStore" in disk.rejected_reasons
+
     @pytest.mark.usefixtures("device_info_not_ceph_disk_member",
                              "disable_kernel_queries")
     def test_is_not_ceph_disk_member_lsblk(self, patch_bluestore_label):
@@ -348,6 +357,16 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk._get_device_id() == 'ID_VENDOR_ID_MODEL_ID_SCSI_SERIAL'
 
+    def test_has_bluestore_label(self):
+        # patch device.Device __init__ function to do nothing since we want to only test the
+        # low-level behavior of has_bluestore_label
+        with patch.object(device.Device, "__init__", lambda self, path, with_lsm=False: None):
+            disk = device.Device("/dev/sda")
+            disk.abspath = "/dev/sda"
+            with patch('builtins.open', mock_open(read_data=b'bluestore block device\n')):
+                assert disk.has_bluestore_label
+            with patch('builtins.open', mock_open(read_data=b'not a bluestore block device\n')):
+                assert not disk.has_bluestore_label
 
 
 class TestDeviceEncryption(object):

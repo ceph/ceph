@@ -80,11 +80,11 @@ class TestValidDevice(object):
     def setup(self):
         self.validator = arg_validators.ValidDevice()
 
-    def test_path_is_valid(self, fake_call):
+    def test_path_is_valid(self, fake_call, patch_bluestore_label):
         result = self.validator('/')
         assert result.abspath == '/'
 
-    def test_path_is_invalid(self, fake_call):
+    def test_path_is_invalid(self, fake_call, patch_bluestore_label):
         with pytest.raises(argparse.ArgumentError):
             self.validator('/device/does/not/exist')
 
@@ -117,4 +117,3 @@ class TestValidFraction(object):
     def test_fraction_is_greater_one(self, fake_call):
         with pytest.raises(argparse.ArgumentError):
             self.validator('1.1')
-
