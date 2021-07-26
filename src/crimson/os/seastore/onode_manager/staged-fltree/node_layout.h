@@ -65,7 +65,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return ret;
   }
 
-  static eagain_future<typename parent_t::fresh_impl_t> allocate(
+  static eagain_ifuture<typename parent_t::fresh_impl_t> allocate(
       context_t c, bool is_level_tail, level_t level) {
     LOG_PREFIX(OTree::Layout::allocate);
     extent_len_t extent_size;
@@ -75,15 +75,15 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       extent_size = c.vb.get_internal_node_size();
     }
     return c.nm.alloc_extent(c.t, extent_size
-    ).handle_error(
-      eagain_ertr::pass_further{},
+    ).handle_error_interruptible(
+      eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
           [FNAME, c, extent_size, is_level_tail, level] {
         ERRORT("EIO -- extent_size={}, is_level_tail={}, level={}",
                c.t, extent_size, is_level_tail, level);
         ceph_abort("fatal error");
       })
-    ).safe_then([is_level_tail, level](auto extent) {
+    ).si_then([is_level_tail, level](auto extent) {
       assert(extent->is_initial_pending());
       auto mut = extent->get_mutable();
       node_stage_t::bootstrap_extent(
@@ -304,16 +304,16 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return normalize(std::move(left_last_pos));
   }
 
-  eagain_future<NodeExtentMutable>
+  eagain_ifuture<NodeExtentMutable>
   rebuild_extent(context_t c) override {
-    return extent.rebuild(c).safe_then([this] (auto mut) {
+    return extent.rebuild(c).si_then([this] (auto mut) {
       // addr may change
       build_name();
       return mut;
     });
   }
 
-  eagain_future<> retire_extent(context_t c) override {
+  eagain_ifuture<> retire_extent(context_t c) override {
     return extent.retire(c);
   }
 

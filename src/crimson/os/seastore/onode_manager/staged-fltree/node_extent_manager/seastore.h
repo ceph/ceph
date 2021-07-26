@@ -21,7 +21,7 @@ namespace crimson::os::seastore::onode {
 class SeastoreSuper final: public Super {
  public:
   SeastoreSuper(Transaction& t, RootNodeTracker& tracker,
-                laddr_t root_addr, InterruptedTransactionManager& tm)
+                laddr_t root_addr, TransactionManager& tm)
     : Super(t, tracker), root_addr{root_addr}, tm{tm} {}
   ~SeastoreSuper() override = default;
  protected:
@@ -36,7 +36,7 @@ class SeastoreSuper final: public Super {
   }
  private:
   laddr_t root_addr;
-  InterruptedTransactionManager tm;
+  TransactionManager &tm;
 };
 
 class SeastoreNodeExtent final: public NodeExtent {
@@ -74,15 +74,15 @@ class SeastoreNodeExtent final: public NodeExtent {
 
 class TransactionManagerHandle : public NodeExtentManager {
  public:
-  TransactionManagerHandle(InterruptedTransactionManager tm) : tm{tm} {}
-  InterruptedTransactionManager tm;
+  TransactionManagerHandle(TransactionManager &tm) : tm{tm} {}
+  TransactionManager &tm;
 };
 
 template <bool INJECT_EAGAIN=false>
 class SeastoreNodeExtentManager final: public TransactionManagerHandle {
  public:
   SeastoreNodeExtentManager(
-      InterruptedTransactionManager tm, laddr_t min, double p_eagain)
+      TransactionManager &tm, laddr_t min, double p_eagain)
       : TransactionManagerHandle(tm), addr_min{min}, p_eagain{p_eagain} {
     if constexpr (INJECT_EAGAIN) {
       assert(p_eagain > 0.0 && p_eagain < 1.0);
@@ -100,7 +100,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
  protected:
   bool is_read_isolated() const override { return true; }
 
-  read_ertr::future<NodeExtentRef> read_extent(
+  read_iertr::future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr) override {
     TRACET("reading at {:#x} ...", t, addr);
     if constexpr (INJECT_EAGAIN) {
@@ -110,7 +110,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       }
     }
     return tm.read_extent<SeastoreNodeExtent>(t, addr
-    ).safe_then([addr, &t](auto&& e) -> read_ertr::future<NodeExtentRef> {
+    ).si_then([addr, &t](auto&& e) -> read_iertr::future<NodeExtentRef> {
       TRACET("read {}B at {:#x} -- {}",
              t, e->get_length(), e->get_laddr(), *e);
       if (t.is_conflicted()) {
@@ -121,11 +121,11 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       assert(e->is_valid());
       assert(e->get_laddr() == addr);
       std::ignore = addr;
-      return read_ertr::make_ready_future<NodeExtentRef>(e);
+      return read_iertr::make_ready_future<NodeExtentRef>(e);
     });
   }
 
-  alloc_ertr::future<NodeExtentRef> alloc_extent(
+  alloc_iertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, extent_len_t len) override {
     TRACET("allocating {}B ...", t, len);
     if constexpr (INJECT_EAGAIN) {
@@ -135,7 +135,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       }
     }
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
-    ).safe_then([len, &t](auto extent) {
+    ).si_then([len, &t](auto extent) {
       DEBUGT("allocated {}B at {:#x} -- {}",
              t, extent->get_length(), extent->get_laddr(), *extent);
       if (!extent->is_initial_pending()) {
@@ -149,7 +149,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     });
   }
 
-  retire_ertr::future<> retire_extent(
+  retire_iertr::future<> retire_extent(
       Transaction& t, NodeExtentRef _extent) override {
     LogicalCachedExtentRef extent = _extent;
     auto addr = extent->get_laddr();
@@ -163,13 +163,13 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return crimson::ct_error::eagain::make();
       }
     }
-    return tm.dec_ref(t, extent).safe_then([addr, len, &t] (unsigned cnt) {
+    return tm.dec_ref(t, extent).si_then([addr, len, &t] (unsigned cnt) {
       assert(cnt == 0);
       TRACET("retired {}B at {:#x} ...", t, len, addr);
     });
   }
 
-  getsuper_ertr::future<Super::URef> get_super(
+  getsuper_iertr::future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
     TRACET("get root ...", t);
     if constexpr (INJECT_EAGAIN) {
@@ -178,7 +178,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return crimson::ct_error::eagain::make();
       }
     }
-    return tm.read_onode_root(t).safe_then([this, &t, &tracker](auto root_addr) {
+    return tm.read_onode_root(t).si_then([this, &t, &tracker](auto root_addr) {
       TRACET("got root {:#x}", t, root_addr);
       return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
     });

@@ -90,8 +90,8 @@ class NodeImpl {
   virtual std::tuple<match_stage_t, search_position_t> erase(const search_position_t&) = 0;
   virtual std::tuple<match_stage_t, std::size_t> evaluate_merge(NodeImpl&) = 0;
   virtual search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, extent_len_t) = 0;
-  virtual eagain_future<NodeExtentMutable> rebuild_extent(context_t) = 0;
-  virtual eagain_future<> retire_extent(context_t) = 0;
+  virtual eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t) = 0;
+  virtual eagain_ifuture<> retire_extent(context_t) = 0;
   virtual search_position_t make_tail() = 0;
 
   virtual node_stats_t get_stats() const = 0;
@@ -179,7 +179,7 @@ class InternalNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static eagain_future<fresh_impl_t> allocate(context_t, field_type_t, bool, level_t);
+  static eagain_ifuture<fresh_impl_t> allocate(context_t, field_type_t, bool, level_t);
 
   static InternalNodeImplURef load(NodeExtentRef, field_type_t);
 
@@ -259,7 +259,7 @@ class LeafNodeImpl : public NodeImpl {
       return {std::move(impl), mut};
     }
   };
-  static eagain_future<fresh_impl_t> allocate(context_t, field_type_t, bool);
+  static eagain_ifuture<fresh_impl_t> allocate(context_t, field_type_t, bool);
 
   static LeafNodeImplURef load(NodeExtentRef, field_type_t);
 
