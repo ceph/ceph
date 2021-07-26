@@ -74,6 +74,42 @@ service.
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
 
+Ingress
+-------
+
+The core *nfs* service will deploy one or more nfs-ganesha daemons,
+each of which will provide a working NFS endpoint.  The IP for each
+NFS endpoint will depend on which host the nfs-ganesha daemons are
+deployed.  By default, daemons are placed semi-randomly, but users can
+also explicitly control where daemons are placed; see
+:ref:`orchestrator-cli-placement-spec`.
+
+When a cluster is created with ``--ingress``, an *ingress* service is
+additionally deployed to provide load balancing and high-availability
+for the NFS servers.  A virtual IP is used to provide a known, stable
+NFS endpoint that all clients can use to mount.  Ceph will take care
+of the details of NFS redirecting traffic on the virtual IP to the
+appropriate backend NFS servers, and redeploying NFS servers when they
+fail.
+
+Show NFS Cluster IP(s)
+----------------------
+
+To examine an NFS cluster's IP endpoints, including the IPs for the individual NFS
+daemons, and the virtual IP (if any) for the ingress service,
+
+.. code:: bash
+
+    $ ceph nfs cluster info [<cluster_id>]
+
+.. note:: This will not work with the rook backend. Instead, expose the port with
+   the kubectl patch command and fetch the port details with kubectl get services
+   command::
+
+    $ kubectl patch service -n rook-ceph -p '{"spec":{"type": "NodePort"}}' rook-ceph-nfs-<cluster-name>-<node-id>
+    $ kubectl get services -n rook-ceph rook-ceph-nfs-<cluster-name>-<node-id>
+
+
 Delete NFS Ganesha Cluster
 --------------------------
 
