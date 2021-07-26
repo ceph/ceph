@@ -363,7 +363,6 @@ int RocksDBStore::ParseOptionsFromStringStatic(
 {
   // keep aligned with func tryInterpret
   const set<string> need_interp_keys = {"compaction_threads", "flusher_threads", "compact_on_mount", "disableWAL"};
-  int r;
   rocksdb::Status status;
   std::unordered_map<std::string, std::string> str_map;
   status = StringToMap(opt_str, &str_map);
@@ -377,6 +376,7 @@ int RocksDBStore::ParseOptionsFromStringStatic(
     string this_opt = it->first + "=" + it->second;
     rocksdb::Status status =
       rocksdb::GetOptionsFromString(opt, this_opt, &opt);
+    int r = 0;
     if (!status.ok()) {
       if (interp != nullptr) {
 	r = interp(it->first, it->second, opt);
