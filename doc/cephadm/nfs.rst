@@ -59,6 +59,7 @@ The specification can then be applied by running the following command:
 
    ceph orch apply -i nfs.yaml
 
+.. _cephadm-ha-nfs:
 
 High-availability NFS
 =====================

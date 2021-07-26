@@ -92,6 +92,13 @@ of the details of NFS redirecting traffic on the virtual IP to the
 appropriate backend NFS servers, and redeploying NFS servers when they
 fail.
 
+Enabling ingress via the ``ceph nfs cluster create`` command deploys a
+simple ingress configuration with the most common configuration
+options.  Ingress can also be added to an existing NFS service (e.g.,
+one created without the ``--ingress`` flag), and the basic NFS service can
+also be modified after the fact to include non-default options, by modifying
+the services directly.  For more information, see :ref:`cephadm-ha-nfs`.
+
 Show NFS Cluster IP(s)
 ----------------------
 
