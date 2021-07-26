@@ -340,7 +340,7 @@ static void set_err_msg(std::string *sink, std::string msg)
 /*
  * Dump either the full user info or a subset to a formatter.
  *
- * NOTE: It is the caller's respnsibility to ensure that the
+ * NOTE: It is the caller's responsibility to ensure that the
  * formatter is flushed at the correct time.
  */
 
@@ -455,6 +455,43 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   f->close_section();
 }
 
+static int user_add_helper(RGWUserAdminOpState& op_state, std::string *err_msg)
+{
+  int ret = 0;
+  const rgw_user& uid = op_state.get_user_id();
+  std::string user_email = op_state.get_user_email();
+  std::string display_name = op_state.get_display_name();
+
+  // fail if the user exists already
+  if (op_state.has_existing_user()) {
+    if (op_state.found_by_email) {
+      set_err_msg(err_msg, "email: " + user_email +
+          " is the email address of an existing user");
+      ret = -ERR_EMAIL_EXIST;
+    } else if (op_state.found_by_key) {
+      set_err_msg(err_msg, "duplicate key provided");
+      ret = -ERR_KEY_EXIST;
+    } else {
+      set_err_msg(err_msg, "user: " + uid.to_str() + " exists");
+      ret = -EEXIST;
+    }
+    return ret;
+  }
+
+  // fail if the user_info has already been populated
+  if (op_state.is_populated()) {
+    set_err_msg(err_msg, "cannot overwrite already populated user");
+    return -EEXIST;
+  }
+
+  // fail if the display name was not included
+  if (display_name.empty()) {
+    set_err_msg(err_msg, "no display name specified");
+    return -EINVAL;
+  }
+
+  return ret;
+}
 
 RGWAccessKeyPool::RGWAccessKeyPool(RGWUser* usr)
 {
@@ -1060,7 +1097,7 @@ int RGWSubUserPool::check_op(RGWUserAdminOpState& op_state,
   }
 
   if (op_state.get_subuser_perm() == RGW_PERM_INVALID) {
-    set_err_msg(err_msg, "invaild subuser access");
+    set_err_msg(err_msg, "invalid subuser access");
     return -EINVAL;
   }
 
@@ -1576,28 +1613,22 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
 
 int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
-  bool same_id;
-  bool populated;
-  rgw_user& op_id = op_state.get_user_id();
+  int ret = 0;
+  const rgw_user& uid = op_state.get_user_id();
 
-  RGWUserInfo user_info;
-
-  same_id = (user_id.compare(op_id) == 0);
-  populated = is_populated();
-
-  if (op_id.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid.compare(RGW_USER_ANON_ID) == 0) {
     set_err_msg(err_msg, "unable to perform operations on the anonymous user");
     return -EINVAL;
   }
 
-  if (populated && !same_id) {
-    set_err_msg(err_msg, "user id mismatch, operation id: " + op_id.to_str()
+  if (is_populated() && user_id.compare(uid) != 0) {
+    set_err_msg(err_msg, "user id mismatch, operation id: " + uid.to_str()
             + " does not match: " + user_id.to_str());
 
     return -EINVAL;
   }
 
-  int ret = rgw_validate_tenant_name(op_id.tenant);
+  ret = rgw_validate_tenant_name(uid.tenant);
   if (ret) {
     set_err_msg(err_msg,
 		"invalid tenant only alphanumeric and _ characters are allowed");
@@ -1737,46 +1768,12 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 			 optional_yield y)
 {
-  std::string subprocess_msg;
-  int ret = 0;
-  bool defer_user_update = true;
-
-  RGWUserInfo user_info;
-
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   std::string user_email = op_state.get_user_email();
   std::string display_name = op_state.get_display_name();
 
-  // fail if the user exists already
-  if (op_state.has_existing_user()) {
-    if (op_state.found_by_email) {
-      set_err_msg(err_msg, "email: " + user_email +
-		  " is the email address an existing user");
-      ret = -ERR_EMAIL_EXIST;
-    } else if (op_state.found_by_key) {
-      set_err_msg(err_msg, "duplicate key provided");
-      ret = -ERR_KEY_EXIST;
-    } else {
-      set_err_msg(err_msg, "user: " + op_state.user_id.to_str() + " exists");
-      ret = -EEXIST;
-    }
-    return ret;
-  }
-
-  // fail if the user_info has already been populated
-  if (op_state.is_populated()) {
-    set_err_msg(err_msg, "cannot overwrite already populated user");
-    return -EEXIST;
-  }
-
-  // fail if the display name was not included
-  if (display_name.empty()) {
-    set_err_msg(err_msg, "no display name specified");
-    return -EINVAL;
-  }
-
-		
   // set the user info
+  RGWUserInfo user_info;
   user_id = uid;
   user_info.user_id = user_id;
   user_info.display_name = display_name;
@@ -1833,13 +1830,15 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
   op_state.set_populated();
 
   // update the helper objects
-  ret = init_members(op_state);
+  int ret = init_members(op_state);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to initialize user");
     return ret;
   }
 
   // see if we need to add an access key
+  std::string subprocess_msg;
+  bool defer_user_update = true;
   if (op_state.has_key_op()) {
     ret = keys.add(dpp, op_state, &subprocess_msg, defer_user_update, y);
     if (ret < 0) {
@@ -1864,11 +1863,14 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
   return 0;
 }
 
-
 int RGWUser::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
 {
   std::string subprocess_msg;
-  int ret;
+  int ret = user_add_helper(op_state, &subprocess_msg);
+  if (ret != 0) {
+    set_err_msg(err_msg, "unable to parse parameters, " + subprocess_msg);
+    return ret;
+  }
 
   ret = check_op(op_state, &subprocess_msg);
   if (ret < 0) {
@@ -2141,14 +2143,7 @@ int RGWUser::modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
 
   ret = check_op(op_state, &subprocess_msg);
   if (ret < 0) {
-    if (is_populated() && (user_id.compare(op_state.get_user_id()) != 0)) {
-      set_err_msg(err_msg, "unable to create user " + user_id.to_str()
-		  + " because user id " + op_state.get_user_id().to_str()
-		  + " already exists with email "
-		  + op_state.get_user_email());
-    } else {
-      set_err_msg(err_msg, "unable to parse parameters, " + subprocess_msg);
-    }
+    set_err_msg(err_msg, "unable to parse parameters, " + subprocess_msg);
     return ret;
   }
 
