@@ -150,13 +150,13 @@ int Option::parse_value(
   }
 
   if (type == Option::TYPE_INT) {
-    int64_t f = strict_si_cast<int64_t>(val.c_str(), error_message);
+    int64_t f = strict_si_cast<int64_t>(val, error_message);
     if (!error_message->empty()) {
       return -EINVAL;
     }
     *out = f;
   } else if (type == Option::TYPE_UINT) {
-    uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
+    uint64_t f = strict_si_cast<uint64_t>(val, error_message);
     if (!error_message->empty()) {
       return -EINVAL;
     }
