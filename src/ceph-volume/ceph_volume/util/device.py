@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import os
 from functools import total_ordering
-from ceph_volume import sys_info, process
+from ceph_volume import sys_info
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
+
+
+logger = logging.getLogger(__name__)
+
 
 report_template = """
 {dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
@@ -350,12 +355,17 @@ class Device(object):
 
     @property
     def has_bluestore_label(self):
-        out, err, ret = process.call([
-            'ceph-bluestore-tool', 'show-label',
-            '--dev', self.abspath], verbose_on_failure=False)
-        if ret:
-            return False
-        return True
+        isBluestore = False
+        bluestoreDiskSignature = 'bluestore block device' # 22 bytes long
+
+        # throws OSError on failure
+        with open(self.abspath, "rb") as fd:
+            # read first 22 bytes looking for bluestore disk signature
+            signature = fd.read(22)
+            if signature.decode('ascii', 'replace') == bluestoreDiskSignature:
+                isBluestore = True
+
+        return isBluestore
 
     @property
     def is_mapper(self):
@@ -478,8 +488,16 @@ class Device(object):
             rejected.append("Device type is not acceptable. It should be raw device or partition")
         if self.is_ceph_disk_member:
             rejected.append("Used by ceph-disk")
-        if self.has_bluestore_label:
-            rejected.append('Has BlueStore device label')
+
+        try:
+            if self.has_bluestore_label:
+                rejected.append('Has BlueStore device label')
+        except OSError as e:
+            # likely failed to open the device. assuming it is BlueStore is the safest option
+            # so that a possibly-already-existing OSD doesn't get overwritten
+            logger.error('failed to determine if device {} is Bluestore. device should not be used to avoid false negatives. err: {}'.format(self.abspath, e))
+            rejected.append('Failed to determine if device is BlueStore')
+
         if self.has_gpt_headers:
             rejected.append('Has GPT headers')
         return rejected
