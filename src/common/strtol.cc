@@ -55,11 +55,6 @@ long long strict_strtoll(std::string_view str, int base, std::string *err)
   return ret;
 }
 
-long long strict_strtoll(const char *str, int base, std::string *err)
-{
-  return strict_strtoll(std::string_view(str), base, err);
-}
-
 int strict_strtol(std::string_view str, int base, std::string *err)
 {
   long long ret = strict_strtoll(str, base, err);
@@ -107,11 +102,6 @@ double strict_strtod(std::string_view str, std::string *err)
   return ret;
 }
 
-double strict_strtod(const char *str, std::string *err)
-{
-  return strict_strtod(std::string_view(str), err);
-}
-
 float strict_strtof(std::string_view str, std::string *err)
 {
   char *endptr;
@@ -138,11 +128,6 @@ float strict_strtof(std::string_view str, std::string *err)
   }
   *err = "";
   return ret;
-}
-
-float strict_strtof(const char *str, std::string *err)
-{
-  return strict_strtof(std::string_view(str), err);
 }
 
 template<typename T>
