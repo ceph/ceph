@@ -3,7 +3,7 @@
 import copy
 import os
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import cherrypy
 from mgr_util import merge_dicts
@@ -446,6 +446,19 @@ class Host(RESTController):
             add_labels = list(set(labels).difference(current_labels))
             for label in add_labels:
                 orch.hosts.add_label(hostname, label)
+
+    @RESTController.Resource('GET')
+    @EndpointDoc('Get facts of a host',
+                 parameters={
+                     'hostname': (str, 'Hostname')
+                 },
+                 responses={200: ''})
+    @handle_orchestrator_error('host')
+    def get_facts(self, hostname: Optional[str] = None) -> List[Dict[str, Any]]:
+        orch = OrchClient.instance()
+        if hostname is not None:
+            return orch.hosts.get_facts(hostname)
+        return orch.hosts.get_facts()
 
 
 @UiApiController('/host', Scope.HOSTS)
