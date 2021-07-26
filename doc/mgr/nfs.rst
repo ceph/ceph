@@ -465,11 +465,35 @@ The NFS log level can be adjusted using `nfs cluster config set` command (see :r
 
 .. _nfs-ganesha-config:
 
-Ganesha Configuration Hierarchy
-===============================
+
+Manual Ganesha deployment
+=========================
+
+It may be possible to deploy and manage the NFS ganesha daemons manually
+instead of allowing cephadm or rook to do so.
+
+.. note:: Manual configuration is not tested or fully documented; your
+          mileage may vary. If you make this work, please help us by
+          updating this documentation.
+
+Known issues
+------------
+
+* The ``mgr/nfs`` module enumerates NFS clusters via the orchestrator API; if NFS is
+  not managed by the orchestrator (e.g., cephadm or rook) then this will not work.  It
+  may be possible to create the cluster, mark the cephadm service as 'unmanaged', but this
+  is awkward and not ideal.
+
+Requirements
+------------
+
+The following packages are required to enable CephFS and RGW exports with nfs-ganesha:
 
 -  ``nfs-ganesha``, ``nfs-ganesha-ceph``, ``nfs-ganesha-rados-grace`` and
    ``nfs-ganesha-rados-urls`` packages (version 3.3 and above)
+
+Ganesha Configuration Hierarchy
+-------------------------------
 
 Cephadm and rook start each nfs-ganesha daemon with a minimal
 `bootstrap` configuration file that pulls from a shared `common`
