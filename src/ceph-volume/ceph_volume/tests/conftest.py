@@ -52,6 +52,8 @@ def mock_lv_device_generator():
         dev.used_by_ceph = False
         dev.vg_size = [size]
         dev.vg_free = dev.vg_size
+        dev.available_lvm = True
+        dev.is_device = False
         dev.lvs = [lvm.Volume(vg_name=dev.vg_name, lv_name=dev.lv_name, lv_size=size, lv_tags='')]
         return dev
     return mock_lv
