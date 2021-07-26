@@ -8130,7 +8130,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   if (count(begin(si_options), end(si_options), var)) {
     n = strict_si_cast<int64_t>(val.c_str(), &interr);
   } else if (count(begin(iec_options), end(iec_options), var)) {
-    n = strict_iec_cast<int64_t>(val.c_str(), &interr);
+    n = strict_iec_cast<int64_t>(val, &interr);
   } else {
     // parse string as both int and float; different fields use different types.
     n = strict_strtoll(val.c_str(), 10, &interr);

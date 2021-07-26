@@ -237,20 +237,8 @@ uint64_t strict_iecstrtoll(std::string_view str, std::string *err)
 
 uint64_t strict_iecstrtoll(const char *str, std::string *err)
 {
-  return strict_iec_cast<uint64_t>(std::string_view(str), err);
+  return strict_iec_cast<uint64_t>(str, err);
 }
-
-template<typename T>
-T strict_iec_cast(const char *str, std::string *err)
-{
-  return strict_iec_cast<T>(std::string_view(str), err);
-}
-
-template int strict_iec_cast<int>(const char *str, std::string *err);
-template long strict_iec_cast<long>(const char *str, std::string *err);
-template long long strict_iec_cast<long long>(const char *str, std::string *err);
-template uint64_t strict_iec_cast<uint64_t>(const char *str, std::string *err);
-template uint32_t strict_iec_cast<uint32_t>(const char *str, std::string *err);
 
 template<typename T>
 T strict_si_cast(std::string_view str, std::string *err)
