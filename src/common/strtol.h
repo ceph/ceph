@@ -72,14 +72,12 @@ auto consume(std::string_view& s, int base = 10)
 bool strict_strtob(const char* str, std::string *err);
 
 long long strict_strtoll(std::string_view str, int base, std::string *err);
-long long strict_strtoll(const char *str, int base, std::string *err);
 
 int strict_strtol(std::string_view str, int base, std::string *err);
-int strict_strtol(const char *str, int base, std::string *err);
 
-double strict_strtod(const char *str, std::string *err);
+double strict_strtod(std::string_view str, std::string *err);
 
-float strict_strtof(const char *str, std::string *err);
+float strict_strtof(std::string_view str, std::string *err);
 
 uint64_t strict_iecstrtoll(const char *str, std::string *err);
 
