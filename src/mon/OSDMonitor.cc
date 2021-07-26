@@ -13433,7 +13433,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string tss;
     int64_t value;
     if (field == "max_objects") {
-      value = strict_sistrtoll(val.c_str(), &tss);
+      value = strict_si_cast<uint64_t>(val, &tss);
     } else if (field == "max_bytes") {
       value = strict_iecstrtoll(val.c_str(), &tss);
     } else {
