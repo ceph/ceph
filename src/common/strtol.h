@@ -79,7 +79,7 @@ double strict_strtod(std::string_view str, std::string *err);
 
 float strict_strtof(std::string_view str, std::string *err);
 
-uint64_t strict_iecstrtoll(const char *str, std::string *err);
+uint64_t strict_iecstrtoll(std::string_view str, std::string *err);
 
 template<typename T>
 T strict_iec_cast(std::string_view str, std::string *err);

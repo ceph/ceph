@@ -220,11 +220,6 @@ uint64_t strict_iecstrtoll(std::string_view str, std::string *err)
   return strict_iec_cast<uint64_t>(str, err);
 }
 
-uint64_t strict_iecstrtoll(const char *str, std::string *err)
-{
-  return strict_iec_cast<uint64_t>(str, err);
-}
-
 template<typename T>
 T strict_si_cast(std::string_view str, std::string *err)
 {

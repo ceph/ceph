@@ -382,7 +382,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t size = strict_iecstrtoll(s.c_str(), &parse_error);
+  uint64_t size = strict_iecstrtoll(s, &parse_error);
   if (!parse_error.empty()) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -416,7 +416,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t objectsize = strict_iecstrtoll(s.c_str(), &parse_error);
+  uint64_t objectsize = strict_iecstrtoll(s, &parse_error);
   if (!parse_error.empty()) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -500,7 +500,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t size = strict_iecstrtoll(s.c_str(), &parse_error);
+  uint64_t size = strict_iecstrtoll(s, &parse_error);
   if (parse_error.empty() && (size >= (1 << 12)) && (size <= (1 << 26))) {
     v = boost::any(size);
     return;
@@ -527,7 +527,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t format = strict_iecstrtoll(s.c_str(), &parse_error);
+  uint64_t format = strict_iecstrtoll(s, &parse_error);
   if (!parse_error.empty() || (format != 1 && format != 2)) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
