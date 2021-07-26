@@ -307,15 +307,3 @@ uint64_t strict_sistrtoll(const char *str, std::string *err)
 {
   return strict_si_cast<uint64_t>(str, err);
 }
-
-template<typename T>
-T strict_si_cast(const char *str, std::string *err)
-{
-  return strict_si_cast<T>(std::string_view(str), err);
-}
-
-template int strict_si_cast<int>(const char *str, std::string *err);
-template long strict_si_cast<long>(const char *str, std::string *err);
-template long long strict_si_cast<long long>(const char *str, std::string *err);
-template uint64_t strict_si_cast<uint64_t>(const char *str, std::string *err);
-template uint32_t strict_si_cast<uint32_t>(const char *str, std::string *err);
