@@ -505,26 +505,26 @@ class NodeExtentAccessorT {
     std::memcpy(to.get_write(), extent->get_read(), get_length());
   }
 
-  eagain_future<NodeExtentMutable> rebuild(context_t c) {
+  eagain_ifuture<NodeExtentMutable> rebuild(context_t c) {
     LOG_PREFIX(OTree::Extent::rebuild);
     assert(!is_retired());
     if (state == nextent_state_t::FRESH) {
       assert(extent->is_initial_pending());
       // already fresh and no need to record
-      return eagain_ertr::make_ready_future<NodeExtentMutable>(*mut);
+      return eagain_iertr::make_ready_future<NodeExtentMutable>(*mut);
     }
     assert(!extent->is_initial_pending());
     auto alloc_size = get_length();
     return c.nm.alloc_extent(c.t, alloc_size
-    ).handle_error(
-      eagain_ertr::pass_further{},
+    ).handle_error_interruptible(
+      eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
           [FNAME, c, alloc_size, l_to_discard = extent->get_laddr()] {
         ERRORT("EIO during allocate -- node_size={}, to_discard={:x}",
                c.t, alloc_size, l_to_discard);
         ceph_abort("fatal error");
       })
-    ).safe_then([this, c, FNAME] (auto fresh_extent) {
+    ).si_then([this, c, FNAME] (auto fresh_extent) {
       DEBUGT("update addr from {:#x} to {:#x} ...",
              c.t, extent->get_laddr(), fresh_extent->get_laddr());
       assert(fresh_extent->is_initial_pending());
@@ -542,8 +542,8 @@ class NodeExtentAccessorT {
       recorder = nullptr;
 
       return c.nm.retire_extent(c.t, to_discard
-      ).handle_error(
-        eagain_ertr::pass_further{},
+      ).handle_error_interruptible(
+        eagain_iertr::pass_further{},
         crimson::ct_error::input_output_error::handle(
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
@@ -559,18 +559,18 @@ class NodeExtentAccessorT {
           ceph_abort("fatal error");
         })
       );
-    }).safe_then([this] {
+    }).si_then([this] {
       return *mut;
     });
   }
 
-  eagain_future<> retire(context_t c) {
+  eagain_ifuture<> retire(context_t c) {
     LOG_PREFIX(OTree::Extent::retire);
     assert(!is_retired());
     auto addr = extent->get_laddr();
     return c.nm.retire_extent(c.t, std::move(extent)
-    ).handle_error(
-      eagain_ertr::pass_further{},
+    ).handle_error_interruptible(
+      eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
           [FNAME, c, addr] {
         ERRORT("EIO -- addr={:x}", c.t, addr);

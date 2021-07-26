@@ -22,6 +22,10 @@ using eagain_ertr = crimson::errorator<
 template <class ValueT=void>
 using eagain_future = eagain_ertr::future<ValueT>;
 
+using eagain_iertr = trans_iertr<eagain_ertr>;
+template <class ValueT=void>
+using eagain_ifuture = eagain_iertr::future<ValueT>;
+
 using crimson::os::seastore::Transaction;
 using crimson::os::seastore::TransactionRef;
 using crimson::os::seastore::laddr_t;
