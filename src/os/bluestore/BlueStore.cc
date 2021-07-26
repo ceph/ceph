@@ -5030,6 +5030,27 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_remove_lat, "remove_lat",
     "Average removal latency");
 
+  // Resulting size axis configuration for op histograms, values are in bytes
+  PerfHistogramCommon::axis_config_d alloc_hist_x_axis_config{
+    "Given size (bytes)",
+    PerfHistogramCommon::SCALE_LOG2, ///< Request size in logarithmic scale
+    0,                               ///< Start at 0
+    4096,                            ///< Quantization unit
+    13,                               ///< Enough to cover 4+M requests
+  };
+  // Req size axis configuration for op histograms, values are in bytes
+  PerfHistogramCommon::axis_config_d alloc_hist_y_axis_config{
+    "Request size (bytes)",
+    PerfHistogramCommon::SCALE_LOG2, ///< Request size in logarithmic scale
+    0,                               ///< Start at 0
+    4096,                            ///< Quantization unit
+    13,                               ///< Enough to cover 4+M requests
+  };
+  b.add_u64_counter_histogram(
+    l_bluestore_allocate_hist, "allocate_histogram",
+    alloc_hist_x_axis_config, alloc_hist_y_axis_config,
+    "Histogram of requested block allocations vs. given ones");
+
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -14138,7 +14159,7 @@ int BlueStore::_do_alloc_write(
     }
     return -ENOSPC;
   }
-  _collect_allocation_stats(need, min_alloc_size, prealloc.size());
+  _collect_allocation_stats(need, min_alloc_size, prealloc);
 
   dout(20) << __func__ << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();
@@ -16123,11 +16144,15 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 }
 
 void BlueStore::_collect_allocation_stats(uint64_t need, uint32_t alloc_size,
-                                          size_t extents)
+                                          const PExtentVector& extents)
 {
   alloc_stats_count++;
-  alloc_stats_fragments += extents;
+  alloc_stats_fragments += extents.size();
   alloc_stats_size += need;
+
+  for (auto& e : extents) {
+    logger->hinc(l_bluestore_allocate_hist, e.length, need);
+  }
 }
 
 void BlueStore::_record_allocation_stats()
