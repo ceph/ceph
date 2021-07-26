@@ -84,6 +84,9 @@ A shadow user is created corresponding to every federated user. The user id is d
 The user is created in a separate namespace - 'oidc' such that the user id doesn't clash with any other user ids in rgw. The format of the user id
 is - <tenant>$<user-namespace>$<sub> where user-namespace is 'oidc' for users that authenticate with oidc providers.
 
+RGW now supports Session tags that can be passed in the web token to AssumeRoleWithWebIdentity call. More information related to Session Tags can be found here
+:doc:`session-tags`.
+
 STS Configuration
 =================
 
