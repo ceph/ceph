@@ -113,13 +113,6 @@ void Cache::register_metrics()
     {extent_types_t::TEST_BLOCK_PHYSICAL, ext_label("TEST_BLOCK_PHYSICAL")}
   };
 
-  auto counter_label = sm::label("counter");
-  std::map<std::string, sm::label_instance> labels_by_counter {
-    {"EXTENTS",     counter_label("EXTENTS")},
-    {"BYTES",       counter_label("BYTES")},
-    {"DELTA_BYTES", counter_label("DELTA_BYTES")},
-  };
-
   /*
    * trans_created
    */
@@ -414,27 +407,21 @@ void Cache::register_metrics()
      * read_effort_successful
      */
     stats.read_effort_successful = {};
-    auto register_read_effort_successful =
-      [this, &labels_by_counter]
-      (const char* counter_name, uint64_t& value) {
-        std::ostringstream oss_desc;
-        oss_desc << "total successful read transactional effort labeled by counter";
-        metrics.add_group(
-          "cache",
-          {
-            sm::make_counter(
-              "read_effort_successful",
-              value,
-              sm::description(oss_desc.str()),
-              {labels_by_counter.find(counter_name)->second}
-            ),
-          }
-        );
-      };
-    for (auto& counter_name : {"EXTENTS", "BYTES"}) {
-      auto& value = stats.read_effort_successful.get_by_name(counter_name);
-      register_read_effort_successful(counter_name, value);
-    }
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "successful_read_extents",
+          stats.read_effort_successful.extents,
+          sm::description("extents of successful read transactions")
+        ),
+        sm::make_counter(
+          "successful_read_extent_bytes",
+          stats.read_effort_successful.bytes,
+          sm::description("extent bytes of successful read transactions")
+        ),
+      }
+    );
   }
 
   /**
@@ -451,30 +438,26 @@ void Cache::register_metrics()
         [this] {
           return extents.size();
         },
-        sm::description("total number of cached extents"),
-        {labels_by_counter.find("EXTENTS")->second}
+        sm::description("total number of cached extents")
       ),
       sm::make_counter(
-        "cached_extents",
+        "cached_extent_bytes",
         [this] {
           return extents.get_bytes();
         },
-        sm::description("total bytes of cached extents"),
-        {labels_by_counter.find("BYTES")->second}
+        sm::description("total bytes of cached extents")
       ),
       sm::make_counter(
         "dirty_extents",
         [this] {
           return dirty.size();
         },
-        sm::description("total number of dirty extents"),
-        {labels_by_counter.find("EXTENTS")->second}
+        sm::description("total number of dirty extents")
       ),
       sm::make_counter(
-        "dirty_extents",
+        "dirty_extent_bytes",
         stats.dirty_bytes,
-        sm::description("total bytes of dirty extents"),
-        {labels_by_counter.find("BYTES")->second}
+        sm::description("total bytes of dirty extents")
       ),
     }
   );

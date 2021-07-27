@@ -608,15 +608,6 @@ private:
     uint64_t extents = 0;
     uint64_t bytes = 0;
 
-    uint64_t& get_by_name(const std::string& counter_name) {
-      if (counter_name == "EXTENTS") {
-        return extents;
-      } else {
-        ceph_assert(counter_name == "BYTES");
-        return bytes;
-      }
-    }
-
     void increment(uint64_t extent_len) {
       ++extents;
       bytes += extent_len;
