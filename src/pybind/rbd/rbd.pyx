@@ -2278,6 +2278,8 @@ cdef class MirrorImageStatusIterator(object):
                     'info'        : {
                         'global_id' : decode_cstr(self.images[i].info.global_id),
                         'state'     : self.images[i].info.state,
+                        # primary isn't added here because it is unknown (always
+                        # false, see XXX in Mirror::image_global_status_list())
                         },
                     'remote_statuses': site_statuses,
                     }
