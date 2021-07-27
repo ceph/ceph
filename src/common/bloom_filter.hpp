@@ -45,8 +45,8 @@ class bloom_filter
 {
 protected:
 
-  typedef unsigned int bloom_type;
-  typedef unsigned char cell_type;
+  using bloom_type = unsigned int;
+  using cell_type = unsigned char;
 
   unsigned char*       bit_table_;   ///< pointer to bit map
   std::vector<bloom_type> salt_;     ///< vector of salts
