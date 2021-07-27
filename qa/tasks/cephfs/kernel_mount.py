@@ -28,16 +28,27 @@ class KernelMount(CephFSMount):
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
         self.rbytes = config.get('rbytes', False)
+        self.dynamic_debug = config.get('dynamic_debug', [])
         self.inst = None
         self.addr = None
         self._mount_bin = ['adjust-ulimits', 'ceph-coverage', self.test_dir +\
                            '/archive/coverage', '/bin/mount', '-t', 'ceph']
+
+    def _enable_debugging(self):
+        if self.dynamic_debug:
+            debug = ''.join([f"echo '{d}' | sudo tee /sys/kernel/debug/dynamic_debug/control\n" for d in self.dynamic_debug])
+            shell = f"""
+sudo modprobe ceph
+{debug}
+"""
+            self.run_shell_payload(shell, timeout=(5*60))
 
     def mount(self, mntopts=[], check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
         self.setup_netns()
+        self._enable_debugging()
 
         if not self.cephfs_mntpt:
             self.cephfs_mntpt = '/'

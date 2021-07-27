@@ -1,2 +1,4 @@
 tasks:
-- kclient:
+  - kclient:
+      dynamic_debug:
+      - module ceph format "check_new_map mds" +p
