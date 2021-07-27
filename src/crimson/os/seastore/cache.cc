@@ -275,72 +275,26 @@ void Cache::register_metrics()
   /*
    * cache_query: cache_access and cache_hit
    */
-  auto register_cache_access =
-    [this, &labels_by_src, &labels_by_ext]
-    (src_t src, const sm::label_instance& src_label,
-     extent_types_t ext, const sm::label_instance& ext_label) {
-      auto m_key = std::make_pair(src, ext);
-      stats.cache_query[m_key] = {0, 0};
-      {
-        metrics.add_group(
-          "cache",
-          {
-            sm::make_counter(
-              "cache_access",
-              stats.cache_query.find(m_key)->second.access,
-              sm::description("total number of cache accesses labeled by "
-                              "transaction source and extent type"),
-              {src_label, ext_label}
-            ),
-            sm::make_counter(
-              "cache_hit",
-              stats.cache_query.find(m_key)->second.hit,
-              sm::description("total number of cache hits labeled by "
-                              "transaction source and extent type"),
-              {src_label, ext_label}
-            ),
-          }
-        );
-      }
-    };
-
+  stats.cache_query_by_src.fill({});
   for (auto& [src, src_label] : labels_by_src) {
-    for (auto& [ext, ext_label] : labels_by_ext) {
-      if (ext != extent_types_t::RETIRED_PLACEHOLDER) {
-        register_cache_access(src, src_label, ext, ext_label);
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "cache_access",
+          get_counter(stats.cache_query_by_src, src).access,
+          sm::description("total number of cache accesses"),
+          {src_label}
+        ),
+        sm::make_counter(
+          "cache_hit",
+          get_counter(stats.cache_query_by_src, src).hit,
+          sm::description("total number of cache hits"),
+          {src_label}
+        ),
       }
-    }
+    );
   }
-
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "cache_access",
-        [this] {
-          uint64_t total = 0;
-          for (auto& [k, v] : stats.cache_query) {
-            total += v.access;
-          }
-          return total;
-        },
-        sm::description("total number of cache accesses"),
-        {src_label("ALL")}
-      ),
-      sm::make_counter(
-        "cache_hit",
-        [this] {
-          uint64_t total = 0;
-          for (auto& [k, v] : stats.cache_query) {
-            total += v.hit;
-          }
-          return total;
-        },
-        sm::description("total number of cache hits"),
-        {src_label("ALL")}
-      ),
-    }
-  );
 
   {
     /*
