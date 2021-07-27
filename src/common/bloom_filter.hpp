@@ -23,9 +23,11 @@
 #define COMMON_BLOOM_FILTER_HPP
 
 #include <cmath>
+#include <numeric>
 
-#include "include/mempool.h"
 #include "include/encoding.h"
+#include "include/intarith.h"
+#include "include/mempool.h"
 
 static const unsigned char bit_mask[CHAR_BIT] = {
   0x01,  //00000001
@@ -277,16 +279,12 @@ public:
    */
   inline double density() const
   {
-    size_t set = 0;
-    auto p = bit_table_.begin();
-    size_t left = table_size_;
-    while (left-- > 0) {
-      uint8_t c = *p;
-      for (; c; ++set)
-	c &= c - 1;
-      ++p;
-    }
-    return (double)set / (double)(table_size_ << 3);
+    unsigned set = std::transform_reduce(
+      bit_table_.begin(),
+      bit_table_.begin() + table_size_,
+      0, std::plus<>(),
+      popcount<cell_type>);
+    return (double)set / (table_size_ * sizeof(cell_type) * CHAR_BIT);
   }
 
   virtual inline double approx_unique_element_count() const {
