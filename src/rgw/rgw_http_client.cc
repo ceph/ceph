@@ -632,6 +632,7 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
   }
   curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_TIMEOUT, req_timeout);
+  curl_easy_setopt(easy_handle, CURLOPT_CONNECTTIMEOUT, req_connect_timeout);
 
   return 0;
 }
@@ -1047,7 +1048,7 @@ void RGWHTTPManager::manage_pending_requests()
 int RGWHTTPManager::add_request(RGWHTTPClient *client)
 {
   rgw_http_req_data *req_data = new rgw_http_req_data;
-
+  client->set_req_connect_timeout(3);
   int ret = client->init_request(req_data);
   if (ret < 0) {
     req_data->put();

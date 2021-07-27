@@ -65,6 +65,8 @@ protected:
 
   long  req_timeout{0L};
 
+  long  req_connect_timeout{0L};
+
   void init();
 
   RGWHTTPManager *get_manager();
@@ -149,6 +151,12 @@ public:
   // zero (default) mean that request will never timeout
   void set_req_timeout(long timeout) {
     req_timeout = timeout;
+  }
+
+  // set connect timeout in seconds
+  // zero (default) mean that request will never timeout
+  void set_req_connect_timeout(long connect_timeout) {
+    req_connect_timeout = connect_timeout;
   }
 
   int process(optional_yield y);
