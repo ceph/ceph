@@ -31,7 +31,8 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-class OSDMapTest : public testing::Test {
+class OSDMapTest : public testing::Test,
+                   public ::testing::WithParamInterface<std::pair<int, int>> {
   int num_osds = 6;
 public:
   OSDMap osdmap;
@@ -1943,3 +1944,156 @@ TEST_F(OSDMapTest, BUG_48884)
     }
   }
 }
+
+TEST_P(OSDMapTest, BUG_51842) {
+    set_up_map(3, true);
+    OSDMap tmp; // use a tmpmap here, so we do not dirty origin map..
+    tmp.deepish_copy_from(osdmap);
+    for (int i = 0; i < (int)get_num_osds(); i++) {
+      stringstream osd_name;
+      stringstream host_name;
+      vector<string> move_to;
+      osd_name << "osd." << i;
+      host_name << "host=host-" << i;
+      move_to.push_back("root=infra-1706");
+      move_to.push_back(host_name.str());
+      auto r = crush_move(tmp, osd_name.str(), move_to);
+      ASSERT_EQ(0, r);
+    }
+
+    // build crush rule
+    CrushWrapper crush;
+    get_crush(tmp, crush);
+    string rule_name = "infra-1706";
+    int rule_type = pg_pool_t::TYPE_REPLICATED;
+    ASSERT_TRUE(!crush.rule_exists(rule_name));
+    int rno;
+    for (rno = 0; rno < crush.get_max_rules(); rno++) {
+      if (!crush.rule_exists(rno))
+        break;
+    }
+    string root_bucket = "infra-1706";
+    int root = crush.get_item_id(root_bucket);
+    int min_size = 1;
+    int max_size = 20;
+    int steps = 5;
+    crush_rule *rule = crush_make_rule(steps, rno, rule_type, min_size, max_size);
+    int step = 0;
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
+    // note: it's ok to set like 'step chooseleaf_firstn 0 host'
+    std::pair<int, int> param = GetParam();
+    int rep_num = std::get<0>(param);
+    int domain = std::get<1>(param);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, rep_num, domain);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
+    ASSERT_TRUE(step == steps);
+    auto r = crush_add_rule(crush.get_crush_map(), rule, rno);
+    ASSERT_TRUE(r >= 0);
+    crush.set_rule_name(rno, rule_name);
+    {
+      OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
+      pending_inc.crush.clear();
+      crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      tmp.apply_incremental(pending_inc);
+    }
+    {
+      stringstream oss;
+      crush.dump_tree(&oss, NULL);
+      std::cout << oss.str() << std::endl;
+      Formatter *f = Formatter::create("json-pretty");
+      f->open_object_section("crush_rules");
+      crush.dump_rules(f);
+      f->close_section();
+      f->flush(cout);
+      delete f;
+    }
+    // create a replicated pool referencing the above rule
+    int64_t pool_infra_1706;
+    {
+      OSDMap::Incremental new_pool_inc(tmp.get_epoch() + 1);
+      new_pool_inc.new_pool_max = tmp.get_pool_max();
+      new_pool_inc.fsid = tmp.get_fsid();
+      pg_pool_t empty;
+      pool_infra_1706 = ++new_pool_inc.new_pool_max;
+      pg_pool_t *p = new_pool_inc.get_new_pool(pool_infra_1706, &empty);
+      p->size = 3;
+      p->min_size = 1;
+      p->set_pg_num(256);
+      p->set_pgp_num(256);
+      p->type = pg_pool_t::TYPE_REPLICATED;
+      p->crush_rule = rno;
+      p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      new_pool_inc.new_pool_names[pool_infra_1706] = "pool_infra_1706";
+      tmp.apply_incremental(new_pool_inc);
+    }
+
+    // add upmaps
+    pg_t rep_pg(3, pool_infra_1706);
+    pg_t rep_pgid = tmp.raw_pg_to_pg(rep_pg);
+    pg_t rep_pg2(4, pool_infra_1706);
+    pg_t rep_pgid2 = tmp.raw_pg_to_pg(rep_pg2);
+    pg_t rep_pg3(6, pool_infra_1706);
+    pg_t rep_pgid3 = tmp.raw_pg_to_pg(rep_pg3);
+    {
+      OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
+      pending_inc.new_pg_upmap[rep_pgid] = mempool::osdmap::vector<int32_t>({1,0,2});
+      pending_inc.new_pg_upmap[rep_pgid2] = mempool::osdmap::vector<int32_t>({1,2,0});
+      pending_inc.new_pg_upmap[rep_pgid3] = mempool::osdmap::vector<int32_t>({1,2,0});
+      tmp.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmp.have_pg_upmaps(rep_pgid));
+      ASSERT_TRUE(tmp.have_pg_upmaps(rep_pgid2));
+      ASSERT_TRUE(tmp.have_pg_upmaps(rep_pgid3));
+    }
+
+    {
+      // now, set pool size to 1
+      OSDMap tmpmap;
+      tmpmap.deepish_copy_from(tmp);
+      OSDMap::Incremental new_pool_inc(tmpmap.get_epoch() + 1);
+      pg_pool_t p = *tmpmap.get_pg_pool(pool_infra_1706);
+      p.size = 1;
+      p.last_change = new_pool_inc.epoch;
+      new_pool_inc.new_pools[pool_infra_1706] = p;
+      tmpmap.apply_incremental(new_pool_inc);
+
+      OSDMap::Incremental new_pending_inc(tmpmap.get_epoch() + 1);
+      clean_pg_upmaps(g_ceph_context, tmpmap, new_pending_inc);
+      tmpmap.apply_incremental(new_pending_inc);
+      // check pg upmaps
+      ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid));
+      ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid2));
+      ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid3));
+    }
+    {
+      // now, set pool size to 4
+      OSDMap tmpmap;
+      tmpmap.deepish_copy_from(tmp);
+      OSDMap::Incremental new_pool_inc(tmpmap.get_epoch() + 1);
+      pg_pool_t p = *tmpmap.get_pg_pool(pool_infra_1706);
+      p.size = 4;
+      p.last_change = new_pool_inc.epoch;
+      new_pool_inc.new_pools[pool_infra_1706] = p;
+      tmpmap.apply_incremental(new_pool_inc);
+
+      OSDMap::Incremental new_pending_inc(tmpmap.get_epoch() + 1);
+      clean_pg_upmaps(g_ceph_context, tmpmap, new_pending_inc);
+      tmpmap.apply_incremental(new_pending_inc);
+      // check pg upmaps
+      ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid));
+      ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid2));
+      ASSERT_TRUE(!tmpmap.have_pg_upmaps(rep_pgid3));
+    }
+}
+
+INSTANTIATE_TEST_CASE_P(
+  OSDMap,
+  OSDMapTest,
+  ::testing::Values(
+    std::make_pair<int, int>(0, 1), // chooseleaf firstn 0 host
+    std::make_pair<int, int>(3, 1), // chooseleaf firstn 3 host
+    std::make_pair<int, int>(0, 0), // chooseleaf firstn 0 osd
+    std::make_pair<int, int>(3, 0)  // chooseleaf firstn 3 osd
+  )
+);
