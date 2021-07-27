@@ -1123,7 +1123,7 @@ void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, Me
 /*
  * update MDS location cache for a single inode
  */
-void Client::update_dir_dist(Inode *in, DirStat *dst)
+void Client::update_dir_dist(Inode *in, DirStat *dst, mds_rank_t from)
 {
   // auth
   ldout(cct, 20) << "got dirfrag map for " << in->ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
@@ -1137,12 +1137,14 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
     _fragmap_remove_non_leaves(in);
   }
 
-  // replicated
-  in->dir_replicated = !dst->dist.empty();
-  if (!dst->dist.empty())
-    in->frag_repmap[dst->frag].assign(dst->dist.begin(), dst->dist.end()) ;
-  else
-    in->frag_repmap.erase(dst->frag);
+  // replicated, only update from auth mds reply
+  if (from == dst->auth) {
+    in->dir_replicated = !dst->dist.empty();
+    if (!dst->dist.empty())
+      in->frag_repmap[dst->frag].assign(dst->dist.begin(), dst->dist.end()) ;
+    else
+      in->frag_repmap.erase(dst->frag);
+  }
 }
 
 void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
@@ -1432,7 +1434,8 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   if (reply->head.is_dentry) {
     diri = add_update_inode(&dirst, request->sent_stamp, session,
 			    request->perms);
-    update_dir_dist(diri, &dst);  // dir stat info is attached to ..
+    mds_rank_t from_mds = mds_rank_t(reply->get_source().num());
+    update_dir_dist(diri, &dst, from_mds);  // dir stat info is attached to ..
 
     if (in) {
       Dir *dir = diri->open_dir();
