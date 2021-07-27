@@ -776,7 +776,7 @@ public:
   void unlock_fh_pos(Fh *f);
 
   // metadata cache
-  void update_dir_dist(Inode *in, DirStat *st);
+  void update_dir_dist(Inode *in, DirStat *st, mds_rank_t from);
 
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
   void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
