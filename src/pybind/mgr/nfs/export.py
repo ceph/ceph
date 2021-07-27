@@ -181,10 +181,8 @@ class ExportMgr:
             })
             log.info(f"Deleted export user {export.fsal.user_id}")
         elif isinstance(export.fsal, RGWFSAL):
-            assert export.fsal.user_id
-            uid = f'nfs.{export.cluster_id}.{export.path}'
-            self._exec(['radosgw-admin', 'user', 'rm', '--uid', uid])
-            log.info(f"Deleted export RGW user {uid}")
+            # do nothing; we're using the bucket owner creds.
+            pass
 
     def _create_export_user(self, export: Export) -> None:
         if isinstance(export.fsal, CephFSFSAL):
@@ -205,16 +203,22 @@ class ExportMgr:
 
         elif isinstance(export.fsal, RGWFSAL):
             rgwfsal = cast(RGWFSAL, export.fsal)
-            rgwfsal.user_id = f'nfs.{export.cluster_id}.{export.path}'
-            ret, out, err = self._exec(['radosgw-admin', 'user', 'info', '--uid',
-                                        rgwfsal.user_id])
+            ret, out, err = self._exec(['radosgw-admin', 'bucket', 'stats', '--bucket',
+                                        export.path])
             if ret:
-                ret, out, err = self._exec(['radosgw-admin', 'user', 'create',
-                                            '--uid', rgwfsal.user_id,
-                                            '--display-name', rgwfsal.user_id])
-                if ret:
-                    raise NFSException(f'Failed to create user {rgwfsal.user_id}')
+                raise NFSException(f'Failed to fetch owner for bucket {export.path}')
             j = json.loads(out)
+            owner = j.get('owner', '')
+            rgwfsal.user_id = owner
+            ret, out, err = self._exec([
+                'radosgw-admin', 'user', 'info', '--uid', owner
+            ])
+            if ret:
+                raise NFSException(
+                    f'Failed to fetch key for bucket {export.path} owner {owner}'
+                )
+            j = json.loads(out)
+
             # FIXME: make this more tolerate of unexpected output?
             rgwfsal.access_key_id = j['keys'][0]['access_key']
             rgwfsal.secret_access_key = j['keys'][0]['secret_key']
@@ -475,17 +479,21 @@ class ExportMgr:
             'format': 'json',
         })
         if ret == -errno.EINVAL and 'does not match' in err:
-            ret, out, err = self.mgr.check_mon_command({
+            ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth caps',
                 'entity': 'client.{}'.format(entity),
                 'caps': nfs_caps,
                 'format': 'json',
             })
-            ret, out, err = self.mgr.check_mon_command({
+            if err:
+                raise NFSException(f'Failed to update caps for {entity}: {err}')
+            ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth get',
                 'entity': 'client.{}'.format(entity),
                 'format': 'json',
             })
+            if err:
+                raise NFSException(f'Failed to fetch caps for {entity}: {err}')
 
         json_res = json.loads(out)
         log.info("Export user created is {}".format(json_res[0]['entity']))
@@ -577,7 +585,6 @@ class ExportMgr:
                           access_type: str,
                           read_only: bool,
                           squash: str,
-                          realm: Optional[str] = None,
                           clients: list = []) -> Tuple[int, str, str]:
         pseudo_path = self.format_path(pseudo_path)
 
