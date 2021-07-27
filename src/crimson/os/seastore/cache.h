@@ -101,7 +101,7 @@ public:
       Transaction::src_t src) {
     LOG_PREFIX(Cache::create_transaction);
 
-    ++(get_counter(stats.trans_created_by_src, src));
+    ++(get_by_src(stats.trans_created_by_src, src));
 
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
@@ -122,7 +122,7 @@ public:
       Transaction::src_t src) {
     LOG_PREFIX(Cache::create_weak_transaction);
 
-    ++(get_counter(stats.trans_created_by_src, src));
+    ++(get_by_src(stats.trans_created_by_src, src));
 
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
@@ -142,7 +142,7 @@ public:
   void reset_transaction_preserve_handle(Transaction &t) {
     LOG_PREFIX(Cache::reset_transaction_preserve_handle);
     if (t.did_reset()) {
-      ++(get_counter(stats.trans_created_by_src, t.get_src()));
+      ++(get_by_src(stats.trans_created_by_src, t.get_src()));
     }
     t.reset_preserve_handle(last_commit);
     DEBUGT("reset", t);
@@ -669,7 +669,7 @@ private:
   } stats;
 
   template <typename CounterT>
-  CounterT& get_counter(
+  CounterT& get_by_src(
       std::array<CounterT, Transaction::SRC_MAX>& counters_by_src,
       Transaction::src_t src) {
     assert(static_cast<std::size_t>(src) < counters_by_src.size());
@@ -757,7 +757,7 @@ private:
       const src_ext_t* p_metric_key) {
     query_counters_t* p_counters = nullptr;
     if (p_metric_key) {
-      p_counters = &get_counter(stats.cache_query_by_src, p_metric_key->first);
+      p_counters = &get_by_src(stats.cache_query_by_src, p_metric_key->first);
       ++p_counters->access;
     }
     if (auto iter = extents.find_offset(offset);
