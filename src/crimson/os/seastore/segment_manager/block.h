@@ -141,7 +141,9 @@ public:
     >;
   close_ertr::future<> close();
 
-  BlockSegmentManager(const std::string &path) : device_path(path) {}
+  BlockSegmentManager(const std::string &path) : device_path(path) {
+    register_metrics();
+  }
   ~BlockSegmentManager();
 
   open_ertr::future<SegmentRef> open(segment_id_t id) final;
@@ -173,7 +175,39 @@ private:
   friend class BlockSegment;
   using segment_state_t = Segment::segment_state_t;
 
-  
+  struct effort_t {
+    uint64_t num = 0;
+    uint64_t bytes = 0;
+
+    void increment(uint64_t read_bytes) {
+      ++num;
+      bytes += read_bytes;
+    }
+  };
+
+  struct {
+    effort_t data_read;
+    effort_t data_write;
+    effort_t metadata_write;
+    uint64_t opened_segments;
+    uint64_t closed_segments;
+    uint64_t closed_segments_unused_bytes;
+    uint64_t released_segments;
+
+    void reset() {
+      data_read = {};
+      data_write = {};
+      metadata_write = {};
+      opened_segments = 0;
+      closed_segments = 0;
+      closed_segments_unused_bytes = 0;
+      released_segments = 0;
+    }
+  } stats;
+
+  void register_metrics();
+  seastar::metrics::metric_group metrics;
+
   std::string device_path;
   std::unique_ptr<SegmentStateTracker> tracker;
   block_sm_superblock_t superblock;
@@ -193,7 +227,8 @@ private:
 
   char *buffer = nullptr;
 
-  Segment::close_ertr::future<> segment_close(segment_id_t id);
+  Segment::close_ertr::future<> segment_close(
+      segment_id_t id, segment_off_t write_pointer);
 };
 
 }
