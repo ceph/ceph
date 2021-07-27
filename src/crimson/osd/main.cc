@@ -112,7 +112,7 @@ seastar::future<> make_keyring()
   });
 }
 
-uint64_t get_nonce()
+static uint64_t get_nonce()
 {
   if (auto pid = getpid(); pid == 1 || std::getenv("CEPH_USE_RANDOM_NONCE")) {
     // we're running in a container; use a random number instead!
