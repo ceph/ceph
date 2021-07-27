@@ -2270,7 +2270,7 @@ cdef class MirrorImageStatusIterator(object):
                         local_status = site_status
                     else:
                         site_status['mirror_uuid'] = mirror_uuid
-                        site_statuses += site_status
+                        site_statuses.append(site_status)
 
                 status = {
                     'name'        : decode_cstr(self.images[i].name),
@@ -4643,7 +4643,7 @@ written." % (self.name, ret, length))
                     local_status = site_status
                 else:
                     site_status['mirror_uuid'] = mirror_uuid
-                    site_statuses += site_status
+                    site_statuses.append(site_status)
             status = {
                 'name': decode_cstr(c_status.name),
                 'id'  : self.id(),
