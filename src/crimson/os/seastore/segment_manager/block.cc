@@ -84,23 +84,25 @@ static write_ertr::future<> do_writev(
 static read_ertr::future<> do_read(
   seastar::file &device,
   uint64_t offset,
+  size_t len,
   bufferptr &bptr)
 {
+  assert(len <= bptr.length());
   logger().debug(
     "block: do_read offset {} len {}",
     offset,
-    bptr.length());
+    len);
   return device.dma_read(
     offset,
     bptr.c_str(),
-    bptr.length()
+    len
   ).handle_exception([](auto e) -> read_ertr::future<size_t> {
     logger().error(
       "do_read: dma_read got error {}",
       e);
     return crimson::ct_error::input_output_error::make();
-  }).then([length=bptr.length()](auto result) -> read_ertr::future<> {
-    if (result != length) {
+  }).then([len](auto result) -> read_ertr::future<> {
+    if (result != len) {
       return crimson::ct_error::input_output_error::make();
     }
     return read_ertr::now();
@@ -123,6 +125,7 @@ SegmentStateTracker::read_in(
   return do_read(
     device,
     offset,
+    bptr.length(),
     bptr);
 }
 
@@ -285,6 +288,7 @@ read_superblock(seastar::file &device, seastar::stat_data sd)
       return do_read(
 	device,
 	0,
+	bp.length(),
 	bp
       ).safe_then([=, &bp] {
 	  bufferlist bl;
@@ -310,7 +314,7 @@ segment_off_t BlockSegment::get_write_capacity() const
 
 Segment::close_ertr::future<> BlockSegment::close()
 {
-  return manager.segment_close(id);
+  return manager.segment_close(id, write_pointer);
 }
 
 Segment::write_ertr::future<> BlockSegment::write(
@@ -326,10 +330,16 @@ Segment::write_ertr::future<> BlockSegment::write(
   return manager.segment_write({id, offset}, bl);
 }
 
-Segment::close_ertr::future<> BlockSegmentManager::segment_close(segment_id_t id)
+Segment::close_ertr::future<> BlockSegmentManager::segment_close(
+    segment_id_t id, segment_off_t write_pointer)
 {
   assert(tracker);
   tracker->set(id, segment_state_t::CLOSED);
+  ++stats.closed_segments;
+  int unused_bytes = get_segment_size() - write_pointer;
+  assert(unused_bytes >= 0);
+  stats.closed_segments_unused_bytes += unused_bytes;
+  stats.metadata_write.increment(tracker->get_size());
   return tracker->write_out(device, superblock.tracker_offset);
 }
 
@@ -345,6 +355,7 @@ Segment::write_ertr::future<> BlockSegmentManager::segment_write(
     addr.offset,
     get_offset(addr),
     bl.length());
+  stats.data_write.increment(bl.length());
   return do_writev(device, get_offset(addr), std::move(bl), superblock.block_size);
 }
 
@@ -359,12 +370,15 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
   ).safe_then([=](auto p) {
     device = std::move(p.first);
     auto sd = p.second;
+    stats.data_read.increment(
+        ceph::encoded_sizeof_bounded<block_sm_superblock_t>());
     return read_superblock(device, sd);
   }).safe_then([=](auto sb) {
     superblock = sb;
     tracker = std::make_unique<SegmentStateTracker>(
       superblock.segments,
       superblock.block_size);
+    stats.data_read.increment(tracker->get_size());
     return tracker->read_in(
       device,
       superblock.tracker_offset
@@ -374,6 +388,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
 	  tracker->set(i, segment_state_t::CLOSED);
 	}
       }
+      stats.metadata_write.increment(tracker->get_size());
       return tracker->write_out(device, superblock.tracker_offset);
     });
   });
@@ -401,10 +416,13 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(seastore_meta_t meta)
 	device = p.first;
 	stat = p.second;
 	sb = make_superblock(meta, stat);
+	stats.metadata_write.increment(
+	    ceph::encoded_sizeof_bounded<block_sm_superblock_t>());
 	return write_superblock(device, sb);
       }).safe_then([&] {
 	logger().debug("BlockSegmentManager::mkfs: superblock written");
 	tracker.reset(new SegmentStateTracker(sb.segments, sb.block_size));
+	stats.metadata_write.increment(tracker->get_size());
 	return tracker->write_out(device, sb.tracker_offset);
       }).finally([&] {
 	return device.close();
@@ -437,8 +455,10 @@ SegmentManager::open_ertr::future<SegmentRef> BlockSegmentManager::open(
   }
 
   tracker->set(id, segment_state_t::OPEN);
+  stats.metadata_write.increment(tracker->get_size());
   return tracker->write_out(device, superblock.tracker_offset
   ).safe_then([this, id] {
+    ++stats.opened_segments;
     return open_ertr::future<SegmentRef>(
       open_ertr::ready_future_marker{},
       SegmentRef(new BlockSegment(*this, id)));
@@ -466,6 +486,8 @@ SegmentManager::release_ertr::future<> BlockSegmentManager::release(
   }
 
   tracker->set(id, segment_state_t::EMPTY);
+  ++stats.released_segments;
+  stats.metadata_write.increment(tracker->get_size());
   return tracker->write_out(device, superblock.tracker_offset);
 }
 
@@ -497,10 +519,74 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
     return crimson::ct_error::enoent::make();
   }
 
+  stats.data_read.increment(len);
   return do_read(
     device,
     get_offset(addr),
+    len,
     out);
+}
+
+void BlockSegmentManager::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  // TODO: add label for device_id
+  stats.reset();
+  metrics.add_group(
+    "segment_manager",
+    {
+      sm::make_counter(
+        "data_read_num",
+        stats.data_read.num,
+        sm::description("total number of data read")
+      ),
+      sm::make_counter(
+        "data_read_bytes",
+        stats.data_read.bytes,
+        sm::description("total bytes of data read")
+      ),
+      sm::make_counter(
+        "data_write_num",
+        stats.data_write.num,
+        sm::description("total number of data write")
+      ),
+      sm::make_counter(
+        "data_write_bytes",
+        stats.data_write.bytes,
+        sm::description("total bytes of data write")
+      ),
+      sm::make_counter(
+        "metadata_write_num",
+        stats.metadata_write.num,
+        sm::description("total number of metadata write")
+      ),
+      sm::make_counter(
+        "metadata_write_bytes",
+        stats.metadata_write.bytes,
+        sm::description("total bytes of metadata write")
+      ),
+      sm::make_counter(
+        "opened_segments",
+        stats.opened_segments,
+        sm::description("total segments opened")
+      ),
+      sm::make_counter(
+        "closed_segments",
+        stats.closed_segments,
+        sm::description("total segments closed")
+      ),
+      sm::make_counter(
+        "closed_segments_unused_bytes",
+        stats.closed_segments_unused_bytes,
+        sm::description("total unused bytes of closed segments")
+      ),
+      sm::make_counter(
+        "released_segments",
+        stats.released_segments,
+        sm::description("total segments released")
+      ),
+    }
+  );
 }
 
 }
