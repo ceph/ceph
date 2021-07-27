@@ -388,15 +388,6 @@ set(CMAKE_EXTRA_INCLUDE_FILES "sys/time.h")
 CHECK_TYPE_SIZE(suseconds_t SUSECONDS_T)
 unset(CMAKE_EXTRA_INCLUDE_FILES)
 
-function(compile_with_fmt target)
-  get_target_property(fmt_compile_definitions
-    fmt::fmt INTERFACE_COMPILE_DEFINITIONS)
-  if(fmt_compile_definitions)
-    target_compile_definitions(${target} PUBLIC
-      ${fmt_compile_definitions})
-  endif()
-endfunction()
-
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
@@ -434,7 +425,8 @@ endif()
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
-compile_with_fmt(common-objs)
+target_compile_definitions(common-objs PRIVATE
+  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
 add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
