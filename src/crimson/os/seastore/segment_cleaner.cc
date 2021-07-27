@@ -185,9 +185,10 @@ SegmentCleaner::get_segment_ret SegmentCleaner::get_segment()
 void SegmentCleaner::update_journal_tail_target(journal_seq_t target)
 {
   logger().debug(
-    "{}: {}",
+    "{}: {}, current tail target {}",
     __func__,
-    target);
+    target,
+    journal_tail_target);
   assert(journal_tail_target == journal_seq_t() || target >= journal_tail_target);
   if (journal_tail_target == journal_seq_t() || target > journal_tail_target) {
     journal_tail_target = target;
@@ -390,7 +391,8 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
 	  logger().debug("Scanner::init_segments: out-of-line segment {}", segment_id);
 	  init_mark_segment_closed(
 	    segment_id,
-	    header.journal_segment_seq);
+	    header.journal_segment_seq,
+	    true);
 	} else {
 	  logger().debug("Scanner::init_segments: journal segment {}", segment_id);
 	  segments.emplace_back(std::make_pair(segment_id, std::move(header)));

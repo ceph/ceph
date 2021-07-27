@@ -58,10 +58,6 @@ Journal::initialize_segment_ertr::future<segment_seq_t>
 Journal::initialize_segment(Segment &segment)
 {
   auto new_tail = segment_provider->get_journal_tail_target();
-  logger().debug(
-    "initialize_segment {} journal_tail_target {}",
-    segment.get_segment_id(),
-    new_tail);
   // write out header
   ceph_assert(segment.get_write_ptr() == 0);
   bufferlist bl;
@@ -75,6 +71,11 @@ Journal::initialize_segment(Segment &segment)
     segment_provider->get_journal_tail_target(),
     current_segment_nonce,
     false};
+  logger().debug(
+    "initialize_segment {} journal_tail_target {}, header {}",
+    segment.get_segment_id(),
+    new_tail,
+    header);
   encode(header, bl);
 
   bufferptr bp(
@@ -226,7 +227,8 @@ Journal::prep_replay_segments(
     [this](auto &seg) {
       segment_provider->init_mark_segment_closed(
 	seg.first,
-	seg.second.journal_segment_seq);
+	seg.second.journal_segment_seq,
+	false);
     });
 
   auto journal_tail = segments.rbegin()->second.journal_tail;
