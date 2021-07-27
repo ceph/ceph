@@ -8265,10 +8265,20 @@ void RGWPutObjRetention::execute(optional_yield y)
     }
     if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph::real_clock::to_time_t(old_obj_retention.get_retain_until_date())) {
       if (old_obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
-	s->err.message = "proposed retain-until date shortens an existing retention period and governance bypass check failed";
+	  s->err.message = "proposed retain-until date shortens an existing retention period and governance bypass check failed";
         op_ret = -EACCES;
         return;
       }
+    } else if (old_obj_retention.get_mode() == obj_retention.get_mode()) {
+      // ok if retention mode doesn't change
+    } else if (obj_retention.get_mode() == "GOVERNANCE") {
+      s->err.message = "can't change retention mode from COMPLIANCE to GOVERNANCE";
+      op_ret = -EACCES;
+      return;
+    } else if (!bypass_perm || !bypass_governance_mode) {
+      s->err.message = "can't change retention mode from GOVERNANCE without governance bypass";
+      op_ret = -EACCES;
+      return;
     }
   }
 
