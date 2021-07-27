@@ -727,6 +727,9 @@ class Filesystem(MDSCluster):
 
         self.getinfo(refresh = True)
 
+        # wait pgs to be clean
+        self.mon_manager.wait_for_clean()
+
     def run_client_payload(self, cmd):
         # avoid circular dep by importing here:
         from tasks.cephfs.fuse_mount import FuseMount
