@@ -97,7 +97,11 @@ class SnappyCompressor : public Compressor {
     if (qat_enabled)
       return qat_accel.decompress(p, compressed_len, dst, compressor_message);
 #endif
+#if SNAPPY_VERSION <= 0x10108
     snappy::uint32 res_len = 0;
+#else
+    uint32_t res_len = 0;
+#endif
     BufferlistSource source_1(p, compressed_len);
     if (!snappy::GetUncompressedLength(&source_1, &res_len)) {
       return -1;
