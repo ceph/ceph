@@ -481,7 +481,7 @@ class Module(MgrModule):
         for state in DF_POOL:
             path = 'pool_{}'.format(state)
             metrics[path] = Metric(
-                'gauge',
+                'counter' if state in ('rd', 'rd_bytes', 'wr', 'wr_bytes') else 'gauge',
                 path,
                 'DF pool {}'.format(state),
                 ('pool_id',)
