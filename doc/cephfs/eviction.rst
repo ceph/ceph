@@ -104,7 +104,7 @@ the blocklist:
 
 ::
 
-    $ ceph osd blocklist ls
+    $ ceph osd blacklist ls
     listed 1 entries
     127.0.0.1:0/3710147553 2018-03-19 11:32:24.716146
     $ ceph osd blocklist rm 127.0.0.1:0/3710147553
@@ -134,7 +134,7 @@ to continue talking to OSDs.  To enable this mode, set
 ``mds_session_blocklist_on_timeout`` to false on your MDS nodes.
 
 For the equivalent behaviour on manual evictions, set
-``mds_session_blocklist_on_evict`` to false.
+``mds_session_blacklist_on_evict`` to false.
 
 Note that if blocklisting is disabled, then evicting a client will
 only have an effect on the MDS you send the command to.  On a system
