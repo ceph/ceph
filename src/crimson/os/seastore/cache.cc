@@ -137,24 +137,6 @@ void Cache::register_metrics()
     register_trans_created(src);
   }
 
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "trans_created",
-        [this] {
-          uint64_t total = 0;
-          for (auto& v : stats.trans_created_by_src) {
-            total += v;
-          }
-          return total;
-        },
-        sm::description("total number of transaction created"),
-        {src_label("ALL")}
-      ),
-    }
-  );
-
   /*
    * trans_committed
    */
@@ -182,24 +164,6 @@ void Cache::register_metrics()
     }
     register_trans_committed(src);
   }
-
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "trans_committed",
-        [this] {
-          uint64_t total = 0;
-          for (auto& v : stats.trans_committed_by_src) {
-            total += v;
-          }
-          return total;
-        },
-        sm::description("total number of transaction committed"),
-        {src_label("ALL")}
-      ),
-    }
-  );
 
   /*
    * trans_invalidated
