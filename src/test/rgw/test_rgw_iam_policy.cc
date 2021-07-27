@@ -56,6 +56,7 @@ using rgw::IAM::s3GetBucketNotification;
 using rgw::IAM::s3GetBucketPolicy;
 using rgw::IAM::s3GetBucketPolicyStatus;
 using rgw::IAM::s3GetBucketPublicAccessBlock;
+using rgw::IAM::s3GetBucketEncryption;
 using rgw::IAM::s3GetBucketRequestPayment;
 using rgw::IAM::s3GetBucketTagging;
 using rgw::IAM::s3GetBucketVersioning;
@@ -386,6 +387,7 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetBucketPolicyStatus] = 1;
   act2[s3GetBucketPublicAccessBlock] = 1;
   act2[s3GetPublicAccessBlock] = 1;
+  act2[s3GetBucketEncryption] = 1;
 
   EXPECT_EQ(p->statements[2].action, act2);
   EXPECT_EQ(p->statements[2].notaction, None);
@@ -455,6 +457,7 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetBucketPolicyStatus] = 1;
   s3allow[s3GetBucketPublicAccessBlock] = 1;
   s3allow[s3GetPublicAccessBlock] = 1;
+  s3allow[s3GetBucketEncryption] = 1;
 
   EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy,
 		   ARN(Partition::aws, Service::s3,
