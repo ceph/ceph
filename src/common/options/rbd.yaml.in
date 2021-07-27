@@ -310,7 +310,7 @@ options:
   max: 32_M
   validator: |
     [](std::string *value, std::string *error_message) {
-      uint64_t f = strict_si_cast<uint64_t>(value->c_str(), error_message);
+      uint64_t f = strict_si_cast<uint64_t>(*value, error_message);
       if (!error_message->empty()) {
         return -EINVAL;
       } else if (!isp2(f)) {
