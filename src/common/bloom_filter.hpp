@@ -76,8 +76,9 @@ public:
       random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
   {
     ceph_assert(false_positive_probability > 0.0);
-    find_optimal_parameters(predicted_inserted_element_count, false_positive_probability,
-			    &salt_count_, &table_size_);
+    std::tie(salt_count_, table_size_) =
+      find_optimal_parameters(predicted_inserted_element_count,
+			      false_positive_probability);
     init();
   }
 
@@ -157,11 +158,8 @@ public:
    */
   inline void insert(uint32_t val) {
     ceph_assert(bit_table_);
-    std::size_t bit_index = 0;
-    std::size_t bit = 0;
-    for (std::size_t i = 0; i < salt_.size(); ++i)
-    {
-      compute_indices(hash_ap(val,salt_[i]),bit_index,bit);
+    for (auto salt : salt_) {
+      auto [bit_index, bit] = compute_indices(hash_ap(val, salt));
       bit_table_[bit_index >> 3] |= bit_mask[bit];
     }
     ++insert_count_;
@@ -170,11 +168,8 @@ public:
   inline void insert(const unsigned char* key_begin, const std::size_t& length)
   {
     ceph_assert(bit_table_);
-    std::size_t bit_index = 0;
-    std::size_t bit = 0;
-    for (std::size_t i = 0; i < salt_.size(); ++i)
-    {
-      compute_indices(hash_ap(key_begin,length,salt_[i]),bit_index,bit);
+    for (auto salt : salt_) {
+      auto [bit_index, bit] = compute_indices(hash_ap(key_begin, length, salt));
       bit_table_[bit_index >> 3] |= bit_mask[bit];
     }
     ++insert_count_;
@@ -214,13 +209,9 @@ public:
   {
     if (!bit_table_)
       return false;
-    std::size_t bit_index = 0;
-    std::size_t bit = 0;
-    for (std::size_t i = 0; i < salt_.size(); ++i)
-    {
-      compute_indices(hash_ap(val,salt_[i]),bit_index,bit);
-      if ((bit_table_[bit_index >> 3] & bit_mask[bit]) != bit_mask[bit])
-      {
+    for (auto salt : salt_) {
+      auto [bit_index, bit] = compute_indices(hash_ap(val, salt));
+      if ((bit_table_[bit_index >> 3] & bit_mask[bit]) != bit_mask[bit]) {
         return false;
       }
     }
@@ -231,13 +222,9 @@ public:
   {
     if (!bit_table_)
       return false;
-    std::size_t bit_index = 0;
-    std::size_t bit = 0;
-    for (std::size_t i = 0; i < salt_.size(); ++i)
-    {
-      compute_indices(hash_ap(key_begin,length,salt_[i]),bit_index,bit);
-      if ((bit_table_[bit_index >> 3] & bit_mask[bit]) != bit_mask[bit])
-      {
+    for (auto salt : salt_) {
+      auto [bit_index, bit] = compute_indices(hash_ap(key_begin, length, salt));
+      if ((bit_table_[bit_index >> 3] & bit_mask[bit]) != bit_mask[bit]) {
         return false;
       }
     }
@@ -347,10 +334,13 @@ public:
 
 protected:
 
-  inline virtual void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const
+  virtual std::pair<size_t /* bit_index */,
+		    size_t /* bit */>
+  compute_indices(const bloom_type& hash) const
   {
-    bit_index = hash % (table_size_ << 3);
-    bit = bit_index & 7;
+    size_t bit_index = hash % (table_size_ << 3);
+    size_t bit = bit_index & 7;
+    return {bit_index, bit};
   }
 
   void generate_unique_salt()
@@ -431,10 +421,10 @@ protected:
     }
   }
 
-  static void find_optimal_parameters(std::size_t target_insert_count,
-				      double target_fpp,
-				      std::size_t *salt_count,
-				      std::size_t *table_size)
+  static std::pair<std::size_t /* salt_count */,
+		   std::size_t /* table_size */>
+  find_optimal_parameters(std::size_t target_insert_count,
+			  double target_fpp)
   {
     /*
       Note:
@@ -462,10 +452,11 @@ protected:
       k += 1.0;
     }
 
-    *salt_count = static_cast<std::size_t>(min_k);
+    size_t salt_count = static_cast<std::size_t>(min_k);
     size_t t = static_cast<std::size_t>(min_m);
     t += (((t & 7) != 0) ? (bits_per_char - (t & 7)) : 0);
-    *table_size = t >> 3;
+    size_t table_size = t >> 3;
+    return {salt_count, table_size};
   }
 
   inline bloom_type hash_ap(uint32_t val, bloom_type hash) const
@@ -591,14 +582,16 @@ public:
 
 private:
 
-  inline void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const override
+  std::pair<size_t /* bit_index */,
+	    size_t /* bit */>
+  compute_indices(const bloom_type& hash) const final
   {
-    bit_index = hash;
-    for (std::size_t i = 0; i < size_list.size(); ++i)
-    {
-      bit_index %= size_list[i] << 3;
+    size_t bit_index = hash;
+    for (auto size : size_list) {
+      bit_index %= size << 3;
     }
-    bit = bit_index & 7;
+    size_t bit = bit_index & 7;
+    return {bit_index, bit};
   }
 
   std::vector<std::size_t> size_list;
