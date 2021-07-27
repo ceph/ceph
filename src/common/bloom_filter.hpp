@@ -39,17 +39,16 @@ static const unsigned char bit_mask[bits_per_char] = {
   0x80   //10000000
 };
 
-MEMPOOL_DECLARE_FACTORY(unsigned char, byte, bloom_filter);
-
 class bloom_filter
 {
 protected:
 
   using bloom_type = unsigned int;
   using cell_type = unsigned char;
+  using table_type = mempool::bloom_filter::vector<cell_type>;
 
-  unsigned char*       bit_table_;   ///< pointer to bit map
   std::vector<bloom_type> salt_;     ///< vector of salts
+  table_type          bit_table_;    ///< bit map
   std::size_t         salt_count_;   ///< number of salts
   std::size_t         table_size_;   ///< bit table size in bytes
   std::size_t         insert_count_;  ///< insertion count
@@ -59,8 +58,7 @@ protected:
 public:
 
   bloom_filter()
-    : bit_table_(0),
-      salt_count_(0),
+    : salt_count_(0),
       table_size_(0),
       insert_count_(0),
       target_element_count_(0),
@@ -70,8 +68,7 @@ public:
   bloom_filter(const std::size_t& predicted_inserted_element_count,
 	       const double& false_positive_probability,
 	       const std::size_t& random_seed)
-    : bit_table_(0),
-      insert_count_(0),
+    : insert_count_(0),
       target_element_count_(predicted_inserted_element_count),
       random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
   {
@@ -86,8 +83,7 @@ public:
 	       std::size_t table_size,
 	       const std::size_t& random_seed,
 	       std::size_t target_element_count)
-    : bit_table_(0),
-      salt_count_(salt_count),
+    : salt_count_(salt_count),
       table_size_(table_size),
       insert_count_(0),
       target_element_count_(target_element_count),
@@ -98,16 +94,10 @@ public:
 
   void init() {
     generate_unique_salt();
-    if (table_size_) {
-      bit_table_ = mempool::bloom_filter::alloc_byte.allocate(table_size_);
-      std::fill_n(bit_table_, table_size_, 0x00);
-    } else {
-      bit_table_ = NULL;
-    }
+    bit_table_.resize(table_size_, static_cast<unsigned char>(0x00));
   }
 
   bloom_filter(const bloom_filter& filter)
-    : bit_table_(0)
   {
     this->operator=(filter);
   }
@@ -115,25 +105,18 @@ public:
   bloom_filter& operator = (const bloom_filter& filter)
   {
     if (this != &filter) {
-      if (bit_table_) {
-	mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
-      }
       salt_count_ = filter.salt_count_;
       table_size_ = filter.table_size_;
       insert_count_ = filter.insert_count_;
       target_element_count_ = filter.target_element_count_;
       random_seed_ = filter.random_seed_;
-      bit_table_ = mempool::bloom_filter::alloc_byte.allocate(table_size_);
-      std::copy(filter.bit_table_, filter.bit_table_ + table_size_, bit_table_);
+      bit_table_ = filter.bit_table_;
       salt_ = filter.salt_;
     }
     return *this;
   }
 
-  virtual ~bloom_filter()
-  {
-    mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
-  }
+  virtual ~bloom_filter() = default;
 
   inline bool operator!() const
   {
@@ -142,8 +125,8 @@ public:
 
   inline void clear()
   {
-    if (bit_table_)
-      std::fill_n(bit_table_, table_size_, 0x00);
+    std::fill(bit_table_.begin(), bit_table_.end(),
+	      static_cast<unsigned char>(0x00));
     insert_count_ = 0;
   }
 
@@ -157,7 +140,6 @@ public:
    * @param val integer value to insert
    */
   inline void insert(uint32_t val) {
-    ceph_assert(bit_table_);
     for (auto salt : salt_) {
       auto [bit_index, bit] = compute_indices(hash_ap(val, salt));
       bit_table_[bit_index >> 3] |= bit_mask[bit];
@@ -167,7 +149,6 @@ public:
 
   inline void insert(const unsigned char* key_begin, const std::size_t& length)
   {
-    ceph_assert(bit_table_);
     for (auto salt : salt_) {
       auto [bit_index, bit] = compute_indices(hash_ap(key_begin, length, salt));
       bit_table_[bit_index >> 3] |= bit_mask[bit];
@@ -207,8 +188,9 @@ public:
    */
   inline virtual bool contains(uint32_t val) const
   {
-    if (!bit_table_)
+    if (table_size_ == 0) {
       return false;
+    }
     for (auto salt : salt_) {
       auto [bit_index, bit] = compute_indices(hash_ap(val, salt));
       if ((bit_table_[bit_index >> 3] & bit_mask[bit]) != bit_mask[bit]) {
@@ -220,8 +202,9 @@ public:
 
   inline virtual bool contains(const unsigned char* key_begin, const std::size_t length) const
   {
-    if (!bit_table_)
+    if (table_size_ == 0) {
       return false;
+    }
     for (auto salt : salt_) {
       auto [bit_index, bit] = compute_indices(hash_ap(key_begin, length, salt));
       if ((bit_table_[bit_index >> 3] & bit_mask[bit]) != bit_mask[bit]) {
@@ -295,10 +278,8 @@ public:
    */
   inline double density() const
   {
-    if (!bit_table_)
-      return 0.0;
     size_t set = 0;
-    uint8_t *p = bit_table_;
+    auto p = bit_table_.begin();
     size_t left = table_size_;
     while (left-- > 0) {
       uint8_t c = *p;
@@ -329,7 +310,7 @@ public:
 
   inline const cell_type* table() const
   {
-    return bit_table_;
+    return bit_table_.data();
   }
 
 protected:
@@ -535,7 +516,7 @@ public:
 
   inline bool compress(const double& target_ratio)
   {
-    if (!bit_table_)
+    if (bit_table_.empty())
       return false;
 
     if ((0.0 >= target_ratio) || (target_ratio >= 1.0))
@@ -551,21 +532,19 @@ public:
       return false;
     }
 
-    cell_type* tmp = mempool::bloom_filter::alloc_byte.allocate(new_table_size);
-    std::copy(bit_table_, bit_table_ + (new_table_size), tmp);
-    cell_type* itr = bit_table_ + (new_table_size);
-    cell_type* end = bit_table_ + (original_table_size);
-    cell_type* itr_tmp = tmp;
-    cell_type* itr_end = tmp + (new_table_size);
-    while (end != itr)
-    {
+    table_type tmp(new_table_size);
+    std::copy(bit_table_.begin(), bit_table_.begin() + new_table_size, tmp.begin());
+    auto itr = bit_table_.begin() + new_table_size;
+    auto end = bit_table_.begin() + original_table_size;
+    auto itr_tmp = tmp.begin();
+    auto itr_end = tmp.begin() + new_table_size;
+    while (end != itr) {
       *(itr_tmp++) |= (*itr++);
-      if (itr_tmp == itr_end)
-	itr_tmp = tmp;
+      if (itr_tmp == itr_end) {
+	itr_tmp = tmp.begin();
+      }
     }
-
-    mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
-    bit_table_ = tmp;
+    std::swap(bit_table_, tmp);
     size_list.push_back(new_table_size);
     table_size_ = new_table_size;
 
@@ -611,7 +590,7 @@ WRITE_CLASS_ENCODER(compressible_bloom_filter)
   If it can be guaranteed that bits_per_char will be of the form 2^n then
   the following optimization can be used:
 
-  hash_table[bit_index >> n] |= bit_mask[bit_index & (bits_per_char - 1)];
+  bit_table_[bit_index >> n] |= bit_mask[bit_index & (bits_per_char - 1)];
 
   Note 2:
   For performance reasons where possible when allocating memory it should
