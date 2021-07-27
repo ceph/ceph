@@ -1957,12 +1957,20 @@ bool OSDMap::check_pg_upmaps(
     // okay, upmap is valid
     // continue to check if it is still necessary
     auto i = pg_upmap.find(pg);
-    if (i != pg_upmap.end() && raw == i->second) {
-      ldout(cct, 10) << " removing redundant pg_upmap "
-                     << i->first << " " << i->second
-                     << dendl;
-      to_cancel->push_back(pg);
-      continue;
+    if (i != pg_upmap.end()) {
+      if (i->second == raw) {
+        ldout(cct, 10) << "removing redundant pg_upmap " << i->first << " "
+                       << i->second << dendl;
+        to_cancel->push_back(pg);
+        continue;
+      }
+      if ((int)i->second.size() != get_pg_pool_size(pg)) {
+        ldout(cct, 10) << "removing pg_upmap " << i->first << " "
+                       << i->second << " != pool size " << get_pg_pool_size(pg)
+                       << dendl;
+        to_cancel->push_back(pg);
+        continue;
+      }
     }
     auto j = pg_upmap_items.find(pg);
     if (j != pg_upmap_items.end()) {
