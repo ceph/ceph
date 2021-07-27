@@ -585,7 +585,6 @@ class ExportMgr:
                           access_type: str,
                           read_only: bool,
                           squash: str,
-                          realm: Optional[str] = None,
                           clients: list = []) -> Tuple[int, str, str]:
         pseudo_path = self.format_path(pseudo_path)
 
