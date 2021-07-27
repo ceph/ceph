@@ -618,6 +618,11 @@ private:
         return bytes;
       }
     }
+
+    void increment(uint64_t extent_len) {
+      ++extents;
+      bytes += extent_len;
+    }
   };
 
   struct trans_efforts_t {
@@ -641,10 +646,19 @@ private:
     }
   };
 
+  struct trans_byextent_efforts_t {
+    std::array<effort_t, EXTENT_TYPES_MAX> read_by_ext;
+    std::array<effort_t, EXTENT_TYPES_MAX> mutate_by_ext;
+    std::array<uint64_t, EXTENT_TYPES_MAX> delta_bytes_by_ext;
+    std::array<effort_t, EXTENT_TYPES_MAX> retire_by_ext;
+    std::array<effort_t, EXTENT_TYPES_MAX> fresh_by_ext;
+  };
+
   struct {
     std::array<uint64_t, Transaction::SRC_MAX> trans_created_by_src;
     std::array<uint64_t, Transaction::SRC_MAX> trans_committed_by_src;
-    std::array<trans_efforts_t, Transaction::SRC_MAX> committed_efforts_by_src;
+    std::array<trans_byextent_efforts_t,
+               Transaction::SRC_MAX> committed_efforts_by_src;
     std::unordered_map<src_ext_t, uint64_t,
                        boost::hash<src_ext_t>> trans_invalidated;
     std::array<trans_efforts_t, Transaction::SRC_MAX> invalidated_efforts_by_src;
@@ -661,6 +675,13 @@ private:
       Transaction::src_t src) {
     assert(static_cast<std::size_t>(src) < counters_by_src.size());
     return counters_by_src[static_cast<std::size_t>(src)];
+  }
+
+  template <typename CounterT>
+  CounterT& get_by_ext(
+      std::array<CounterT, EXTENT_TYPES_MAX>& counters_by_ext,
+      extent_types_t ext) {
+    return counters_by_ext[extent_type_to_index(ext)];
   }
 
   seastar::metrics::metric_group metrics;
@@ -701,9 +722,6 @@ private:
 
   /// Mark a valid transaction as conflicted
   void invalidate(Transaction& t, CachedExtent& conflicting_extent);
-
-  /// Measure efforts of a submitting/invalidating transaction
-  void measure_efforts(Transaction& t, trans_efforts_t& efforts);
 
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
