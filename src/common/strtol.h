@@ -72,24 +72,20 @@ auto consume(std::string_view& s, int base = 10)
 bool strict_strtob(const char* str, std::string *err);
 
 long long strict_strtoll(std::string_view str, int base, std::string *err);
-long long strict_strtoll(const char *str, int base, std::string *err);
 
 int strict_strtol(std::string_view str, int base, std::string *err);
-int strict_strtol(const char *str, int base, std::string *err);
 
-double strict_strtod(const char *str, std::string *err);
+double strict_strtod(std::string_view str, std::string *err);
 
-float strict_strtof(const char *str, std::string *err);
+float strict_strtof(std::string_view str, std::string *err);
 
-uint64_t strict_iecstrtoll(const char *str, std::string *err);
-
-template<typename T>
-T strict_iec_cast(const char *str, std::string *err);
-
-uint64_t strict_sistrtoll(const char *str, std::string *err);
+uint64_t strict_iecstrtoll(std::string_view str, std::string *err);
 
 template<typename T>
-T strict_si_cast(const char *str, std::string *err);
+T strict_iec_cast(std::string_view str, std::string *err);
+
+template<typename T>
+T strict_si_cast(std::string_view str, std::string *err);
 
 /* On enter buf points to the end of the buffer, e.g. where the least
  * significant digit of the input number will be printed. Returns pointer to

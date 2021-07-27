@@ -260,7 +260,7 @@ int BitmapFreelistManager::_read_cfg(
     string val;
     int r = cfg_reader(keys[i], &val);
     if (r == 0) {
-      *(vals[i]) = strict_iecstrtoll(val.c_str(), &err);
+      *(vals[i]) = strict_iecstrtoll(val, &err);
       if (!err.empty()) {
         derr << __func__ << " Failed to parse - "
           << keys[i] << ":" << val
