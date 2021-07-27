@@ -1525,6 +1525,14 @@ class TestCephVolume(object):
             cd.command_ceph_volume(ctx)
             assert ctx.fsid == fsid
 
+        cmd = self._get_cmd('--fsid', '00000000-0000-0000-0000-0000deadbeez')
+        with with_cephadm_ctx(cmd) as ctx:
+            err = 'not an fsid'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+                assert ctx.fsid == None
+
         s = get_ceph_conf(fsid=fsid)
         f = cephadm_fs.create_file('ceph.conf', contents=s)
 

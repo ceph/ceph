@@ -4604,6 +4604,7 @@ def command_enter(ctx):
 
 @infer_fsid
 @infer_image
+@validate_fsid
 def command_ceph_volume(ctx):
     # type: (CephadmContext) -> None
     cp = read_config(ctx.config)
