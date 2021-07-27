@@ -3549,6 +3549,45 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
   end_header(s, NULL);
 }
 
+void RGWPutBucketEncryption_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketEncryption_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    if (op_ret == -ENOENT)
+      set_req_state_err(s, ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION);
+    else
+      set_req_state_err(s, op_ret);
+  }
+
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (!op_ret) {
+    encode_xml("ServerSideEncryptionConfiguration", bucket_encryption_conf, s->formatter);
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+}
+
+void RGWDeleteBucketEncryption_ObjStore_S3::send_response()
+{
+  if (op_ret == 0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 void RGWGetRequestPayment_ObjStore_S3::send_response()
 {
   dump_errno(s);
@@ -4345,6 +4384,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketPolicyStatus_ObjStore_S3;
   } else if (is_block_public_access_op()) {
     return new RGWGetBucketPublicAccessBlock_ObjStore_S3;
+  } else if (is_bucket_encryption_op()) {
+    return new RGWGetBucketEncryption_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -4398,6 +4439,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutBucketReplication_ObjStore_S3;
   } else if (is_block_public_access_op()) {
     return new RGWPutBucketPublicAccessBlock_ObjStore_S3;
+  } else if (is_bucket_encryption_op()) {
+    return new RGWPutBucketEncryption_ObjStore_S3;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -4422,6 +4465,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteBucketReplication_ObjStore_S3;
   } else if (is_block_public_access_op()) {
     return new RGWDeleteBucketPublicAccessBlock;
+  } else if (is_bucket_encryption_op()) {
+    return new RGWDeleteBucketEncryption_ObjStore_S3;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -5470,6 +5515,9 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ:
         case RGW_OP_PUT_ACLS:
         case RGW_OP_PUT_CORS:
+        case RGW_OP_PUT_BUCKET_ENCRYPTION:
+        case RGW_OP_GET_BUCKET_ENCRYPTION:
+        case RGW_OP_DELETE_BUCKET_ENCRYPTION:
         case RGW_OP_INIT_MULTIPART: // in case that Init Multipart uses CHUNK encoding
         case RGW_OP_COMPLETE_MULTIPART:
         case RGW_OP_SET_BUCKET_VERSIONING:
