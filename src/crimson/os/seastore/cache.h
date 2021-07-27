@@ -367,6 +367,11 @@ public:
     }
   }
 
+  /**
+   * alloc_new_extent
+   *
+   * Allocates a fresh extent. if delayed is true, addr will be alloc'd later
+   */
   template <typename T>
   TCachedExtentRef<T> alloc_new_extent(
     Transaction &t,       ///< [in, out] current transaction

@@ -284,7 +284,7 @@ public:
     Transaction &t,
     laddr_t hint,
     extent_len_t len) {
-    auto ext = cache->alloc_new_extent<T>(
+    auto ext = epm->alloc_new_extent<T>(
       t,
       len);
     return lba_manager->alloc_extent(
