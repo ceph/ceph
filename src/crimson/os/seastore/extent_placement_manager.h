@@ -214,7 +214,6 @@ class SegmentedAllocator : public ExtentAllocator {
     finish_record_ret finish_write(
       Transaction& t,
       ool_record_t& record);
-    segment_off_t fake_paddr_off = 0;
     bool _needs_roll(segment_off_t length) const;
 
     write_iertr::future<> _write(
@@ -319,6 +318,28 @@ public:
       extent = cache.alloc_new_extent_by_type(t, type, length, true);
     } else {
       extent = cache.alloc_new_extent_by_type(t, type, length);
+    }
+    extent->backend_type = dtype;
+    extent->hint = hint;
+    return extent;
+  }
+
+  template<
+    typename T,
+    std::enable_if_t<std::is_base_of_v<LogicalCachedExtent, T>, int> = 0>
+  TCachedExtentRef<T> alloc_new_extent(
+    Transaction& t,
+    segment_off_t length,
+    ool_placement_hint_t hint = ool_placement_hint_t::NONE)
+  {
+    auto dtype = get_allocator_type(hint);
+    TCachedExtentRef<T> extent;
+    if (need_delayed_allocation(dtype)) {
+      // set a unique temperary paddr, this is necessary because
+      // transaction's write_set is indexed by paddr
+      extent = cache.alloc_new_extent<T>(t, length, true);
+    } else {
+      extent = cache.alloc_new_extent<T>(t, length);
     }
     extent->backend_type = dtype;
     extent->hint = hint;
