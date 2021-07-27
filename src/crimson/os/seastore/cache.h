@@ -592,8 +592,8 @@ private:
   CachedExtent::list dirty;
 
   struct query_counters_t {
-    uint64_t access;
-    uint64_t hit;
+    uint64_t access = 0;
+    uint64_t hit = 0;
   };
 
   /**
@@ -662,8 +662,7 @@ private:
     std::unordered_map<src_ext_t, uint64_t,
                        boost::hash<src_ext_t>> trans_invalidated;
     std::array<trans_efforts_t, Transaction::SRC_MAX> invalidated_efforts_by_src;
-    std::unordered_map<src_ext_t, query_counters_t,
-                       boost::hash<src_ext_t>> cache_query;
+    std::array<query_counters_t, Transaction::SRC_MAX> cache_query_by_src;
     uint64_t read_transactions_successful;
     effort_t read_effort_successful;
     uint64_t dirty_bytes;
@@ -758,8 +757,7 @@ private:
       const src_ext_t* p_metric_key) {
     query_counters_t* p_counters = nullptr;
     if (p_metric_key) {
-      assert(stats.cache_query.count(*p_metric_key));
-      p_counters = &stats.cache_query[*p_metric_key];
+      p_counters = &get_counter(stats.cache_query_by_src, p_metric_key->first);
       ++p_counters->access;
     }
     if (auto iter = extents.find_offset(offset);
