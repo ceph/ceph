@@ -23,10 +23,8 @@
 #define COMMON_BLOOM_FILTER_HPP
 
 #include <cmath>
-#include <numeric>
 
 #include "include/encoding.h"
-#include "include/intarith.h"
 #include "include/mempool.h"
 
 static const unsigned char bit_mask[CHAR_BIT] = {
@@ -277,15 +275,7 @@ public:
    *    .75 = 200% target insertions
    *   1.0  = all bits set... infinite insertions
    */
-  inline double density() const
-  {
-    unsigned set = std::transform_reduce(
-      bit_table_.begin(),
-      bit_table_.begin() + table_size_,
-      0, std::plus<>(),
-      popcount<cell_type>);
-    return (double)set / (table_size_ * sizeof(cell_type) * CHAR_BIT);
-  }
+  double density() const;
 
   virtual inline double approx_unique_element_count() const {
     // this is not a very good estimate; a better solution should have
