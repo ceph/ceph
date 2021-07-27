@@ -4,8 +4,6 @@
 #pragma once
 
 #include <iostream>
-#include <unordered_map>
-#include <boost/functional/hash.hpp>
 
 #include "seastar/core/shared_future.hh"
 
@@ -646,12 +644,15 @@ private:
     }
   };
 
+  template <typename CounterT>
+  using counter_by_extent_t = std::array<CounterT, EXTENT_TYPES_MAX>;
+
   struct trans_byextent_efforts_t {
-    std::array<effort_t, EXTENT_TYPES_MAX> read_by_ext;
-    std::array<effort_t, EXTENT_TYPES_MAX> mutate_by_ext;
-    std::array<uint64_t, EXTENT_TYPES_MAX> delta_bytes_by_ext;
-    std::array<effort_t, EXTENT_TYPES_MAX> retire_by_ext;
-    std::array<effort_t, EXTENT_TYPES_MAX> fresh_by_ext;
+    counter_by_extent_t<effort_t> read_by_ext;
+    counter_by_extent_t<effort_t> mutate_by_ext;
+    counter_by_extent_t<uint64_t> delta_bytes_by_ext;
+    counter_by_extent_t<effort_t> retire_by_ext;
+    counter_by_extent_t<effort_t > fresh_by_ext;
   };
 
   struct {
@@ -659,8 +660,7 @@ private:
     std::array<uint64_t, Transaction::SRC_MAX> trans_committed_by_src;
     std::array<trans_byextent_efforts_t,
                Transaction::SRC_MAX> committed_efforts_by_src;
-    std::unordered_map<src_ext_t, uint64_t,
-                       boost::hash<src_ext_t>> trans_invalidated;
+    std::array<counter_by_extent_t<uint64_t>, Transaction::SRC_MAX> trans_invalidated;
     std::array<trans_efforts_t, Transaction::SRC_MAX> invalidated_efforts_by_src;
     std::array<query_counters_t, Transaction::SRC_MAX> cache_query_by_src;
     uint64_t read_transactions_successful;
@@ -678,7 +678,7 @@ private:
 
   template <typename CounterT>
   CounterT& get_by_ext(
-      std::array<CounterT, EXTENT_TYPES_MAX>& counters_by_ext,
+      counter_by_extent_t<CounterT>& counters_by_ext,
       extent_types_t ext) {
     return counters_by_ext[extent_type_to_index(ext)];
   }

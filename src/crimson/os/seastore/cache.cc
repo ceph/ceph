@@ -211,50 +211,24 @@ void Cache::register_metrics()
   /*
    * trans_invalidated
    */
-  auto register_trans_invalidated =
-    [this, &labels_by_src, &labels_by_ext](src_t src, extent_types_t ext) {
-      auto m_key = std::make_pair(src, ext);
-      stats.trans_invalidated[m_key] = 0;
-      std::ostringstream oss_desc;
-      oss_desc << "total number of transaction invalidated (src="
-               << src << ", ext="
-               << ext << ")";
+  for (auto& [src, src_label] : labels_by_src) {
+    for (auto& [ext, ext_label] : labels_by_ext) {
+      auto& counter_by_extent = get_by_src(stats.trans_invalidated, src);
+      auto& counter = get_by_ext(counter_by_extent, ext);
+      counter = 0;
       metrics.add_group(
         "cache",
         {
           sm::make_counter(
             "trans_invalidated",
-            stats.trans_invalidated.find(m_key)->second,
-            sm::description(oss_desc.str()),
-            {labels_by_src.find(src)->second,
-             labels_by_ext.find(ext)->second}
+            counter,
+            sm::description("total number of transaction invalidated"),
+            {src_label, ext_label}
           ),
         }
       );
-    };
-  for (auto& [src, label] : labels_by_src) {
-    for (auto& [ext, _label] : labels_by_ext) {
-      register_trans_invalidated(src, ext);
     }
   }
-
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "trans_invalidated",
-        [this] {
-          uint64_t total = 0;
-          for (auto& [k, v] : stats.trans_invalidated) {
-            total += v;
-          }
-          return total;
-        },
-        sm::description("total number of transaction invalidated"),
-        {src_label("ALL")}
-      ),
-    }
-  );
 
   /**
    * read_transactions_successful
@@ -383,7 +357,7 @@ void Cache::register_metrics()
       auto& efforts = get_by_src(stats.committed_efforts_by_src, src);
       for (auto& [effort_name, effort_label] : labels_by_effort) {
         auto& effort_by_ext = [&efforts, &effort_name]()
-            -> std::array<effort_t, EXTENT_TYPES_MAX>& {
+            -> counter_by_extent_t<effort_t>& {
           if (effort_name == "READ") {
             return efforts.read_by_ext;
           } else if (effort_name == "MUTATE") {
@@ -629,10 +603,9 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
   DEBUGT("set conflict", t);
   t.conflicted = true;
 
-  auto m_key = std::make_pair(
-      t.get_src(), conflicting_extent.get_type());
-  assert(stats.trans_invalidated.count(m_key));
-  ++(stats.trans_invalidated[m_key]);
+  auto& counter_by_extent = get_by_src(stats.trans_invalidated, t.get_src());
+  auto& counter = get_by_ext(counter_by_extent, conflicting_extent.get_type());
+  ++counter;
 
   auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
                              t.get_src());
