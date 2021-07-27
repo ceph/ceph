@@ -27,8 +27,7 @@
 #include "include/mempool.h"
 #include "include/encoding.h"
 
-static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
-static const unsigned char bit_mask[bits_per_char] = {
+static const unsigned char bit_mask[CHAR_BIT] = {
   0x01,  //00000001
   0x02,  //00000010
   0x04,  //00000100
@@ -256,7 +255,7 @@ public:
 
   inline virtual std::size_t size() const
   {
-    return table_size_ * bits_per_char;
+    return table_size_ * CHAR_BIT;
   }
 
   inline std::size_t element_count() const
@@ -435,7 +434,7 @@ protected:
 
     size_t salt_count = static_cast<std::size_t>(min_k);
     size_t t = static_cast<std::size_t>(min_m);
-    t += (((t & 7) != 0) ? (bits_per_char - (t & 7)) : 0);
+    t += (((t & 7) != 0) ? (CHAR_BIT - (t & 7)) : 0);
     size_t table_size = t >> 3;
     return {salt_count, table_size};
   }
@@ -511,7 +510,7 @@ public:
 
   inline std::size_t size() const override
   {
-    return size_list.back() * bits_per_char;
+    return size_list.back() * CHAR_BIT;
   }
 
   inline bool compress(const double& target_ratio)
@@ -587,10 +586,10 @@ WRITE_CLASS_ENCODER(compressible_bloom_filter)
 
 /*
   Note 1:
-  If it can be guaranteed that bits_per_char will be of the form 2^n then
+  If it can be guaranteed that CHAR_BIT will be of the form 2^n then
   the following optimization can be used:
 
-  bit_table_[bit_index >> n] |= bit_mask[bit_index & (bits_per_char - 1)];
+  bit_table_[bit_index >> n] |= bit_mask[bit_index & (CHAR_BIT - 1)];
 
   Note 2:
   For performance reasons where possible when allocating memory it should
