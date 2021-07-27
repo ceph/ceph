@@ -64,6 +64,38 @@ Options
 :Type: String
 :Default: None
 
+``ssl_options``
+
+:Description: Optional colon separated list of ssl context options:
+
+              ``default_workarounds`` Implement various bug workarounds.
+
+              ``no_compression`` Disable compression.
+
+              ``no_sslv2`` Disable SSL v2.
+
+              ``no_sslv3`` Disable SSL v3.
+
+              ``no_tlsv1`` Disable TLS v1.
+
+              ``no_tlsv1_1`` Disable TLS v1.1.
+
+              ``no_tlsv1_2`` Disable TLS v1.2.
+
+              ``single_dh_use`` Always create a new key when using tmp_dh parameters.
+
+:Type: String
+:Default: ``no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1``
+
+``ssl_ciphers``
+
+:Description: Optional list of one or more cipher strings separated by colons.
+              The format of the string is described in openssl's ciphers(1)
+              manual.
+
+:Type: String
+:Default: None
+
 ``tcp_nodelay``
 
 :Description: If set the socket option will disable Nagle's algorithm on 
