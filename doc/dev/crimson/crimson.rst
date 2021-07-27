@@ -39,12 +39,30 @@ As you might expect, crimson is not featurewise on par with its predecessor yet.
 object store backend
 --------------------
 
-At the moment ``crimson-osd`` offers two object store backends:
+At the moment, ``crimson-osd`` offers both native and alienized object store
+backends. The native object store backends perform IO using seastar reactor.
+They are:
 
-- CyanStore: CyanStore is modeled after memstore in classic OSD.
-- AlienStore: AlienStore is short for Alienized BlueStore.
+.. describe:: cyanstore
 
-Seastore is still under active development.
+   CyanStore is modeled after memstore in classic OSD.
+
+.. describe:: seastore
+
+   Seastore is still under active development.
+
+While the alienized object store backends are backed by a thread pool, which
+is a proxy of the alien store adaptor running in SeaStar. The proxy issues
+requests to object stores running in alien threads, i.e., worker threads not
+managed by the Seastar framework. They are:
+
+.. describe:: memstore
+
+   The memory backed object store
+
+.. describe:: bluestore
+
+   The object store used by classic OSD by default.
 
 daemonize
 ---------
@@ -121,17 +139,20 @@ using ``vstart.sh``,
 
     for more Seastar specific command line options.
 
-``--memstore``
+``--cyanstore``
     use the CyanStore as the object store backend.
 
 ``--bluestore``
-    use the AlienStore as the object store backend. This is the default setting,
-    if not specified otherwise.
+    use the alienized BlueStore as the object store backend. This is the default
+    setting, if not specified otherwise.
+
+``--memstore``
+    use the alienized MemStore as the object store backend.
 
 So, a typical command to start a single-crimson-node cluster is::
 
   $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
-    --without-dashboard --memstore \
+    --without-dashboard --cyanstore \
     --crimson --nodaemon --redirect-output \
     --osd-args "--memory 4G"
 

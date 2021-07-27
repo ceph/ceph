@@ -413,6 +413,9 @@ case $1 in
     --memstore)
         objectstore="memstore"
         ;;
+    --cyanstore)
+        objectstore="cyanstore"
+        ;;
     --seastore)
         objectstore="seastore"
         ;;
