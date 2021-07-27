@@ -476,6 +476,8 @@ seastar::future<> OSD::start_asok_admin()
 seastar::future<> OSD::stop()
 {
   logger().info("stop");
+  beacon_timer.cancel();
+  tick_timer.cancel();
   // see also OSD::shutdown()
   return prepare_to_stop().then([this] {
     state.set_stopping();

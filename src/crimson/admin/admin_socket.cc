@@ -225,30 +225,29 @@ seastar::future<> AdminSocket::start(const std::string& path)
     return seastar::make_ready_future<>();
   }
   // listen in background
-  task = seastar::do_until(
-    [this] { return stop_gate.is_closed(); },
-    [this] {
-      return seastar::with_gate(stop_gate, [this] {
-        assert(!connected_sock.has_value());
-        return server_sock->accept().then([this](seastar::accept_result acc) {
-          connected_sock = std::move(acc.connection);
-          return seastar::do_with(connected_sock->input(),
-                                  connected_sock->output(),
-            [this](auto& input, auto& output) mutable {
-            return handle_client(input, output);
-          }).finally([this] {
-            assert(connected_sock.has_value());
-            connected_sock.reset();
-          });
-        }).handle_exception([this](auto ep) {
-          if (!stop_gate.is_closed()) {
-            logger().error("AdminSocket: terminated: {}", ep);
-          }
+  task = seastar::keep_doing([this] {
+    return seastar::try_with_gate(stop_gate, [this] {
+      assert(!connected_sock.has_value());
+      return server_sock->accept().then([this](seastar::accept_result acc) {
+        connected_sock = std::move(acc.connection);
+        return seastar::do_with(connected_sock->input(),
+                                connected_sock->output(),
+          [this](auto& input, auto& output) mutable {
+          return handle_client(input, output);
+        }).finally([this] {
+          assert(connected_sock.has_value());
+          connected_sock.reset();
         });
+      }).handle_exception([this](auto ep) {
+        if (!stop_gate.is_closed()) {
+          logger().error("AdminSocket: terminated: {}", ep);
+        }
       });
-    }).finally([path] {
-      return seastar::remove_file(path);
     });
+  }).handle_exception_type([](const seastar::gate_closed_exception&) {
+  }).finally([path] {
+    return seastar::remove_file(path);
+  });
   return seastar::make_ready_future<>();
 }
 
