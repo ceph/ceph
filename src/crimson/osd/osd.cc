@@ -108,6 +108,7 @@ OSD::OSD(int id, uint32_t nonce,
                     __func__, cpp_strerror(r));
     }
   }
+  logger().info("{}: nonce is {}", __func__, nonce);
 }
 
 OSD::~OSD() = default;
