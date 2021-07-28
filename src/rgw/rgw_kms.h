@@ -43,6 +43,7 @@ int make_actual_key_from_sse_s3(CephContext *cct,
 int reconstitute_actual_key_from_sse_s3(CephContext *cct,
                             map<string, bufferlist>& attrs,
                             std::string& actual_key);
+int generate_kek_sse_s3(CephContext *cct, string kek_id);
 
 /**
  * SecretEngine Interface
