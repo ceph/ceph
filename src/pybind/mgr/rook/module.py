@@ -112,6 +112,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._k8s_StorageV1_api: Optional[client.StorageV1Api] = None
         self._rook_cluster: Optional[RookCluster] = None
         self._rook_env = RookEnv()
+        self._k8s_AppsV1_api: Optional[client.AppsV1Api] = None
         self.storage_class = self.get_module_option('storage_class')
 
         self._shutdown = threading.Event()
@@ -167,6 +168,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._k8s_BatchV1_api = client.BatchV1Api()
         self._k8s_CustomObjects_api = client.CustomObjectsApi()
         self._k8s_StorageV1_api = client.StorageV1Api()
+        self._k8s_AppsV1_api = client.AppsV1Api()
 
         try:
             # XXX mystery hack -- I need to do an API call from
@@ -185,6 +187,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             self._k8s_BatchV1_api,
             self._k8s_CustomObjects_api,
             self._k8s_StorageV1_api,
+            self._k8s_AppsV1_api,
             self._rook_env,
             self.storage_class)
 
