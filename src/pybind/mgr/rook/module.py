@@ -478,6 +478,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                                 "support OSD creation.")
             result_list.append(self.rook_cluster.add_osds(drive_group, matching_hosts))
         return OrchResult(result_list)
+
+    def remove_osds(self, osd_ids: List[str], replace: bool = False, force: bool = False) -> OrchResult[str]:
+        assert self._rook_cluster is not None
+        res = self._rook_cluster.remove_osds(osd_ids, replace, force, self.mon_command)
+        return OrchResult(res)
+
     """
     @handle_orch_error
     def create_osds(self, drive_group):
