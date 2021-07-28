@@ -267,7 +267,6 @@ class KubernetesResource(Generic[T]):
                     raise AttributeError(
                         "{} doesn't contain a metadata.name. Unable to track changes".format(
                             self.api_func)) 
-
     @threaded
     def _watch(self, res_ver: Optional[str]) -> None:
         """ worker thread that runs the kubernetes watch """
@@ -476,12 +475,13 @@ class LSOCreator(DefaultCreator):
 class RookCluster(object):
     # import of client.CoreV1Api must be optional at import time.
     # Instead allow mgr/rook to be imported anyway.
-    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', storageV1_api: 'client.StorageV1Api', rook_env: 'RookEnv', storage_class: 'str'):
+    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', customObjects_api: 'client.CustomObjectsApi', storageV1_api: 'client.StorageV1Api', appsV1_api: 'client.AppsV1Api', rook_env: 'RookEnv', storage_class: 'str'):
         self.rook_env = rook_env  # type: RookEnv
         self.coreV1_api = coreV1_api  # client.CoreV1Api
         self.batchV1_api = batchV1_api
         self.customObjects_api = customObjects_api
         self.storageV1_api = storageV1_api  # client.StorageV1Api
+        self.appsV1_api = appsV1_api  # client.AppsV1Api
         self.storage_class = storage_class # type: str
 
         #  TODO: replace direct k8s calls with Rook API calls
