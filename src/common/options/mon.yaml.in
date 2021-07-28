@@ -756,9 +756,10 @@ options:
 - name: mon_mds_force_trim_to
   type: int
   level: dev
-  desc: force mons to trim mdsmaps/fsmaps through this epoch
-  fmt_desc: Force monitor to trim mdsmaps to this point (0 disables it.
-    dangerous, use with care)
+  desc: force mons to trim mdsmaps/fsmaps up to this epoch
+  fmt_desc: Force monitor to trim mdsmaps up to but not including this FSMap
+    epoch. A value of 0 disables (the default) this config. This command is
+    potentially dangerous, use with care.
   default: 0
   services:
   - mon
