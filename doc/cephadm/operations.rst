@@ -63,16 +63,6 @@ something like:
 
 This works well for normal operations when logging levels are low.
 
-Disabling logging to stderr
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-To disable logging to stderr:
-
-.. prompt:: bash #
-
-  ceph config set global log_to_stderr false
-  ceph config set global mon_cluster_log_to_stderr false
-
 Logging to files
 ----------------
 
@@ -97,9 +87,9 @@ To enable logging to files, run the following commands:
 Disabling logging to stderr
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you choose to log to files, we recommend disabling logging to
-stderr (see above) or else everything will be logged twice. Run the
-following commands to disable logging to stderr:
+If you choose to log to files, we recommend disabling logging to stderr or else
+everything will be logged twice. Run the following commands to disable logging
+to stderr:
 
 .. prompt:: bash #
 
