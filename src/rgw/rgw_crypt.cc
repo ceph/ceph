@@ -16,6 +16,7 @@
 #include "crypto/crypto_accel.h"
 #include "crypto/crypto_plugin.h"
 #include "rgw/rgw_kms.h"
+#include "rgw/rgw_bucket_encryption.h"
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/error/error.h"
@@ -912,6 +913,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 {
   int res = 0;
   crypt_http_responses.clear();
+
   {
     std::string_view req_sse_ca =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
@@ -1097,6 +1099,78 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         s->err.message = "Server Side Encryption with KMS managed key requires "
                          "HTTP header x-amz-server-side-encryption : aws:kms";
         return -EINVAL;
+      }
+    }
+
+    /* Checking bucket attributes if SSE is enabled. Currently only supporting SSE-S3 */
+    rgw::sal::Attrs buck_attrs(s->bucket_attrs);
+    auto aiter = buck_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+    if (aiter != buck_attrs.end()) {
+      ldpp_dout(s, 5) << "Found RGW_ATTR_BUCKET_ENCRYPTION_POLICY on "
+	      << s->bucket_name << dendl;
+
+      bufferlist::const_iterator iter{&aiter->second};
+      try {
+        RGWBucketEncryptionConfig bucket_encryption_conf;
+	bucket_encryption_conf.decode(iter);
+	if (bucket_encryption_conf.sse_algorithm() == "AES256") {
+	  ldpp_dout(s, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: "
+		  <<  bucket_encryption_conf.sse_algorithm() << dendl;
+	  std::string_view context = "";
+          std::string cooked_context;
+	  if ((res = make_canonical_context(s, context, cooked_context)))
+	    return res;
+
+	  /* Find the KEK ID */
+	  auto kek_iter = buck_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
+	  if (kek_iter == buck_attrs.end()) {
+	    ldpp_dout(s, 5) << "ERROR: KEK ID absent for bucket having "
+		    "encryption enabled" << dendl;
+	    s->err.message = "Server side error - SSE-S3 key absent";
+	    return -EINVAL;
+	  }
+
+	  std::string_view key_id = kek_iter->second.to_str();
+	  ldpp_dout(s, 5) << "Found KEK ID: " << key_id << dendl;
+	  std::string key_selector = create_random_key_selector(s->cct);
+
+	  set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
+	  set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
+	  set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256");
+	  set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
+	  std::string actual_key;
+	  res = make_actual_key_from_sse_s3(s->cct, attrs, actual_key);
+          if (res != 0) {
+	    ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+	    s->err.message = "Failed to retrieve the actual key " ;
+	    return res;
+	  }
+	  if (actual_key.size() != AES_256_KEYSIZE) {
+	    ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
+                           key_id << " is not 256 bit size" << dendl;
+	    s->err.message = "SSE-S3 provided an invalid key for the given keyid.";
+	    return -ERR_INVALID_ACCESS_KEY;
+	  }
+
+          if (block_crypt) {
+	    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
+	    aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
+	    *block_crypt = std::move(aes);
+	  }
+          ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+
+	  crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
+
+	  return 0;
+	} else {
+          ldpp_dout(s, 5) << "ERROR: SSE algorithm: "
+		  <<  bucket_encryption_conf.sse_algorithm()
+		  << " not supported" << dendl;
+	  s->err.message = "The requested encryption algorithm is not valid, must be AES256.";
+	  return -ERR_INVALID_ENCRYPTION_ALGORITHM;
+	}
+      } catch (const buffer::error& e) {
+        ldpp_dout(s, 5) << __func__ <<  "decode bucket_encryption_conf failed" << dendl;
       }
     }
 
@@ -1312,6 +1386,40 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     if (block_crypt) *block_crypt = std::move(aes);
     return 0;
   }
+
+  /* SSE-S3 */
+  if (stored_mode == "AES256") {
+    if (s->cct->_conf->rgw_crypt_require_ssl &&
+        !rgw_transport_is_secure(s->cct, *s->info.env)) {
+      ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
+      return -ERR_INVALID_REQUEST;
+    }
+    /* try to retrieve actual key */
+    std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
+    std::string actual_key;
+    res = reconstitute_actual_key_from_sse_s3(s->cct, attrs, actual_key);
+    if (res != 0) {
+      ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key  " << dendl;
+      s->err.message = "Failed to retrieve the actual key " ;
+      return res;
+    }
+    if (actual_key.size() != AES_256_KEYSIZE) {
+      ldpp_dout(s, 0) << "ERROR: key obtained " <<
+          " is not 256 bit size" << dendl;
+      s->err.message = "SSE-S3  provided an invalid key for the given keyid.";
+      return -ERR_INVALID_ACCESS_KEY;
+    }
+
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
+    aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
+    actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
+    if (block_crypt) *block_crypt = std::move(aes);
+
+    crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
+    return 0;
+  }
+
+
   /*no decryption*/
   return 0;
 }
