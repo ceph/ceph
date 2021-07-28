@@ -982,4 +982,6 @@ add_ceph_unittest(unittest_any)
 add_executable(unittest_weighted_shuffle test_weighted_shuffle.cc)
 add_ceph_unittest(unittest_weighted_shuffle)
 
+add_executable(unittest_intarith test_intarith.cc)
+add_ceph_unittest(unittest_intarith)
 #make check ends here
