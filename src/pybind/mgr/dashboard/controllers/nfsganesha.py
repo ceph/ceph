@@ -7,17 +7,21 @@ from functools import partial
 import cephfs
 import cherrypy
 
+from .. import mgr
 from ..security import Scope
 from ..services.cephfs import CephFS
-from ..services.cephx import CephX
 from ..services.exception import DashboardException, serialize_dashboard_exception
-from ..services.ganesha import Ganesha, GaneshaConf, NFSException
 from ..services.rgw_client import NoCredentialsException, \
     NoRgwDaemonsException, RequestException, RgwClient
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     ReadPermission, RESTController, Task, UIRouter
 
-logger = logging.getLogger('controllers.ganesha')
+logger = logging.getLogger('controllers.nfs')
+
+
+class NFSException(DashboardException):
+    def __init__(self, msg):
+        super(NFSException, self).__init__(component="nfs", msg=msg)
 
 
 # documentation helpers
@@ -100,8 +104,8 @@ class NFSGanesha(RESTController):
     def status(self):
         status = {'available': True, 'message': None}
         try:
-            Ganesha.get_ganesha_clusters()
-        except NFSException as e:
+            mgr.remote('nfs', 'is_active')
+        except (NameError, ImportError) as e:
             status['message'] = str(e)  # type: ignore
             status['available'] = False
 
@@ -116,12 +120,7 @@ class NFSGaneshaExports(RESTController):
     @EndpointDoc("List all NFS-Ganesha exports",
                  responses={200: [EXPORT_SCHEMA]})
     def list(self):
-        result = []
-        for cluster_id in Ganesha.get_ganesha_clusters():
-            result.extend(
-                [export.to_dict()
-                 for export in GaneshaConf.instance(cluster_id).list_exports()])
-        return result
+        return mgr.remote('nfs', 'export_ls')
 
     @NfsTask('create', {'path': '{path}', 'fsal': '{fsal.name}',
                         'cluster_id': '{cluster_id}'}, 2.0)
@@ -131,18 +130,18 @@ class NFSGaneshaExports(RESTController):
     def create(self, path, cluster_id, daemons, pseudo, tag, access_type,
                squash, security_label, protocols, transports, fsal, clients,
                reload_daemons=True):
-        if fsal['name'] not in Ganesha.fsals_available():
+        if fsal['name'] not in mgr.remote('nfs', 'cluster_fsals'):
             raise NFSException("Cannot create this export. "
                                "FSAL '{}' cannot be managed by the dashboard."
                                .format(fsal['name']))
 
-        ganesha_conf = GaneshaConf.instance(cluster_id)
-        ex_id = ganesha_conf.create_export({
+        fsal.pop('user_id')  # mgr/nfs does not let you customize user_id
+        # FIXME: what was this?     'tag': tag,
+        raw_ex = {
             'path': path,
             'pseudo': pseudo,
             'cluster_id': cluster_id,
             'daemons': daemons,
-            'tag': tag,
             'access_type': access_type,
             'squash': squash,
             'security_label': security_label,
@@ -150,10 +149,9 @@ class NFSGaneshaExports(RESTController):
             'transports': transports,
             'fsal': fsal,
             'clients': clients
-        })
-        if reload_daemons:
-            ganesha_conf.reload_daemons(daemons)
-        return ganesha_conf.get_export(ex_id).to_dict()
+        }
+        export = mgr.remote('nfs', 'export_apply', cluster_id, raw_ex)
+        return export
 
     @EndpointDoc("Get an NFS-Ganesha export",
                  parameters={
@@ -162,11 +160,7 @@ class NFSGaneshaExports(RESTController):
                  },
                  responses={200: EXPORT_SCHEMA})
     def get(self, cluster_id, export_id):
-        export_id = int(export_id)
-        ganesha_conf = GaneshaConf.instance(cluster_id)
-        if not ganesha_conf.has_export(export_id):
-            raise cherrypy.HTTPError(404)
-        return ganesha_conf.get_export(export_id).to_dict()
+        return mgr.remote('nfs', 'export_get', cluster_id, export_id)
 
     @NfsTask('edit', {'cluster_id': '{cluster_id}', 'export_id': '{export_id}'},
              2.0)
@@ -178,23 +172,22 @@ class NFSGaneshaExports(RESTController):
             squash, security_label, protocols, transports, fsal, clients,
             reload_daemons=True):
         export_id = int(export_id)
-        ganesha_conf = GaneshaConf.instance(cluster_id)
 
-        if not ganesha_conf.has_export(export_id):
+        if not mgr.remote('nfs', 'export_get', export_id):
             raise cherrypy.HTTPError(404)  # pragma: no cover - the handling is too obvious
 
-        if fsal['name'] not in Ganesha.fsals_available():
+        if fsal['name'] not in mgr.remote('nfs', 'cluster_fsals'):
             raise NFSException("Cannot make modifications to this export. "
                                "FSAL '{}' cannot be managed by the dashboard."
                                .format(fsal['name']))
 
-        old_export = ganesha_conf.update_export({
-            'export_id': export_id,
+        fsal.pop('user_id')  # mgr/nfs does not let you customize user_id
+        # FIXME: what was this? 'tag': tag,
+        raw_ex = {
             'path': path,
+            'pseudo': pseudo,
             'cluster_id': cluster_id,
             'daemons': daemons,
-            'pseudo': pseudo,
-            'tag': tag,
             'access_type': access_type,
             'squash': squash,
             'security_label': security_label,
@@ -202,14 +195,9 @@ class NFSGaneshaExports(RESTController):
             'transports': transports,
             'fsal': fsal,
             'clients': clients
-        })
-        daemons = list(daemons)
-        for d_id in old_export.daemons:
-            if d_id not in daemons:
-                daemons.append(d_id)
-        if reload_daemons:
-            ganesha_conf.reload_daemons(daemons)
-        return ganesha_conf.get_export(export_id).to_dict()
+        }
+        export = mgr.remote('nfs', 'export_apply', cluster_id, raw_ex)
+        return export
 
     @NfsTask('delete', {'cluster_id': '{cluster_id}',
                         'export_id': '{export_id}'}, 2.0)
@@ -224,13 +212,11 @@ class NFSGaneshaExports(RESTController):
                  })
     def delete(self, cluster_id, export_id, reload_daemons=True):
         export_id = int(export_id)
-        ganesha_conf = GaneshaConf.instance(cluster_id)
 
-        if not ganesha_conf.has_export(export_id):
+        export = mgr.remote('nfs', 'export_get', cluster_id, export_id)
+        if not export:
             raise cherrypy.HTTPError(404)  # pragma: no cover - the handling is too obvious
-        export = ganesha_conf.remove_export(export_id)
-        if reload_daemons:
-            ganesha_conf.reload_daemons(export.daemons)
+        mgr.remote('nfs', 'export_rm', cluster_id, export['pseudo'])
 
 
 @APIRouter('/nfs-ganesha/daemon', Scope.NFS_GANESHA)
@@ -241,15 +227,13 @@ class NFSGaneshaService(RESTController):
                  responses={200: [{
                      'daemon_id': (str, 'Daemon identifier'),
                      'cluster_id': (str, 'Cluster identifier'),
-                     'cluster_type': (str, 'Cluster type'),
+                     'cluster_type': (str, 'Cluster type'),   # FIXME: remove this property
                      'status': (int, 'Status of daemon', True),
                      'desc': (str, 'Status description', True)
                  }]})
     def list(self):
-        result = []
-        for cluster_id in Ganesha.get_ganesha_clusters():
-            result.extend(GaneshaConf.instance(cluster_id).list_daemons())
-        return result
+        # FIXME: remove this; dashboard should only care about clusters.
+        return mgr.remote('nfs', 'daemon_ls')
 
 
 @UIRouter('/nfs-ganesha', Scope.NFS_GANESHA)
@@ -257,12 +241,13 @@ class NFSGaneshaUi(BaseController):
     @Endpoint('GET', '/cephx/clients')
     @ReadPermission
     def cephx_clients(self):
-        return list(CephX.list_clients())
+        # FIXME: remove this; cephx users/creds are managed by mgr/nfs
+        return ['admin']
 
     @Endpoint('GET', '/fsals')
     @ReadPermission
     def fsals(self):
-        return Ganesha.fsals_available()
+        return mgr.remote('nfs', 'cluster_fsals')
 
     @Endpoint('GET', '/lsdir')
     @ReadPermission
@@ -316,4 +301,4 @@ class NFSGaneshaUi(BaseController):
     @Endpoint('GET', '/clusters')
     @ReadPermission
     def clusters(self):
-        return Ganesha.get_ganesha_clusters()
+        return mgr.remote('nfs', 'cluster_ls')
