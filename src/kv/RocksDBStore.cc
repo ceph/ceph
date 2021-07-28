@@ -904,6 +904,7 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
   status = rocksdb::DB::ListColumnFamilies(rocksdb::DBOptions(opt),
 					   path, &rocksdb_cfs);
   if (!status.ok()) {
+    derr << __func__ << " unable to list column families: " << status.ToString() << dendl;
     return -EIO;
   }
   dout(5) << __func__ << " column families from rocksdb: " << rocksdb_cfs << dendl;
