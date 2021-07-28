@@ -1,13 +1,13 @@
 import logging
 import threading
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Any
 
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import orchestrator
 
 from .export import ExportMgr
 from .cluster import NFSCluster
-from typing import Any
+from .utils import available_clusters
 
 log = logging.getLogger(__name__)
 
@@ -130,3 +130,37 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_nfs_cluster_config_reset(self, cluster_id: str) -> Tuple[int, str, str]:
         """Reset NFS-Ganesha Config to default"""
         return self.nfs.reset_nfs_cluster_config(cluster_id=cluster_id)
+
+    def is_active(self) -> bool:
+        return True
+
+    def export_ls(self) -> List[Dict[Any, Any]]:
+        return self.export_mgr.list_all_exports()
+
+    def export_get(self, cluster_id: str, export_id: int) -> Dict[Any, Any]:
+        return self.export_mgr.get_export_by_id(cluster_id, export_id)
+
+    def export_rm(self, cluster_id: str, pseudo: str) -> None:
+        self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo)
+
+    def daemon_ls(self) -> List[Dict[Any, Any]]:
+        return self.nfs.list_daemons()
+
+    def cluster_ls(self) -> List[str]:
+        return [
+            {
+                'pool': NFS_POOL_NAME,
+                'namespace': cluster_id,
+                'type': 'orchestrator',
+                'daemon_conf': None,
+            } for cluster_id in available_clusters()
+        ]
+
+    def cluster_fsals(self) -> List[str]:
+        return ['CEPH', 'RGW']
+
+    def export_apply(self, cluster_id: str, export: Dict[Any, Any]) -> Dict[Any, Any]:
+        ret, out, err, export = self.export_mgr._apply_export(cluster_id, export)
+        if ret:
+            return None
+        return export.to_dict()
