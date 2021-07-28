@@ -37,6 +37,12 @@ int make_actual_key_from_kms(CephContext *cct,
 int reconstitute_actual_key_from_kms(CephContext *cct,
                             map<string, bufferlist>& attrs,
                             std::string& actual_key);
+int make_actual_key_from_sse_s3(CephContext *cct,
+                            map<string, bufferlist>& attrs,
+                            std::string& actual_key);
+int reconstitute_actual_key_from_sse_s3(CephContext *cct,
+                            map<string, bufferlist>& attrs,
+                            std::string& actual_key);
 
 /**
  * SecretEngine Interface

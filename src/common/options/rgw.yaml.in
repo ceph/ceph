@@ -2697,6 +2697,125 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_s3_sse_backend
+  type: str
+  level: advanced
+  desc: Where the SSE-S3 encryption keys are stored. Supported KMS systems are OpenStack
+    Barbican ('barbican', the default) and HashiCorp Vault ('vault').
+  fmt_desc: Where the SSE-S3 encryption keys are stored. Supported KMS
+    systems are OpenStack Barbican (``barbican``, the default) and
+    HashiCorp Vault (``vault``).
+  default: barbican
+  services:
+  - rgw
+  enum_values:
+  - barbican
+  - vault
+  - testing
+  - kmip
+  with_legacy: true
+
+- name: rgw_crypt_s3_sse_vault_auth
+  type: str
+  level: advanced
+  desc: Type of authentication method to be used with SSE-S3 and Vault.
+  fmt_desc: Type of authentication method to be used. The only method
+    currently supported is ``token``.
+  default: token
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_s3_sse_backend
+  - rgw_crypt_s3_sse_vault_addr
+  - rgw_crypt_s3_sse_vault_token_file
+  enum_values:
+  - token
+  - agent
+  with_legacy: true
+- name: rgw_crypt_s3_sse_vault_token_file
+  type: str
+  level: advanced
+  desc: If authentication method is 'token', provide a path to the token file, which
+    for security reasons should readable only by Rados Gateway.
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_s3_sse_backend
+  - rgw_crypt_s3_sse_vault_auth
+  - rgw_crypt_s3_sse_vault_addr
+  with_legacy: true
+- name: rgw_crypt_s3_sse_vault_addr
+  type: str
+  level: advanced
+  desc: SSE-S3 Vault server base address.
+  fmt_desc: Vault server base address, e.g. ``http://vaultserver:8200``.
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_s3_sse_backend
+  - rgw_crypt_s3_sse_vault_auth
+  - rgw_crypt_s3_sse_vault_prefix
+  with_legacy: true
+# Optional URL prefix to Vault secret path
+- name: rgw_crypt_s3_sse_vault_prefix
+  type: str
+  level: advanced
+  desc: SSE-S3 Vault secret URL prefix, which can be used to restrict access to a particular
+    subset of the Vault secret space.
+  fmt_desc: The Vault secret URL prefix, which can be used to restrict access
+    to a particular subset of the secret space, e.g. ``/v1/secret/data``.
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_s3_sse_s3_backend
+  - rgw_crypt_s3_sse_vault_addr
+  - rgw_crypt_s3_sse_vault_auth
+  with_legacy: true
+#  Vault Namespace (only availabe in Vault Enterprise Version)
+- name: rgw_crypt_s3_sse_vault_namespace
+  type: str
+  level: advanced
+  desc: Vault Namespace to be used to select your tenant
+  fmt_desc: If set, Vault Namespace provides tenant isolation for teams and individuals
+    on the same Vault Enterprise instance, e.g. ``acme/tenant1``
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_s3_sse_s3_backend
+  - rgw_crypt_s3_sse_vault_auth
+  - rgw_crypt_s3_sse_vault_addr
+  with_legacy: true
+# Enable TLS authentication rgw and vault
+- name: rgw_crypt_s3_sse_vault_verify_ssl
+  type: bool
+  level: advanced
+  desc: Should RGW verify the vault server SSL certificate.
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+# TLS certs options
+- name: rgw_crypt_s3_sse_vault_ssl_cacert
+  type: str
+  level: advanced
+  desc: Path for custom ca certificate for accessing vault server
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_crypt_s3_sse_vault_ssl_clientcert
+  type: str
+  level: advanced
+  desc: Path for custom client certificate for accessing vault server
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_crypt_s3_sse_vault_ssl_clientkey
+  type: str
+  level: advanced
+  desc: Path for private key required for client cert
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_list_bucket_min_readahead
   type: int
   level: advanced
