@@ -805,7 +805,7 @@ Options
 
 .. option:: --caps=<caps>
 
-	List of caps (e.g., "usage=read, write; user=read".
+	List of caps (e.g., "usage=read, write; user=read").
 
 .. option:: --compression=<compression-algorithm>
 
