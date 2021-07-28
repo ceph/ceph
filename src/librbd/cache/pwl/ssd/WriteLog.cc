@@ -670,8 +670,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     first_valid_entry = m_first_valid_entry;
     while (retiring_entries.size() < frees_per_tx && !m_log_entries.empty()) {
       GenericLogEntriesVector retiring_subentries;
-      auto entry = m_log_entries.front();
-      uint64_t control_block_pos = entry->log_entry_index;
+      uint64_t control_block_pos = m_log_entries.front()->log_entry_index;
       uint64_t data_length = 0;
       for (auto it = m_log_entries.begin(); it != m_log_entries.end(); ++it) {
         if (this->can_retire_entry(*it)) {
@@ -708,9 +707,11 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             it != retiring_subentries.end(); it++) {
           ceph_assert(m_log_entries.front() == *it);
           m_log_entries.pop_front();
-          if (entry->is_write_entry()) {
-            auto write_entry = static_pointer_cast<WriteLogEntry>(entry);
-            this->m_blocks_to_log_entries.remove_log_entry(write_entry);
+          if ((*it)->write_bytes() > 0 || (*it)->bytes_dirty() > 0) {
+            auto gen_write_entry = static_pointer_cast<GenericWriteLogEntry>(*it);
+            if (gen_write_entry) {
+                this->m_blocks_to_log_entries.remove_log_entry(gen_write_entry);
+            }
           }
         }
 
