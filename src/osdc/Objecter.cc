@@ -4722,6 +4722,13 @@ void Objecter::handle_command_reply(MCommandReply *m)
   m->put();
 }
 
+Objecter::LingerOp::LingerOp(Objecter *o, uint64_t linger_id)
+  : objecter(o),
+    linger_id(linger_id),
+    watch_lock(ceph::make_shared_mutex(
+		 fmt::format("LingerOp::watch_lock #{}", linger_id)))
+{}
+
 void Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
 {
   shunique_lock sul(rwlock, ceph::acquire_unique);

@@ -177,6 +177,7 @@ target_compile_definitions(common-common-objs PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
   "CEPH_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
+compile_with_fmt(common-common-objs)
 
 set(common_mountcephfs_srcs
   armor.c
