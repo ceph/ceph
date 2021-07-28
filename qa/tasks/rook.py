@@ -465,6 +465,21 @@ def rook_toolbox(ctx, config):
 
 
 @contextlib.contextmanager
+def rook_post_config(ctx, config):
+    try:
+        _shell(ctx, config, ['ceph', 'config', 'set', 'mgr', 'mgr/rook/storage_class',
+                             'scratch'])
+        yield
+
+    except Exception as e:
+        log.exception(e)
+        raise
+
+    finally:
+        pass
+
+
+@contextlib.contextmanager
 def wait_for_osds(ctx, config):
     cluster_name = config.get('cluster', 'ceph')
 
@@ -616,6 +631,7 @@ def task(ctx, config):
             lambda: rook_cluster(ctx, config),
             lambda: rook_toolbox(ctx, config),
             lambda: wait_for_osds(ctx, config),
+            lambda: rook_post_config(ctx, config),
             lambda: ceph_config_keyring(ctx, config),
             lambda: ceph_clients(ctx, config),
     ):
