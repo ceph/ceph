@@ -302,6 +302,7 @@ class RgwStub(Stub):
                 'metadata': {
                     'frontend_config#0': 'beast port=8000',
                     'id': 'daemon1',
+                    'realm_name': 'realm1',
                     'zonegroup_name': 'zonegroup1',
                     'zone_name': 'zone1'
                 }
@@ -311,6 +312,7 @@ class RgwStub(Stub):
                 'metadata': {
                     'frontend_config#0': 'civetweb port=8002',
                     'id': 'daemon2',
+                    'realm_name': 'realm2',
                     'zonegroup_name': 'zonegroup2',
                     'zone_name': 'zone2'
                 }

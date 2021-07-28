@@ -37,13 +37,19 @@ class NoCredentialsException(RequestException):
             'the dashboard.')
 
 
+class RgwAdminException(Exception):
+    pass
+
+
 class RgwDaemon:
     """Simple representation of a daemon."""
     host: str
     name: str
     port: int
     ssl: bool
+    realm_name: str
     zonegroup_name: str
+    zone_name: str
 
 
 def _get_daemons() -> Dict[str, RgwDaemon]:
@@ -60,7 +66,9 @@ def _get_daemons() -> Dict[str, RgwDaemon]:
         if dict_contains_path(daemon_map[key], ['metadata', 'frontend_config#0']):
             daemon = _determine_rgw_addr(daemon_map[key])
             daemon.name = daemon_map[key]['metadata']['id']
+            daemon.realm_name = daemon_map[key]['metadata']['realm_name']
             daemon.zonegroup_name = daemon_map[key]['metadata']['zonegroup_name']
+            daemon.zone_name = daemon_map[key]['metadata']['zone_name']
             daemons[daemon.name] = daemon
             logger.info('Found RGW daemon with configuration: host=%s, port=%d, ssl=%s',
                         daemon.host, daemon.port, str(daemon.ssl))
@@ -186,9 +194,9 @@ def _parse_frontend_config(config) -> Tuple[int, bool]:
     raise LookupError('Failed to determine RGW port from "{}"'.format(config))
 
 
-def radosgw_admin(args: List[str]) -> Tuple[int, str, str]:
+def _radosgw_admin(args: List[str]) -> Tuple[int, str, str]:
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # pylint: disable=subprocess-run-check
             [
                 'radosgw-admin',
                 '-c', str(mgr.get_ceph_conf_path()),
@@ -208,60 +216,62 @@ def radosgw_admin(args: List[str]) -> Tuple[int, str, str]:
         raise
 
 
-def configure_rgw_users():
-    mgr.log.info('Configuring dashboard RGW credentials')
-    user = 'dashboard'
+def _parse_secrets(user: str, payload: str) -> Tuple[Optional[str], Optional[str]]:
+    data = json.loads(payload)
+    for key in data.get('keys', []):
+        if key.get('user') == user and data.get('system') in ['true', True]:
+            access_key = key.get('access_key')
+            secret_key = key.get('secret_key')
+            return access_key, secret_key
+    return None, None
 
-    def parse_secrets(user: str, out: str) -> Tuple[Optional[str], Optional[str]]:
-        r = json.loads(out)
-        for k in r.get('keys', []):
-            if k.get('user') == user and r.get('system') in ['true', True]:
-                access_key = k.get('access_key')
-                secret_key = k.get('secret_key')
-                return access_key, secret_key
-        return None, None
 
-    def get_keys(realm: Optional[str]) -> Tuple[str, str]:
-        cmd = ['user', 'info', '--uid', user]
-        if realm:
-            cmd += ['--rgw-realm', realm]
-        rc, out, _ = radosgw_admin(cmd)
-        access_key = None
-        secret_key = None
-        if not rc:
-            access_key, secret_key = parse_secrets(user, out)
-        if not access_key:
-            rc, out, err = radosgw_admin([
-                'user', 'create',
-                '--uid', user,
-                '--display-name', 'Ceph Dashboard',
-                '--system',
-            ])
-            if not rc:
-                access_key, secret_key = parse_secrets(user, out)
-        if not access_key:
-            mgr.log.error(f'Unable to create rgw {user} user: {err}')
-        assert access_key
-        assert secret_key
-        return access_key, secret_key
-
-    rc, out, err = radosgw_admin(['realm', 'list'])
-    if rc:
-        mgr.log.error(f'Unable to list RGW realms: {err}')
-        return
-    j = json.loads(out)
-    realms = j.get('realms', [])
+def _get_user_keys(user: str, realm: Optional[str] = None) -> Tuple[str, str]:
+    cmd = ['user', 'info', '--uid', user]
+    cmd_realm_option = ['--rgw-realm', realm] if realm else []
+    if realm:
+        cmd += cmd_realm_option
+    rc, out, err = _radosgw_admin(cmd)
     access_key = None
     secret_key = None
+    if not rc:
+        access_key, secret_key = _parse_secrets(user, out)
+    if not access_key:
+        rgw_create_user_cmd = [
+            'user', 'create',
+            '--uid', user,
+            '--display-name', 'Ceph Dashboard',
+            '--system',
+        ] + cmd_realm_option
+        rc, out, err = _radosgw_admin(rgw_create_user_cmd)
+        if not rc:
+            access_key, secret_key = _parse_secrets(user, out)
+    if not access_key:
+        mgr.log.error(f'Unable to create rgw {user} user: {err}')
+    assert access_key
+    assert secret_key
+    return access_key, secret_key
+
+
+def configure_rgw_credentials():
+    mgr.log.info('Configuring dashboard RGW credentials')
+    user = 'dashboard'
+    rc, out, err = _radosgw_admin(['realm', 'list'])
+    if rc:
+        error = RgwAdminException(f'Unable to list RGW realms: {err}')
+        mgr.log.exception(error)
+        raise error
+    j = json.loads(out)
+    realms = j.get('realms', [])
     if realms:
-        als = {}
-        sls = {}
+        access_keys = {}
+        secret_keys = {}
         for realm in realms:
-            als[realm], sls[realm] = get_keys(realm)
-        access_key = json.dumps(als)
-        secret_key = json.dumps(sls)
+            access_keys[realm], secret_keys[realm] = _get_user_keys(user, realm)
+        access_key = json.dumps(access_keys)
+        secret_key = json.dumps(secret_keys)
     else:
-        access_key, secret_key = get_keys(None)
+        access_key, secret_key = _get_user_keys(user)
     Settings.RGW_API_ACCESS_KEY = access_key
     Settings.RGW_API_SECRET_KEY = secret_key
 
@@ -286,8 +296,9 @@ class RgwClient(RestClient):
     @staticmethod
     def _get_daemon_connection_info(daemon_name: str) -> dict:
         try:
-            access_key = Settings.RGW_API_ACCESS_KEY[daemon_name]
-            secret_key = Settings.RGW_API_SECRET_KEY[daemon_name]
+            realm_name = RgwClient._daemons[daemon_name].realm_name
+            access_key = Settings.RGW_API_ACCESS_KEY[realm_name]
+            secret_key = Settings.RGW_API_SECRET_KEY[realm_name]
         except TypeError:
             # Legacy string values.
             access_key = Settings.RGW_API_ACCESS_KEY
@@ -324,10 +335,11 @@ class RgwClient(RestClient):
 
         # The API access key and secret key are mandatory for a minimal configuration.
         if not (Settings.RGW_API_ACCESS_KEY and Settings.RGW_API_SECRET_KEY):
-            logger.warning('No credentials found, please consult the '
-                           'documentation about how to enable RGW for the '
-                           'dashboard.')
-            raise NoCredentialsException()
+            try:
+                configure_rgw_credentials()
+            except Exception as error:
+                logger.exception(error)
+                raise NoCredentialsException()
 
         if not daemon_name:
             # Select default daemon if configured in settings:
