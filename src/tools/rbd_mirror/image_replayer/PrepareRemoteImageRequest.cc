@@ -112,7 +112,7 @@ void PrepareRemoteImageRequest<I>::handle_get_mirror_info(int r) {
     return;
   } else if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
     dout(5) << "remote image mirroring is being disabled" << dendl;
-    finish(-EREMOTEIO);
+    finish(-ENOENT);
     return;
   } else if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY &&
              (state_builder == nullptr ||
