@@ -782,7 +782,8 @@ public:
    */
   void replay_open_sessions(version_t event_cmapv,
 			    std::map<client_t,entity_inst_t>& client_map,
-			    std::map<client_t,client_metadata_t>& client_metadata_map);
+			    std::map<client_t,client_metadata_t>& client_metadata_map,
+			    bool client_opened=true);
 
   /**
    * For these session IDs, if a session exists with this ID, and it has

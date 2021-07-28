@@ -3079,7 +3079,7 @@ void EImportStart::replay(MDSRank *mds)
     decode(cm, blp);
     if (!blp.end())
       decode(cmm, blp);
-    mds->sessionmap.replay_open_sessions(cmapv, cm, cmm);
+    mds->sessionmap.replay_open_sessions(cmapv, cm, cmm, false);
   }
   update_segment();
 }
