@@ -219,6 +219,9 @@ public:
   friend class PaxosFSMap;
   using mds_info_t = MDSMap::mds_info_t;
 
+  static const version_t STRUCT_VERSION = 7;
+  static const version_t STRUCT_VERSION_TRIM_TO = 7;
+
   FSMap() : compat(MDSMap::get_compat_set_default()) {}
 
   FSMap(const FSMap &rhs)
@@ -231,7 +234,8 @@ public:
       ever_enabled_multiple(rhs.ever_enabled_multiple),
       mds_roles(rhs.mds_roles),
       standby_daemons(rhs.standby_daemons),
-      standby_epochs(rhs.standby_epochs)
+      standby_epochs(rhs.standby_epochs),
+      struct_version(rhs.struct_version)
   {
     filesystems.clear();
     for (const auto &i : rhs.filesystems) {
@@ -513,6 +517,11 @@ public:
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
+  version_t get_struct_version() const { return struct_version; }
+  bool is_struct_old() const {
+    return struct_version < STRUCT_VERSION_TRIM_TO;
+  }
+
   size_t filesystem_count() const {return filesystems.size();}
   bool filesystem_exists(fs_cluster_id_t fscid) const {return filesystems.count(fscid) > 0;}
   Filesystem::const_ref get_filesystem(fs_cluster_id_t fscid) const {return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));}
@@ -591,6 +600,9 @@ protected:
   // For MDS daemons not yet assigned to a Filesystem
   std::map<mds_gid_t, mds_info_t> standby_daemons;
   std::map<mds_gid_t, epoch_t> standby_epochs;
+
+private:
+  epoch_t struct_version = 0;
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 
