@@ -33,7 +33,7 @@ backtraceDir="${depsToolsetDir}/libbacktrace"
 backtraceSrcDir="${depsSrcDir}/libbacktrace"
 snappySrcDir="${depsSrcDir}/snappy"
 snappyDir="${depsToolsetDir}/snappy"
-snappyTag="1.1.7"
+snappyTag="1.1.9"
 # Additional Windows libraries, which aren't provided by Mingw
 winLibDir="${depsToolsetDir}/windows/lib"
 
@@ -233,6 +233,7 @@ cmake -DCMAKE_INSTALL_PREFIX=$snappyDir \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_SHARED_LIBS=ON \
       -DSNAPPY_BUILD_TESTS=OFF \
+      -DSNAPPY_BUILD_BENCHMARKS=OFF \
       -DCMAKE_TOOLCHAIN_FILE=$MINGW_CMAKE_FILE \
       ../
 _make
