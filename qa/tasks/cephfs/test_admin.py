@@ -74,7 +74,8 @@ class TestAddDataPool(TestAdminCommands):
         """
         pool_name = "foo"
         mon_cmd = self.fs.mon_manager.raw_cluster_cmd
-        mon_cmd('osd', 'pool', 'create', pool_name, str(self.fs.pgs_per_fs_pool))
+        mon_cmd('osd', 'pool', 'create', pool_name, '--pg_num_min',
+                str(self.fs.pg_num_min))
         # Check whether https://tracker.ceph.com/issues/43061 is fixed
         mon_cmd('osd', 'pool', 'application', 'enable', pool_name, 'cephfs')
         self.fs.add_data_pool(pool_name, create=False)
@@ -207,7 +208,7 @@ class TestFsNew(TestAdminCommands):
         pool_names = [fs_name+'-'+key for key in keys]
         mon_cmd = self.fs.mon_manager.raw_cluster_cmd
         for p in pool_names:
-            mon_cmd('osd', 'pool', 'create', p, str(self.fs.pgs_per_fs_pool))
+            mon_cmd('osd', 'pool', 'create', p, '--pg_num_min', str(self.fs.pg_num_min))
             mon_cmd('osd', 'pool', 'application', 'enable', p, 'cephfs')
         mon_cmd('fs', 'new', fs_name, pool_names[0], pool_names[1])
         for i in range(2):

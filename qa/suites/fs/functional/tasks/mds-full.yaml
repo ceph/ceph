@@ -12,6 +12,8 @@ overrides:
       - is full \(reached quota
       - POOL_FULL
       - POOL_BACKFILLFULL
+      - PG_RECOVERY_FULL
+      - PG_DEGRADED
     conf:
       mon:
         mon osd nearfull ratio: 0.6
