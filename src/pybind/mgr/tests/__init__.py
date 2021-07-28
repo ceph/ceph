@@ -43,7 +43,7 @@ if 'UNITTEST' in os.environ:
             else:
                 self._store[k] = value
 
-        def mock_store_preifx(self, kind, prefix):
+        def mock_store_prefix(self, kind, prefix):
             if not hasattr(self, '_store'):
                 self._store = {}
             full_prefix = f'mock_store/{kind}/{prefix}'
@@ -60,7 +60,7 @@ if 'UNITTEST' in os.environ:
             self.mock_store_set('store', k, v)
 
         def _ceph_get_store_prefix(self, prefix):
-            return self.mock_store_preifx('store', prefix)
+            return self.mock_store_prefix('store', prefix)
 
         def _ceph_get_module_option(self, module, key, localized_prefix= None):
             try:
@@ -125,7 +125,7 @@ if 'UNITTEST' in os.environ:
 
             def config_dump():
                 r = []
-                for prefix, value in self.mock_store_preifx('config', '').items():
+                for prefix, value in self.mock_store_prefix('config', '').items():
                     section, name = prefix.split('/', 1)
                     r.append({
                         'name': name,
