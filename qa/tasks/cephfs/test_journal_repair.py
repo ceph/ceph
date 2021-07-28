@@ -159,6 +159,7 @@ class TestJournalRepair(CephFSTestCase):
         # Set max_mds to 2
         self.fs.set_max_mds(2)
         status = self.fs.wait_for_daemons()
+        rank0_gid = self.fs.get_rank(rank=0, status=status)['gid']
         self.fs.set_joinable(False) # no unintended failover
 
         # Create a dir on each rank
@@ -222,6 +223,7 @@ class TestJournalRepair(CephFSTestCase):
             return 1 in mds_map['damaged']
 
         self.wait_until_true(is_marked_damaged, 60)
+        self.assertEqual(rank0_gid, self.fs.get_rank(rank=0)['gid'])
 
         # Now give up and go through a disaster recovery procedure
         self.fs.fail()
@@ -237,8 +239,8 @@ class TestJournalRepair(CephFSTestCase):
         # Bring an MDS back online, mount a client, and see that we can walk the full
         # filesystem tree again
         self.fs.set_joinable(True) # redundant with `fs reset`
-        self.wait_until_equal(lambda: self.fs.get_active_names(), [active_mds_names[0]], 30,
-                              reject_fn=lambda v: len(v) > 1)
+        status = self.fs.wait_for_daemons()
+        self.assertEqual(len(list(self.fs.get_ranks(status=status))), 1)
         self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "-R"], wait=True)
 
