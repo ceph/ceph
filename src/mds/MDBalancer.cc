@@ -1236,8 +1236,13 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
     return;
   // hit me
   double v = dir->pop_me.get(type).hit(amount);
+  bool is_rd = false;
+  if (type == META_POP_IRD || type == META_POP_READDIR) {
+    v = dir->pop_me.get(META_POP_IRD).get() + dir->pop_me.get(META_POP_READDIR).get();
+    is_rd = true;
+  }
 
-  const bool hot = (v > g_conf()->mds_bal_split_rd && type == META_POP_IRD) ||
+  const bool hot = (v > g_conf()->mds_bal_split_rd && is_rd) ||
                    (v > g_conf()->mds_bal_split_wr && type == META_POP_IWR);
 
   dout(20) << type << " pop is " << v << ", frag " << dir->get_frag()
@@ -1246,14 +1251,14 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
   maybe_fragment(dir, hot);
 
   // replicate?
-  if (type == META_POP_IRD && who >= 0) {
+  if (is_rd && who >= 0) {
     dir->pop_spread.hit(who);
   }
 
   double rd_adj = 0.0;
-  if (type == META_POP_IRD &&
-      dir->last_popularity_sample < last_sample) {
-    double dir_pop = dir->pop_auth_subtree.get(type).get();    // hmm??
+  double rdd_adj = 0.0;
+  if (is_rd && dir->last_popularity_sample < last_sample) {
+    double dir_pop = dir->pop_auth_subtree.get(META_POP_IRD).get() + dir->pop_auth_subtree.get(META_POP_READDIR).get();    // hmm??
     dir->last_popularity_sample = last_sample;
     double pop_sp = dir->pop_spread.get();
     dir_pop += pop_sp * 10;
@@ -1276,7 +1281,13 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
 	rd_adj /= 2.0;  // temper somewhat
 
-	dout(5) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << dendl;
+	double rddp = dir->pop_me.get(META_POP_READDIR).get();
+	rdd_adj = rddp / mds->get_mds_map()->get_num_in_mds() - rddp;
+	rdd_adj /= 2.0;  // temper somewhat
+
+	dout(5) << "replicating dir " << *dir << " pop " << dir_pop
+            << " .. rdp " << rdp << " adj " << rd_adj
+            << " .. rddp " << rddp << " adj " << rdd_adj << dendl;
 
 	dir->dir_rep = CDir::REP_ALL;
 	mds->mdcache->send_dir_updates(dir, true);
@@ -1284,6 +1295,8 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
 	// fixme this should adjust the whole pop hierarchy
 	dir->pop_me.get(META_POP_IRD).adjust(rd_adj);
 	dir->pop_auth_subtree.get(META_POP_IRD).adjust(rd_adj);
+	dir->pop_me.get(META_POP_READDIR).adjust(rdd_adj);
+	dir->pop_auth_subtree.get(META_POP_READDIR).adjust(rdd_adj);
       }
 
       if (dir->ino() != 1 &&
