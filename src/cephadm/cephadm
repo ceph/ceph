@@ -2690,20 +2690,16 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
         + (' &' if background else '') + '\n')
 
 
-def clean_cgroup(ctx: CephadmContext, unit_name: str):
+def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str):
     # systemd may fail to cleanup cgroups from previous stopped unit, which will cause next "systemctl start" to fail.
     # see https://tracker.ceph.com/issues/50998
-
-    # In bootstrap we set the context fsid at the end.
-    if not ctx.fsid:
-        return
 
     CGROUPV2_PATH = Path('/sys/fs/cgroup')
     if not (CGROUPV2_PATH / 'system.slice').exists():
         # Only unified cgroup is affected, skip if not the case
         return
 
-    slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
+    slice_name = 'system-ceph\\x2d{}.slice'.format(fsid.replace('-', '\\x2d'))
     cg_path = CGROUPV2_PATH / 'system.slice' / slice_name / f'{unit_name}.service'
     if not cg_path.exists():
         return
@@ -2855,7 +2851,7 @@ def deploy_daemon_units(
     if enable:
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
-        clean_cgroup(ctx, unit_name)
+        clean_cgroup(ctx, fsid, unit_name)
         call_throws(ctx, ['systemctl', 'start', unit_name])
 
 
