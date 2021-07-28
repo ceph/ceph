@@ -103,8 +103,6 @@ class TestClusterAffinity(CephFSTestCase):
         """
         That a vanilla standby is preferred over others with mds_join_fs set to another fs.
         """
-        # After Octopus is EOL, we can remove this setting:
-        self.fs.set_allow_multifs()
         fs2 = self.mds_cluster.newfs(name="cephfs2")
         status, target = self._verify_init()
         active = self.fs.get_active_names(status=status)[0]
@@ -129,8 +127,6 @@ class TestClusterAffinity(CephFSTestCase):
         standbys = [info['name'] for info in status.get_standbys()]
         for mds in standbys:
             self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
-        # After Octopus is EOL, we can remove this setting:
-        self.fs.set_allow_multifs()
         fs2 = self.mds_cluster.newfs(name="cephfs2")
         for mds in standbys:
             self._change_target_state(target, mds, {'join_fscid': fs2.id})
