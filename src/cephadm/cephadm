@@ -106,6 +106,7 @@ class BaseConfig:
 
     def __init__(self):
         self.image: str = ''
+        self.skip_tls_pull: bool = False
         self.docker: bool = False
         self.data_dir: str = DATA_DIR
         self.log_dir: str = LOG_DIR
@@ -3362,7 +3363,13 @@ def _pull_image(ctx, image):
         'Digest did not match, expected',
     ]
 
-    cmd = [ctx.container_engine.path, 'pull', image]
+    cmd = [ctx.container_engine.path, 'pull']
+    if ctx.skip_tls_pull:
+        if ctx.docker:
+            cmd.insert(1, '--tlsverify=false')
+        else:
+            cmd.append('--tls-verify=false')
+    cmd.append(image)
     if isinstance(ctx.container_engine, Podman) and os.path.exists('/etc/ceph/podman-auth.json'):
         cmd.append('--authfile=/etc/ceph/podman-auth.json')
     cmd_str = ' '.join(cmd)
@@ -7577,6 +7584,10 @@ def _get_parser():
         '--image',
         help='container image. Can also be set via the "CEPHADM_IMAGE" '
         'env var')
+    parser.add_argument(
+        '--skip-tls-pull',
+        action='store_true',
+        help='do not use tls when pulling image')
     parser.add_argument(
         '--docker',
         action='store_true',
