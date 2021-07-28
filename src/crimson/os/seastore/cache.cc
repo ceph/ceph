@@ -117,52 +117,40 @@ void Cache::register_metrics()
    * trans_created
    */
   stats.trans_created_by_src.fill(0);
-  auto register_trans_created = [this, &labels_by_src](src_t src) {
-    std::ostringstream oss_desc;
-    oss_desc << "total number of transaction created (src="
-             << src << ")";
+  for (auto& [src, src_label] : labels_by_src) {
     metrics.add_group(
       "cache",
       {
         sm::make_counter(
           "trans_created",
           get_by_src(stats.trans_created_by_src, src),
-          sm::description(oss_desc.str()),
-          {labels_by_src.find(src)->second}
+          sm::description("total number of transaction created"),
+          {src_label}
         ),
       }
     );
-  };
-  for (auto& [src, label] : labels_by_src) {
-    register_trans_created(src);
   }
 
   /*
    * trans_committed
    */
   stats.trans_committed_by_src.fill(0);
-  auto register_trans_committed = [this, &labels_by_src](src_t src) {
-    std::ostringstream oss_desc;
-    oss_desc << "total number of transaction committed (src="
-             << src << ")";
+  for (auto& [src, src_label] : labels_by_src) {
+    if (src == src_t::READ) {
+      // READ transaction won't commit
+      continue;
+    }
     metrics.add_group(
       "cache",
       {
         sm::make_counter(
           "trans_committed",
           get_by_src(stats.trans_committed_by_src, src),
-          sm::description(oss_desc.str()),
-          {labels_by_src.find(src)->second}
+          sm::description("total number of transaction committed"),
+          {src_label}
         ),
       }
     );
-  };
-  for (auto& [src, label] : labels_by_src) {
-    if (src == src_t::READ) {
-      // READ transaction won't commit
-      continue;
-    }
-    register_trans_committed(src);
   }
 
   /*
@@ -188,17 +176,16 @@ void Cache::register_metrics()
   }
 
   /**
-   * read_transactions_successful
+   * trans_read_successful
    */
   stats.read_transactions_successful = 0;
   metrics.add_group(
     "cache",
     {
       sm::make_counter(
-        "read_trans_successful",
+        "trans_read_successful",
         stats.read_transactions_successful,
-        sm::description("total number of successful read transactions"),
-        {}
+        sm::description("total number of successful read transactions")
       ),
     }
   );
@@ -248,7 +235,18 @@ void Cache::register_metrics()
       auto& efforts = get_by_src(stats.invalidated_efforts_by_src, src);
       efforts = {};
       for (auto& [effort_name, effort_label] : labels_by_effort) {
-        auto& effort = efforts.get_by_name(effort_name);
+        auto& effort = [&effort_name, &efforts]() -> effort_t& {
+          if (effort_name == "READ") {
+            return efforts.read;
+          } else if (effort_name == "MUTATE") {
+            return efforts.mutate;
+          } else if (effort_name == "RETIRE") {
+            return efforts.retire;
+          } else {
+            assert(effort_name == "FRESH");
+            return efforts.fresh;
+          }
+        }();
         metrics.add_group(
           "cache",
           {
