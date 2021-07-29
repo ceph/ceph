@@ -660,7 +660,9 @@ private:
   CounterT& get_by_ext(
       counter_by_extent_t<CounterT>& counters_by_ext,
       extent_types_t ext) {
-    return counters_by_ext[extent_type_to_index(ext)];
+    auto index = static_cast<uint8_t>(ext);
+    assert(index < EXTENT_TYPES_MAX);
+    return counters_by_ext[index];
   }
 
   seastar::metrics::metric_group metrics;

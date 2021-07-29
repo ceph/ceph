@@ -331,40 +331,20 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  OMAP_INNER = 4,
-  OMAP_LEAF = 5,
-  ONODE_BLOCK_STAGED = 6,
-  COLL_BLOCK = 7,
-  OBJECT_DATA_BLOCK = 8,
-  RETIRED_PLACEHOLDER = 9,
-
-  RBM_ALLOC_INFO = 0xE0,
+  OMAP_INNER = 3,
+  OMAP_LEAF = 4,
+  ONODE_BLOCK_STAGED = 5,
+  COLL_BLOCK = 6,
+  OBJECT_DATA_BLOCK = 7,
+  RETIRED_PLACEHOLDER = 8,
+  RBM_ALLOC_INFO = 9,
   // Test Block Types
-  TEST_BLOCK = 0xF0,
-  TEST_BLOCK_PHYSICAL = 0xF1,
-
-  // None
-  NONE = 0xFF
+  TEST_BLOCK = 10,
+  TEST_BLOCK_PHYSICAL = 11,
+  // None and the number of valid extent_types_t
+  NONE = 12,
 };
-
-// FIXME: reassign extent_types_t values instead
-inline uint8_t extent_type_to_index(extent_types_t type) {
-  auto value = static_cast<uint8_t>(type);
-  if (value <= 9) {
-    return value;
-  }
-  switch (type) {
-    case extent_types_t::RBM_ALLOC_INFO:
-      return 10;
-    case extent_types_t::TEST_BLOCK:
-      return 11;
-    case extent_types_t::TEST_BLOCK_PHYSICAL:
-      return 12;
-    default:
-      ceph_abort("impossible path");
-  };
-}
-constexpr uint8_t EXTENT_TYPES_MAX = 13;
+constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
 
 inline bool is_logical_type(extent_types_t type) {
   switch (type) {
