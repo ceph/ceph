@@ -104,6 +104,15 @@ export class CdValidators {
   }
 
   /**
+   * Validator that performs SSL certificate validation of pem format.
+   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   *   if the validation check fails, otherwise `null`.
+   */
+  static pemCert(): ValidatorFn {
+    return Validators.pattern(/^-----BEGIN .+-----$.+^-----END .+-----$/ms);
+  }
+
+  /**
    * Validator that requires controls to fulfill the specified condition if
    * the specified prerequisites matches. If the prerequisites are fulfilled,
    * then the given function is executed and if it succeeds, the 'required'

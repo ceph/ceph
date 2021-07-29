@@ -185,7 +185,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               unmanaged: false,
               ssl: true
             },
-            [Validators.required, CdValidators.sslCert()]
+            [Validators.required, CdValidators.pemCert()]
           ),
           CdValidators.composeIf(
             {
