@@ -404,10 +404,10 @@ Session* Server::find_session_by_uuid(std::string_view uuid)
     if (!session) {
       session = it.second;
     } else if (!session->reclaiming_from) {
-      assert(it.second->reclaiming_from == session);
+      ceph_assert(it.second->reclaiming_from == session);
       session = it.second;
     } else {
-      assert(session->reclaiming_from == it.second);
+      ceph_assert(session->reclaiming_from == it.second);
     }
   }
   return session;
@@ -445,8 +445,8 @@ void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
       mds->send_message_client(reply, session);
     }
 
-    assert(!target->reclaiming_from);
-    assert(!session->reclaiming_from);
+    ceph_assert(!target->reclaiming_from);
+    ceph_assert(!session->reclaiming_from);
     session->reclaiming_from = target;
     reply->set_addrs(entity_addrvec_t(target->info.inst.addr));
   }
@@ -469,7 +469,7 @@ void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaim
     if (reply) {
       int64_t session_id = session->get_client().v;
       send_reply = new LambdaContext([this, session_id, reply](int r) {
-	    assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+	    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
 	    if (!session) {
 	      return;
@@ -501,7 +501,7 @@ void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
 {
   Session *session = mds->get_session(m);
   dout(3) << __func__ <<  " " << *m << " from " << m->get_source() << dendl;
-  assert(m->get_source().is_client()); // should _not_ come from an mds!
+  ceph_assert(m->get_source().is_client()); // should _not_ come from an mds!
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
@@ -1162,7 +1162,7 @@ void Server::find_idle_sessions()
   const auto sessions_p2 = mds->sessionmap.by_state.find(Session::STATE_STALE);
   if (sessions_p2 != mds->sessionmap.by_state.end() && !sessions_p2->second->empty()) {
     for (auto session : *(sessions_p2->second)) {
-      assert(session->is_stale());
+      ceph_assert(session->is_stale());
       auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
       if (last_cap_renew_span < cutoff) {
 	dout(20) << "oldest stale session is " << session->info.inst

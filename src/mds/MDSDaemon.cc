@@ -374,23 +374,23 @@ void MDSDaemon::set_up_admin_socket()
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("client config "
 				     "name=client_id,type=CephInt,req=true "
 				     "name=option,type=CephString,req=true "
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("damage ls",
 				     asok_hook,
 				     "List detected metadata damage");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("damage rm "
 				     "name=damage_id,type=CephInt",
 				     asok_hook,
 				     "Remove a damage table entry");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("osdmap barrier name=target_epoch,type=CephInt",
 				     asok_hook,
 				     "Wait until the MDS has this OSD map epoch");

@@ -6588,10 +6588,10 @@ public:
 			       LogSegment *_ls, version_t iv)
     : MDCacheLogContext(m), inos(_inos), ls(_ls), inotablev(iv) {}
   void finish(int r) override {
-    assert(r == 0);
+    ceph_assert(r == 0);
     if (inotablev) {
       get_mds()->inotable->apply_release_ids(inos);
-      assert(get_mds()->inotable->get_version() == inotablev);
+      ceph_assert(get_mds()->inotable->get_version() == inotablev);
     }
     ls->purge_inodes_finish(inos);
   }
@@ -6613,10 +6613,10 @@ void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegment *ls)
   // FIXME: handle non-default data pool and namespace
 
   auto cb = new LambdaContext([this, inos, ls](int r){
-      assert(r == 0 || r == -2);
+      ceph_assert(r == 0 || r == -2);
       mds->inotable->project_release_ids(inos);
       version_t piv = mds->inotable->get_projected_version();
-      assert(piv != 0);
+      ceph_assert(piv != 0);
       mds->mdlog->start_submit_entry(new EPurged(inos, ls->seq, piv),
 				     new C_MDS_purge_completed_finish(this, inos, ls, piv));
       mds->mdlog->flush();
