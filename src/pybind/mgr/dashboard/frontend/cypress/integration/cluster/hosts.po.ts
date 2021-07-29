@@ -128,15 +128,20 @@ export class HostsPageHelper extends PageHelper {
       this.getTableCell(this.columnIndex.hostname, hostname).click();
       this.clickActionButton('enter-maintenance');
 
-      cy.contains('cd-modal button', 'Continue').click();
+      cy.document().then(($document) => {
+        const documentResult = $document.querySelectorAll('cd-modal');
+        if (documentResult.length) {
+          cy.contains('button', 'Continue').click();
 
-      this.getTableCell(this.columnIndex.hostname, hostname)
-        .parent()
-        .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
-        .should(($ele) => {
-          const status = $ele.toArray().map((v) => v.innerText);
-          expect(status).to.include('maintenance');
-        });
+          this.getTableCell(this.columnIndex.hostname, hostname)
+            .parent()
+            .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+            .should(($ele) => {
+              const status = $ele.toArray().map((v) => v.innerText);
+              expect(status).to.include('maintenance');
+            });
+        }
+      });
     }
     if (exit) {
       this.getTableCell(this.columnIndex.hostname, hostname)
