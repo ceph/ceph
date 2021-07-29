@@ -10,7 +10,7 @@ from mgr_util import CephfsClient
 from .fs_util import listdir
 
 from .operations.volume import create_volume, \
-    delete_volume, list_volumes, open_volume, get_pool_names
+    delete_volume, rename_volume, list_volumes, open_volume, get_pool_names
 from .operations.group import open_group, create_group, remove_group, open_group_unique
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
@@ -130,6 +130,21 @@ class VolumeClient(CephfsClient["Module"]):
             return -errno.ESHUTDOWN, "", "shutdown in progress"
         volumes = list_volumes(self.mgr)
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
+
+    def rename_fs_volume(self, volname, newvolname, sure):
+        if self.is_stopping():
+            return -errno.ESHUTDOWN, "", "shutdown in progress"
+
+        if not sure:
+            return (
+                -errno.EPERM, "",
+                "WARNING: This will rename the filesystem and possibly its "
+                "pools. It is a potentially disruptive operation, clients' "
+                "cephx credentials need reauthorized to access the file system "
+                "and its pools with the new name. Add --yes-i-really-mean-it "
+                "if you are sure you wish to continue.")
+
+        return rename_volume(self.mgr, volname, newvolname)
 
     ### subvolume operations
 
