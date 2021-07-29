@@ -326,7 +326,7 @@ void Cache::register_metrics()
         }();
         effort_by_ext.fill({});
         for (auto& [ext, ext_label] : labels_by_ext) {
-          auto& effort = effort_by_ext[extent_type_to_index(ext)];
+          auto& effort = get_by_ext(effort_by_ext, ext);
           metrics.add_group(
             "cache",
             {
@@ -350,7 +350,7 @@ void Cache::register_metrics()
       auto& delta_by_ext = efforts.delta_bytes_by_ext;
       delta_by_ext.fill(0);
       for (auto& [ext, ext_label] : labels_by_ext) {
-        auto& value = delta_by_ext[extent_type_to_index(ext)];
+        auto& value = get_by_ext(delta_by_ext, ext);
         metrics.add_group(
           "cache",
           {
