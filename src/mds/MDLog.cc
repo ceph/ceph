@@ -626,7 +626,7 @@ void MDLog::trim(int m)
   unsigned max_expiring_segments = 0;
   if (pre_segments_size > 0){
     max_expiring_segments = max_segments/2;
-    assert(segments.size() >= pre_segments_size);
+    ceph_assert(segments.size() >= pre_segments_size);
     max_expiring_segments = std::max<unsigned>(max_expiring_segments,segments.size() - pre_segments_size);
   }
   

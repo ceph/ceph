@@ -56,7 +56,7 @@ public:
   }
 
   void send() {
-    assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
 
     dout(20) << __func__ << dendl;
 
@@ -257,7 +257,7 @@ public:
   void send() {
     // not really a hard requirement here, but lets ensure this in
     // case we change the logic here.
-    assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
 
     dout(20) << __func__ << dendl;
     f->open_object_section("result");
@@ -2318,7 +2318,7 @@ void MDSRankDispatcher::handle_mds_map(
 
     if (oldstate == MDSMap::STATE_STANDBY_REPLAY) {
         dout(10) << "Monitor activated us! Deactivating replay loop" << dendl;
-        assert (state == MDSMap::STATE_REPLAY);
+        ceph_assert (state == MDSMap::STATE_REPLAY);
     } else {
       // did i just recover?
       if ((is_active() || is_clientreplay()) &&

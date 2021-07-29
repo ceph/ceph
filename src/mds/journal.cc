@@ -1731,7 +1731,7 @@ void EPurged::replay(MDSRank *mds)
       dout(10) << "EPurged.replay inotable " << mds->inotable->get_version()
 	       << " < " << inotablev << " " << dendl;
       mds->inotable->replay_release_ids(inos);
-      assert(mds->inotable->get_version() == inotablev);
+      ceph_assert(mds->inotable->get_version() == inotablev);
     }
   }
   update_segment();
