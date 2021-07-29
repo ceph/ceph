@@ -1107,7 +1107,12 @@ class Filesystem(MDSCluster):
 
     def rank_asok(self, command, rank=0, status=None, timeout=None):
         info = self.get_rank(rank=rank, status=status)
-        return self.json_asok(command, 'mds', info['name'], timeout=timeout)
+        ret = self.json_asok(command, 'mds', info['name'], timeout=timeout)
+        key = 'mds_kill_export_at'
+        v = self.json_asok(['config', 'get', key], 'mds', info['name'])[key]
+        log.info(f"lxb------------ mds_kill_export_at = {v}, rank = {rank}, {info['name']}")
+
+        return ret
 
     def rank_tell(self, command, rank=0, status=None):
         return json.loads(self.mon_manager.raw_cluster_cmd("tell", f"mds.{self.id}:{rank}", *command))
