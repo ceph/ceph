@@ -397,6 +397,9 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     m_delete_requested = true;
     on_start_fail(0, "remote image no longer exists");
     return;
+  } else if (r == -ERESTART) {
+    on_start_fail(r, "image in transient state, try again");
+    return;
   } else if (r < 0) {
     on_start_fail(r, "error bootstrapping replay");
     return;
