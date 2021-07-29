@@ -450,6 +450,9 @@ public:
   bool is_backfilling() const final {
     return peering_state.is_backfilling();
   }
+  uint64_t get_last_user_version() const {
+    return get_info().last_user_version;
+  }
   bool get_need_up_thru() const {
     return peering_state.get_need_up_thru();
   }

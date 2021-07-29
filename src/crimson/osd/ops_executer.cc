@@ -639,6 +639,12 @@ uint32_t OpsExecuter::get_pool_stripe_width() const {
   return pg->get_pool().info.get_stripe_width();
 }
 
+// Defined here because there is a circular dependency between OpsExecuter and PG
+version_t OpsExecuter::get_last_user_version() const
+{
+  return pg->get_last_user_version();
+}
+
 static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   const std::string& type,
   bufferlist::const_iterator& iter)
