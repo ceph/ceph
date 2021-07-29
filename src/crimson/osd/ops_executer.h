@@ -272,6 +272,8 @@ public:
   object_stat_sum_t& get_stats(){
     return delta_stats;
   }
+
+  version_t get_last_user_version() const;
 };
 
 template <class Context, class MainFunc, class EffectFunc>
