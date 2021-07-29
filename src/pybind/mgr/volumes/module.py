@@ -61,6 +61,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs volume rename '
+                   f'name=vol_name,type=CephString,goodchars={goodchars} '
+                   f'name=new_vol_name,type=CephString,goodchars={goodchars} '
+                   'name=yes_i_really_mean_it,type=CephBool,req=false ',
+            'desc': "Rename a CephFS volume by passing --yes-i-really-mean-it flag",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolumegroup ls '
             'name=vol_name,type=CephString ',
             'desc': "List subvolumegroups",
@@ -415,6 +423,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_volume_ls(self, inbuf, cmd):
         return self.vc.list_fs_volumes()
+
+    @mgr_cmd_wrap
+    def _cmd_fs_volume_rename(self, inbuf, cmd):
+        return self.vc.rename_fs_volume(cmd['vol_name'],
+                                        cmd['new_vol_name'],
+                                        cmd.get('yes_i_really_mean_it', False))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_create(self, inbuf, cmd):
