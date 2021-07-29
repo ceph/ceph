@@ -1939,6 +1939,7 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   mds->mdlog->submit_entry(le, new C_MDS_ExportFinishLogged(this, dir));
   mds->mdlog->flush();
+  dout(10) << "g_conf()->mds_kill_export_at : " << g_conf()->mds_kill_export_at << dendl;
   assert (g_conf()->mds_kill_export_at != 10);
 }
 
