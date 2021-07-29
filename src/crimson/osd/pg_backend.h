@@ -273,6 +273,10 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     object_stat_sum_t& delta_stats);
+  interruptible_future<> omap_remove_key(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
   using omap_clear_ertr = crimson::errorator<crimson::ct_error::enoent>;
   using omap_clear_iertr =
     ::crimson::interruptible::interruptible_errorator<

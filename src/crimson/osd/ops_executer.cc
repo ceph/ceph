@@ -604,6 +604,14 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_range(os, osd_op, txn, delta_stats);
     }, true);
+  case CEPH_OSD_OP_OMAPRMKEYS:
+    /** TODO: Implement supports_omap()
+    if (!pg.get_pool().info.supports_omap()) {
+      return crimson::ct_error::operation_not_supported::make();
+    }*/
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.omap_remove_key(os, osd_op, txn);
+    }, true);
   case CEPH_OSD_OP_OMAPCLEAR:
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_clear(os, osd_op, txn, *osd_op_params, delta_stats);
