@@ -67,6 +67,10 @@ private:
    *    v
    * GET_MIRROR_INFO
    *    |
+   *    | (if the image mirror state is CREATING)
+   *    v
+   * TRASH_MOVE
+   *    |
    *    v
    * <finish>
    *
@@ -94,6 +98,9 @@ private:
 
   void get_mirror_info();
   void handle_get_mirror_info(int r);
+
+  void move_to_trash();
+  void handle_move_to_trash(int r);
 
   void finish(int r);
 
