@@ -3782,6 +3782,17 @@ options:
   level: advanced
   default: 1_G
   with_legacy: true
+- name: memstore_object_class
+  type: str
+  level: advanced
+  desc: Object class type to use for storing memstore data
+  default: bufferlist
+  enum_values:
+  - bufferlist
+  - pageset
+  - vector
+  flags:
+  - create
 - name: memstore_page_set
   type: bool
   level: advanced

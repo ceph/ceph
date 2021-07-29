@@ -374,13 +374,7 @@ int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::string k(name);
-  std::lock_guard lock{o->xattr_mutex};
-  if (!o->xattr.count(k)) {
-    return -ENODATA;
-  }
-  value = o->xattr[k];
-  return 0;
+  return o->getattr(name, value);
 }
 
 int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
@@ -394,9 +388,7 @@ int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->xattr_mutex};
-  aset = o->xattr;
-  return 0;
+  return o->getattrs(aset);
 }
 
 int MemStore::list_collections(std::vector<coll_t>& ls)
@@ -476,10 +468,7 @@ int MemStore::omap_get(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  *header = o->omap_header;
-  *out = o->omap;
-  return 0;
+  return o->omap_get(header, out);
 }
 
 int MemStore::omap_get_header(
@@ -494,9 +483,7 @@ int MemStore::omap_get_header(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  *header = o->omap_header;
-  return 0;
+  return o->omap_get_header(header);
 }
 
 int MemStore::omap_get_keys(
@@ -510,10 +497,7 @@ int MemStore::omap_get_keys(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  for (auto p = o->omap.begin(); p != o->omap.end(); ++p)
-    keys->insert(p->first);
-  return 0;
+  return o->omap_get_keys(keys);
 }
 
 int MemStore::omap_get_values(
@@ -528,13 +512,7 @@ int MemStore::omap_get_values(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  for (auto p = keys.begin(); p != keys.end(); ++p) {
-    auto q = o->omap.find(*p);
-    if (q != o->omap.end())
-      out->insert(*q);
-  }
-  return 0;
+  return o->omap_get_values(keys, out);
 }
 
 int MemStore::omap_check_keys(
@@ -549,59 +527,8 @@ int MemStore::omap_check_keys(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  for (auto p = keys.begin(); p != keys.end(); ++p) {
-    auto q = o->omap.find(*p);
-    if (q != o->omap.end())
-      out->insert(*p);
-  }
-  return 0;
+  return o->omap_check_keys(keys, out);
 }
-
-class MemStore::OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
-  CollectionRef c;
-  ObjectRef o;
-  std::map<std::string,ceph::buffer::list>::iterator it;
-public:
-  OmapIteratorImpl(CollectionRef c, ObjectRef o)
-    : c(c), o(o), it(o->omap.begin()) {}
-
-  int seek_to_first() override {
-    std::lock_guard lock{o->omap_mutex};
-    it = o->omap.begin();
-    return 0;
-  }
-  int upper_bound(const std::string &after) override {
-    std::lock_guard lock{o->omap_mutex};
-    it = o->omap.upper_bound(after);
-    return 0;
-  }
-  int lower_bound(const std::string &to) override {
-    std::lock_guard lock{o->omap_mutex};
-    it = o->omap.lower_bound(to);
-    return 0;
-  }
-  bool valid() override {
-    std::lock_guard lock{o->omap_mutex};
-    return it != o->omap.end();
-  }
-  int next() override {
-    std::lock_guard lock{o->omap_mutex};
-    ++it;
-    return 0;
-  }
-  std::string key() override {
-    std::lock_guard lock{o->omap_mutex};
-    return it->first;
-  }
-  ceph::buffer::list value() override {
-    std::lock_guard lock{o->omap_mutex};
-    return it->second;
-  }
-  int status() override {
-    return 0;
-  }
-};
 
 ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
   CollectionHandle& ch,
@@ -612,9 +539,8 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return ObjectMap::ObjectMapIterator();
-  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o));
+  return o->get_omap_iterator();
 }
-
 
 // ---------------
 // write operations
@@ -1106,10 +1032,7 @@ int MemStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->xattr_mutex};
-  for (auto p = aset.begin(); p != aset.end(); ++p)
-    o->xattr[p->first] = p->second;
-  return 0;
+  return o->setattrs(aset);
 }
 
 int MemStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *name)
@@ -1122,12 +1045,7 @@ int MemStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *name
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->xattr_mutex};
-  auto i = o->xattr.find(name);
-  if (i == o->xattr.end())
-    return -ENODATA;
-  o->xattr.erase(i);
-  return 0;
+  return o->rmattr(name);
 }
 
 int MemStore::_rmattrs(const coll_t& cid, const ghobject_t& oid)
@@ -1140,9 +1058,7 @@ int MemStore::_rmattrs(const coll_t& cid, const ghobject_t& oid)
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->xattr_mutex};
-  o->xattr.clear();
-  return 0;
+  return o->rmattrs();
 }
 
 int MemStore::_clone(const coll_t& cid, const ghobject_t& oldoid,
@@ -1158,19 +1074,10 @@ int MemStore::_clone(const coll_t& cid, const ghobject_t& oldoid,
   if (!oo)
     return -ENOENT;
   ObjectRef no = c->get_or_create_object(newoid);
+  if (!no)
+    return -ENOENT;
   used_bytes += oo->get_size() - no->get_size();
-  no->clone(oo.get(), 0, oo->get_size(), 0);
-
-  // take xattr and omap locks with std::lock()
-  std::scoped_lock l{oo->xattr_mutex,
-		     no->xattr_mutex,
-		     oo->omap_mutex,
-		     no->omap_mutex};
-
-  no->omap_header = oo->omap_header;
-  no->omap = oo->omap;
-  no->xattr = oo->xattr;
-  return 0;
+  return no->clone(oo.get());
 }
 
 int MemStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid,
@@ -1195,7 +1102,7 @@ int MemStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid,
     len = oo->get_size() - srcoff;
 
   const ssize_t old_size = no->get_size();
-  no->clone(oo.get(), srcoff, len, dstoff);
+  no->clone_range(oo.get(), srcoff, len, dstoff);
   used_bytes += (no->get_size() - old_size);
 
   return len;
@@ -1211,10 +1118,7 @@ int MemStore::_omap_clear(const coll_t& cid, const ghobject_t &oid)
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  o->omap.clear();
-  o->omap_header.clear();
-  return 0;
+  return o->omap_clear();
 }
 
 int MemStore::_omap_setkeys(const coll_t& cid, const ghobject_t &oid,
@@ -1228,16 +1132,7 @@ int MemStore::_omap_setkeys(const coll_t& cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  auto p = aset_bl.cbegin();
-  __u32 num;
-  decode(num, p);
-  while (num--) {
-    std::string key;
-    decode(key, p);
-    decode(o->omap[key], p);
-  }
-  return 0;
+  return o->omap_setkeys(aset_bl);
 }
 
 int MemStore::_omap_rmkeys(const coll_t& cid, const ghobject_t &oid,
@@ -1251,16 +1146,7 @@ int MemStore::_omap_rmkeys(const coll_t& cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  auto p = keys_bl.cbegin();
-  __u32 num;
-  decode(num, p);
-  while (num--) {
-    std::string key;
-    decode(key, p);
-    o->omap.erase(key);
-  }
-  return 0;
+  return o->omap_rmkeys(keys_bl);
 }
 
 int MemStore::_omap_rmkeyrange(const coll_t& cid, const ghobject_t &oid,
@@ -1275,11 +1161,7 @@ int MemStore::_omap_rmkeyrange(const coll_t& cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  auto p = o->omap.lower_bound(first);
-  auto e = o->omap.lower_bound(last);
-  o->omap.erase(p, e);
-  return 0;
+  return o->omap_rmkeyrange(first, last);
 }
 
 int MemStore::_omap_setheader(const coll_t& cid, const ghobject_t &oid,
@@ -1293,9 +1175,7 @@ int MemStore::_omap_setheader(const coll_t& cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  o->omap_header = bl;
-  return 0;
+  return o->omap_setheader(bl);
 }
 
 int MemStore::_create_collection(const coll_t& cid, int bits)
@@ -1455,346 +1335,12 @@ int MemStore::_merge_collection(const coll_t& cid, uint32_t bits, coll_t dest)
   return 0;
 }
 
-namespace {
-struct BufferlistObject : public MemStore::Object {
-  ceph::spinlock mutex;
-  ceph::buffer::list data;
-
-  size_t get_size() const override { return data.length(); }
-
-  int read(uint64_t offset, uint64_t len, ceph::buffer::list &bl) override;
-  int write(uint64_t offset, const ceph::buffer::list &bl) override;
-  int clone(Object *src, uint64_t srcoff, uint64_t len,
-            uint64_t dstoff) override;
-  int truncate(uint64_t offset) override;
-
-  void encode(ceph::buffer::list& bl) const override {
-    ENCODE_START(1, 1, bl);
-    encode(data, bl);
-    encode_base(bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) override {
-    DECODE_START(1, p);
-    decode(data, p);
-    decode_base(p);
-    DECODE_FINISH(p);
-  }
-};
-}
-// BufferlistObject
-int BufferlistObject::read(uint64_t offset, uint64_t len,
-                                     ceph::buffer::list &bl)
-{
-  std::lock_guard<decltype(mutex)> lock(mutex);
-  bl.substr_of(data, offset, len);
-  return bl.length();
-}
-
-int BufferlistObject::write(uint64_t offset, const ceph::buffer::list &src)
-{
-  unsigned len = src.length();
-
-  std::lock_guard<decltype(mutex)> lock(mutex);
-
-  // before
-  ceph::buffer::list newdata;
-  if (get_size() >= offset) {
-    newdata.substr_of(data, 0, offset);
-  } else {
-    if (get_size()) {
-      newdata.substr_of(data, 0, get_size());
-    }
-    newdata.append_zero(offset - get_size());
-  }
-
-  newdata.append(src);
-
-  // after
-  if (get_size() > offset + len) {
-    ceph::buffer::list tail;
-    tail.substr_of(data, offset + len, get_size() - (offset + len));
-    newdata.append(tail);
-  }
-
-  data = std::move(newdata);
-  return 0;
-}
-
-int BufferlistObject::clone(Object *src, uint64_t srcoff,
-                                      uint64_t len, uint64_t dstoff)
-{
-  auto srcbl = dynamic_cast<BufferlistObject*>(src);
-  if (srcbl == nullptr)
-    return -ENOTSUP;
-
-  ceph::buffer::list bl;
-  {
-    std::lock_guard<decltype(srcbl->mutex)> lock(srcbl->mutex);
-    if (srcoff == dstoff && len == src->get_size()) {
-      data = srcbl->data;
-      return 0;
-    }
-    bl.substr_of(srcbl->data, srcoff, len);
-  }
-  return write(dstoff, bl);
-}
-
-int BufferlistObject::truncate(uint64_t size)
-{
-  std::lock_guard<decltype(mutex)> lock(mutex);
-  if (get_size() > size) {
-    ceph::buffer::list bl;
-    bl.substr_of(data, 0, size);
-    data = std::move(bl);
-  } else if (get_size() == size) {
-    // do nothing
-  } else {
-    data.append_zero(size - get_size());
-  }
-  return 0;
-}
-
-// PageSetObject
-
-struct MemStore::PageSetObject : public Object {
-  PageSet data;
-  uint64_t data_len;
-#if defined(__GLIBCXX__)
-  // use a thread-local vector for the pages returned by PageSet, so we
-  // can avoid allocations in read/write()
-  static thread_local PageSet::page_vector tls_pages;
-#endif
-
-  size_t get_size() const override { return data_len; }
-
-  int read(uint64_t offset, uint64_t len, ceph::buffer::list &bl) override;
-  int write(uint64_t offset, const ceph::buffer::list &bl) override;
-  int clone(Object *src, uint64_t srcoff, uint64_t len,
-            uint64_t dstoff) override;
-  int truncate(uint64_t offset) override;
-
-  void encode(ceph::buffer::list& bl) const override {
-    ENCODE_START(1, 1, bl);
-    encode(data_len, bl);
-    data.encode(bl);
-    encode_base(bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) override {
-    DECODE_START(1, p);
-    decode(data_len, p);
-    data.decode(p);
-    decode_base(p);
-    DECODE_FINISH(p);
-  }
-
-private:
-  FRIEND_MAKE_REF(PageSetObject);
-  explicit PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
-};
-
-#if defined(__GLIBCXX__)
-// use a thread-local vector for the pages returned by PageSet, so we
-// can avoid allocations in read/write()
-thread_local PageSet::page_vector MemStore::PageSetObject::tls_pages;
-#define DEFINE_PAGE_VECTOR(name)
-#else
-#define DEFINE_PAGE_VECTOR(name) PageSet::page_vector name;
-#endif
-
-int MemStore::PageSetObject::read(uint64_t offset, uint64_t len, ceph::buffer::list& bl)
-{
-  const auto start = offset;
-  const auto end = offset + len;
-  auto remaining = len;
-
-  DEFINE_PAGE_VECTOR(tls_pages);
-  data.get_range(offset, len, tls_pages);
-
-  // allocate a buffer for the data
-  ceph::buffer::ptr buf(len);
-
-  auto p = tls_pages.begin();
-  while (remaining) {
-    // no more pages in range
-    if (p == tls_pages.end() || (*p)->offset >= end) {
-      buf.zero(offset - start, remaining);
-      break;
-    }
-    auto page = *p;
-
-    // fill any holes between pages with zeroes
-    if (page->offset > offset) {
-      const auto count = std::min(remaining, page->offset - offset);
-      buf.zero(offset - start, count);
-      remaining -= count;
-      offset = page->offset;
-      if (!remaining)
-        break;
-    }
-
-    // read from page
-    const auto page_offset = offset - page->offset;
-    const auto count = std::min(remaining, data.get_page_size() - page_offset);
-
-    buf.copy_in(offset - start, count, page->data + page_offset);
-
-    remaining -= count;
-    offset += count;
-
-    ++p;
-  }
-
-  tls_pages.clear(); // drop page refs
-
-  bl.append(std::move(buf));
-  return len;
-}
-
-int MemStore::PageSetObject::write(uint64_t offset, const ceph::buffer::list &src)
-{
-  unsigned len = src.length();
-
-  DEFINE_PAGE_VECTOR(tls_pages);
-  // make sure the page range is allocated
-  data.alloc_range(offset, src.length(), tls_pages);
-
-  auto page = tls_pages.begin();
-
-  auto p = src.begin();
-  while (len > 0) {
-    unsigned page_offset = offset - (*page)->offset;
-    unsigned pageoff = data.get_page_size() - page_offset;
-    unsigned count = std::min(len, pageoff);
-    p.copy(count, (*page)->data + page_offset);
-    offset += count;
-    len -= count;
-    if (count == pageoff)
-      ++page;
-  }
-  if (data_len < offset)
-    data_len = offset;
-  tls_pages.clear(); // drop page refs
-  return 0;
-}
-
-int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
-                                   uint64_t len, uint64_t dstoff)
-{
-  const int64_t delta = dstoff - srcoff;
-
-  auto &src_data = static_cast<PageSetObject*>(src)->data;
-  const uint64_t src_page_size = src_data.get_page_size();
-
-  auto &dst_data = data;
-  const auto dst_page_size = dst_data.get_page_size();
-
-  DEFINE_PAGE_VECTOR(tls_pages);
-  PageSet::page_vector dst_pages;
-
-  while (len) {
-    // limit to 16 pages at a time so tls_pages doesn't balloon in size
-    auto count = std::min(len, (uint64_t)src_page_size * 16);
-    src_data.get_range(srcoff, count, tls_pages);
-
-    // allocate the destination range
-    // TODO: avoid allocating pages for holes in the source range
-    dst_data.alloc_range(srcoff + delta, count, dst_pages);
-    auto dst_iter = dst_pages.begin();
-
-    for (auto &src_page : tls_pages) {
-      auto sbegin = std::max(srcoff, src_page->offset);
-      auto send = std::min(srcoff + count, src_page->offset + src_page_size);
-
-      // zero-fill holes before src_page
-      if (srcoff < sbegin) {
-        while (dst_iter != dst_pages.end()) {
-          auto &dst_page = *dst_iter;
-          auto dbegin = std::max(srcoff + delta, dst_page->offset);
-          auto dend = std::min(sbegin + delta, dst_page->offset + dst_page_size);
-          std::fill(dst_page->data + dbegin - dst_page->offset,
-                    dst_page->data + dend - dst_page->offset, 0);
-          if (dend < dst_page->offset + dst_page_size)
-            break;
-          ++dst_iter;
-        }
-        const auto c = sbegin - srcoff;
-        count -= c;
-        len -= c;
-      }
-
-      // copy data from src page to dst pages
-      while (dst_iter != dst_pages.end()) {
-        auto &dst_page = *dst_iter;
-        auto dbegin = std::max(sbegin + delta, dst_page->offset);
-        auto dend = std::min(send + delta, dst_page->offset + dst_page_size);
-
-        std::copy(src_page->data + (dbegin - delta) - src_page->offset,
-                  src_page->data + (dend - delta) - src_page->offset,
-                  dst_page->data + dbegin - dst_page->offset);
-        if (dend < dst_page->offset + dst_page_size)
-          break;
-        ++dst_iter;
-      }
-
-      const auto c = send - sbegin;
-      count -= c;
-      len -= c;
-      srcoff = send;
-      dstoff = send + delta;
-    }
-    tls_pages.clear(); // drop page refs
-
-    // zero-fill holes after the last src_page
-    if (count > 0) {
-      while (dst_iter != dst_pages.end()) {
-        auto &dst_page = *dst_iter;
-        auto dbegin = std::max(dstoff, dst_page->offset);
-        auto dend = std::min(dstoff + count, dst_page->offset + dst_page_size);
-        std::fill(dst_page->data + dbegin - dst_page->offset,
-                  dst_page->data + dend - dst_page->offset, 0);
-        ++dst_iter;
-      }
-      srcoff += count;
-      dstoff += count;
-      len -= count;
-    }
-    dst_pages.clear(); // drop page refs
-  }
-
-  // update object size
-  if (data_len < dstoff)
-    data_len = dstoff;
-  return 0;
-}
-
-int MemStore::PageSetObject::truncate(uint64_t size)
-{
-  data.free_pages_after(size);
-  data_len = size;
-
-  const auto page_size = data.get_page_size();
-  const auto page_offset = size & ~(page_size-1);
-  if (page_offset == size)
-    return 0;
-
-  DEFINE_PAGE_VECTOR(tls_pages);
-  // write zeroes to the rest of the last page
-  data.get_range(page_offset, page_size, tls_pages);
-  if (tls_pages.empty())
-    return 0;
-
-  auto page = tls_pages.begin();
-  auto data = (*page)->data;
-  std::fill(data + (size - page_offset), data + page_size, 0);
-  tls_pages.clear(); // drop page ref
-  return 0;
-}
-
-
 MemStore::ObjectRef MemStore::Collection::create_object() const {
-  if (use_page_set)
+  switch (oc) {
+  case O_PAGESET:
     return ceph::make_ref<PageSetObject>(cct->_conf->memstore_page_size);
+  case O_VECTOR:
+    return ceph::make_ref<VectorObject>();
+  }
   return new BufferlistObject();
 }

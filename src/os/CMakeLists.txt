@@ -15,6 +15,7 @@ set(libos_srcs
   filestore/WBThrottle.cc
   filestore/os_xattr.c
   memstore/MemStore.cc
+  memstore/MemObject.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
   fs/FS.cc)

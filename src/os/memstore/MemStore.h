@@ -24,75 +24,26 @@
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
 #include "os/ObjectStore.h"
-#include "PageSet.h"
 #include "include/ceph_assert.h"
+#include "MemObject.h"
 
 class MemStore : public ObjectStore {
 public:
-  struct Object : public RefCountedObject {
-    ceph::mutex xattr_mutex{ceph::make_mutex("MemStore::Object::xattr_mutex")};
-    ceph::mutex omap_mutex{ceph::make_mutex("MemStore::Object::omap_mutex")};
-    std::map<std::string,ceph::buffer::ptr,std::less<>> xattr;
-    ceph::buffer::list omap_header;
-    std::map<std::string,ceph::buffer::list> omap;
+  using ObjectRef = MemObject::Ref;
 
-    using Ref = ceph::ref_t<Object>;
-
-    // interface for object data
-    virtual size_t get_size() const = 0;
-    virtual int read(uint64_t offset, uint64_t len, ceph::buffer::list &bl) = 0;
-    virtual int write(uint64_t offset, const ceph::buffer::list &bl) = 0;
-    virtual int clone(Object *src, uint64_t srcoff, uint64_t len,
-                      uint64_t dstoff) = 0;
-    virtual int truncate(uint64_t offset) = 0;
-    virtual void encode(ceph::buffer::list& bl) const = 0;
-    virtual void decode(ceph::buffer::list::const_iterator& p) = 0;
-
-    void encode_base(ceph::buffer::list& bl) const {
-      using ceph::encode;
-      encode(xattr, bl);
-      encode(omap_header, bl);
-      encode(omap, bl);
-    }
-    void decode_base(ceph::buffer::list::const_iterator& p) {
-      using ceph::decode;
-      decode(xattr, p);
-      decode(omap_header, p);
-      decode(omap, p);
-    }
-
-    void dump(ceph::Formatter *f) const {
-      f->dump_int("data_len", get_size());
-      f->dump_int("omap_header_len", omap_header.length());
-
-      f->open_array_section("xattrs");
-      for (auto p = xattr.begin(); p != xattr.end(); ++p) {
-	f->open_object_section("xattr");
-	f->dump_string("name", p->first);
-	f->dump_int("length", p->second.length());
-	f->close_section();
-      }
-      f->close_section();
-
-      f->open_array_section("omap");
-      for (auto p = omap.begin(); p != omap.end(); ++p) {
-	f->open_object_section("pair");
-	f->dump_string("key", p->first);
-	f->dump_int("length", p->second.length());
-	f->close_section();
-      }
-      f->close_section();
-    }
-  protected:
-    Object() = default;
+  enum ObjectClass {
+    O_BUFFERLIST,
+    O_PAGESET,
+    O_VECTOR,
+    O_LAST = O_VECTOR,
   };
-  using ObjectRef = Object::Ref;
 
-  struct PageSetObject;
   struct Collection : public CollectionImpl {
     int bits = 0;
     CephContext *cct;
-    bool use_page_set;
+
+    int oc = ObjectClass::O_BUFFERLIST;
+
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
     std::map<ghobject_t, ObjectRef> object_map;        ///< for iteration
     std::map<std::string,ceph::buffer::ptr> xattr;
@@ -132,7 +83,7 @@ public:
     void encode(ceph::buffer::list& bl) const {
       ENCODE_START(1, 1, bl);
       encode(xattr, bl);
-      encode(use_page_set, bl);
+      encode(oc, bl);
       uint32_t s = object_map.size();
       encode(s, bl);
       for (auto p = object_map.begin(); p != object_map.end(); ++p) {
@@ -144,7 +95,7 @@ public:
     void decode(ceph::buffer::list::const_iterator& p) {
       DECODE_START(1, p);
       decode(xattr, p);
-      decode(use_page_set, p);
+      decode(oc, p);
       uint32_t s;
       decode(s, p);
       while (s--) {
@@ -177,8 +128,15 @@ public:
     FRIEND_MAKE_REF(Collection);
     explicit Collection(CephContext *cct, coll_t c)
       : CollectionImpl(cct, c),
-	cct(cct),
-	use_page_set(cct->_conf->memstore_page_set) {}
+	cct(cct) {
+      auto ocstring = cct->_conf.get_val<std::string>("memstore_object_class");
+      if (ocstring == "pageset") {
+        oc = MemStore::O_PAGESET;
+      } else if (ocstring == "vector") {
+        oc = MemStore::O_VECTOR;
+      }
+      oc = MemStore::O_BUFFERLIST;
+    }
   };
   typedef Collection::Ref CollectionRef;
 
