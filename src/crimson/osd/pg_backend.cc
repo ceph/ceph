@@ -1309,6 +1309,26 @@ PGBackend::interruptible_future<> PGBackend::omap_remove_range(
   return seastar::now();
 }
 
+PGBackend::interruptible_future<> PGBackend::omap_remove_key(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  ceph::bufferlist to_rm_bl;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode_str_set_to_bl(p, &to_rm_bl);
+  } catch (buffer::error& e) {
+    throw crimson::osd::invalid_argument{};
+  }
+  txn.omap_rmkeys(coll->get_cid(), ghobject_t{os.oi.soid}, to_rm_bl);
+  // TODO:
+  // ctx->clean_regions.mark_omap_dirty();
+  // ctx->delta_stats.num_wr++;
+  os.oi.clear_omap_digest();
+  return seastar::now();
+}
+
 PGBackend::omap_clear_iertr::future<>
 PGBackend::omap_clear(
   ObjectState& os,
