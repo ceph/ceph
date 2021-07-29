@@ -281,12 +281,12 @@ void Client::_assign_faked_root(Inode *in)
     last_used_faked_root = 0;
     it = free_faked_inos.lower_bound(last_used_faked_root + 1);
   }
-  assert(it != free_faked_inos.end());
+  ceph_assert(it != free_faked_inos.end());
   vinodeno_t inode_info = in->vino();
   uint64_t inode_num = (uint64_t)inode_info.ino;
   ldout(cct, 10) << "inode_num " << inode_num << "inode_num & 0x3ff=" << (inode_num & 0x3ff)<< dendl;
   last_used_faked_root = it.get_start()  + (inode_num & 0x3ff); // 0x3ff mask and get_start will not exceed 2048
-  assert(it.get_start() + it.get_len() > last_used_faked_root);
+  ceph_assert(it.get_start() + it.get_len() > last_used_faked_root);
 
   in->faked_ino = last_used_faked_root;
   free_faked_inos.erase(in->faked_ino);
@@ -3100,7 +3100,7 @@ void Client::kick_requests_closed(MetaSession *session)
 	req->unsafe_item.remove_myself();
 	if (is_dir_operation(req)) {
 	  Inode *dir = req->inode();
-	  assert(dir);
+	  ceph_assert(dir);
 	  dir->set_async_err(-CEPHFS_EIO);
 	  lderr(cct) << "kick_requests_closed drop req of inode(dir) : "
 		     <<  dir->ino  << " " << req->get_tid() << dendl;
@@ -10804,7 +10804,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   int rval = cond.wait();
   lock.lock();
 
-  assert(root);
+  ceph_assert(root);
   total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
 
   if (rval < 0) {
@@ -12369,7 +12369,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   req->head.args.setxattr.flags = xattr_flags;
 
   bufferlist bl;
-  assert (value || size == 0);
+  ceph_assert(value || size == 0);
   bl.append((const char*)value, size);
   req->set_data(bl);
 
@@ -14999,7 +14999,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	}
       }
       if (mds >= 0) {
-	assert (s != NULL);
+	ceph_assert(s != NULL);
 	switch (s->state) {
 	case MetaSession::STATE_CLOSING:
 	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;
@@ -15355,7 +15355,7 @@ void Client::set_uuid(const std::string& uuid)
   ceph_assert(iref_reader.is_state_satisfied());
 
   std::scoped_lock l(client_lock);
-  assert(!uuid.empty());
+  ceph_assert(!uuid.empty());
 
   metadata["uuid"] = uuid;
   _close_sessions();
