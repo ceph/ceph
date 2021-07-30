@@ -6666,6 +6666,9 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
   }
 
   r = _open_db_and_around(true);
+  if (r < 0) {
+    return r;
+  }
 
   if (id == BlueFS::BDEV_NEWWAL) {
     string p = path + "/block.wal";
@@ -6743,6 +6746,9 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
   }
 
   int r = _open_db_and_around(true);
+  if (r < 0) {
+    return r;
+  }
 
   uint64_t used_space = 0;
   for(auto src_id : devs_source) {
@@ -6789,7 +6795,6 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   const string& dev_path)
 {
   dout(10) << __func__ << " path " << dev_path << " id:" << id << dendl;
-  int r;
   ceph_assert(path_fd < 0);
 
   ceph_assert(id == BlueFS::BDEV_NEWWAL || id == BlueFS::BDEV_NEWDB);
@@ -6799,7 +6804,10 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     return -EIO;
   }
 
-  r = _open_db_and_around(true);
+  int r = _open_db_and_around(true);
+  if (r < 0) {
+    return r;
+  }
 
   string link_db;
   string link_wal;
