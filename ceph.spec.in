@@ -112,8 +112,6 @@
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
 
-# disable dwz which compresses the debuginfo
-%global _find_debuginfo_dwz_opts %{nil}
 %if ! 0%{?suse_version}
 # use multi-threaded xz compression: xz level 7 using ncpus threads
 %global _source_payload w7T%{_smp_build_ncpus}.xzdio
