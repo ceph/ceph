@@ -1,4 +1,6 @@
-<alert type="{{ bootstrapClass }}">
+<alert type="{{ bootstrapClass }}"
+       [dismissible]="dismissible"
+       (onClose)="onClose()">
   <table>
     <ng-container *ngIf="size === 'normal'; else slim">
       <tr>

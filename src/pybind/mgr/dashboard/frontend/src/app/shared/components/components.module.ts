@@ -14,6 +14,7 @@ import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
+import { MotdComponent } from '../components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { AlertPanelComponent } from './alert-panel/alert-panel.component';
@@ -85,7 +86,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
     OrchestratorDocModalComponent,
-    DocComponent
+    DocComponent,
+    MotdComponent
   ],
   providers: [],
   exports: [
@@ -108,7 +110,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     PwdExpirationNotificationComponent,
     TelemetryNotificationComponent,
     OrchestratorDocPanelComponent,
-    DocComponent
+    DocComponent,
+    MotdComponent
   ],
   entryComponents: [
     ModalComponent,
