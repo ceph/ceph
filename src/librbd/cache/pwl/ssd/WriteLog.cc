@@ -69,32 +69,33 @@ WriteLog<I>::~WriteLog() {
 template <typename I>
 void WriteLog<I>::collect_read_extents(
     uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
-    std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
     std::vector<bufferlist*> &bls_to_read,
     uint64_t entry_hit_length, Extent hit_extent,
     pwl::C_ReadRequest *read_ctx) {
-    // Make a bl for this hit extent. This will add references to the
-    // write_entry->cache_bl */
-    ldout(m_image_ctx.cct, 5) << dendl;
-    auto write_entry = static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
-    buffer::list hit_bl;
-    hit_bl = write_entry->get_cache_bl();
-    bool writesame = write_entry->is_writesame_entry();
-    auto hit_extent_buf = std::make_shared<ImageExtentBuf>(
-        hit_extent, hit_bl, true, read_buffer_offset, writesame);
-    read_ctx->read_extents.push_back(hit_extent_buf);
+  // Make a bl for this hit extent. This will add references to the
+  // write_entry->cache_bl */
+  ldout(m_image_ctx.cct, 5) << dendl;
+  auto write_entry = static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
+  buffer::list hit_bl;
+  hit_bl = write_entry->get_cache_bl();
+  bool writesame = write_entry->is_writesame_entry();
+  auto hit_extent_buf = std::make_shared<ImageExtentBuf>(
+      hit_extent, hit_bl, true, read_buffer_offset, writesame);
+  read_ctx->read_extents.push_back(hit_extent_buf);
 
-    if(!hit_bl.length()) {
-      ldout(m_image_ctx.cct, 5) << "didn't hit RAM" << dendl;
-      auto read_extent = read_ctx->read_extents.back();
-      log_entries_to_read.push_back(&write_entry->ram_entry);
-      bls_to_read.push_back(&read_extent->m_bl);
-    }
+  if (!hit_bl.length()) {
+    ldout(m_image_ctx.cct, 5) << "didn't hit RAM" << dendl;
+    auto read_extent = read_ctx->read_extents.back();
+    write_entry->inc_bl_refs();
+    log_entries_to_read.push_back(std::move(write_entry));
+    bls_to_read.push_back(&read_extent->m_bl);
+  }
 }
 
 template <typename I>
 void WriteLog<I>::complete_read(
-    std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
     std::vector<bufferlist*> &bls_to_read,
     Context *ctx) {
   if (!log_entries_to_read.empty()) {
@@ -529,9 +530,11 @@ Context* WriteLog<I>::construct_flush_entry_ctx(
                                     std::move(captured_entry_bl));
           }), 0);
       });
-      ctx = new LambdaContext(
-        [this, log_entry, read_bl_ptr, ctx](int r) {
-          aio_read_data_block(&log_entry->ram_entry, read_bl_ptr, ctx);
+    ctx = new LambdaContext(
+      [this, log_entry, read_bl_ptr, ctx](int r) {
+        auto write_entry = static_pointer_cast<WriteLogEntry>(log_entry);
+        write_entry->inc_bl_refs();
+        aio_read_data_block(std::move(write_entry), read_bl_ptr, ctx);
       });
     return ctx;
   } else {
@@ -979,29 +982,32 @@ int WriteLog<I>::update_pool_root_sync(
 }
 
 template <typename I>
-void WriteLog<I>::aio_read_data_block(WriteLogCacheEntry *log_entry,
+void WriteLog<I>::aio_read_data_block(std::shared_ptr<GenericWriteLogEntry> log_entry,
                                       bufferlist *bl, Context *ctx) {
-  std::vector<WriteLogCacheEntry*> log_entries {log_entry};
+  std::vector<std::shared_ptr<GenericWriteLogEntry>> log_entries = {std::move(log_entry)};
   std::vector<bufferlist *> bls {bl};
   aio_read_data_blocks(log_entries, bls, ctx);
 }
 
 template <typename I>
 void WriteLog<I>::aio_read_data_blocks(
-    std::vector<WriteLogCacheEntry*> &log_entries,
+    std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries,
     std::vector<bufferlist *> &bls, Context *ctx) {
   ceph_assert(log_entries.size() == bls.size());
 
   //get the valid part
   Context *read_ctx = new LambdaContext(
-    [this, log_entries, bls, ctx](int r) {
+    [log_entries, bls, ctx](int r) {
       for (unsigned int i = 0; i < log_entries.size(); i++) {
         bufferlist valid_data_bl;
-        auto length = log_entries[i]->is_write() ? log_entries[i]->write_bytes :
-                                                   log_entries[i]->ws_datalen;
+        auto write_entry = static_pointer_cast<WriteLogEntry>(log_entries[i]);
+        auto length = write_entry->ram_entry.is_write() ? write_entry->ram_entry.write_bytes
+                                                        : write_entry->ram_entry.ws_datalen;
+
         valid_data_bl.substr_of(*bls[i], 0, length);
         bls[i]->clear();
         bls[i]->append(valid_data_bl);
+        write_entry->dec_bl_refs();
       }
      ctx->complete(r);
     });
@@ -1009,7 +1015,7 @@ void WriteLog<I>::aio_read_data_blocks(
   CephContext *cct = m_image_ctx.cct;
   AioTransContext *aio = new AioTransContext(cct, read_ctx);
   for (unsigned int i = 0; i < log_entries.size(); i++) {
-    auto log_entry = log_entries[i];
+    WriteLogCacheEntry *log_entry = &log_entries[i]->ram_entry;
 
     ceph_assert(log_entry->is_write() || log_entry->is_writesame());
     uint64_t len = log_entry->is_write() ? log_entry->write_bytes :
