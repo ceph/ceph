@@ -35,11 +35,11 @@ class GenericLogOperation {
 protected:
   PerfCounters *m_perfcounter = nullptr;
 public:
-  utime_t dispatch_time;         // When op created
-  utime_t buf_persist_time;      // When buffer persist begins
-  utime_t buf_persist_comp_time; // When buffer persist completes
-  utime_t log_append_time;       // When log append begins
-  utime_t log_append_comp_time;  // When log append completes
+  utime_t dispatch_time;          // When op created
+  utime_t buf_persist_start_time; // When buffer persist begins
+  utime_t buf_persist_comp_time;  // When buffer persist completes
+  utime_t log_append_start_time;  // When log append begins
+  utime_t log_append_comp_time;   // When log append completes
   GenericLogOperation(utime_t dispatch_time, PerfCounters *perfcounter);
   virtual ~GenericLogOperation() { };
   GenericLogOperation(const GenericLogOperation&) = delete;
