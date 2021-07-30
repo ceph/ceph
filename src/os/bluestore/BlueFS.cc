@@ -519,7 +519,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
 
   // initial txn
   log_t.op_init();
-  _flush_and_sync_log(l);
+  _flush_and_sync_log(l, false);
 
   // write supers
   super.log_fnode = log_file->fnode;
@@ -1424,6 +1424,71 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	  }
         }
 	break;
+      case bluefs_transaction_t::OP_FILE_UPDATE_INC:
+	{
+	  bluefs_fnode_t fnode;
+	  decode(fnode, p);
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+	    << ":  op_file_update_inc " << " " << fnode << " " << dendl;
+	  if (unlikely(to_stdout)) {
+	    std::cout << " 0x" << std::hex << pos << std::dec
+	      << ":  op_file_update_inc " << " " << fnode << std::endl;
+	  }
+	  if (!noop) {
+	    FileRef f = _get_file(fnode.ino);
+	    if (cct->_conf->bluefs_log_replay_check_allocations) {
+	      // check initial log layout
+	      if (first_log_check) {
+		first_log_check = false;
+		int r = _check_new_allocations(log_file->fnode,
+		  MAX_BDEV, used_blocks);
+		if (r < 0) {
+		  return r;
+		}
+	      }
+
+	      auto& fnode_extents = f->fnode.extents;
+	      for (auto e : fnode_extents) {
+		auto id = e.bdev;
+		if (int r = _verify_alloc_granularity(id, e.offset, e.length,
+		  "OP_FILE_UPDATE"); r < 0) {
+		  return r;
+		}
+		apply_for_bitset_range(e.offset, e.length, alloc_size[id],
+		  used_blocks[id],
+		  [&](uint64_t pos, boost::dynamic_bitset<uint64_t>& bs) {
+		    ceph_assert(bs.test(pos));
+		    bs.reset(pos);
+		  }
+		);
+	      }
+	    }
+
+	    if (fnode.ino != 1) {
+	      vselector->sub_usage(f->vselector_hint, f->fnode);
+	    }
+	    f->fnode.clone_persistent_header(fnode);
+	    f->fnode.claim_extents(fnode);
+	    dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+		     << ":  op_file_update_inc produced " << " " << f->fnode << " " << dendl;
+
+	    if (fnode.ino != 1) {
+	      vselector->add_usage(f->vselector_hint, f->fnode);
+	    }
+
+	    if (fnode.ino > ino_last) {
+	      ino_last = fnode.ino;
+	    }
+	    if (cct->_conf->bluefs_log_replay_check_allocations) {
+	      int r = _check_new_allocations(f->fnode,
+		MAX_BDEV, used_blocks);
+	      if (r < 0) {
+		return r;
+	      }
+	    }
+	  }
+	}
+      break;
 
       case bluefs_transaction_t::OP_FILE_REMOVE:
         {
@@ -2170,7 +2235,7 @@ void BlueFS::_compact_log_dump_metadata(bluefs_transaction_t *t,
       e.bdev = bdev_new;
     }
     dout(20) << __func__ << " op_file_update " << file_ref->fnode << dendl;
-    t->op_file_update(file_ref->fnode);
+    t->op_file_update(file_ref->fnode.make_full());
   }
   for (auto& [path, dir_ref] : dir_map) {
     dout(20) << __func__ << " op_dir_create " << path << dendl;
@@ -2344,12 +2409,12 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
 
   // update the log file change and log a jump to the offset where we want to
   // write the new entries
-  log_t.op_file_update(log_file->fnode);
+  log_t.op_file_update(log_file->fnode.make_full());
   log_t.op_jump(log_seq, old_log_jump_to);
 
   flush_bdev();  // FIXME?
 
-  _flush_and_sync_log(l, 0, old_log_jump_to);
+  _flush_and_sync_log(l, false, 0, old_log_jump_to);
 
   // 2. prepare compacted log
   bluefs_transaction_t t;
@@ -2418,17 +2483,12 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
     }
     old_extents.push_back(temp);
   }
-  auto from = log_file->fnode.extents.begin();
-  auto to = log_file->fnode.extents.end();
-  while (from != to) {
-    new_log->fnode.append_extent(*from);
-    ++from;
-  }
 
+  // dec by the extents from old log file, they are added to new log
   vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
+  new_log->fnode.make_full(); // reset new allocations inidication
+  new_log->fnode.claim_extents(log_file->fnode);  //FIXME inc CHECKME: wouldn't it claim on top of newly allocated?
 
-  // clear the extents from old log file, they are added to new log
-  log_file->fnode.clear_extents();
   // swap the log files. New log file is the log file now.
   new_log->fnode.swap_extents(log_file->fnode);
 
@@ -2480,6 +2540,7 @@ void BlueFS::_pad_bl(bufferlist& bl)
 
 
 int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
+				bool allow_delta,
 				uint64_t want_seq,
 				uint64_t jump_to)
 {
@@ -2515,7 +2576,13 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
     dout(20) << __func__ << " " << lsi->second.size() << " dirty_files" << dendl;
     for (auto &f : lsi->second) {
       dout(20) << __func__ << "   op_file_update " << f.fnode << dendl;
-      log_t.op_file_update(f.fnode);
+      bluefs_fnode_t delta;
+      if (allow_delta) {
+	f.fnode.make_delta(&delta);
+	log_t.op_file_update_inc(delta);
+      }	else {
+	log_t.op_file_update(f.fnode.make_full());
+      }
     }
   }
 
@@ -2540,8 +2607,10 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
       cct->_conf->bluefs_max_log_runway,
       &log_writer->file->fnode);
     ceph_assert(r == 0);
+    bluefs_fnode_t delta;
+    log_writer->file->fnode.make_delta(&delta);
+    log_t.op_file_update_inc(delta);
     vselector->add_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
-    log_t.op_file_update(log_writer->file->fnode);
     just_expanded_log = true;
   }
 
@@ -2949,7 +3018,11 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
   vselector->sub_usage(h->file->vselector_hint, h->file->fnode.size);
   h->file->fnode.size = offset;
   vselector->add_usage(h->file->vselector_hint, h->file->fnode.size);
-  log_t.op_file_update(h->file->fnode);
+
+  bluefs_fnode_t delta;
+  h->file->fnode.make_delta(&delta);
+  log_t.op_file_update_inc(delta);
+
   return 0;
 }
 
@@ -2971,7 +3044,7 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l)
     uint64_t s = log_seq;
     dout(20) << __func__ << " file metadata was dirty (" << old_dirty_seq
 	     << ") on " << h->file->fnode << ", flushing log" << dendl;
-    _flush_and_sync_log(l, old_dirty_seq);
+    _flush_and_sync_log(l, true, old_dirty_seq);
     ceph_assert(h->file->dirty_seq == 0 ||  // cleaned
 	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
@@ -3141,15 +3214,17 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
   uint64_t allocated = f->fnode.get_allocated();
   if (off + len > allocated) {
     uint64_t want = off + len - allocated;
-    vselector->sub_usage(f->vselector_hint, f->fnode);
 
+    vselector->sub_usage(f->vselector_hint, f->fnode);
     int r = _allocate(vselector->select_prefer_bdev(f->vselector_hint),
       want,
       &f->fnode);
-    vselector->add_usage(f->vselector_hint, f->fnode);
     if (r < 0)
       return r;
-    log_t.op_file_update(f->fnode);
+    bluefs_fnode_t delta;
+    f->fnode.make_delta(&delta);
+    log_t.op_file_update_inc(delta);
+    vselector->add_usage(f->vselector_hint, f->fnode);
   }
   return 0;
 }
@@ -3165,7 +3240,7 @@ void BlueFS::sync_metadata(bool avoid_compact)
     start = ceph_clock_now();
     *_dout <<  dendl;
     flush_bdev(); // FIXME?
-    _flush_and_sync_log(l);
+    _flush_and_sync_log(l, false);
     dout(10) << __func__ << " done in " << (ceph_clock_now() - start) << dendl;
   }
 
@@ -3255,7 +3330,7 @@ int BlueFS::open_for_write(
 	   << " vsel_hint " << file->vselector_hint
 	   << dendl;
 
-  log_t.op_file_update(file->fnode);
+  log_t.op_file_update(file->fnode.make_full());
   if (create)
     log_t.op_dir_link(dirname, filename, file->fnode.ino);
 
@@ -3488,7 +3563,7 @@ int BlueFS::lock_file(std::string_view dirname, std::string_view filename,
     file_map[ino_last] = file;
     dir->file_map[string{filename}] = file;
     ++file->refs;
-    log_t.op_file_update(file->fnode);
+    log_t.op_file_update(file->fnode.make_full());
     log_t.op_dir_link(dirname, filename, file->fnode.ino);
   } else {
     file = q->second;

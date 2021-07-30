@@ -399,6 +399,7 @@ private:
 #endif
 
   int _flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
+			  bool allow_delta,
 			  uint64_t want_seq = 0,
 			  uint64_t jump_to = 0);
   uint64_t _estimate_log_size();
