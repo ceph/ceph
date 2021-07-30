@@ -27,6 +27,8 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd_min_pg_log_entries=5 --osd_max_pg_log_entries=10 "
+    # Use "high_recovery_ops" profile if mclock_scheduler is enabled.
+    CEPH_ARGS+="--osd-mclock-profile=high_recovery_ops "
     export margin=10
     export objects=200
     export poolname=test
@@ -674,13 +676,13 @@ function TEST_backfill_ec_down_all_out() {
       break
     done
     ceph pg dump pgs
-    for i in $(seq 1 60)
+    for i in $(seq 1 240)
     do
       if ceph pg dump pgs | grep ^$PG | grep -qv backfilling
       then
           break
       fi
-      if [ $i = "60" ];
+      if [ $i = "240" ];
       then
           echo "Timeout waiting for recovery to finish"
           return 1

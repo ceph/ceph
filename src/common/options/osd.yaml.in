@@ -1045,6 +1045,22 @@ options:
   default: 21500
   flags:
   - runtime
+- name: osd_mclock_force_run_benchmark_on_init
+  type: bool
+  level: advanced
+  desc: Force run the OSD benchmark on OSD initialization/boot-up
+  long_desc: This option specifies whether the OSD benchmark must be run during
+    the OSD boot-up sequence even if historical data about the OSD iops capacity
+    is available in the MON config store. Enable this to refresh the OSD iops
+    capacity if the underlying device's performance characteristics have changed
+    significantly. Only considered for osd_op_queue = mclock_scheduler.
+  fmt_desc: Force run the OSD benchmark on OSD initialization/boot-up
+  default: false
+  see_also:
+  - osd_mclock_max_capacity_iops_hdd
+  - osd_mclock_max_capacity_iops_ssd
+  flags:
+  - startup
 - name: osd_mclock_profile
   type: str
   level: advanced
