@@ -512,6 +512,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 del self._drive_group_map[service_id]
                 self._save_drive_groups()
             return f'Removed {service_name}'
+        elif service_type == 'ingress':
+            self.log.info("{0} service '{1}' does not exist".format('ingress', service_id))
+            return 'The Rook orchestrator does not currently support ingress'
         else:
             raise orchestrator.OrchestratorError(f'Service type {service_type} not supported')
 
@@ -553,7 +556,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> str
-        return self.rook_cluster.apply_nfsgw(spec)
+        return self.rook_cluster.apply_nfsgw(spec, self)
 
     @handle_orch_error
     def remove_daemons(self, names: List[str]) -> List[str]:
