@@ -47,8 +47,10 @@ struct bluefs_fnode_t {
   mempool::bluefs::vector<uint64_t> extents_index;
 
   uint64_t allocated;
+  uint64_t newly_allocated;
 
-  bluefs_fnode_t() : ino(0), size(0), __unused__(0), allocated(0) {}
+  bluefs_fnode_t() : ino(0), size(0), __unused__(0),
+    allocated(0), newly_allocated(0) {}
 
   uint64_t get_allocated() const {
     return allocated;
@@ -61,6 +63,7 @@ struct bluefs_fnode_t {
       extents_index.emplace_back(allocated);
       allocated += p.length;
     }
+    newly_allocated = allocated;
   }
 
   DENC_HELPERS
@@ -87,6 +90,55 @@ struct bluefs_fnode_t {
     DENC_FINISH(p);
   }
 
+  bluefs_fnode_t* make_delta(bluefs_fnode_t* delta) {
+    ceph_assert(delta);
+    delta->ino = ino;
+    delta->size = size;
+    delta->mtime = mtime;
+    delta->clear_extents();
+    if (newly_allocated < allocated) {
+      uint64_t x_off = 0;
+      auto p = seek(newly_allocated, &x_off);
+      if (p != extents.end() && x_off) {
+	ceph_assert(x_off < p->length);
+	delta->append_extent(
+	  bluefs_extent_t(p->bdev, p->offset + x_off, p->length - x_off));
+	++p;
+      }
+      while (p != extents.end()) {
+	delta->append_extent(*p);
+	++p;
+      }
+      newly_allocated = allocated;
+    }
+    return delta;
+  }
+
+  bluefs_fnode_t& make_full() {
+    newly_allocated = allocated;
+    return *this;
+  }
+
+  void clone_persistent_header(bluefs_fnode_t& from) {
+    ino = from.ino;
+    size = from.size;
+    mtime = from.mtime;
+  }
+  void claim_extents(bluefs_fnode_t& other) {
+    //for the sake of simplicity do not support the claim
+    // when new allocations are present
+    //
+    ceph_assert(newly_allocated == allocated);
+
+    auto from = other.extents.begin();
+    auto to = other.extents.end();
+    while (from != to) {
+      append_extent(*from);
+      ++from;
+    }
+    newly_allocated = allocated;
+    other.clear_extents();
+  }
   void append_extent(const bluefs_extent_t& ext) {
     if (!extents.empty() &&
 	extents.back().end() == ext.offset &&
@@ -103,6 +155,11 @@ struct bluefs_fnode_t {
   void pop_front_extent() {
     auto it = extents.begin();
     allocated -= it->length;
+    if (newly_allocated > it->length) {
+      newly_allocated -= it->length;
+    } else {
+      newly_allocated = 0;
+    }
     extents_index.erase(extents_index.begin());
     for (auto& i: extents_index) {
       i -= it->length;
@@ -114,11 +171,13 @@ struct bluefs_fnode_t {
     other.extents.swap(extents);
     other.extents_index.swap(extents_index);
     std::swap(allocated, other.allocated);
+    std::swap(newly_allocated, other.newly_allocated);
+
   }
   void clear_extents() {
     extents_index.clear();
     extents.clear();
-    allocated = 0;
+    newly_allocated = allocated = 0;
   }
 
   mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
@@ -195,6 +254,7 @@ struct bluefs_transaction_t {
     OP_FILE_REMOVE, ///< remove file (ino)
     OP_JUMP,        ///< jump the seq # and offset
     OP_JUMP_SEQ,    ///< jump the seq #
+    OP_FILE_UPDATE_INC, ///< incremental update file metadata (file)
   } op_t;
 
   uuid_d uuid;          ///< fs uuid
@@ -240,6 +300,11 @@ struct bluefs_transaction_t {
   void op_file_update(const bluefs_fnode_t& file) {
     using ceph::encode;
     encode((__u8)OP_FILE_UPDATE, op_bl);
+    encode(file, op_bl);
+  }
+  void op_file_update_inc(const bluefs_fnode_t& file) {
+    using ceph::encode;
+    encode((__u8)OP_FILE_UPDATE_INC, op_bl);
     encode(file, op_bl);
   }
   void op_file_remove(uint64_t ino) {
