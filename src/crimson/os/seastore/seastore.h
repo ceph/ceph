@@ -226,7 +226,7 @@ private:
 	  }).safe_then([&ret](auto _ret) {
 	    ret = _ret;
 	  });
-	}).safe_then([&ret, op_type, &t, begin_time, this] {
+	}).safe_then([&ret, op_type, begin_time, this] {
 	  const_cast<SeaStore*>(this)->add_latency_sample(op_type,
                      std::chrono::steady_clock::now() - begin_time);
 	  return seastar::make_ready_future<Ret>(ret);
