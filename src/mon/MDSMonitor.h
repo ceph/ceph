@@ -32,6 +32,9 @@ class FileSystemCommandHandler;
 
 class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHandler {
  public:
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+
   MDSMonitor(Monitor *mn, Paxos *p, string service_name);
 
   // service methods
@@ -142,6 +145,10 @@ protected:
   // when the mon was not updating us for some period (e.g. during slow
   // election) to reset last_beacon timeouts
   mono_time last_tick = mono_clock::zero();
+
+private:
+  time last_fsmap_struct_flush = clock::zero();
+  bool check_fsmap_struct_version = true;
 };
 
 #endif

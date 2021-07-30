@@ -120,7 +120,12 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 
   ceph_assert(fsmap_bl.length() > 0);
   dout(10) << __func__ << " got " << version << dendl;
-  PaxosFSMap::decode(fsmap_bl);
+  try {
+    PaxosFSMap::decode(fsmap_bl);
+  } catch (const ceph::buffer::malformed_input& e) {
+    derr << "unable to decode FSMap: " << e.what() << dendl;
+    throw;
+  }
 
   // new map
   dout(0) << "new map" << dendl;
@@ -264,7 +269,7 @@ version_t MDSMonitor::get_trim_to() const
 {
   version_t floor = 0;
   if (g_conf()->mon_mds_force_trim_to > 0 &&
-      g_conf()->mon_mds_force_trim_to < (int)get_last_committed()) {
+      g_conf()->mon_mds_force_trim_to <= (int)get_last_committed()) {
     floor = g_conf()->mon_mds_force_trim_to;
     dout(10) << __func__ << " explicit mon_mds_force_trim_to = "
              << floor << dendl;
@@ -273,8 +278,11 @@ version_t MDSMonitor::get_trim_to() const
   unsigned max = g_conf()->mon_max_mdsmap_epochs;
   version_t last = get_last_committed();
 
-  if (last - get_first_committed() > max && floor < last - max)
-    return last - max;
+  if (last - get_first_committed() > max && floor < last - max) {
+    floor = last-max;
+  }
+
+  dout(20) << __func__ << " = " << floor << dendl;
   return floor;
 }
 
@@ -2170,6 +2178,34 @@ void MDSMonitor::tick()
 
   bool do_propose = false;
   bool propose_osdmap = false;
+
+  if (check_fsmap_struct_version) {
+    /* Allow time for trimming otherwise PaxosService::is_writeable will always
+     * be false.
+     */
+
+    auto now = clock::now();
+    auto elapsed = now - last_fsmap_struct_flush;
+    if (elapsed > std::chrono::seconds(30)) {
+      FSMap fsmap;
+      bufferlist bl;
+      auto v = get_first_committed();
+      int err = get_version(v, bl);
+      if (err) {
+        derr << "could not get version " << v << dendl;
+        ceph_abort();
+      }
+      fsmap.decode(bl);
+      if (fsmap.is_struct_old()) {
+        dout(5) << "fsmap struct is too old; proposing to flush out old versions" << dendl;
+        do_propose = true;
+        last_fsmap_struct_flush = now;
+      } else {
+        dout(20) << "struct is recent" << dendl;
+        check_fsmap_struct_version = false;
+      }
+    }
+  }
 
   do_propose |= pending.check_health();
 

@@ -63,9 +63,12 @@ class FSStatus(object):
     """
     Operations on a snapshot of the FSMap.
     """
-    def __init__(self, mon_manager):
+    def __init__(self, mon_manager, epoch=None):
         self.mon = mon_manager
-        self.map = json.loads(self.mon.raw_cluster_cmd("fs", "dump", "--format=json"))
+        cmd = ["fs", "dump", "--format=json"]
+        if epoch is not None:
+            cmd.append(str(epoch))
+        self.map = json.loads(self.mon.raw_cluster_cmd(*cmd))
 
     def __str__(self):
         return json.dumps(self.map, indent = 2, sort_keys = True)
@@ -333,8 +336,8 @@ class MDSCluster(CephCluster):
     def newfs(self, name='cephfs', create=True):
         return Filesystem(self._ctx, name=name, create=create)
 
-    def status(self):
-        return FSStatus(self.mon_manager)
+    def status(self, epoch=None):
+        return FSStatus(self.mon_manager, epoch)
 
     def delete_all_filesystems(self):
         """
