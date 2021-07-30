@@ -419,16 +419,16 @@ class Module(MgrModule):
             r, outb, outs = self.osd_command(cmd_dict)
             # Check for invalid calls
             if r != 0:
+                self.log.debug("Invalid command dictionary.")
                 continue
             else:
                 try:
-                    # This is where the histograms will land if there are any
+                    # This is where the histograms will land if there are any.
                     dump = json.loads(outb)
-                    #------- Testing -------------
-                    # result[osd_id] = dump //// Add this line back if you need to
+
                     for histogram in dump['osd']:
-                        # Log axis information. There are two axes, represented each
-                        # as a dictionary. Both dictionary are contained inside a
+                        # Log axis information. There are two axes, each represented
+                        # as a dictionary. Both dictionaries are contained inside a
                         # list called 'axes'.
                         axes = []
                         for axis in dump['osd'][histogram]['axes']:
@@ -437,16 +437,18 @@ class Module(MgrModule):
                             # axis. It will be appended to the 'axes' list at the end.
                             axis_dict: Dict[str, dict] = defaultdict(int)
 
-                            # These are all single values.
+                            # Collecting information for buckets, min, name, etc.
+                            # TODO: In some cases, the user might change the size of
+                            # their buckets. A check needs to be written that separates
+                            # out histograms with unique bucket sizes.
                             axis_dict['buckets'] = axis['buckets']
                             axis_dict['min'] = axis['min']
                             axis_dict['name'] = axis['name']
                             axis_dict['quant_size'] = axis['quant_size']
                             axis_dict['scale_type'] = axis['scale_type']
 
-                            # Ranges were originally kept in dictionaries, but
-                            # I am placing them inside lists so that they will
-                            # be more human-readable later on.
+                            # Collecting ranges; placing them in lists to
+                            # improve readability later on.
                             ranges = []
                             for _range in axis['ranges']:
                                 _max, _min = None, None
@@ -454,44 +456,48 @@ class Module(MgrModule):
                                     _max = _range['max']
                                 if 'min' in _range:
                                     _min = _range['min']
-
-                                # Use json.dumps() to help the final output be
-                                # readable to users. The original data can be
-                                # retrieved later (perhaps on the server side) with json.loads().
-                                ranges.append(json.dumps([_min, _max]))
+                                ranges.append([_min, _max])
                             axis_dict['ranges'] = ranges
 
-                            # Now that the axis dict contains all the appropriate
-                            # information, append it to the 'axes' list. This loop
-                            # will happen twice, once for each axis.
+                            # Now that 'axis_dict' contains all the appropriate
+                            # information for the current axis, append it to the 'axes' list.
+                            # There will end up being two axes in the 'axes' list, since the
+                            # histograms are 2D.
                             axes.append(axis_dict)
 
                         # Add the 'axes' list, containing both axes, to result.
                         result['osd'][histogram]['axes'] = axes
 
-                        # Collect current values
+                        # Collect current values and make sure they are in
+                        # integer form.
                         values = []
                         for value_list in dump['osd'][histogram]['values']:
-                            # values.append(json.dumps(value_list))
-                            values.append(value_list)
+                            values.append([int(v) for v in value_list])
 
                         # Aggregate values. If 'values' have already been initialized,
-                        # you can safely add.
-                        if 'values' in result:
+                        # we can safely add.
+                        if 'values' in result['osd'][histogram]:
                             for i in range (0, len(values)):
                                 for j in range (0, len(values[i])):
                                     values[i][j] += result['osd'][histogram]['values'][i][j]
 
-                        # Add the values to result, using json.dumps() to improve readability.
-                        # These values can be retrieved later with json.loads().
-                        for i in range(0, len(values)):
-                            values[i] = json.dumps(values[i])
+                        # Add the values to result.
                         result['osd'][histogram]['values'] = values
 
                 # Sometimes, json errors occur if you give it an empty string.
-                except json.decoder.JSONDecodeError:
-                    continue
+                # I am also putting in a catch for a KeyError since it could
+                # happen where the code is assuming that a key exists in the
+                # schema when it doesn't. In either case, we'll handle that
+                # bt returning an empty dict.
+                except (json.decoder.JSONDecodeError, KeyError) as e:
+                    self.log.debug("Error caught: {}".format(e))
+                    return {}
 
+        # TODO: Improve the JSON formatting of the histograms to make them
+        # more human-readable. This can be done directly in this function with json.dumps(),
+        # but it will be better to locate the exact area where the whole report
+        # is getting formatted, and make some formatting edits there. We want to ensure
+        # that the data is easily retrievable on the server side.
         return result
 
     def get_io_rate(self) -> dict:
