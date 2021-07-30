@@ -795,20 +795,27 @@ class LocalCephManager(CephManager):
         """
         return LocalRemote()
 
-    # XXX: For reason behind setting "shell" to False, see
-    # https://tracker.ceph.com/issues/49644.
-    def run_ceph_w(self, watch_channel=None, shell=False):
+    def run_ceph_w(self, watch_channel=None):
         """
         :param watch_channel: Specifies the channel to be watched.
                               This can be 'cluster', 'audit', ...
         :type watch_channel: str
         """
-        args = [CEPH_CMD, "-w"]
+        # XXX: Ceph API test CI job crashes because "ceph -w" process launched
+        # by run_ceph_w() crashes when shell is set to True.
+        # See https://tracker.ceph.com/issues/49644.
+        #
+        # The 2 possible workaround this are either setting "shell" to "False"
+        # when command "ceph -w" is executed or to prepend "exec sudo" to
+        # command arguments. We are going with latter since former would make
+        # it necessary to pass "shell" parameter to run() method. This leads
+        # to incompatibility with the method teuthology.orchestra.run's run()
+        # since it doesn't accept "shell" as parameter.
+        args = ['exec', 'sudo', CEPH_CMD, "-w"]
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
-        proc = self.controller.run(args=args, wait=False, stdout=StringIO(),
-                                   shell=shell)
+        proc = self.controller.run(args=args, wait=False, stdout=StringIO())
         return proc
 
     def run_cluster_cmd(self, **kwargs):
