@@ -696,7 +696,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   bl->clear();
   m_perfcounter->inc(l_librbd_pwl_rd_req, 1);
 
-  std::vector<WriteLogCacheEntry*> log_entries_to_read;
+  std::vector<std::shared_ptr<GenericWriteLogEntry>> log_entries_to_read;
   std::vector<bufferlist*> bls_to_read;
 
   m_async_op_tracker.start_op();

@@ -88,14 +88,6 @@ void WriteLogEntry::init(bool has_data,
   ram_entry.discard = 0;
 }
 
-unsigned int WriteLogEntry::reader_count() const {
-  if (cache_bp.have_raw()) {
-    return (cache_bp.raw_nref() - bl_refs - 1);
-  } else {
-    return 0;
-  }
-}
-
 std::ostream& WriteLogEntry::format(std::ostream &os) const {
   os << "(Write) ";
   GenericWriteLogEntry::format(os);
