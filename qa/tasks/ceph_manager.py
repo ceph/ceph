@@ -1528,6 +1528,7 @@ class CephManager:
             self.log = tmp
         if self.config is None:
             self.config = dict()
+        self.testdir = teuthology.get_testdir(self.ctx)
         pools = self.list_pools()
         self.pools = {}
         for pool in pools:
@@ -1569,9 +1570,8 @@ class CephManager:
                            stdout=StringIO(),
                            check_status=kwargs.get('check_status', True))
 
-        testdir = teuthology.get_testdir(self.ctx)
         prefix = ['sudo', 'adjust-ulimits', 'ceph-coverage',
-                  f'{testdir}/archive/coverage', 'timeout', '120', 'ceph',
+                  f'{self.testdir}/archive/coverage', 'timeout', '120', 'ceph',
                   '--cluster', self.cluster]
         kwargs['args'] = prefix + list(kwargs['args'])
         return self.controller.run(**kwargs)
@@ -1717,11 +1717,10 @@ class CephManager:
         if remote is None:
             remote = self.controller
 
-        testdir = teuthology.get_testdir(self.ctx)
         pre = [
             'adjust-ulimits',
             'ceph-coverage',
-            '{tdir}/archive/coverage'.format(tdir=testdir),
+           f'{self.testdir}/archive/coverage',
             'rados',
             '--cluster',
             self.cluster,
@@ -1833,12 +1832,11 @@ class CephManager:
         if self.rook:
             assert False, 'not implemented'
 
-        testdir = teuthology.get_testdir(self.ctx)
         args = [
             'sudo',
             'adjust-ulimits',
             'ceph-coverage',
-            '{tdir}/archive/coverage'.format(tdir=testdir),
+           f'{self.testdir}/archive/coverage',
             'timeout',
             str(timeout),
             'ceph',
