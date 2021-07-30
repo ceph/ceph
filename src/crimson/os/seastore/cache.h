@@ -311,7 +311,7 @@ public:
 	  if (!ref->is_valid()) {
 	    LOG_PREFIX(Cache::get_extent);
 	    DEBUGT("got invalid extent: {}", t, ref);
-	    invalidate(t, *ref.get());
+	    this->invalidate(t, *ref.get());
 	    return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	  } else {
 	    t.add_to_read_set(ref);
