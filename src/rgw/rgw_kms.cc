@@ -185,17 +185,17 @@ class SSEContext {
 protected:
   virtual ~SSEContext(){};
 public:
-  virtual std::string & backend() = 0;
-  virtual std::string & addr() = 0;
-  virtual std::string & auth() = 0;
-  virtual std::string & k_namespace() = 0;
-  virtual std::string & prefix() = 0;
+  virtual const std::string & backend() = 0;
+  virtual const std::string & addr() = 0;
+  virtual const std::string & auth() = 0;
+  virtual const std::string & k_namespace() = 0;
+  virtual const std::string & prefix() = 0;
   virtual const std::string & secret_engine() = 0;
-  virtual std::string & ssl_cacert() = 0;
-  virtual std::string & ssl_clientcert() = 0;
-  virtual std::string & ssl_clientkey() = 0;
-  virtual std::string & token_file() = 0;
-  virtual bool verify_ssl() = 0;
+  virtual const std::string & ssl_cacert() = 0;
+  virtual const std::string & ssl_clientcert() = 0;
+  virtual const std::string & ssl_clientkey() = 0;
+  virtual const std::string & token_file() = 0;
+  virtual const bool verify_ssl() = 0;
 };
 
 class VaultSecretEngine: public SecretEngine {
@@ -1085,37 +1085,37 @@ class KMSContext : public SSEContext {
 public:
   KMSContext(CephContext*_cct) : cct{_cct} {};
   ~KMSContext() override {};
-  std::string & backend() override {
+  const std::string & backend() override {
     return cct->_conf->rgw_crypt_s3_kms_backend;
   };
-  std::string & addr() override {
+  const std::string & addr() override {
     return cct->_conf->rgw_crypt_vault_addr;
   };
-  std::string & auth() override {
+  const std::string & auth() override {
     return cct->_conf->rgw_crypt_vault_auth;
   };
-  std::string & k_namespace() override {
+  const std::string & k_namespace() override {
     return cct->_conf->rgw_crypt_vault_namespace;
   };
-  std::string & prefix() override {
+  const std::string & prefix() override {
     return cct->_conf->rgw_crypt_vault_prefix;
   };
   const std::string & secret_engine() override {
     return cct->_conf->rgw_crypt_vault_secret_engine;
   };
-  std::string & ssl_cacert() override {
+  const std::string & ssl_cacert() override {
     return cct->_conf->rgw_crypt_vault_ssl_cacert;
   };
-  std::string & ssl_clientcert() override {
+  const std::string & ssl_clientcert() override {
     return cct->_conf->rgw_crypt_vault_ssl_clientcert;
   };
-  std::string & ssl_clientkey() override {
+  const std::string & ssl_clientkey() override {
     return cct->_conf->rgw_crypt_vault_ssl_clientkey;
   };
-  std::string & token_file() override {
+  const std::string & token_file() override {
     return cct->_conf->rgw_crypt_vault_token_file;
   };
-  bool verify_ssl() override {
+  const bool verify_ssl() override {
     return cct->_conf->rgw_crypt_vault_verify_ssl;
   };
 };
@@ -1126,37 +1126,37 @@ public:
   static const std::string sse_s3_secret_engine;
   SseS3Context(CephContext*_cct) : cct{_cct} {};
   ~SseS3Context(){};
-  std::string & backend() override {
+  const std::string & backend() override {
    return cct->_conf->rgw_crypt_sse_s3_backend;
   };
-  std::string & addr() override {
+  const std::string & addr() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_addr;
   };
-  std::string & auth() override {
+  const std::string & auth() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_auth;
   };
-  std::string & k_namespace() override {
+  const std::string & k_namespace() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_namespace;
   };
-  std::string & prefix() override {
+  const std::string & prefix() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_prefix;
   };
   const std::string & secret_engine() override {
     return sse_s3_secret_engine;
   };
-  std::string & ssl_cacert() override {
+  const std::string & ssl_cacert() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_ssl_cacert;
   };
-  std::string & ssl_clientcert() override {
+  const std::string & ssl_clientcert() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_ssl_clientcert;
   };
-  std::string & ssl_clientkey() override {
+  const std::string & ssl_clientkey() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_ssl_clientkey;
   };
-  std::string & token_file() override {
+  const std::string & token_file() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_token_file;
   };
-  bool verify_ssl() override {
+  const bool verify_ssl() override {
     return cct->_conf->rgw_crypt_sse_s3_vault_verify_ssl;
   };
 };
@@ -1168,7 +1168,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext 
 {
   std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
   KMSContext kctx { cct };
-  std::string &kms_backend { kctx.backend() };
+  const std::string &kms_backend { kctx.backend() };
 
   ldpp_dout(dpp, 20) << "Getting KMS encryption key for key " << key_id << dendl;
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
@@ -1199,7 +1199,7 @@ int make_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
                             std::string& actual_key)
 {
   KMSContext kctx { cct };
-  std::string &kms_backend { kctx.backend() };
+  const std::string &kms_backend { kctx.backend() };
   if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend)
     return make_actual_key_from_vault(dpp, cct, kctx, attrs, actual_key);
   return reconstitute_actual_key_from_kms(dpp, cct, attrs, actual_key);
@@ -1212,7 +1212,7 @@ int reconstitute_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
 {
   std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
   SseS3Context kctx { cct };
-  std::string &kms_backend { kctx.backend() };
+  const std::string &kms_backend { kctx.backend() };
 
   ldpp_dout(dpp, 20) << "Getting SSE-S3  encryption key for key " << key_id << dendl;
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
@@ -1231,7 +1231,7 @@ int make_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
                             std::string& actual_key)
 {
   SseS3Context kctx { cct };
-  std::string kms_backend { kctx.backend() };
+  const std::string kms_backend { kctx.backend() };
   if (RGW_SSE_KMS_BACKEND_VAULT != kms_backend) {
     ldpp_dout(dpp, 0) << "ERROR: Unsupported rgw_crypt_sse_s3_backend: " << kms_backend << dendl;
     return -EINVAL;
