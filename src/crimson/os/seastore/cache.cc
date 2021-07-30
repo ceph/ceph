@@ -1,8 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/cache.h"
+
+#include <string_view>
+
+#include "crimson/os/seastore/logging.h"
 
 // included for get_extent_by_type
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
@@ -219,11 +222,12 @@ void Cache::register_metrics()
      * efforts discarded/committed
      */
     auto effort_label = sm::label("effort");
-    std::map<std::string, sm::label_instance> labels_by_effort {
-      {"READ",   effort_label("READ")},
-      {"MUTATE", effort_label("MUTATE")},
-      {"RETIRE", effort_label("RETIRE")},
-      {"FRESH",  effort_label("FRESH")},
+    using namespace std::literals::string_view_literals;
+    const string_view effort_names[] = {
+      "READ"sv,
+      "MUTATE"sv,
+      "RETIRE"sv,
+      "FRESH"sv,
     };
 
     // invalidated efforts (non READ)
@@ -234,7 +238,7 @@ void Cache::register_metrics()
       }
       auto& efforts = get_by_src(stats.invalidated_efforts_by_src, src);
       efforts = {};
-      for (auto& [effort_name, effort_label] : labels_by_effort) {
+      for (auto& effort_name : effort_names) {
         auto& effort = [&effort_name, &efforts]() -> effort_t& {
           if (effort_name == "READ") {
             return efforts.read;
@@ -254,13 +258,13 @@ void Cache::register_metrics()
               "invalidated_extents",
               effort.extents,
               sm::description("extents of invalidated transactions"),
-              {src_label, effort_label}
+              {src_label, effort_label(effort_name)}
             ),
             sm::make_counter(
               "invalidated_extent_bytes",
               effort.bytes,
               sm::description("extent bytes of invalidated transactions"),
-              {src_label, effort_label}
+              {src_label, effort_label(effort_name)}
             ),
           }
         );
@@ -282,7 +286,7 @@ void Cache::register_metrics()
     // invalidated efforts (READ)
     // read transaction won't have non-read efforts
     auto read_src_label = labels_by_src.find(src_t::READ)->second;
-    auto read_effort_label = labels_by_effort.find("READ")->second;
+    auto read_effort_label = effort_label("READ");
     auto& read_efforts = get_by_src(stats.invalidated_efforts_by_src, src_t::READ);
     read_efforts = {};
     metrics.add_group(
@@ -310,7 +314,7 @@ void Cache::register_metrics()
         continue;
       }
       auto& efforts = get_by_src(stats.committed_efforts_by_src, src);
-      for (auto& [effort_name, effort_label] : labels_by_effort) {
+      for (auto& effort_name : effort_names) {
         auto& effort_by_ext = [&efforts, &effort_name]()
             -> counter_by_extent_t<effort_t>& {
           if (effort_name == "READ") {
@@ -334,13 +338,13 @@ void Cache::register_metrics()
                 "committed_extents",
                 effort.extents,
                 sm::description("extents of committed transactions"),
-                {src_label, effort_label, ext_label}
+                {src_label, effort_label(effort_name), ext_label}
               ),
               sm::make_counter(
                 "committed_extent_bytes",
                 effort.bytes,
                 sm::description("extent bytes of committed transactions"),
-                {src_label, effort_label, ext_label}
+                {src_label, effort_label(effort_name), ext_label}
               ),
             }
           );

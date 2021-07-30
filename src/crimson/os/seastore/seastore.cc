@@ -69,7 +69,7 @@ void SeaStore::register_metrics()
       "seastore",
       {
         sm::make_histogram(
-          "op_lat", [this, op_type] {
+          "op_lat", [this, op_type=op_type] {
             return get_latency(op_type);
           },
           sm::description(desc),
