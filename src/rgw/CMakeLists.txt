@@ -164,6 +164,10 @@ endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_kafka.cc)
 endif()
+if(WITH_RADOSGW_DBSTORE)
+  add_subdirectory(store/dbstore)
+  list(APPEND librgw_common_srcs rgw_sal_dbstore.cc)
+endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 target_link_libraries(rgw_common
@@ -226,6 +230,10 @@ endif()
 
 if(WITH_JAEGER)
   add_dependencies(rgw_common jaegertracing::libjaegertracing)
+endif()
+
+if(WITH_RADOSGW_DBSTORE)
+  target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 
 set(rgw_a_srcs
