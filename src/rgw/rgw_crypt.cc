@@ -1103,7 +1103,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
     }
 
     /* Checking bucket attributes if SSE is enabled. Currently only supporting SSE-S3 */
-    rgw::sal::Attrs buck_attrs(s->bucket_attrs);
+    const auto& buck_attrs = s->bucket_attrs;
     auto aiter = buck_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
     if (aiter != buck_attrs.end()) {
       ldpp_dout(s, 5) << "Found RGW_ATTR_BUCKET_ENCRYPTION_POLICY on "
