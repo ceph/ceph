@@ -113,161 +113,79 @@ void Cache::register_metrics()
     {extent_types_t::TEST_BLOCK_PHYSICAL, ext_label("TEST_BLOCK_PHYSICAL")}
   };
 
-  auto counter_label = sm::label("counter");
-  std::map<std::string, sm::label_instance> labels_by_counter {
-    {"EXTENTS",     counter_label("EXTENTS")},
-    {"BYTES",       counter_label("BYTES")},
-    {"DELTA_BYTES", counter_label("DELTA_BYTES")},
-  };
-
   /*
    * trans_created
    */
   stats.trans_created_by_src.fill(0);
-  auto register_trans_created = [this, &labels_by_src](src_t src) {
-    std::ostringstream oss_desc;
-    oss_desc << "total number of transaction created (src="
-             << src << ")";
+  for (auto& [src, src_label] : labels_by_src) {
     metrics.add_group(
       "cache",
       {
         sm::make_counter(
           "trans_created",
-          get_counter(stats.trans_created_by_src, src),
-          sm::description(oss_desc.str()),
-          {labels_by_src.find(src)->second}
+          get_by_src(stats.trans_created_by_src, src),
+          sm::description("total number of transaction created"),
+          {src_label}
         ),
       }
     );
-  };
-  for (auto& [src, label] : labels_by_src) {
-    register_trans_created(src);
   }
-
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "trans_created",
-        [this] {
-          uint64_t total = 0;
-          for (auto& v : stats.trans_created_by_src) {
-            total += v;
-          }
-          return total;
-        },
-        sm::description("total number of transaction created"),
-        {src_label("ALL")}
-      ),
-    }
-  );
 
   /*
    * trans_committed
    */
   stats.trans_committed_by_src.fill(0);
-  auto register_trans_committed = [this, &labels_by_src](src_t src) {
-    std::ostringstream oss_desc;
-    oss_desc << "total number of transaction committed (src="
-             << src << ")";
+  for (auto& [src, src_label] : labels_by_src) {
+    if (src == src_t::READ) {
+      // READ transaction won't commit
+      continue;
+    }
     metrics.add_group(
       "cache",
       {
         sm::make_counter(
           "trans_committed",
-          get_counter(stats.trans_committed_by_src, src),
-          sm::description(oss_desc.str()),
-          {labels_by_src.find(src)->second}
+          get_by_src(stats.trans_committed_by_src, src),
+          sm::description("total number of transaction committed"),
+          {src_label}
         ),
       }
     );
-  };
-  for (auto& [src, label] : labels_by_src) {
-    if (src == src_t::READ) {
-      // READ transaction won't commit
-      continue;
-    }
-    register_trans_committed(src);
   }
-
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "trans_committed",
-        [this] {
-          uint64_t total = 0;
-          for (auto& v : stats.trans_committed_by_src) {
-            total += v;
-          }
-          return total;
-        },
-        sm::description("total number of transaction committed"),
-        {src_label("ALL")}
-      ),
-    }
-  );
 
   /*
    * trans_invalidated
    */
-  auto register_trans_invalidated =
-    [this, &labels_by_src, &labels_by_ext](src_t src, extent_types_t ext) {
-      auto m_key = std::make_pair(src, ext);
-      stats.trans_invalidated[m_key] = 0;
-      std::ostringstream oss_desc;
-      oss_desc << "total number of transaction invalidated (src="
-               << src << ", ext="
-               << ext << ")";
+  for (auto& [src, src_label] : labels_by_src) {
+    for (auto& [ext, ext_label] : labels_by_ext) {
+      auto& counter_by_extent = get_by_src(stats.trans_invalidated, src);
+      auto& counter = get_by_ext(counter_by_extent, ext);
+      counter = 0;
       metrics.add_group(
         "cache",
         {
           sm::make_counter(
             "trans_invalidated",
-            stats.trans_invalidated.find(m_key)->second,
-            sm::description(oss_desc.str()),
-            {labels_by_src.find(src)->second,
-             labels_by_ext.find(ext)->second}
+            counter,
+            sm::description("total number of transaction invalidated"),
+            {src_label, ext_label}
           ),
         }
       );
-    };
-  for (auto& [src, label] : labels_by_src) {
-    for (auto& [ext, _label] : labels_by_ext) {
-      register_trans_invalidated(src, ext);
     }
   }
 
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "trans_invalidated",
-        [this] {
-          uint64_t total = 0;
-          for (auto& [k, v] : stats.trans_invalidated) {
-            total += v;
-          }
-          return total;
-        },
-        sm::description("total number of transaction invalidated"),
-        {src_label("ALL")}
-      ),
-    }
-  );
-
   /**
-   * read_transactions_successful
+   * trans_read_successful
    */
   stats.read_transactions_successful = 0;
   metrics.add_group(
     "cache",
     {
       sm::make_counter(
-        "read_trans_successful",
+        "trans_read_successful",
         stats.read_transactions_successful,
-        sm::description("total number of successful read transactions"),
-        {}
+        sm::description("total number of successful read transactions")
       ),
     }
   );
@@ -275,79 +193,30 @@ void Cache::register_metrics()
   /*
    * cache_query: cache_access and cache_hit
    */
-  auto register_cache_access =
-    [this, &labels_by_src, &labels_by_ext]
-    (src_t src, const sm::label_instance& src_label,
-     extent_types_t ext, const sm::label_instance& ext_label) {
-      auto m_key = std::make_pair(src, ext);
-      stats.cache_query[m_key] = {0, 0};
-      {
-        metrics.add_group(
-          "cache",
-          {
-            sm::make_counter(
-              "cache_access",
-              stats.cache_query.find(m_key)->second.access,
-              sm::description("total number of cache accesses labeled by "
-                              "transaction source and extent type"),
-              {src_label, ext_label}
-            ),
-            sm::make_counter(
-              "cache_hit",
-              stats.cache_query.find(m_key)->second.hit,
-              sm::description("total number of cache hits labeled by "
-                              "transaction source and extent type"),
-              {src_label, ext_label}
-            ),
-          }
-        );
-      }
-    };
-
+  stats.cache_query_by_src.fill({});
   for (auto& [src, src_label] : labels_by_src) {
-    for (auto& [ext, ext_label] : labels_by_ext) {
-      if (ext != extent_types_t::RETIRED_PLACEHOLDER) {
-        register_cache_access(src, src_label, ext, ext_label);
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "cache_access",
+          get_by_src(stats.cache_query_by_src, src).access,
+          sm::description("total number of cache accesses"),
+          {src_label}
+        ),
+        sm::make_counter(
+          "cache_hit",
+          get_by_src(stats.cache_query_by_src, src).hit,
+          sm::description("total number of cache hits"),
+          {src_label}
+        ),
       }
-    }
+    );
   }
-
-  metrics.add_group(
-    "cache",
-    {
-      sm::make_counter(
-        "cache_access",
-        [this] {
-          uint64_t total = 0;
-          for (auto& [k, v] : stats.cache_query) {
-            total += v.access;
-          }
-          return total;
-        },
-        sm::description("total number of cache accesses"),
-        {src_label("ALL")}
-      ),
-      sm::make_counter(
-        "cache_hit",
-        [this] {
-          uint64_t total = 0;
-          for (auto& [k, v] : stats.cache_query) {
-            total += v.hit;
-          }
-          return total;
-        },
-        sm::description("total number of cache hits"),
-        {src_label("ALL")}
-      ),
-    }
-  );
 
   {
     /*
      * efforts discarded/committed
-     *
-     * XXX: include ext_label if want to measure efforts at the granularity of
-     * sub-components.
      */
     auto effort_label = sm::label("effort");
     std::map<std::string, sm::label_instance> labels_by_effort {
@@ -357,91 +226,164 @@ void Cache::register_metrics()
       {"FRESH",  effort_label("FRESH")},
     };
 
-    auto register_effort =
-      [this, &labels_by_src, &labels_by_effort, &labels_by_counter]
-      (const char* category,
-       src_t src,
-       const std::string& effort_name,
-       const char* counter_name,
-       uint64_t& value) {
-        std::ostringstream oss_desc;
-        oss_desc << "total number of " << category
-                 << " transactional efforts labeled by source, effort and counter";
-        std::ostringstream oss_metric;
-        oss_metric << category << "_efforts";
+    // invalidated efforts (non READ)
+    for (auto& [src, src_label] : labels_by_src) {
+      if (src == src_t::READ) {
+        // register src_t::READ later
+        continue;
+      }
+      auto& efforts = get_by_src(stats.invalidated_efforts_by_src, src);
+      efforts = {};
+      for (auto& [effort_name, effort_label] : labels_by_effort) {
+        auto& effort = [&effort_name, &efforts]() -> effort_t& {
+          if (effort_name == "READ") {
+            return efforts.read;
+          } else if (effort_name == "MUTATE") {
+            return efforts.mutate;
+          } else if (effort_name == "RETIRE") {
+            return efforts.retire;
+          } else {
+            assert(effort_name == "FRESH");
+            return efforts.fresh;
+          }
+        }();
         metrics.add_group(
           "cache",
           {
             sm::make_counter(
-              oss_metric.str(),
-              value,
-              sm::description(oss_desc.str()),
-              {labels_by_src.find(src)->second,
-               labels_by_effort.find(effort_name)->second,
-               labels_by_counter.find(counter_name)->second}
+              "invalidated_extents",
+              effort.extents,
+              sm::description("extents of invalidated transactions"),
+              {src_label, effort_label}
+            ),
+            sm::make_counter(
+              "invalidated_extent_bytes",
+              effort.bytes,
+              sm::description("extent bytes of invalidated transactions"),
+              {src_label, effort_label}
             ),
           }
         );
-      };
+      } // effort_name
 
-    auto get_efforts_by_category =
-      [this](const char* category) -> auto& {
-        if (strcmp(category, "committed") == 0) {
-          return stats.committed_efforts_by_src;
-        } else {
-          assert(strcmp(category, "invalidated") == 0);
-          return stats.invalidated_efforts_by_src;
+      metrics.add_group(
+        "cache",
+        {
+          sm::make_counter(
+            "invalidated_delta_bytes",
+            efforts.mutate_delta_bytes,
+            sm::description("delta bytes of invalidated transactions"),
+            {src_label}
+          ),
         }
-      };
+      );
+    } // src
 
-    for (auto& category : {"committed", "invalidated"}) {
-      auto& efforts_by_src = get_efforts_by_category(category);
-      for (auto& [src, label] : labels_by_src) {
-        if (std::strcmp(category, "committed") == 0 && src == src_t::READ) {
-          // READ transaction won't commit
-          continue;
-        }
+    // invalidated efforts (READ)
+    // read transaction won't have non-read efforts
+    auto read_src_label = labels_by_src.find(src_t::READ)->second;
+    auto read_effort_label = labels_by_effort.find("READ")->second;
+    auto& read_efforts = get_by_src(stats.invalidated_efforts_by_src, src_t::READ);
+    read_efforts = {};
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "invalidated_extents",
+          read_efforts.read.extents,
+          sm::description("extents of invalidated transactions"),
+          {read_src_label, read_effort_label}
+        ),
+        sm::make_counter(
+          "invalidated_extent_bytes",
+          read_efforts.read.bytes,
+          sm::description("extent bytes of invalidated transactions"),
+          {read_src_label, read_effort_label}
+        ),
+      }
+    );
 
-        auto& efforts = get_counter(efforts_by_src, src);
-        for (auto& [effort_name, _label] : labels_by_effort) {
-          auto& effort = efforts.get_by_name(effort_name);
-          for (auto& counter_name : {"EXTENTS", "BYTES"}) {
-            auto& value = effort.get_by_name(counter_name);
-            register_effort(category, src, effort_name, counter_name, value);
+    // by-extent committed efforts
+    for (auto& [src, src_label] : labels_by_src) {
+      if (src == src_t::READ) {
+        // READ transaction won't commit
+        continue;
+      }
+      auto& efforts = get_by_src(stats.committed_efforts_by_src, src);
+      for (auto& [effort_name, effort_label] : labels_by_effort) {
+        auto& effort_by_ext = [&efforts, &effort_name]()
+            -> counter_by_extent_t<effort_t>& {
+          if (effort_name == "READ") {
+            return efforts.read_by_ext;
+          } else if (effort_name == "MUTATE") {
+            return efforts.mutate_by_ext;
+          } else if (effort_name == "RETIRE") {
+            return efforts.retire_by_ext;
+          } else {
+            assert(effort_name == "FRESH");
+            return efforts.fresh_by_ext;
           }
-          if (effort_name == "MUTATE") {
-            register_effort(category, src, effort_name, "DELTA_BYTES",
-                            efforts.mutate_delta_bytes);
+        }();
+        effort_by_ext.fill({});
+        for (auto& [ext, ext_label] : labels_by_ext) {
+          auto& effort = get_by_ext(effort_by_ext, ext);
+          metrics.add_group(
+            "cache",
+            {
+              sm::make_counter(
+                "committed_extents",
+                effort.extents,
+                sm::description("extents of committed transactions"),
+                {src_label, effort_label, ext_label}
+              ),
+              sm::make_counter(
+                "committed_extent_bytes",
+                effort.bytes,
+                sm::description("extent bytes of committed transactions"),
+                {src_label, effort_label, ext_label}
+              ),
+            }
+          );
+        } // ext
+      } // effort_name
+
+      auto& delta_by_ext = efforts.delta_bytes_by_ext;
+      delta_by_ext.fill(0);
+      for (auto& [ext, ext_label] : labels_by_ext) {
+        auto& value = get_by_ext(delta_by_ext, ext);
+        metrics.add_group(
+          "cache",
+          {
+            sm::make_counter(
+              "committed_delta_bytes",
+              value,
+              sm::description("delta bytes of committed transactions"),
+              {src_label, ext_label}
+            ),
           }
-        } // effort_name
-      } // src
-    } // category
+        );
+      } // ext
+    } // src
 
     /**
      * read_effort_successful
      */
     stats.read_effort_successful = {};
-    auto register_read_effort_successful =
-      [this, &labels_by_counter]
-      (const char* counter_name, uint64_t& value) {
-        std::ostringstream oss_desc;
-        oss_desc << "total successful read transactional effort labeled by counter";
-        metrics.add_group(
-          "cache",
-          {
-            sm::make_counter(
-              "read_effort_successful",
-              value,
-              sm::description(oss_desc.str()),
-              {labels_by_counter.find(counter_name)->second}
-            ),
-          }
-        );
-      };
-    for (auto& counter_name : {"EXTENTS", "BYTES"}) {
-      auto& value = stats.read_effort_successful.get_by_name(counter_name);
-      register_read_effort_successful(counter_name, value);
-    }
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "successful_read_extents",
+          stats.read_effort_successful.extents,
+          sm::description("extents of successful read transactions")
+        ),
+        sm::make_counter(
+          "successful_read_extent_bytes",
+          stats.read_effort_successful.bytes,
+          sm::description("extent bytes of successful read transactions")
+        ),
+      }
+    );
   }
 
   /**
@@ -458,30 +400,26 @@ void Cache::register_metrics()
         [this] {
           return extents.size();
         },
-        sm::description("total number of cached extents"),
-        {labels_by_counter.find("EXTENTS")->second}
+        sm::description("total number of cached extents")
       ),
       sm::make_counter(
-        "cached_extents",
+        "cached_extent_bytes",
         [this] {
           return extents.get_bytes();
         },
-        sm::description("total bytes of cached extents"),
-        {labels_by_counter.find("BYTES")->second}
+        sm::description("total bytes of cached extents")
       ),
       sm::make_counter(
         "dirty_extents",
         [this] {
           return dirty.size();
         },
-        sm::description("total number of dirty extents"),
-        {labels_by_counter.find("EXTENTS")->second}
+        sm::description("total number of dirty extents")
       ),
       sm::make_counter(
-        "dirty_extents",
+        "dirty_extent_bytes",
         stats.dirty_bytes,
-        sm::description("total bytes of dirty extents"),
-        {labels_by_counter.find("BYTES")->second}
+        sm::description("total bytes of dirty extents")
       ),
     }
   );
@@ -609,44 +547,41 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
   assert(!t.conflicted);
   DEBUGT("set conflict", t);
   t.conflicted = true;
-  auto m_key = std::make_pair(
-      t.get_src(), conflicting_extent.get_type());
-  assert(stats.trans_invalidated.count(m_key));
-  ++(stats.trans_invalidated[m_key]);
-  auto& efforts = get_counter(stats.invalidated_efforts_by_src,
-                              t.get_src());
-  measure_efforts(t, efforts);
-  for (auto &i: t.mutated_block_list) {
-    if (!i->is_valid()) {
-      continue;
-    }
-    ++efforts.mutate.extents;
-    efforts.mutate.bytes += i->get_length();
-    efforts.mutate_delta_bytes += i->get_delta().length();
-  }
-}
 
-void Cache::measure_efforts(Transaction& t, trans_efforts_t& efforts)
-{
+  auto& counter_by_extent = get_by_src(stats.trans_invalidated, t.get_src());
+  auto& counter = get_by_ext(counter_by_extent, conflicting_extent.get_type());
+  ++counter;
+
+  auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
+                             t.get_src());
   efforts.read.extents += t.read_set.size();
   for (auto &i: t.read_set) {
     efforts.read.bytes += i.ref->get_length();
   }
+  if (t.get_src() != Transaction::src_t::READ) {
+    efforts.retire.extents += t.retired_set.size();
+    for (auto &i: t.retired_set) {
+      efforts.retire.bytes += i->get_length();
+    }
 
-  efforts.retire.extents += t.retired_set.size();
-  for (auto &i: t.retired_set) {
-    efforts.retire.bytes += i->get_length();
+    efforts.fresh.extents += t.fresh_block_list.size();
+    for (auto &i: t.fresh_block_list) {
+      efforts.fresh.bytes += i->get_length();
+    }
+
+    for (auto &i: t.mutated_block_list) {
+      if (!i->is_valid()) {
+        continue;
+      }
+      efforts.mutate.increment(i->get_length());
+      efforts.mutate_delta_bytes += i->get_delta().length();
+    }
+  } else {
+    // read transaction won't have non-read efforts
+    assert(t.retired_set.empty());
+    assert(t.fresh_block_list.empty());
+    assert(t.mutated_block_list.empty());
   }
-
-  efforts.fresh.extents += t.fresh_block_list.size();
-  for (auto &i: t.fresh_block_list) {
-    efforts.fresh.bytes += i->get_length();
-  }
-
-  /**
-   * Mutated blocks are special because CachedExtent::get_delta() is not
-   * idempotent, so they need to be dealt later.
-   */
 }
 
 void Cache::on_transaction_destruct(Transaction& t)
@@ -658,13 +593,15 @@ void Cache::on_transaction_destruct(Transaction& t)
     DEBUGT("read is successful", t);
     ++stats.read_transactions_successful;
 
+    auto& effort = stats.read_effort_successful;
+    effort.extents += t.read_set.size();
+    for (auto &i: t.read_set) {
+      effort.bytes += i.ref->get_length();
+    }
+    // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
     assert(t.fresh_block_list.empty());
     assert(t.mutated_block_list.empty());
-    stats.read_effort_successful.extents += t.read_set.size();
-    for (auto &i: t.read_set) {
-      stats.read_effort_successful.bytes += i.ref->get_length();
-    }
   }
 }
 
@@ -738,14 +675,15 @@ record_t Cache::prepare_record(Transaction &t)
 
   assert(!t.is_weak());
   assert(t.get_src() != Transaction::src_t::READ);
-  ++(get_counter(stats.trans_committed_by_src, t.get_src()));
-  auto& efforts = get_counter(stats.committed_efforts_by_src,
-                              t.get_src());
-  measure_efforts(t, efforts);
+  ++(get_by_src(stats.trans_committed_by_src, t.get_src()));
+  auto& efforts = get_by_src(stats.committed_efforts_by_src,
+                             t.get_src());
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
     assert(i.ref->is_valid());
+    get_by_ext(efforts.read_by_ext,
+               i.ref->get_type()).increment(i.ref->get_length());
   }
   DEBUGT("read_set validated", t);
   t.read_set.clear();
@@ -762,8 +700,8 @@ record_t Cache::prepare_record(Transaction &t)
       continue;
     }
     DEBUGT("mutating {}", t, *i);
-    ++efforts.mutate.extents;
-    efforts.mutate.bytes += i->get_length();
+    get_by_ext(efforts.mutate_by_ext,
+               i->get_type()).increment(i->get_length());
 
     assert(i->prior_instance);
     replace_extent(i, i->prior_instance);
@@ -805,19 +743,24 @@ record_t Cache::prepare_record(Transaction &t)
     }
     auto delta_length = record.deltas.back().bl.length();
     assert(delta_length);
-    efforts.mutate_delta_bytes += delta_length;
+    get_by_ext(efforts.delta_bytes_by_ext,
+               i->get_type()) += delta_length;
   }
 
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
   for (auto &i: t.retired_set) {
     DEBUGT("retiring {}", t, *i);
+    get_by_ext(efforts.retire_by_ext,
+               i->get_type()).increment(i->get_length());
     retire_extent(i);
   }
 
   record.extents.reserve(t.fresh_block_list.size());
   for (auto &i: t.fresh_block_list) {
     DEBUGT("fresh block {}", t, *i);
+    get_by_ext(efforts.fresh_by_ext,
+               i->get_type()).increment(i->get_length());
     bufferlist bl;
     i->prepare_write();
     bl.append(i->get_bptr());
