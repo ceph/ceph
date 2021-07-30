@@ -194,7 +194,7 @@ public:
 
     ceph::real_time mtime;
     string etag;
-    std::optional<uint64_t> olh_epoch;
+    uint64_t olh_epoch{0};
     ceph::real_time delete_at;
     std::optional<string> user_data;
 

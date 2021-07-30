@@ -49,7 +49,7 @@ class RGWPutObj_Compress : public rgw::putobj::Pipe
   std::vector<compression_block> blocks;
 public:
   RGWPutObj_Compress(CephContext* cct_, CompressorRef compressor,
-                     rgw::putobj::DataProcessor *next)
+                     rgw::sal::DataProcessor *next)
     : Pipe(next), cct(cct_), compressor(compressor) {}
 
   int process(bufferlist&& data, uint64_t logical_offset) override;

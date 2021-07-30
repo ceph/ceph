@@ -17,7 +17,6 @@
 
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
-#include "rgw_putobj.h"
 
 class RGWGetDataCB;
 struct RGWObjState;
@@ -118,6 +117,34 @@ enum AttrsMod {
   ATTRSMOD_MERGE   = 2
 };
 
+// a simple streaming data processing abstraction
+class DataProcessor {
+ public:
+  virtual ~DataProcessor() {}
+
+  // consume a bufferlist in its entirety at the given object offset. an
+  // empty bufferlist is given to request that any buffered data be flushed,
+  // though this doesn't wait for completions
+  virtual int process(bufferlist&& data, uint64_t offset) = 0;
+};
+
+// a data consumer that writes an object in a bucket
+class ObjectProcessor : public DataProcessor {
+ public:
+  // prepare to start processing object data
+  virtual int prepare(optional_yield y) = 0;
+
+  // complete the operation and make its result visible to clients
+  virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) = 0;
+};
+
 /**
  * Base class for AIO completions
  */
@@ -176,9 +203,6 @@ class Store {
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, 
         rgw::notify::EventType event_type, const std::string* object_name=nullptr) = 0;
     virtual std::unique_ptr<GCChain> get_gc_chain(rgw::sal::Object* obj) = 0;
-    virtual std::unique_ptr<Writer> get_writer(Aio* aio, rgw::sal::Bucket* bucket,
-              RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
-              const DoutPrefixProvider* dpp, optional_yield y) = 0;
     virtual RGWLC* get_rgwlc(void) = 0;
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() = 0;
     virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) = 0;
@@ -232,6 +256,21 @@ class Store {
 				   const std::string& tenant,
 				   vector<std::unique_ptr<RGWOIDCProvider>>& providers) = 0;
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id=std::nullopt, ceph::real_time mtime=real_clock::now()) = 0;
+    virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  const std::string& unique_tag,
+				  uint64_t position,
+				  uint64_t *cur_accounted_size) = 0;
+    virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  uint64_t olh_epoch,
+				  const std::string& unique_tag) = 0;
 
     virtual void finalize(void) = 0;
 
@@ -848,6 +887,14 @@ public:
 
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;
 
+  virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
+			  optional_yield y,
+			  std::unique_ptr<rgw::sal::Object> _head_obj,
+			  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+			  const rgw_placement_rule *ptail_placement_rule,
+			  uint64_t part_num,
+			  const std::string& part_num_str) = 0;
+
   friend inline ostream& operator<<(ostream& out, const MultipartUpload& u) {
     out << u.get_meta();
     if (!u.get_upload_id().empty())
@@ -953,45 +1000,29 @@ protected:
     virtual void delete_inline(const DoutPrefixProvider *dpp, const std::string& tag) = 0;
 };
 
-using RawObjSet = std::set<rgw_raw_obj>;
-
-class Writer : public rgw::putobj::DataProcessor {
+class Writer : public ObjectProcessor {
 protected:
-  Aio* const aio;
-  rgw::sal::Bucket* bucket;
-  RGWObjectCtx& obj_ctx;
-  std::unique_ptr<rgw::sal::Object> head_obj;
-  RawObjSet written; // set of written objects for deletion
   const DoutPrefixProvider* dpp;
-  optional_yield y;
 
- public:
-  Writer(Aio* aio,
-	      rgw::sal::Bucket* bucket,
-              RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
-              const DoutPrefixProvider* dpp, optional_yield y)
-    : aio(aio), bucket(bucket),
-      obj_ctx(obj_ctx), head_obj(std::move(_head_obj)), dpp(dpp), y(y)
-  {}
-  Writer(Writer&& r)
-    : aio(r.aio), bucket(r.bucket),
-      obj_ctx(r.obj_ctx), head_obj(std::move(r.head_obj)), dpp(r.dpp), y(r.y)
-  {}
+public:
+  Writer(const DoutPrefixProvider *_dpp, optional_yield y) : dpp(_dpp) {}
+  virtual ~Writer() = default;
 
-  ~Writer() = default;
+  // prepare to start processing object data
+  virtual int prepare(optional_yield y) = 0;
 
-  // change the current stripe object
-  virtual int set_stripe_obj(const rgw_raw_obj& obj) = 0;
+  // Process a bufferlist
+  virtual int process(bufferlist&& data, uint64_t offset) = 0;
 
-  // write the data as an exclusive create and wait for it to complete
-  virtual int write_exclusive(const bufferlist& data) = 0;
-
-  virtual int drain() = 0;
-
-  // when the operation completes successfully, clear the set of written objects
-  // so they aren't deleted on destruction
-  virtual void clear_written() { written.clear(); }
-
+  // complete the operation and make its result visible to clients
+  virtual int complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) = 0;
 };
 
 class Zone {

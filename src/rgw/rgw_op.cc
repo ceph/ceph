@@ -3733,13 +3733,9 @@ void RGWPutObj::execute(optional_yield y)
   // create the object processor
   auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
                                 s->yield);
-  using namespace rgw::putobj;
-  constexpr auto max_processor_size = std::max({sizeof(MultipartObjectProcessor),
-                                               sizeof(AtomicObjectProcessor),
-                                               sizeof(AppendObjectProcessor)});
-  ceph::static_ptr<ObjectProcessor, max_processor_size> processor;
+  std::unique_ptr<rgw::sal::Writer> processor;
 
-  rgw_placement_rule *pdest_placement;
+  rgw_placement_rule *pdest_placement = &s->dest_placement;
 
   if (multipart) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
@@ -3758,21 +3754,18 @@ void RGWPutObj::execute(optional_yield y)
     s->dest_placement = *pdest_placement;
     pdest_placement = &s->dest_placement;
     ldpp_dout(this, 20) << "dest_placement for part=" << *pdest_placement << dendl;
-    processor.emplace<MultipartObjectProcessor>(
-        &*aio, store, s->bucket.get(), pdest_placement,
-        s->owner.get_id(), obj_ctx, s->object->clone(),
-        multipart_upload_id, multipart_part_num, multipart_part_str,
-        this, s->yield);
+    processor = upload->get_writer(this, s->yield, s->object->clone(),
+				   s->user->get_id(), obj_ctx, pdest_placement,
+				   multipart_part_num, multipart_part_str);
   } else if(append) {
     if (s->bucket->versioned()) {
       op_ret = -ERR_INVALID_BUCKET_STATE;
       return;
     }
-    pdest_placement = &s->dest_placement;
-    processor.emplace<AppendObjectProcessor>(
-            &*aio, store, s->bucket.get(), pdest_placement, s->bucket_owner.get_id(),
-	    obj_ctx, s->object->clone(),
-            s->req_id, position, &cur_accounted_size, this, s->yield);
+    processor = store->get_append_writer(this, s->yield, s->object->clone(),
+					 s->bucket_owner.get_id(), obj_ctx,
+					 pdest_placement, s->req_id, position,
+					 &cur_accounted_size);
   } else {
     if (s->bucket->versioning_enabled()) {
       if (!version_id.empty()) {
@@ -3782,11 +3775,9 @@ void RGWPutObj::execute(optional_yield y)
         version_id = s->object->get_instance();
       }
     }
-    pdest_placement = &s->dest_placement;
-    processor.emplace<AtomicObjectProcessor>(
-        &*aio, store, s->bucket.get(), pdest_placement,
-        s->bucket_owner.get_id(), obj_ctx, s->object->clone(),
-	olh_epoch, s->req_id, this, s->yield);
+    processor = store->get_atomic_writer(this, s->yield, s->object->clone(),
+					 s->bucket_owner.get_id(), obj_ctx,
+					 pdest_placement, olh_epoch, s->req_id);
   }
 
   op_ret = processor->prepare(s->yield);
@@ -3824,13 +3815,13 @@ void RGWPutObj::execute(optional_yield y)
   fst = copy_source_range_fst;
 
   // no filters by default
-  DataProcessor *filter = processor.get();
+  rgw::sal::DataProcessor *filter = processor.get();
 
   const auto& compression_type = store->get_zone()->get_params().get_compression_type(*pdest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  std::unique_ptr<DataProcessor> encrypt;
+  std::unique_ptr<rgw::sal::DataProcessor> encrypt;
 
   if (!append) { // compression and encryption only apply to full object uploads
     op_ret = get_encrypt_filter(&encrypt, filter);
@@ -4159,21 +4150,19 @@ void RGWPostObj::execute(optional_yield y)
     auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
                                   s->yield);
 
-    using namespace rgw::putobj;
-    AtomicObjectProcessor processor(&*aio, store, s->bucket.get(),
-                                    &s->dest_placement,
-                                    s->bucket_owner.get_id(),
-                                    *static_cast<RGWObjectCtx*>(s->obj_ctx),
-                                    std::move(obj), 0, s->req_id, this, s->yield);
-    op_ret = processor.prepare(s->yield);
+    std::unique_ptr<rgw::sal::Writer> processor;
+    processor = store->get_atomic_writer(this, s->yield, std::move(obj),
+					 s->bucket_owner.get_id(), *s->obj_ctx,
+					 &s->dest_placement, 0, s->req_id);
+    op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
       return;
     }
 
     /* No filters by default. */
-    DataProcessor *filter = &processor;
+    rgw::sal::DataProcessor *filter = processor.get();
 
-    std::unique_ptr<DataProcessor> encrypt;
+    std::unique_ptr<rgw::sal::DataProcessor> encrypt;
     op_ret = get_encrypt_filter(&encrypt, filter);
     if (op_ret < 0) {
       return;
@@ -4274,7 +4263,7 @@ void RGWPostObj::execute(optional_yield y)
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
     }
 
-    op_ret = processor.complete(s->obj_size, etag, nullptr, real_time(), attrs,
+    op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(), attrs,
                                 (delete_at ? *delete_at : real_time()),
                                 nullptr, nullptr, nullptr, nullptr, nullptr,
                                 s->yield);
@@ -7144,21 +7133,18 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   rgw_placement_rule dest_placement = s->dest_placement;
   dest_placement.inherit_from(bucket->get_placement_rule());
 
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
-                                s->yield);
-
-  using namespace rgw::putobj;
-  AtomicObjectProcessor processor(&*aio, store, bucket.get(), &s->dest_placement, bowner.get_id(),
-                                  obj_ctx, std::move(obj), 0, s->req_id, this, s->yield);
-
-  op_ret = processor.prepare(s->yield);
+  std::unique_ptr<rgw::sal::Writer> processor;
+  processor = store->get_atomic_writer(this, s->yield, std::move(obj),
+				       bowner.get_id(), obj_ctx,
+				       &s->dest_placement, 0, s->req_id);
+  op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot prepare processor due to ret=" << op_ret << dendl;
     return op_ret;
   }
 
   /* No filters by default. */
-  DataProcessor *filter = &processor;
+  rgw::sal::DataProcessor *filter = processor.get();
 
   const auto& compression_type = store->get_zone()->get_params().get_compression_type(
       dest_placement);
@@ -7250,7 +7236,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   }
 
   /* Complete the transaction. */
-  op_ret = processor.complete(size, etag, nullptr, ceph::real_time(),
+  op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
                               attrs, ceph::real_time() /* delete_at */,
                               nullptr, nullptr, nullptr, nullptr, nullptr,
                               s->yield);

@@ -28,6 +28,7 @@
 #include "rgw_multi.h"
 #include "rgw_acl_s3.h"
 #include "rgw_aio.h"
+#include "rgw_aio_throttle.h"
 
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
@@ -113,19 +114,6 @@ static int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider* dpp,
     policy->create_default(user->get_id(), user->get_display_name());
   }
   return 0;
-}
-
-static int process_completed(const AioResultList& completed, RawObjSet* written)
-{
-  std::optional<int> error;
-  for (auto& r : completed) {
-    if (r.result >= 0) {
-      written->insert(r.obj.get_ref().obj);
-    } else if (!error) { // record first error code
-      error = r.result;
-    }
-  }
-  return error.value_or(0);
 }
 
 int RadosCompletions::drain()
@@ -1199,13 +1187,6 @@ std::unique_ptr<GCChain> RadosStore::get_gc_chain(rgw::sal::Object* obj)
   return std::unique_ptr<GCChain>(new RadosGCChain(this, obj));
 }
 
-std::unique_ptr<Writer> RadosStore::get_writer(Aio* aio, rgw::sal::Bucket* bucket,
-              RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
-              const DoutPrefixProvider* dpp, optional_yield y)
-{
-  return std::unique_ptr<Writer>(new RadosWriter(aio, this, bucket, obj_ctx, std::move(_head_obj), dpp, y));
-}
-
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
 {
   return rados->delete_raw_obj(dpp, obj);
@@ -1469,6 +1450,40 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
 std::unique_ptr<MultipartUpload> RadosStore::get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time mtime)
 {
   return std::unique_ptr<MultipartUpload>(new RadosMultipartUpload(this, bucket, oid, upload_id, mtime));
+}
+
+std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  const std::string& unique_tag,
+				  uint64_t position,
+				  uint64_t *cur_accounted_size)
+{
+  auto aio = rgw::make_throttle(ctx()->_conf->rgw_put_obj_min_window_size, y);
+  return std::unique_ptr<Writer>(new RadosAppendWriter(dpp, y,
+				 std::move(_head_obj),
+				 this, std::move(aio), owner, obj_ctx,
+				 ptail_placement_rule,
+				 unique_tag, position,
+				 cur_accounted_size));
+}
+
+std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  uint64_t olh_epoch,
+				  const std::string& unique_tag)
+{
+  auto aio = rgw::make_throttle(ctx()->_conf->rgw_put_obj_min_window_size, y);
+  return std::unique_ptr<Writer>(new RadosAtomicWriter(dpp, y,
+				 std::move(_head_obj),
+				 this, std::move(aio), owner, obj_ctx,
+				 ptail_placement_rule,
+				 olh_epoch, unique_tag));
 }
 
 int RadosStore::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx* ioctx)
@@ -2478,6 +2493,21 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
   return 0;
 }
 
+std::unique_ptr<Writer> RadosMultipartUpload::get_writer(
+				  const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  uint64_t part_num,
+				  const std::string& part_num_str)
+{
+  auto aio = rgw::make_throttle(store->ctx()->_conf->rgw_put_obj_min_window_size, y);
+  return std::unique_ptr<Writer>(new RadosMultipartWriter(dpp, y, this,
+				 std::move(_head_obj), store, std::move(aio), owner,
+				 obj_ctx, ptail_placement_rule, part_num, part_num_str));
+}
+
 MPRadosSerializer::MPRadosSerializer(const DoutPrefixProvider *dpp, RadosStore* store, RadosObject* obj, const std::string& lock_name) :
   lock(lock_name)
 {
@@ -2636,97 +2666,73 @@ void RadosGCChain::delete_inline(const DoutPrefixProvider *dpp, const std::strin
   store->getRados()->delete_objs_inline(dpp, chain, tag);
 }
 
-int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
+int RadosAtomicWriter::prepare(optional_yield y)
 {
-  stripe_obj = store->svc()->rados->obj(raw_obj);
-  return stripe_obj.open(dpp);
+  return processor.prepare(y);
 }
 
-int RadosWriter::process(bufferlist&& bl, uint64_t offset)
+int RadosAtomicWriter::process(bufferlist&& data, uint64_t offset)
 {
-  bufferlist data = std::move(bl);
-  const uint64_t cost = data.length();
-  if (cost == 0) { // no empty writes, use aio directly for creates
-    return 0;
-  }
-  librados::ObjectWriteOperation op;
-  if (offset == 0) {
-    op.write_full(data);
-  } else {
-    op.write(offset, data);
-  }
-  constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
-  return process_completed(c, &written);
+  return processor.process(std::move(data), offset);
 }
 
-int RadosWriter::write_exclusive(const bufferlist& data)
+int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y)
 {
-  const uint64_t cost = data.length();
-
-  librados::ObjectWriteOperation op;
-  op.create(true); // exclusive create
-  op.write_full(data);
-
-  constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
-  auto d = aio->drain();
-  c.splice(c.end(), d);
-  return process_completed(c, &written);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
+			    if_match, if_nomatch, user_data, zones_trace, canceled, y);
 }
 
-int RadosWriter::drain()
+int RadosAppendWriter::prepare(optional_yield y)
 {
-  return process_completed(aio->drain(), &written);
+  return processor.prepare(y);
 }
 
-RadosWriter::~RadosWriter()
+int RadosAppendWriter::process(bufferlist&& data, uint64_t offset)
 {
-  // wait on any outstanding aio completions
-  process_completed(aio->drain(), &written);
+  return processor.process(std::move(data), offset);
+}
 
-  bool need_to_remove_head = false;
-  std::optional<rgw_raw_obj> raw_head;
-  if (!rgw::sal::Object::empty(head_obj.get())) {
-    raw_head.emplace();
-    dynamic_cast<RadosObject*>(head_obj.get())->get_raw_obj(&*raw_head);
-  }
+int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y)
+{
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
+			    if_match, if_nomatch, user_data, zones_trace, canceled, y);
+}
 
-  /**
-   * We should delete the object in the "multipart" namespace to avoid race condition.
-   * Such race condition is caused by the fact that the multipart object is the gatekeeper of a multipart
-   * upload, when it is deleted, a second upload would start with the same suffix("2/"), therefore, objects
-   * written by the second upload may be deleted by the first upload.
-   * details is describled on #11749
-   *
-   * The above comment still stands, but instead of searching for a specific object in the multipart
-   * namespace, we just make sure that we remove the object that is marked as the head object after
-   * we remove all the other raw objects. Note that we use different call to remove the head object,
-   * as this one needs to go via the bucket index prepare/complete 2-phase commit scheme.
-   */
-  for (const auto& obj : written) {
-    if (raw_head && obj == *raw_head) {
-      ldpp_dout(dpp, 5) << "NOTE: we should not process the head object (" << obj << ") here" << dendl;
-      need_to_remove_head = true;
-      continue;
-    }
+int RadosMultipartWriter::prepare(optional_yield y)
+{
+  return processor.prepare(y);
+}
 
-    int r = store->delete_raw_obj(dpp, obj);
-    if (r < 0 && r != -ENOENT) {
-      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
-    }
-  }
+int RadosMultipartWriter::process(bufferlist&& data, uint64_t offset)
+{
+  return processor.process(std::move(data), offset);
+}
 
-  if (need_to_remove_head) {
-    ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = head_obj->get_delete_op(&obj_ctx);
-    del_op->params.bucket_owner = bucket->get_acl_owner();
-
-    int r = del_op->delete_obj(dpp, y);
-    if (r < 0 && r != -ENOENT) {
-      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
-    }
-  }
+int RadosMultipartWriter::complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y)
+{
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
+			    if_match, if_nomatch, user_data, zones_trace, canceled, y);
 }
 
 const RGWZoneGroup& RadosZone::get_zonegroup()
