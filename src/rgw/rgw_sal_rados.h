@@ -20,11 +20,14 @@
 #include "rgw_notify.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
+#include "rgw_multi.h"
+#include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
 
 namespace rgw { namespace sal {
 
 class RadosStore;
+class RadosMultipartUpload;
 
 class RadosCompletions : public Completions {
   public:
@@ -186,7 +189,7 @@ class RadosObject : public Object {
     virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
     virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) override;
-    virtual void get_raw_obj(rgw_raw_obj* raw_obj) override;
+    void get_raw_obj(rgw_raw_obj* raw_obj);
     virtual std::unique_ptr<Object> clone() override {
       return std::unique_ptr<Object>(new RadosObject(*this));
     }
@@ -294,6 +297,10 @@ class RadosBucket : public Bucket {
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) override;
     Object* create_object(const rgw_obj_key& key /* Attributes */) override;
     virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
+    virtual int remove_bucket_bypass_gc(int concurrent_max, bool
+					keep_index_consistent,
+					optional_yield y, const
+					DoutPrefixProvider *dpp) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int get_bucket_info(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -327,6 +334,17 @@ class RadosBucket : public Bucket {
     virtual std::unique_ptr<Bucket> clone() override {
       return std::make_unique<RadosBucket>(*this);
     }
+    virtual int list_multiparts(const DoutPrefixProvider *dpp,
+				const string& prefix,
+				string& marker,
+				const string& delim,
+				const int& max_uploads,
+				vector<std::unique_ptr<MultipartUpload>>& uploads,
+				map<string, bool> *common_prefixes,
+				bool *is_truncated) override;
+    virtual int abort_multiparts(const DoutPrefixProvider *dpp,
+				 CephContext *cct,
+				 string& prefix, string& delim) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
@@ -461,6 +479,7 @@ class RadosStore : public Store {
     virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
 				   vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
+    virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id=std::nullopt, ceph::real_time mtime=real_clock::now()) override;
 
     virtual void finalize(void) override;
 
@@ -487,6 +506,56 @@ class RadosStore : public Store {
     const RGWCtl* ctl() const { return &rados->ctl; }
 
     void setUserCtl(RGWUserCtl *_ctl) { user_ctl = _ctl; }
+};
+
+class RadosMultipartPart : public MultipartPart {
+protected:
+  RGWUploadPartInfo info;
+
+public:
+  RadosMultipartPart() = default;
+  virtual ~RadosMultipartPart() = default;
+
+  virtual uint32_t get_num() { return info.num; }
+  virtual uint64_t get_size() { return info.accounted_size; }
+  virtual const std::string& get_etag() { return info.etag; }
+  virtual ceph::real_time& get_mtime() { return info.modified; }
+
+  /* For RadosStore code */
+  RGWObjManifest& get_manifest() { return info.manifest; }
+
+  friend class RadosMultipartUpload;
+};
+
+class RadosMultipartUpload : public MultipartUpload {
+  RadosStore* store;
+  RGWMPObj mp_obj;
+  ceph::real_time mtime;
+  rgw_placement_rule placement;
+
+public:
+  RadosMultipartUpload(RadosStore* _store, Bucket* _bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time _mtime) : MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), mtime(_mtime) {}
+  virtual ~RadosMultipartUpload() = default;
+
+  virtual const std::string& get_meta() const { return mp_obj.get_meta(); }
+  virtual const std::string& get_key() const { return mp_obj.get_key(); }
+  virtual const std::string& get_upload_id() const { return mp_obj.get_upload_id(); }
+  virtual ceph::real_time& get_mtime() { return mtime; }
+  virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
+  virtual int init(const DoutPrefixProvider* dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
+  virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			 int num_parts, int marker,
+			 int* next_marker, bool* truncated,
+			 bool assume_unsorted = false) override;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct,
+		    RGWObjectCtx* obj_ctx) override;
+  virtual int complete(const DoutPrefixProvider* dpp, CephContext* cct,
+		       std::string& etag, RGWObjManifest& manifest,
+		       map<int, string>& part_etags,
+		       list<rgw_obj_index_key>& remove_objs,
+		       uint64_t& accounted_size, bool& compressed,
+		       RGWCompressionInfo& cs_info, off_t& ofs) override;
+  virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
 };
 
 class MPRadosSerializer : public MPSerializer {
