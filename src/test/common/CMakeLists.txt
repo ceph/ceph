@@ -283,6 +283,11 @@ add_executable(unittest_shunique_lock
 add_ceph_unittest(unittest_shunique_lock)
 target_link_libraries(unittest_shunique_lock ceph-common)
 
+add_executable(unittest_fair_mutex
+  test_fair_mutex.cc)
+add_ceph_unittest(unittest_fair_mutex)
+target_link_libraries(unittest_fair_mutex ceph-common)
+
 # unittest_perf_histogram
 add_executable(unittest_perf_histogram
   test_perf_histogram.cc
