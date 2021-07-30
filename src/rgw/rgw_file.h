@@ -2489,8 +2489,8 @@ public:
   const std::string& obj_name;
   RGWFileHandle* rgw_fh;
   std::optional<rgw::BlockingAioThrottle> aio;
-  std::optional<rgw::putobj::AtomicObjectProcessor> processor;
-  rgw::putobj::DataProcessor* filter;
+  std::unique_ptr<rgw::sal::Writer> processor;
+  rgw::sal::DataProcessor* filter;
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
   buffer::list data;
