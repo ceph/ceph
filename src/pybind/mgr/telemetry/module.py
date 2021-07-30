@@ -400,9 +400,13 @@ class Module(MgrModule):
 
     def get_osd_histograms(self) -> Dict[str, dict]:
         # Initialize result dict
-        result: Dict[str, dict] = defaultdict()
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(int))))))
 
-        # You can get a list of osd ids from the metadata
+        # Get list of osd ids from the metadata
         osd_metadata = self.get('osd_metadata')
         
         # Grab output from the "osd.x perf histogram dump" command
@@ -418,12 +422,73 @@ class Module(MgrModule):
                 continue
             else:
                 try:
-                    # This is where the histograms will land
-                    # if there are any
+                    # This is where the histograms will land if there are any
                     dump = json.loads(outb)
-                    result['osd.'+osd_id] = dump
-                # Sometimes, json errors occur if
-                # you give it an empty string
+                    #------- Testing -------------
+                    # result[osd_id] = dump //// Add this line back if you need to
+                    for histogram in dump['osd']:
+                        # Log axis information. There are two axes, represented each
+                        # as a dictionary. Both dictionary are contained inside a
+                        # list called 'axes'.
+                        axes = []
+                        for axis in dump['osd'][histogram]['axes']:
+
+                            # This is the dict that contains information for an individual
+                            # axis. It will be appended to the 'axes' list at the end.
+                            axis_dict: Dict[str, dict] = defaultdict(int)
+
+                            # These are all single values.
+                            axis_dict['buckets'] = axis['buckets']
+                            axis_dict['min'] = axis['min']
+                            axis_dict['name'] = axis['name']
+                            axis_dict['quant_size'] = axis['quant_size']
+                            axis_dict['scale_type'] = axis['scale_type']
+
+                            # Ranges were originally kept in dictionaries, but
+                            # I am placing them inside lists so that they will
+                            # be more human-readable later on.
+                            ranges = []
+                            for _range in axis['ranges']:
+                                _max, _min = None, None
+                                if 'max' in _range:
+                                    _max = _range['max']
+                                if 'min' in _range:
+                                    _min = _range['min']
+
+                                # Use json.dumps() to help the final output be
+                                # readable to users. The original data can be
+                                # retrieved later (perhaps on the server side) with json.loads().
+                                ranges.append(json.dumps([_min, _max]))
+                            axis_dict['ranges'] = ranges
+
+                            # Now that the axis dict contains all the appropriate
+                            # information, append it to the 'axes' list. This loop
+                            # will happen twice, once for each axis.
+                            axes.append(axis_dict)
+
+                        # Add the 'axes' list, containing both axes, to result.
+                        result['osd'][histogram]['axes'] = axes
+
+                        # Collect current values
+                        values = []
+                        for value_list in dump['osd'][histogram]['values']:
+                            # values.append(json.dumps(value_list))
+                            values.append(value_list)
+
+                        # Aggregate values. If 'values' have already been initialized,
+                        # you can safely add.
+                        if 'values' in result:
+                            for i in range (0, len(values)):
+                                for j in range (0, len(values[i])):
+                                    values[i][j] += result['osd'][histogram]['values'][i][j]
+
+                        # Add the values to result, using json.dumps() to improve readability.
+                        # These values can be retrieved later with json.loads().
+                        for i in range(0, len(values)):
+                            values[i] = json.dumps(values[i])
+                        result['osd'][histogram]['values'] = values
+
+                # Sometimes, json errors occur if you give it an empty string.
                 except json.decoder.JSONDecodeError:
                     continue
 
