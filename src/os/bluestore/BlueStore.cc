@@ -6814,7 +6814,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     bluefs_layout.dedicated_wal = false;
   }
 
-  size_t target_size;
+  size_t target_size = 0;
   string target_name;
   if (id == BlueFS::BDEV_NEWWAL) {
     target_name = "block.wal";
