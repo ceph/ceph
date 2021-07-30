@@ -53,6 +53,8 @@ DEFAULT_PROMETHEUS_IMAGE = 'docker.io/prom/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'docker.io/prom/node-exporter:v0.18.1'
 DEFAULT_GRAFANA_IMAGE = 'docker.io/ceph/ceph-grafana:6.7.4'
 DEFAULT_ALERT_MANAGER_IMAGE = 'docker.io/prom/alertmanager:v0.20.0'
+DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
+DEFAULT_KEEPALIVED_IMAGE = 'docker.io/arcts/keepalived'
 DEFAULT_REGISTRY = 'docker.io'   # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
@@ -640,7 +642,7 @@ class HAproxy(object):
     """Defines an HAproxy container"""
     daemon_type = 'haproxy'
     required_files = ['haproxy.cfg']
-    default_image = 'haproxy'
+    default_image = DEFAULT_HAPROXY_IMAGE
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -727,7 +729,7 @@ class Keepalived(object):
     """Defines an Keepalived container"""
     daemon_type = 'keepalived'
     required_files = ['keepalived.conf']
-    default_image = 'arcts/keepalived'
+    default_image = DEFAULT_KEEPALIVED_IMAGE
 
     def __init__(self,
                  ctx: CephadmContext,
