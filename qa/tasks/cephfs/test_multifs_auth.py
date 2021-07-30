@@ -29,8 +29,6 @@ class TestMultiFS(CapsHelper):
         self.run_cluster_cmd(f'auth rm {self.client_name}')
 
         self.fs1 = self.fs
-        # After Octopus is EOL, we can remove this setting:
-        self.fs1.set_allow_multifs()
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
 
         # we'll reassign caps to client.1 so that it can operate with cephfs2
