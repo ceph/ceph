@@ -4,8 +4,6 @@
 #pragma once
 
 #include <iostream>
-#include <unordered_map>
-#include <boost/functional/hash.hpp>
 
 #include "seastar/core/shared_future.hh"
 
@@ -101,7 +99,7 @@ public:
       Transaction::src_t src) {
     LOG_PREFIX(Cache::create_transaction);
 
-    ++(get_counter(stats.trans_created_by_src, src));
+    ++(get_by_src(stats.trans_created_by_src, src));
 
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
@@ -122,7 +120,7 @@ public:
       Transaction::src_t src) {
     LOG_PREFIX(Cache::create_weak_transaction);
 
-    ++(get_counter(stats.trans_created_by_src, src));
+    ++(get_by_src(stats.trans_created_by_src, src));
 
     auto ret = std::make_unique<Transaction>(
       get_dummy_ordering_handle(),
@@ -142,7 +140,7 @@ public:
   void reset_transaction_preserve_handle(Transaction &t) {
     LOG_PREFIX(Cache::reset_transaction_preserve_handle);
     if (t.did_reset()) {
-      ++(get_counter(stats.trans_created_by_src, t.get_src()));
+      ++(get_by_src(stats.trans_created_by_src, t.get_src()));
     }
     t.reset_preserve_handle(last_commit);
     DEBUGT("reset", t);
@@ -592,8 +590,8 @@ private:
   CachedExtent::list dirty;
 
   struct query_counters_t {
-    uint64_t access;
-    uint64_t hit;
+    uint64_t access = 0;
+    uint64_t hit = 0;
   };
 
   /**
@@ -610,13 +608,9 @@ private:
     uint64_t extents = 0;
     uint64_t bytes = 0;
 
-    uint64_t& get_by_name(const std::string& counter_name) {
-      if (counter_name == "EXTENTS") {
-        return extents;
-      } else {
-        ceph_assert(counter_name == "BYTES");
-        return bytes;
-      }
+    void increment(uint64_t extent_len) {
+      ++extents;
+      bytes += extent_len;
     }
   };
 
@@ -626,41 +620,49 @@ private:
     uint64_t mutate_delta_bytes = 0;
     effort_t retire;
     effort_t fresh;
-
-    effort_t& get_by_name(const std::string& effort_name) {
-      if (effort_name == "READ") {
-        return read;
-      } else if (effort_name == "MUTATE") {
-        return mutate;
-      } else if (effort_name == "RETIRE") {
-        return retire;
-      } else {
-        ceph_assert(effort_name == "FRESH");
-        return fresh;
-      }
-    }
   };
 
+  template <typename CounterT>
+  using counter_by_extent_t = std::array<CounterT, EXTENT_TYPES_MAX>;
+
+  struct trans_byextent_efforts_t {
+    counter_by_extent_t<effort_t> read_by_ext;
+    counter_by_extent_t<effort_t> mutate_by_ext;
+    counter_by_extent_t<uint64_t> delta_bytes_by_ext;
+    counter_by_extent_t<effort_t> retire_by_ext;
+    counter_by_extent_t<effort_t> fresh_by_ext;
+  };
+
+  template <typename CounterT>
+  using counter_by_src_t = std::array<CounterT, Transaction::SRC_MAX>;
+
   struct {
-    std::array<uint64_t, Transaction::SRC_MAX> trans_created_by_src;
-    std::array<uint64_t, Transaction::SRC_MAX> trans_committed_by_src;
-    std::array<trans_efforts_t, Transaction::SRC_MAX> committed_efforts_by_src;
-    std::unordered_map<src_ext_t, uint64_t,
-                       boost::hash<src_ext_t>> trans_invalidated;
-    std::array<trans_efforts_t, Transaction::SRC_MAX> invalidated_efforts_by_src;
-    std::unordered_map<src_ext_t, query_counters_t,
-                       boost::hash<src_ext_t>> cache_query;
+    counter_by_src_t<uint64_t> trans_created_by_src;
+    counter_by_src_t<uint64_t> trans_committed_by_src;
+    counter_by_src_t<trans_byextent_efforts_t>      committed_efforts_by_src;
+    counter_by_src_t<counter_by_extent_t<uint64_t>> trans_invalidated;
+    counter_by_src_t<trans_efforts_t>  invalidated_efforts_by_src;
+    counter_by_src_t<query_counters_t> cache_query_by_src;
     uint64_t read_transactions_successful;
     effort_t read_effort_successful;
     uint64_t dirty_bytes;
   } stats;
 
   template <typename CounterT>
-  CounterT& get_counter(
-      std::array<CounterT, Transaction::SRC_MAX>& counters_by_src,
+  CounterT& get_by_src(
+      counter_by_src_t<CounterT>& counters_by_src,
       Transaction::src_t src) {
     assert(static_cast<std::size_t>(src) < counters_by_src.size());
     return counters_by_src[static_cast<std::size_t>(src)];
+  }
+
+  template <typename CounterT>
+  CounterT& get_by_ext(
+      counter_by_extent_t<CounterT>& counters_by_ext,
+      extent_types_t ext) {
+    auto index = static_cast<uint8_t>(ext);
+    assert(index < EXTENT_TYPES_MAX);
+    return counters_by_ext[index];
   }
 
   seastar::metrics::metric_group metrics;
@@ -702,9 +704,6 @@ private:
   /// Mark a valid transaction as conflicted
   void invalidate(Transaction& t, CachedExtent& conflicting_extent);
 
-  /// Measure efforts of a submitting/invalidating transaction
-  void measure_efforts(Transaction& t, trans_efforts_t& efforts);
-
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
 
@@ -740,8 +739,7 @@ private:
       const src_ext_t* p_metric_key) {
     query_counters_t* p_counters = nullptr;
     if (p_metric_key) {
-      assert(stats.cache_query.count(*p_metric_key));
-      p_counters = &stats.cache_query[*p_metric_key];
+      p_counters = &get_by_src(stats.cache_query_by_src, p_metric_key->first);
       ++p_counters->access;
     }
     if (auto iter = extents.find_offset(offset);

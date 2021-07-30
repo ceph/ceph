@@ -331,21 +331,20 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  OMAP_INNER = 4,
-  OMAP_LEAF = 5,
-  ONODE_BLOCK_STAGED = 6,
-  COLL_BLOCK = 7,
-  OBJECT_DATA_BLOCK = 8,
-  RETIRED_PLACEHOLDER = 9,
-
-  RBM_ALLOC_INFO = 0xE0,
+  OMAP_INNER = 3,
+  OMAP_LEAF = 4,
+  ONODE_BLOCK_STAGED = 5,
+  COLL_BLOCK = 6,
+  OBJECT_DATA_BLOCK = 7,
+  RETIRED_PLACEHOLDER = 8,
+  RBM_ALLOC_INFO = 9,
   // Test Block Types
-  TEST_BLOCK = 0xF0,
-  TEST_BLOCK_PHYSICAL = 0xF1,
-
-  // None
-  NONE = 0xFF
+  TEST_BLOCK = 10,
+  TEST_BLOCK_PHYSICAL = 11,
+  // None and the number of valid extent_types_t
+  NONE = 12,
 };
+constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
 
 inline bool is_logical_type(extent_types_t type) {
   switch (type) {
@@ -709,18 +708,6 @@ struct rbm_alloc_delta_t {
   extent_types_t type;
   interval_set<blk_id_t> alloc_blk_ids;
   op_types_t op;
-};
-
-}
-
-namespace std {
-
-template<>
-struct hash<::crimson::os::seastore::extent_types_t> {
-  std::size_t operator()(
-      const ::crimson::os::seastore::extent_types_t& type) const noexcept {
-    return std::hash<uint8_t>{}((uint8_t)type);
-  }
 };
 
 }

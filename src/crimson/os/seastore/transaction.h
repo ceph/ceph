@@ -340,15 +340,3 @@ template <typename T>
 using with_trans_ertr = typename T::base_ertr::template extend<crimson::ct_error::eagain>;
 
 }
-
-namespace std {
-
-template<>
-struct hash<::crimson::os::seastore::Transaction::src_t> {
-  std::size_t operator()(
-      const ::crimson::os::seastore::Transaction::src_t& src) const noexcept {
-    return std::hash<uint8_t>{}((uint8_t)src);
-  }
-};
-
-}
