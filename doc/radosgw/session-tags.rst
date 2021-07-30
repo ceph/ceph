@@ -107,6 +107,8 @@ An example of a role permission policy that uses aws:PrincipalTag is as follows:
 3. iam:ResourceTag: This key is used to compare the key-value pair attached to the resource with the key-value pair
 in the policy. In case of AssumeRoleWithWebIdentity, tags attached to the role can be used to compare with that in
 the trust policy to allow a user to assume a role.
+RGW now supports REST APIs for tagging, listing tags and untagging actions on a role. More information related to
+role tagging can be found here :doc:`role`.
 
 An example of a role's trust policy that uses aws:ResourceTag is as follows:
 
