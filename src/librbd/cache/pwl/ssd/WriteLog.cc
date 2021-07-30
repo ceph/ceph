@@ -765,7 +765,7 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
 
   utime_t now = ceph_clock_now();
   for (auto &operation : ops) {
-    operation->log_append_time = now;
+    operation->log_append_start_time = now;
     auto log_entry = operation->get_log_entry();
 
     if (log_entries.size() == CONTROL_BLOCK_MAX_LOG_ENTRIES ||
