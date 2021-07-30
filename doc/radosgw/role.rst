@@ -410,3 +410,114 @@ Delete Policy attached to a Role
 
 Example::
   POST "<hostname>?Action=DeleteRolePolicy&RoleName=S3Access&PolicyName=Policy1"
+
+Tag a role
+----------
+A role can have multivalued tags attached to it. These tags can be passed in as part of CreateRole REST API also.
+AWS does not support multi-valued role tags.
+
+Example::
+  POST "<hostname>?Action=TagRole&RoleName=S3Access&Tags.member.1.Key=Department&Tags.member.1.Value=Engineering"
+
+.. code-block:: XML
+
+  <TagRoleResponse>
+    <ResponseMetadata>
+      <RequestId>tx000000000000000000004-00611f337e-1027-default</RequestId>
+    </ResponseMetadata>
+  </TagRoleResponse>
+
+
+List role tags
+--------------
+Lists the tags attached to a role.
+
+Example::
+  POST "<hostname>?Action=ListRoleTags&RoleName=S3Access"
+
+.. code-block:: XML
+
+  <ListRoleTagsResponse>
+    <ListRoleTagsResult>
+      <Tags>
+        <member>
+          <Key>Department</Key>
+          <Value>Engineering</Value>
+        </member>
+      </Tags>
+    </ListRoleTagsResult>
+    <ResponseMetadata>
+      <RequestId>tx000000000000000000005-00611f337e-1027-default</RequestId>
+    </ResponseMetadata>
+  </ListRoleTagsResponse>
+
+Delete role tags
+----------------
+Delete a tag/ tags attached to a role.
+
+Example::
+  POST "<hostname>?Action=UntagRoles&RoleName=S3Access&TagKeys.member.1=Department"
+
+.. code-block:: XML
+
+  <UntagRoleResponse>
+    <ResponseMetadata>
+      <RequestId>tx000000000000000000007-00611f337e-1027-default</RequestId>
+    </ResponseMetadata>
+  </UntagRoleResponse>
+
+
+Sample code for tagging, listing tags and untagging a role
+----------------------------------------------------------
+
+The following is sample code for adding tags to role, listing tags and untagging a role using boto3.
+
+.. code-block:: python
+
+    import boto3
+
+    access_key = 'TESTER'
+    secret_key = 'test123'
+
+    iam_client = boto3.client('iam',
+    aws_access_key_id=access_key,
+    aws_secret_access_key=secret_key,
+    endpoint_url='http://s3.us-east.localhost:8000',
+    region_name=''
+    )
+
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\"arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\"localhost:8080/auth/realms/quickstart:sub\":\"user1\"}}}]}"
+
+    print ("\n Creating Role with tags\n")
+    tags_list = [
+        {'Key':'Department','Value':'Engineering'}
+    ]
+    role_response = iam_client.create_role(
+        AssumeRolePolicyDocument=policy_document,
+        Path='/',
+        RoleName='S3Access',
+        Tags=tags_list,
+    )
+
+    print ("Adding tags to role\n")
+    response = iam_client.tag_role(
+                RoleName='S3Access',
+                Tags= [
+                        {'Key':'CostCenter','Value':'123456'}
+                    ]
+                )
+    print ("Listing role tags\n")
+    response = iam_client.list_role_tags(
+                RoleName='S3Access'
+                )
+    print (response)
+    print ("Untagging role\n")
+    response = iam_client.untag_role(
+        RoleName='S3Access',
+        TagKeys=[
+            'Department',
+        ]
+    )
+
+
+
