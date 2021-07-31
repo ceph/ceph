@@ -104,6 +104,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->close_section();
   f->dump_unsigned("features", mds_features);
   f->dump_unsigned("flags", flags);
+  f->dump_object("compat", compat);
 }
 
 void MDSMap::mds_info_t::dump(std::ostream& o) const
@@ -123,7 +124,10 @@ void MDSMap::mds_info_t::dump(std::ostream& o) const
   if (join_fscid != FS_CLUSTER_ID_NONE) {
     o << " join_fscid=" << join_fscid;
   }
-  o << " addr " << addrs << "]";
+  o << " addr " << addrs;
+  o << " compat ";
+  compat.printlite(o);
+  o << "]";
 }
 
 void MDSMap::mds_info_t::generate_test_instances(std::list<mds_info_t*>& ls)
@@ -546,7 +550,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  __u8 v = 9;
+  __u8 v = 10;
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 7;
   }
@@ -572,6 +576,9 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   if (v >= 9) {
     encode(flags, bl);
   }
+  if (v >= 10) {
+    encode(compat, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -595,7 +602,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
 
 void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(9, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(10, 4, 4, bl);
   decode(global_id, bl);
   decode(name, bl);
   decode(rank, bl);
@@ -627,6 +634,9 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   }
   if (struct_v >= 9) {
     decode(flags, bl);
+  }
+  if (struct_v >= 10) {
+    decode(compat, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -898,6 +908,15 @@ void MDSMap::decode(bufferlist::const_iterator& p)
       decode(required_client_features, p);
     } else {
       set_min_compat_client(min_compat_client);
+    }
+  }
+
+  for (auto& p: mds_info) {
+    static const CompatSet empty;
+    auto& info = p.second;
+    if (empty.compare(info.compat) == 0) {
+      /* bootstrap old compat; mds_info_t::decode does not have access to MDSMap */
+      info.compat = compat;
     }
   }
 

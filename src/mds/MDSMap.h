@@ -109,6 +109,10 @@ public:
   } availability_t;
 
   struct mds_info_t {
+    enum mds_flags : uint64_t {
+      FROZEN = 1 << 0,
+    };
+
     mds_info_t() = default;
 
     bool laggy() const { return !(laggy_since == utime_t()); }
@@ -151,9 +155,7 @@ public:
     fs_cluster_id_t join_fscid = FS_CLUSTER_ID_NONE;
     uint64_t mds_features = 0;
     uint64_t flags = 0;
-    enum mds_flags : uint64_t {
-      FROZEN = 1 << 0,
-    };
+    CompatSet compat;
   private:
     void encode_versioned(ceph::buffer::list& bl, uint64_t features) const;
     void encode_unversioned(ceph::buffer::list& bl) const;
@@ -166,6 +168,13 @@ public:
   static CompatSet get_compat_set_all();
   static CompatSet get_compat_set_default();
   static CompatSet get_compat_set_base(); // pre v0.20
+
+  static MDSMap create_null_mdsmap() {
+    MDSMap null_map;
+    /* Use the largest epoch so it's always bigger than whatever the MDS has. */
+    null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
+    return null_map;
+  }
 
   bool get_inline_data_enabled() const { return inline_data_enabled; }
   void set_inline_data_enabled(bool enabled) { inline_data_enabled = enabled; }
