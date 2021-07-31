@@ -1108,7 +1108,7 @@ spec:
                         assert len(cephadm_module.cache.get_daemons_by_type('mgr')) == 3
 
                         # put one host in offline state and one host in maintenance state
-                        cephadm_module.inventory._inventory['test2']['status'] = 'offline'
+                        cephadm_module.offline_hosts = {'test2'}
                         cephadm_module.inventory._inventory['test3']['status'] = 'maintenance'
                         cephadm_module.inventory.save()
 
