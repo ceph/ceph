@@ -8,6 +8,11 @@
   `ceph-mgr` debian package as an indirect dependency. If your workflow depends
   on this behavior, you might want to install `ceph-mgr-rook` separately.
 
+* the "kvs" Ceph object class is not packaged anymore. "kvs" Ceph object class
+  offers a distributed flat b-tree key-value store implemented on top of librados
+  objects omap. Because we don't have existing internal users of this object
+  class, it is not packaged anymore.
+
 * A new library is available, libcephsqlite. It provides a SQLite Virtual File
   System (VFS) on top of RADOS. The database and journals are striped over
   RADOS across multiple objects for virtually unlimited scaling and throughput
