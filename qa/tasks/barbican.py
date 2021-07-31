@@ -96,8 +96,11 @@ def setup_venv(ctx, config):
     assert isinstance(config, dict)
     log.info('Setting up virtualenv for barbican...')
     for (client, _) in config.items():
-        run_in_barbican_dir(ctx, client, ['virtualenv', '.barbicanenv'])
-        run_in_barbican_venv(ctx, client, ['pip', 'install', 'pytz', '-e', get_barbican_dir(ctx)])
+        run_in_barbican_dir(ctx, client,
+                            ['python3', '-m', 'venv', '.barbicanenv'])
+        run_in_barbican_venv(ctx, client,
+                             ['pip', 'install', 'pytz',
+                              '-e', get_barbican_dir(ctx)])
     yield
 
 def assign_ports(ctx, config, initial_port):
