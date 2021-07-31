@@ -282,7 +282,7 @@ if(WITH_LIBCEPHSQLITE)
 endif()
 
 # key-value store
-option(WITH_KVS "Key value store is here" ON)
+option(WITH_KVS "Key value store is here" OFF)
 
 option(WITH_KRBD "Enable Linux krbd support of 'rbd' utility" ON)
 
