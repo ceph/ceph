@@ -72,8 +72,7 @@ set(components
 # for collecting dpdk library targets, it will be used when defining dpdk::dpdk
 set(_dpdk_libs)
 # for list of dpdk library archive paths
-set(dpdk_LIBRARIES)
-
+set(dpdk_LIBRARIES "")
 foreach(c ${components})
   set(dpdk_lib dpdk::${c})
   if(TARGET ${dpdk_lib})
