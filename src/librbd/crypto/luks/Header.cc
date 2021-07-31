@@ -133,11 +133,7 @@ int Header::format(const char* type, const char* alg, const char* key,
   struct crypt_params_luks1 luks1params;
   struct crypt_params_luks2 luks2params;
 
-#ifdef LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT
-  size_t converted_data_alignment = data_alignment / sector_size;
-#else
-  size_t converted_data_alignment = data_alignment / 512;
-#endif
+  const size_t converted_data_alignment = data_alignment / 512;
 
   void* params = nullptr;
   if (strcmp(type, CRYPT_LUKS1) == 0) {
