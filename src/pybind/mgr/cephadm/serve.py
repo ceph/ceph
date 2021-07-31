@@ -736,124 +736,128 @@ class CephadmServe:
         self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
         self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
 
-        # assign names
-        for i in range(len(slots_to_add)):
-            slot = slots_to_add[i]
-            slot = slot.assign_name(self.mgr.get_unique_name(
-                slot.daemon_type,
-                slot.hostname,
-                daemons,
-                prefix=spec.service_id,
-                forcename=slot.name,
-                rank=slot.rank,
-                rank_generation=slot.rank_generation,
-            ))
-            slots_to_add[i] = slot
-            if rank_map is not None:
-                assert slot.rank is not None
-                assert slot.rank_generation is not None
-                assert rank_map[slot.rank][slot.rank_generation] is None
-                rank_map[slot.rank][slot.rank_generation] = slot.name
+        try:
+            # assign names
+            for i in range(len(slots_to_add)):
+                slot = slots_to_add[i]
+                slot = slot.assign_name(self.mgr.get_unique_name(
+                    slot.daemon_type,
+                    slot.hostname,
+                    daemons,
+                    prefix=spec.service_id,
+                    forcename=slot.name,
+                    rank=slot.rank,
+                    rank_generation=slot.rank_generation,
+                ))
+                slots_to_add[i] = slot
+                if rank_map is not None:
+                    assert slot.rank is not None
+                    assert slot.rank_generation is not None
+                    assert rank_map[slot.rank][slot.rank_generation] is None
+                    rank_map[slot.rank][slot.rank_generation] = slot.name
 
-        if rank_map:
-            # record the rank_map before we make changes so that if we fail the
-            # next mgr will clean up.
-            self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+            if rank_map:
+                # record the rank_map before we make changes so that if we fail the
+                # next mgr will clean up.
+                self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
 
-            # remove daemons now, since we are going to fence them anyway
+                # remove daemons now, since we are going to fence them anyway
+                for d in daemons_to_remove:
+                    assert d.hostname is not None
+                    self._remove_daemon(d.name(), d.hostname)
+                daemons_to_remove = []
+
+                # fence them
+                svc.fence_old_ranks(spec, rank_map, len(all_slots))
+
+            # create daemons
+            for slot in slots_to_add:
+                # first remove daemon on conflicting port?
+                if slot.ports:
+                    for d in daemons_to_remove:
+                        if d.hostname != slot.hostname:
+                            continue
+                        if not (set(d.ports or []) & set(slot.ports)):
+                            continue
+                        if d.ip and slot.ip and d.ip != slot.ip:
+                            continue
+                        self.log.info(
+                            f'Removing {d.name()} before deploying to {slot} to avoid a port conflict'
+                        )
+                        # NOTE: we don't check ok-to-stop here to avoid starvation if
+                        # there is only 1 gateway.
+                        self._remove_daemon(d.name(), d.hostname)
+                        daemons_to_remove.remove(d)
+                        progress_done += 1
+                        break
+
+                # deploy new daemon
+                daemon_id = slot.name
+                if not did_config:
+                    svc.config(spec, daemon_id)
+                    did_config = True
+
+                daemon_spec = svc.make_daemon_spec(
+                    slot.hostname, daemon_id, slot.network, spec,
+                    daemon_type=slot.daemon_type,
+                    ports=slot.ports,
+                    ip=slot.ip,
+                    rank=slot.rank,
+                    rank_generation=slot.rank_generation,
+                )
+                self.log.debug('Placing %s.%s on host %s' % (
+                    slot.daemon_type, daemon_id, slot.hostname))
+
+                try:
+                    daemon_spec = svc.prepare_create(daemon_spec)
+                    self._create_daemon(daemon_spec)
+                    r = True
+                    progress_done += 1
+                    update_progress()
+                except (RuntimeError, OrchestratorError) as e:
+                    msg = (f"Failed while placing {slot.daemon_type}.{daemon_id} "
+                           f"on {slot.hostname}: {e}")
+                    self.mgr.events.for_service(spec, 'ERROR', msg)
+                    self.mgr.log.error(msg)
+                    # only return "no change" if no one else has already succeeded.
+                    # later successes will also change to True
+                    if r is None:
+                        r = False
+                    progress_done += 1
+                    update_progress()
+                    continue
+
+                # add to daemon list so next name(s) will also be unique
+                sd = orchestrator.DaemonDescription(
+                    hostname=slot.hostname,
+                    daemon_type=slot.daemon_type,
+                    daemon_id=daemon_id,
+                )
+                daemons.append(sd)
+
+            # remove any?
+            def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
+                daemon_ids = [d.daemon_id for d in remove_daemons]
+                assert None not in daemon_ids
+                # setting force flag retains previous behavior
+                r = svc.ok_to_stop(cast(List[str], daemon_ids), force=True)
+                return not r.retval
+
+            while daemons_to_remove and not _ok_to_stop(daemons_to_remove):
+                # let's find a subset that is ok-to-stop
+                daemons_to_remove.pop()
             for d in daemons_to_remove:
+                r = True
                 assert d.hostname is not None
                 self._remove_daemon(d.name(), d.hostname)
-            daemons_to_remove = []
 
-            # fence them
-            svc.fence_old_ranks(spec, rank_map, len(all_slots))
-
-        # create daemons
-        for slot in slots_to_add:
-            # first remove daemon on conflicting port?
-            if slot.ports:
-                for d in daemons_to_remove:
-                    if d.hostname != slot.hostname:
-                        continue
-                    if not (set(d.ports or []) & set(slot.ports)):
-                        continue
-                    if d.ip and slot.ip and d.ip != slot.ip:
-                        continue
-                    self.log.info(
-                        f'Removing {d.name()} before deploying to {slot} to avoid a port conflict'
-                    )
-                    # NOTE: we don't check ok-to-stop here to avoid starvation if
-                    # there is only 1 gateway.
-                    self._remove_daemon(d.name(), d.hostname)
-                    daemons_to_remove.remove(d)
-                    progress_done += 1
-                    break
-
-            # deploy new daemon
-            daemon_id = slot.name
-            if not did_config:
-                svc.config(spec, daemon_id)
-                did_config = True
-
-            daemon_spec = svc.make_daemon_spec(
-                slot.hostname, daemon_id, slot.network, spec,
-                daemon_type=slot.daemon_type,
-                ports=slot.ports,
-                ip=slot.ip,
-                rank=slot.rank,
-                rank_generation=slot.rank_generation,
-            )
-            self.log.debug('Placing %s.%s on host %s' % (
-                slot.daemon_type, daemon_id, slot.hostname))
-
-            try:
-                daemon_spec = svc.prepare_create(daemon_spec)
-                self._create_daemon(daemon_spec)
-                r = True
                 progress_done += 1
                 update_progress()
-            except (RuntimeError, OrchestratorError) as e:
-                msg = (f"Failed while placing {slot.daemon_type}.{daemon_id} "
-                       f"on {slot.hostname}: {e}")
-                self.mgr.events.for_service(spec, 'ERROR', msg)
-                self.mgr.log.error(msg)
-                # only return "no change" if no one else has already succeeded.
-                # later successes will also change to True
-                if r is None:
-                    r = False
-                progress_done += 1
-                update_progress()
-                continue
 
-            # add to daemon list so next name(s) will also be unique
-            sd = orchestrator.DaemonDescription(
-                hostname=slot.hostname,
-                daemon_type=slot.daemon_type,
-                daemon_id=daemon_id,
-            )
-            daemons.append(sd)
-
-        # remove any?
-        def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
-            daemon_ids = [d.daemon_id for d in remove_daemons]
-            assert None not in daemon_ids
-            # setting force flag retains previous behavior
-            r = svc.ok_to_stop(cast(List[str], daemon_ids), force=True)
-            return not r.retval
-
-        while daemons_to_remove and not _ok_to_stop(daemons_to_remove):
-            # let's find a subset that is ok-to-stop
-            daemons_to_remove.pop()
-        for d in daemons_to_remove:
-            r = True
-            assert d.hostname is not None
-            self._remove_daemon(d.name(), d.hostname)
-
-            progress_done += 1
-            update_progress()
-
-        self.mgr.remote('progress', 'complete', progress_id)
+            self.mgr.remote('progress', 'complete', progress_id)
+        except Exception as e:
+            self.mgr.remote('progress', 'fail', progress_id, str(e))
+            raise
 
         if r is None:
             r = False
