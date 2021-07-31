@@ -20,7 +20,7 @@ if command -v dpkg >/dev/null; then
         exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in ant ditaa doxygen libxslt-devel libxml2-devel graphviz python3-devel python3-pip python3-virtualenv python3-Cython; do
+    for package in ant ditaa doxygen libxslt-devel libxml2-devel graphviz python3-devel python3-pip python3-Cython; do
 	if ! rpm -q --whatprovides $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
@@ -31,7 +31,7 @@ elif command -v yum >/dev/null; then
         exit 1
     fi
 else
-    for command in dot virtualenv doxygen ant ditaa cython; do
+    for command in dot doxygen ant ditaa cython; do
         if ! command -v "$command" > /dev/null; then
             # add a space after old values
             missing="${missing:+$missing }$command"
@@ -51,8 +51,9 @@ set -e
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --python=python3 $vdir
+    python3 -m venv $vdir
 
+    $vdir/bin/pip install --quiet wheel
     $vdir/bin/pip install --quiet \
               -r $TOPDIR/admin/doc-requirements.txt \
               -r $TOPDIR/admin/doc-python-common-requirements.txt
