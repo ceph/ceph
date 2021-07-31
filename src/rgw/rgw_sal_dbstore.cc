@@ -145,6 +145,13 @@ namespace rgw::sal {
     return ret;
   }
 
+  int DBBucket::remove_bucket_bypass_gc(int concurrent_max, bool
+					keep_index_consistent,
+					optional_yield y, const
+					DoutPrefixProvider *dpp) {
+    return 0;
+  }
+
   int DBBucket::get_bucket_info(const DoutPrefixProvider *dpp, optional_yield y)
   {
     int ret = 0;
@@ -335,6 +342,23 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBBucket::list_multiparts(const DoutPrefixProvider *dpp,
+				const string& prefix,
+				string& marker,
+				const string& delim,
+				const int& max_uploads,
+				vector<std::unique_ptr<MultipartUpload>>& uploads,
+				map<string, bool> *common_prefixes,
+				bool *is_truncated) {
+    return 0;
+  }
+
+  int DBBucket::abort_multiparts(const DoutPrefixProvider *dpp,
+				 CephContext *cct,
+				 string& prefix, string& delim) {
+    return 0;
+  }
+
   void DBStore::finalize(void)
   {
     if (dbsm)
@@ -435,6 +459,31 @@ namespace rgw::sal {
       vector<std::unique_ptr<RGWOIDCProvider>>& providers)
   {
     return 0;
+  }
+
+  std::unique_ptr<MultipartUpload> DBStore::get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time mtime) {
+    return nullptr;
+  }
+
+  std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  const std::string& unique_tag,
+				  uint64_t position,
+				  uint64_t *cur_accounted_size) {
+    return nullptr;
+  }
+
+  std::unique_ptr<Writer> DBStore::get_atomic_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  uint64_t olh_epoch,
+				  const std::string& unique_tag) {
+    return nullptr;
   }
 
   std::unique_ptr<User> DBStore::get_user(const rgw_user &u)
@@ -689,13 +738,6 @@ namespace rgw::sal {
   }
 
   std::unique_ptr<GCChain> DBStore::get_gc_chain(rgw::sal::Object* obj)
-  {
-    return 0;
-  }
-
-  std::unique_ptr<Writer> DBStore::get_writer(Aio *aio, rgw::sal::Bucket* bucket,
-      RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
-      const DoutPrefixProvider *dpp, optional_yield y)
   {
     return 0;
   }

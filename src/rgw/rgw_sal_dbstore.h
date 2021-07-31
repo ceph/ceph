@@ -122,6 +122,10 @@ namespace rgw { namespace sal {
       virtual int list(const DoutPrefixProvider *dpp, ListParams&, int, ListResults&, optional_yield y) override;
       Object* create_object(const rgw_obj_key& key /* Attributes */) override;
       virtual int remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
+      virtual int remove_bucket_bypass_gc(int concurrent_max, bool
+					keep_index_consistent,
+					optional_yield y, const
+					DoutPrefixProvider *dpp) override;
       virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
       virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
       virtual int get_bucket_info(const DoutPrefixProvider *dpp, optional_yield y) override;
@@ -155,6 +159,17 @@ namespace rgw { namespace sal {
       virtual std::unique_ptr<Bucket> clone() override {
         return std::make_unique<DBBucket>(*this);
       }
+      virtual int list_multiparts(const DoutPrefixProvider *dpp,
+				const string& prefix,
+				string& marker,
+				const string& delim,
+				const int& max_uploads,
+				vector<std::unique_ptr<MultipartUpload>>& uploads,
+				map<string, bool> *common_prefixes,
+				bool *is_truncated) override;
+      virtual int abort_multiparts(const DoutPrefixProvider *dpp,
+				 CephContext *cct,
+				 string& prefix, string& delim) override;
 
       friend class DBStore;
   };
@@ -288,9 +303,6 @@ namespace rgw { namespace sal {
       virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, 
           rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
       virtual std::unique_ptr<GCChain> get_gc_chain(rgw::sal::Object* obj) override;
-      virtual std::unique_ptr<Writer> get_writer(Aio *aio, rgw::sal::Bucket* bucket,
-          RGWObjectCtx& obj_ctx, std::unique_ptr<rgw::sal::Object> _head_obj,
-          const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual RGWLC* get_rgwlc(void) override { return NULL; }
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
       virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) override;
@@ -345,7 +357,22 @@ namespace rgw { namespace sal {
       virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
           const std::string& tenant,
           vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
-
+      virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time mtime) override;
+      virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  const std::string& unique_tag,
+				  uint64_t position,
+				  uint64_t *cur_accounted_size) override;
+      virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
+				  optional_yield y,
+				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_placement_rule *ptail_placement_rule,
+				  uint64_t olh_epoch,
+				  const std::string& unique_tag) override;
 
       virtual void finalize(void) override;
 
