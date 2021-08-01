@@ -38,6 +38,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
+#include "rgw_tracer.h"
 
 namespace ceph {
   class Formatter;
@@ -1646,6 +1647,8 @@ struct req_state : DoutPrefixProvider {
   std::vector<std::string> token_claims;
 
   std::vector<rgw::IAM::Policy> session_policies;
+
+  jspan trace;
 
   req_state(CephContext* _cct, RGWEnv* e, uint64_t id);
   ~req_state();
