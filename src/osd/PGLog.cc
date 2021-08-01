@@ -1095,6 +1095,11 @@ namespace {
           return iter->next();
         });
       }).then([this] {
+        if (info.pgid.is_no_shard()) {
+          // replicated pool pg does not persist this key
+          assert(on_disk_rollback_info_trimmed_to == eversion_t());
+          on_disk_rollback_info_trimmed_to = info.last_update;
+        }
         log = PGLog::IndexedLog(
              info.last_update,
              info.log_tail,
