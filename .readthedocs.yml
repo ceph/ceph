@@ -6,6 +6,8 @@ version: 2
 formats: []
 build:
   image: latest
+  apt_packages:
+    - ditaa
 python:
   version: 3.8
   install:
