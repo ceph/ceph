@@ -109,6 +109,9 @@ extensions = [
 
 ditaa = shutil.which("ditaa")
 if ditaa is not None:
+    # in case we don't have binfmt_misc enabled or jar is not registered
+    ditaa_args = ['-jar', ditaa]
+    ditaa = 'java'
     extensions += ['sphinxcontrib.ditaa']
 else:
     extensions += ['plantweb.directive']
