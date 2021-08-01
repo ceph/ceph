@@ -260,22 +260,13 @@ TEST(cls_rgw_gc, gc_queue_ops3)
   uint64_t max = 2;
   bool expired_only = false, truncated;
   cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
-  ASSERT_EQ(2, list_info1.size());
+  ASSERT_EQ(1, list_info1.size());
 
-  int i = 0;
-  for (auto it : list_info1) {
-    std::cerr << "[          ] list info tag = " << it.tag << std::endl;
-    if (i == 0) {
-      ASSERT_EQ("chain-1", it.tag);
-    }
-    if (i == 1) {
-      ASSERT_EQ("chain-0", it.tag);
-    }
-    i++;
-  }
+  auto it = list_info1.cbegin();
+  ASSERT_EQ("chain-1", it->tag);
 
   //Test remove entries
-  num_entries = 2;
+  num_entries = 1;
   cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
@@ -339,7 +330,7 @@ TEST(cls_rgw_gc, gc_queue_ops4)
   uint64_t max = 2;
   bool expired_only = false, truncated;
   cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
-  ASSERT_EQ(2, list_info1.size());
+  ASSERT_EQ(1, list_info1.size());
 
   int i = 0;
   for (auto it : list_info1) {
@@ -349,7 +340,7 @@ TEST(cls_rgw_gc, gc_queue_ops4)
   }
 
   //Test remove entries
-  num_entries = 2;
+  num_entries = 1;
   cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
