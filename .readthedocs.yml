@@ -7,7 +7,7 @@ formats: []
 build:
   image: latest
 python:
-  version: 3
+  version: 3.8
   install:
     - requirements: admin/doc-requirements.txt
     - requirements: admin/doc-read-the-docs.txt
