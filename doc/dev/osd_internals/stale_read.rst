@@ -2,9 +2,10 @@ Preventing Stale Reads
 ======================
 
 We write synchronously to all replicas before sending an ack to the
-client, which ensures that we do not introduce potential inconsistency
-in the write path.  However, we only read from one replica, and the
-client will use whatever OSDMap is has to identify which OSD to read
+client, which limits the potential for inconsistency
+in the write path.  However, by default we read from just one replica
+(the lead/primary OSD for each PG), and the
+client will use whatever OSDMap it has to identify which OSD to read
 from.  In most cases, this is fine: either the client map is correct,
 or the OSD that we think is the primary for the object knows that it
 is not the primary anymore, and can feed the client an updated map
