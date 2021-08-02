@@ -50,7 +50,7 @@ import logging
 
 from unittest import suite, loader
 
-from teuthology.orchestra.run import Raw, quote, PIPE
+from teuthology.orchestra.run import Raw, PIPE, convert_args_list_to_str
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
@@ -437,7 +437,7 @@ class LocalRemote(object):
                  ' '.join([str(a.value) if isinstance(a, Raw) else a for a in args]))
 
         if shell:
-            subproc = subprocess.Popen(quote(args),
+            subproc = subprocess.Popen(convert_args_list_to_str(args),
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE,
                                        stdin=subprocess.PIPE,
