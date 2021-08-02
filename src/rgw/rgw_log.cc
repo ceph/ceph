@@ -493,6 +493,12 @@ int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state *s,
   if (olog) {
     olog->log(entry);
   }
+
+  int dout_level = s->cct->_conf.get_val<int>("rgw_ops_log_dout_level");
+  if (dout_level >= 0) {
+    ldpp_dout(s, dout_level) << bl << dendl;
+  }
+done:
   if (ret < 0)
     ldpp_dout(s, 0) << "ERROR: failed to log entry" << dendl;
 
