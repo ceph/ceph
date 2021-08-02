@@ -11,13 +11,13 @@
 #include "librbd/ImageCtx.h"
 #include "journal/Journaler.h"
 #include "librbd/journal/TypeTraits.h"
+#include "common/Timer.h"
 
 using librados::IoCtx;
 using journal::Journaler;
 
 class Context;
 class ContextWQ;
-class SafeTimer;
 
 namespace journal {
   class Journaler;

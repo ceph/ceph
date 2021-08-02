@@ -7,6 +7,7 @@
 #include <functional>
 #include <libpmemobj.h>
 #include <list>
+#include "common/Timer.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncOpTracker.h"
@@ -21,7 +22,6 @@
 #include "librbd/cache/pwl/rwl/Builder.h"
 
 class Context;
-class SafeTimer;
 
 namespace librbd {
 
