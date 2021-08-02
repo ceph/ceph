@@ -6666,6 +6666,9 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
   }
 
   r = _open_db_and_around(true);
+  if (r < 0) {
+    return r;
+  }
 
   if (id == BlueFS::BDEV_NEWWAL) {
     string p = path + "/block.wal";
@@ -6743,7 +6746,12 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
   }
 
   int r = _open_db_and_around(true);
-
+  if (r < 0) {
+    return r;
+  }
+  auto close_db = make_scope_guard([&] {
+    _close_db_and_around(true);
+  });
   uint64_t used_space = 0;
   for(auto src_id : devs_source) {
     used_space += bluefs->get_used(src_id);
@@ -6754,8 +6762,7 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
          << " can't migrate, free space at target: " << target_free
 	 << " is less than required space: " << used_space
 	 << dendl;
-    r = -ENOSPC;
-    goto shutdown;
+    return -ENOSPC;
   }
   if (devs_source.count(BlueFS::BDEV_DB)) {
     bluefs_layout.shared_bdev = BlueFS::BDEV_DB;
@@ -6767,7 +6774,7 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
   r = bluefs->device_migrate_to_existing(cct, devs_source, id, bluefs_layout);
   if (r < 0) {
     derr << __func__ << " failed during BlueFS migration, " << cpp_strerror(r) << dendl;
-    goto shutdown;
+    return r;
   }
 
   if (devs_source.count(BlueFS::BDEV_DB)) {
@@ -6778,9 +6785,6 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
     r = unlink(string(path + "/block.wal").c_str());
     ceph_assert(r == 0);
   }
-
-shutdown:
-  _close_db_and_around(true);
   return r;
 }
 
@@ -6789,7 +6793,6 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   const string& dev_path)
 {
   dout(10) << __func__ << " path " << dev_path << " id:" << id << dendl;
-  int r;
   ceph_assert(path_fd < 0);
 
   ceph_assert(id == BlueFS::BDEV_NEWWAL || id == BlueFS::BDEV_NEWDB);
@@ -6799,7 +6802,13 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     return -EIO;
   }
 
-  r = _open_db_and_around(true);
+  int r = _open_db_and_around(true);
+  if (r < 0) {
+    return r;
+  }
+  auto close_db = make_scope_guard([&] {
+    _close_db_and_around(true);
+  });
 
   string link_db;
   string link_wal;
@@ -6814,7 +6823,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     bluefs_layout.dedicated_wal = false;
   }
 
-  size_t target_size;
+  size_t target_size = 0;
   string target_name;
   if (id == BlueFS::BDEV_NEWWAL) {
     target_name = "block.wal";
@@ -6862,7 +6871,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 
   if (r < 0) {
     derr << __func__ << " failed during BlueFS migration, " << cpp_strerror(r) << dendl;
-    goto shutdown;
+    return r;
   }
 
   if (!link_db.empty()) {
@@ -6880,9 +6889,6 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     true);
   ceph_assert(r == 0);
   dout(0) << __func__ << " success" << dendl;
-
-shutdown:
-  _close_db_and_around(true);
 
   return r;
 }
@@ -7042,31 +7048,54 @@ int BlueStore::_mount()
   if (r < 0) {
     return r;
   }
+  auto close_db = make_scope_guard([&] {
+    if (!mounted) {
+      _close_db_and_around(true);
+    }
+  });
 
   r = _upgrade_super();
   if (r < 0) {
-    goto out_db;
+    return r;
   }
 
   r = _open_collections();
-  if (r < 0)
-    goto out_db;
+  if (r < 0) {
+    return r;
+  }
+  auto shutdown_cache = make_scope_guard([&] {
+    if (!mounted) {
+      _shutdown_cache();
+    }
+  });
 
   r = _reload_logger();
-  if (r < 0)
-    goto out_coll;
+  if (r < 0) {
+    return r;
+  }
 
   _kv_start();
+  auto stop_kv = make_scope_guard([&] {
+    if (!mounted) {
+      _kv_stop();
+    }
+  });
 
 #ifdef HAVE_LIBZBD
+  using scope_guard_t = scope_guard<std::function<void()>>;
+  std::optional<scope_guard_t> stop_zoned_cleaner;
   if (bdev->is_smr()) {
     _zoned_cleaner_start();
+    stop_zoned_cleaner = scope_guard_t([this] {
+      _zoned_cleaner_stop();
+    });
   }
 #endif
-  
+
   r = _deferred_replay();
-  if (r < 0)
-    goto out_stop;
+  if (r < 0) {
+    return r;
+  }
 
   mempool_thread.init();
 
@@ -7091,19 +7120,6 @@ int BlueStore::_mount()
 
   mounted = true;
   return 0;
-
- out_stop:
-#ifdef HAVE_LIBZBD
-  if (bdev->is_smr()) {
-    _zoned_cleaner_stop();
-  }
-#endif
-  _kv_stop();
- out_coll:
-  _shutdown_cache();
- out_db:
-  _close_db_and_around(false);
-  return r;
 }
 
 int BlueStore::umount()
@@ -8217,22 +8233,30 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   bool read_only = !(repair || depth == FSCK_DEEP);
 
   int r = _open_db_and_around(read_only);
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
+  auto close_db = make_scope_guard([&] {
+    _close_db_and_around(true);
+  });
 
   if (!read_only) {
     r = _upgrade_super();
     if (r < 0) {
-      goto out_db;
+      return r;
     }
   }
 
   r = _open_collections();
-  if (r < 0)
-    goto out_db;
+  if (r < 0) {
+    return r;
+  }
 
   mempool_thread.init();
-
+  auto stop_mempool = make_scope_guard([&] {
+    mempool_thread.shutdown();
+    _shutdown_cache();
+  });
   // we need finisher and kv_{sync,finalize}_thread *just* for replay
   // enable in repair or deep mode modes only
   if (!read_only) {
@@ -8240,18 +8264,10 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     r = _deferred_replay();
     _kv_stop();
   }
-  if (r < 0)
-    goto out_scan;
-
-  r = _fsck_on_open(depth, repair);
-
-out_scan:
-  mempool_thread.shutdown();
-  _shutdown_cache();
-out_db:
-  _close_db_and_around(false);
-
-  return r;
+  if (r < 0) {
+    return r;
+  }
+  return _fsck_on_open(depth, repair);
 }
 
 int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
@@ -9237,40 +9253,41 @@ int BlueStore::get_devices(set<string> *ls)
     }
     return 0;
   }
-  
+
   // grumble, we haven't started up yet.
-  int r = _open_path();
-  if (r < 0)
-    goto out;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
-  r = _read_fsid(&fsid);
-  if (r < 0)
-    goto out_fsid;
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_fsid;
-  r = _open_bdev(false);
-  if (r < 0)
-    goto out_fsid;
-  r = _minimal_open_bluefs(false);
-  if (r < 0)
-    goto out_bdev;
+  if (int r = _open_path(); r < 0) {
+    return r;
+  }
+  auto close_path = make_scope_guard([&] {
+    _close_path();
+  });
+  if (int r = _open_fsid(false); r < 0) {
+    return r;
+  }
+  auto close_fsid = make_scope_guard([&] {
+    _close_fsid();
+  });
+  if (int r = _read_fsid(&fsid); r < 0) {
+    return r;
+  }
+  if (int r = _lock_fsid(); r < 0) {
+    return r;
+  }
+  if (int r = _open_bdev(false); r < 0) {
+    return r;
+  }
+  auto close_bdev = make_scope_guard([&] {
+    _close_bdev();
+  });
+  if (int r = _minimal_open_bluefs(false); r < 0) {
+    return r;
+  }
   bdev->get_devices(ls);
   if (bluefs) {
     bluefs->get_devices(ls);
   }
-  r = 0;
   _minimal_close_bluefs();
- out_bdev:
-  _close_bdev();
- out_fsid:
-  _close_fsid();
- out_path:
-  _close_path();
- out:
-  return r;
+  return 0;
 }
 
 void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
