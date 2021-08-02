@@ -72,15 +72,18 @@ set(components
 # for collecting dpdk library targets, it will be used when defining dpdk::dpdk
 set(_dpdk_libs)
 # for list of dpdk library archive paths
-set(dpdk_LIBRARIES)
-
+set(dpdk_LIBRARIES "")
 foreach(c ${components})
   set(dpdk_lib dpdk::${c})
   if(TARGET ${dpdk_lib})
     get_target_property(DPDK_rte_${c}_LIBRARY
       ${dpdk_lib} IMPORTED_LOCATION)
   else()
-    find_library(DPDK_rte_${c}_LIBRARY rte_${c}
+    find_library(DPDK_rte_${c}_LIBRARY
+      NAMES
+        # use static library
+        ${CMAKE_STATIC_LIBRARY_PREFIX}rte_${c}${CMAKE_STATIC_LIBRARY_SUFFIX}
+        rte_${c}
       HINTS
         ENV DPDK_DIR
         ${dpdk_LIBRARY_DIRS}
