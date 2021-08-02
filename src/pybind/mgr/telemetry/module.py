@@ -444,7 +444,7 @@ class Module(MgrModule):
                 # I am also putting in a catch for a KeyError since it could
                 # happen where the code is assuming that a key exists in the
                 # schema when it doesn't. In either case, we'll handle that
-                # bt returning an empty dict.
+                # by returning an empty dict.
                 except (json.decoder.JSONDecodeError, KeyError) as e:
                     self.log.debug("Error caught: {}".format(e))
                     return {}
@@ -1014,6 +1014,28 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         Show report of all channels
         '''
         report = self.get_report(channels=channels)
+
+        # Formatting the perf histograms so they are human-readable. This will change the
+        # ranges and values, which are currently in list form, into strings so that
+        # they are displayed horizontally instead of vertically.
+        try:
+            for histogram in report['osd_perf_histograms']['osd']:
+                # Adjust ranges by converting lists into strings
+                for axis in report['osd_perf_histograms']['osd'][histogram]['axes']:
+                    for i in range(0, len(axis['ranges'])):
+                        axis['ranges'][i] = str(axis['ranges'][i])
+
+                # Adjust values also by converting lists into strings
+                for i in range(0, len(report['osd_perf_histograms']['osd'][histogram]['values'])):
+                    report['osd_perf_histograms']['osd'][histogram]['values'][i] = \
+                            str(report['osd_perf_histograms']['osd'][histogram]['values'][i])
+        except KeyError:
+            # If the perf channel is not enabled, there should be a KeyError since
+            # 'osd_perf_histograms' would not be present in the report. In that case,
+            # the show function should pass as usual without trying to format the
+            # histograms.
+            pass
+
         report = json.dumps(report, indent=4, sort_keys=True)
         if self.channel_device:
             report += '''
