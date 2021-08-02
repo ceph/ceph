@@ -70,8 +70,24 @@ function main() {
         return 1
     fi
     FOR_MAKE_CHECK=1 prepare
+    local cxx_compiler=g++
+    local c_compiler=gcc
+    for i in $(seq 14 -1 10); do
+        if type -t clang-$i > /dev/null; then
+            cxx_compiler="clang++-$i"
+            c_compiler="clang-$i"
+            break
+        fi
+    done
     # Init defaults after deps are installed.
-    local cmake_opts=" -DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_CEPHFS_SHELL=ON -DWITH_GRAFANA=ON -DWITH_SPDK=ON -DENABLE_GIT_VERSION=OFF"
+    local cmake_opts
+    cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
+    cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
+    cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
+    cmake_opts+=" -DWITH_FIO=ON"
+    cmake_opts+=" -DWITH_CEPHFS_SHELL=ON"
+    cmake_opts+=" -DWITH_GRAFANA=ON"
+    cmake_opts+=" -DWITH_SPDK=ON"
     if [ $WITH_SEASTAR ]; then
         cmake_opts+=" -DWITH_SEASTAR=ON"
     fi
