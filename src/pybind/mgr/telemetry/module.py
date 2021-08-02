@@ -493,11 +493,6 @@ class Module(MgrModule):
                     self.log.debug("Error caught: {}".format(e))
                     return {}
 
-        # TODO: Improve the JSON formatting of the histograms to make them
-        # more human-readable. This can be done directly in this function with json.dumps(),
-        # but it will be better to locate the exact area where the whole report
-        # is getting formatted, and make some formatting edits there. We want to ensure
-        # that the data is easily retrievable on the server side.
         return result
 
     def get_io_rate(self) -> dict:
