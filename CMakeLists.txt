@@ -206,11 +206,8 @@ endif()
 
 # libcryptsetup is only available on linux
 if(WITH_RBD AND LINUX)
-  find_package(libcryptsetup REQUIRED)
+  find_package(libcryptsetup 2.0.5 REQUIRED)
   set(HAVE_LIBCRYPTSETUP ${LIBCRYPTSETUP_FOUND})
-  if(${LIBCRYPTSETUP_VERSION} VERSION_LESS 2.0.5)
-    set(LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT TRUE)
-  endif()
 endif()
 
 include(CMakeDependentOption)
