@@ -12,3 +12,4 @@ sphinx_rtd_theme == 0.5.2
 Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-openapi
+sphinxcontrib-seqdiag
