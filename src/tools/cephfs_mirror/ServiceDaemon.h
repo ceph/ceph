@@ -5,10 +5,9 @@
 #define CEPHFS_MIRROR_SERVICE_DAEMON_H
 
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include "mds/FSMap.h"
 #include "Types.h"
-
-class SafeTimer;
 
 namespace cephfs {
 namespace mirror {

@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_PLUGIN_API_H
 #define CEPH_LIBRBD_PLUGIN_API_H
 
+#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
 #include "include/int_types.h"
@@ -12,8 +13,6 @@
 #include "librbd/io/ReadResult.h"
 
 namespace ZTracer { struct Trace; }
-
-class SafeTimer;
 
 namespace librbd {
 
