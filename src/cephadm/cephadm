@@ -3613,7 +3613,8 @@ def prepare_mon_addresses(
             ctx.mon_ip = wrap_ipv6(ctx.mon_ip)
         hasport = r.findall(ctx.mon_ip)
         if hasport:
-            port = int(hasport[0])
+            port_str = hasport[0]
+            port = int(port_str)
             if port == 6789:
                 addr_arg = '[v1:%s]' % ctx.mon_ip
             elif port == 3300:
@@ -3622,7 +3623,7 @@ def prepare_mon_addresses(
                 logger.warning('Using msgr2 protocol for unrecognized port %d' %
                                port)
                 addr_arg = '[v2:%s]' % ctx.mon_ip
-            base_ip = ctx.mon_ip[0:-(len(str(port))) - 1]
+            base_ip = ctx.mon_ip[0:-(len(port_str)) - 1]
             check_ip_port(ctx, base_ip, port)
         else:
             base_ip = ctx.mon_ip
@@ -3640,10 +3641,11 @@ def prepare_mon_addresses(
             if not hasport:
                 raise Error('--mon-addrv value %s must include port number' %
                             addr_arg)
-            port = int(hasport[0])
+            port_str = hasport[0]
+            port = int(port_str)
             # strip off v1: or v2: prefix
             addr = re.sub(r'^v\d+:', '', addr)
-            base_ip = addr[0:-(len(str(port))) - 1]
+            base_ip = addr[0:-(len(port_str)) - 1]
             check_ip_port(ctx, base_ip, port)
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
