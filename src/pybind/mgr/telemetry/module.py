@@ -378,7 +378,7 @@ class Module(MgrModule):
             curr_pool_id, curr_pool_name = curr_pool[0], curr_pool[1]
 
             # Initialize a dict that will hold aggregated stats for the current pool
-            compiled_stats_dict: Dict[str, Any] = defaultdict(lambda: defaultdict())
+            compiled_stats_dict: Dict[str, Any] = defaultdict(lambda: defaultdict(int))
 
             # Find out which pgs belong to the current pool and add up
             # their stats
