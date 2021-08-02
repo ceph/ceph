@@ -195,7 +195,8 @@ int radosgw_Main(int argc, const char **argv)
   map<string,string> defaults = {
     { "debug_rgw", "1/5" },
     { "keyring", "$rgw_data/keyring" },
-    { "objecter_inflight_ops", "24576" }
+    { "objecter_inflight_ops", "24576" },
+    { "ms_mon_client_mode", "secure" }
   };
 
   vector<const char*> args;
