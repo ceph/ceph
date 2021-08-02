@@ -1516,6 +1516,10 @@ protected:
 
   bool need_to_check_storage_class = false;
 
+  //object lock
+  RGWObjectRetention *obj_retention;
+  RGWObjectLegalHold *obj_legal_hold;
+
   int init_common();
 
 public:
@@ -1533,6 +1537,13 @@ public:
     last_ofs = 0;
     olh_epoch = 0;
     copy_if_newer = false;
+    obj_retention = nullptr;
+    obj_legal_hold = nullptr;
+  }
+
+  ~RGWCopyObj() override {
+    delete obj_retention;
+    delete obj_legal_hold;
   }
 
   static bool parse_copy_location(const std::string_view& src,
