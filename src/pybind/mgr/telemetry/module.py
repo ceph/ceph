@@ -378,7 +378,7 @@ class Module(MgrModule):
             curr_pool_id, curr_pool_name = curr_pool[0], curr_pool[1]
 
             # Initialize a dict that will hold aggregated stats for the current pool
-            compiled_stats_dict: Dict[str, dict] = defaultdict(lambda: defaultdict(int))
+            compiled_stats_dict: Dict[str, Any] = defaultdict(lambda: defaultdict())
 
             # Find out which pgs belong to the current pool and add up
             # their stats
@@ -435,7 +435,7 @@ class Module(MgrModule):
 
                             # This is the dict that contains information for an individual
                             # axis. It will be appended to the 'axes' list at the end.
-                            axis_dict: Dict[str, dict] = defaultdict(int)
+                            axis_dict: Dict[str, Any] = defaultdict()
 
                             # Collecting information for buckets, min, name, etc.
                             # TODO: In some cases, the user might change the size of
