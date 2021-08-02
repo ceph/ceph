@@ -1039,10 +1039,12 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
-  if (run_sync_thread) {
+  if (run_meta_sync_thread) {
     std::lock_guard l{meta_sync_thread_lock};
     meta_sync_processor_thread->stop();
+  }
 
+  if (run_data_sync_thread) {
     std::lock_guard dl{data_sync_thread_lock};
     for (auto iter : data_sync_processor_threads) {
       RGWDataSyncProcessorThread *thread = iter.second;
@@ -1052,9 +1054,11 @@ void RGWRados::finalize()
       sync_log_trimmer->stop();
     }
   }
-  if (run_sync_thread) {
+  if (run_meta_sync_thread) {
     delete meta_sync_processor_thread;
     meta_sync_processor_thread = NULL;
+  }
+  if (run_data_sync_thread) {
     std::lock_guard dl{data_sync_thread_lock};
     for (auto iter : data_sync_processor_threads) {
       RGWDataSyncProcessorThread *thread = iter.second;
@@ -1242,9 +1246,8 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
 
   /* no point of running sync thread if we don't have a master zone configured
     or there is no rest_master_conn */
-  if (!svc.zone->need_to_sync()) {
-    run_sync_thread = false;
-  }
+  run_meta_sync_thread = run_sync_thread && svc.zone->need_to_meta_sync();
+  run_data_sync_thread = run_sync_thread && svc.zone->need_to_data_sync();
 
   if (svc.zone->is_meta_master()) {
     auto md_log = svc.mdlog->get_log(current_period.get_id());
@@ -1260,7 +1263,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  if (run_sync_thread) {
+  if (run_meta_sync_thread) {
     for (const auto &pt: zonegroup.placement_targets) {
       if (zone_params.placement_pools.find(pt.second.name)
           == zone_params.placement_pools.end()){
@@ -1277,7 +1280,9 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
       return ret;
     }
     meta_sync_processor_thread->start();
+  }
 
+  if (run_data_sync_thread) {
     // configure the bucket trim manager
     rgw::BucketTrimConfig config;
     rgw::configure_bucket_trim(cct, config);

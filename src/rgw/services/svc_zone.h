@@ -150,7 +150,8 @@ public:
 
   bool is_meta_master() const;
 
-  bool need_to_sync() const;
+  bool need_to_meta_sync() const;
+  bool need_to_data_sync() const;
   bool need_to_log_data() const;
   bool need_to_log_metadata() const;
   bool can_reshard() const;

@@ -1074,11 +1074,16 @@ bool RGWSI_Zone::find_data_provider(const rgw_zone_id& id, RGWDataProvider **dp)
   return true;
 }
 
-bool RGWSI_Zone::need_to_sync() const
+bool RGWSI_Zone::need_to_meta_sync() const
 {
   return !(zonegroup->master_zone.empty() ||
 	   !rest_master_conn ||
 	   current_period->get_id().empty());
+}
+
+bool RGWSI_Zone::need_to_data_sync() const
+{
+  return !data_sync_source_zones.empty();
 }
 
 bool RGWSI_Zone::need_to_log_data() const

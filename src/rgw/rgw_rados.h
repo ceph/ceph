@@ -371,6 +371,8 @@ class RGWRados
   bool use_lc_thread;
   bool quota_threads;
   bool run_sync_thread;
+  bool run_meta_sync_thread{false};
+  bool run_data_sync_thread{false};
   bool run_reshard_thread;
 
   RGWMetaNotifier *meta_notifier;
