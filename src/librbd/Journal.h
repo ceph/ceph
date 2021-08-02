@@ -10,6 +10,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
+#include "common/Timer.h"
 #include "common/RefCountedObj.h"
 #include "journal/Future.h"
 #include "journal/JournalMetadataListener.h"
@@ -27,7 +28,6 @@
 #include <unordered_map>
 
 class ContextWQ;
-class SafeTimer;
 namespace journal { class Journaler; }
 
 namespace librbd {

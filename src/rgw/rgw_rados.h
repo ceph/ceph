@@ -11,6 +11,7 @@
 #include "include/Context.h"
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
+#include "common/Timer.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -38,7 +39,6 @@
 struct D3nDataCache;
 
 class RGWWatcher;
-class SafeTimer;
 class ACLOwner;
 class RGWGC;
 class RGWMetaNotifier;

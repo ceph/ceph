@@ -10,14 +10,13 @@
 #include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
+#include "common/Timer.h"
 #include "journal/FutureImpl.h"
 #include <list>
 #include <map>
 #include <set>
 #include <boost/noncopyable.hpp>
 #include "include/ceph_assert.h"
-
-class SafeTimer;
 
 namespace journal {
 
