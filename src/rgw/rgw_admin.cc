@@ -3912,7 +3912,7 @@ int main(int argc, const char **argv)
   zone_name = g_conf()->rgw_zone;
   zonegroup_name = g_conf()->rgw_zonegroup;
 
-  RGWStreamFlusher f(formatter.get(), cout);
+  RGWStreamFlusher stream_flusher(formatter.get(), cout);
 
   RGWUserAdminOpState user_op(store);
   if (!user_email.empty()) {
@@ -6013,7 +6013,7 @@ int main(int argc, const char **argv)
         return -ret;
       }
     } else {
-      int ret = RGWBucketAdminOp::get_policy(store, bucket_op, f, dpp());
+      int ret = RGWBucketAdminOp::get_policy(store, bucket_op, stream_flusher, dpp());
       if (ret < 0) {
         cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6032,7 +6032,7 @@ int main(int argc, const char **argv)
     if (!rgw::sal::User::empty(user)) {
       user_ids.push_back(user->get_id().id);
       ret =
-	RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, f,
+	RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, stream_flusher,
 				      null_yield, dpp(), warnings_only);
     } else {
       /* list users in groups of max-keys, then perform user-bucket
@@ -6054,7 +6054,7 @@ int main(int argc, const char **argv)
 	} else {
 	  /* ok, do the limit checks for this group */
 	  ret =
-	    RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, f,
+	    RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, stream_flusher,
 					  null_yield, dpp(), warnings_only);
 	  if (ret < 0)
 	    break;
@@ -6074,7 +6074,7 @@ int main(int argc, const char **argv)
           return -ENOENT;
         }
       }
-      RGWBucketAdminOp::info(store, bucket_op, f, null_yield, dpp());
+      RGWBucketAdminOp::info(store, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
@@ -6169,7 +6169,7 @@ int main(int argc, const char **argv)
     }
     bucket_op.set_fetch_stats(true);
 
-    int r = RGWBucketAdminOp::info(store, bucket_op, f, null_yield, dpp());
+    int r = RGWBucketAdminOp::info(store, bucket_op, stream_flusher, null_yield, dpp());
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
@@ -6419,7 +6419,7 @@ next:
     }
     ret = RGWUsage::show(dpp(), store, user.get(), bucket.get(), start_epoch,
 			 end_epoch, show_log_entries, show_log_sum, &categories,
-			 f);
+			 stream_flusher);
     if (ret < 0) {
       cerr << "ERROR: failed to show usage" << std::endl;
       return 1;
@@ -6789,7 +6789,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE_STALE_LIST) {
-    ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, f, dpp(), true);
+    ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, stream_flusher, dpp(), true);
     if (ret < 0) {
       cerr << "ERROR: listing returned " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6797,7 +6797,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE_STALE_RM) {
-    ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, f, dpp(), false);
+    ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, stream_flusher, dpp(), false);
     if (ret < 0) {
       cerr << "ERROR: removing returned " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7178,7 +7178,7 @@ next:
       }
       do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
     } else {
-      RGWBucketAdminOp::check_index(store, bucket_op, f, null_yield, dpp());
+      RGWBucketAdminOp::check_index(store, bucket_op, stream_flusher, null_yield, dpp());
     }
   }
 
@@ -7319,7 +7319,7 @@ next:
 
 
   if (opt_cmd == OPT::LC_RESHARD_FIX) {
-    ret = RGWBucketAdminOp::fix_lc_shards(store, bucket_op, f, dpp());
+    ret = RGWBucketAdminOp::fix_lc_shards(store, bucket_op, stream_flusher, dpp());
     if (ret < 0) {
       cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
     }
@@ -9130,7 +9130,7 @@ next:
      return EINVAL;
    }
 
-   ret = RGWBucketAdminOp::list_stale_instances(store, bucket_op, f, dpp());
+   ret = RGWBucketAdminOp::list_stale_instances(store, bucket_op, stream_flusher, dpp());
    if (ret < 0) {
      cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
    }
@@ -9142,7 +9142,7 @@ next:
      return EINVAL;
    }
 
-   ret = RGWBucketAdminOp::clear_stale_instances(store, bucket_op,f, dpp());
+   ret = RGWBucketAdminOp::clear_stale_instances(store, bucket_op, stream_flusher, dpp());
    if (ret < 0) {
      cerr << "ERROR: deleting stale instances" << cpp_strerror(-ret) << std::endl;
    }
