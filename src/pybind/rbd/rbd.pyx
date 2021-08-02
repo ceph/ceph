@@ -2270,7 +2270,7 @@ cdef class MirrorImageStatusIterator(object):
                         local_status = site_status
                     else:
                         site_status['mirror_uuid'] = mirror_uuid
-                        site_statuses += site_status
+                        site_statuses.append(site_status)
 
                 status = {
                     'name'        : decode_cstr(self.images[i].name),
@@ -2278,6 +2278,8 @@ cdef class MirrorImageStatusIterator(object):
                     'info'        : {
                         'global_id' : decode_cstr(self.images[i].info.global_id),
                         'state'     : self.images[i].info.state,
+                        # primary isn't added here because it is unknown (always
+                        # false, see XXX in Mirror::image_global_status_list())
                         },
                     'remote_statuses': site_statuses,
                     }
@@ -4642,8 +4644,8 @@ written." % (self.name, ret, length))
                 if mirror_uuid == '':
                     local_status = site_status
                 else:
-                    site_statuses['mirror_uuid'] = mirror_uuid
-                    site_statuses += site_status
+                    site_status['mirror_uuid'] = mirror_uuid
+                    site_statuses.append(site_status)
             status = {
                 'name': decode_cstr(c_status.name),
                 'id'  : self.id(),
