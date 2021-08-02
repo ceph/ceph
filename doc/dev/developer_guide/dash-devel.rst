@@ -430,7 +430,14 @@ run-cephadm-e2e-tests.sh
 Orchestrator backend behave correctly.
 
 Prerequisites: you need to install `KCLI
-<https://kcli.readthedocs.io/en/latest/>`_ in your local machine.
+<https://kcli.readthedocs.io/en/latest/>`_ and Node.js in your local machine.
+
+Configure KCLI plan requirements::
+
+  $ sudo chown -R $(id -un) /var/lib/libvirt/images
+  $ mkdir -p /var/lib/libvirt/images/ceph-dashboard dashboard
+  $ kcli create pool -p /var/lib/libvirt/images/ceph-dashboard dashboard
+  $ kcli create network -c 192.168.100.0/24 dashboard
 
 Note:
   This script is aimed to be run as jenkins job so the cleanup is triggered only in a jenkins
@@ -439,9 +446,16 @@ Note:
 Start E2E tests by running::
 
   $ cd <your/ceph/repo/dir>
-  $ sudo chown -R $(id -un) src/pybind/mgr/dashboard/frontend/dist src/pybind/mgr/dashboard/frontend/node_modules
+  $ sudo chown -R $(id -un) src/pybind/mgr/dashboard/frontend/{dist,node_modules,src/environments}
   $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
   $ kcli delete plan -y ceph  # After tests finish.
+
+You can also start a cluster in development mode and later run E2E tests by running::
+
+  $ ./src/pybind/mgr/dashboard/ci/cephadm/start-cluster.sh --dev-mode
+  $ # Work on your feature, bug fix, ...
+  $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
+  $ # Remember to kill the npm build watch process i.e.: pkill -f "ng build"
 
 Other running options
 .....................
