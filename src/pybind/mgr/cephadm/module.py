@@ -1659,7 +1659,7 @@ Then run the following:
 
         self._set_maintenance_healthcheck()
 
-        return f"Ceph cluster {self._cluster_fsid} on {hostname} moved to maintenance"
+        return f'Daemons for Ceph cluster {self._cluster_fsid} stopped on host {hostname}. Host {hostname} moved to maintenance mode'
 
     @handle_orch_error
     @host_exists()
