@@ -44,11 +44,11 @@
 
 #ifndef _WIN32
 #define LIBRADOS_C_API_BASE(fn)               \
-  asm(".symver _" #fn "_base, " #fn "@")
+  extern __typeof (_##fn##_base) _##fn##_base __attribute__((__symver__ (#fn "@")))
 #define LIBRADOS_C_API_BASE_DEFAULT(fn)       \
-  asm(".symver _" #fn ", " #fn "@@")
+  extern __typeof (_##fn) _##fn __attribute__((__symver__ (#fn "@@")))
 #define LIBRADOS_C_API_DEFAULT(fn, ver)       \
-  asm(".symver _" #fn ", " #fn "@@LIBRADOS_" #ver)
+  extern __typeof (_##fn) _##fn __attribute__((__symver__ (#fn "@@LIBRADOS_" #ver)))
 
 #define LIBRADOS_C_API_BASE_F(fn) _ ## fn ## _base
 #define LIBRADOS_C_API_DEFAULT_F(fn) _ ## fn
