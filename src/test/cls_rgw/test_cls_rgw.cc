@@ -555,7 +555,7 @@ TEST_F(cls_rgw, bi_list)
 {
   string bucket_oid = str_int("bucket", 5);
 
- CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
+  CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);

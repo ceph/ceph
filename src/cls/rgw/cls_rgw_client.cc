@@ -348,13 +348,16 @@ void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, rgw_cls_bi_entry
   op.exec(RGW_CLASS, RGW_BI_PUT, in);
 }
 
-int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
-                   const string& name, const string& marker, uint32_t max,
-                   list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+/* nb: any entries passed in are replaced with the results of the cls
+ * call, so caller does not need to clear entries between calls
+ */
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+		    const std::string& name_filter, const std::string& marker, uint32_t max,
+		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated)
 {
   bufferlist in, out;
   rgw_cls_bi_list_op call;
-  call.name = name;
+  call.name_filter = name_filter;
   call.marker = marker;
   call.max = max;
   encode(call, in);
