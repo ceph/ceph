@@ -31,6 +31,15 @@ Alternative usage:
 Following are few important notes that might save some investigation around
 vstart_runner.py -
 
+* If using the FUSE client, ensure that the fuse package is installed and
+  enabled on the system and that "user_allow_other" is added to /etc/fuse.conf.
+
+* If using the kernel client, the user must have the ability to run commands
+  with passwordless sudo access.
+
+* A failure on the kernel client may crash the host, so it's recommended to
+  use this functionality within a virtual machine.
+
 * "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments are
   overridden by vstart_runner.py. Former two usually have no applicability
   for test runs on developer's machines and see note point on "omit_sudo"
