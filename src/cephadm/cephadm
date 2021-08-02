@@ -1426,7 +1426,8 @@ def call(ctx: CephadmContext,
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE)
+            stderr=asyncio.subprocess.PIPE,
+            env=os.environ.copy())
         assert process.stdout
         assert process.stderr
         try:
@@ -1475,7 +1476,7 @@ def call_timeout(ctx, command, timeout):
         raise TimeoutExpired(msg)
 
     try:
-        return subprocess.call(command, timeout=timeout)
+        return subprocess.call(command, timeout=timeout, env=os.environ.copy())
     except subprocess.TimeoutExpired:
         raise_timeout(command, timeout)
 
@@ -4815,7 +4816,7 @@ def command_logs(ctx):
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
     logger.debug('Running command: %s' % ' '.join(cmd))
-    subprocess.call(cmd)  # type: ignore
+    subprocess.call(cmd, env=os.environ.copy())  # type: ignore
 
 ##################################
 
