@@ -165,7 +165,7 @@ Mirroring Status
 
 CephFS mirroring module provides `mirror daemon status` interface to check mirror daemon status::
 
-  $ ceph fs snapshot mirror daemon status <fs_name>
+  $ ceph fs snapshot mirror daemon status
   [
     {
       "daemon_id": 284167,
