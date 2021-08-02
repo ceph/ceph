@@ -2,67 +2,23 @@
 
 set -ex
 
-cleanup() {
-    if [[ -n "$JENKINS_HOME" ]]; then
-        printf "\n\nStarting cleanup...\n\n"
-        kcli delete plan -y ceph || true
-        sudo podman container prune -f
-        printf "\n\nCleanup completed.\n\n"
-    fi
-}
-
-on_error() {
-    if [ "$1" != "0" ]; then
-        printf "\n\nERROR $1 thrown on line $2\n\n"
-        printf "\n\nCollecting info...\n\n"
-        for vm_id in 0 1 2
-        do
-            local vm="ceph-node-0${vm_id}"
-            printf "\n\nDisplaying journalctl from VM ${vm}:\n\n"
-            kcli ssh -u root -- ${vm} 'journalctl --no-tail --no-pager -t cloud-init' || true
-            printf "\n\nEnd of journalctl from VM ${vm}\n\n"
-            printf "\n\nDisplaying podman logs:\n\n"
-            kcli ssh -u root -- ${vm} 'podman logs --names --since 30s $(podman ps -aq)' || true
-        done
-        printf "\n\nTEST FAILED.\n\n"
-    fi
-}
-
-trap 'on_error $? $LINENO' ERR
-trap 'cleanup $? $LINENO' EXIT
-
-sed -i '/ceph-node-/d' $HOME/.ssh/known_hosts
-
-: ${CEPH_DEV_FOLDER:=${PWD}}
-
-# Required to start dashboard.
-cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
-NG_CLI_ANALYTICS=false npm ci
-npm run build
-
-cd ${CEPH_DEV_FOLDER}
-kcli delete plan -y ceph || true
-kcli create plan -f ./src/pybind/mgr/dashboard/ci/cephadm/ceph_cluster.yml -P ceph_dev_folder=${CEPH_DEV_FOLDER} ceph
-
-while [[ -z $(kcli ssh -u root -- ceph-node-00 'journalctl --no-tail --no-pager -t cloud-init' | grep "Dashboard is now available") ]]; do
-    sleep 30
-    kcli list vm
-    # Uncomment for debugging purposes.
-    #kcli ssh -u root -- ceph-node-00 'podman ps -a'
-    #kcli ssh -u root -- ceph-node-00 'podman logs --names --since 30s $(podman ps -aq)'
-    kcli ssh -u root -- ceph-node-00 'journalctl -n 100 --no-pager -t cloud-init'
-done
-
-cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
-npx cypress info
-
 : ${CYPRESS_BASE_URL:=''}
 : ${CYPRESS_LOGIN_USER:='admin'}
 : ${CYPRESS_LOGIN_PWD:='password'}
 : ${CYPRESS_ARGS:=''}
+: ${DASHBOARD_PORT:='8443'}
+
+get_vm_ip () {
+    local ip=$(kcli info vm "$1" -f ip -v | grep -Eo '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
+    echo -n $ip
+}
 
 if [[ -z "${CYPRESS_BASE_URL}" ]]; then
-    CYPRESS_BASE_URL="https://$(kcli info vm ceph-node-00 -f ip -v | sed -e 's/[^0-9.]//'):8443"
+    CEPH_NODE_00_IP="$(get_vm_ip ceph-node-00)"
+    if [[ -z "${CEPH_NODE_00_IP}" ]]; then
+        . "$(dirname $0)"/start-cluster.sh
+    fi
+    CYPRESS_BASE_URL="https://$(get_vm_ip ceph-node-00):${DASHBOARD_PORT}"
 fi
 
 export CYPRESS_BASE_URL CYPRESS_LOGIN_USER CYPRESS_LOGIN_PWD
@@ -77,5 +33,9 @@ cypress_run () {
     fi
     npx cypress run ${CYPRESS_ARGS} --browser chrome --headless --config "$override_config"
 }
+
+: ${CEPH_DEV_FOLDER:=${PWD}}
+
+cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
 
 cypress_run "orchestrator/workflow/*-spec.ts"

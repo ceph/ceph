@@ -1,7 +1,7 @@
 parameters:
  nodes: 3
- pool: default
- network: default
+ pool: ceph-dashboard
+ network: ceph-dashboard
  domain: cephlab.com
  prefix: ceph
  numcpus: 1
@@ -26,15 +26,14 @@ parameters:
   - {{ network }}
  disks: {{ disks }}
  pool: {{ pool }}
- {% if ceph_dev_folder is defined %}
  sharedfolders: [{{ ceph_dev_folder }}]
- {% endif %}
+ files:
+  - bootstrap-cluster.sh
  cmds:
  - dnf -y install python3 chrony lvm2 podman
  - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
  - setenforce 0
  {% if number == 0 %}
- scripts:
-  - bootstrap-cluster.sh
+ - bash /root/bootstrap-cluster.sh
  {% endif %}
 {% endfor %}
