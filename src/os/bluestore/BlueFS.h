@@ -361,12 +361,27 @@ private:
   // used to trigger zeros into read (debug / verify)
   std::atomic<uint64_t> inject_read_zeros{0};
 
+  // static logs
+  uint64_t effective_slog = 0;
+  bluefs_fnode_t logA;
+  bluefs_fnode_t logB;
+
+  inline const bluefs_fnode_t& get_slog(uint64_t s) const {
+    return s & 1 ? logB : logA;
+  }
+  inline const bluefs_fnode_t& get_slog() const {
+    return get_slog(effective_slog);
+  }
+
   void _init_logger();
   void _shutdown_logger();
   void _update_logger_stats();
 
   void _init_alloc();
   void _stop_alloc();
+
+  void _alloc_init_rm_free(const bluefs_extent_t& e);
+  void _alloc_init_rm_free(const bluefs_fnode_t& fnode);
 
   void _pad_bl(ceph::buffer::list& bl);  ///< pad ceph::buffer::list to block size w/ zeros
 
@@ -384,12 +399,13 @@ private:
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
   int _allocate_without_fallback(uint8_t id, uint64_t len,
+				 uint64_t want_alloc_size,
 				 PExtentVector* extents);
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log(FileWriter *h);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
-  int _flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l);
+  int _flush_and_maybe_compact(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l);
   int _flush(FileWriter *h, bool force, bool *flushed = nullptr);
   int _fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l);
 
@@ -412,6 +428,7 @@ private:
     RENAME_DB2SLOW = 8,
   };
   void _compact_log_dump_metadata(bluefs_transaction_t *t,
+				  uint64_t starting_log_seq,
 				  int flags);
   void _compact_log_sync();
   void _compact_log_async(std::unique_lock<ceph::mutex>& l);
@@ -448,6 +465,7 @@ private:
 
   int _open_super();
   int _write_super(int dev);
+
   int _check_new_allocations(const bluefs_fnode_t& fnode,
     size_t dev_count,
     boost::dynamic_bitset<uint64_t>* used_blocks);
@@ -467,6 +485,30 @@ private:
   unsigned get_super_length() {
     return 4096;
   }
+
+  int _slog_init(
+    char id,
+    int log_dev,
+    void* vselector_hint,
+    bluefs_fnode_t& log_fnode,
+    bluefs_extent_t& log_stamp,
+    bluefs_extent_t& log_alloc);
+  int _slog_open();
+  int _slog_stamp_read(char id,
+    const bluefs_extent_t& ext_stamp,
+    const bluefs_extent_t& ext_alloc,
+    bluefs_static_log_stamp_t* res_stamp,
+    bluefs_fnode_t* res_fnode);
+
+  int _slog_commit(uint64_t first_op_seq);
+  int _slog_flush_and_sync(std::unique_lock<ceph::mutex>& l,
+    uint64_t want_seq = 0);
+
+  bool _slog_should_compact(uint64_t to_add);
+  void _slog_rewrite_with_layout(
+    int super_dev,
+    int flags,
+    std::optional<bluefs_layout_t> layout);
 
 public:
   BlueFS(CephContext* cct);
@@ -573,7 +615,7 @@ public:
 
   void flush(FileWriter *h, bool force = false) {
     std::unique_lock l(lock);
-    int r = _flush(h, force, l);
+    int r = _flush_and_maybe_compact(h, force, l);
     ceph_assert(r == 0);
   }
 

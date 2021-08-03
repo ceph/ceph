@@ -52,6 +52,13 @@ struct bluefs_fnode_t {
   bluefs_fnode_t() : ino(0), size(0), __unused__(0),
     allocated(0), newly_allocated(0) {}
 
+  void clear() {
+    ino = 0;
+    size = 0;
+    mtime = 0;
+    __unused__ = 0;
+    clear_extents();
+  }
   uint64_t get_allocated() const {
     return allocated;
   }
@@ -180,8 +187,8 @@ struct bluefs_fnode_t {
     newly_allocated = allocated = 0;
   }
 
-  mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
-    uint64_t off, uint64_t *x_off);
+  mempool::bluefs::vector<bluefs_extent_t>::const_iterator seek(
+    uint64_t off, uint64_t *x_off) const;
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bluefs_fnode_t*>& ls);
@@ -212,6 +219,11 @@ struct bluefs_layout_t {
 };
 WRITE_CLASS_ENCODER(bluefs_layout_t)
 
+enum {
+  BLUEFS_LOG_FMT_ORIGINAL = 0,
+  BLUEFS_LOG_FMT_STATIC = 1,
+};
+
 struct bluefs_super_t {
   uuid_d uuid;      ///< unique to this bluefs instance
   uuid_d osd_uuid;  ///< matches the osd that owns us
@@ -221,6 +233,13 @@ struct bluefs_super_t {
   bluefs_fnode_t log_fnode;
 
   std::optional<bluefs_layout_t> memorized_layout;
+
+  uint32_t log_format = BLUEFS_LOG_FMT_ORIGINAL;
+  uint64_t log_size = 0;
+  bluefs_extent_t stampLogA;
+  bluefs_extent_t stampLogB;
+  bluefs_extent_t allocLogA;
+  bluefs_extent_t allocLogB;
 
   bluefs_super_t()
     : version(0),
@@ -335,4 +354,20 @@ struct bluefs_transaction_t {
 WRITE_CLASS_ENCODER(bluefs_transaction_t)
 
 std::ostream& operator<<(std::ostream& out, const bluefs_transaction_t& t);
+
+struct bluefs_static_log_stamp_t {
+  uuid_d uuid;      ///< unique to this bluefs instance
+  uint64_t slog_seq = 0;      ///< static log instance
+  uint64_t first_op_seq = 0;  ///< seq no for the first op in the log
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(
+    std::list<bluefs_static_log_stamp_t*>& ls);
+};
+WRITE_CLASS_ENCODER(bluefs_static_log_stamp_t)
+
+std::ostream& operator<<(std::ostream&, const bluefs_static_log_stamp_t& s);
+
 #endif

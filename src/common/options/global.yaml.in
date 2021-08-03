@@ -3894,6 +3894,21 @@ options:
   long_desc: The number of times to retry on getting the block device lock. Programs
     such as systemd-udevd may compete with Ceph for this lock. 0 means 'unlimited'.
   default: 3
+- name: bluefs_mode
+  type: str
+  level: dev
+  default: static_log
+  enum_values:
+  - original
+  - static_log
+  - static_log
+  with_legacy: true
+- name: bluefs_static_log_size
+  type: size
+  level: advanced
+  desc: Bluefs static log preallocated size
+  default: 16_M
+  with_legacy: true
 - name: bluefs_alloc_size
   type: size
   level: advanced

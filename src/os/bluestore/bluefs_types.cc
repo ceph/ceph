@@ -67,19 +67,26 @@ void bluefs_layout_t::dump(Formatter *f) const
 
 void bluefs_super_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   encode(uuid, bl);
   encode(osd_uuid, bl);
   encode(version, bl);
   encode(block_size, bl);
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
+
+  encode(log_format, bl);
+  encode(log_size, bl);
+  encode(stampLogA, bl);
+  encode(stampLogB, bl);
+  encode(allocLogA, bl);
+  encode(allocLogB, bl);
   ENCODE_FINISH(bl);
 }
 
 void bluefs_super_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(2, p);
+  DECODE_START(3, p);
   decode(uuid, p);
   decode(osd_uuid, p);
   decode(version, p);
@@ -87,6 +94,21 @@ void bluefs_super_t::decode(bufferlist::const_iterator& p)
   decode(log_fnode, p);
   if (struct_v >= 2) {
     decode(memorized_layout, p);
+  }
+  if (struct_v >= 3) {
+    decode(log_format, p);
+    decode(log_size, p);
+    decode(stampLogA, p);
+    decode(stampLogB, p);
+    decode(allocLogA, p);
+    decode(allocLogB, p);
+  } else {
+    log_format = BLUEFS_LOG_FMT_ORIGINAL;
+    log_size = 0;
+    stampLogA = bluefs_extent_t();
+    stampLogB = bluefs_extent_t();
+    allocLogA = bluefs_extent_t();
+    allocLogB = bluefs_extent_t();
   }
   DECODE_FINISH(p);
 }
@@ -98,6 +120,15 @@ void bluefs_super_t::dump(Formatter *f) const
   f->dump_unsigned("version", version);
   f->dump_unsigned("block_size", block_size);
   f->dump_object("log_fnode", log_fnode);
+
+  f->dump_unsigned("log_format", log_format);
+  if (log_format == BLUEFS_LOG_FMT_ORIGINAL) {
+    f->dump_unsigned("log_size", log_size);
+    f->dump_object("stampLogA", stampLogA);
+    f->dump_object("stampLogB", stampLogB);
+    f->dump_object("allocLogA", allocLogA);
+    f->dump_object("allocLogB", allocLogB);
+  }
 }
 
 void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
@@ -113,15 +144,20 @@ ostream& operator<<(ostream& out, const bluefs_super_t& s)
   return out << "super(uuid " << s.uuid
 	     << " osd " << s.osd_uuid
 	     << " v " << s.version
-	     << " block_size 0x" << std::hex << s.block_size
-	     << " log_fnode 0x" << s.log_fnode
-	     << std::dec << ")";
+	     << " block_size 0x" << std::hex << s.block_size << std::dec
+	     << " log_fnode " << s.log_fnode
+	     << " log_format " << s.log_format
+	     << " stampLogA " << s.stampLogA
+	     << " stampLogB " << s.stampLogB
+	     << " allocLogA " << s.allocLogA
+	     << " allocLogB " << s.allocLogB
+	     << ")";
 }
 
 // bluefs_fnode_t
 
-mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
-  uint64_t offset, uint64_t *x_off)
+mempool::bluefs::vector<bluefs_extent_t>::const_iterator bluefs_fnode_t::seek(
+  uint64_t offset, uint64_t *x_off) const
 {
   auto p = extents.begin();
 
@@ -244,5 +280,48 @@ ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
   return out << "txn(seq " << t.seq
 	     << " len 0x" << std::hex << t.op_bl.length()
 	     << " crc 0x" << t.op_bl.crc32c(-1)
+	     << std::dec << ")";
+}
+
+// bluefs_static_log_stamp_t
+
+void bluefs_static_log_stamp_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(uuid, bl);
+  encode(slog_seq, bl);
+  encode(first_op_seq, bl);
+  ENCODE_FINISH(bl);
+}
+
+void bluefs_static_log_stamp_t::decode(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(uuid, p);
+  decode(slog_seq, p);
+  decode(first_op_seq, p);
+  DECODE_FINISH(p);
+}
+
+void bluefs_static_log_stamp_t::dump(Formatter* f) const
+{
+  f->dump_stream("uuid") << uuid;
+  f->dump_stream("slog_seq") << slog_seq;
+  f->dump_stream("first_op_seq") << first_op_seq;
+}
+
+void bluefs_static_log_stamp_t::generate_test_instances(list<bluefs_static_log_stamp_t*>& ls)
+{
+  ls.push_back(new bluefs_static_log_stamp_t);
+  ls.push_back(new bluefs_static_log_stamp_t);
+  ls.back()->slog_seq = 1;
+  ls.back()->first_op_seq = 2;
+}
+
+ostream& operator<<(ostream& out, const bluefs_static_log_stamp_t& h)
+{
+  return out << "log(uuid " << h.uuid
+	     << " slog_seq " << h.slog_seq
+	     << " first_op_seq " << h.first_op_seq
 	     << std::dec << ")";
 }
