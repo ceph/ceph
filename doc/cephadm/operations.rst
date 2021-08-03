@@ -43,17 +43,17 @@ monitor hosts as well as to the monitor daemons' stderr.
 Ceph daemon logs
 ================
 
-Logging to stdout
------------------
+Logging to journald
+-------------------
 
-Ceph daemons traditionally write logs to ``/var/log/ceph``. Ceph
-daemons log to stderr by default and Ceph logs are captured by the
-container runtime environment. By default, most systems send these
-logs to journald, which means that they are accessible via
-``journalctl``.
+Ceph daemons traditionally write logs to ``/var/log/ceph``. Ceph daemons log to
+journald by default and Ceph logs are captured by the container runtime
+environment. They are accessible via ``journalctl``.
 
-Example of logging to stdout 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. note:: Prior to Quincy, ceph daemons logged to stderr.
+
+Example of logging to journald
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For example, to view the logs for the daemon ``mon.foo`` for a cluster
 with ID ``5c5a50ae-272a-455d-99e9-32c6a013e694``, the command would be
@@ -69,11 +69,11 @@ Logging to files
 ----------------
 
 You can also configure Ceph daemons to log to files instead of to
-stderr if you prefer logs to appear in files (as they did in earlier,
+journald if you prefer logs to appear in files (as they did in earlier,
 pre-cephadm, pre-Octopus versions of Ceph).  When Ceph logs to files,
 the logs appear in ``/var/log/ceph/<cluster-fsid>``. If you choose to
-configure Ceph to log to files instead of to stderr, remember to
-configure Ceph so that it will not log to stderr (the commands for
+configure Ceph to log to files instead of to journald, remember to
+configure Ceph so that it will not log to journald (the commands for
 this are covered below).
 
 Enabling logging to files
@@ -86,10 +86,10 @@ To enable logging to files, run the following commands:
   ceph config set global log_to_file true
   ceph config set global mon_cluster_log_to_file true
 
-Disabling logging to stderr
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Disabling logging to journald
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you choose to log to files, we recommend disabling logging to stderr or else
+If you choose to log to files, we recommend disabling logging to journald or else
 everything will be logged twice. Run the following commands to disable logging
 to stderr:
 
@@ -97,6 +97,11 @@ to stderr:
 
   ceph config set global log_to_stderr false
   ceph config set global mon_cluster_log_to_stderr false
+  ceph config set global log_to_journald false
+  ceph config set global mon_cluster_log_to_journald false
+
+.. note:: You can change the default by passing --log-to-file during
+   bootstrapping a new cluster.
 
 Modifying the log retention schedule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
