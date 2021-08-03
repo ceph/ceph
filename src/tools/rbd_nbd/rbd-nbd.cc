@@ -159,6 +159,7 @@ static void usage()
             << "  --quiesce                     Use quiesce callbacks\n"
             << "  --quiesce-hook <path>         Specify quiesce hook path\n"
             << "                                (default: " << Config().quiesce_hook << ")\n"
+            << "  --quiesce-onsignal            Run quiesce hook on signal/detach\n"
             << "  --read-only                   Map read-only\n"
             << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
             << "                                (default: " << Config().reattach_timeout << ")\n"
@@ -174,6 +175,12 @@ static void usage()
 static int nbd = -1;
 static int nbd_index = -1;
 static EventSocket terminate_event_sock;
+
+static bool signal_ctx = false;
+static bool quiesce_onsignal = false;
+
+static ceph::mutex g_lock = ceph::make_mutex("NBDServer::GlobalLocker");
+static ceph::condition_variable g_cond;
 
 #define RBD_NBD_BLKSIZE 512UL
 
@@ -207,6 +214,7 @@ public:
     , reader_thread(*this, &NBDServer::reader_entry)
     , writer_thread(*this, &NBDServer::writer_entry)
     , quiesce_thread(*this, &NBDServer::quiesce_entry)
+    , quiesce_onsignal_thread(*this, &NBDServer::quiesce_onsignal_entry)
   {
     std::vector<librbd::config_option_t> options;
     image.config_list(&options);
@@ -222,6 +230,15 @@ public:
 
   Config *get_cfg() const {
     return cfg;
+  }
+
+  void unquiesce()
+  {
+    dout(20) << __func__ << dendl;
+
+    run_quiesce_hook(cfg->quiesce_hook, cfg->devpath, "unquiesce");
+
+    dout(20) << __func__ << ": done  with unquiesce" << dendl;
   }
 
 private:
@@ -456,6 +473,11 @@ signal:
     std::scoped_lock disconnect_l{disconnect_lock};
     disconnect_cond.notify_all();
 
+    if (quiesce_onsignal && !signal_ctx) {
+      std::scoped_lock g_l{g_lock};
+      g_cond.notify_all();
+    }
+
     dout(20) << __func__ << ": terminated" << dendl;
   }
 
@@ -509,6 +531,16 @@ signal:
     return true;
   }
 
+  bool wait_signal() {
+    dout(20) << __func__ << dendl;
+
+    std::unique_lock g_l{g_lock};
+    g_cond.wait(g_l, [this] { return signal_ctx || terminated; });
+
+    dout(20) << __func__ << ": got signal request" << dendl;
+    return true;
+  }
+
   void wait_unquiesce(std::unique_lock<ceph::mutex> &locker) {
     dout(20) << __func__ << dendl;
 
@@ -538,6 +570,26 @@ signal:
     if (r < 0) {
       derr << "flush failed: " << cpp_strerror(r) << dendl;
     }
+  }
+
+  void quiesce_onsignal_entry()
+  {
+    while (wait_signal()) {
+      if (!signal_ctx) {
+        break;
+      }
+
+      run_quiesce_hook(cfg->quiesce_hook, cfg->devpath, "quiesce");
+
+      wait_inflight_io();
+
+      ceph_assert(terminate_event_sock.is_valid());
+      dout(20) << __func__ << ": " << "notifying terminate" << dendl;
+      terminate_event_sock.notify();
+      break;
+    }
+
+    dout(20) << __func__ << ": terminated" << dendl;
   }
 
   void quiesce_entry()
@@ -588,7 +640,7 @@ signal:
       (server.*func)();
       return NULL;
     }
-  } reader_thread, writer_thread, quiesce_thread;
+  } reader_thread, writer_thread, quiesce_thread, quiesce_onsignal_thread;
 
   bool started = false;
   bool quiesce = false;
@@ -611,6 +663,9 @@ public:
       writer_thread.create("rbd_writer");
       if (cfg->quiesce) {
         quiesce_thread.create("rbd_quiesce");
+      }
+      if (quiesce_onsignal) {
+        quiesce_onsignal_thread.create("rbd_quies_onsig");
       }
     }
   }
@@ -657,6 +712,9 @@ public:
       writer_thread.join();
       if (cfg->quiesce) {
         quiesce_thread.join();
+      }
+      if (quiesce_onsignal) {
+        quiesce_onsignal_thread.join();
       }
 
       assert_clean();
@@ -1422,10 +1480,16 @@ static void handle_signal(int signum)
   ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
 
-  dout(20) << __func__ << ": " << "notifying terminate" << dendl;
-
-  ceph_assert(terminate_event_sock.is_valid());
-  terminate_event_sock.notify();
+  if (!quiesce_onsignal) {
+    dout(20) << __func__ << ": " << "notifying terminate" << dendl;
+    ceph_assert(terminate_event_sock.is_valid());
+    terminate_event_sock.notify();
+  } else {
+    std::scoped_lock g_l{g_lock};
+    signal_ctx = true;
+    dout(20) << __func__ << ": " << "notifying quiesce on signal" << dendl;
+    g_cond.notify_all();
+  }
 }
 
 static NBDServer *start_server(int fd, librbd::Image& image, Config *cfg)
@@ -1443,17 +1507,24 @@ static NBDServer *start_server(int fd, librbd::Image& image, Config *cfg)
   return server;
 }
 
-static void run_server(Preforker& forker, NBDServer *server, bool netlink_used)
+static void run_server(Preforker& forker, NBDServer *server,
+                       bool netlink_used, bool reconnect)
 {
   if (g_conf()->daemonize) {
     global_init_postfork_finish(g_ceph_context);
     forker.daemonize();
   }
 
-  if (netlink_used)
+  if (netlink_used) {
+    /* FIXME: skip call to unquiesce if --quiesce-nosignal is not used
+     *        at the time of previous map/attach. */
+    if (reconnect) {
+      server->unquiesce();
+    }
     server->wait_for_disconnect();
-  else
+  } else {
     ioctl(nbd, NBD_DO_IT);
+  }
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_signal);
@@ -1763,7 +1834,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 
     cout << cfg->devpath << std::endl;
 
-    run_server(forker, server, use_netlink);
+    run_server(forker, server, use_netlink, reconnect);
 
     if (cfg->quiesce) {
       r = image.quiesce_unwatch(server->quiesce_watch_handle);
@@ -2023,6 +2094,8 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cfg->quiesce = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->quiesce_hook,
                                      "--quiesce-hook", (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--quiesce-onsignal", (char *)NULL)) {
+      quiesce_onsignal = true;
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       cfg->readonly = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->reattach_timeout, err,
