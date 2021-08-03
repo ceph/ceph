@@ -3138,6 +3138,14 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_mclock_max_capacity_iops_hdd")
     .add_see_also("osd_mclock_max_capacity_iops_ssd"),
 
+    Option("osd_mclock_skip_benchmark", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Skip the OSD benchmark on OSD initialization/boot-up")
+    .set_long_description("This option specifies whether the OSD benchmark must be skipped during the OSD boot-up sequence. Only considered for osd_op_queue = mclock_scheduler.")
+    .set_flag(Option::FLAG_RUNTIME)
+    .add_see_also("osd_mclock_max_capacity_iops_hdd")
+    .add_see_also("osd_mclock_max_capacity_iops_ssd"),
+
     Option("osd_mclock_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("high_client_ops")
     .set_enum_allowed( { "balanced", "high_recovery_ops", "high_client_ops", "custom" } )
