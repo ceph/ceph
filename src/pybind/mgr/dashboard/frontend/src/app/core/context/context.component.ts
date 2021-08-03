@@ -42,7 +42,7 @@ export class ContextComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.router.events
         .pipe(filter((event: Event) => event instanceof NavigationEnd))
-        .subscribe(() => (this.isRgwRoute = this.router.url.includes(this.rgwUrlPrefix)))
+        .subscribe(() => (this.isRgwRoute = this.router.url.startsWith(this.rgwUrlPrefix)))
     );
     // Set daemon list polling only when in RGW route:
     this.subs.add(
