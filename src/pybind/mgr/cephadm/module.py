@@ -2374,6 +2374,20 @@ Then run the following:
 
         return self._apply_service_spec(cast(ServiceSpec, spec))
 
+    def set_health_warning(self, name: str, summary: str, count: int, detail: List[str]) -> None:
+        self.health_checks[name] = {
+            'severity': 'warning',
+            'summary': summary,
+            'count': count,
+            'detail': detail,
+        }
+        self.set_health_checks(self.health_checks)
+
+    def remove_health_warning(self, name: str) -> None:
+        if name in self.health_checks:
+            del self.health_checks[name]
+            self.set_health_checks(self.health_checks)
+
     def _plan(self, spec: ServiceSpec) -> dict:
         if spec.service_type == 'osd':
             return {'service_name': spec.service_name(),
