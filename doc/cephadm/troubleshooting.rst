@@ -109,16 +109,11 @@ This will return something in the following form:
 Checking cephadm logs
 ---------------------
 
-You can monitor the cephadm log in real time with::
+To learn how to monitor the cephadm logs as they are generated, read :ref:`watching_cephadm_logs`.
 
-  ceph -W cephadm
-
-You can see the last few messages with::
-
-  ceph log last cephadm
-
-If you have enabled logging to files, you can see a cephadm log file called
-``ceph.cephadm.log`` on monitor hosts (see :ref:`cephadm-logs`).
+If your Ceph cluster has been configured to log events to files, there will exist a
+cephadm log file called ``ceph.cephadm.log`` on all monitor hosts (see
+:ref:`cephadm-logs` for a more complete explanation of this).
 
 Gathering log files
 -------------------
