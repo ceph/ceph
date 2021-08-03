@@ -323,31 +323,16 @@ class CephadmServe:
 
         self.mgr.config_checker.run_checks()
 
-        health_changed = False
         for k in [
                 'CEPHADM_HOST_CHECK_FAILED',
                 'CEPHADM_FAILED_DAEMON',
                 'CEPHADM_REFRESH_FAILED',
         ]:
-            if k in self.mgr.health_checks:
-                del self.mgr.health_checks[k]
-                health_changed = True
+            self.mgr.remove_health_warning(k)
         if bad_hosts:
-            self.mgr.health_checks['CEPHADM_HOST_CHECK_FAILED'] = {
-                'severity': 'warning',
-                'summary': '%d hosts fail cephadm check' % len(bad_hosts),
-                'count': len(bad_hosts),
-                'detail': bad_hosts,
-            }
-            health_changed = True
+            self.mgr.set_health_warning('CEPHADM_HOST_CHECK_FAILED', f'{len(bad_hosts)} hosts fail cephadm check', len(bad_hosts), bad_hosts)
         if failures:
-            self.mgr.health_checks['CEPHADM_REFRESH_FAILED'] = {
-                'severity': 'warning',
-                'summary': 'failed to probe daemons or devices',
-                'count': len(failures),
-                'detail': failures,
-            }
-            health_changed = True
+            self.mgr.set_health_warning('CEPHADM_REFRESH_FAILED', 'failed to probe daemons or devices', len(failures), failures)
         failed_daemons = []
         for dd in self.mgr.cache.get_daemons():
             if dd.status is not None and dd.status == DaemonDescriptionStatus.error:
@@ -355,15 +340,7 @@ class CephadmServe:
                     dd.name(), dd.hostname, dd.status_desc
                 ))
         if failed_daemons:
-            self.mgr.health_checks['CEPHADM_FAILED_DAEMON'] = {
-                'severity': 'warning',
-                'summary': '%d failed cephadm daemon(s)' % len(failed_daemons),
-                'count': len(failed_daemons),
-                'detail': failed_daemons,
-            }
-            health_changed = True
-        if health_changed:
-            self.mgr.set_health_checks(self.mgr.health_checks)
+            self.mgr.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(failed_daemons), failed_daemons)
 
     def _check_host(self, host: str) -> Optional[str]:
         if host not in self.mgr.inventory:
