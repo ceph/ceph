@@ -80,18 +80,18 @@ public:
     }
 #endif
   }
-  int register_dencoders() {
+  int register_dencoders(DencoderRegistry& registry) {
     assert(mod);
-    using register_dencoders_t = void (*)();
-    const auto register_dencoders =
+    using register_dencoders_t = void (*)(DencoderRegistry&);
+    const auto do_register =
       reinterpret_cast<register_dencoders_t>(dlsym(mod, REGISTER_DENCODERS_FUNCTION.data()));
-    if (register_dencoders == nullptr) {
+    if (do_register == nullptr) {
       std::cerr << "failed to dlsym(" << REGISTER_DENCODERS_FUNCTION << ")" << std::endl;
       return -1;
     }
-    const unsigned nr_before = DencoderRegistry::instance().get().size();
-    register_dencoders();
-    const unsigned nr_after = DencoderRegistry::instance().get().size();
+    const unsigned nr_before = registry.get().size();
+    do_register(registry);
+    const unsigned nr_after = registry.get().size();
     return nr_after - nr_before;
   }
   bool good() const {
@@ -101,7 +101,7 @@ private:
   void *mod = nullptr;
 };
 
-vector<DencoderPlugin> load_plugins()
+vector<DencoderPlugin> load_plugins(DencoderRegistry& registry)
 {
   fs::path mod_dir{CEPH_DENC_MOD_DIR};
   if (auto ceph_lib = getenv("CEPH_LIB"); ceph_lib) {
@@ -118,7 +118,7 @@ vector<DencoderPlugin> load_plugins()
     if (!plugin.good()) {
       continue;
     }
-    int n = plugin.register_dencoders();
+    int n = plugin.register_dencoders(registry);
     if (n <= 0) {
       std::cerr << "fail to load dencoders from " << entry << std::endl;
       continue;
@@ -130,8 +130,8 @@ vector<DencoderPlugin> load_plugins()
 
 int main(int argc, const char **argv)
 {
-  auto plugins = load_plugins();
-  auto& dencoders = DencoderRegistry::instance().get();
+  DencoderRegistry registry;
+  auto plugins = load_plugins(registry);
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);

@@ -25,7 +25,7 @@ using namespace std;
 
 #include "denc_registry.h"
 
-DENC_API void register_dencoders()
+DENC_API void register_dencoders(DencoderRegistry& registry)
 {
 #include "mds_types.h"
 }

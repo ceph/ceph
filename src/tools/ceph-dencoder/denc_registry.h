@@ -226,31 +226,30 @@ public:
 class DencoderRegistry
 {
   using dencoders_t = std::map<std::string, std::unique_ptr<Dencoder>>;
+
 public:
-  void add(const char* name, std::unique_ptr<Dencoder>&& denc);
   dencoders_t& get() {
     return dencoders;
   }
-  static DencoderRegistry& instance();
+
+  template<typename DencoderT, typename...Args>
+  void emplace(const char* name, Args&&...args) {
+    auto dencoder = std::make_unique<DencoderT>(std::forward<Args>(args)...);
+    dencoders.emplace(name, std::move(dencoder));
+  }
+
 private:
   dencoders_t dencoders;
 };
 
-template<typename DencoderT, typename...Args>
-void make_and_register_dencoder(const char* name, Args&&...args)
-{
-  auto dencoder = std::make_unique<DencoderT>(std::forward<Args>(args)...);
-  DencoderRegistry::instance().add(name, std::move(dencoder));
-}
-
-#define TYPE(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, false, false);
-#define TYPE_STRAYDATA(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, true, false);
-#define TYPE_NONDETERMINISTIC(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, false, true);
-#define TYPE_FEATUREFUL(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, false, false);
-#define TYPE_FEATUREFUL_STRAYDATA(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, true, false);
-#define TYPE_FEATUREFUL_NONDETERMINISTIC(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, false, true);
-#define TYPE_FEATUREFUL_NOCOPY(t) make_and_register_dencoder<DencoderImplFeaturefulNoCopy<t>>(#t, false, false);
-#define TYPE_NOCOPY(t) make_and_register_dencoder<DencoderImplNoFeatureNoCopy<t>>(#t, false, false);
-#define MESSAGE(t) make_and_register_dencoder<MessageDencoderImpl<t>>(#t);
+#define TYPE(t) registry.emplace<DencoderImplNoFeature<t>>(#t, false, false);
+#define TYPE_STRAYDATA(t) registry.emplace<DencoderImplNoFeature<t>>(#t, true, false);
+#define TYPE_NONDETERMINISTIC(t) registry.emplace<DencoderImplNoFeature<t>>(#t, false, true);
+#define TYPE_FEATUREFUL(t) registry.emplace<DencoderImplFeatureful<t>>(#t, false, false);
+#define TYPE_FEATUREFUL_STRAYDATA(t) registry.emplace<DencoderImplFeatureful<t>>(#t, true, false);
+#define TYPE_FEATUREFUL_NONDETERMINISTIC(t) registry.emplace<DencoderImplFeatureful<t>>(#t, false, true);
+#define TYPE_FEATUREFUL_NOCOPY(t) registry.emplace<DencoderImplFeaturefulNoCopy<t>>(#t, false, false);
+#define TYPE_NOCOPY(t) registry.emplace<DencoderImplNoFeatureNoCopy<t>>(#t, false, false);
+#define MESSAGE(t) registry.emplace<MessageDencoderImpl<t>>(#t);
 
 #define DENC_API extern "C" [[gnu::visibility("default")]]
