@@ -135,17 +135,9 @@ class CephadmServe:
 
     def _update_paused_health(self) -> None:
         if self.mgr.paused:
-            self.mgr.health_checks['CEPHADM_PAUSED'] = {
-                'severity': 'warning',
-                'summary': 'cephadm background work is paused',
-                'count': 1,
-                'detail': ["'ceph orch resume' to resume"],
-            }
-            self.mgr.set_health_checks(self.mgr.health_checks)
+            self.mgr.set_health_warning('CEPHADM_PAUSED', 'cephadm background work is paused', 1, ["'ceph orch resume' to resume"])
         else:
-            if 'CEPHADM_PAUSED' in self.mgr.health_checks:
-                del self.mgr.health_checks['CEPHADM_PAUSED']
-                self.mgr.set_health_checks(self.mgr.health_checks)
+            self.mgr.remove_health_warning('CEPHADM_PAUSED')
 
     def _autotune_host_memory(self, host: str) -> None:
         total_mem = self.mgr.cache.get_facts(host).get('memory_total_kb', 0)
