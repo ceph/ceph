@@ -7,7 +7,6 @@
 #include <fmt/format.h>
 #include <seastar/core/condition-variable.hh>
 #include "crimson/common/operation.h"
-#include "osd/osd_types.h"
 
 namespace crimson::osd {
 
