@@ -1033,6 +1033,31 @@ To create a transifex api token visit `<https://www.transifex.com/user/settings/
 After the command ran successfully, build the UI and check if everything is
 working as expected. You also might want to run the frontend tests.
 
+Add a new release resource to transifex
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In order to organize the translations, we create a
+`transifex resource <https://www.transifex.com/ceph/ceph-dashboard/content/>`_
+for every Ceph release. This means, once a new version has been released, the
+``src/pybind/mgr/dashboard/frontend/i18n.config.json`` needs to be updated on
+the release branch.
+
+Please replace::
+
+"resource": "Master:master"
+
+by::
+
+"resource": "<Release-name>:<release-name>"
+
+E.g. the resource definition for the pacific release::
+
+"resource": "Pacific:pacific"
+
+Note:
+  The first part of the resource definition (before the colon) needs to be
+  written with a capital letter.
+
 Suggestions
 ~~~~~~~~~~~
 
