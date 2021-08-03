@@ -404,7 +404,6 @@ class CephAnsible(Task):
             run.Raw('cd ~/ceph-ansible'),
             run.Raw(';'),
             'virtualenv',
-            run.Raw('--system-site-packages'),
             run.Raw('--python=python3'),
             'venv',
             run.Raw(';'),
@@ -426,6 +425,10 @@ class CephAnsible(Task):
             run.Raw('notario>=0.0.13'), # FIXME: use requirements.txt
             run.Raw('netaddr'),
             run.Raw('six'),
+            run.Raw(';'),
+            'LANG=en_US.utf8',
+            'pip',
+            'install',
             run.Raw(ansible_ver),
             run.Raw(';'),
             run.Raw(str_args)
