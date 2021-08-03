@@ -230,7 +230,6 @@ struct LBAInternalNode
   std::ostream &print_detail(std::ostream &out) const final;
 
   ceph::bufferlist get_delta() final {
-    assert(!delta_buffer.empty());
     ceph::buffer::ptr bptr(delta_buffer.get_bytes());
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
@@ -500,7 +499,6 @@ struct LBALeafNode
   }
 
   ceph::bufferlist get_delta() final {
-    assert(!delta_buffer.empty());
     ceph::buffer::ptr bptr(delta_buffer.get_bytes());
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
