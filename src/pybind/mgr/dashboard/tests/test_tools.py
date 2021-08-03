@@ -13,7 +13,8 @@ except ImportError:
 from ..controllers import APIRouter, BaseController, Proxy, RESTController, Router
 from ..controllers._version import APIVersion
 from ..services.exception import handle_rados_error
-from ..tools import dict_contains_path, dict_get, json_str_to_object, partial_dict
+from ..tools import dict_contains_path, dict_get, json_str_to_object, \
+    merge_list_of_dicts_by_key, partial_dict
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
@@ -197,3 +198,13 @@ class TestFunctions(unittest.TestCase):
         self.assertFalse(dict_get({'foo': {'bar': False}}, 'foo.bar'))
         self.assertIsNone(dict_get({'foo': {'bar': False}}, 'foo.bar.baz'))
         self.assertEqual(dict_get({'foo': {'bar': False}, 'baz': 'xyz'}, 'baz'), 'xyz')
+
+    def test_merge_list_of_dicts_by_key(self):
+        expected_result = [{'a': 1, 'b': 2, 'c': 3}, {'a': 4, 'b': 5, 'c': 6}]
+        self.assertEqual(expected_result, merge_list_of_dicts_by_key(
+            [{'a': 1, 'b': 2}, {'a': 4, 'b': 5}], [{'a': 1, 'c': 3}, {'a': 4, 'c': 6}], 'a'))
+
+        expected_result = [{'a': 1, 'b': 2}, {'a': 4, 'b': 5, 'c': 6}]
+        self.assertEqual(expected_result, merge_list_of_dicts_by_key(
+            [{'a': 1, 'b': 2}, {'a': 4, 'b': 5}], [{}, {'a': 4, 'c': 6}], 'a'))
+        self.assertRaises(TypeError, merge_list_of_dicts_by_key, None)

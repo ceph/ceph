@@ -67,4 +67,16 @@
   <ng-container i18n
                 *ngIf="showSubmit">Are you sure you want to continue?</ng-container>
 </ng-template>
+
+<ng-template #orchTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="Data will be available only if Orchestrator is available.">Unavailable</span>
+</ng-template>
+
+<ng-template #flashTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="SSD, NVMEs">Flash</span>
+</ng-template>
 <router-outlet name="modal"></router-outlet>

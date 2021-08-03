@@ -22,8 +22,11 @@ export class HostService {
 
   constructor(private http: HttpClient, private deviceService: DeviceService) {}
 
-  list(): Observable<object[]> {
-    return this.http.get<object[]>(this.baseURL);
+  list(facts: string): Observable<object[]> {
+    return this.http.get<object[]>(this.baseURL, {
+      headers: { Accept: 'application/vnd.ceph.api.v1.1+json' },
+      params: { facts: facts }
+    });
   }
 
   create(hostname: string, addr: string, labels: string[], status: string) {
