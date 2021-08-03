@@ -10,6 +10,7 @@
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
 #include "common/Formatter.h"
+#include "crimson/osd/osd_operation_sequencer.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
 
@@ -66,6 +67,16 @@ void ClientRequest::may_set_prev_op()
   if (__builtin_expect(!prev_op, true)) {
     prev_op = sequencer.get_last_issued();
   }
+}
+
+template <typename FuncT>
+ClientRequest::interruptible_future<> ClientRequest::with_sequencer(FuncT&& func)
+{
+  may_set_prev_op();
+  return sequencer.start_op(*this, handle, std::forward<FuncT>(func))
+  .then_interruptible([this] {
+    sequencer.finish_op(*this);
+  });
 }
 
 seastar::future<> ClientRequest::start()

@@ -64,13 +64,7 @@ public:
 
 private:
   template <typename FuncT>
-  interruptible_future<> with_sequencer(FuncT&& func) {
-    may_set_prev_op();
-    return sequencer.start_op(*this, handle, std::forward<FuncT>(func))
-    .then_interruptible([this] {
-      sequencer.finish_op(*this);
-    });
-  }
+  interruptible_future<> with_sequencer(FuncT&& func);
   interruptible_future<> do_process(
     Ref<PG>& pg,
     crimson::osd::ObjectContextRef obc);
@@ -85,7 +79,7 @@ private:
   ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
 
-  OpSequencer& sequencer;
+  class OpSequencer& sequencer;
   const Operation* prev_op = nullptr;
 
   template <typename Errorator>
