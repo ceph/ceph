@@ -13,7 +13,6 @@
  */
 
 
-#include <dlfcn.h>
 #include <errno.h>
 
 #if __has_include(<filesystem>)
@@ -29,6 +28,7 @@ namespace fs = std::experimental::filesystem;
 #include "common/Formatter.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "denc_plugin.h"
 #include "denc_registry.h"
 
 #define MB(m) ((m) * 1024 * 1024)
@@ -63,44 +63,6 @@ void usage(ostream &out)
   out << "  is_deterministic    exit w/ success if type encodes deterministically\n";
 }
 
-static constexpr string_view REGISTER_DENCODERS_FUNCTION = "register_dencoders\0";
-
-class DencoderPlugin {
-public:
-  DencoderPlugin(const fs::path& path) {
-    mod = dlopen(path.c_str(), RTLD_NOW);
-    if (mod == nullptr) {
-      std::cerr << "failed to dlopen(" << path << "): " << dlerror() << std::endl;
-    }
-  }
-  ~DencoderPlugin() {
-#if !defined(__FreeBSD__)
-    if (mod) {
-      dlclose(mod);
-    }
-#endif
-  }
-  int register_dencoders(DencoderRegistry& registry) {
-    assert(mod);
-    using register_dencoders_t = void (*)(DencoderRegistry&);
-    const auto do_register =
-      reinterpret_cast<register_dencoders_t>(dlsym(mod, REGISTER_DENCODERS_FUNCTION.data()));
-    if (do_register == nullptr) {
-      std::cerr << "failed to dlsym(" << REGISTER_DENCODERS_FUNCTION << ")" << std::endl;
-      return -1;
-    }
-    const unsigned nr_before = registry.get().size();
-    do_register(registry);
-    const unsigned nr_after = registry.get().size();
-    return nr_after - nr_before;
-  }
-  bool good() const {
-    return mod != nullptr;
-  }
-private:
-  void *mod = nullptr;
-};
-
 vector<DencoderPlugin> load_plugins(DencoderRegistry& registry)
 {
   fs::path mod_dir{CEPH_DENC_MOD_DIR};
@@ -123,6 +85,7 @@ vector<DencoderPlugin> load_plugins(DencoderRegistry& registry)
       std::cerr << "fail to load dencoders from " << entry << std::endl;
       continue;
     }
+    std::cout << "load " << n << " from " << entry << std::endl;
     dencoder_plugins.push_back(std::move(plugin));
   }
   return dencoder_plugins;
