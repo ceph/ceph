@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--notrim] [--encryption-format *format*] [--encryption-passphrase-file *passphrase-file*] [--io-timeout *seconds*] [--reattach-timeout *seconds*] map *image-spec* | *snap-spec*
+| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--quiesce] [--quiesce-hook *path*] [--quiesce-onsignal] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--notrim] [--encryption-format *format*] [--encryption-passphrase-file *passphrase-file*] [--io-timeout *seconds*] [--reattach-timeout *seconds*] map *image-spec* | *snap-spec*
 | **rbd-nbd** unmap *nbd device* | *image-spec* | *snap-spec*
 | **rbd-nbd** list-mapped
 | **rbd-nbd** attach --device *nbd device* *image-spec* | *snap-spec*
@@ -29,6 +29,18 @@ Options
 
    Use *ceph.conf* configuration file instead of the default
    ``/etc/ceph/ceph.conf`` to determine monitor addresses during startup.
+
+.. option:: --quiesce
+
+   Enable quiesce callbacks.
+
+.. option:: --quiesce-hook *path*
+
+   Specify quiesce hook path (defaults to package provided rbd-nbd_quiesce script).
+
+.. option:: --quiesce-onsignal
+
+   Run quiesce hook on signal/detach.
 
 .. option:: --read-only
 
