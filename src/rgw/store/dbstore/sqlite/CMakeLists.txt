@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14.0)
 project(sqlite_db)
 
-find_package(SQLITE3 REQUIRED)
+find_package(SQLite3 REQUIRED)
 
 set(sqlite_db_srcs
     sqliteDB.h
