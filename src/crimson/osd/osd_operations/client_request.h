@@ -57,9 +57,9 @@ public:
 
 public:
   seastar::future<> start();
-  uint64_t get_prev_id() const {
-    assert(prev_op_id.has_value());
-    return *prev_op_id;
+  const Operation& get_prev_op() const {
+    assert(prev_op);
+    return *prev_op;
   }
 
 private:
@@ -86,7 +86,7 @@ private:
   PGPipeline &pp(PG &pg);
 
   OpSequencer& sequencer;
-  std::optional<uint64_t> prev_op_id;
+  const Operation* prev_op = nullptr;
 
   template <typename Errorator>
   using interruptible_errorator =

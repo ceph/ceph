@@ -35,13 +35,12 @@ public:
   start_op(const OpT& op,
            HandleT& handle,
            FuncT&& do_op) {
-    const uint64_t prev_op = op.get_prev_id();
-    const uint64_t this_op = op.get_id();
+    const auto* const prev_op = &op.get_prev_op();
     auto have_green_light = seastar::make_ready_future<>();
-    assert(prev_op < this_op);
+    assert(prev_op->get_id() < op.get_id());
     if (last_issued == prev_op) {
       // starting a new op, let's advance the last_issued!
-      last_issued = this_op;
+      last_issued = &op;
     }
     if (prev_op != last_unblocked) {
       // this implies that there are some blocked ops before me, so i have to
@@ -52,41 +51,41 @@ public:
       // the seastar scheduler to determine the order of performing these ops,
       // once they are unblocked after the first op of the same pg interval is
       // scheduled.
-      assert(prev_op > last_unblocked);
+      assert(prev_op->get_id() > last_unblocked->get_id());
       handle.exit();
       ::crimson::get_logger(ceph_subsys_osd).debug(
         "OpSequencer::start_op: {} waiting ({} > {})",
-        op, prev_op, last_unblocked);
+        op, prev_op->get_id(), last_unblocked->get_id());
       have_green_light = unblocked.wait([prev_op, this] {
         // wait until the previous op is unblocked
         return last_unblocked == prev_op;
       });
     }
-    return have_green_light.then([this_op, do_op=std::move(do_op), this]() mutable {
+    return have_green_light.then([&op, do_op=std::move(do_op), this]() mutable {
       auto result = seastar::futurize_invoke(std::move(do_op));
       // unblock the next one
-      last_unblocked = this_op;
+      last_unblocked = &op;
       unblocked.broadcast();
       return result;
     });
   }
-  uint64_t get_last_issued() const {
+  const Operation* get_last_issued() const {
     return last_issued;
   }
   template <class OpT>
   void finish_op(const OpT& op) {
-    assert(op.get_id() > last_completed);
-    last_completed = op.get_id();
+    assert(op.get_id() > last_completed->get_id());
+    last_completed = &op;
   }
   template <class OpT>
   void maybe_reset(const OpT& op) {
     const auto op_id = op.get_id();
     // pg interval changes, so we need to reenqueue the previously unblocked
     // ops by rewinding the "last_unblock" pointer
-    if (op_id <= last_unblocked) {
+    if (op_id <= last_unblocked->get_id()) {
       ::crimson::get_logger(ceph_subsys_osd).debug(
         "OpSequencer::maybe_reset:{}  {} <= {}, resetting to {}",
-        op, op_id, last_unblocked, last_completed);
+        op, op_id, last_unblocked->get_id(), last_completed->get_id());
       last_unblocked = last_completed;
     }
   }
@@ -106,11 +105,11 @@ private:
   //      last_completed
   //
   // the id of last op which is issued
-  uint64_t last_issued = 0;
+  const Operation* last_issued = nullptr;
   // the id of last op which is unblocked
-  uint64_t last_unblocked = 0;
+  const Operation* last_unblocked = nullptr;
   // the id of last op which is completed
-  uint64_t last_completed = 0;
+  const Operation* last_completed = nullptr;
   seastar::condition_variable unblocked;
 
   friend fmt::formatter<OpSequencer>;

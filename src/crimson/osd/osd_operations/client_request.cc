@@ -36,7 +36,7 @@ ClientRequest::~ClientRequest()
 
 void ClientRequest::print(std::ostream &lhs) const
 {
-  lhs << "m=[" << *m << "], prev_op_id=" << prev_op_id;
+  lhs << "m=[" << *m << "], prev_op_id=" << prev_op->get_id();
 }
 
 void ClientRequest::dump_detail(Formatter *f) const
@@ -62,9 +62,9 @@ bool ClientRequest::is_pg_op() const
 
 void ClientRequest::may_set_prev_op()
 {
-  // set prev_op_id if it's not set yet
-  if (__builtin_expect(!prev_op_id.has_value(), true)) {
-    prev_op_id.emplace(sequencer.get_last_issued());
+  // set prev_op if it's not set yet
+  if (__builtin_expect(!prev_op, true)) {
+    prev_op = sequencer.get_last_issued();
   }
 }
 
