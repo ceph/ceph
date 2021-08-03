@@ -33,7 +33,7 @@ except ImportError:
     client = None
     config = None
 
-from mgr_module import MgrModule, Option
+from mgr_module import MgrModule, Option, NFS_POOL_NAME
 import orchestrator
 from orchestrator import handle_orch_error, OrchResult, raise_if_exception
 
@@ -349,6 +349,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # CephNFSes
             all_nfs = self.rook_cluster.get_resource("cephnfses")
             for nfs in all_nfs:
+                if nfs['spec']['rados']['pool'] != NFS_POOL_NAME:
+                    continue
                 nfs_name = nfs['metadata']['name']
                 svc = 'nfs.' + nfs_name
                 if svc in spec:
