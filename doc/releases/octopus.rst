@@ -19,6 +19,14 @@ Notable Changes
   If you want to return back the old behavior add 'ssl_options=' (empty) to
   ``rgw frontends`` configuration.
 
+* CephFS: old clusters (pre-Jewel) that did not use CephFS have legacy data
+  structures in the ceph-mon stores. These structures are not understood by
+  Pacific monitors. With Octopus v15.2.14, the monitors have been taught to flush
+  and trim these old structures out in preparation for an upgrade to Pacific or
+  Quincy. For more information, see
+  `Issue 51673 <https://tracker.ceph.com/issues/51673>`.
+
+
 Changelog
 ---------
 
