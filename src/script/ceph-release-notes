@@ -242,7 +242,7 @@ def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict
                        issue + " " + str(prs))
 
     for (pr, (author, title, message)) in sorted(
-        pr2info.items(), key=lambda title: title[1][1]
+        pr2info.items(), key=lambda title: title[1][1].lower()
     ):
         if pr in pr2issues:
             if plaintext:
