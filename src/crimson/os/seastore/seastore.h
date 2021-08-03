@@ -218,8 +218,11 @@ private:
       [=](auto &oid, auto &ret, auto &t, auto &onode, auto &f) {
 	return repeat_eagain([&, this, src] {
 	  t = transaction_manager->create_transaction(src);
-	  return onode_manager->get_onode(
-	    *t, oid
+	  return with_trans_intr(
+	    *t,
+	    [&](auto &t) {
+	      return onode_manager->get_onode(t, oid);
+	    }
 	  ).safe_then([&](auto onode_ret) {
 	    onode = std::move(onode_ret);
 	    return f(*t, *onode);
