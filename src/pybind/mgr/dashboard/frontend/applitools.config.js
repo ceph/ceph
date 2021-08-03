@@ -1,5 +1,6 @@
 module.exports = {
   appName: 'Ceph Dashboard',
+  batchId: process.env.APPLITOOLS_BATCH_ID, 
   apiKey: process.env.APPLITOOLS_API_KEY,
   browser: [
     { width: 1920, height: 1080, name: 'chrome' },
