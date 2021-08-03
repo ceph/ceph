@@ -14,8 +14,8 @@ describe('Create Cluster Review page', () => {
     cy.get('button[aria-label="Next"]').click();
   });
 
-  describe('navigation link and title test', () => {
-    it('should check if nav-link and title contains Review', () => {
+  describe('navigation link test', () => {
+    it('should check if nav-link contains Review', () => {
       cy.get('.nav-link').should('contain.text', 'Review');
     });
   });
@@ -28,6 +28,8 @@ describe('Create Cluster Review page', () => {
       // check for fields in table
       createCluster.getStatusTables().should('contain.text', 'Hosts');
       createCluster.getStatusTables().should('contain.text', 'Storage Capacity');
+      createCluster.getStatusTables().should('contain.text', 'CPUs');
+      createCluster.getStatusTables().should('contain.text', 'Memory');
     });
 
     it('should check Hosts by Services and Host Details tables are present', () => {
@@ -46,14 +48,26 @@ describe('Create Cluster Review page', () => {
       createCluster.getDataTableHeaders(0).contains('Number of Hosts');
 
       // verify correct columns on Host Details table
-      createCluster.getDataTableHeaders(1).contains('Host Name');
+      createCluster.getDataTableHeaders(1).contains('Hostname');
 
       createCluster.getDataTableHeaders(1).contains('Labels');
+
+      createCluster.getDataTableHeaders(1).contains('CPUs');
+
+      createCluster.getDataTableHeaders(1).contains('Cores');
+
+      createCluster.getDataTableHeaders(1).contains('Total Memory');
+
+      createCluster.getDataTableHeaders(1).contains('Raw Capacity');
+
+      createCluster.getDataTableHeaders(1).contains('HDDs');
+
+      createCluster.getDataTableHeaders(1).contains('Flash');
+
+      createCluster.getDataTableHeaders(1).contains('NICs');
     });
 
-    it('should check hosts count and default host name are present', () => {
-      createCluster.getStatusTables().contains(2);
-
+    it('should check default host name is present', () => {
       createCluster.check_for_host();
     });
   });

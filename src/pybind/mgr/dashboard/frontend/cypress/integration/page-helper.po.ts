@@ -206,7 +206,7 @@ export abstract class PageHelper {
   getDataTableHeaders(index = 0) {
     this.waitDataTableToLoad();
 
-    return cy.get('.datatable-header').its(index).find('.datatable-header-cell-label');
+    return cy.get('.datatable-header').its(index).find('.datatable-header-cell');
   }
 
   /**

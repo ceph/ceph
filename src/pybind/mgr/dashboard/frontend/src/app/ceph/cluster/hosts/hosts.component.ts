@@ -1,8 +1,10 @@
-import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
+import { Subscription } from 'rxjs';
+import { map, mergeMap } from 'rxjs/operators';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -24,7 +26,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
-import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -40,13 +42,19 @@ const BASE_URL = 'hosts';
   styleUrls: ['./hosts.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class HostsComponent extends ListWithDetails implements OnInit {
+export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit {
+  private sub = new Subscription();
+
   @ViewChild(TableComponent)
   table: TableComponent;
   @ViewChild('servicesTpl', { static: true })
   public servicesTpl: TemplateRef<any>;
   @ViewChild('maintenanceConfirmTpl', { static: true })
   maintenanceConfirmTpl: TemplateRef<any>;
+  @ViewChild('orchTmpl', { static: true })
+  orchTmpl: TemplateRef<any>;
+  @ViewChild('flashTmpl', { static: true })
+  flashTmpl: TemplateRef<any>;
 
   @Input()
   hiddenColumns: string[] = [];
@@ -95,8 +103,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   constructor(
     private authStorageService: AuthStorageService,
+    private dimlessBinary: DimlessBinaryPipe,
     private hostService: HostService,
-    private cephShortVersionPipe: CephShortVersionPipe,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
@@ -162,7 +170,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Services`,
         prop: 'services',
-        flexGrow: 3,
+        flexGrow: 2,
         cellTemplate: this.servicesTpl
       },
       {
@@ -186,19 +194,57 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         }
       },
       {
-        name: $localize`Version`,
-        prop: 'ceph_version',
-        flexGrow: 1,
-        pipe: this.cephShortVersionPipe
+        name: $localize`Model`,
+        prop: 'model',
+        flexGrow: 1
+      },
+      {
+        name: $localize`CPUs`,
+        prop: 'cpu_count',
+        flexGrow: 0.3
+      },
+      {
+        name: $localize`Cores`,
+        prop: 'cpu_cores',
+        flexGrow: 0.3
+      },
+      {
+        name: $localize`Total Memory`,
+        prop: 'memory_total_bytes',
+        pipe: this.dimlessBinary,
+        flexGrow: 0.4
+      },
+      {
+        name: $localize`Raw Capacity`,
+        prop: 'raw_capacity',
+        pipe: this.dimlessBinary,
+        flexGrow: 0.5
+      },
+      {
+        name: $localize`HDDs`,
+        prop: 'hdd_count',
+        flexGrow: 0.3
+      },
+      {
+        name: $localize`Flash`,
+        prop: 'flash_count',
+        headerTemplate: this.flashTmpl,
+        flexGrow: 0.3
+      },
+      {
+        name: $localize`NICs`,
+        prop: 'nic_count',
+        flexGrow: 0.3
       }
     ];
-    this.orchService.status().subscribe((status: OrchestratorStatus) => {
-      this.orchStatus = status;
-    });
 
     this.columns = this.columns.filter((col: any) => {
       return !this.hiddenColumns.includes(col.prop);
     });
+  }
+
+  ngOnDestroy() {
+    this.sub.unsubscribe();
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -343,6 +389,21 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     });
   }
 
+  transformHostsData() {
+    if (this.orchStatus?.available) {
+      _.forEach(this.hosts, (hostKey) => {
+        hostKey['memory_total_bytes'] = hostKey['memory_total_kb'] * 1024;
+        hostKey['raw_capacity'] = hostKey['hdd_capacity_bytes'] + hostKey['flash_capacity_bytes'];
+      });
+    } else {
+      // mark host facts columns unavailable
+      for (let column = 4; column < this.columns.length; column++) {
+        this.columns[column]['prop'] = '';
+        this.columns[column]['cellTemplate'] = this.orchTmpl;
+      }
+    }
+  }
+
   getHosts(context: CdTableFetchDataContext) {
     if (this.isLoadingHosts) {
       return;
@@ -357,24 +418,36 @@ export class HostsComponent extends ListWithDetails implements OnInit {
       'tcmu-runner': 'iscsi'
     };
     this.isLoadingHosts = true;
-    this.hostService.list().subscribe(
-      (resp: any[]) => {
-        resp.map((host) => {
-          host.services.map((service: any) => {
-            service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
-            const permission = this.permissions[typeToPermissionKey[service.type]];
-            service.canRead = permission ? permission.read : false;
-            return service;
-          });
-          return host;
-        });
-        this.hosts = resp;
-        this.isLoadingHosts = false;
-      },
-      () => {
-        this.isLoadingHosts = false;
-        context.error();
-      }
-    );
+    this.sub = this.orchService
+      .status()
+      .pipe(
+        mergeMap((orchStatus) => {
+          this.orchStatus = orchStatus;
+
+          return this.hostService.list(`${this.orchStatus?.available}`);
+        }),
+        map((hostList: object[]) =>
+          hostList.map((host) => {
+            host['services'].map((service: any) => {
+              service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
+              const permission = this.permissions[typeToPermissionKey[service.type]];
+              service.canRead = permission ? permission.read : false;
+              return service;
+            });
+            return host;
+          })
+        )
+      )
+      .subscribe(
+        (hostList) => {
+          this.hosts = hostList;
+          this.transformHostsData();
+          this.isLoadingHosts = false;
+        },
+        () => {
+          this.isLoadingHosts = false;
+          context.error();
+        }
+      );
   }
 }

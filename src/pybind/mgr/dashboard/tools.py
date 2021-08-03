@@ -828,3 +828,13 @@ def find_object_in_list(key, value, iterable):
         if key in obj and obj[key] == value:
             return obj
     return None
+
+
+def merge_list_of_dicts_by_key(target_list: list, source_list: list, key: str):
+    target_list = {d[key]: d for d in target_list}
+    for sdict in source_list:
+        if bool(sdict):
+            if sdict[key] in target_list:
+                target_list[sdict[key]].update(sdict)
+    target_list = [value for value in target_list.values()]
+    return target_list

@@ -15,6 +15,16 @@
           <td><span i18n>Number of devices: {{ totalDevices }}. Raw capacity:
             {{ totalCapacity | dimlessBinary }}.</span></td>
         </tr>
+        <tr>
+          <td i18n
+              class="bold">CPUs</td>
+          <td>{{ totalCPUs }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">Memory</td>
+          <td>{{ totalMemory }}</td>
+        </tr>
       </table>
     </fieldset>
   </div>
@@ -26,12 +36,14 @@
               [columns]="hostsByService['columns']"
               [toolHeader]="false">
     </cd-table>
-
-    <legend i18n
-            class="cd-header">Host Details</legend>
-    <cd-table [data]="hostsDetails['data']"
-              [columns]="hostsDetails['columns']"
-              [toolHeader]="false">
-    </cd-table>
   </div>
 </div>
+
+<legend i18n
+        class="cd-header">Host Details</legend>
+<cd-hosts [hiddenColumns]="['services', 'status']"
+          [hideTitle]="true"
+          [hideSubmitBtn]="true"
+          [hasTableDetails]="false"
+          [showGeneralActionsOnly]="true">
+</cd-hosts>

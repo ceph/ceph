@@ -51,7 +51,7 @@ export class HostFormComponent extends CdForm implements OnInit {
       this.pageURL = 'hosts';
     }
     this.createForm();
-    this.hostService.list().subscribe((resp: any[]) => {
+    this.hostService.list('false').subscribe((resp: any[]) => {
       this.hostnames = resp.map((host) => {
         return host['hostname'];
       });

@@ -12,6 +12,7 @@ import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -99,7 +100,6 @@ describe('HostsComponent', () => {
           }
         ],
         hostname: hostname,
-        ceph_version: 'ceph version Development',
         labels: ['foo', 'bar']
       }
     ];
@@ -108,14 +108,73 @@ describe('HostsComponent', () => {
     hostListSpy.and.callFake(() => of(payload));
     fixture.detectChanges();
 
-    return fixture.whenStable().then(() => {
-      fixture.detectChanges();
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    fixture.detectChanges();
 
-      const spans = fixture.debugElement.nativeElement.querySelectorAll(
-        '.datatable-body-cell-label span'
-      );
-      expect(spans[0].textContent).toBe(hostname);
-    });
+    const spans = fixture.debugElement.nativeElement.querySelectorAll(
+      '.datatable-body-cell-label span'
+    );
+    expect(spans[0].textContent).toBe(hostname);
+  });
+
+  it('should test if host facts are tranformed correctly if orch available', () => {
+    const payload = [
+      {
+        hostname: 'host_test',
+        services: [
+          {
+            type: 'osd',
+            id: '0'
+          }
+        ],
+        cpu_count: 2,
+        cpu_cores: 1,
+        memory_total_kb: 1024,
+        hdd_count: 4,
+        hdd_capacity_bytes: 1024,
+        flash_count: 4,
+        flash_capacity_bytes: 1024,
+        nic_count: 1
+      }
+    ];
+    OrchestratorHelper.mockStatus(true);
+    hostListSpy.and.callFake(() => of(payload));
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    expect(hostListSpy).toHaveBeenCalled();
+    expect(component.hosts[0]['cpu_count']).toEqual(2);
+    expect(component.hosts[0]['memory_total_bytes']).toEqual(1048576);
+    expect(component.hosts[0]['raw_capacity']).toEqual(2048);
+    expect(component.hosts[0]['hdd_count']).toEqual(4);
+    expect(component.hosts[0]['flash_count']).toEqual(4);
+    expect(component.hosts[0]['cpu_cores']).toEqual(1);
+    expect(component.hosts[0]['nic_count']).toEqual(1);
+  });
+
+  it('should test if host facts are unavailable if no orch available', () => {
+    const payload = [
+      {
+        hostname: 'host_test',
+        services: [
+          {
+            type: 'osd',
+            id: '0'
+          }
+        ]
+      }
+    ];
+    OrchestratorHelper.mockStatus(false);
+    hostListSpy.and.callFake(() => of(payload));
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    fixture.detectChanges();
+
+    const spans = fixture.debugElement.nativeElement.querySelectorAll(
+      '.datatable-body-cell-label span'
+    );
+    expect(spans[7].textContent).toBe('Unavailable');
   });
 
   it('should show force maintenance modal when it is safe to stop host', () => {

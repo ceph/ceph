@@ -28,8 +28,8 @@ describe('HostService', () => {
 
   it('should call list', fakeAsync(() => {
     let result;
-    service.list().subscribe((resp) => (result = resp));
-    const req = httpTesting.expectOne('api/host');
+    service.list('true').subscribe((resp) => (result = resp));
+    const req = httpTesting.expectOne('api/host?facts=true');
     expect(req.request.method).toBe('GET');
     req.flush(['foo', 'bar']);
     tick();

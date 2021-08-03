@@ -231,7 +231,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
       this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
-    this.hostService.list().subscribe((resp: object[]) => {
+    this.hostService.list('false').subscribe((resp: object[]) => {
       const options: SelectOption[] = [];
       _.forEach(resp, (host: object) => {
         if (_.get(host, 'sources.orchestrator', false)) {

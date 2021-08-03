@@ -94,7 +94,7 @@ export class CreateClusterComponent implements OnDestroy {
   }
 
   onSubmit() {
-    this.hostService.list().subscribe((hosts) => {
+    this.hostService.list('false').subscribe((hosts) => {
       hosts.forEach((host) => {
         const index = host['labels'].indexOf('_no_schedule', 0);
         if (index > -1) {
