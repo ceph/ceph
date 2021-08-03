@@ -126,7 +126,12 @@ class FSPerfStats(object):
     def notify(self, cmdtag):
         self.log.debug("cmdtag={0}".format(cmdtag))
         with self.meta_lock:
-            result = self.client_metadata['in_progress'].pop(cmdtag)
+            try:
+                result = self.client_metadata['in_progress'].pop(cmdtag)
+            except KeyError:
+                self.log.warn(f"cmdtag {cmdtag} not found in client metadata")
+                return
+
             client_meta = result[1].wait()
             if client_meta[0] != 0:
                 self.log.warn("failed to fetch client metadata from rank {0}, err={1}".format(
