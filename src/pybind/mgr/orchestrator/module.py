@@ -9,7 +9,7 @@ import yaml
 from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
@@ -777,7 +777,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(-errno.EINVAL, stderr='--all-available-devices is required')
 
     @_cli_write_command('orch daemon add osd')
-    def _daemon_add_osd(self, svc_arg: Optional[str] = None) -> HandleCommandResult:
+    def _daemon_add_osd(self,
+                        svc_arg: Optional[str] = None,
+                        method: Optional[OSDMethod] = None) -> HandleCommandResult:
         """Create an OSD service. Either --svc_arg=host:drives"""
         # Create one or more OSDs"""
 
@@ -794,9 +796,10 @@ Usage:
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
                 data_devices=devs,
+                method=method,
             )
         except (TypeError, KeyError, ValueError) as e:
-            msg = f"Invalid 'host:device' spec: '{svc_arg}': {e}" + usage
+            msg = f"Invalid host:device spec: '{svc_arg}': {e}" + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
         completion = self.create_osds(drive_group)
