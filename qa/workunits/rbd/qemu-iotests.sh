@@ -12,7 +12,7 @@ cd qemu
 if lsb_release -da 2>&1 | grep -iqE '(bionic|focal)'; then
     # Bionic requires a matching test harness
     git checkout v2.11.0
-elif lsb_release -da 2>&1 | grep -iqE '(xenial|linux release 8)'; then
+elif lsb_release -da 2>&1 | grep -iqE '(xenial|linux release 8|stream release 8)'; then
     # Xenial requires a recent test harness
     git checkout v2.3.0
 else
