@@ -6,7 +6,7 @@
 #include <map>
 #include <fmt/format.h>
 #include <seastar/core/condition-variable.hh>
-#include "crimson/common/operation.h"
+#include "crimson/osd/osd_operations/client_request.h"
 
 namespace crimson::osd {
 
@@ -26,12 +26,11 @@ namespace crimson::osd {
 // can keep an op waiting in the case explained above.
 class OpSequencer {
 public:
-  template <typename OpT,
-            typename HandleT,
+  template <typename HandleT,
             typename FuncT,
             typename Result = std::invoke_result_t<FuncT>>
   seastar::futurize_t<Result>
-  start_op(const OpT& op,
+  start_op(const ClientRequest& op,
            HandleT& handle,
            FuncT&& do_op) {
     const uint64_t prev_op = op.get_prev_id();
@@ -72,13 +71,11 @@ public:
   uint64_t get_last_issued() const {
     return last_issued;
   }
-  template <class OpT>
-  void finish_op(const OpT& op) {
+  void finish_op(const ClientRequest& op) {
     assert(op.get_id() > last_completed);
     last_completed = op.get_id();
   }
-  template <class OpT>
-  void maybe_reset(const OpT& op) {
+  void maybe_reset(const ClientRequest& op) {
     const auto op_id = op.get_id();
     // pg interval changes, so we need to reenqueue the previously unblocked
     // ops by rewinding the "last_unblock" pointer
