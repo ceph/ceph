@@ -167,12 +167,15 @@ SeaStore::list_objects(CollectionRef ch,
       [this, start, end, limit] (auto& ret) {
     return repeat_eagain2([this, start, end, limit, &ret] {
       return seastar::do_with(
-          transaction_manager->create_transaction(
-            Transaction::src_t::READ),
-          [this, start, end, limit, &ret] (auto& t) {
-        return onode_manager->list_onodes(*t, start, end, limit
-        ).safe_then([&ret] (auto&& _ret) {
-          ret = std::move(_ret);
+        transaction_manager->create_transaction(
+          Transaction::src_t::READ),
+        [this, start, end, limit, &ret] (auto& t) {
+	return with_trans_intr(
+	  *t,
+	  [this, start, end, limit, &ret](auto &t) {
+            return onode_manager->list_onodes(t, start, end, limit);
+	}).safe_then([&ret] (auto&& _ret) {
+            ret = std::move(_ret);
         });
       });
     }).then([&ret] {
@@ -677,9 +680,13 @@ seastar::future<> SeaStore::do_transaction(
     Transaction::src_t::MUTATE,
     op_type_t::TRANSACTION,
     [this](auto &ctx) {
-      return onode_manager->get_or_create_onodes(
-	*ctx.transaction, ctx.iter.get_objects()
-      ).safe_then([this, &ctx](auto &&read_onodes) {
+    return with_trans_intr(
+      *ctx.transaction,
+      [&](auto &t) {
+        return onode_manager->get_or_create_onodes(
+	  *ctx.transaction, ctx.iter.get_objects());
+	}
+    ).safe_then([this, &ctx](auto &&read_onodes) {
 	ctx.onodes = std::move(read_onodes);
 	return crimson::repeat(
 	  [this, &ctx]() -> tm_ertr::future<seastar::stop_iteration> {
@@ -696,7 +703,12 @@ seastar::future<> SeaStore::do_transaction(
 	    };
 	  });
       }).safe_then([this, &ctx] {
-	return onode_manager->write_dirty(*ctx.transaction, ctx.onodes);
+	return with_trans_intr(
+	  *ctx.transaction,
+          [&](auto &t) {
+	    return onode_manager->write_dirty(*ctx.transaction, ctx.onodes);
+	  }
+	);
       }).safe_then([this, &ctx] {
         // There are some validations in onode tree during onode value
         // destruction in debug mode, which need to be done before calling
@@ -836,7 +848,12 @@ SeaStore::tm_ret SeaStore::_remove(
 {
   LOG_PREFIX(SeaStore::_remove);
   DEBUGT("onode={}", *ctx.transaction, *onode);
-  return onode_manager->erase_onode(*ctx.transaction, onode);
+  return with_trans_intr(
+    *ctx.transaction,
+    [&](auto &t) {
+      return onode_manager->erase_onode(*ctx.transaction, onode);
+    }
+  );
 }
 
 SeaStore::tm_ret SeaStore::_touch(

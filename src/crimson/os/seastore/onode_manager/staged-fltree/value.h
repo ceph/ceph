@@ -208,10 +208,10 @@ class Value {
   Value(NodeExtentManager&, const ValueBuilder&, Ref<tree_cursor_t>&);
 
   /// Extends the payload size.
-  eagain_future<> extend(Transaction&, value_size_t extend_size);
+  eagain_ifuture<> extend(Transaction&, value_size_t extend_size);
 
   /// Trim and shrink the payload.
-  eagain_future<> trim(Transaction&, value_size_t trim_size);
+  eagain_ifuture<> trim(Transaction&, value_size_t trim_size);
 
   /// Get the permission to mutate the payload with the optional value recorder.
   template <typename PayloadT, typename ValueDeltaRecorderT>
