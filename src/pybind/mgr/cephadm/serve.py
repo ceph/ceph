@@ -502,8 +502,7 @@ class CephadmServe:
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_DAEMON']:
-            if k in self.mgr.health_checks:
-                del self.mgr.health_checks[k]
+            self.mgr.remove_health_warning(k)
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
             ls = self.mgr.list_servers()
             managed = self.mgr.cache.get_daemon_names()
@@ -548,23 +547,9 @@ class CephadmServe:
                         'stray host %s has %d stray daemons: %s' % (
                             host, len(missing_names), missing_names))
             if self.mgr.warn_on_stray_hosts and host_detail:
-                self.mgr.health_checks['CEPHADM_STRAY_HOST'] = {
-                    'severity': 'warning',
-                    'summary': '%d stray host(s) with %s daemon(s) '
-                    'not managed by cephadm' % (
-                        len(host_detail), host_num_daemons),
-                    'count': len(host_detail),
-                    'detail': host_detail,
-                }
+                self.mgr.set_health_warning('CEPHADM_STRAY_HOST', f'{len(host_detail)} stray host(s) with {host_num_daemons} daemon(s) not managed by cephadm', len(host_detail), host_detail)
             if self.mgr.warn_on_stray_daemons and daemon_detail:
-                self.mgr.health_checks['CEPHADM_STRAY_DAEMON'] = {
-                    'severity': 'warning',
-                    'summary': '%d stray daemon(s) not managed by cephadm' % (
-                        len(daemon_detail)),
-                    'count': len(daemon_detail),
-                    'detail': daemon_detail,
-                }
-        self.mgr.set_health_checks(self.mgr.health_checks)
+                self.mgr.set_health_warning('CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
 
     def _apply_all_services(self) -> bool:
         r = False
