@@ -121,6 +121,7 @@ class Btree {
       auto this_obj = *this;
       return p_cursor->erase<FORCE_MERGE>(p_tree->get_context(t), true
       ).si_then([this_obj, this] (Ref<tree_cursor_t> next_cursor) {
+        assert(p_cursor->is_invalid());
         if (next_cursor) {
           assert(!next_cursor->is_end());
           return Cursor{p_tree, next_cursor};
