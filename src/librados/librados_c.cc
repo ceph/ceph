@@ -532,21 +532,23 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_unset_osdmap_full_try)(
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   ctx->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
-LIBRADOS_C_API_BASE_DEFAULT(rados_unset_pool_full_try);
+LIBRADOS_C_API_BASE_DEFAULT(rados_unset_osdmap_full_try);
 
-extern "C" void _rados_set_pool_full_try(rados_ioctx_t io)
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_set_pool_full_try)(
+  rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   ctx->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_set_pool_full_try);
 
-extern "C" void _rados_unset_pool_full_try(rados_ioctx_t io)
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_unset_pool_full_try)(
+  rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   ctx->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
-LIBRADOS_C_API_BASE_DEFAULT(rados_unset_osdmap_full_try);
+LIBRADOS_C_API_BASE_DEFAULT(rados_unset_pool_full_try);
 
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_application_enable)(
   rados_ioctx_t io,
