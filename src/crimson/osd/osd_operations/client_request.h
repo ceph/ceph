@@ -57,7 +57,7 @@ public:
 
 public:
   seastar::future<> start();
-  const Operation& get_prev_op() const {
+  const ClientRequest& get_prev_op() const {
     assert(prev_op);
     return *prev_op;
   }
@@ -80,7 +80,7 @@ private:
   PGPipeline &pp(PG &pg);
 
   class OpSequencer& sequencer;
-  const Operation* prev_op = nullptr;
+  const ClientRequest* prev_op = nullptr;
 
   template <typename Errorator>
   using interruptible_errorator =
