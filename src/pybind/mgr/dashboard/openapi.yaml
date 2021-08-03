@@ -3214,10 +3214,16 @@ paths:
         name: sources
         schema:
           type: string
+      - default: false
+        description: Host Facts
+        in: query
+        name: facts
+        schema:
+          type: boolean
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v1.1+json:
               schema:
                 properties:
                   addr:
