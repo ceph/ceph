@@ -126,7 +126,7 @@ class DefaultFetcher():
             if len(terms) == 1 and len(terms[0].match_expressions) == 1 and terms[0].match_expressions[0].key == 'kubernetes.io/hostname' and len(terms[0].match_expressions[0].values) == 1:
                 node = terms[0].match_expressions[0].values[0]
         size = self.convert_size(i.spec.capacity['storage'])
-        path = i.spec.host_path.path if i.spec.host_path else ('/dev/' + i.metadata.annotations['storage.openshift.com/device-name']) if i.metadata.annotations['storage.openshift.com/device-name'] else ''
+        path = i.spec.host_path.path if i.spec.host_path else i.spec.local.path if i.spec.local else ('/dev/' + i.metadata.annotations['storage.openshift.com/device-name']) if i.metadata.annotations and 'storage.openshift.com/device-name' in i.metadata.annotations else ''
         state = i.spec.volume_mode == 'Block' and i.status.phase == 'Available'
         pv_name = i.metadata.name
         device = Device(
