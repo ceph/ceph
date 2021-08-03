@@ -8,7 +8,8 @@
   "compilerOptions": {
     "sourceMap": false,
     "types": [
-      "cypress"
+      "cypress",
+      "@applitools/eyes-cypress"
     ],
     "target": "es6"
   }
