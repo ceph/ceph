@@ -98,7 +98,8 @@ class OSDService(CephService):
         if replace_osd_ids is None:
             replace_osd_ids = OsdIdClaims(self.mgr).filtered_by_host(host)
             assert replace_osd_ids is not None
-        # check result
+
+        # check result: lvm
         osds_elems: dict = CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
             [
@@ -141,6 +142,43 @@ class OSDService(CephService):
                 CephadmServe(self.mgr)._create_daemon(
                     daemon_spec,
                     osd_uuid_map=osd_uuid_map)
+
+        # check result: raw
+        raw_elems: dict = CephadmServe(self.mgr)._run_cephadm_json(
+            host, 'osd', 'ceph-volume',
+            [
+                '--',
+                'raw', 'list',
+                '--format', 'json',
+            ])
+        for osd_uuid, osd in raw_elems.items():
+            if osd.get('ceph_fsid') != fsid:
+                continue
+            osd_id = str(osd.get('osd_id', '-1'))
+            if osd_id in before_osd_uuid_map and osd_id not in replace_osd_ids:
+                # if it exists but is part of the replacement operation, don't skip
+                continue
+            if osd_id not in osd_uuid_map:
+                logger.debug('osd id {} does not exist in cluster'.format(osd_id))
+                continue
+            if osd_uuid_map.get(osd_id) != osd_uuid:
+                logger.debug('mismatched osd uuid (cluster has %s, osd '
+                             'has %s)' % (osd_uuid_map.get(osd_id), osd_uuid))
+                continue
+            if osd_id in created:
+                continue
+
+            created.append(osd_id)
+            daemon_spec = CephadmDaemonDeploySpec(
+                service_name=service_name,
+                daemon_id=osd_id,
+                host=host,
+                daemon_type='osd',
+            )
+            daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+            CephadmServe(self.mgr)._create_daemon(
+                daemon_spec,
+                osd_uuid_map=osd_uuid_map)
 
         if created:
             self.mgr.cache.invalidate_host_devices(host)
