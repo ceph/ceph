@@ -10205,7 +10205,8 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
   // If the scheduler enabled is mclock, override the default
   // osd capacity with the value obtained from running the
   // osd bench test. This is later used to setup mclock.
-  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler") {
+  if ((cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler") &&
+      (cct->_conf.get_val<bool>("osd_mclock_skip_benchmark") == false)) {
     std::string max_capacity_iops_config;
     bool force_run_benchmark =
       cct->_conf.get_val<bool>("osd_mclock_force_run_benchmark_on_init");
