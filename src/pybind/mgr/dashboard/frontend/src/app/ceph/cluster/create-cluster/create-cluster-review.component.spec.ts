@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import _ from 'lodash';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
@@ -18,7 +19,7 @@ describe('CreateClusterReviewComponent', () => {
   let serviceListSpy: jasmine.Spy;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, SharedModule, CoreModule, CephModule]
+    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), CephModule, CoreModule]
   });
 
   beforeEach(() => {

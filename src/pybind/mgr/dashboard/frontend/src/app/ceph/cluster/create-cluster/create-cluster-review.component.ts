@@ -7,6 +7,7 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 
 @Component({
@@ -16,7 +17,6 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 })
 export class CreateClusterReviewComponent implements OnInit {
   hosts: object[] = [];
-  hostsDetails: object;
   hostsByService: object;
   hostsCount: number;
   serviceCount: number;
@@ -26,10 +26,13 @@ export class CreateClusterReviewComponent implements OnInit {
   totalDevices: number;
   totalCapacity = 0;
   services: Array<CephServiceSpec> = [];
+  totalCPUs = 0;
+  totalMemory = 0;
 
   constructor(
     public wizardStepsService: WizardStepsService,
     public cephServiceService: CephServiceService,
+    private dimlessBinary: DimlessBinaryPipe,
     public hostService: HostService,
     private osdService: OsdService
   ) {}
@@ -41,24 +44,6 @@ export class CreateClusterReviewComponent implements OnInit {
     let walDeviceCapacity = 0;
     let dbDevices = 0;
     let dbDeviceCapacity = 0;
-    this.hostsDetails = {
-      columns: [
-        {
-          prop: 'hostname',
-          name: $localize`Host Name`,
-          flexGrow: 2
-        },
-        {
-          name: $localize`Labels`,
-          prop: 'labels',
-          flexGrow: 1,
-          cellTransformation: CellTemplate.badge,
-          customTemplateConfig: {
-            class: 'badge-dark'
-          }
-        }
-      ]
-    };
 
     this.hostsByService = {
       columns: [
@@ -88,6 +73,7 @@ export class CreateClusterReviewComponent implements OnInit {
           (this.serviceOccurrences[serviceKey['service_type']] || 0) + 1;
         this.uniqueServices.add(serviceKey['service_type']);
       });
+      this.totalMemory = this.dimlessBinary.transform(this.totalMemory);
 
       this.uniqueServices.forEach((serviceType) => {
         this.hostsCountPerService.push({
@@ -99,10 +85,15 @@ export class CreateClusterReviewComponent implements OnInit {
       this.hostsByService['data'] = [...this.hostsCountPerService];
     });
 
-    this.hostService.list().subscribe((resp: object[]) => {
+    this.hostService.list('true').subscribe((resp: object[]) => {
       this.hosts = resp;
       this.hostsCount = this.hosts.length;
-      this.hostsDetails['data'] = [...this.hosts];
+      _.forEach(this.hosts, (hostKey) => {
+        this.totalCPUs = this.totalCPUs + hostKey['cpu_count'];
+        // convert to bytes
+        this.totalMemory = this.totalMemory + hostKey['memory_total_kb'] * 1024;
+      });
+      this.totalMemory = this.dimlessBinary.transform(this.totalMemory);
     });
 
     if (this.osdService.osdDevices['data']) {

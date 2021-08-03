@@ -2,18 +2,19 @@
 
 from ..security import Scope
 from ..services.cluster import ClusterModel
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController
+from . import APIDoc, APIRouter, EndpointDoc, RESTController
+from ._version import APIVersion
 
 
-@ApiController('/cluster', Scope.CONFIG_OPT)
-@ControllerDoc("Get Cluster Details", "Cluster")
+@APIRouter('/cluster', Scope.CONFIG_OPT)
+@APIDoc("Get Cluster Details", "Cluster")
 class Cluster(RESTController):
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     @EndpointDoc("Get the cluster status")
     def list(self):
         return ClusterModel.from_db().dict()
 
-    @RESTController.MethodMap(version='0.1')
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
     @EndpointDoc("Update the cluster status",
                  parameters={'status': (str, 'Cluster Status')})
     def singleton_set(self, status: str):
