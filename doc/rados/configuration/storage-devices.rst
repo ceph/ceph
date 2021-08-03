@@ -31,33 +31,34 @@ with the Luminous 12.2.z release, the new default (and recommended) backend is
 BlueStore
 ---------
 
-BlueStore is a special-purpose storage backend designed specifically
-for managing data on disk for Ceph OSD workloads.  It is motivated by
-experience supporting and managing OSDs using FileStore over the
-last ten years.  Key BlueStore features include:
+BlueStore is a special-purpose storage backend designed specifically for
+managing data on disk for Ceph OSD workloads.  BlueStore is based on over a
+decade of experience supporting and managing OSDs using FileStore.
 
-* Direct management of storage devices.  BlueStore consumes raw block
-  devices or partitions.  This avoids any intervening layers of
-  abstraction (such as local file systems like XFS) that may limit
+Key BlueStore features include:
+
+* Direct management of storage devices. BlueStore consumes raw block
+  devices or partitions.  This avoids intervening layers of
+  abstraction (such as local file systems like XFS) that can limit
   performance or add complexity.
-* Metadata management with RocksDB.  We embed RocksDB's key/value database
-  in order to manage internal metadata, such as the mapping from object
+* Metadata management with RocksDB. RocksDB's key/value database is embedded
+  in order to manage internal metadata, including the mapping of object
   names to block locations on disk.
-* Full data and metadata checksumming.  By default all data and
+* Full data and metadata checksumming. By default, all data and
   metadata written to BlueStore is protected by one or more
-  checksums.  No data or metadata will be read from disk or returned
+  checksums. No data or metadata is read from disk or returned
   to the user without being verified.
-* Inline compression.  Data written may be optionally compressed
-  before being written to disk.
-* Multi-device metadata tiering.  BlueStore allows its internal
+* Inline compression.  Data can be optionally compressed before being written
+  to disk.
+* Multi-device metadata tiering. BlueStore allows its internal
   journal (write-ahead log) to be written to a separate, high-speed
-  device (like an SSD, NVMe, or NVDIMM) to increased performance.  If
+  device (like an SSD, NVMe, or NVDIMM) for increased performance.  If
   a significant amount of faster storage is available, internal
-  metadata can also be stored on the faster device.
-* Efficient copy-on-write.  RBD and CephFS snapshots rely on a
+  metadata can be stored on the faster device.
+* Efficient copy-on-write. RBD and CephFS snapshots rely on a
   copy-on-write *clone* mechanism that is implemented efficiently in
-  BlueStore.  This results in efficient IO both for regular snapshots
-  and for erasure coded pools (which rely on cloning to implement
+  BlueStore. This results in efficient I/O both for regular snapshots
+  and for erasure-coded pools (which rely on cloning to implement
   efficient two-phase commits).
 
 For more information, see :doc:`bluestore-config-ref` and :doc:`/rados/operations/bluestore-migration`.
