@@ -60,7 +60,7 @@ void usage(ostream &out)
   out << "  is_deterministic    exit w/ success if type encodes deterministically\n";
 }
 
-vector<DencoderPlugin> load_plugins(DencoderRegistry& registry)
+vector<DencoderPlugin> load_plugins()
 {
   fs::path mod_dir{CEPH_DENC_MOD_DIR};
   if (auto ceph_lib = getenv("CEPH_LIB"); ceph_lib) {
@@ -83,12 +83,6 @@ vector<DencoderPlugin> load_plugins(DencoderRegistry& registry)
     if (!plugin.good()) {
       continue;
     }
-    int n = plugin.register_dencoders(registry);
-    if (n <= 0) {
-      std::cerr << "fail to load dencoders from " << entry << std::endl;
-      continue;
-    }
-    std::cout << "load " << n << " from " << entry << std::endl;
     dencoder_plugins.push_back(std::move(plugin));
   }
   return dencoder_plugins;
@@ -96,8 +90,13 @@ vector<DencoderPlugin> load_plugins(DencoderRegistry& registry)
 
 int main(int argc, const char **argv)
 {
+  vector<DencoderPlugin> plugins = load_plugins();
   DencoderRegistry registry;
-  auto plugins = load_plugins(registry);
+  for (auto& plugin : plugins) {
+    for (auto& [name, denc] : plugin.register_dencoders()) {
+      registry.register_dencoder(name, denc);
+    }
+  }
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -136,7 +135,7 @@ int main(int argc, const char **argv)
 	cerr << "class '" << cname << "' unknown" << std::endl;
 	return 1;
       }
-      den = dencoders[cname].get();
+      den = dencoders[cname];
       den->generate();
     } else if (*i == string("skip")) {
       ++i;
