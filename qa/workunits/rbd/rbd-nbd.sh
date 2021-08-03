@@ -342,6 +342,30 @@ EOF
 rbd snap create ${POOL}/${IMAGE}@quiesce2
 _sudo dd if=${DATA} of=${DEV} bs=1M count=1 oflag=direct
 
+# test the hook is called on signal
+unmap_device ${DEV} ${PID}
+touch ${QUIESCE_HOOK}
+chmod +x ${QUIESCE_HOOK}
+cat > ${QUIESCE_HOOK} <<EOF
+#/bin/sh
+echo "test the hook is executed" >&2
+echo \$1 > ${TEMPDIR}/\$2
+EOF
+DEV=`_sudo rbd device --device-type nbd map --quiesce-hook ${QUIESCE_HOOK} ${POOL}/${IMAGE} \
+	--log-file=${LOG_FILE} --options="quiesce-onsignal,try-netlink"`
+_sudo dd if=${DATA} of=${DEV} bs=1M count=1 oflag=direct
+get_pid ${POOL}
+_sudo kill -SIGTERM ${PID}
+sleep 4 # let the process take some time to call quiesce-hook
+test "$(cat ${TEMPDIR}/quiesce)" = ${DEV}
+expect_false get_pid ${POOL}
+DEV=`_sudo rbd device --device-type nbd attach --device ${DEV} --quiesce-hook ${QUIESCE_HOOK} \
+	${POOL}/${IMAGE} --log-file=${LOG_FILE} --options="quiesce-onsignal"`
+get_pid ${POOL}
+sleep 4 # let the process take some time to call quiesce-hook
+test "$(cat ${TEMPDIR}/unquiesce)" = ${DEV}
+_sudo dd if=${DATA} of=${DEV} bs=1M count=1 oflag=direct
+
 # test rbd-nbd_quiesce hook that comes with distribution
 unmap_device ${DEV} ${PID}
 LOG_FILE=${TEMPDIR}/rbd-nbd.log
