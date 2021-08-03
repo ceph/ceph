@@ -462,27 +462,27 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 "On": "On",
                 "Off": "Off",
                 True: "Yes",
-                False: "No",
+                False: "",
             }
 
             out = []
             if wide:
                 table = PrettyTable(
-                    ['Hostname', 'Path', 'Type', 'Transport', 'RPM', 'Vendor', 'Model',
-                     'Serial', 'Size', 'Health', 'Ident', 'Fault', 'Available',
-                     'Reject Reasons'],
+                    ['HOST', 'PATH', 'TYPE', 'TRANSPORT', 'RPM', 'DEVICE ID', 'SIZE',
+                     'HEALTH', 'IDENT', 'FAULT',
+                     'AVAILABLE', 'REJECT REASONS'],
                     border=False)
             else:
                 table = PrettyTable(
-                    ['Hostname', 'Path', 'Type', 'Serial', 'Size',
-                     'Health', 'Ident', 'Fault', 'Available'],
+                    ['HOST', 'PATH', 'TYPE', 'DEVICE ID', 'SIZE',
+                     'AVAILABLE', 'REJECT REASONS'],
                     border=False)
             table.align = 'l'
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for host_ in sorted(inv_hosts, key=lambda h: h.name):  # type: InventoryHost
-                for d in host_.devices.devices:  # type: Device
+                for d in sorted(host_.devices.devices, key=lambda d: d.path):  # type: Device
 
                     led_ident = 'N/A'
                     led_fail = 'N/A'
@@ -490,24 +490,17 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                         led_ident = d.lsm_data['ledSupport']['IDENTstatus']
                         led_fail = d.lsm_data['ledSupport']['FAILstatus']
 
-                    if d.device_id is not None:
-                        fallback_serial = d.device_id.split('_')[-1]
-                    else:
-                        fallback_serial = ""
-
                     if wide:
                         table.add_row(
                             (
                                 host_.name,
                                 d.path,
                                 d.human_readable_type,
-                                d.lsm_data.get('transport', 'Unknown'),
-                                d.lsm_data.get('rpm', 'Unknown'),
-                                d.sys_api.get('vendor') or 'N/A',
-                                d.sys_api.get('model') or 'N/A',
-                                d.lsm_data.get('serialNum', fallback_serial),
+                                d.lsm_data.get('transport', ''),
+                                d.lsm_data.get('rpm', ''),
+                                d.device_id,
                                 format_dimless(d.sys_api.get('size', 0), 5),
-                                d.lsm_data.get('health', 'Unknown'),
+                                d.lsm_data.get('health', ''),
                                 display_map[led_ident],
                                 display_map[led_fail],
                                 display_map[d.available],
@@ -520,12 +513,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                                 host_.name,
                                 d.path,
                                 d.human_readable_type,
-                                d.lsm_data.get('serialNum', fallback_serial),
+                                d.device_id,
                                 format_dimless(d.sys_api.get('size', 0), 5),
-                                d.lsm_data.get('health', 'Unknown'),
-                                display_map[led_ident],
-                                display_map[led_fail],
-                                display_map[d.available]
+                                display_map[d.available],
+                                ', '.join(d.rejected_reasons)
                             )
                         )
             out.append(table.get_string())
