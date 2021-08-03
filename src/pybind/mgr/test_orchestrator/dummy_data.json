@@ -330,8 +330,6 @@
       "service_id": "vstart",
       "service_name": "nfs.vstart",
       "service_type": "nfs",
-      "pool": "nfs-ganesha",
-      "namespace": "vstart",
       "status": {
         "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
         "container_image_name": "quay.io/ceph-ci/ceph:master",
