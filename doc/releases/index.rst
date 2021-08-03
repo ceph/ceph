@@ -67,6 +67,7 @@ Release timeline
 .. _16.2.0: pacific#v16-2-0-pacific
 
 .. _Octopus: octopus
+.. _15.2.14: octopus#v15-2-14-octopus
 .. _15.2.13: octopus#v15-2-13-octopus
 .. _15.2.12: octopus#v15-2-12-octopus
 .. _15.2.11: octopus#v15-2-11-octopus
