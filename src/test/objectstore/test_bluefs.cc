@@ -85,7 +85,21 @@ public:
   }
 };
 
-TEST(BlueFS, mkfs) {
+class Test : public ::testing::Test,
+  public ::testing::WithParamInterface<const char*> {
+
+  ConfSaver conf;
+
+public:
+  Test() : conf(g_ceph_context->_conf)
+  {}
+  void SetUp() override
+  {
+    conf.SetVal("bluefs_mode", GetParam());
+  }
+};
+
+TEST_P(Test, mkfs) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   uuid_d fsid;
@@ -94,7 +108,7 @@ TEST(BlueFS, mkfs) {
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
 }
 
-TEST(BlueFS, mkfs_mount) {
+TEST_P(Test, mkfs_mount) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
@@ -108,7 +122,7 @@ TEST(BlueFS, mkfs_mount) {
   fs.umount();
 }
 
-TEST(BlueFS, write_read) {
+TEST_P(Test, write_read) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
@@ -138,7 +152,7 @@ TEST(BlueFS, write_read) {
   fs.umount();
 }
 
-TEST(BlueFS, small_appends) {
+TEST_P(Test, small_appends) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
@@ -169,7 +183,7 @@ TEST(BlueFS, small_appends) {
   fs.umount();
 }
 
-TEST(BlueFS, very_large_write) {
+TEST_P(Test, very_large_write) {
   // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size = 1048576 * 1024 * 6ull;
   TempBdev bdev{size};
@@ -243,7 +257,7 @@ TEST(BlueFS, very_large_write) {
   g_ceph_context->_conf.set_val("bluefs_buffered_io", stringify((int)old));
 }
 
-TEST(BlueFS, very_large_write2) {
+TEST_P(Test, very_large_write2) {
   // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size_full = 1048576 * 1024 * 6ull;
   uint64_t size = 1048576 * 1024 * 5ull;
@@ -408,7 +422,7 @@ void join_all(std::vector<std::thread>& v)
 #define NUM_SINGLE_FILE_WRITERS 1
 #define NUM_MULTIPLE_FILE_WRITERS 2
 
-TEST(BlueFS, test_flush_1) {
+TEST_P(Test, test_flush_1) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -442,7 +456,7 @@ TEST(BlueFS, test_flush_1) {
   fs.umount();
 }
 
-TEST(BlueFS, test_flush_2) {
+TEST_P(Test, test_flush_2) {
   uint64_t size = 1048576 * 256;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -469,7 +483,7 @@ TEST(BlueFS, test_flush_2) {
   fs.umount();
 }
 
-TEST(BlueFS, test_flush_3) {
+TEST_P(Test, test_flush_3) {
   uint64_t size = 1048576 * 256;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -503,7 +517,7 @@ TEST(BlueFS, test_flush_3) {
   fs.umount();
 }
 
-TEST(BlueFS, test_simple_compaction_sync) {
+TEST_P(Test, test_simple_compaction_sync) {
   g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "true");
@@ -553,9 +567,12 @@ TEST(BlueFS, test_simple_compaction_sync) {
   }
   fs.compact_log();
   fs.umount();
+  int r = fs.mount();
+  ceph_assert(r == 0);
+  fs.umount();
 }
 
-TEST(BlueFS, test_simple_compaction_async) {
+TEST_P(Test, test_simple_compaction_async) {
   g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "false");
@@ -607,8 +624,8 @@ TEST(BlueFS, test_simple_compaction_async) {
   fs.umount();
 }
 
-TEST(BlueFS, test_compaction_sync) {
-  uint64_t size = 1048576 * 128;
+TEST_P(Test, test_compaction_sync) {
+  uint64_t size = 1048576 * 256;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
     "bluefs_alloc_size",
@@ -625,7 +642,9 @@ TEST(BlueFS, test_compaction_sync) {
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     std::vector<std::thread> write_threads;
-    uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
+    // keep some more free space for extra needs
+    uint64_t keep_extra = g_conf()->bluefs_mode == "original" ? 32 * 1048576 : 1048576;
+    uint64_t effective_size = size - fs.get_used() - keep_extra;
     uint64_t per_thread_bytes = (effective_size/(NUM_WRITERS));
     for (int i=0; i<NUM_WRITERS; i++) {
       write_threads.push_back(std::thread(write_data, std::ref(fs), per_thread_bytes));
@@ -644,7 +663,7 @@ TEST(BlueFS, test_compaction_sync) {
   fs.umount();
 }
 
-TEST(BlueFS, test_compaction_async) {
+TEST_P(Test, test_compaction_async) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -662,7 +681,9 @@ TEST(BlueFS, test_compaction_async) {
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     std::vector<std::thread> write_threads;
-    uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
+    // keep some more free space for extra needs
+    uint64_t keep_extra = g_conf()->bluefs_mode == "original" ? 32 * 1048576 : 1048576;
+    uint64_t effective_size = size - fs.get_used() - keep_extra;
     uint64_t per_thread_bytes = (effective_size/(NUM_WRITERS));
     for (int i=0; i<NUM_WRITERS; i++) {
       write_threads.push_back(std::thread(write_data, std::ref(fs), per_thread_bytes));
@@ -681,7 +702,7 @@ TEST(BlueFS, test_compaction_async) {
   fs.umount();
 }
 
-TEST(BlueFS, test_replay) {
+TEST_P(Test, test_replay) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -699,7 +720,7 @@ TEST(BlueFS, test_replay) {
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     std::vector<std::thread> write_threads;
-    uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
+    uint64_t effective_size = size - (34 * 1048576); // leaving the last 34 MB for log compaction
     uint64_t per_thread_bytes = (effective_size/(NUM_WRITERS));
     for (int i=0; i<NUM_WRITERS; i++) {
       write_threads.push_back(std::thread(write_data, std::ref(fs), per_thread_bytes));
@@ -722,7 +743,7 @@ TEST(BlueFS, test_replay) {
   fs.umount();
 }
 
-TEST(BlueFS, test_replay_growth) {
+TEST_P(Test, test_replay_growth) {
   uint64_t size = 1048576LL * (2 * 1024 + 128);
   TempBdev bdev{size};
 
@@ -760,7 +781,7 @@ TEST(BlueFS, test_replay_growth) {
   fs.umount();
 }
 
-TEST(BlueFS, test_tracker_50965) {
+TEST_P(Test, test_tracker_50965) {
   uint64_t size_wal = 1048576 * 64;
   TempBdev bdev_wal{size_wal};
   uint64_t size_db = 1048576 * 128;
@@ -825,6 +846,13 @@ TEST(BlueFS, test_tracker_50965) {
 
   fs.umount();
 }
+
+INSTANTIATE_TEST_SUITE_P(
+  BlueFS,
+  Test,
+  ::testing::Values(
+    "original",
+    "static_log"));
 
 int main(int argc, char **argv) {
   vector<const char*> args;
