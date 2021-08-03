@@ -257,7 +257,8 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
     oid,
     Transaction::src_t::READ,
     op_type_t::READ,
-    [=](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
+    [=](auto &t, auto &onode)
+        -> with_trans_ertr<ObjectDataHandler::read_iertr>::future<bufferlist> {
       size_t size = onode.get_layout().size;
 
       if (offset >= size) {
@@ -268,14 +269,16 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
 	size - offset :
 	std::min(size - offset, len);
 
-      return ObjectDataHandler().read(
-	ObjectDataHandler::context_t{
-	  *transaction_manager,
-	  t,
-	  onode,
-	},
-	offset,
-	corrected_len);
+      return with_trans_intr(t, [&](auto &t) {
+        return ObjectDataHandler().read(
+          ObjectDataHandler::context_t{
+            transaction_manager->get_tm(),
+            t,
+            onode,
+          },
+          offset,
+          corrected_len);
+      });
     });
 }
 
@@ -884,14 +887,16 @@ SeaStore::tm_ret SeaStore::_write(
   return seastar::do_with(
     std::move(_bl),
     [=, &ctx, &onode](auto &bl) {
-      return ObjectDataHandler().write(
-	ObjectDataHandler::context_t{
-	  *transaction_manager,
-	  *ctx.transaction,
-	  *onode,
-	},
-	offset,
-	bl);
+      return with_trans_intr(*ctx.transaction, [&](auto &t) {
+        return ObjectDataHandler().write(
+          ObjectDataHandler::context_t{
+            transaction_manager->get_tm(),
+            t,
+            *onode,
+          },
+          offset,
+          bl);
+      });
     });
 }
 
@@ -1017,13 +1022,15 @@ SeaStore::tm_ret SeaStore::_truncate(
   LOG_PREFIX(SeaStore::_truncate);
   DEBUGT("onode={} size={}", *ctx.transaction, *onode, size);
   onode->get_mutable_layout(*ctx.transaction).size = size;
-  return ObjectDataHandler().truncate(
-    ObjectDataHandler::context_t{
-      *transaction_manager,
-      *ctx.transaction,
-      *onode
-    },
-    size);
+  return with_trans_intr(*ctx.transaction, [&](auto &t) {
+    return ObjectDataHandler().truncate(
+      ObjectDataHandler::context_t{
+        transaction_manager->get_tm(),
+        t,
+        *onode
+      },
+      size);
+  });
 }
 
 SeaStore::tm_ret SeaStore::_setattrs(

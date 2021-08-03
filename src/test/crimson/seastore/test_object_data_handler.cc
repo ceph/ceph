@@ -56,14 +56,16 @@ struct object_data_handler_test_t:
 	known_contents,
 	offset,
 	len));
-    return ObjectDataHandler().write(
-      ObjectDataHandler::context_t{
-	itm,
-	t,
-	*onode,
-      },
-      offset,
-      bl).unsafe_get0();
+    with_trans_intr(t, [&](auto &t) {
+      return ObjectDataHandler().write(
+        ObjectDataHandler::context_t{
+          *tm,
+          t,
+          *onode,
+        },
+        offset,
+        bl);
+    }).unsafe_get0();
   }
   void write(objaddr_t offset, extent_len_t len, char fill) {
     auto t = create_mutate_transaction();
@@ -77,13 +79,15 @@ struct object_data_handler_test_t:
 	known_contents.c_str() + offset,
 	0,
 	size - offset);
-      ObjectDataHandler().truncate(
-	ObjectDataHandler::context_t{
-	  itm,
-	  t,
-	  *onode
-	},
-	offset).unsafe_get0();
+      with_trans_intr(t, [&](auto &t) {
+        return ObjectDataHandler().truncate(
+          ObjectDataHandler::context_t{
+            *tm,
+            t,
+            *onode
+          },
+          offset);
+      }).unsafe_get0();
     }
     size = offset;
   }
@@ -94,14 +98,16 @@ struct object_data_handler_test_t:
   }
 
   void read(Transaction &t, objaddr_t offset, extent_len_t len) {
-    bufferlist bl = ObjectDataHandler().read(
-      ObjectDataHandler::context_t{
-	itm,
-	t,
-	*onode
-      },
-      offset,
-      len).unsafe_get0();
+    bufferlist bl = with_trans_intr(t, [&](auto &t) {
+      return ObjectDataHandler().read(
+        ObjectDataHandler::context_t{
+          *tm,
+          t,
+          *onode
+        },
+        offset,
+        len);
+    }).unsafe_get0();
     bufferlist known;
     known.append(
       bufferptr(
