@@ -25,6 +25,7 @@ class SendCommandError(rados.Error):
         super(SendCommandError, self).__init__(err, errno)
 
 
+# pylint: disable=too-many-public-methods
 class CephService(object):
 
     OSD_FLAG_NO_SCRUB = 'noscrub'
@@ -89,6 +90,32 @@ class CephService(object):
         if svc_data:
             svc_data['status'] = mgr.get_daemon_status(svc_data['type'], svc_data['service_map_id'])
         return svc_data
+
+    @classmethod
+    def get_service_perf_counters(cls, service_type: str, service_id: str) -> Dict[str, Any]:
+        schema_dict = mgr.get_perf_schema(service_type, service_id)
+        schema = schema_dict["{}.{}".format(service_type, service_id)]
+        counters = []
+        for key, value in sorted(schema.items()):
+            counter = {'name': str(key), 'description': value['description']}
+            # pylint: disable=W0212
+            if mgr._stattype_to_str(value['type']) == 'counter':
+                counter['value'] = cls.get_rate(
+                    service_type, service_id, key)
+                counter['unit'] = mgr._unit_to_str(value['units'])
+            else:
+                counter['value'] = mgr.get_latest(
+                    service_type, service_id, key)
+                counter['unit'] = ''
+            counters.append(counter)
+
+        return {
+            'service': {
+                'type': service_type,
+                'id': str(service_id)
+            },
+            'counters': counters
+        }
 
     @classmethod
     def get_pool_list(cls, application=None):

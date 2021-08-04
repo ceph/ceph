@@ -71,7 +71,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
         RgwStub.get_settings()
         mgr.list_servers.return_value = [{
             'hostname': 'host1',
-            'services': [{'id': 'daemon1', 'type': 'rgw'}, {'id': 'daemon2', 'type': 'rgw'}]
+            'services': [{'id': '4832', 'type': 'rgw'}, {'id': '5356', 'type': 'rgw'}]
         }]
         mgr.get_metadata.side_effect = [
             {
@@ -90,6 +90,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody([{
             'id': 'daemon1',
+            'service_map_id': '4832',
             'version': 'ceph version master (dev)',
             'server_hostname': 'host1',
             'zonegroup_name': 'zg1',
@@ -97,6 +98,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
         },
             {
             'id': 'daemon2',
+            'service_map_id': '5356',
             'version': 'ceph version master (dev)',
             'server_hostname': 'host1',
             'zonegroup_name': 'zg2',
