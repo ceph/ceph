@@ -660,31 +660,33 @@ static int check_index(cls_method_context_t hctx,
   calc_header->ver = existing_header->ver;
   calc_header->syncstopped = existing_header->syncstopped;
 
-  map<string, bufferlist> keys;
-  string start_obj;
-  string filter_prefix;
+  std::map<std::string, bufferlist> keys;
+  std::string start_obj;
+  std::string filter_prefix;
 
-#define CHECK_CHUNK_SIZE 1000
-  bool done = false;
-  bool more;
+  constexpr int CHECK_CHUNK_SIZE = 1000;
+  bool more = true;
 
   do {
+  read_restart:
     rc = get_obj_vals(hctx, start_obj, filter_prefix, CHECK_CHUNK_SIZE, &keys, &more);
-    if (rc < 0)
+    if (rc < 0) {
       return rc;
+    }
 
-    for (auto kiter = keys.begin(); kiter != keys.end(); ++kiter) {
-      if (!bi_is_plain_entry(kiter->first)) {
-        done = true;
-        break;
+    for (const auto& kiter : keys) {
+      // skip over "ugly namespace"
+      if (kiter.first >= BI_PREFIX_BEGIN && kiter.first <= BI_PREFIX_END) {
+	start_obj = BI_PREFIX_END;
+	goto read_restart;
       }
 
       rgw_bucket_dir_entry entry;
-      auto eiter = kiter->second.cbegin();
+      auto eiter = kiter.second.cbegin();
       try {
         decode(entry, eiter);
       } catch (ceph::buffer::error& err) {
-        CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter->first.c_str());
+        CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter.first.c_str());
         return -EIO;
       }
       rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
@@ -692,10 +694,12 @@ static int check_index(cls_method_context_t hctx,
       stats.total_size += entry.meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
       stats.actual_size += entry.meta.size;
-
-      start_obj = kiter->first;
     }
-  } while (keys.size() == CHECK_CHUNK_SIZE && !done);
+
+    if (!keys.empty()) {
+      start_obj = keys.crbegin()->first; // use last entry as start_obj for next call
+    }
+  } while (more);
 
   return 0;
 }
