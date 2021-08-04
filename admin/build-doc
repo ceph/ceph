@@ -50,8 +50,12 @@ set -e
 
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
-if [ ! -e $vdir ]; then
-    python3 -m venv $vdir
+md5=$vdir/md5
+if test -f $md5 && md5sum --check $md5 > /dev/null; then
+    # reusing existing venv
+    :
+else
+    virtualenv --python=python3 $vdir
 
     $vdir/bin/pip install --quiet wheel
     $vdir/bin/pip install --quiet \
@@ -59,6 +63,11 @@ if [ ! -e $vdir ]; then
               -r $TOPDIR/admin/doc-python-common-requirements.txt
     BUILD_DOC=1 $vdir/bin/pip install --quiet \
          -r $TOPDIR/admin/doc-pybind.txt
+    md5sum \
+        $TOPDIR/admin/doc-requirements.txt \
+        $TOPDIR/admin/doc-python-common-requirements.txt \
+        $TOPDIR/admin/doc-pybind.txt \
+        > $md5
 fi
 
 install -d -m0755 \
