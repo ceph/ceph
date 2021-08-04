@@ -97,6 +97,7 @@ class RgwDaemon(RESTController):
                 # extract per-daemon service data and health
                 daemon = {
                     'id': metadata['id'],
+                    'service_map_id': service['id'],
                     'version': metadata['ceph_version'],
                     'server_hostname': hostname,
                     'zonegroup_name': metadata['zonegroup_name'],
