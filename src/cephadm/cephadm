@@ -108,6 +108,7 @@ class BaseConfig:
 
     def __init__(self) -> None:
         self.image: str = ''
+        self.container_cli_args: Optional[str] = None
         self.docker: bool = False
         self.data_dir: str = DATA_DIR
         self.log_dir: str = LOG_DIR
@@ -2777,6 +2778,9 @@ def get_container(ctx: CephadmContext,
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             container_args.append('--cgroups=split')
 
+        if ctx.container_cli_args is not None:
+            container_args.extend(shlex.split(ctx.container_cli_args))
+
     return CephContainer.for_daemon(
         ctx,
         fsid=fsid,
@@ -3440,6 +3444,7 @@ class CephContainer:
                  host_network: bool = True,
                  memory_request: Optional[str] = None,
                  memory_limit: Optional[str] = None,
+                 container_cli_args: Optional[List[str]] = None,
                  ) -> None:
         self.ctx = ctx
         self.image = image
@@ -3456,6 +3461,7 @@ class CephContainer:
         self.host_network = host_network
         self.memory_request = memory_request
         self.memory_limit = memory_limit
+        self.container_cli_args = container_cli_args if container_cli_args else ctx.container_cli_args
 
     @classmethod
     def for_daemon(cls,
@@ -3535,6 +3541,9 @@ class CephContainer:
             # fall back to SIGKILL).
             '--stop-signal=SIGTERM',
         ]
+
+        if self.container_cli_args is not None:
+            cmd_args.extend(shlex.split(self.container_cli_args))
 
         if isinstance(self.ctx.container_engine, Podman):
             if os.path.exists('/etc/ceph/podman-auth.json'):
@@ -5119,6 +5128,9 @@ def command_bootstrap(ctx):
         is_available(ctx, 'mgr epoch %d' % epoch, mgr_has_latest_epoch)
 
     enable_cephadm_mgr_module(cli, wait_for_mgr_restart)
+
+    if ctx.container_cli_args is not None:
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_cli_args', '--value={}'.format(ctx.container_cli_args), '--force'])
 
     # ssh
     if not ctx.skip_ssh:
@@ -7928,6 +7940,9 @@ def _get_parser():
         '--image',
         help='container image. Can also be set via the "CEPHADM_IMAGE" '
         'env var')
+    parser.add_argument(
+        '--container-cli-args',
+        help='Run the container cli with extra args')
     parser.add_argument(
         '--docker',
         action='store_true',

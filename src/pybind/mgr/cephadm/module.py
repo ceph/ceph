@@ -172,6 +172,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='mode for remote execution of cephadm',
         ),
         Option(
+            'container_cli_args',
+            type='str',
+            default=None,
+            desc='Run the container cli with extra args',
+        ),
+        Option(
             'container_image_base',
             default=DEFAULT_IMAGE,
             desc='Container image name, without the tag',
@@ -405,6 +411,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.host_check_interval = 0
             self.max_count_per_host = 0
             self.mode = ''
+            self.container_cli_args = None
             self.container_image_base = ''
             self.container_image_prometheus = ''
             self.container_image_grafana = ''

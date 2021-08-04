@@ -12,7 +12,7 @@ Synopsis
 | **cephadm**** [-h] [--image IMAGE] [--docker] [--data-dir DATA_DIR]
 |               [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |               [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
-|               [--retry RETRY] [--no-container-init]
+|               [--retry RETRY] [--no-container-init] [--container-cli-args]
 |               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install}
 |               ...
 
@@ -159,6 +159,14 @@ Options
 .. option:: --no-container-init
 
    do not run podman/docker with `--init` (default: False)
+
+.. option:: --container-cli-args
+
+   pass any additional flags to podman/docker cli (default: None)
+
+   For example, to debug Ceph daemons at runtime with gdb or strace, you must
+   enable the SYS_PTRACE capability on ceph's containers, and you can do this
+   with `--container-cli-args="--cap-add=PTRACE"`
 
 
 Commands

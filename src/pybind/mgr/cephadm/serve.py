@@ -1282,6 +1282,8 @@ class CephadmServe:
 
         # subcommand
         final_args.append(command)
+        if self.mgr.container_cli_args is not None:
+            final_args.append('--container-cli-args="{}"'.format(self.mgr.container_cli_args))
 
         # subcommand args
         if not no_fsid:
