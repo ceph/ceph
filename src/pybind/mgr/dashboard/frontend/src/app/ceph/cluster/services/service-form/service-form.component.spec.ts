@@ -251,6 +251,23 @@ describe('ServiceFormComponent', () => {
         const ssl_key = fixture.debugElement.query(By.css('#ssl_key'));
         expect(ssl_key).toBeNull();
       });
+
+      it('should test .pem file', () => {
+        const pemCert = `
+-----BEGIN CERTIFICATE-----
+iJ5IbgzlKPssdYwuAEI3yPZxX/g5vKBrgcyD3LttLL/DlElq/1xCnwVrv7WROSNu
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+mn/S7BNBEC7AGe5ajmN+8hBTGdACUXe8rwMNrtTy/MwBZ0VpJsAAjJh+aptZh5yB
+-----END CERTIFICATE-----
+-----BEGIN RSA PRIVATE KEY-----
+x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
+-----END RSA PRIVATE KEY-----`;
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('ssl_cert', pemCert);
+        fixture.detectChanges();
+        formHelper.expectValid('ssl_cert');
+      });
     });
 
     describe('should test service iscsi', () => {
