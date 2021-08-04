@@ -144,7 +144,7 @@ def _title_message(commit, pr, strict):
     message = "    " + "\n    ".join(lines)
     return (title, message)
 
-def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict, use_tags):
+def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict, use_tags, include_pr_messages):
 
     issue2prs = {}
     pr2issues = {}
@@ -308,7 +308,7 @@ def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict
                     author=author, pr=pr
                 )
             )
-        if message:
+        if include_pr_messages and message:
             print (message)
 
 
@@ -354,6 +354,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--use-tags", default=False,
                         help="Use github tags to guess the component")
+    parser.add_argument("--include-pr-messages", default=False, action='store_true',
+                        help="Include full PR message in addition to PR title, if available")
 
     args = parser.parse_args()
     gh = github.GitHub(
@@ -368,5 +370,6 @@ if __name__ == "__main__":
         args.markdown,
         args.verbose,
         args.strict,
-        args.use_tags
+        args.use_tags,
+        args.include_pr_messages
     )
