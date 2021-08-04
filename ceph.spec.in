@@ -436,7 +436,6 @@ Requires:      ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 Requires:      findutils
 Requires:      grep
 Requires:      logrotate
-Requires:      parted
 Requires:      psmisc
 Requires:      util-linux
 Requires:      which
