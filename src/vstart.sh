@@ -1189,7 +1189,7 @@ start_ganesha() {
         ip = $IP
         port = $port
         ganesha data = $ganesha_dir
-        pid file = $ganesha_dir/ganesha-$name.pid
+        pid file = $CEPH_OUT_DIR/ganesha-$name.pid
 EOF
 
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
