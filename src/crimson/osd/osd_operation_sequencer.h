@@ -70,9 +70,38 @@ public:
   const ClientRequest* get_last_issued() const {
     return last_issued;
   }
-  void finish_op(const ClientRequest& op) {
+  void finish_op_in_order(const ClientRequest& op) {
     assert(op.get_id() > last_completed->get_id());
     last_completed = &op;
+  }
+  void finish_op_out_of_order(ClientRequest& this_op) {
+    for (auto it = OperationRegistryI::op_list::s_iterator_to(this_op);
+         it != OperationRegistryI::op_list::s_iterator_to(*last_issued);
+         ++it) {
+      // we're iterating over the operation registry of all ClientRequests.
+      // this list aggrates every single instance in the system, and thus
+      // we need to skip operations coming from different client's session
+      // or targeting different PG. The op we're interested in should be
+      // somewhere between the operation that early exists (this_op) and
+      // the most recently registered one.
+      // as the out-of-order exit is supposed to happen on cold paths only,
+      // the extra overhead is a thing we can live with.
+      auto* maybe_next_op = std::addressof(dynamic_cast<ClientRequest&>(*it));
+      if (maybe_next_op->same_session_and_pg(this_op)) {
+        // OK, this is the next op.
+        maybe_next_op->prev_op = this_op.prev_op;
+        break;
+      }
+    }
+    // fix the last_unblocked pointer. otherwise we wouldn't be able to leave
+    // the wait loop in start_op() as any concrete value of last_unblocked can
+    // wake at most one op and above we lowered this number to 0.
+    if (last_unblocked == &this_op) {
+      last_unblocked = this_op.prev_op;
+    }
+    if (last_issued == &this_op) {
+      last_issued = this_op.prev_op;
+    }
   }
   void maybe_reset(const ClientRequest& op) {
     const auto op_id = op.get_id();

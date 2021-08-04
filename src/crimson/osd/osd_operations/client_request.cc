@@ -54,6 +54,12 @@ ClientRequest::PGPipeline &ClientRequest::pp(PG &pg)
   return pg.client_request_pg_pipeline;
 }
 
+bool ClientRequest::same_session_and_pg(const ClientRequest& other_op) const
+{
+  return &get_osd_priv(conn.get()) == &get_osd_priv(other_op.conn.get()) &&
+         m->get_spg() == other_op.m->get_spg();
+}
+
 bool ClientRequest::is_pg_op() const
 {
   return std::any_of(
@@ -75,7 +81,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_sequencer(FuncT&& func
   may_set_prev_op();
   return sequencer.start_op(*this, handle, std::forward<FuncT>(func))
   .then_interruptible([this] {
-    sequencer.finish_op(*this);
+    sequencer.finish_op_in_order(*this);
   });
 }
 

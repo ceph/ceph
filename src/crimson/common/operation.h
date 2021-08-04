@@ -314,6 +314,12 @@ std::ostream &operator<<(std::ostream &, const Operation &op);
  * Maintains a set of lists of all active ops.
  */
 class OperationRegistryI {
+  using op_list_member_option = boost::intrusive::member_hook<
+    Operation,
+    registry_hook_t,
+    &Operation::registry_hook
+    >;
+
   friend class Operation;
   seastar::timer<seastar::lowres_clock> shutdown_timer;
   seastar::promise<> shutdown;
@@ -323,6 +329,11 @@ protected:
   virtual bool registries_empty() const = 0;
 
 public:
+  using op_list = boost::intrusive::list<
+    Operation,
+    op_list_member_option,
+    boost::intrusive::constant_time_size<false>>;
+
   template <typename T, typename... Args>
   typename T::IRef create_operation(Args&&... args) {
     typename T::IRef op = new T(std::forward<Args>(args)...);
@@ -346,16 +357,6 @@ public:
 
 template <size_t NUM_REGISTRIES>
 class OperationRegistryT : public OperationRegistryI {
-  using op_list_member_option = boost::intrusive::member_hook<
-    Operation,
-    registry_hook_t,
-    &Operation::registry_hook
-    >;
-  using op_list = boost::intrusive::list<
-    Operation,
-    op_list_member_option,
-    boost::intrusive::constant_time_size<false>>;
-
   std::array<
     op_list,
     NUM_REGISTRIES

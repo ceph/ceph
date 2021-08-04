@@ -61,6 +61,7 @@ public:
     assert(prev_op);
     return *prev_op;
   }
+  bool same_session_and_pg(const ClientRequest& other_op) const;
 
 private:
   template <typename FuncT>
@@ -81,6 +82,7 @@ private:
 
   class OpSequencer& sequencer;
   const ClientRequest* prev_op = nullptr;
+  friend class OpSequencer;
 
   template <typename Errorator>
   using interruptible_errorator =
