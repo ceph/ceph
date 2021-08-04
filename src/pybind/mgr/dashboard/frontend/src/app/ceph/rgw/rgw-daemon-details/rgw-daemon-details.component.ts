@@ -2,6 +2,7 @@ import { Component, Input, OnChanges } from '@angular/core';
 
 import _ from 'lodash';
 
+import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -14,10 +15,11 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 export class RgwDaemonDetailsComponent implements OnChanges {
   metadata: any;
   serviceId = '';
+  serviceMapId = '';
   grafanaPermission: Permission;
 
   @Input()
-  selection: any;
+  selection: RgwDaemon;
 
   constructor(
     private rgwDaemonService: RgwDaemonService,
@@ -27,9 +29,9 @@ export class RgwDaemonDetailsComponent implements OnChanges {
   }
 
   ngOnChanges() {
-    // Get the service id of the first selected row.
     if (this.selection) {
       this.serviceId = this.selection.id;
+      this.serviceMapId = this.selection.service_map_id;
     }
   }
 
