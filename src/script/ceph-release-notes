@@ -137,6 +137,10 @@ def _title_message(commit, pr, strict):
         # assume that a single line means the intention is to
         # re-write the PR title
         return (lines[0], None)
+    elif len(lines) < 3 and 'refs/pull' in lines[0]:
+        # assume the intent was rewriting the title and something like
+        # ptl-tool was used to generate the merge message
+        return (lines[1], None)
     message = "    " + "\n    ".join(lines)
     return (title, message)
 
