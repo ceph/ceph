@@ -4,7 +4,7 @@
 """To run this script first install the dependencies
 
 
-  virtualenv v
+  python3 -m venv v
   source v/bin/activate
   pip install githubpy GitPython requests
 
