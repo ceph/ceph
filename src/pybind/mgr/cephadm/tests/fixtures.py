@@ -59,7 +59,7 @@ def with_cephadm_module(module_options=None, store=None):
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
-            mock.patch("cephadm.services.osd.OSDService.get_osdspec_affinity", return_value='test_spec'), \
+            mock.patch("cephadm.services.osd.OSDService.get_osd_metadata", return_value={}), \
             mock.patch("cephadm.module.CephadmOrchestrator.remote"):
 
         m = CephadmOrchestrator.__new__(CephadmOrchestrator)
