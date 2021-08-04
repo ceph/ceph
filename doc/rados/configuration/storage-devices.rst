@@ -66,19 +66,19 @@ For more information, see :doc:`bluestore-config-ref` and :doc:`/rados/operation
 FileStore
 ---------
 
-FileStore is the legacy approach to storing objects in Ceph.  It
+FileStore is the legacy approach to storing objects in Ceph. It
 relies on a standard file system (normally XFS) in combination with a
 key/value database (traditionally LevelDB, now RocksDB) for some
 metadata.
 
-FileStore is well-tested and widely used in production but suffers
-from many performance deficiencies due to its overall design and
-reliance on a traditional file system for storing object data.
+FileStore is well-tested and widely used in production. However, it
+suffers from many performance deficiencies due to its overall design
+and its reliance on a traditional file system for storing object data.
 
-Although FileStore is generally capable of functioning on most
-POSIX-compatible file systems (including btrfs and ext4), we only
-recommend that XFS be used.  Both btrfs and ext4 have known bugs and
-deficiencies and their use may lead to data loss.  By default all Ceph
-provisioning tools will use XFS.
+Although FileStore is capable of functioning on most POSIX-compatible
+file systems (including btrfs and ext4), we recommend that only the
+XFS file system be used with Ceph. Both btrfs and ext4 have known bugs and
+deficiencies and their use may lead to data loss. By default, all Ceph
+provisioning tools use XFS.
 
 For more information, see :doc:`filestore-config-ref`.
