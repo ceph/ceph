@@ -253,7 +253,7 @@ class Module(MgrModule):
 
         servers = self.list_servers()
         for server in servers:
-            self.get_server(server['hostname'])
+            self.get_server(server['hostname'])  # type: ignore
 
         osdmap = self.get('osd_map')
         for o in osdmap['osds']:

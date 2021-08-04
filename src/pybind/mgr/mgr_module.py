@@ -180,7 +180,7 @@ class OSDMap(ceph_module.BasePyOSDMap):
         return self._pool_raw_used_rate(pool_id)
 
     @classmethod
-    def build_simple(cls, epoch: int = 1, uuid: Optional[str] = None, num_osd: int = -1):
+    def build_simple(cls, epoch: int = 1, uuid: Optional[str] = None, num_osd: int = -1) -> 'ceph_module.BasePyOSDMap':
         return cls._build_simple(epoch, uuid, num_osd)
 
     def get_ec_profile(self, name: str) -> Optional[List[Dict[str, str]]]:
@@ -454,7 +454,7 @@ def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerF
 
 def CLIRequiresDB(func: HandlerFuncType) -> HandlerFuncType:
     @functools.wraps(func)
-    def check(self, *args: Any, **kwargs: Any) -> Tuple[int, str, str]:
+    def check(self: MgrModule, *args: Any, **kwargs: Any) -> Tuple[int, str, str]:
         if not self.db_ready():
             return -errno.EAGAIN, "", "mgr db not yet available"
         return func(self, *args, **kwargs)
@@ -828,7 +828,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_active_uri(self) -> str:
         return self._ceph_get_active_uri()
 
-    def get(self, data_name: str):
+    def get(self, data_name: str) -> Dict[str, Any]:
         return self._ceph_get(data_name)
 
     def get_mgr_ip(self) -> str:
@@ -1236,7 +1236,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._rados.shutdown()
             self._ceph_unregister_client(addrs)
 
-    def get(self, data_name: str):
+    def get(self, data_name: str) -> Any:
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
 
@@ -1358,7 +1358,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return ret
 
-    def get_server(self, hostname) -> ServerInfoT:
+    def get_server(self, hostname: str) -> ServerInfoT:
         """
         Called by the plugin to fetch metadata about a particular hostname from
         ceph-mgr.
