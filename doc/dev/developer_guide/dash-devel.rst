@@ -1138,7 +1138,7 @@ Unit tests based on tox
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 We included a ``tox`` configuration file that will run the unit tests under
-Python 2 or 3, as well as linting tools to guarantee the uniformity of code.
+Python 3, as well as linting tools to guarantee the uniformity of code.
 
 You need to install ``tox`` and ``coverage`` before running it. To install the
 packages in your system, either install it via your operating system's package
@@ -1152,9 +1152,6 @@ Alternatively, you can use Python's native package installation method::
 
 To run the tests, run ``src/script/run_tox.sh`` in the dashboard directory (where
 ``tox.ini`` is located)::
-
-  ## Run Python 2+3 tests+lint commands:
-  $ ../../../script/run_tox.sh --tox-env py27,py3,lint,check
 
   ## Run Python 3 tests+lint commands:
   $ ../../../script/run_tox.sh --tox-env py3,lint,check

@@ -40,11 +40,11 @@ TEMP=$($GETOPT --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
 test $? != 0 && usage
 eval set -- "$TEMP"
 
-PYTHON_OPTION=""
+PYTHON=python3
 while true ; do
     case "$1" in
         -h|--help) usage ;;  # does not return
-        --python) PYTHON_OPTION="--python=$2" ; shift ; shift ;;
+        --python) PYTHON="$2" ; shift ; shift ;;
         --) shift ; break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -57,7 +57,7 @@ if [ -z "$DIR" ] ; then
 fi
 rm -fr $DIR
 mkdir -p $DIR
-virtualenv $PYTHON_OPTION $DIR
+$PYTHON -m venv $DIR
 . $DIR/bin/activate
 
 if pip --help | grep -q disable-pip-version-check; then

@@ -257,7 +257,6 @@ BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
 BuildRequires:	python%{python3_pkgversion}-requests
 BuildRequires:	python%{python3_pkgversion}-dateutil
-BuildRequires:	python%{python3_pkgversion}-virtualenv
 BuildRequires:	python%{python3_pkgversion}-coverage
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat

@@ -144,7 +144,9 @@ def setup_user_bucket(client, dns_name, access_key, secret_key, bucket_name, tes
     )
     client.run(
         args=[
-            'virtualenv',
+            'python3',
+            '-m',
+            'venv',
             '{testdir}/venv'.format(testdir=testdir),
             run.Raw('&&'),
             run.Raw('{testdir}/venv/bin/pip'.format(testdir=testdir)),
