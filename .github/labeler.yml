@@ -238,3 +238,4 @@ nfs:
   - doc/cephfs/nfs.rst
   - doc/cephadm/nfs.rst
   - doc/radosgw/nfs.rst
+  - doc/dev/vstart-ganesha.rst
