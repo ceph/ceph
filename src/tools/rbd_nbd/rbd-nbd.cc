@@ -255,13 +255,13 @@ private:
 
   void io_start(IOContext *ctx)
   {
-    std::lock_guard l{lock};
+    std::scoped_lock l{lock};
     io_pending.push_back(&ctx->item);
   }
 
   void io_finish(IOContext *ctx)
   {
-    std::lock_guard l{lock};
+    std::scoped_lock l{lock};
     ceph_assert(ctx->item.is_on_list());
     ctx->item.remove_myself();
     io_finished.push_back(&ctx->item);
@@ -449,11 +449,11 @@ error:
       }
     }
 signal:
-    std::lock_guard l{lock};
+    std::scoped_lock l{lock};
     terminated = true;
     cond.notify_all();
 
-    std::lock_guard disconnect_l{disconnect_lock};
+    std::scoped_lock disconnect_l{disconnect_lock};
     disconnect_cond.notify_all();
 
     dout(20) << __func__ << ": terminated" << dendl;
