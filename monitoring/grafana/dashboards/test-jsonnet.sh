@@ -4,7 +4,7 @@ set -e
 TEMPDIR=`mktemp -d`
 BASEDIR=$(dirname "$0")
 
-jsonnet -m ${TEMPDIR} $BASEDIR/jsonnet/grafana_dashboards.jsonnet
+JSONNET_PATH="${GRAFONNET_PATH}" jsonnet -m ${TEMPDIR} $BASEDIR/jsonnet/grafana_dashboards.jsonnet
 
 truncate -s 0 ${TEMPDIR}/json_difference.log
 for json_files in $BASEDIR/*.json

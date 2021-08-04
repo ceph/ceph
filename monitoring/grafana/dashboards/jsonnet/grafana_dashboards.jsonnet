@@ -1,4 +1,4 @@
-local g = import '../../../../src/pybind/mgr/dashboard/grafonnet-lib/grafonnet/grafana.libsonnet';
+local g = import 'grafana.libsonnet';
 
 local dashboardSchema(title, uid, time_from, refresh, schemaVersion, tags,timezone, timepicker) =
   g.dashboard.new(title=title, uid=uid, time_from=time_from, refresh=refresh, schemaVersion=schemaVersion, tags=tags, timezone=timezone, timepicker=timepicker);
