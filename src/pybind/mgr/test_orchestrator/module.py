@@ -113,7 +113,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         # type: () -> List[orchestrator.DaemonDescription]
         """ Return ceph daemons on the running host."""
         types = ("mds", "osd", "mon", "rgw", "mgr", "nfs", "iscsi")
-        out = map(str, check_output(['ps', 'aux']).splitlines())
+        out = map(str, check_output(['ps', 'aux']).decode().splitlines())
         processes = [p for p in out if any(
             [('ceph-{} '.format(t) in p) for t in types])]
 
