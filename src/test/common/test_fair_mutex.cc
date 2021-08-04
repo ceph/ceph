@@ -13,6 +13,7 @@ TEST(FairMutex, simple)
   {
     std::unique_lock lock{mutex};
     ASSERT_TRUE(mutex.is_locked());
+    ASSERT_TRUE(ceph_mutex_is_locked_by_me(mutex));
     // fair_mutex does not recursive ownership semantics
     ASSERT_FALSE(mutex.try_lock());
   }

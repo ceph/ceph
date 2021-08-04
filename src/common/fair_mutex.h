@@ -4,7 +4,6 @@
 
 #include "common/ceph_mutex.h"
 
-#include <pthread.h>
 #include <thread>
 #include <string>
 
@@ -26,7 +25,7 @@ public:
     cond.wait(lock, [&] {
       return my_id == unblock_id;
     });
-    locked_by = std::this_thread::get_id();
+    _set_locked_by();
   }
 
   bool try_lock()
@@ -36,7 +35,7 @@ public:
       return false;
     }
     ++next_id;
-    locked_by = std::this_thread::get_id();
+    _set_locked_by();
     return true;
   }
 
@@ -44,7 +43,7 @@ public:
   {
     std::lock_guard lock(mutex);
     ++unblock_id;
-    locked_by = std::thread::id();
+    _reset_locked_by();
     cond.notify_all();
   }
 
@@ -52,16 +51,28 @@ public:
   {
     return next_id != unblock_id;
   }
-
+#ifdef CEPH_DEBUG_MUTEX
   bool is_locked_by_me() const {
     return is_locked() && locked_by == std::this_thread::get_id();
   }
-
+private:
+  void _set_locked_by() {
+    locked_by = std::this_thread::get_id();
+  }
+  void _reset_locked_by() {
+    locked_by = {};
+  }
+#else
+  void _set_locked_by() {}
+  void _reset_locked_by() {}
+#endif
 private:
   unsigned next_id = 0;
   unsigned unblock_id = 0;
   ceph::condition_variable cond;
   ceph::mutex mutex;
+#ifdef CEPH_DEBUG_MUTEX
   std::thread::id locked_by = {};
+#endif
 };
 } // namespace ceph
