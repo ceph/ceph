@@ -107,20 +107,7 @@ EXPORT {
 
 %url "rados://{NFS_POOL_NAME}/foo/export-2"'''
 
-    clusters = {
-        'foo': {
-            'pool': NFS_POOL_NAME,
-            'namespace': 'foo',
-            'type': "ORCHESTRATOR",
-            'daemon_conf': 'conf-nfs.foo',
-            'daemons': ['foo.host_a', 'foo.host_b'],
-            'exports': {
-                1: ['foo.host_a', 'foo.host_b'],
-                2: ['foo.host_a', 'foo.host_b'],
-                3: ['foo.host_a', 'foo.host_b']  # for new-added export
-            }
-        }
-    }
+    cluster_id = "foo"
 
     class RObject(object):
         def __init__(self, key: str, raw: str) -> None:
@@ -184,32 +171,10 @@ EXPORT {
         self.io_mock.remove_object.side_effect = self._ioctx_remove_mock
 
         # mock nfs services
-        cluster_info = self.clusters['foo']
         orch_nfs_services = [
-            ServiceDescription(spec=NFSServiceSpec(service_id='foo'))
+            ServiceDescription(spec=NFSServiceSpec(service_id=self.cluster_id))
         ] if enable else []
 
-        """
-        # mock nfs daemons
-        def _get_nfs_instances(service_name=None):
-            if not enable:
-                return []
-            instances = {
-                'nfs.foo': [
-                    DaemonDescription(daemon_id='foo.host_a', status=1),
-                    DaemonDescription(daemon_id='foo.host_b', status=1)
-                ],
-                'nfs.bar': [
-                    DaemonDescription(daemon_id='bar.host_c', status=1)
-                ]
-            }
-            if service_name is not None:
-                return instances[service_name]
-            result = []
-            for _, daemons in instances.items():
-                result.extend(daemons)
-            return result
-        """
         def mock_exec(cls, args):
             u = {
                 "user_id": "abc",
@@ -256,7 +221,7 @@ EXPORT {
         with mock.patch('nfs.module.Module.describe_service') as describe_service, \
                 mock.patch('nfs.module.Module.rados') as rados, \
                 mock.patch('nfs.export.available_clusters',
-                           return_value=self.clusters.keys()), \
+                           return_value=[self.cluster_id]), \
                 mock.patch('nfs.export.restart_nfs_service'), \
                 mock.patch('nfs.export.ExportMgr._exec', mock_exec), \
                 mock.patch('nfs.export.check_fs', return_value=True), \
@@ -412,31 +377,28 @@ NFS_CORE_PARAM {
         assert blocks[0].block_name == "%url"
         assert blocks[0].values['value'] == "rados://ganesha/ns/export-1"
 
-    def test_ganesha_conf(self) -> None:
+    def _do_mock_test(self, func) -> None:
         with self._mock_orchestrator(True):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_ganesha_conf(cluster_id, info['exports'])
-                self._reset_temp_store()
+            func()
+            self._reset_temp_store()
 
-    def _do_test_ganesha_conf(self, cluster: str, expected_exports: Dict[int, List[str]]) -> None:
+    def test_ganesha_conf(self) -> None:
+        self._do_mock_test(self._do_test_ganesha_conf)
+
+    def _do_test_ganesha_conf(self) -> None:
         nfs_mod = Module('nfs', '', '')
         ganesha_conf = ExportMgr(nfs_mod)
-        exports = ganesha_conf.exports['foo']
+        exports = ganesha_conf.exports[self.cluster_id]
 
         assert len(exports) == 2
-        #assert 1 in exports
-        #assert 2 in exports
 
         self._validate_export_1([e for e in exports if e.export_id == 1][0])
         self._validate_export_2([e for e in exports if e.export_id == 2][0])
 
     def test_config_dict(self) -> None:
-        with self._mock_orchestrator(True):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_config_dict(cluster_id, info['exports'])
-                self._reset_temp_store()
+        self._do_mock_test(self._do_test_config_dict)
 
-    def _do_test_config_dict(self, cluster: str, expected_exports: Dict[int, List[str]]) -> None:
+    def _do_test_config_dict(self) -> None:
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
         export = [e for e in conf.exports['foo'] if e.export_id == 1][0]
@@ -449,7 +411,7 @@ NFS_CORE_PARAM {
                                        {'access_type': 'RO',
                                         'addresses': ['192.168.0.0/16'],
                                         'squash': 'All'}],
-                           'cluster_id': 'foo',
+                           'cluster_id': self.cluster_id,
                            'export_id': 1,
                            'fsal': {'fs_name': 'a', 'name': 'CEPH', 'user_id': 'ganesha'},
                            'path': '/',
@@ -463,7 +425,7 @@ NFS_CORE_PARAM {
         ex_dict = export.to_dict()
         assert ex_dict == {'access_type': 'RW',
                            'clients': [],
-                           'cluster_id': 'foo',
+                           'cluster_id': self.cluster_id,
                            'export_id': 2,
                            'fsal': {'name': 'RGW',
                                     'access_key_id': 'the_access_key',
@@ -477,17 +439,13 @@ NFS_CORE_PARAM {
                            'transports': ['TCP', 'UDP']}
 
     def test_config_from_dict(self) -> None:
-        with self._mock_orchestrator(True):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_config_from_dict(cluster_id, info['exports'])
-                self._reset_temp_store()
+        self._do_mock_test(self._do_test_config_from_dict)
 
-    def _do_test_config_from_dict(self, cluster_id: str, expected_exports: Dict[int, List[str]]) -> None:
+    def _do_test_config_from_dict(self) -> None:
         export = Export.from_dict(1, {
-            'daemons': expected_exports[1],
             'export_id': 1,
             'path': '/',
-            'cluster_id': cluster_id,
+            'cluster_id': self.cluster_id,
             'pseudo': '/cephfs_a',
             'tag': None,
             'access_type': 'RW',
@@ -532,17 +490,15 @@ NFS_CORE_PARAM {
         assert export.clients[1].addresses == ["192.168.0.0/16"]
         assert export.clients[1].squash == "all_squash"
         assert export.clients[1].access_type == "RO"
-        # assert export.daemons == set(expected_exports[1])  # probably correct value
-        assert export.cluster_id == cluster_id
+        assert export.cluster_id == self.cluster_id
         assert export.attr_expiration_time == 0
         assert export.security_label
 
         export = Export.from_dict(2, {
-            'daemons': expected_exports[2],
             'export_id': 2,
             'path': 'bucket',
             'pseudo': '/rgw',
-            'cluster_id': cluster_id,
+            'cluster_id': self.cluster_id,
             'tag': None,
             'access_type': 'RW',
             'squash': 'all_squash',
@@ -569,8 +525,7 @@ NFS_CORE_PARAM {
 #        assert export.fsal.access_key is None
 #        assert export.fsal.secret_key is None
         assert len(export.clients) == 0
-#        assert export.daemons == set(expected_exports[2])
-        assert export.cluster_id == cluster_id
+        assert export.cluster_id == self.cluster_id
 
     @pytest.mark.parametrize(
         "block",
@@ -580,11 +535,10 @@ NFS_CORE_PARAM {
         ]
     )
     def test_export_from_to_export_block(self, block):
-        cluster_id = 'foo'
         blocks = GaneshaConfParser(block).parse()
-        export = Export.from_export_block(blocks[0], cluster_id)
+        export = Export.from_export_block(blocks[0], self.cluster_id)
         newblock = export.to_export_block()
-        export2 = Export.from_export_block(newblock, cluster_id)
+        export2 = Export.from_export_block(newblock, self.cluster_id)
         newblock2 = export2.to_export_block()
         assert newblock == newblock2
 
@@ -596,9 +550,8 @@ NFS_CORE_PARAM {
         ]
     )
     def test_export_from_to_dict(self, block):
-        cluster_id = 'foo'
         blocks = GaneshaConfParser(block).parse()
-        export = Export.from_export_block(blocks[0], cluster_id)
+        export = Export.from_export_block(blocks[0], self.cluster_id)
         j = export.to_dict()
         export2 = Export.from_dict(j['export_id'], j)
         j2 = export2.to_dict()
@@ -612,27 +565,23 @@ NFS_CORE_PARAM {
         ]
     )
     def test_export_validate(self, block):
-        cluster_id = 'foo'
         blocks = GaneshaConfParser(block).parse()
-        export = Export.from_export_block(blocks[0], cluster_id)
+        export = Export.from_export_block(blocks[0], self.cluster_id)
         nfs_mod = Module('nfs', '', '')
         with mock.patch('nfs.export_utils.check_fs', return_value=True):
             export.validate(nfs_mod)
 
     def test_update_export(self):
-        with self._mock_orchestrator(True):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_update_export(cluster_id, info['exports'])
-                self._reset_temp_store()
+        self._do_mock_test(self._do_test_update_export)
 
-    def _do_test_update_export(self, cluster_id, expected_exports):
+    def _do_test_update_export(self):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
-        r = conf.apply_export(cluster_id, json.dumps({
+        r = conf.apply_export(self.cluster_id, json.dumps({
             'export_id': 2,
             'path': 'bucket',
             'pseudo': '/rgw/bucket',
-            'cluster_id': cluster_id,
+            'cluster_id': self.cluster_id,
             'tag': 'bucket_tag',
             'access_type': 'RW',
             'squash': 'all_squash',
@@ -667,15 +616,14 @@ NFS_CORE_PARAM {
         assert len(export.clients) == 1
         assert export.clients[0].squash is None
         assert export.clients[0].access_type is None
-        assert export.cluster_id == cluster_id
+        assert export.cluster_id == self.cluster_id
 
         # do it again, with changes
-        r = conf.apply_export(cluster_id, json.dumps({
+        r = conf.apply_export(self.cluster_id, json.dumps({
             'export_id': 2,
-            'daemons': expected_exports[2],
             'path': 'newbucket',
             'pseudo': '/rgw/bucket',
-            'cluster_id': cluster_id,
+            'cluster_id': self.cluster_id,
             'tag': 'bucket_tag',
             'access_type': 'RO',
             'squash': 'root',
@@ -710,14 +658,13 @@ NFS_CORE_PARAM {
         assert len(export.clients) == 1
         assert export.clients[0].squash is None
         assert export.clients[0].access_type is None
-        assert export.cluster_id == cluster_id
+        assert export.cluster_id == self.cluster_id
 
         # again, but without export_id
-        r = conf.apply_export(cluster_id, json.dumps({
-            'daemons': expected_exports[2],
+        r = conf.apply_export(self.cluster_id, json.dumps({
             'path': 'newestbucket',
             'pseudo': '/rgw/bucket',
-            'cluster_id': cluster_id,
+            'cluster_id': self.cluster_id,
             'tag': 'bucket_tag',
             'access_type': 'RW',
             'squash': 'root',
@@ -738,7 +685,7 @@ NFS_CORE_PARAM {
         }))
         assert r[0] == 0
 
-        export = conf._fetch_export('foo', '/rgw/bucket')
+        export = conf._fetch_export(self.cluster_id, '/rgw/bucket')
         assert export.export_id == 2
         assert export.path == "newestbucket"
         assert export.pseudo == "/rgw/bucket"
@@ -752,34 +699,28 @@ NFS_CORE_PARAM {
         assert len(export.clients) == 1
         assert export.clients[0].squash is None
         assert export.clients[0].access_type is None
-        assert export.cluster_id == cluster_id
+        assert export.cluster_id == self.cluster_id
 
     def test_update_export_with_ganesha_conf(self):
-        with self._mock_orchestrator(True):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_update_export_with_ganesha_conf(cluster_id, info['exports'])
-                self._reset_temp_store()
+        self._do_mock_test(self._do_test_update_export_with_ganesha_conf)
 
-    def _do_test_update_export_with_ganesha_conf(self, cluster_id, expected_exports):
+    def _do_test_update_export_with_ganesha_conf(self):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
-        r = conf.apply_export(cluster_id, self.export_3)
+        r = conf.apply_export(self.cluster_id, self.export_3)
         assert r[0] == 0
 
     def test_update_export_with_list(self):
-        with self._mock_orchestrator(True):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_update_export_with_list(cluster_id, info['exports'])
-                self._reset_temp_store()
+        self._do_mock_test(self._do_test_update_export_with_list)
 
-    def _do_test_update_export_with_list(self, cluster_id, expected_exports):
+    def _do_test_update_export_with_list(self):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
-        r = conf.apply_export(cluster_id, json.dumps([
+        r = conf.apply_export(self.cluster_id, json.dumps([
             {
                 'path': 'bucket',
                 'pseudo': '/rgw/bucket',
-                'cluster_id': cluster_id,
+                'cluster_id': self.cluster_id,
                 'tag': 'bucket_tag',
                 'access_type': 'RW',
                 'squash': 'root',
@@ -801,7 +742,7 @@ NFS_CORE_PARAM {
             {
                 'path': 'bucket2',
                 'pseudo': '/rgw/bucket2',
-                'cluster_id': cluster_id,
+                'cluster_id': self.cluster_id,
                 'tag': 'bucket_tag',
                 'access_type': 'RO',
                 'squash': 'root',
@@ -837,7 +778,7 @@ NFS_CORE_PARAM {
         assert len(export.clients) == 1
         assert export.clients[0].squash is None
         assert export.clients[0].access_type is None
-        assert export.cluster_id == cluster_id
+        assert export.cluster_id == self.cluster_id
 
         export = conf._fetch_export('foo', '/rgw/bucket2')
         assert export.export_id == 4
@@ -853,41 +794,35 @@ NFS_CORE_PARAM {
         assert len(export.clients) == 1
         assert export.clients[0].squash is None
         assert export.clients[0].access_type is None
-        assert export.cluster_id == cluster_id
+        assert export.cluster_id == self.cluster_id
 
     def test_remove_export(self) -> None:
-        with self._mock_orchestrator(True), mock.patch('nfs.module.ExportMgr._exec'):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_remove_export(cluster_id, info['exports'])
-                self._reset_temp_store()
+        self._do_mock_test(self._do_test_remove_export)
 
-    def _do_test_remove_export(self, cluster_id: str, expected_exports: Dict[int, List[str]]) -> None:
+    def _do_test_remove_export(self) -> None:
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
-        assert len(conf.exports[cluster_id]) == 2
-        assert conf.delete_export(cluster_id=cluster_id,
+        assert len(conf.exports[self.cluster_id]) == 2
+        assert conf.delete_export(cluster_id=self.cluster_id,
                                   pseudo_path="/rgw") == (0, "Successfully deleted export", "")
-        exports = conf.exports[cluster_id]
+        exports = conf.exports[self.cluster_id]
         assert len(exports) == 1
         assert exports[0].export_id == 1
 
     def test_create_export_rgw(self):
-        with self._mock_orchestrator(True):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_create_export_rgw(cluster_id, info['exports'])
-                self._reset_temp_store()
+        self._do_mock_test(self._do_test_create_export_rgw)
 
-    def _do_test_create_export_rgw(self, cluster_id, expected_exports):
+    def _do_test_create_export_rgw(self):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
-        exports = conf.list_exports(cluster_id=cluster_id)
+        exports = conf.list_exports(cluster_id=self.cluster_id)
         ls = json.loads(exports[1])
         assert len(ls) == 2
 
         r = conf.create_export(
             fsal_type='rgw',
-            cluster_id=cluster_id,
+            cluster_id=self.cluster_id,
             bucket='bucket',
             pseudo_path='/mybucket',
             read_only=False,
@@ -896,7 +831,7 @@ NFS_CORE_PARAM {
         )
         assert r[0] == 0
 
-        exports = conf.list_exports(cluster_id=cluster_id)
+        exports = conf.list_exports(cluster_id=self.cluster_id)
         ls = json.loads(exports[1])
         assert len(ls) == 3
 
@@ -915,25 +850,22 @@ NFS_CORE_PARAM {
         assert export.clients[0].squash == 'root'
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.0.0/16"]
-        assert export.cluster_id == cluster_id
+        assert export.cluster_id == self.cluster_id
 
     def test_create_export_cephfs(self):
-        with self._mock_orchestrator(True):
-            for cluster_id, info in self.clusters.items():
-                self._do_test_create_export_cephfs(cluster_id, info['exports'])
-                self._reset_temp_store()
+        self._do_mock_test(self._do_test_create_export_cephfs)
 
-    def _do_test_create_export_cephfs(self, cluster_id, expected_exports):
+    def _do_test_create_export_cephfs(self):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
-        exports = conf.list_exports(cluster_id=cluster_id)
+        exports = conf.list_exports(cluster_id=self.cluster_id)
         ls = json.loads(exports[1])
         assert len(ls) == 2
 
         r = conf.create_export(
             fsal_type='cephfs',
-            cluster_id=cluster_id,
+            cluster_id=self.cluster_id,
             fs_name='myfs',
             path='/',
             pseudo_path='/cephfs2',
@@ -943,7 +875,7 @@ NFS_CORE_PARAM {
         )
         assert r[0] == 0
 
-        exports = conf.list_exports(cluster_id=cluster_id)
+        exports = conf.list_exports(cluster_id=self.cluster_id)
         ls = json.loads(exports[1])
         assert len(ls) == 3
 
@@ -962,132 +894,4 @@ NFS_CORE_PARAM {
         assert export.clients[0].squash == 'root'
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.1.0/8"]
-        assert export.cluster_id == cluster_id
-
-    """
-    def test_reload_daemons(self):
-        # Fail to import call in Python 3.8, see https://bugs.python.org/issue35753
-        mock_call = unittest.mock.call
-
-        # Orchestrator cluster: reload all daemon config objects.
-        conf = ExportMgr.instance('foo')
-        calls = [mock_call(conf) for conf in conf.list_daemon_confs()]
-        for daemons in [[], ['a', 'b']]:
-            conf.reload_daemons(daemons)
-            self.io_mock.notify.assert_has_calls(calls)
-            self.io_mock.reset_mock()
-
-        # User-defined cluster: reload daemons in the parameter
-        self._set_user_defined_clusters_location()
-        conf = ExportMgr.instance('_default_')
-        calls = [mock_call('conf-{}'.format(daemon)) for daemon in ['nodea', 'nodeb']]
-        conf.reload_daemons(['nodea', 'nodeb'])
-        self.io_mock.notify.assert_has_calls(calls)
-    """
-
-    """
-    def test_list_daemons(self):
-        for cluster_id, info in self.clusters.items():
-            instance = ExportMgr.instance(cluster_id)
-            daemons = instance.list_daemons()
-            for daemon in daemons:
-                assert daemon['cluster_id'], cluster_id)
-                assert daemon['cluster_type'], info['type'])
-                self.assertIn('daemon_id', daemon)
-                self.assertIn('status', daemon)
-                self.assertIn('status_desc', daemon)
-            assert [daemon['daemon_id'] for daemon in daemons], info['daemons'])
-    
-    def test_validate_orchestrator(self):
-        cluster_id = 'foo'
-        cluster_info = self.clusters[cluster_id]
-        instance = ExportMgr.instance(cluster_id)
-        export = MagicMock()
-
-        # export can be linked to none or all daemons
-        export_daemons = [[], cluster_info['daemons']]
-        for daemons in export_daemons:
-            export.daemons = daemons
-            instance.validate(export)
-
-        # raise if linking to partial or non-exist daemons
-        export_daemons = [cluster_info['daemons'][:1], 'xxx']
-        for daemons in export_daemons:
-            with self.assertRaises(NFSException):
-                export.daemons = daemons
-                instance.validate(export)
-        
-    def test_validate_user(self):
-        self._set_user_defined_clusters_location()
-        cluster_id = '_default_'
-        instance = ExportMgr.instance(cluster_id)
-        export = MagicMock()
-
-        # export can be linked to none, partial, or all daemons
-        fake_daemons = ['nodea', 'nodeb']
-        export_daemons = [[], fake_daemons[:1], fake_daemons]
-        for daemons in export_daemons:
-            export.daemons = daemons
-            instance.validate(export)
-
-        # raise if linking to non-exist daemons
-        export_daemons = ['xxx']
-        for daemons in export_daemons:
-            with self.assertRaises(NFSException):
-                export.daemons = daemons
-                instance.validate(export)
-
-    def _verify_locations(self, locations, cluster_ids):
-        for cluster_id in cluster_ids:
-            self.assertIn(cluster_id, locations)
-            cluster = locations.pop(cluster_id)
-            self.assertDictEqual(cluster, {key: cluster[key] for key in [
-                'pool', 'namespace', 'type', 'daemon_conf']})
-        self.assertDictEqual(locations, {})
-
-    def test_get_cluster_locations(self):
-        # pylint: disable=protected-access
-
-        # There is only a Orchestrator cluster.
-        self._mock_orchestrator(True)
-        locations = ganesha.Ganesha._get_clusters_locations()
-        self._verify_locations(locations, ['foo'])
-
-        # No cluster.
-        self._mock_orchestrator(False)
-        with self.assertRaises(NFSException):
-            ganesha.Ganesha._get_clusters_locations()
-
-        # There is only a user-defined cluster.
-        self._set_user_defined_clusters_location()
-        self._mock_orchestrator(False)
-        locations = ganesha.Ganesha._get_clusters_locations()
-        self._verify_locations(locations, ['_default_'])
-
-        # There are both Orchestrator cluster and user-defined cluster.
-        self._set_user_defined_clusters_location()
-        self._mock_orchestrator(True)
-        locations = ganesha.Ganesha._get_clusters_locations()
-        self._verify_locations(locations, ['foo', '_default_'])
-
-    def test_get_cluster_locations_conflict(self):
-        # pylint: disable=protected-access
-
-        # Pool/namespace collision.
-        self._set_user_defined_clusters_location('ganesha2/foo')
-        with self.assertRaises(NFSException) as ctx:
-            ganesha.Ganesha._get_clusters_locations()
-        self.assertIn('already in use', str(ctx.exception))
-
-        # Cluster name collision with orch. cluster.
-        self._set_user_defined_clusters_location('foo:ganesha/ns')
-        with self.assertRaises(NFSException) as ctx:
-            ganesha.Ganesha._get_clusters_locations()
-        self.assertIn('Detected a conflicting NFS-Ganesha cluster', str(ctx.exception))
-
-        # Cluster name collision with user-defined cluster.
-        self._set_user_defined_clusters_location('cluster1:ganesha/ns,cluster1:fake-pool/fake-ns')
-        with self.assertRaises(NFSException) as ctx:
-            ganesha.Ganesha._get_clusters_locations()
-        self.assertIn('Duplicate Ganesha cluster definition', str(ctx.exception))
-"""
+        assert export.cluster_id == self.cluster_id
