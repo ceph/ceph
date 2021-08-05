@@ -6097,6 +6097,7 @@ class YumDnf(Packager):
         'rhel': ('centos', 'el'),
         'scientific': ('centos', 'el'),
         'rocky': ('centos', 'el'),
+        'almalinux': ('centos', 'el'),
         'fedora': ('fedora', 'fc'),
     }
 
