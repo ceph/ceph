@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_BUCKET_H
-#define CEPH_RGW_BUCKET_H
+#pragma once
 
 #include <string>
 #include <memory>
@@ -124,8 +123,7 @@ public:
 /**
  * Store a list of the user's buckets, with associated functinos.
  */
-class RGWUserBuckets
-{
+class RGWUserBuckets {
   std::map<std::string, RGWBucketEnt> buckets;
 
 public:
@@ -310,12 +308,11 @@ struct RGWBucketAdminOpState {
                             bucket_stored(false), sync_bucket(true)  {}
 };
 
+
 /*
  * A simple wrapper class for administrative bucket operations
  */
-
-class RGWBucket
-{
+class RGWBucket {
   RGWUserBuckets buckets;
   rgw::sal::Store* store;
   RGWAccessHandle handle;
@@ -362,8 +359,7 @@ public:
   const RGWBucketInfo& get_bucket_info() const { return bucket->get_info(); }
 };
 
-class RGWBucketAdminOp
-{
+class RGWBucketAdminOp {
 public:
   static int get_policy(rgw::sal::Store* store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
@@ -411,8 +407,7 @@ struct rgw_ep_info {
     : ep(ep), attrs(attrs) {}
 };
 
-class RGWBucketCtl
-{
+class RGWBucketCtl {
   CephContext *cct;
 
   struct Svc {
@@ -762,5 +757,3 @@ private:
 
 bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Store* store, const string& marker,
                            const string& bucket_id, rgw_bucket* bucket_out);
-
-#endif

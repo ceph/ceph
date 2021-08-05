@@ -594,8 +594,6 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
 
   bucket->set_tag_timeout(dpp, BUCKET_TAG_TIMEOUT);
 
-  string prefix;
-  string empty_delimiter;
   rgw::sal::Bucket::ListResults results;
   results.is_truncated = true;
 
@@ -603,15 +601,13 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   formatter->open_object_section("objects");
   while (results.is_truncated) {
     rgw::sal::Bucket::ListParams params;
-
     params.marker = results.next_marker;
-    params.prefix = prefix;
 
     int r = bucket->list(dpp, params, listing_max_entries, results, y);
 
     if (r == -ENOENT) {
       break;
-    } else if (r < 0 && r != -ENOENT) {
+    } else if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
     }
 
