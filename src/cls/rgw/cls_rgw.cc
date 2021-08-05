@@ -501,6 +501,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bool has_delimiter = !op.delimiter.empty();
 
   if (has_delimiter &&
+      start_after_key > op.filter_prefix &&
       boost::algorithm::ends_with(start_after_key, op.delimiter)) {
     // advance past all subdirectory entries if we start after a
     // subdirectory
