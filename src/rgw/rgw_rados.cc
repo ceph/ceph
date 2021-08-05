@@ -4920,30 +4920,30 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, RGWBucketInfo& b
 				 map<RGWObjCategory, RGWStorageStats> *calculated_stats)
 {
   RGWSI_RADOS::Pool index_pool;
+
   // key - bucket index object id
   // value - bucket index check OP returned result with the given bucket index object (shard)
   map<int, string> oids;
-  map<int, struct rgw_cls_check_index_ret> bucket_objs_ret;
-
   int ret = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, &index_pool, &oids, nullptr);
   if (ret < 0) {
-      return ret;
+    return ret;
   }
 
+  // declare and pre-populate
+  map<int, struct rgw_cls_check_index_ret> bucket_objs_ret;
   for (auto& iter : oids) {
-    bucket_objs_ret[iter.first] = rgw_cls_check_index_ret();
+    bucket_objs_ret.emplace(iter.first, rgw_cls_check_index_ret());
   }
 
   ret = CLSRGWIssueBucketCheck(index_pool.ioctx(), oids, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio)();
   if (ret < 0) {
-      return ret;
+    return ret;
   }
 
-  // Aggregate results (from different shards if there is any)
-  map<int, struct rgw_cls_check_index_ret>::iterator iter;
-  for (iter = bucket_objs_ret.begin(); iter != bucket_objs_ret.end(); ++iter) {
-    accumulate_raw_stats(iter->second.existing_header, *existing_stats);
-    accumulate_raw_stats(iter->second.calculated_header, *calculated_stats);
+  // aggregate results (from different shards if there are any)
+  for (const auto& iter : bucket_objs_ret) {
+    accumulate_raw_stats(iter.second.existing_header, *existing_stats);
+    accumulate_raw_stats(iter.second.calculated_header, *calculated_stats);
   }
 
   return 0;
