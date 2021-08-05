@@ -154,6 +154,12 @@ __attribute__((__symver__ (\"func@v2\"))) void func_v2() {};
 
 int main() {}"
   HAVE_ATTR_SYMVER)
+  if(NOT HAVE_ATTR_SYMVER)
+    if(CMAKE_CXX_FLAGS MATCHES "-flto" AND NOT CMAKE_CXX_FLAGS MATCHES "-flto-partition=none")
+      # https://tracker.ceph.com/issues/40060
+      message(FATAL_ERROR "please pass -flto-partition=none as part of CXXFLAGS")
+    endif()
+  endif()
 set(CMAKE_REQUIRED_FLAGS -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt)
 check_c_source_compiles("
 void func_v1() {}
