@@ -297,9 +297,15 @@ class Activate(object):
                         'assuming bluestore')
 
             return activate_bluestore(lvs, args.no_systemd)
-        if args.bluestore:
+
+        # explicit filestore/bluestore flags take precedence
+        if getattr(args, 'bluestore', False):
             activate_bluestore(lvs, args.no_systemd)
-        elif args.filestore:
+        elif getattr(args, 'filestore', False):
+            activate_filestore(lvs, args.no_systemd)
+        elif any('ceph.block_device' in lv.tags for lv in lvs):
+            activate_bluestore(lvs, args.no_systemd)
+        elif any('ceph.data_device' in lv.tags for lv in lvs):
             activate_filestore(lvs, args.no_systemd)
 
     def main(self):
@@ -344,12 +350,12 @@ class Activate(object):
         parser.add_argument(
             '--bluestore',
             action='store_true',
-            help='bluestore objectstore (default)',
+            help='force bluestore objectstore activation',
         )
         parser.add_argument(
             '--filestore',
             action='store_true',
-            help='filestore objectstore',
+            help='force filestore objectstore activation',
         )
         parser.add_argument(
             '--all',
@@ -367,10 +373,6 @@ class Activate(object):
             print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
-        # Default to bluestore here since defaulting it in add_argument may
-        # cause both to be True
-        if not args.bluestore and not args.filestore:
-            args.bluestore = True
         if args.activate_all:
             self.activate_all(args)
         else:
