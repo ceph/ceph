@@ -26,7 +26,6 @@ EXPORT {
     Access_Type = RW;
     Protocols = 4;
     Attr_Expiration_Time = 0;
-    # Delegations = R;
     # Squash = root;
 
     FSAL {
@@ -55,17 +54,11 @@ EXPORT {
 EXPORT
 {
     Export_ID=2;
-
     Path = "/";
-
     Pseudo = "/rgw";
-
     Access_Type = RW;
-
     squash = AllAnonymous;
-
     Protocols = 4, 3;
-
     Transports = TCP, UDP;
 
     FSAL {
@@ -290,7 +283,6 @@ NFS_CORE_PARAM {
         assert export.export_id == 1
         assert export.path == "/"
         assert export.pseudo == "/cephfs_a/"
-        # assert export.tag is None
         assert export.access_type == "RW"
         # assert export.squash == "root_squash"  # probably correct value
         assert export.squash == "no_root_squash"
@@ -326,7 +318,6 @@ NFS_CORE_PARAM {
         assert export.export_id == 2
         assert export.path == "/"
         assert export.pseudo == "/rgw"
-        #assert export.tag is None
         assert export.access_type == "RW"
         # assert export.squash == "all_squash"  # probably correct value
         assert export.squash == "AllAnonymous"
@@ -425,7 +416,6 @@ NFS_CORE_PARAM {
             'path': '/',
             'cluster_id': self.cluster_id,
             'pseudo': '/cephfs_a',
-            'tag': None,
             'access_type': 'RW',
             'squash': 'root_squash',
             'security_label': True,
@@ -451,7 +441,6 @@ NFS_CORE_PARAM {
         assert export.export_id == 1
         assert export.path == "/"
         assert export.pseudo == "/cephfs_a"
-        #assert export.tag is None
         assert export.access_type == "RW"
         assert export.squash == "root_squash"
         assert set(export.protocols) == {4}
@@ -477,7 +466,6 @@ NFS_CORE_PARAM {
             'path': 'bucket',
             'pseudo': '/rgw',
             'cluster_id': self.cluster_id,
-            'tag': None,
             'access_type': 'RW',
             'squash': 'all_squash',
             'security_label': False,
@@ -493,7 +481,6 @@ NFS_CORE_PARAM {
         assert export.export_id == 2
         assert export.path == "bucket"
         assert export.pseudo == "/rgw"
-        #assert export.tag is None
         assert export.access_type == "RW"
         assert export.squash == "all_squash"
         assert set(export.protocols) == {4, 3}
@@ -560,7 +547,6 @@ NFS_CORE_PARAM {
             'path': 'bucket',
             'pseudo': '/rgw/bucket',
             'cluster_id': self.cluster_id,
-            'tag': 'bucket_tag',
             'access_type': 'RW',
             'squash': 'all_squash',
             'security_label': False,
@@ -602,7 +588,6 @@ NFS_CORE_PARAM {
             'path': 'newbucket',
             'pseudo': '/rgw/bucket',
             'cluster_id': self.cluster_id,
-            'tag': 'bucket_tag',
             'access_type': 'RO',
             'squash': 'root',
             'security_label': False,
@@ -643,7 +628,6 @@ NFS_CORE_PARAM {
             'path': 'newestbucket',
             'pseudo': '/rgw/bucket',
             'cluster_id': self.cluster_id,
-            'tag': 'bucket_tag',
             'access_type': 'RW',
             'squash': 'root',
             'security_label': False,
@@ -699,7 +683,6 @@ NFS_CORE_PARAM {
                 'path': 'bucket',
                 'pseudo': '/rgw/bucket',
                 'cluster_id': self.cluster_id,
-                'tag': 'bucket_tag',
                 'access_type': 'RW',
                 'squash': 'root',
                 'security_label': False,
@@ -721,7 +704,6 @@ NFS_CORE_PARAM {
                 'path': 'bucket2',
                 'pseudo': '/rgw/bucket2',
                 'cluster_id': self.cluster_id,
-                'tag': 'bucket_tag',
                 'access_type': 'RO',
                 'squash': 'root',
                 'security_label': False,
