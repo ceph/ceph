@@ -418,6 +418,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_refresh_rate = 0
             self.endpoint_port = 0
             self.agent_starting_port = 0
+            self.apply_spec_fails: List[Tuple[str, str]] = []
 
         self.notify('mon_map', None)
         self.config_notify()
