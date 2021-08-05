@@ -794,7 +794,7 @@ class CephadmServe:
                 # deploy new daemon
                 daemon_id = slot.name
                 if not did_config:
-                    svc.config(spec, daemon_id)
+                    svc.config(spec)
                     did_config = True
 
                 daemon_spec = svc.make_daemon_spec(

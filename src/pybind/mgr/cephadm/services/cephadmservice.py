@@ -188,7 +188,7 @@ class CephadmService(metaclass=ABCMeta):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         raise NotImplementedError()
 
-    def config(self, spec: ServiceSpec, daemon_id: str) -> None:
+    def config(self, spec: ServiceSpec) -> None:
         """
         Configure the cluster for this service. Only called *once* per
         service apply. Not for every daemon.
@@ -701,7 +701,7 @@ class MdsService(CephService):
     def allow_colo(self) -> bool:
         return True
 
-    def config(self, spec: ServiceSpec, daemon_id: str) -> None:
+    def config(self, spec: ServiceSpec) -> None:
         assert self.TYPE == spec.service_type
         assert spec.service_id
 
@@ -757,7 +757,7 @@ class RgwService(CephService):
     def allow_colo(self) -> bool:
         return True
 
-    def config(self, spec: RGWSpec, rgw_id: str) -> None:  # type: ignore
+    def config(self, spec: RGWSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
 
         # set rgw_realm and rgw_zone, if present

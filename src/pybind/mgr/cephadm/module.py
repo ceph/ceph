@@ -2240,7 +2240,7 @@ Then run the following:
                                              forcename=name)
 
             if not did_config:
-                self.cephadm_services[service_type].config(spec, daemon_id)
+                self.cephadm_services[service_type].config(spec)
                 did_config = True
 
             daemon_spec = self.cephadm_services[service_type].make_daemon_spec(
