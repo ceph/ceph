@@ -70,6 +70,7 @@ def cephadm_fs(
 
     with mock.patch('os.fchown'), \
          mock.patch('os.fchmod'), \
+         mock.patch('platform.processor', return_value='x86_64'), \
          mock.patch('cephadm.extract_uid_gid', return_value=(uid, gid)):
 
             fs.create_dir(cd.DATA_DIR)
