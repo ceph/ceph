@@ -130,8 +130,15 @@ void RGWCreateRole::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
+  std::string user_tenant = s->user->get_tenant();
   RGWRole role(s->cct, store->getRados()->pctl, role_name, role_path, trust_policy,
-                s->user->get_tenant(), max_session_duration);
+             user_tenant, max_session_duration);
+  if (!user_tenant.empty() && role.get_tenant() != user_tenant) {
+    ldpp_dout(this, 20) << "ERROR: the tenant provided in the role name does not match with the tenant of the user creating the role"
+                        << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
   op_ret = role.create(s, true, y);
 
   if (op_ret == -EEXIST) {
