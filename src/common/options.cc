@@ -6777,16 +6777,6 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "Length of time for bucket stats to be cached within RGW instance."),
 
-    Option("rgw_bucket_quota_soft_threshold", Option::TYPE_FLOAT, Option::LEVEL_BASIC)
-    .set_default(0.95)
-    .set_description("RGW quota soft threshold")
-    .set_long_description(
-        "Threshold from which RGW doesn't rely on cached info for quota "
-        "decisions. This is done for higher accuracy of the quota mechanism at "
-        "cost of performance, when getting close to the quota limit. The value "
-        "configured here is the ratio between the data usage to the max usage "
-        "as specified by the quota."),
-
     Option("rgw_bucket_quota_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10000)
     .set_description("RGW quota stats cache size")
