@@ -68,6 +68,7 @@ int ClusterWatcher::init() {
 void ClusterWatcher::shutdown() {
   dout(20) << dendl;
   std::scoped_lock locker(m_lock);
+  m_stopping = true;
   m_monc->sub_unwant("fsmap");
 }
 
@@ -84,6 +85,10 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
   std::map<Filesystem, uint64_t> fs_metadata_pools;
   {
     std::scoped_lock locker(m_lock);
+    if (m_stopping) {
+      return;
+    }
+
     // deleted filesystems are considered mirroring disabled
     for (auto it = m_filesystem_peers.begin(); it != m_filesystem_peers.end();) {
       if (!fsmap.filesystem_exists(it->first.fscid)) {
@@ -167,7 +172,10 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
     }
   }
 
-  m_monc->sub_got("fsmap", fsmap.get_epoch());
+  std::scoped_lock(m_lock);
+  if (!m_stopping) {
+    m_monc->sub_got("fsmap", fsmap.get_epoch());
+  } // else we have already done a sub_unwant()
 }
 
 } // namespace mirror
