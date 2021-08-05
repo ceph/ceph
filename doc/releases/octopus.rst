@@ -26,6 +26,18 @@ Notable Changes
   Quincy. For more information, see
   `Issue 51673 <https://tracker.ceph.com/issues/51673>`.
 
+* `ceph-mgr-modules-core` debian package does not recommend `ceph-mgr-rook`
+  anymore. As the latter depends on `python3-numpy` which cannot be imported in
+  different Python sub-interpreters multi-times if the version of
+  `python3-numpy` is older than 1.19. Since `apt-get` installs the `Recommends`
+  packages by default, `ceph-mgr-rook` was always installed along with
+  `ceph-mgr` debian package as an indirect dependency. If your workflow depends
+  on this behavior, you might want to install `ceph-mgr-rook` separately.
+
+* Several bug fixes in BlueStore, including a fix for an unexpected
+  ENOSPC bug in Avl/Hybrid allocators.
+
+* Includes a fix for a bug that affects recovery below *min_size* for EC pools.
 
 Changelog
 ---------
