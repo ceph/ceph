@@ -302,7 +302,7 @@ NFS_CORE_PARAM {
         # assert export.clients[1].squash ==  "all_squash"  # probably correct value
         assert export.clients[1].squash == "All"
         assert export.clients[1].access_type == "RO"
-        assert export.cluster_id in ('_default_', 'foo')
+        assert export.cluster_id == 'foo'
         assert export.attr_expiration_time == 0
         # assert export.security_label == False  # probably correct value
         assert export.security_label == True
@@ -311,7 +311,7 @@ NFS_CORE_PARAM {
         blocks = GaneshaConfParser(self.export_1).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 1
-        export = Export.from_export_block(blocks[0], '_default_')
+        export = Export.from_export_block(blocks[0], self.cluster_id)
         self._validate_export_1(export)
 
     def _validate_export_2(self, export: Export):
@@ -328,13 +328,13 @@ NFS_CORE_PARAM {
         # assert export.fsal.access_key == "access_key"  # probably correct value
         # assert export.fsal.secret_key == "secret_key"  # probably correct value
         assert len(export.clients) == 0
-        assert export.cluster_id in ('_default_', 'foo')
+        assert export.cluster_id == 'foo'
 
     def test_export_parser_2(self) -> None:
         blocks = GaneshaConfParser(self.export_2).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 1
-        export = Export.from_export_block(blocks[0], '_default_')
+        export = Export.from_export_block(blocks[0], self.cluster_id)
         self._validate_export_2(export)
 
     def test_daemon_conf_parser(self) -> None:
