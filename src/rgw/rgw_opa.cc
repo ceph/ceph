@@ -31,6 +31,7 @@ int rgw_opa_authorize(RGWOp *& op,
   /* set required headers for OPA request */
   req.append_header("X-Auth-Token", opa_token);
   req.append_header("Content-Type", "application/json");
+  req.append_header("Expect", "100-continue");
 
   /* check if we want to verify OPA server SSL certificate */
   req.set_verify_ssl(s->cct->_conf->rgw_opa_verify_ssl);
