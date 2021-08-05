@@ -194,6 +194,7 @@ class CephadmServe:
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=pspec),
                     hosts=self.mgr._schedulable_hosts(),
+                    unreachable_hosts=self.mgr._unreachable_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )
@@ -225,6 +226,7 @@ class CephadmServe:
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=ks.placement),
                     hosts=self.mgr._schedulable_hosts(),
+                    unreachable_hosts=self.mgr._unreachable_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )
@@ -677,6 +679,7 @@ class CephadmServe:
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr._schedulable_hosts(),
+            unreachable_hosts=self.mgr._unreachable_hosts(),
             daemons=daemons,
             networks=self.mgr.cache.networks,
             filter_new_host=(
