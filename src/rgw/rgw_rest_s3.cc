@@ -6515,6 +6515,29 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
       enable_progress = false;
     }
 
+    if (output_row_delimiter.size()) {
+      csv.output_row_delimiter = *output_row_delimiter.c_str();
+    }
+
+    if (output_column_delimiter.size()) {
+      csv.output_column_delimiter = *output_column_delimiter.c_str();
+    }
+
+    if (output_quot.size()) {
+      csv.output_quot_char = *output_quot.c_str();
+    }
+
+    if (output_escape_char.size()) {
+      csv.output_escape_char = *output_escape_char.c_str();
+    }
+
+    if(output_quote_fields.compare("ALWAYS") == 0) {
+      csv.quote_fields_always = true;
+    }
+    else if(output_quote_fields.compare("ASNEEDED") == 0) {
+      csv.quote_fields_asneeded = true;
+    }
+
     if(m_header_info.compare("IGNORE")==0) {
       csv.ignore_header_info=true;
     }
@@ -6524,11 +6547,11 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
     m_s3_csv_object = std::unique_ptr<s3selectEngine::csv_object>(new s3selectEngine::csv_object(s3select_syntax.get(), csv));
   }
 
-  m_aws_response_handler.get()->init_response();
+  m_aws_response_handler->init_response();
 
   if (s3select_syntax->get_error_description().empty() == false)
   { //error-flow (syntax-error)
-    m_aws_response_handler.get()->send_error_response(s3select_syntax_error,
+    m_aws_response_handler->send_error_response(s3select_syntax_error,
                                                       s3select_syntax->get_error_description().c_str(),
                                                       s3select_resource_id);
 
@@ -6540,16 +6563,16 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
     if (input == nullptr) {
       input = "";
     }
-    m_aws_response_handler.get()->init_success_response();
+    m_aws_response_handler->init_success_response();
     length_before_processing = (m_aws_response_handler->get_sql_result()).size();
 
     //query is correct(syntax), processing is starting.
-    status = m_s3_csv_object->run_s3select_on_stream(m_aws_response_handler.get()->get_sql_result(), input, input_length, s->obj_size);
+    status = m_s3_csv_object->run_s3select_on_stream(m_aws_response_handler->get_sql_result(), input, input_length, s->obj_size);
     length_post_processing = (m_aws_response_handler->get_sql_result()).size();
-    m_aws_response_handler.get()->set_total_bytes_returned(length_post_processing-length_before_processing);
+    m_aws_response_handler->set_total_bytes_returned(length_post_processing-length_before_processing);
     if (status < 0)
     { //error flow(processing-time)
-      m_aws_response_handler.get()->send_error_response(s3select_processTime_error,
+      m_aws_response_handler->send_error_response(s3select_processTime_error,
                                                         m_s3_csv_object->get_error_description().c_str(),
                                                         s3select_resource_id);
 
@@ -6572,14 +6595,14 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
   }
   
   if (length_post_processing-length_before_processing != 0) {
-    m_aws_response_handler.get()->send_success_response();
+    m_aws_response_handler->send_success_response();
   } else {
-    m_aws_response_handler.get()->send_continuation_response();
+    m_aws_response_handler->send_continuation_response();
   }
   
   if (enable_progress == true) {
-    m_aws_response_handler.get()->init_progress_response();
-    m_aws_response_handler.get()->send_progress_response();
+    m_aws_response_handler->init_progress_response();
+    m_aws_response_handler->send_progress_response();
   }
 
   return status;
@@ -6587,6 +6610,8 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
 
 int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
 {
+  std::string input_tag{"InputSerialization"};
+  std::string output_tag{"OutputSerialization"};
 
   if(chunk_number !=0) {
     return 0;
@@ -6602,40 +6627,54 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   }
 
   //AWS cli s3select parameters
-  extract_by_tag("Expression", sql_query);
-  extract_by_tag("FieldDelimiter", m_column_delimiter);
-  extract_by_tag("QuoteCharacter", m_quot);
-  extract_by_tag("RecordDelimiter", m_row_delimiter);
+  extract_by_tag(m_s3select_query, "Expression", sql_query);
+  extract_by_tag(m_s3select_query, "Enabled", m_enable_progress);
+  
+  size_t _qi = m_s3select_query.find("<" + input_tag + ">", 0);
+  size_t _qe = m_s3select_query.find("</" + input_tag + ">", _qi);
+  m_s3select_input = m_s3select_query.substr(_qi + input_tag.size() + 2, _qe - (_qi + input_tag.size() + 2));
+
+  extract_by_tag(m_s3select_input,"FieldDelimiter", m_column_delimiter);
+  extract_by_tag(m_s3select_input, "QuoteCharacter", m_quot);
+  extract_by_tag(m_s3select_input, "RecordDelimiter", m_row_delimiter);
+  extract_by_tag(m_s3select_input, "FileHeaderInfo", m_header_info);
   if (m_row_delimiter.size()==0) {
     m_row_delimiter='\n';
   }
+  extract_by_tag(m_s3select_input, "QuoteEscapeCharacter", m_escape_char);
+  extract_by_tag(m_s3select_input, "CompressionType", m_compression_type);
 
-  extract_by_tag("QuoteEscapeCharacter", m_escape_char);
-  extract_by_tag("CompressionType", m_compression_type);
-  extract_by_tag("Enabled", m_enable_progress);
+  size_t _qo = m_s3select_query.find("<" + output_tag + ">", 0);
+  size_t _qs = m_s3select_query.find("</" + output_tag + ">", _qi);
+  m_s3select_output = m_s3select_query.substr(_qo + output_tag.size() + 2, _qs - (_qo + output_tag.size() + 2));
+  
+  extract_by_tag(m_s3select_output, "FieldDelimiter", output_column_delimiter);
+  extract_by_tag(m_s3select_output, "QuoteCharacter", output_quot);
+  extract_by_tag(m_s3select_output, "QuoteEscapeCharacter", output_escape_char);
+  extract_by_tag(m_s3select_output, "QuoteFields", output_quote_fields);
+  extract_by_tag(m_s3select_output, "RecordDelimiter", output_row_delimiter);
   if (m_compression_type.length()>0 && m_compression_type.compare("NONE") != 0) {
     ldpp_dout(this, 10) << "RGW supports currently only NONE option for compression type" << dendl;
     return -1;
   }
 
-  extract_by_tag("FileHeaderInfo", m_header_info);
-
   return 0;
 }
 
-int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string tag_name, std::string& result)
+int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string input, std::string tag_name, std::string& result)
 {
   result = "";
-  size_t _qs = m_s3select_query.find("<" + tag_name + ">", 0) + tag_name.size() + 2;
+  size_t _qs = input.find("<" + tag_name + ">", 0);
+  size_t qs_input = _qs + tag_name.size() + 2;
   if (_qs == std::string::npos) {
     return -1;
   }
-  size_t _qe = m_s3select_query.find("</" + tag_name + ">", _qs);
+  size_t _qe = input.find("</" + tag_name + ">", qs_input);
   if (_qe == std::string::npos) {
     return -1;
   }
 
-  result = m_s3select_query.substr(_qs, _qe - _qs);
+  result = input.substr(qs_input, _qe - qs_input);
 
   return 0;
 }
@@ -6643,7 +6682,7 @@ int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string tag_name, std::string& 
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
   int status=0;
-  if (m_aws_response_handler.get() == nullptr) {
+  if (m_aws_response_handler == nullptr) {
     m_aws_response_handler = std::make_unique<aws_response_handler>(s,this);
   }
   
@@ -6670,7 +6709,7 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
       continue; 
     }
     
-    m_aws_response_handler.get()->set_processed_size(it.length());
+    m_aws_response_handler->set_processed_size(it.length());
 
     status = run_s3select(m_sql_query.c_str(), &(it)[0], it.length());
     if(status<0) {
@@ -6680,11 +6719,11 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
   }
   }
 
-  if (m_aws_response_handler.get()->get_processed_size() == s->obj_size) {
+  if (m_aws_response_handler->get_processed_size() == s->obj_size) {
     if (status >=0) {
-    m_aws_response_handler.get()->init_stats_response();
-    m_aws_response_handler.get()->send_stats_response();
-    m_aws_response_handler.get()->init_end_response();
+    m_aws_response_handler->init_stats_response();
+    m_aws_response_handler->send_stats_response();
+    m_aws_response_handler->init_end_response();
     }
   }
   return status;
