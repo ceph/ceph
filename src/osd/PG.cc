@@ -2079,6 +2079,23 @@ void PG::forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view
   }
 }
 
+void PG::forward_scrub_event(ScrubSafeAPI fn,
+			     epoch_t epoch_queued,
+			     Scrub::act_token_t act_token,
+			     std::string_view desc)
+{
+  dout(20) << __func__ << ": " << desc << " queued: " << epoch_queued
+	   << " token: " << act_token << dendl;
+  if (is_active() && m_scrubber) {
+    ((*m_scrubber).*fn)(epoch_queued, act_token);
+  } else {
+    // pg might be in the process of being deleted
+    dout(5) << __func__ << " refusing to forward. "
+	    << (is_clean() ? "(clean) " : "(not clean) ")
+	    << (is_active() ? "(active) " : "(not active) ") << dendl;
+  }
+}
+
 void PG::replica_scrub(OpRequestRef op, ThreadPool::TPHandle& handle)
 {
   dout(10) << __func__ << " (op)" << dendl;
@@ -2087,12 +2104,14 @@ void PG::replica_scrub(OpRequestRef op, ThreadPool::TPHandle& handle)
 }
 
 void PG::replica_scrub(epoch_t epoch_queued,
+		       Scrub::act_token_t act_token,
 		       [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(10) << __func__ << " queued at: " << epoch_queued
 	   << (is_primary() ? " (primary)" : " (replica)") << dendl;
   scrub_queued = false;
-  forward_scrub_event(&ScrubPgIF::send_start_replica, epoch_queued, "StartReplica/nw");
+  forward_scrub_event(&ScrubPgIF::send_start_replica, epoch_queued, act_token,
+		      "StartReplica/nw");
 }
 
 bool PG::ops_blocked_by_scrub() const
