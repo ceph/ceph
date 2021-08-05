@@ -438,9 +438,6 @@ class Module(MgrModule):
                             axis_dict: Dict[str, Any] = defaultdict()
 
                             # Collecting information for buckets, min, name, etc.
-                            # TODO: In some cases, the user might change the size of
-                            # their buckets. A check needs to be written that separates
-                            # out histograms with unique bucket sizes.
                             axis_dict['buckets'] = axis['buckets']
                             axis_dict['min'] = axis['min']
                             axis_dict['name'] = axis['name']
@@ -466,7 +463,12 @@ class Module(MgrModule):
                             axes.append(axis_dict)
 
                         # Add the 'axes' list, containing both axes, to result.
-                        result['osd'][histogram]['axes'] = axes
+                        # At this point, you will see that the name of the key is the string
+                        # form of our axes list (str(axes)). This is there so that histograms
+                        # with different axis configs will not be combined.
+                        # The key names are modified into something more readable ('config_x')
+                        # down below.
+                        result[str(axes)][histogram]['axes'] = axes
 
                         # Collect current values and make sure they are in
                         # integer form.
@@ -476,13 +478,19 @@ class Module(MgrModule):
 
                         # Aggregate values. If 'values' have already been initialized,
                         # we can safely add.
-                        if 'values' in result['osd'][histogram]:
+                        if 'values' in result[str(axes)][histogram]:
                             for i in range (0, len(values)):
                                 for j in range (0, len(values[i])):
-                                    values[i][j] += result['osd'][histogram]['values'][i][j]
+                                    values[i][j] += result[str(axes)][histogram]['values'][i][j]
 
                         # Add the values to result.
-                        result['osd'][histogram]['values'] = values
+                        result[str(axes)][histogram]['values'] = values
+
+                        # Update num_combined_osds
+                        if 'num_combined_osds' not in result[str(axes)][histogram]:
+                            result[str(axes)][histogram]['num_combined_osds'] = 1
+                        else:
+                            result[str(axes)][histogram]['num_combined_osds'] += 1
 
                 # Sometimes, json errors occur if you give it an empty string.
                 # I am also putting in a catch for a KeyError since it could
@@ -492,6 +500,15 @@ class Module(MgrModule):
                 except (json.decoder.JSONDecodeError, KeyError) as e:
                     self.log.debug("Error caught: {}".format(e))
                     return {}
+
+        # Update result key names. The key names are currently very complicated
+        # axis configurations, such that histograms with like axis configurations are
+        # combined. However, to make the final report more readable, I will update
+        # the key names to "config_1", "config_2", etc.
+        config_num = 1
+        for k, v in list(result.items()):
+            result['config_' + str(config_num)] = result.pop(k)
+            config_num += 1
 
         return result
 
