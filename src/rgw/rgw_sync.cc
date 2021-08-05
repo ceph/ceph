@@ -1297,7 +1297,7 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
         break;
       }
 
-      if ((sync_status == -EAGAIN || sync_status == -ECANCELED) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
+      if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
         ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
         continue;
       }
@@ -1322,7 +1322,7 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
         tn->log(10, SSTR("removing local metadata entry"));
           yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
       }
-      if ((retcode == -EAGAIN || retcode == -ECANCELED) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
+      if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
         ldpp_dout(dpp, 20) << *this << ": failed to store metadata: " << section << ":" << key << ", got retcode=" << retcode << dendl;
         continue;
       }
@@ -1393,6 +1393,8 @@ public:
   int state_store_mdlog_entries();
   int state_store_mdlog_entries_complete();
 };
+
+#define META_SYNC_SPAWN_WINDOW 20
 
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
@@ -1514,19 +1516,16 @@ public:
 
       if (child_ret < 0) {
         ldpp_dout(sync_env->dpp, 0) << *this << ": child operation stack=" << child << " entry=" << pos << " returned " << child_ret << dendl;
+        // on any error code from RGWMetaSyncSingleEntryCR, we do not advance
+        // the sync status marker past this entry, and set
+        // can_adjust_marker=false to exit out of RGWMetaSyncShardCR.
+        // RGWMetaSyncShardControlCR will rerun RGWMetaSyncShardCR from the
+        // previous marker and retry
+        can_adjust_marker = false;
       }
 
       map<string, string>::iterator prev_iter = pos_to_prev.find(pos);
       ceph_assert(prev_iter != pos_to_prev.end());
-
-      /*
-       * we should get -EAGAIN for transient errors, for which we want to retry, so we don't
-       * update the marker and abort. We'll get called again for these. Permanent errors will be
-       * handled by marking the entry at the error log shard, so that we retry on it separately
-       */
-      if (child_ret == -EAGAIN) {
-        can_adjust_marker = false;
-      }
 
       if (pos_to_prev.size() == 1) {
         if (can_adjust_marker) {
@@ -1625,6 +1624,11 @@ public:
               // stack_to_pos holds a reference to the stack
               stack_to_pos[stack] = marker;
               pos_to_prev[marker] = marker;
+            }
+            // limit spawn window
+            while (num_spawned() > META_SYNC_SPAWN_WINDOW) {
+              yield wait_for_child();
+              collect_children();
             }
           }
         }
@@ -1813,6 +1817,11 @@ public:
                 // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
                 pos_to_prev[log_iter->id] = marker;
+              }
+              // limit spawn window
+              while (num_spawned() > META_SYNC_SPAWN_WINDOW) {
+                yield wait_for_child();
+                collect_children();
               }
             }
             marker = log_iter->id;
@@ -2236,7 +2245,7 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
       case rgw_meta_sync_info::StateBuildingFullSyncMaps:
         tn->log(20, "building full sync maps");
         r = run(dpp, new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers, tn));
-        if (r == -EBUSY || r == -EAGAIN) {
+        if (r == -EBUSY || r == -EIO) {
           backoff.backoff_sleep();
           continue;
         }
