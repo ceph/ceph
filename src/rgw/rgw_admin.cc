@@ -3894,23 +3894,34 @@ int main(int argc, const char **argv)
 			 OPT::ROLE_POLICY_GET,
 			 OPT::RESHARD_LIST,
 			 OPT::RESHARD_STATUS,
-       OPT::PUBSUB_TOPICS_LIST,
-       OPT::PUBSUB_TOPIC_GET,
-       OPT::PUBSUB_SUB_GET,
-       OPT::PUBSUB_SUB_PULL,
-       OPT::SCRIPT_GET,
-  };
+			 OPT::PUBSUB_TOPICS_LIST,
+			 OPT::PUBSUB_TOPIC_GET,
+			 OPT::PUBSUB_SUB_GET,
+			 OPT::PUBSUB_SUB_PULL,
+			 OPT::SCRIPT_GET,
+    };
 
+    std::set<OPT> gc_ops_list = {
+			 OPT::GC_LIST,
+			 OPT::GC_PROCESS,
+			 OPT::OBJECT_RM,
+			 OPT::BUCKET_RM,  // --purge-objects
+			 OPT::USER_RM,    // --purge-data
+			 OPT::OBJECTS_EXPIRE,
+			 OPT::OBJECTS_EXPIRE_STALE_RM,
+			 OPT::LC_PROCESS
+    };
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
                          raw_period_update || raw_period_pull);
   bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
+  bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end()) && !bypass_gc;
 
-  if (raw_storage_op) {
+    if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(dpp(), g_ceph_context);
   } else {
     store = RGWStoreManager::get_storage(dpp(), g_ceph_context, false, false, false, false, false,
-      need_cache && g_conf()->rgw_cache_enabled);
+      need_cache && g_conf()->rgw_cache_enabled, need_gc);
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
