@@ -888,6 +888,19 @@ spec:
                             'entity': entity,
                         })
 
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_invalid_config_option_health_warning(self, _run_cephadm, get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
+            get_foreign_ceph_option.side_effect = KeyError
+            CephadmServe(cephadm_module)._apply_service_config(ServiceSpec('mgr', placement=ps, config={'test': 'foo'}))
+            assert cephadm_module.health_checks.get('CEPHADM_INVALID_CONFIG_OPTION') is not None
+            assert cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['count'] == 1
+            assert 'Ignoring 1 invalid config option(s)' in cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['summary']
+            assert 'Ignoring invalid mgr config option test' in cephadm_module.health_checks['CEPHADM_INVALID_CONFIG_OPTION']['detail']
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
     @mock.patch("cephadm.services.nfs.NFSService.purge", mock.MagicMock())
