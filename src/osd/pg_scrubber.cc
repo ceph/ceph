@@ -221,15 +221,17 @@ void PgScrubber::send_scrub_resched(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
-void PgScrubber::send_start_replica(epoch_t epoch_queued)
+void PgScrubber::send_start_replica(epoch_t epoch_queued, Scrub::act_token_t token)
 {
-  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued
+	   << " token: " << token << dendl;
   if (is_primary()) {
     // shouldn't happen. Ignore
     dout(1) << "got a replica scrub request while Primary!" << dendl;
     return;
   }
-  if (check_interval(epoch_queued)) {
+
+  if (check_interval(epoch_queued) && is_token_current(token)) {
     m_fsm->my_states();
     // save us some time by not waiting for updates if there are none
     // to wait for. Affects the transition from NotActive into either
@@ -242,10 +244,11 @@ void PgScrubber::send_start_replica(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
-void PgScrubber::send_sched_replica(epoch_t epoch_queued)
+void PgScrubber::send_sched_replica(epoch_t epoch_queued, Scrub::act_token_t token)
 {
-  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
-  if (check_interval(epoch_queued)) {
+  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued
+	   << " token: " << token << dendl;
+  if (check_interval(epoch_queued) && is_token_current(token)) {
     m_fsm->my_states();
     m_fsm->process_event(SchedReplica{});  // retest for map availability
   }
@@ -491,9 +494,8 @@ void PgScrubber::reg_next_scrub(const requested_scrub_t& request_flags)
 
 void PgScrubber::unreg_next_scrub()
 {
-  dout(10) << __func__ << " existing-" << m_scrub_reg_stamp << ". was registered? "
-	   << is_scrub_registered() << dendl;
   if (is_scrub_registered()) {
+    dout(15) << __func__ << " existing-" << m_scrub_reg_stamp << dendl;
     m_osds->unreg_pg_scrub(m_pg->info.pgid, m_scrub_reg_stamp);
     m_scrub_reg_stamp = utime_t{};
   }
@@ -1045,7 +1047,8 @@ int PgScrubber::build_primary_map_chunk()
 int PgScrubber::build_replica_map_chunk()
 {
   dout(10) << __func__ << " interval start: " << m_interval_start
-	   << " epoch: " << m_epoch_start << " deep: " << m_is_deep << dendl;
+	   << " current token: " << m_current_token << " epoch: " << m_epoch_start
+	   << " deep: " << m_is_deep << dendl;
 
   auto ret = build_scrub_map_chunk(replica_scrubmap, replica_scrubmap_pos, m_start, m_end,
 				   m_is_deep);
@@ -1057,7 +1060,7 @@ int PgScrubber::build_replica_map_chunk()
       // (note: previous version used low priority here. Now switched to using the
       // priority of the original message)
       m_osds->queue_for_rep_scrub_resched(m_pg, m_replica_request_priority,
-					  m_flags.priority);
+					  m_flags.priority, m_current_token);
       break;
 
     case 0: {
@@ -1250,7 +1253,8 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   // make sure the FSM is at NotActive
   m_fsm->assert_not_active();
 
-  m_osds->queue_for_rep_scrub(m_pg, m_replica_request_priority, m_flags.priority);
+  m_osds->queue_for_rep_scrub(m_pg, m_replica_request_priority, m_flags.priority,
+			      m_current_token);
 }
 
 void PgScrubber::set_op_parameters(requested_scrub_t& request)
@@ -1482,7 +1486,9 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
    *  otherwise the interval would have changed.
    *  Ostensibly we can discard & redo the reservation. But then we
    *  will be temporarily releasing the OSD resource - and might not be able to grab it
-   *  again. Thus, we simply treat this as a successful new request.
+   *  again. Thus, we simply treat this as a successful new request
+   *  (but mark the fact that if there is a previous request from the primary to
+   *  scrub a specific chunk - that request is now defunct).
    */
 
   if (m_remote_osd_resource.has_value() && m_remote_osd_resource->is_stale()) {
@@ -1500,6 +1506,15 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
   if (m_remote_osd_resource.has_value()) {
 
     dout(10) << __func__ << " already reserved." << dendl;
+
+    /*
+     * it might well be that we did not yet finish handling the latest scrub-op from
+     * our primary. This happens, for example, if 'noscrub' was set via a command, then
+     * reset. The primary in this scenario will remain in the same interval, but we do need
+     * to reset our internal state (otherwise - the first renewed 'give me your scrub map'
+     * from the primary will see us in active state, crashing the OSD).
+     */
+    advance_token();
     granted = true;
 
   } else if (m_pg->cct->_conf->osd_scrub_during_recovery ||
@@ -1551,6 +1566,12 @@ void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
 {
   dout(10) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
+
+  /*
+   * this specific scrub session has terminated. All incoming events carrying the old
+   * tag will be discarded.
+   */
+  advance_token();
   m_remote_osd_resource.reset();
 }
 
@@ -2020,6 +2041,30 @@ void PgScrubber::reset_internal_state()
   m_sleep_started_at = utime_t{};
 
   m_active = false;
+}
+
+// note that only applicable to the Replica:
+void PgScrubber::advance_token()
+{
+  dout(10) << __func__ << " was: " << m_current_token << dendl;
+  m_current_token++;
+
+  // when advance_token() is called, it is assumed that no scrubbing takes place.
+  // We will, though, verify that. And if we are actually still handling a stale request -
+  // both our internal state and the FSM state will be cleared.
+  replica_handling_done();
+  m_fsm->process_event(FullReset{});
+}
+
+bool PgScrubber::is_token_current(Scrub::act_token_t received_token)
+{
+  if (received_token == 0 || received_token == m_current_token) {
+    return true;
+  }
+  dout(5) << __func__ << " obsolete token (" << received_token
+          << " vs current " << m_current_token << dendl;
+
+  return false;
 }
 
 const OSDMapRef& PgScrubber::get_osdmap() const
