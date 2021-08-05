@@ -53,28 +53,37 @@ class NFSCluster:
     def _get_user_conf_obj_name(self, cluster_id: str) -> str:
         return f'userconf-nfs.{cluster_id}'
 
-    def _call_orch_apply_nfs(self, cluster_id: str, placement: Optional[str], virtual_ip: Optional[str] = None) -> None:
+    def _call_orch_apply_nfs(
+            self,
+            cluster_id: str,
+            placement: Optional[str],
+            virtual_ip: Optional[str] = None,
+            port: Optional[int] = None,
+    ) -> None:
+        if not port:
+            port = 2049   # default nfs port
         if virtual_ip:
             # nfs + ingress
             # run NFS on non-standard port
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
                                   placement=PlacementSpec.from_string(placement),
                                   # use non-default port so we don't conflict with ingress
-                                  port=12049)
+                                  port=10000 + port)   # semi-arbitrary, fix me someday
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
                                 service_id='nfs.' + cluster_id,
                                 backend_service='nfs.' + cluster_id,
-                                frontend_port=2049,  # default nfs port
-                                monitor_port=9049,
+                                frontend_port=port,
+                                monitor_port=7000 + port,   # semi-arbitrary, fix me someday
                                 virtual_ip=virtual_ip)
             completion = self.mgr.apply_ingress(ispec)
             orchestrator.raise_if_exception(completion)
         else:
             # standalone nfs
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
-                                  placement=PlacementSpec.from_string(placement))
+                                  placement=PlacementSpec.from_string(placement),
+                                  port=port)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
 
@@ -88,11 +97,14 @@ class NFSCluster:
         log.info(f"Deleted {self._get_common_conf_obj_name(cluster_id)} object and all objects in "
                  f"{cluster_id}")
 
-    def create_nfs_cluster(self,
-                           cluster_id: str,
-                           placement: Optional[str],
-                           virtual_ip: Optional[str],
-                           ingress: Optional[bool] = None) -> Tuple[int, str, str]:
+    def create_nfs_cluster(
+            self,
+            cluster_id: str,
+            placement: Optional[str],
+            virtual_ip: Optional[str],
+            ingress: Optional[bool] = None,
+            port: Optional[int] = None,
+    ) -> Tuple[int, str, str]:
         try:
             if virtual_ip and not ingress:
                 raise NFSInvalidOperation('virtual_ip can only be provided with ingress enabled')
@@ -108,7 +120,7 @@ class NFSCluster:
             self.create_empty_rados_obj(cluster_id)
 
             if cluster_id not in available_clusters(self.mgr):
-                self._call_orch_apply_nfs(cluster_id, placement, virtual_ip)
+                self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, port)
                 return 0, "NFS Cluster Created Successfully", ""
             return 0, "", f"{cluster_id} cluster already exists"
         except Exception as e:

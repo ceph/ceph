@@ -93,10 +93,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 cluster_id: str,
                                 placement: Optional[str] = None,
                                 ingress: Optional[bool] = None,
-                                virtual_ip: Optional[str] = None) -> Tuple[int, str, str]:
+                                virtual_ip: Optional[str] = None,
+                                port: Optional[int] = None) -> Tuple[int, str, str]:
         """Create an NFS Cluster"""
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
-                                           virtual_ip=virtual_ip, ingress=ingress)
+                                           virtual_ip=virtual_ip, ingress=ingress,
+                                           port=port)
 
     @CLICommand('nfs cluster rm', perm='rw')
     def _cmd_nfs_cluster_rm(self, cluster_id: str) -> Tuple[int, str, str]:

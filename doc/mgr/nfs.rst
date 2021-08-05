@@ -29,7 +29,7 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <cluster_id> [<placement>] [--ingress --virtual-ip <ip>]
+    $ ceph nfs cluster create <cluster_id> [<placement>] [--port <port>] [--ingress --virtual-ip <ip>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
 ``cluster_id``, and a common NFS Ganesha config RADOS object.
@@ -57,6 +57,8 @@ on nodes host1 and host2 (for a total of two NFS Ganesha daemons in the
 cluster)::
 
     "2 host1,host2"
+
+NFS can be deployed on a port other than 2049 (the default) with ``--port <port>``.
 
 To deploy NFS with a high-availability front-end (virtual IP and load balancer), add the
 ``--ingress`` flag and specify a virtual IP address. This will deploy a combination
