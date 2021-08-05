@@ -99,6 +99,8 @@ def setup_venv(ctx, config):
         run_in_barbican_dir(ctx, client,
                             ['python3', '-m', 'venv', '.barbicanenv'])
         run_in_barbican_venv(ctx, client,
+                             ['pip', 'install', '--upgrade', 'pip'])
+        run_in_barbican_venv(ctx, client,
                              ['pip', 'install', 'pytz',
                               '-e', get_barbican_dir(ctx)])
     yield
