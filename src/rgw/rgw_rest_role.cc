@@ -332,9 +332,6 @@ void RGWListRoles::execute()
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");
-    s->formatter->open_object_section("ResponseMetadata");
-    s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
     s->formatter->open_array_section("ListRolesResult");
     s->formatter->open_object_section("Roles");
     for (const auto& it : result) {
@@ -343,6 +340,9 @@ void RGWListRoles::execute()
       s->formatter->close_section();
     }
     s->formatter->close_section();
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     s->formatter->close_section();
   }
