@@ -93,6 +93,7 @@ class Migrations:
             placements, to_add, to_remove = HostAssignment(
                 spec=spec,
                 hosts=self.mgr.inventory.all_specs(),
+                unreachable_hosts=self.mgr._unreachable_hosts(),
                 daemons=existing_daemons,
             ).place()
 
