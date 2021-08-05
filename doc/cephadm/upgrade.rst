@@ -12,8 +12,14 @@ The automated upgrade process follows Ceph best practices.  For example:
 * Each daemon is restarted only after Ceph indicates that the cluster
   will remain available.
 
-Keep in mind that the Ceph cluster health status is likely to switch to
-``HEALTH_WARNING`` during the upgrade.
+.. note::
+
+   The Ceph cluster health status is likely to switch to
+   ``HEALTH_WARNING`` during the upgrade.
+
+.. note:: 
+
+   In case a host of the cluster is offline, the upgrade is paused.
 
 
 Starting the upgrade
