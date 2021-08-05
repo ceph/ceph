@@ -11,7 +11,6 @@ def device_report_keys(device_info):
     device_info(devices={
         # example output of disk.get_devices()
         '/dev/sdb': {'human_readable_size': '1.82 TB',
-                     'locked': 0,
                      'model': 'PERC H700',
                      'nr_requests': '128',
                      'partitions': {},
@@ -39,7 +38,6 @@ def device_sys_api_keys(device_info):
     device_info(devices={
         # example output of disk.get_devices()
         '/dev/sdb': {'human_readable_size': '1.82 TB',
-                     'locked': 0,
                      'model': 'PERC H700',
                      'nr_requests': '128',
                      'partitions': {},
@@ -68,7 +66,6 @@ def device_data(device_info):
             # example output of disk.get_devices()
             '/dev/sdb': {
                 'human_readable_size': '1.82 TB',
-                'locked': 0,
                 'model': 'PERC H700',
                 'nr_requests': '128',
                 'partitions': {},
@@ -123,7 +120,6 @@ class TestInventory(object):
 
     expected_sys_api_keys = [
         'human_readable_size',
-        'locked',
         'model',
         'nr_requests',
         'partitions',

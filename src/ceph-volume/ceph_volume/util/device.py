@@ -552,7 +552,6 @@ class Device(object):
         reasons = [
             ('removable', 1, 'removable'),
             ('ro', 1, 'read-only'),
-            ('locked', 1, 'locked'),
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
