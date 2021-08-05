@@ -43,7 +43,13 @@
 #define tracepoint(...)
 #endif
 
-#ifdef HAVE_ASM_SYMVER
+#if defined(HAVE_ASM_SYMVER) || defined(HAVE_ATTR_SYMVER)
+// prefer __attribute__() over global asm(".symver"). because the latter
+// is not parsed by the compiler and is partitioned away by GCC if
+// lto-partitions is enabled, in other words, these asm() statements
+// are dropped by the -flto option by default. the way to address it is
+// to use __attribute__. so this information can be processed by the
+// C compiler, and be preserved after LTO partitions the code
 #ifdef HAVE_ATTR_SYMVER
 #define LIBRADOS_C_API_BASE(fn)               \
   extern __typeof (_##fn##_base) _##fn##_base __attribute__((__symver__ (#fn "@")))
