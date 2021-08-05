@@ -548,14 +548,25 @@ class CephadmServe:
         specs = []  # type: List[ServiceSpec]
         for sn, spec in self.mgr.spec_store.active_specs.items():
             specs.append(spec)
+        for name in ['CEPHADM_APPLY_SPEC_FAIL', 'CEPHADM_DAEMON_PLACE_FAIL']:
+            self.mgr.remove_health_warning(name)
+        self.mgr.apply_spec_fails = []
         for spec in specs:
             try:
                 if self._apply_service(spec):
                     r = True
             except Exception as e:
-                self.log.exception('Failed to apply %s spec %s: %s' % (
-                    spec.service_name(), spec, e))
+                msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
+                self.log.exception(msg)
                 self.mgr.events.for_service(spec, 'ERROR', 'Failed to apply: ' + str(e))
+                self.mgr.apply_spec_fails.append((spec.service_name(), str(e)))
+                warnings = []
+                for x in self.mgr.apply_spec_fails:
+                    warnings.append(f'{x[0]}: {x[1]}')
+                self.mgr.set_health_warning('CEPHADM_APPLY_SPEC_FAIL',
+                                            f"Failed to apply {len(self.mgr.apply_spec_fails)} service(s): {','.join(x[0] for x in self.mgr.apply_spec_fails)}",
+                                            len(self.mgr.apply_spec_fails),
+                                            warnings)
 
         return r
 
@@ -670,9 +681,17 @@ class CephadmServe:
                 'status', '').lower() not in ['maintenance', 'offline'] and d.hostname not in self.mgr.offline_hosts)]
             self.log.debug('Add %s, remove %s' % (slots_to_add, daemons_to_remove))
         except OrchestratorError as e:
-            self.log.error('Failed to apply %s spec %s: %s' % (
-                spec.service_name(), spec, e))
+            msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
+            self.log.error(msg)
             self.mgr.events.for_service(spec, 'ERROR', 'Failed to apply: ' + str(e))
+            self.mgr.apply_spec_fails.append((spec.service_name(), str(e)))
+            warnings = []
+            for x in self.mgr.apply_spec_fails:
+                warnings.append(f'{x[0]}: {x[1]}')
+            self.mgr.set_health_warning('CEPHADM_APPLY_SPEC_FAIL',
+                                        f"Failed to apply {len(self.mgr.apply_spec_fails)} service(s): {','.join(x[0] for x in self.mgr.apply_spec_fails)}",
+                                        len(self.mgr.apply_spec_fails),
+                                        warnings)
             return False
 
         r = None
@@ -746,6 +765,7 @@ class CephadmServe:
                 svc.fence_old_ranks(spec, rank_map, len(all_slots))
 
             # create daemons
+            daemon_place_fails = []
             for slot in slots_to_add:
                 # first remove daemon on conflicting port?
                 if slot.ports:
@@ -794,6 +814,7 @@ class CephadmServe:
                            f"on {slot.hostname}: {e}")
                     self.mgr.events.for_service(spec, 'ERROR', msg)
                     self.mgr.log.error(msg)
+                    daemon_place_fails.append(msg)
                     # only return "no change" if no one else has already succeeded.
                     # later successes will also change to True
                     if r is None:
@@ -809,6 +830,9 @@ class CephadmServe:
                     daemon_id=daemon_id,
                 )
                 daemons.append(sd)
+
+            if daemon_place_fails:
+                self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(daemon_place_fails), daemon_place_fails)
 
             # remove any?
             def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:

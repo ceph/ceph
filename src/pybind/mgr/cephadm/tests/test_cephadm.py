@@ -858,6 +858,32 @@ class TestCephadm(object):
                             'entity': entity,
                         })
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_daemon_place_fail_health_warning(self, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.side_effect = OrchestratorError('fail')
+            ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
+            r = CephadmServe(cephadm_module)._apply_service(ServiceSpec('mgr', placement=ps))
+            assert not r
+            assert cephadm_module.health_checks.get('CEPHADM_DAEMON_PLACE_FAIL') is not None
+            assert cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['count'] == 1
+            assert 'Failed to place 1 daemon(s)' in cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['summary']
+            assert 'Failed while placing mgr.a on test: fail' in cephadm_module.health_checks['CEPHADM_DAEMON_PLACE_FAIL']['detail']
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_apply_spec_fail_health_warning(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            CephadmServe(cephadm_module)._apply_all_services()
+            ps = PlacementSpec(hosts=['fail'], count=1)
+            r = CephadmServe(cephadm_module)._apply_service(ServiceSpec('mgr', placement=ps))
+            assert not r
+            assert cephadm_module.apply_spec_fails
+            assert cephadm_module.health_checks.get('CEPHADM_APPLY_SPEC_FAIL') is not None
+            assert cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['count'] == 1
+            assert 'Failed to apply 1 service(s)' in cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['summary']
+
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_invalid_config_option_health_warning(self, _run_cephadm, get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):

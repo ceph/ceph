@@ -407,7 +407,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
-
+            self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
 
         self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
