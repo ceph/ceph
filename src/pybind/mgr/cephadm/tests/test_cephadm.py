@@ -1116,8 +1116,12 @@ spec:
                         # candidates for scheduling
                         candidates = [
                             h.hostname for h in cephadm_module._schedulable_hosts()]
-                        assert 'test2' not in candidates
-                        assert 'test3' not in candidates
+                        assert 'test2' in candidates
+                        assert 'test3' in candidates
+
+                        unreachable = [h.hostname for h in cephadm_module._unreachable_hosts()]
+                        assert 'test2' in unreachable
+                        assert 'test3' in unreachable
 
                         with with_service(cephadm_module, ServiceSpec('crash', placement=PlacementSpec(host_pattern='*'))):
                             # re-apply services. No mgr should be removed from maint/offline hosts
