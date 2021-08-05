@@ -14,7 +14,7 @@ tasks:
 - cephadm.shell:
     host.a:
       - ceph fs volume create foofs
-      - ceph nfs cluster create foo --ingress --virtual-ip {{VIP0}}/{{VIPPREFIXLEN}}
+      - ceph nfs cluster create foo --ingress --virtual-ip {{VIP0}}/{{VIPPREFIXLEN}} --port 2999
       - ceph nfs export create cephfs foofs foo --pseudo-path /fake
 
 - cephadm.wait_for_service:
@@ -28,7 +28,7 @@ tasks:
     host.a:
       - mkdir /mnt/foo
       - sleep 5
-      - mount -t nfs {{VIP0}}:/fake /mnt/foo
+      - mount -t nfs {{VIP0}}:/fake /mnt/foo -o port=2999
       - echo test > /mnt/foo/testfile
       - sync
 
