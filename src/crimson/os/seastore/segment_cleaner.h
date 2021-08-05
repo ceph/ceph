@@ -248,6 +248,22 @@ public:
 
     virtual TransactionRef create_transaction(Transaction::src_t) = 0;
 
+    /// Creates empty transaction with interruptible context
+    template <typename Func>
+    auto with_transaction_intr(Transaction::src_t src, Func &&f) {
+      return seastar::do_with(
+        create_transaction(src),
+        [f=std::forward<Func>(f)](auto &ref_t) mutable {
+          return with_trans_intr(
+            *ref_t,
+            [f=std::forward<Func>(f)](auto& t) mutable {
+              return f(t);
+            }
+          );
+        }
+      );
+    }
+
     /**
      * get_next_dirty_extent
      *

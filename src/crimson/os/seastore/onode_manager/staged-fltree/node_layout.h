@@ -84,6 +84,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         ceph_abort("fatal error");
       })
     ).si_then([is_level_tail, level](auto extent) {
+      assert(extent);
       assert(extent->is_initial_pending());
       auto mut = extent->get_mutable();
       node_stage_t::bootstrap_extent(
