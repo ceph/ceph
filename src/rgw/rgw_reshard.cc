@@ -475,6 +475,7 @@ RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RGWRadosStore* _store,
 
 int RGWBucketReshardLock::lock() {
   internal_lock.set_must_renew(false);
+
   int ret;
   if (ephemeral) {
     ret = internal_lock.lock_exclusive_ephemeral(&store->getRados()->reshard_pool_ctx,
@@ -482,11 +483,19 @@ int RGWBucketReshardLock::lock() {
   } else {
     ret = internal_lock.lock_exclusive(&store->getRados()->reshard_pool_ctx, lock_oid);
   }
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "RGWReshardLock::" << __func__ <<
-      " failed to acquire lock on " << lock_oid << " ret=" << ret << dendl;
+
+  if (ret == -EBUSY) {
+    ldout(store->ctx(), 0) << "INFO: RGWReshardLock::" << __func__ <<
+      " found lock on " << lock_oid <<
+      " to be held by another RGW process; skipping for now" << dendl;
+    return ret;
+  } else if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: RGWReshardLock::" << __func__ <<
+      " failed to acquire lock on " << lock_oid << ": " <<
+      cpp_strerror(-ret) << dendl;
     return ret;
   }
+
   reset_time(Clock::now());
 
   return 0;
