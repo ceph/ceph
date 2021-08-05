@@ -400,12 +400,17 @@ public:
 			"AfterRepairScrub"sv);
   }
 
-  void replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  void replica_scrub(epoch_t queued,
+		     Scrub::act_token_t act_token,
+		     ThreadPool::TPHandle& handle);
 
-  void replica_scrub_resched(epoch_t queued, ThreadPool::TPHandle& handle)
+  void replica_scrub_resched(epoch_t queued,
+			     Scrub::act_token_t act_token,
+			     ThreadPool::TPHandle& handle)
   {
     scrub_queued = false;
-    forward_scrub_event(&ScrubPgIF::send_sched_replica, queued, "SchedReplica"sv);
+    forward_scrub_event(&ScrubPgIF::send_sched_replica, queued, act_token,
+			"SchedReplica");
   }
 
   void scrub_send_resources_granted(epoch_t queued, ThreadPool::TPHandle& handle)
@@ -657,8 +662,14 @@ private:
 				  requested_scrub_t& planned) const;
 
   using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
-
   void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc);
+  // and for events that carry a meaningful 'activation token'
+  using ScrubSafeAPI = void (ScrubPgIF::*)(epoch_t epoch_queued,
+					   Scrub::act_token_t act_token);
+  void forward_scrub_event(ScrubSafeAPI fn,
+			   epoch_t epoch_queued,
+			   Scrub::act_token_t act_token,
+			   std::string_view desc);
 
 public:
   virtual void do_request(
