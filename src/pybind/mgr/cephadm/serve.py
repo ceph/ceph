@@ -551,16 +551,20 @@ class CephadmServe:
     def _apply_service_config(self, spec: ServiceSpec) -> None:
         if spec.config:
             section = utils.name_to_config_section(spec.service_name())
+            for name in ['CEPHADM_INVALID_CONFIG_OPTION', 'CEPHADM_FAILED_SET_OPTION']:
+                self.mgr.remove_health_warning(name)
+            invalid_config_options = []
+            options_failed_to_set = []
             for k, v in spec.config.items():
                 try:
                     current = self.mgr.get_foreign_ceph_option(section, k)
                 except KeyError:
-                    self.log.warning(
-                        f'Ignoring invalid {spec.service_name()} config option {k}'
-                    )
+                    msg = f'Ignoring invalid {spec.service_name()} config option {k}'
+                    self.log.warning(msg)
                     self.mgr.events.for_service(
                         spec, OrchestratorEvent.ERROR, f'Invalid config option {k}'
                     )
+                    invalid_config_options.append(msg)
                     continue
                 if current != v:
                     self.log.debug(f'setting [{section}] {k} = {v}')
@@ -572,9 +576,14 @@ class CephadmServe:
                             'who': section,
                         })
                     except MonCommandFailed as e:
-                        self.log.warning(
-                            f'Failed to set {spec.service_name()} option {k}: {e}'
-                        )
+                        msg = f'Failed to set {spec.service_name()} option {k}: {e}'
+                        self.log.warning(msg)
+                        options_failed_to_set.append(msg)
+
+            if invalid_config_options:
+                self.mgr.set_health_warning('CEPHADM_INVALID_CONFIG_OPTION', f'Ignoring {len(invalid_config_options)} invalid config option(s)', len(invalid_config_options), invalid_config_options)
+            if options_failed_to_set:
+                self.mgr.set_health_warning('CEPHADM_FAILED_SET_OPTION', f'Failed to set {len(options_failed_to_set)} option(s)', len(options_failed_to_set), options_failed_to_set)
 
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
