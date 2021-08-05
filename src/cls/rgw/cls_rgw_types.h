@@ -335,6 +335,7 @@ struct rgw_bucket_entry_ver {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_entry_ver)
 
+
 struct cls_rgw_obj_key {
   std::string name;
   std::string instance;
@@ -353,6 +354,7 @@ struct cls_rgw_obj_key {
 
   void set(const std::string& _name) {
     name = _name;
+    instance.clear();
   }
 
   bool operator==(const cls_rgw_obj_key& k) const {
