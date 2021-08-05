@@ -47,7 +47,7 @@ class Btree {
   Btree& operator=(const Btree&) = delete;
   Btree& operator=(Btree&&) = delete;
 
-  eagain_future<> mkfs(Transaction& t) {
+  eagain_ifuture<> mkfs(Transaction& t) {
     return Node::mkfs(get_context(t), *root_tracker);
   }
 

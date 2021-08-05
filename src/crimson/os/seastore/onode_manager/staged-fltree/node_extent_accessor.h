@@ -527,6 +527,7 @@ class NodeExtentAccessorT {
     ).si_then([this, c, FNAME] (auto fresh_extent) {
       DEBUGT("update addr from {:#x} to {:#x} ...",
              c.t, extent->get_laddr(), fresh_extent->get_laddr());
+      assert(fresh_extent);
       assert(fresh_extent->is_initial_pending());
       assert(fresh_extent->get_recorder() == nullptr);
       assert(get_length() == fresh_extent->get_length());
@@ -559,7 +560,8 @@ class NodeExtentAccessorT {
           ceph_abort("fatal error");
         })
       );
-    }).si_then([this] {
+    }).si_then([this, c] {
+      assert(!c.t.is_conflicted());
       return *mut;
     });
   }
@@ -581,6 +583,11 @@ class NodeExtentAccessorT {
         ERRORT("ENOENT -- addr={:x}", c.t, addr);
         ceph_abort("fatal error");
       })
+#ifndef NDEBUG
+    ).si_then([this, c] {
+      assert(!c.t.is_conflicted());
+    }
+#endif
     );
   }
 

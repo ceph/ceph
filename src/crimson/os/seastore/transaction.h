@@ -160,6 +160,10 @@ public:
     return weak;
   }
 
+  void test_set_conflict() {
+    conflicted = true;
+  }
+
   bool is_conflicted() const {
     return conflicted;
   }

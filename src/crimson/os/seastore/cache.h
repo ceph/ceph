@@ -450,9 +450,8 @@ public:
    * Alloc initial root node and add to t.  The intention is for other
    * components to use t to adjust the resulting root ref prior to commit.
    */
-  using mkfs_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  mkfs_ertr::future<> mkfs(Transaction &t);
+  using mkfs_iertr = base_iertr;
+  mkfs_iertr::future<> mkfs(Transaction &t);
 
   /**
    * close

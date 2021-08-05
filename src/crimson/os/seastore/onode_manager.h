@@ -22,13 +22,10 @@
 namespace crimson::os::seastore {
 
 class OnodeManager {
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::eagain>;
-
-  using base_iertr = trans_iertr<base_ertr>;
+  using base_iertr = TransactionManager::base_iertr;
 public:
-  using mkfs_ertr = base_ertr;
-  using mkfs_ret = mkfs_ertr::future<>;
+  using mkfs_iertr = base_iertr;
+  using mkfs_ret = mkfs_iertr::future<>;
   virtual mkfs_ret mkfs(Transaction &t) = 0;
 
   using contains_onode_iertr = base_iertr;

@@ -35,32 +35,24 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   return journal->open_for_write().safe_then([this, FNAME](auto addr) {
     DEBUG("about to do_with");
     segment_cleaner->init_mkfs(addr);
-    return seastar::do_with(
-      create_transaction(Transaction::src_t::INIT),
-      [this, FNAME](auto &transaction) {
-	DEBUGT(
-	  "about to cache->mkfs",
-	  *transaction);
-	cache->init();
-	return cache->mkfs(*transaction
-	).safe_then([this, &transaction] {
-	  return lba_manager->mkfs(*transaction);
-	}).safe_then([this, FNAME, &transaction] {
-	  DEBUGT("about to submit_transaction", *transaction);
-	  return with_trans_intr(
-	    *transaction,
-	    [this, &transaction](auto&) {
-	      return submit_transaction_direct(*transaction);
-	    }
-	  ).handle_error(
-	    crimson::ct_error::eagain::handle([] {
-	      ceph_assert(0 == "eagain impossible");
-	      return mkfs_ertr::now();
-	    }),
-	    mkfs_ertr::pass_further{}
-	  );
-	});
+    return with_transaction_intr(
+        Transaction::src_t::INIT, [this, FNAME](auto& t) {
+      DEBUGT("about to cache->mkfs", t);
+      cache->init();
+      return cache->mkfs(t
+      ).si_then([this, &t] {
+        return lba_manager->mkfs(t);
+      }).si_then([this, FNAME, &t] {
+        DEBUGT("about to submit_transaction", t);
+        return submit_transaction_direct(t);
       });
+    }).handle_error(
+      crimson::ct_error::eagain::handle([] {
+        ceph_assert(0 == "eagain impossible");
+        return mkfs_ertr::now();
+      }),
+      mkfs_ertr::pass_further{}
+    );
   }).safe_then([this] {
     return close();
   });

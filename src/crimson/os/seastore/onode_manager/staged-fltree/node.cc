@@ -397,15 +397,11 @@ void Node::test_make_destructable(
   make_root(c, std::move(_super));
 }
 
-eagain_future<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
+eagain_ifuture<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::Node::mkfs);
-  return with_trans_intr(
-    c.t,
-    [c, &root_tracker](auto &t) {
-      return LeafNode::allocate_root(c, root_tracker);
-    }
-  ).safe_then([c, FNAME](auto ret) {
+  return LeafNode::allocate_root(c, root_tracker
+  ).si_then([c, FNAME](auto ret) {
     INFOT("allocated root {}", c.t, ret->get_name());
   });
 }
@@ -421,6 +417,7 @@ eagain_ifuture<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tra
       ceph_abort("fatal error");
     })
   ).si_then([c, &root_tracker, FNAME](auto&& _super) {
+    assert(_super);
     auto root_addr = _super->get_root_laddr();
     assert(root_addr != L_ADDR_NULL);
     TRACET("loading root_addr={:x} ...", c.t, root_addr);
@@ -703,6 +700,7 @@ eagain_ifuture<Ref<Node>> Node::load(
     })
   ).si_then([FNAME, c, addr, expect_is_level_tail](auto extent)
 	      -> eagain_ifuture<Ref<Node>> {
+    assert(extent);
     auto header = extent->get_header();
     auto field_type = header.get_field_type();
     if (!field_type) {
@@ -1390,6 +1388,7 @@ eagain_ifuture<> InternalNode::test_clone_root(
       eagain_iertr::pass_further{},
       crimson::ct_error::assert_all{"Invalid error during test clone"}
     ).si_then([c_other, cloned_root](auto&& super_other) {
+      assert(super_other);
       cloned_root->make_root_new(c_other, std::move(super_other));
       return cloned_root;
     });
@@ -2023,6 +2022,7 @@ eagain_ifuture<> LeafNode::test_clone_root(
       eagain_iertr::pass_further{},
       crimson::ct_error::assert_all{"Invalid error during test clone"}
     ).si_then([c_other, cloned_root](auto&& super_other) {
+      assert(super_other);
       cloned_root->make_root_new(c_other, std::move(super_other));
     });
   }).si_then([this_ref]{});
@@ -2110,6 +2110,7 @@ eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
         ceph_abort("fatal error");
       })
     ).si_then([c, root](auto&& super) {
+      assert(super);
       root->make_root_new(c, std::move(super));
       return root;
     });

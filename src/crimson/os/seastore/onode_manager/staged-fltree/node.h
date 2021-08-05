@@ -360,7 +360,7 @@ class Node
   const std::string& get_name() const;
 
   /// Initializes the tree by allocating an empty root node.
-  static eagain_future<> mkfs(context_t, RootNodeTracker&);
+  static eagain_ifuture<> mkfs(context_t, RootNodeTracker&);
 
   /// Loads the tree root. The tree must be initialized.
   static eagain_ifuture<Ref<Node>> load_root(context_t, RootNodeTracker&);
