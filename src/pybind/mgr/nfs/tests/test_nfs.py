@@ -16,6 +16,7 @@ from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
 
 class TestNFS:
+    cluster_id = "foo"
     export_1 = """
 EXPORT {
     Export_ID=1;
@@ -95,19 +96,10 @@ EXPORT {
 }
 """
 
-    conf_nodea = '''
-%url "rados://ganesha/ns/export-2"
-
-%url "rados://ganesha/ns/export-1"'''
-
-    conf_nodeb = '%url "rados://ganesha/ns/export-1"'
-
     conf_nfs_foo = f'''
-%url "rados://{NFS_POOL_NAME}/foo/export-1"
+%url "rados://{NFS_POOL_NAME}/{cluster_id}/export-1"
 
-%url "rados://{NFS_POOL_NAME}/foo/export-2"'''
-
-    cluster_id = "foo"
+%url "rados://{NFS_POOL_NAME}/{cluster_id}/export-2"'''
 
     class RObject(object):
         def __init__(self, key: str, raw: str) -> None:
@@ -146,12 +138,6 @@ EXPORT {
     def _reset_temp_store(self) -> None:
         self.temp_store_namespace = None
         self.temp_store = {
-            'ns': {
-                'export-1': TestNFS.RObject("export-1", self.export_1),
-                'export-2': TestNFS.RObject("export-2", self.export_2),
-                'conf-nodea': TestNFS.RObject("conf-nodea", self.conf_nodea),
-                'conf-nodeb': TestNFS.RObject("conf-nodeb", self.conf_nodeb),
-            },
             'foo': {
                 'export-1': TestNFS.RObject("export-1", self.export_1),
                 'export-2': TestNFS.RObject("export-2", self.export_2),
@@ -161,7 +147,6 @@ EXPORT {
 
     @contextmanager
     def _mock_orchestrator(self, enable: bool) -> Iterator:
-
         self.io_mock = MagicMock()
         self.io_mock.set_namespace.side_effect = self._ioctx_set_namespace_mock
         self.io_mock.read = self._ioctl_read_mock
@@ -361,21 +346,14 @@ NFS_CORE_PARAM {
         export = Export.from_export_block(blocks[0], '_default_')
         self._validate_export_2(export)
 
-    def test_daemon_conf_parser_a(self) -> None:
-        blocks = GaneshaConfParser(self.conf_nodea).parse()
+    def test_daemon_conf_parser(self) -> None:
+        blocks = GaneshaConfParser(self.conf_nfs_foo).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 2
         assert blocks[0].block_name == "%url"
-        assert blocks[0].values['value'] == "rados://ganesha/ns/export-2"
+        assert blocks[0].values['value'] == f"rados://{NFS_POOL_NAME}/{self.cluster_id}/export-1"
         assert blocks[1].block_name == "%url"
-        assert blocks[1].values['value'] == "rados://ganesha/ns/export-1"
-
-    def test_daemon_conf_parser_b(self) -> None:
-        blocks = GaneshaConfParser(self.conf_nodeb).parse()
-        assert isinstance(blocks, list)
-        assert len(blocks) == 1
-        assert blocks[0].block_name == "%url"
-        assert blocks[0].values['value'] == "rados://ganesha/ns/export-1"
+        assert blocks[1].values['value'] == f"rados://{NFS_POOL_NAME}/{self.cluster_id}/export-2"
 
     def _do_mock_test(self, func) -> None:
         with self._mock_orchestrator(True):
