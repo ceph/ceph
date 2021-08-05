@@ -1523,18 +1523,17 @@ static ceph::spinlock debug_lock;
    */
   char *buffer::list::c_str()
   {
-    if (length() == 0) {
+    if (const auto len = length(); len == 0) {
       return nullptr;                         // no non-empty buffers
-    }
-
-    const auto second = std::next(std::cbegin(_buffers));
-    // splice() tries to not waste our appendable space; to carry
-    // it an empty bptr is added at the end. we account for that.
-    const auto end = _carriage->length() == 0 && \
-      _carriage == &_buffers.back() ? buffers_t::const_iterator(_carriage)
-                                    : std::cend(_buffers);
-    if (second != end) {
+    } else if (len != _buffers.front().length()) {
       rebuild();
+    } else {
+      // there are two *main* scenarios that hit this branch:
+      //   1. bufferlist with single, non-empty buffer;
+      //   2. bufferlist with single, non-empty buffer followed by
+      //      empty buffer. splice() tries to not waste our appendable
+      //      space; to carry it an empty bptr is added at the end.
+      // we account for these and don't rebuild unnecessarily
     }
     return _buffers.front().c_str();
   }
