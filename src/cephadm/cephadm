@@ -2813,15 +2813,42 @@ def deploy_daemon_units(
                     p = os.path.join(data_dir, n)
                     f.write('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
             else:
+                # if ceph-volume does not support 'ceph-volume activate', we must
+                # do 'ceph-volume lvm activate'.
+                test_cv = CephContainer(
+                    ctx,
+                    image=ctx.image,
+                    entrypoint='/usr/sbin/ceph-volume',
+                    args=['activate', '--bad-option'],
+                    privileged=True,
+                    volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
+                    bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
+                    cname='ceph-%s-%s.%s-activate-test' % (fsid, daemon_type, daemon_id),
+                )
+                out, err, ret = call(ctx, test_cv.run_cmd(), verbosity=CallVerbosity.SILENT)
+                #  bad: ceph-volume: error: unrecognized arguments: activate --bad-option
+                # good: ceph-volume: error: unrecognized arguments: --bad-option
+                if 'unrecognized arguments: activate' in err:
+                    # older ceph-volume without top-level activate or --no-tmpfs
+                    cmd = [
+                        'lvm', 'activate',
+                        str(daemon_id), osd_fsid,
+                        '--no-systemd',
+                    ]
+                else:
+                    cmd = [
+                        'activate',
+                        '--osd-id', str(daemon_id),
+                        '--osd-uuid', osd_fsid,
+                        '--no-systemd',
+                        '--no-tmpfs',
+                    ]
+
                 prestart = CephContainer(
                     ctx,
                     image=ctx.image,
                     entrypoint='/usr/sbin/ceph-volume',
-                    args=[
-                        'lvm', 'activate',
-                        str(daemon_id), osd_fsid,
-                        '--no-systemd'
-                    ],
+                    args=cmd,
                     privileged=True,
                     volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
                     bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
