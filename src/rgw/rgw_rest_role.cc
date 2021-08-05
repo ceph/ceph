@@ -176,12 +176,13 @@ void RGWDeleteRole::execute(optional_yield y)
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
   }
-
-  s->formatter->open_object_section("DeleteRoleResponse");
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
-  s->formatter->close_section();
+  if (!op_ret) {
+    s->formatter->open_object_section("DeleteRoleResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
 }
 
 int RGWGetRole::verify_permission(optional_yield y)
