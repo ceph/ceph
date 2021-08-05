@@ -52,12 +52,6 @@ cluster (which had no monitoring stack) to cephadm management.)
 To set up monitoring on a Ceph cluster that has no monitoring, follow the
 steps below:
 
-#. Enable the Prometheus module in the ceph-mgr daemon. This exposes the internal Ceph metrics so that Prometheus can scrape them:
-
-   .. prompt:: bash #
-
-     ceph mgr module enable prometheus
-
 #. Deploy a node-exporter service on every node of the cluster.  The node-exporter provides host-level metrics like CPU and memory utilization:
 
    .. prompt:: bash #
