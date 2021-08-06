@@ -31,6 +31,14 @@ Alternative usage:
 Following are few important notes that might save some investigation around
 vstart_runner.py -
 
+* "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments are
+  overridden by vstart_runner.py. Former two usually have no applicability
+  for test runs on developer's machines and see note point on "omit_sudo"
+  to know more about overriding of "sudo".
+
+* "omit_sudo" is re-set to False unconditionally in cases of commands
+  "passwd" and "chown".
+
 * The presence of binary file named after the first argument in the command
   arguments received by the method LocalRemote.run() is checked for in
   <ceph-repo-root>/build/bin/. If present, the first argument is replaced with
@@ -367,6 +375,12 @@ class LocalRemote(object):
         """
         self.write_file(path, data, sudo=True, **kwargs)
 
+    # XXX: omit_sudo is re-set to False even in cases of commands like passwd
+    # and chown.
+    # XXX: "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments
+    # are overridden. Former two usually have no applicability for test runs
+    # on developer's machines and see note point on "omit_sudo" to know more
+    # about overriding of "sudo".
     # XXX: the presence of binary file named after the first argument is
     # checked in build/bin/, if present the first argument is replaced with
     # the path to binary file.
@@ -375,9 +389,6 @@ class LocalRemote(object):
             args = quote(args)
 
         assert isinstance(args, str)
-        args = args.replace('ceph-coverage', '')
-        args = args.replace('adjust-ulimits', '')
-        args = args.replace('None/archive/ceph-coverage', '')
 
         first_arg = args[ : args.find(' ')]
         if '/' not in first_arg:
@@ -385,6 +396,20 @@ class LocalRemote(object):
             if os.path.exists(local_bin):
                 args = args.replace(first_arg, local_bin, 1)
 
+        # we're intentionally logging the command before overriding to avoid
+        # this clutter in the log.
+        log.debug('> ' + args)
+
+        args = args.replace('None/archive/ceph-coverage', '')
+
+        prefix = """
+adjust-ulimits() {
+    "$@"
+}
+ceph-coverage() {
+    "$@"
+}
+"""
         # We'll let sudo be a part of command even omit flag says otherwise in
         # cases of commands which can normally be ran only by root.
         last_arg = args[args.rfind(' ') + 1 : ]
@@ -394,15 +419,16 @@ class LocalRemote(object):
                     omit_sudo = False
 
         if omit_sudo:
-            args.replace('sudo', '')
-
-        # we'll have double spaces due to previous calls to str.replace().
-        # let's get rid of them.
-        args.replace(' ', '')
-
-        # we're intentionally logging the command before overriding to avoid
-        # this clutter in the log.
-        log.debug('> ' + args)
+            prefix = prefix + """
+sudo() {
+    "$@"
+}
+"""
+        log.info('helper tools like adjust-ulimits , ceph-coverage and '
+                 '"archive/coverage" were found it cmd args. they have been'
+                 'omitted before execution, check vstart_runner.py for more '
+                 'details.')
+        args = prefix + args
 
         return args
 
@@ -422,7 +448,7 @@ class LocalRemote(object):
         subproc = subprocess.Popen(args, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE,
                                    stdin=subprocess.PIPE, cwd=cwd, env=env,
-                                   shell=shell)
+                                   shell=shell, executable='/bin/bash')
 
         if stdin:
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
