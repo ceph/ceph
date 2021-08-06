@@ -2003,25 +2003,22 @@ static void get_md_sync_status(list<string>& status)
     }
   }
 
-  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
-  if (total_behind == 0) {
-    push_ss(ss, status) << "metadata is caught up with master";
-  } else {
-    push_ss(ss, status) << "metadata is behind on " << total_behind << " shards";
-    
-    push_ss(ss, status) << "behind shards: " << "[" << shards_behind_set << "]";
-
+  // fetch remote log entries to determine the oldest change
+  std::optional<std::pair<int, ceph::real_time>> oldest;
+  if (!shards_behind.empty()) {
     map<int, rgw_mdlog_shard_data> master_pos;
     ret = sync.read_master_log_shards_next(dpp(), sync_status.sync_info.period, shards_behind, &master_pos);
     if (ret < 0) {
       derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
-      std::optional<std::pair<int, ceph::real_time>> oldest;
-
       for (auto iter : master_pos) {
         rgw_mdlog_shard_data& shard_data = iter.second;
 
-        if (!shard_data.entries.empty()) {
+        if (shard_data.entries.empty()) {
+          // there aren't any entries in this shard, so we're not really behind
+          shards_behind.erase(iter.first);
+          shards_behind_set.erase(iter.first);
+        } else {
           rgw_mdlog_entry& entry = shard_data.entries.front();
           if (!oldest) {
             oldest.emplace(iter.first, entry.timestamp);
@@ -2030,11 +2027,18 @@ static void get_md_sync_status(list<string>& status)
           }
         }
       }
+    }
+  }
 
-      if (oldest) {
-        push_ss(ss, status) << "oldest incremental change not applied: "
-            << oldest->second << " [" << oldest->first << ']';
-      }
+  int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
+  if (total_behind == 0) {
+    push_ss(ss, status) << "metadata is caught up with master";
+  } else {
+    push_ss(ss, status) << "metadata is behind on " << total_behind << " shards";
+    push_ss(ss, status) << "behind shards: " << "[" << shards_behind_set << "]";
+    if (oldest) {
+      push_ss(ss, status) << "oldest incremental change not applied: "
+          << oldest->second << " [" << oldest->first << ']';
     }
   }
 
