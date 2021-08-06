@@ -124,7 +124,7 @@ Linux)
     esac
     ;;
 Darwin)
-    if ! which brew > /dev/null; then
+    if ! brew --version &>/dev/null; then
         echo "You need Homebrew: http://brew.sh/"
         exit 1
     fi
@@ -149,7 +149,7 @@ if [ -e ./$VENV ]  && [ ! -e ./$VENV/lib/python*/no-global-site-packages.txt ]; 
 fi
 
 if [ -z "$NO_CLOBBER" ] || [ ! -e ./$VENV ]; then
-    if ! which virtualenv > /dev/null; then
+    if ! virtualenv --version &>/dev/null; then
         pip install virtualenv
     fi
     virtualenv --python=$PYTHON $VENV
