@@ -182,6 +182,7 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
  * UTF-8 object names can *both* preceed and follow the "ugly
  * namespace".
  */
+#warning "OOPS, will hte other fix fix this too?"
 static int get_obj_vals(cls_method_context_t hctx,
 			const string& start,
 			const string& filter_prefix,
@@ -669,18 +670,23 @@ static int check_index(cls_method_context_t hctx,
 
   do {
   read_restart:
+    CLS_LOG(0, "ERIC: %s A start_obj=%s", __func__, start_obj.c_str());
     rc = get_obj_vals(hctx, start_obj, filter_prefix, CHECK_CHUNK_SIZE, &keys, &more);
     if (rc < 0) {
       return rc;
     }
+    CLS_LOG(0, "ERIC: %s A.2 more=%d keys.size=%d", __func__, more, keys.size());
 
     for (const auto& kiter : keys) {
+      CLS_LOG(0, "ERIC: %s B", __func__);
       // skip over "ugly namespace"
       if (kiter.first >= BI_PREFIX_BEGIN && kiter.first <= BI_PREFIX_END) {
+	CLS_LOG(0, "ERIC: %s C", __func__);
 	start_obj = BI_PREFIX_END;
 	goto read_restart;
       }
 
+      CLS_LOG(0, "ERIC: %s D", __func__);
       rgw_bucket_dir_entry entry;
       auto eiter = kiter.second.cbegin();
       try {
@@ -689,17 +695,30 @@ static int check_index(cls_method_context_t hctx,
         CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter.first.c_str());
         return -EIO;
       }
+      CLS_LOG(0, "ERIC: %s E", __func__);
       rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
+      CLS_LOG(0, "ERIC: %s F", __func__);
       stats.num_entries++;
       stats.total_size += entry.meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
       stats.actual_size += entry.meta.size;
     }
 
+    CLS_LOG(0, "ERIC: %s G keys.empty=%d more=%d", __func__, keys.empty(), more);
+
     if (!keys.empty()) {
+      CLS_LOG(0, "ERIC: %s H", __func__);
       start_obj = keys.crbegin()->first; // use last entry as start_obj for next call
+    } else {
+      CLS_LOG(0, "ERIC: %s H", __func__);
+      if (more) {
+	CLS_LOG(0, "WARNING: %s : keys is empty and more is true", __func__);
+	more = true;
+      }
     }
+    CLS_LOG(0, "ERIC: %s I", __func__);
   } while (more);
+  CLS_LOG(0, "ERIC: %s J", __func__);
 
   return 0;
 }
@@ -733,9 +752,11 @@ int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferli
   CLS_LOG(10, "entered %s()\n", __func__);
   rgw_bucket_dir_header existing_header;
   rgw_bucket_dir_header calc_header;
+  CLS_LOG(0, "ERIC: %s A", __func__);
   int rc = check_index(hctx, &existing_header, &calc_header);
   if (rc < 0)
     return rc;
+  CLS_LOG(0, "ERIC: %s B", __func__);
 
   return write_bucket_header(hctx, &calc_header);
 }
