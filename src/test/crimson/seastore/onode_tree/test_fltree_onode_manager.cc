@@ -154,7 +154,7 @@ struct fltree_onode_manager_test_t
       items.emplace_back(&p_kv->value);
       ++it;
     }
-    with_transaction([this, &oids, &items, f=std::move(f)] (auto& t) mutable {
+    with_transaction([&oids, &items, f=std::move(f)] (auto& t) mutable {
       std::invoke(f, t, oids, items);
     });
   }
