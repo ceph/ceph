@@ -17,7 +17,7 @@ namespace {
   }
 }
 
-class TestOnode : public Onode {
+class TestOnode final : public Onode {
   onode_layout_t layout;
   bool dirty = false;
 
