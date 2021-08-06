@@ -53,7 +53,7 @@ Delete a Role
 
 To delete a role, execute the following::
 
-	radosgw-admin role rm --role-name={role-name}
+	radosgw-admin role delete --role-name={role-name}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -65,7 +65,7 @@ Request Parameters
 
 For example:: 	
 	
-  radosgw-admin role rm --role-name=S3Access1
+  radosgw-admin role delete --role-name=S3Access1
 
 Note: A role can be deleted only when it doesn't have any permission policy attached to it.
 
@@ -267,7 +267,7 @@ Delete Policy attached to a Role
 
 To delete permission policy attached to a role, execute the following::
 
-	radosgw-admin role policy rm --role-name={role-name} --policy-name={policy-name}
+	radosgw-admin role policy delete --role-name={role-name} --policy-name={policy-name}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -284,7 +284,7 @@ Request Parameters
 
 For example::
 
-  radosgw-admin role-policy get --role-name=S3Access1 --policy-name=Policy1
+  radosgw-admin role-policy delete --role-name=S3Access1 --policy-name=Policy1
 
 
 REST APIs for Manipulating a Role
