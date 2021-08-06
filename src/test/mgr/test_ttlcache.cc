@@ -1,7 +1,6 @@
 #include <iostream>
 
 #include "mgr/TTLCache.h"
-#include "mgr/PyUtil.h"
 #include "gtest/gtest.h"
 
 using namespace std;
@@ -9,20 +8,22 @@ using namespace std;
 TEST(TTLCache, Get) {
 	TTLCache<string, int> c{100};
 	c.insert("foo", 1);
-	std::optional<int> foo = c.get("foo");
-	ASSERT_EQ(*foo ,1);
+	int foo = c.get("foo");
+	ASSERT_EQ(foo, 1);
 }
 
 TEST(TTLCache, Erase) {
 	TTLCache<string, int> c{100};
 	c.insert("foo", 1);
-	std::optional<int> foo = c.get("foo");
-	ASSERT_EQ(*foo, 1);
+	int foo = c.get("foo");
+	ASSERT_EQ(foo, 1);
 	c.erase("foo");
-	foo = c.get("foo");
-	if(foo) {
-		FAIL();
-	}
+  try{
+    foo = c.get("foo");
+    FAIL();
+  } catch (std::out_of_range& e) {
+    SUCCEED();
+  }
 }
 
 TEST(TTLCache, Clear) {
@@ -36,14 +37,16 @@ TEST(TTLCache, Clear) {
 TEST(TTLCache, NoTTL) {
 	TTLCache<string, int> c{100};
 	c.insert("foo", 1);
-	std::optional<int> foo = c.get("foo");
-	ASSERT_EQ(*foo, 1);
+	int foo = c.get("foo");
+	ASSERT_EQ(foo, 1);
 	c.set_ttl(0);
 	c.insert("foo2", 2);
-	foo = c.get("foo2");
-	if(foo) {
-		FAIL();
-	}
+  try{
+    foo = c.get("foo2");
+    FAIL();
+  } catch (std::out_of_range& e) {
+    SUCCEED();
+  }
 }
 
 TEST(TTLCache, SizeLimit) {

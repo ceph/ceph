@@ -24,6 +24,11 @@ protected:
 
   unsigned int get_misses() { return misses; }
   unsigned int get_hits() { return hits; }
+  void throw_key_not_found(Key key) {
+    std::stringstream ss;
+    ss << "Key " << key << " couldn't be found\n";
+    throw std::out_of_range(ss.str());
+  }
 
 public:
   void insert(Key key, Value value) {
@@ -64,6 +69,7 @@ protected:
   bool expired(Key key);
   void finish_get(Key key);
   void finish_erase(Key key);
+  void throw_key_not_found(Key key);
 
 public:
   TTLCacheBase(uint16_t ttl_ = 0, uint16_t size = UINT16_MAX,
@@ -71,7 +77,7 @@ public:
       : Cache<Key, value_type>(size), ttl{ttl_}, ttl_spread_percent{spread} {}
   ~TTLCacheBase(){};
   void insert(Key key, Value value);
-  std::optional<Value> get(Key key);
+  Value get(Key key);
   void erase(Key key);
   void clear();
   uint16_t get_ttl() { return ttl; };
@@ -92,7 +98,7 @@ public:
   TTLCache(uint16_t ttl_ = 0, uint16_t size = UINT16_MAX, float spread = 0.25)
       : TTLCacheBase<Key, PyObject *>(ttl_, size, spread) {}
   ~TTLCache(){};
-  std::optional<PyObject *> get(Key key);
+  PyObject* get(Key key);
   void erase(Key key);
 
 private:

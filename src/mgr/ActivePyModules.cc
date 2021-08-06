@@ -173,10 +173,10 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
   if(ttl_seconds > 0) {
     ttl_cache.set_ttl(ttl_seconds);
-    std::optional<PyObject*> cached = ttl_cache.get(what);
-    if (cached) {
-      return *cached;
-    }
+    try{
+      PyObject* cached = ttl_cache.get(what);
+      return cached;
+    } catch (std::out_of_range& e) {}
   }
   PyObject *obj = _get_python(what);
   if(ttl_seconds) {
