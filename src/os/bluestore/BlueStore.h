@@ -126,6 +126,7 @@ enum {
   l_bluestore_write_small_bytes,
   l_bluestore_write_small_unused,
   l_bluestore_write_deferred,
+  l_bluestore_write_deferred_bytes,
   l_bluestore_write_small_pre_read,
   l_bluestore_write_new,
   l_bluestore_txc,
@@ -2480,7 +2481,7 @@ private:
   void _zoned_clean_zone(uint64_t zone_num);
 #endif
 
-  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
+  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, uint64_t len);
   void _deferred_queue(TransContext *txc);
 public:
   void deferred_try_submit();

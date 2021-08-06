@@ -7460,6 +7460,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 2u);
     ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
     ASSERT_EQ(logger->get(l_bluestore_write_deferred), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes), 0);
   }
 
   logger->reset();
@@ -7477,7 +7478,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
     ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 4u);
     ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 2u);
-    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 4u);
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes), 2 * 65536);
   }
 
   {
@@ -7533,6 +7535,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 64u);
     ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
     ASSERT_EQ(logger->get(l_bluestore_write_deferred), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred_bytes), 0u);
   }
   {
     ObjectStore::Transaction t;
@@ -7607,7 +7610,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 	      CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
       r = queue_transaction(store, ch, std::move(t));
       ++exp_bluestore_write_big;
-      if (expected_write_size != prefer_deferred_size)
+      if (expected_write_size < prefer_deferred_size)
 	++exp_bluestore_write_big_deferred;
       ASSERT_EQ(r, 0);
     }
