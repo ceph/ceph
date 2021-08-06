@@ -377,7 +377,9 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
     for (auto& [k, val] : insert_history) {
       auto& [v, c] = val;
       // validate values in tree keep intact
-      auto cursor = INTR_R(tree.find, t, k).unsafe_get0();
+      auto cursor = with_trans_intr(t, [this, &k=k](auto& tr) {
+        return tree.find(tr, k);
+      }).unsafe_get0();
       EXPECT_NE(cursor, tree.end());
       validate_cursor_from_item(k, v, cursor);
       // validate values in cursors keep intact
@@ -423,7 +425,9 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_erase_leaf_node)
     // randomized erase until empty
     std::random_shuffle(kvs.begin(), kvs.end());
     for (auto& [k, v] : kvs) {
-      auto e_size = INTR_R(tree.erase, t, k).unsafe_get0();
+      auto e_size = with_trans_intr(t, [this, &k=k](auto& tr) {
+        return tree.erase(tr, k);
+      }).unsafe_get0();
       ASSERT_EQ(e_size, 1);
     }
     auto cursor = INTR(tree.begin, t).unsafe_get0();
@@ -543,7 +547,9 @@ class TestTree {
 
       for (auto& [k, val] : insert_history) {
         auto& [v, c] = val;
-        auto result = INTR_R(tree_clone.find, t_clone, k).unsafe_get0();
+        auto result = with_trans_intr(t_clone, [&tree_clone, &k=k] (auto& tr) {
+          return tree_clone.find(tr, k);
+        }).unsafe_get0();
         EXPECT_NE(result, tree_clone.end());
         validate_cursor_from_item(k, v, result);
       }
@@ -555,7 +561,9 @@ class TestTree {
 
       // erase and merge
       logger().info("\n\nERASE-MERGE {}:", key_hobj_t(key));
-      auto nxt_cursor = INTR(cursor.erase<true>, t_clone).unsafe_get0();
+      auto nxt_cursor = with_trans_intr(t_clone, [&cursor=cursor](auto& tr) {
+        return cursor.erase<true>(tr);
+      }).unsafe_get0();
 
       {
         // track root again to dump
@@ -577,7 +585,9 @@ class TestTree {
 
       for (auto& [k, val] : insert_history) {
         auto& [v, c] = val;
-        auto result = INTR_R(tree_clone.find, t_clone, k).unsafe_get0();
+        auto result = with_trans_intr(t_clone, [&tree_clone, &k=k](auto& tr) {
+          return tree_clone.find(tr, k);
+        }).unsafe_get0();
         EXPECT_NE(result, tree_clone.end());
         validate_cursor_from_item(k, v, result);
       }
