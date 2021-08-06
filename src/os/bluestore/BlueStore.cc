@@ -14182,8 +14182,7 @@ int BlueStore::_do_alloc_write(
   auto prealloc_pos = prealloc.begin();
 
   for (auto& wi : wctx->writes) {
-    BlobRef b = wi.b;
-    bluestore_blob_t& dblob = b->dirty_blob();
+    bluestore_blob_t& dblob = wi.b->dirty_blob();
     uint64_t b_off = wi.b_off;
     bufferlist *l = &wi.bl;
     uint64_t final_length = wi.blob_length;
@@ -14195,7 +14194,8 @@ int BlueStore::_do_alloc_write(
       l = &wi.compressed_bl;
       dblob.set_compressed(wi.blob_length, wi.compressed_len);
       if (csum != Checksummer::CSUM_NONE) {
-        dout(20) << __func__ << " initialize csum setting for compressed blob " << *b
+        dout(20) << __func__
+		 << " initialize csum setting for compressed blob " << *wi.b
                  << " csum_type " << Checksummer::get_csum_type_string(csum)
                  << " csum_order " << csum_order
                  << " csum_length 0x" << std::hex << csum_length
@@ -14230,7 +14230,8 @@ int BlueStore::_do_alloc_write(
         b_off = suggested_boff;
       }
       if (csum != Checksummer::CSUM_NONE) {
-        dout(20) << __func__ << " initialize csum setting for new blob " << *b
+        dout(20) << __func__
+		 << " initialize csum setting for new blob " << *wi.b
                  << " csum_type " << Checksummer::get_csum_type_string(csum)
                  << " csum_order " << csum_order
                  << " csum_length 0x" << std::hex << csum_length << std::dec
@@ -14264,7 +14265,7 @@ int BlueStore::_do_alloc_write(
     }
     dblob.allocated(p2align(b_off, min_alloc_size), final_length, extents);
 
-    dout(20) << __func__ << " blob " << *b << dendl;
+    dout(20) << __func__ << " blob " << *wi.b << dendl;
     if (dblob.has_csum()) {
       dblob.calc_csum(b_off, *l);
     }
@@ -14299,7 +14300,7 @@ int BlueStore::_do_alloc_write(
 		 << l->length() << std::dec << " write via deferred" << dendl;
 	bluestore_deferred_op_t *op = _get_deferred_op(txc);
 	op->op = bluestore_deferred_op_t::OP_WRITE;
-	int r = b->get_blob().map(
+	int r = wi.b->get_blob().map(
 	  b_off, l->length(),
 	  [&](uint64_t offset, uint64_t length) {
 	    op->extents.emplace_back(bluestore_pextent_t(offset, length));
@@ -14309,7 +14310,7 @@ int BlueStore::_do_alloc_write(
 	op->data = *l;
 	logger->inc(l_bluestore_write_deferred);
       } else {
-	b->get_blob().map_bl(
+	wi.b->get_blob().map_bl(
 	  b_off, *l,
 	  [&](uint64_t offset, bufferlist& t) {
 	    bdev->aio_write(offset, t, &txc->ioc, false);
