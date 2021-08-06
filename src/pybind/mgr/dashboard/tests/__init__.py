@@ -322,8 +322,6 @@ class RgwStub(Stub):
     @classmethod
     def get_settings(cls):
         settings = {
-            'RGW_API_HOST': '',
-            'RGW_API_PORT': 0,
             'RGW_API_ACCESS_KEY': 'fake-access-key',
             'RGW_API_SECRET_KEY': 'fake-secret-key',
         }

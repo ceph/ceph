@@ -5,9 +5,9 @@ import ipaddress
 import json
 import logging
 import re
-import subprocess
 import xml.etree.ElementTree as ET  # noqa: N814
 from distutils.util import strtobool
+from subprocess import SubprocessError
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -29,7 +29,7 @@ class NoRgwDaemonsException(Exception):
         super().__init__('No RGW service is running.')
 
 
-class NoCredentialsException(RequestException):
+class NoCredentialsException(Exception):
     def __init__(self):
         super(NoCredentialsException, self).__init__(
             'No RGW credentials found, '
@@ -194,86 +194,76 @@ def _parse_frontend_config(config) -> Tuple[int, bool]:
     raise LookupError('Failed to determine RGW port from "{}"'.format(config))
 
 
-def _radosgw_admin(args: List[str]) -> Tuple[int, str, str]:
-    try:
-        result = subprocess.run(  # pylint: disable=subprocess-run-check
-            [
-                'radosgw-admin',
-                '-c', str(mgr.get_ceph_conf_path()),
-                '-k', str(mgr.get_ceph_option('keyring')),
-                '-n', f'mgr.{mgr.get_mgr_id()}',
-            ] + args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=10,
-        )
-        return result.returncode, result.stdout.decode('utf-8'), result.stderr.decode('utf-8')
-    except subprocess.CalledProcessError as ex:
-        mgr.log.error(f'Error executing radosgw-admin {ex.cmd}: {ex.output}')
-        raise
-    except subprocess.TimeoutExpired as ex:
-        mgr.log.error(f'Timeout (10s) executing radosgw-admin {ex.cmd}')
-        raise
-
-
-def _parse_secrets(user: str, payload: str) -> Tuple[Optional[str], Optional[str]]:
-    data = json.loads(payload)
+def _parse_secrets(user: str, data: dict) -> Tuple[str, str]:
     for key in data.get('keys', []):
         if key.get('user') == user and data.get('system') in ['true', True]:
             access_key = key.get('access_key')
             secret_key = key.get('secret_key')
             return access_key, secret_key
-    return None, None
+    return '', ''
 
 
 def _get_user_keys(user: str, realm: Optional[str] = None) -> Tuple[str, str]:
-    cmd = ['user', 'info', '--uid', user]
+    access_key = ''
+    secret_key = ''
+    rgw_user_info_cmd = ['user', 'info', '--uid', user]
     cmd_realm_option = ['--rgw-realm', realm] if realm else []
     if realm:
-        cmd += cmd_realm_option
-    rc, out, err = _radosgw_admin(cmd)
-    access_key = None
-    secret_key = None
-    if not rc:
-        access_key, secret_key = _parse_secrets(user, out)
-    if not access_key:
-        rgw_create_user_cmd = [
-            'user', 'create',
-            '--uid', user,
-            '--display-name', 'Ceph Dashboard',
-            '--system',
-        ] + cmd_realm_option
-        rc, out, err = _radosgw_admin(rgw_create_user_cmd)
-        if not rc:
+        rgw_user_info_cmd += cmd_realm_option
+    try:
+        _, out, err = mgr.send_rgwadmin_command(rgw_user_info_cmd)
+        if out:
             access_key, secret_key = _parse_secrets(user, out)
-    if not access_key:
-        mgr.log.error(f'Unable to create rgw {user} user: {err}')
-    assert access_key
-    assert secret_key
+        if not access_key:
+            rgw_create_user_cmd = [
+                'user', 'create',
+                '--uid', user,
+                '--display-name', 'Ceph Dashboard',
+                '--system',
+            ] + cmd_realm_option
+            _, out, err = mgr.send_rgwadmin_command(rgw_create_user_cmd)
+            if out:
+                access_key, secret_key = _parse_secrets(user, out)
+        if not access_key:
+            logger.error('Unable to create rgw user "%s": %s', user, err)
+    except SubprocessError as error:
+        logger.exception(error)
+
     return access_key, secret_key
 
 
 def configure_rgw_credentials():
-    mgr.log.info('Configuring dashboard RGW credentials')
+    logger.info('Configuring dashboard RGW credentials')
     user = 'dashboard'
-    rc, out, err = _radosgw_admin(['realm', 'list'])
-    if rc:
-        error = RgwAdminException(f'Unable to list RGW realms: {err}')
-        mgr.log.exception(error)
-        raise error
-    j = json.loads(out)
-    realms = j.get('realms', [])
-    if realms:
-        access_keys = {}
-        secret_keys = {}
-        for realm in realms:
-            access_keys[realm], secret_keys[realm] = _get_user_keys(user, realm)
-        access_key = json.dumps(access_keys)
-        secret_key = json.dumps(secret_keys)
-    else:
-        access_key, secret_key = _get_user_keys(user)
-    Settings.RGW_API_ACCESS_KEY = access_key
-    Settings.RGW_API_SECRET_KEY = secret_key
+    realms = []
+    access_key = ''
+    secret_key = ''
+    try:
+        _, out, err = mgr.send_rgwadmin_command(['realm', 'list'])
+        if out:
+            realms = out.get('realms', [])
+        if err:
+            logger.error('Unable to list RGW realms: %s', err)
+        if realms:
+            realm_access_keys = {}
+            realm_secret_keys = {}
+            for realm in realms:
+                realm_access_key, realm_secret_key = _get_user_keys(user, realm)
+                if realm_access_key:
+                    realm_access_keys[realm] = realm_access_key
+                    realm_secret_keys[realm] = realm_secret_key
+            if realm_access_keys:
+                access_key = json.dumps(realm_access_keys)
+                secret_key = json.dumps(realm_secret_keys)
+        else:
+            access_key, secret_key = _get_user_keys(user)
+
+        assert access_key and secret_key
+        Settings.RGW_API_ACCESS_KEY = access_key
+        Settings.RGW_API_SECRET_KEY = secret_key
+    except (AssertionError, SubprocessError) as error:
+        logger.exception(error)
+        raise NoCredentialsException
 
 
 class RgwClient(RestClient):
@@ -318,12 +308,9 @@ class RgwClient(RestClient):
 
     @staticmethod
     def _rgw_settings():
-        return (Settings.RGW_API_HOST,
-                Settings.RGW_API_PORT,
-                Settings.RGW_API_ACCESS_KEY,
+        return (Settings.RGW_API_ACCESS_KEY,
                 Settings.RGW_API_SECRET_KEY,
                 Settings.RGW_API_ADMIN_RESOURCE,
-                Settings.RGW_API_SCHEME,
                 Settings.RGW_API_SSL_VERIFY)
 
     @staticmethod
@@ -335,30 +322,11 @@ class RgwClient(RestClient):
 
         # The API access key and secret key are mandatory for a minimal configuration.
         if not (Settings.RGW_API_ACCESS_KEY and Settings.RGW_API_SECRET_KEY):
-            try:
-                configure_rgw_credentials()
-            except Exception as error:
-                logger.exception(error)
-                raise NoCredentialsException()
+            configure_rgw_credentials()
 
         if not daemon_name:
-            # Select default daemon if configured in settings:
-            if Settings.RGW_API_HOST and Settings.RGW_API_PORT:
-                for daemon in RgwClient._daemons.values():
-                    if daemon.host == Settings.RGW_API_HOST \
-                            and daemon.port == Settings.RGW_API_PORT:
-                        daemon_name = daemon.name
-                        break
-                if not daemon_name:
-                    raise DashboardException(
-                        msg='No RGW daemon found with user-defined host: {}, port: {}'.format(
-                            Settings.RGW_API_HOST,
-                            Settings.RGW_API_PORT),
-                        http_status_code=404,
-                        component='rgw')
             # Select 1st daemon:
-            else:
-                daemon_name = next(iter(RgwClient._daemons.keys()))
+            daemon_name = next(iter(RgwClient._daemons.keys()))
 
         # Discard all cached instances if any rgw setting has changed
         if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
@@ -444,6 +412,7 @@ class RgwClient(RestClient):
             self.userid = self._get_user_id(self.admin_path) if self.got_keys_from_config \
                 else user_id
         except RequestException as error:
+            logger.exception(error)
             msg = 'Error connecting to Object Gateway'
             if error.status_code == 404:
                 msg = '{}: {}'.format(msg, str(error))

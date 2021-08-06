@@ -401,12 +401,11 @@ class Module(MgrModule, CherryPyConfig):
             return result
         return 0, 'Self-signed certificate created', ''
 
-    @CLIWriteCommand("dashboard connect-rgw")
-    def connect_rgw(self):
+    @CLIWriteCommand("dashboard set-rgw-credentials")
+    def set_rgw_credentials(self):
         try:
             configure_rgw_credentials()
         except Exception as error:
-            logger.exception(error)
             return -errno.EINVAL, '', str(error)
 
         return 0, 'RGW credentials configured', ''

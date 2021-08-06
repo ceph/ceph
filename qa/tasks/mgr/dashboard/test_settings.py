@@ -51,8 +51,8 @@ class SettingsTest(DashboardTestCase):
 
     def test_bulk_set(self):
         self._put('/api/settings', {
-            'RGW_API_HOST': 'somehost',
-            'RGW_API_PORT': 7777,
+            'USER_PWD_EXPIRATION_WARNING_1': 12,
+            'USER_PWD_EXPIRATION_WARNING_2': 6,
         })
         self.assertStatus(200)
 
