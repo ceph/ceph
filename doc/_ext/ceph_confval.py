@@ -355,7 +355,11 @@ class CephOption(ObjectDescription):
     def _render_option(self, name) -> str:
         cur_module = self._current_module()
         if cur_module:
-            opt = self._load_module(cur_module).get(name)
+            try:
+                opt = self._load_module(cur_module).get(name)
+            except Exception as e:
+                message = f'Unable to load module "{cur_module}": {e}'
+                raise self.error(message)
         else:
             opt = self._load_yaml().get(name)
         if opt is None:
