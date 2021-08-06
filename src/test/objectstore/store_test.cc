@@ -7421,6 +7421,128 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  SetVal(g_conf(), "bluestore_max_blob_size", "65536");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  PerfCounters* logger = const_cast<PerfCounters*>(store->get_perf_counters());
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(128 * 1024, 'c'));
+
+    t.write(cid, hoid, 0x1000, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 0u);
+  }
+
+  logger->reset();
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(128 * 1024, 'c'));
+
+    t.write(cid, hoid, 0x2000, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 4u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 2u);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  SetVal(g_conf(), "bluestore_max_blob_size", "65536");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+
+  PerfCounters* logger = const_cast<PerfCounters*>(store->get_perf_counters());
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  logger->reset();
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(4096 * 1024, 'c'));
+
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_bytes), bl.length());
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 64u);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
+    ASSERT_EQ(logger->get(l_bluestore_write_deferred), 0u);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
 
 TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 
@@ -7429,9 +7551,11 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 
   size_t alloc_size = 4096;
   size_t large_object_size = 1 * 1024 * 1024;
+  size_t prefer_deferred_size = 65536;
   StartDeferred(alloc_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
-  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size",
+    stringify(prefer_deferred_size).c_str());
   g_conf().apply_changes(nullptr);
 
   int r;
@@ -7447,7 +7571,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  for (size_t expected_write_size = 1024; expected_write_size <= 65536; expected_write_size *= 2) {
+  for (size_t expected_write_size = 1024; expected_write_size <= prefer_deferred_size; expected_write_size *= 2) {
     //create object with hint
     ghobject_t hoid(hobject_t("test-"+to_string(expected_write_size), "", CEPH_NOSNAP, 0, -1, ""));
     {
@@ -7483,7 +7607,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 	      CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
       r = queue_transaction(store, ch, std::move(t));
       ++exp_bluestore_write_big;
-      ++exp_bluestore_write_big_deferred;
+      if (expected_write_size != prefer_deferred_size)
+	++exp_bluestore_write_big_deferred;
       ASSERT_EQ(r, 0);
     }
     ASSERT_EQ(logger->get(l_bluestore_write_big), exp_bluestore_write_big);

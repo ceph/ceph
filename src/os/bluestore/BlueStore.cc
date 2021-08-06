@@ -13467,7 +13467,7 @@ void BlueStore::_do_write_small(
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
 	  if (!g_conf()->bluestore_debug_omit_block_device_write) {
-	    if (b_len <= prefer_deferred_size) {
+	    if (b_len < prefer_deferred_size) {
 	      dout(20) << __func__ << " deferring small 0x" << std::hex
 		       << b_len << std::dec << " unused write via deferred" << dendl;
 	      bluestore_deferred_op_t *op = _get_deferred_op(txc);
@@ -13735,7 +13735,7 @@ bool BlueStore::BigDeferredWriteContext::can_defer(
     ceph_assert(b_off % chunk_size == 0);
     ceph_assert(blob_aligned_len() % chunk_size == 0);
 
-    res = blob_aligned_len() <= prefer_deferred_size &&
+    res = blob_aligned_len() < prefer_deferred_size &&
       blob_aligned_len() <= ondisk &&
       blob.is_allocated(b_off, blob_aligned_len());
     if (res) {
@@ -13937,7 +13937,7 @@ void BlueStore::_do_write_big(
 		   << std::dec << dendl;
           offset += l;
           length -= l;
-	  logger->inc(l_bluestore_write_big_blobs, remaining ? 2 : 1);
+          logger->inc(l_bluestore_write_big_blobs, remaining ? 2 : 1);
           logger->inc(l_bluestore_write_big_deferred, remaining ? 2 : 1);
           continue;
         }
@@ -14305,7 +14305,7 @@ int BlueStore::_do_alloc_write(
 
     // queue io
     if (!g_conf()->bluestore_debug_omit_block_device_write) {
-      if (l->length() <= prefer_deferred_size.load()) {
+      if (l->length() < prefer_deferred_size.load()) {
 	dout(20) << __func__ << " deferring 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
 	bluestore_deferred_op_t *op = _get_deferred_op(txc);
