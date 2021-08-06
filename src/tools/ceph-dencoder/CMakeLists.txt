@@ -9,7 +9,6 @@ if(HAS_VTA)
 endif()
 
 set(dencoder_srcs
-  denc_registry.cc
   ceph_dencoder.cc
   ../../include/uuid.cc
   ../../include/utime.cc
