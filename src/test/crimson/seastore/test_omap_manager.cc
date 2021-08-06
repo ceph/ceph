@@ -507,7 +507,6 @@ TEST_F(omap_manager_test_t, replay)
         check_mappings(omap_root, *t);
         check_mappings(omap_root);
       }
-      i++;
     }
     logger().debug("finally submitting transaction ");
     submit_transaction(std::move(t));
