@@ -497,7 +497,6 @@ void Cache::retire_extent(CachedExtentRef ref)
 
   remove_from_dirty(ref);
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
-  retired_extent_gate.add_extent(*ref);
 
   invalidate(*ref);
   extents.erase(*ref);
@@ -851,8 +850,6 @@ void Cache::complete_commit(
     DEBUGT("retiring {}", t, *i);
     i->dirty_from_or_retired_at = last_commit;
   }
-
-  retired_extent_gate.prune();
 }
 
 void Cache::init() {

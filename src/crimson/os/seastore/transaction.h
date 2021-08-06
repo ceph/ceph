@@ -14,7 +14,6 @@
 
 namespace crimson::os::seastore {
 
-struct retired_extent_gate_t;
 class SeaStore;
 class Transaction;
 
@@ -179,7 +178,6 @@ public:
     journal_seq_t initiated_after,
     on_destruct_func_t&& f
   ) : weak(weak),
-      retired_gate_token(initiated_after),
       handle(std::move(handle)),
       on_destruct(std::move(f)),
       src(src)
@@ -207,7 +205,6 @@ public:
     mutated_block_list.clear();
     retired_set.clear();
     to_release = NULL_SEG_ID;
-    retired_gate_token.reset(initiated_after);
     conflicted = false;
     if (!has_reset) {
       has_reset = true;
@@ -242,8 +239,6 @@ private:
 
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;
-
-  retired_extent_gate_t::token_t retired_gate_token;
 
   bool conflicted = false;
 

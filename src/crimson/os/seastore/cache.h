@@ -92,8 +92,6 @@ public:
   Cache(SegmentManager &segment_manager);
   ~Cache();
 
-  retired_extent_gate_t retired_extent_gate;
-
   /// Creates empty transaction by source
   TransactionRef create_transaction(
       Transaction::src_t src) {
@@ -110,7 +108,6 @@ public:
         return on_transaction_destruct(t);
       }
     );
-    retired_extent_gate.add_token(ret->retired_gate_token);
     DEBUGT("created source={}", *ret, src);
     return ret;
   }
@@ -131,7 +128,6 @@ public:
         return on_transaction_destruct(t);
       }
     );
-    retired_extent_gate.add_token(ret->retired_gate_token);
     DEBUGT("created source={}", *ret, src);
     return ret;
   }
@@ -691,7 +687,7 @@ private:
   /// Remove extent from extents handling dirty and refcounting
   void remove_extent(CachedExtentRef ref);
 
-  /// Retire extent, move reference to retired_extent_gate
+  /// Retire extent
   void retire_extent(CachedExtentRef ref);
 
   /// Replace prev with next
