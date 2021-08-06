@@ -433,7 +433,7 @@ class TreeBuilder {
               seastar::stop_iteration::yes);
           }
           auto p_kv = **ref_kv_iter;
-          return tree->find(t, p_kv->key).si_then([this, cursors, ref_kv_iter](auto cursor) {
+          return tree->find(t, p_kv->key).si_then([cursors, ref_kv_iter](auto cursor) {
             auto p_kv = **ref_kv_iter;
             validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
             cursors->emplace(p_kv->key, cursor);
