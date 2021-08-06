@@ -10,7 +10,11 @@ class DencoderPlugin {
   using dencoders_t = std::vector<std::pair<std::string, Dencoder*>>;
 public:
   DencoderPlugin(const fs::path& path) {
+#if defined(__FreeBSD__)
+    mod = dlopen(path.c_str(), RTLD_NOW | RTLD_NODELETE);
+#else
     mod = dlopen(path.c_str(), RTLD_NOW);
+#endif
     if (mod == nullptr) {
       std::cerr << "failed to dlopen(" << path << "): " << dlerror() << std::endl;
     }
