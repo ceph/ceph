@@ -308,29 +308,32 @@ class CephFSTestCase(CephTestCase):
             # task, so proceed to clear out the core file
             if core_dir[0] == '|':
                 log.info("Piped core dumps to program {0}, skip cleaning".format(core_dir[1:]))
-                return;
+                return True
 
             log.info("Clearing core from directory: {0}".format(core_dir))
 
             # Verify that we see the expected single coredump
             ls_output = self.mds_cluster.mds_daemons[daemon_id].remote.sh([
                 "cd", core_dir, run.Raw('&&'),
-                "sudo", "ls", run.Raw('|'), "sudo", "xargs", "file"
+                "sudo", "ls", run.Raw('|'), "sudo", "xargs", "-r", "file"
             ])
             cores = [l.partition(":")[0]
                      for l in ls_output.strip().split("\n")
                      if re.match(r'.*ceph-mds.* -i +{0}'.format(daemon_id), l)]
 
             log.info("Enumerated cores: {0}".format(cores))
-            self.assertEqual(len(cores), 1)
+            if len(cores) == 0:
+                return False
 
             log.info("Found core file {0}, deleting it".format(cores[0]))
 
             self.mds_cluster.mds_daemons[daemon_id].remote.run(args=[
                 "cd", core_dir, run.Raw('&&'), "sudo", "rm", "-f", cores[0]
             ])
+            return True
         else:
             log.info("No core_pattern directory set, nothing to clear (internal.coredump not enabled?)")
+            return True
 
     def _get_subtrees(self, status=None, rank=None, path=None):
         if path is None:
