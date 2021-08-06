@@ -377,13 +377,17 @@ Enabling the Object Gateway Management Frontend
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 When RGW is deployed with cephadm, the RGW credentials used by the
-dashboard will be automatically created.  You can also manually force the
-credentials to be created with::
+dashboard will be automatically configured. You can also manually force the
+credentials to be set up with::
 
-  $ ceph dashboard connect-rgw
+  $ ceph dashboard set-rgw-credentials
 
 This will create an RGW user with uid ``dashboard`` for each realm in
 the system.
+
+If you've configured a custom 'admin' resource in your RGW admin API, you should set it here also::
+
+  $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
 
 If you are using a self-signed certificate in your Object Gateway setup,
 you should disable certificate verification in the dashboard to avoid refused
