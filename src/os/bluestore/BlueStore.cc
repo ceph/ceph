@@ -13479,6 +13479,7 @@ void BlueStore::_do_write_small(
 		  return 0;
 		});
 	      op->data = bl;
+	      logger->inc(l_bluestore_write_deferred);
 	    } else {
 	      b->get_blob().map_bl(
 		b_off, bl,
