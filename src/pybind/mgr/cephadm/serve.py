@@ -85,7 +85,7 @@ class CephadmServe:
                     self.mgr.need_connect_dashboard_rgw = False
                     if 'dashboard' in self.mgr.get('mgr_map')['modules']:
                         self.log.info('Checking dashboard <-> RGW credentials')
-                        self.mgr.remote('dashboard', 'connect_rgw')
+                        self.mgr.remote('dashboard', 'set_rgw_credentials')
 
                 if not self.mgr.paused:
                     self.mgr.to_remove_osds.process_removal_queue()
