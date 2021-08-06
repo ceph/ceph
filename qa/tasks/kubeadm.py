@@ -54,6 +54,32 @@ def preflight(ctx, config):
             wait=False,
         )
     )
+
+    # set docker cgroup driver = systemd
+    #  see https://kubernetes.io/docs/setup/production-environment/container-runtimes/#docker
+    #  see https://github.com/kubernetes/kubeadm/issues/2066
+    daemon_json = """
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2"
+}
+"""
+    for remote in ctx.cluster.remotes.keys():
+        remote.write_file('/etc/docker/daemon.json', daemon_json, sudo=True)
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'sudo', 'systemctl', 'restart', 'docker',
+                run.Raw('||'),
+                'true',
+            ],
+            wait=False,
+        )
+    )
     yield
 
 
