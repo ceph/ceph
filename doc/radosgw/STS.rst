@@ -67,7 +67,7 @@ The trust between the IDP and the role is created by adding a Condition to the r
 allows access only to applications with the app id given in the trust policy document. The Condition
 is of the form::
 
-    "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\"arn:aws:iam:::oidc-provider/<URL of IDP>\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\"<URL of IDP> :app_id\":\"<aud>\"\}\}\}\]\}"
+    '''{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":["arn:aws:iam:::oidc-provider/<URL of IDP>"]},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"<URL of IDP> :app_id":"<aud>"}}}]}'''
 
 The app_id in the condition above must match the 'aud' field of the incoming token.
 
@@ -106,7 +106,7 @@ according to the permission policy attached to the role.
     region_name=''
     )
 
-    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/TESTER1\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
+    policy_document = '''{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["arn:aws:iam:::user/TESTER1"]},"Action":["sts:AssumeRole"]}]}'''
 
     role_response = iam_client.create_role(
     AssumeRolePolicyDocument=policy_document,
@@ -114,7 +114,7 @@ according to the permission policy attached to the role.
     RoleName='S3Access',
     )
 
-    role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
+    role_policy = '''{"Version":"2012-10-17","Statement":{"Effect":"Allow","Action":"s3:*","Resource":"arn:aws:s3:::*"}}'''
 
     response = iam_client.put_role_policy(
     RoleName='S3Access',
@@ -171,14 +171,14 @@ according to permission policy of the role.
      ]
     )
 
-    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":[\"arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/demo\"]},\"Action\":[\"sts:AssumeRoleWithWebIdentity\"],\"Condition\":{\"StringEquals\":{\"localhost:8080/auth/realms/demo:app_id\":\"customer-portal\"}}}]}"
+    policy_document = '''{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":["arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/demo"]},"Action":["sts:AssumeRoleWithWebIdentity"],"Condition":{"StringEquals":{"localhost:8080/auth/realms/demo:app_id":"customer-portal"}}}]}'''
     role_response = iam_client.create_role(
     AssumeRolePolicyDocument=policy_document,
     Path='/',
     RoleName='S3Access',
     )
 
-    role_policy = "{\"Version\":\"2012-10-17\",\"Statement\":{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"arn:aws:s3:::*\"}}"
+    role_policy = '''{"Version":"2012-10-17","Statement":{"Effect":"Allow","Action":"s3:*","Resource":"arn:aws:s3:::*"}}'''
 
     response = iam_client.put_role_policy(
         RoleName='S3Access',
