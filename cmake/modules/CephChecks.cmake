@@ -147,7 +147,7 @@ endif(NOT CMAKE_CROSSCOMPILING)
 set(version_script_source "v1 { }; v2 { } v1;")
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt "${version_script_source}")
 cmake_push_check_state(RESET)
-set(CMAKE_REQUIRED_FLAGS "-Werror=attribute -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt")
+set(CMAKE_REQUIRED_FLAGS "-Werror -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt")
 check_c_source_compiles("
 __attribute__((__symver__ (\"func@v1\"))) void func_v1() {};
 __attribute__((__symver__ (\"func@v2\"))) void func_v2() {};
