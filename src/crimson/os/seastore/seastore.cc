@@ -172,7 +172,7 @@ SeaStore::list_objects(CollectionRef ch,
         [this, start, end, limit, &ret] (auto& t) {
 	return with_trans_intr(
 	  *t,
-	  [this, start, end, limit, &ret](auto &t) {
+	  [this, start, end, limit](auto &t) {
             return onode_manager->list_onodes(t, start, end, limit);
 	}).safe_then([&ret] (auto&& _ret) {
             ret = std::move(_ret);

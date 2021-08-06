@@ -314,7 +314,7 @@ class TreeBuilder {
 #ifndef NDEBUG
       validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
       return tree->find(t, p_kv->key
-      ).si_then([this, cursor, p_kv](auto cursor_) mutable {
+      ).si_then([cursor, p_kv](auto cursor_) mutable {
         assert(!cursor_.is_end());
         ceph_assert(cursor_.get_ghobj() == p_kv->key);
         ceph_assert(cursor_.value() == cursor.value());
@@ -374,7 +374,7 @@ class TreeBuilder {
             assert(c_iter != cursors->end());
             auto p_kv = **ref_kv_iter;
             // validate values in tree keep intact
-            return tree->find(t, p_kv->key).si_then([this, &c_iter, ref_kv_iter](auto cursor) {
+            return tree->find(t, p_kv->key).si_then([&c_iter, ref_kv_iter](auto cursor) {
               auto p_kv = **ref_kv_iter;
               validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
               // validate values in cursors keep intact
@@ -494,7 +494,7 @@ class TreeBuilder {
 
   eagain_ifuture<> get_stats(Transaction& t) {
     return tree->get_stats_slow(t
-    ).si_then([this](auto stats) {
+    ).si_then([](auto stats) {
       logger().warn("{}", stats);
     });
   }
@@ -537,7 +537,7 @@ class TreeBuilder {
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
-        return validate_one(t, iter).si_then([this, &iter] {
+        return validate_one(t, iter).si_then([&iter] {
           ++iter;
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::no);

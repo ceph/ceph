@@ -163,7 +163,7 @@ TEST_F(a_basic_test_t, 1_basic_sizes)
 
 TEST_F(a_basic_test_t, 2_node_sizes)
 {
-  run_async([this] {
+  run_async([] {
     auto nm = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
     auto t = make_test_transaction();
     ValueBuilderImpl<UnboundedValue> vb;
@@ -616,7 +616,7 @@ struct c_dummy_test_t : public seastar_test_suite_t {};
 
 TEST_F(c_dummy_test_t, 4_split_merge_leaf_node)
 {
-  run_async([this] {
+  run_async([] {
     {
       TestTree test;
       test.build_tree({2, 5}, {2, 5}, {2, 5}, 120).get0();
@@ -1050,7 +1050,7 @@ class DummyChildPool {
       ).handle_error_interruptible(
         eagain_iertr::pass_further{},
         crimson::ct_error::assert_all{"Invalid error during create_initial()"}
-      ).si_then([c, &pool, initial](auto super) {
+      ).si_then([c, initial](auto super) {
         initial->make_root_new(c, std::move(super));
         return initial->upgrade_root(c).si_then([initial] {
           return initial;
@@ -1301,7 +1301,7 @@ class DummyChildPool {
 
 TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
 {
-  run_async([this] {
+  run_async([] {
     DummyChildPool pool;
     {
       logger().info("\n---------------------------------------------"
