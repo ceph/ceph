@@ -4977,7 +4977,10 @@ void BlueStore::_init_logger()
 		    "Small writes into unused portion of existing blob");
   b.add_u64_counter(l_bluestore_write_deferred,
 		    "bluestore_write_deferred",
-		    "Overwrites using deferred");
+		    "Total deferred writes submitted");
+  b.add_u64_counter(l_bluestore_write_deferred_bytes,
+		    "bluestore_write_deferred_bytes",
+		    "Total bytes submitted as deferred writes");
   b.add_u64_counter(l_bluestore_write_small_pre_read,
 		    "bluestore_write_small_pre_read",
 		    "Small writes that required we read some data (possibly "
@@ -12363,12 +12366,14 @@ void BlueStore::_zoned_clean_zone(uint64_t zone_num) {
 }
 
 bluestore_deferred_op_t *BlueStore::_get_deferred_op(
-  TransContext *txc)
+  TransContext *txc, uint64_t len)
 {
   if (!txc->deferred_txn) {
     txc->deferred_txn = new bluestore_deferred_transaction_t;
   }
   txc->deferred_txn->ops.push_back(bluestore_deferred_op_t());
+  logger->inc(l_bluestore_write_deferred);
+  logger->inc(l_bluestore_write_deferred_bytes, len);
   return &txc->deferred_txn->ops.back();
 }
 
@@ -13339,7 +13344,7 @@ void BlueStore::_do_write_small(
 	    if (b_len < prefer_deferred_size) {
 	      dout(20) << __func__ << " deferring small 0x" << std::hex
 		       << b_len << std::dec << " unused write via deferred" << dendl;
-	      bluestore_deferred_op_t *op = _get_deferred_op(txc);
+	      bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
 	      op->op = bluestore_deferred_op_t::OP_WRITE;
 	      b->get_blob().map(
 		b_off, b_len,
@@ -13348,7 +13353,6 @@ void BlueStore::_do_write_small(
 		  return 0;
 		});
 	      op->data = bl;
-	      logger->inc(l_bluestore_write_deferred);
 	    } else {
 	      b->get_blob().map_bl(
 		b_off, bl,
@@ -13428,7 +13432,7 @@ void BlueStore::_do_write_small(
 	  b->dirty_blob().calc_csum(b_off, bl);
 
 	  if (!g_conf()->bluestore_debug_omit_block_device_write) {
-	    bluestore_deferred_op_t *op = _get_deferred_op(txc);
+	    bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
 	    op->op = bluestore_deferred_op_t::OP_WRITE;
 	    int r = b->get_blob().map(
 	      b_off, b_len,
@@ -13448,7 +13452,6 @@ void BlueStore::_do_write_small(
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
 	  txc->statfs_delta.stored() += le->length;
 	  dout(20) << __func__ << "  lex " << *le << dendl;
-	  logger->inc(l_bluestore_write_deferred);
 	  return;
 	}
 	// try to reuse blob if we can
@@ -13690,7 +13693,7 @@ void BlueStore::_do_write_big_apply_deferred(
   txc->statfs_delta.stored() += le->length;
 
   if (!g_conf()->bluestore_debug_omit_block_device_write) {
-    bluestore_deferred_op_t* op = _get_deferred_op(txc);
+    bluestore_deferred_op_t* op = _get_deferred_op(txc, bl.length());
     op->op = bluestore_deferred_op_t::OP_WRITE;
     op->extents.swap(dctx.res_extents);
     op->data = std::move(bl);
@@ -14186,7 +14189,7 @@ int BlueStore::_do_alloc_write(
       if (l->length() < prefer_deferred_size.load()) {
 	dout(20) << __func__ << " deferring 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
-	bluestore_deferred_op_t *op = _get_deferred_op(txc);
+	bluestore_deferred_op_t *op = _get_deferred_op(txc, l->length());
 	op->op = bluestore_deferred_op_t::OP_WRITE;
 	int r = wi.b->get_blob().map(
 	  b_off, l->length(),
@@ -14196,7 +14199,6 @@ int BlueStore::_do_alloc_write(
 	  });
         ceph_assert(r == 0);
 	op->data = *l;
-	logger->inc(l_bluestore_write_deferred);
       } else {
 	wi.b->get_blob().map_bl(
 	  b_off, *l,
