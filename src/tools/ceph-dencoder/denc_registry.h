@@ -5,6 +5,8 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
+
 #include "include/buffer_fwd.h"
 #include "msg/Message.h"
 
@@ -225,32 +227,15 @@ public:
 
 class DencoderRegistry
 {
-  using dencoders_t = std::map<std::string, std::unique_ptr<Dencoder>>;
+  using dencoders_t = std::map<std::string_view, Dencoder*>;
+
 public:
-  void add(const char* name, std::unique_ptr<Dencoder>&& denc);
   dencoders_t& get() {
     return dencoders;
   }
-  static DencoderRegistry& instance();
+  void register_dencoder(std::string_view name, Dencoder* denc) {
+    dencoders.emplace(name, denc);
+  }
 private:
   dencoders_t dencoders;
 };
-
-template<typename DencoderT, typename...Args>
-void make_and_register_dencoder(const char* name, Args&&...args)
-{
-  auto dencoder = std::make_unique<DencoderT>(std::forward<Args>(args)...);
-  DencoderRegistry::instance().add(name, std::move(dencoder));
-}
-
-#define TYPE(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, false, false);
-#define TYPE_STRAYDATA(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, true, false);
-#define TYPE_NONDETERMINISTIC(t) make_and_register_dencoder<DencoderImplNoFeature<t>>(#t, false, true);
-#define TYPE_FEATUREFUL(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, false, false);
-#define TYPE_FEATUREFUL_STRAYDATA(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, true, false);
-#define TYPE_FEATUREFUL_NONDETERMINISTIC(t) make_and_register_dencoder<DencoderImplFeatureful<t>>(#t, false, true);
-#define TYPE_FEATUREFUL_NOCOPY(t) make_and_register_dencoder<DencoderImplFeaturefulNoCopy<t>>(#t, false, false);
-#define TYPE_NOCOPY(t) make_and_register_dencoder<DencoderImplNoFeatureNoCopy<t>>(#t, false, false);
-#define MESSAGE(t) make_and_register_dencoder<MessageDencoderImpl<t>>(#t);
-
-#define DENC_API extern "C" [[gnu::visibility("default")]]
