@@ -304,10 +304,9 @@ seastar::future<> ProtocolV2::read_frame_payload()
     logger().trace("{} RECV({}) frame epilogue", conn, bl.size());
     bool ok = false;
     try {
-      rx_frame_asm.disassemble_first_segment(rx_preamble, rx_segments_data[0]);
       bufferlist rx_epilogue;
       rx_epilogue.append(buffer::create(std::move(bl)));
-      ok = rx_frame_asm.disassemble_remaining_segments(rx_segments_data.data(), rx_epilogue);
+      ok = rx_frame_asm.disassemble_segments(rx_preamble, rx_segments_data.data(), rx_epilogue);
     } catch (FrameError& e) {
       logger().error("read_frame_payload: {} {}", conn, e.what());
       abort_in_fault();
@@ -1474,6 +1473,7 @@ void ProtocolV2::execute_accepting()
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
+          session_comp_handlers = { nullptr, nullptr };
           enable_recording();
           return banner_exchange(false);
         }).then([this] (auto&& ret) {

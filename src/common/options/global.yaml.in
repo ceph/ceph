@@ -989,6 +989,56 @@ options:
   - ms_service_mode
   flags:
   - startup
+- name: ms_osd_compress_mode
+  type: str
+  level: advanced
+  desc: Compression policy to use in Messenger for communicating with OSD
+  default: none
+  services:
+  - osd
+  enum_values:
+  - none
+  - force
+  see_also:
+  - ms_compress_secure
+  flags:
+  - runtime
+- name: ms_osd_compress_min_size
+  type: uint
+  level: advanced
+  desc: Minimal message size eligable for on-wire compression
+  default: 1_K
+  services:
+  - osd
+  see_also:
+  - ms_osd_compress_mode
+  flags:
+  - runtime
+- name: ms_osd_compression_algorithm
+  type: str
+  level: advanced
+  desc: Compression algorithm to use in Messenger when communicating with OSD
+  long_desc: Compression algorithm for connections with OSD in order of preference
+  default: snappy zlib zstd lz4
+  services:
+  - osd
+  see_also:
+  - ms_osd_compress_mode
+  flags:
+  - runtime
+- name: ms_compress_secure
+  type: bool
+  level: advanced
+  desc: Allowing compression when on-wire encryption is enabled
+  long_desc: Combining encryption with compression reduces the level of security of
+    messages between peers. In case both encryption and compression are enabled, 
+    compression setting will be ignored and message will not be compressed. 
+    This behaviour can be override using this setting. 
+  default: false
+  see_also: 
+  - ms_osd_compress_mode
+  flags:
+  - runtime
 - name: ms_learn_addr_from_peer
   type: bool
   level: advanced
