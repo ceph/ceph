@@ -281,7 +281,7 @@ OMapInnerNode::full_merge_ret
 OMapInnerNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 {
   logger().debug("OMapInnerNode: {}", __func__);
-  return oc.tm.alloc_extent<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE)
+  return oc.tm.alloc_extent<OMapInnerNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE)
     .si_then([this, right] (auto &&replacement) {
       replacement->merge_from(*this, *right->cast<OMapInnerNode>());
       return full_merge_ret(
@@ -569,7 +569,7 @@ OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 {
   ceph_assert(right->get_type() == TYPE);
   logger().debug("OMapLeafNode: {}", __func__);
-  return oc.tm.alloc_extent<OMapLeafNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE)
+  return oc.tm.alloc_extent<OMapLeafNode>(oc.t, oc.hint, OMAP_BLOCK_SIZE)
     .si_then([this, right] (auto &&replacement) {
       replacement->merge_from(*this, *right->cast<OMapLeafNode>());
       return full_merge_ret(

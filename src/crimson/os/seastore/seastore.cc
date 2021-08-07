@@ -301,7 +301,7 @@ SeaStore::get_attr_errorator::future<ceph::bufferlist> SeaStore::get_attr(
       }
       return _omap_get_value(
         t,
-        layout.xattr_root.get(),
+        layout.xattr_root.get(onode.get_hint()),
         name);
     }
   ).handle_error(crimson::ct_error::input_output_error::handle([FNAME] {
@@ -324,7 +324,7 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
     op_type_t::GET_ATTRS,
     [=](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
-      return _omap_list(layout.xattr_root, t, std::nullopt,
+      return _omap_list(onode, layout.xattr_root, t, std::nullopt,
         OMapManager::omap_list_config_t::with_inclusive(false)
       ).si_then([&layout](auto p) {
         auto& attrs = std::get<1>(p);
@@ -396,7 +396,7 @@ SeaStore::omap_get_values(
     Transaction::src_t::READ,
     op_type_t::OMAP_GET_VALUES,
     [this, keys](auto &t, auto &onode) {
-      omap_root_t omap_root = onode.get_layout().omap_root.get();
+      omap_root_t omap_root = onode.get_layout().omap_root.get(onode.get_hint());
       return _omap_get_values(
 	t,
 	std::move(omap_root),
@@ -468,12 +468,13 @@ SeaStore::_omap_get_values_ret SeaStore::_omap_get_values(
 }
 
 SeaStore::_omap_list_ret SeaStore::_omap_list(
+  Onode &onode,
   const omap_root_le_t& omap_root,
   Transaction& t,
   const std::optional<std::string>& start,
   OMapManager::omap_list_config_t config) const
 {
-  auto root = omap_root.get();
+  auto root = omap_root.get(onode.get_hint());
   if (root.is_null()) {
     return seastar::make_ready_future<_omap_list_bare_ret>(
       true, omap_values_t{}
@@ -505,6 +506,7 @@ SeaStore::omap_get_values_ret_t SeaStore::omap_list(
     op_type_t::OMAP_LIST,
     [this, config, &start](auto &t, auto &onode) {
       return _omap_list(
+	onode,
 	onode.get_layout().omap_root,
 	t, start, config
       );
@@ -860,6 +862,7 @@ SeaStore::tm_ret SeaStore::_write(
 
 SeaStore::omap_set_kvs_ret
 SeaStore::_omap_set_kvs(
+  OnodeRef &onode,
   const omap_root_le_t& omap_root,
   Transaction& t,
   omap_root_le_t& mutable_omap_root,
@@ -867,13 +870,13 @@ SeaStore::_omap_set_kvs(
 {
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
-    omap_root.get(),
+    omap_root.get(onode->get_hint()),
     [&, keys=std::move(kvs)](auto &omap_manager, auto &root) {
       tm_iertr::future<> maybe_create_root =
         !root.is_null() ?
         tm_iertr::now() :
         omap_manager.initialize_omap(
-          t
+          t, onode->get_hint()
         ).si_then([&root](auto new_root) {
           root = new_root;
         });
@@ -899,6 +902,7 @@ SeaStore::tm_ret SeaStore::_omap_set_values(
   LOG_PREFIX(SeaStore::_omap_set_values);
   DEBUGT("{} {} keys", *ctx.transaction, *onode, aset.size());
   return _omap_set_kvs(
+    onode,
     onode->get_layout().omap_root,
     *ctx.transaction,
     onode->get_mutable_layout(*ctx.transaction).omap_root,
@@ -923,13 +927,13 @@ SeaStore::tm_ret SeaStore::_omap_rmkeys(
 {
   LOG_PREFIX(SeaStore::_omap_rmkeys);
   DEBUGT("{} {} keys", *ctx.transaction, *onode, keys.size());
-  auto omap_root = onode->get_layout().omap_root.get();
+  auto omap_root = onode->get_layout().omap_root.get(onode->get_hint());
   if (omap_root.is_null()) {
     return seastar::now();
   } else {
     return seastar::do_with(
       BtreeOMapManager(*transaction_manager),
-      onode->get_layout().omap_root.get(),
+      onode->get_layout().omap_root.get(onode->get_hint()),
       std::move(keys),
       [&ctx, &onode](
 	auto &omap_manager,
@@ -1027,6 +1031,7 @@ SeaStore::tm_ret SeaStore::_setattrs(
   }
 
   return _omap_set_kvs(
+    onode,
     onode->get_layout().xattr_root,
     *ctx.transaction,
     layout.xattr_root,
