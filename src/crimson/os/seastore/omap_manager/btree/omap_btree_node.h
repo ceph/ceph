@@ -18,6 +18,7 @@ namespace crimson::os::seastore::omap_manager{
 struct omap_context_t {
   TransactionManager &tm;
   Transaction &t;
+  laddr_t hint;
 };
 
 enum class mutation_status_t : uint8_t {

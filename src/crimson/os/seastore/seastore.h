@@ -250,6 +250,7 @@ private:
   using _omap_list_bare_ret = OMapManager::omap_list_bare_ret;
   using _omap_list_ret = OMapManager::omap_list_ret;
   _omap_list_ret _omap_list(
+    Onode &onode,
     const omap_root_le_t& omap_root,
     Transaction& t,
     const std::optional<std::string>& start,
@@ -319,6 +320,7 @@ private:
     const coll_t& cid);
   using omap_set_kvs_ret = tm_iertr::future<>;
   omap_set_kvs_ret _omap_set_kvs(
+    OnodeRef &onode,
     const omap_root_le_t& omap_root,
     Transaction& t,
     omap_root_le_t& mutable_omap_root,
