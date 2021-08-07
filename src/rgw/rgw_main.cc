@@ -557,6 +557,8 @@ int radosgw_Main(int argc, const char **argv)
     RGWFrontend *fe = NULL;
 
     if (framework == "civetweb" || framework == "mongoose") {
+      lderr(cct.get()) << "IMPORTANT: the civetweb frontend is now deprecated "
+          "and will be removed in a future release" << dendl;
       framework = "civetweb";
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);

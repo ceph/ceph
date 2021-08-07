@@ -132,6 +132,7 @@ Civetweb
 ========
 
 .. versionadded:: Firefly
+.. deprecated:: Pacific
 
 The ``civetweb`` frontend uses the Civetweb HTTP library, which is a
 fork of Mongoose.

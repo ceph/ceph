@@ -158,6 +158,8 @@
   CentOS 7.6 and later.  To enable older clients, set ``cephx_require_version``
   and ``cephx_service_require_version`` config options to 1.
 
+* rgw: The Civetweb frontend is now deprecated and will be removed in Quincy.
+
 >=15.0.0
 --------
 
