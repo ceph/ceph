@@ -94,6 +94,35 @@ Shaman
    for its `Web UI`_. But please note, shaman does not build the
    packages, it justs offers information of the builds.
 
+As the following shows, `chacra`_ manages multiple projects whose metadata
+are stored in a database. These metadata are exposed via Shaman as a web
+service. `chacractl`_ is a utility to interact with the `chacra`_ service.
+
+.. graphviz::
+
+   digraph  {
+     libboost [
+       shape=cylinder;
+     ];
+     libzbd [
+       shape=cylinder;
+     ];
+     other_repos [
+       label="...";
+       shape=cylinder;
+     ];
+     postgresql [
+       shape=cylinder;
+       style=filled;
+     ]
+     shaman -> postgresql;
+     chacra -> postgresql;
+     chacractl -> chacra;
+     chacra -> libboost;
+     chacra -> libzbd;
+     chacra -> other_repos;
+   }
+
 .. _Sepia Lab: https://wiki.sepia.ceph.com/doku.php
 .. _Web UI: https://shaman.ceph.com
 
@@ -118,7 +147,8 @@ some of them and uploaded them to our own repos. So, when performing
 ``make check``, the building hosts in our CI just pull them from our internal
 repos hosting these packages instead of building them.
 
-So far, following packages are prebuilt on ubuntu focal:
+So far, following packages are prebuilt for ubuntu focal, and then uploaded to
+`chacra`_:
 
 libboost
     packages `boost`_. The packages' names are changed from ``libboost-*`` to
@@ -142,6 +172,14 @@ libpmem
     pmdk, for an updated debian packaging, please see
     https://github.com/ceph/ceph-ndctl .
 
+.. note::
+
+   please ensure that the package version and the release number of the
+   packaging are properly updated when updating/upgrading the packaging,
+   otherwise it would be difficult to tell which version of the package
+   is installed. We check the package version before trying to upgrade
+   it in ``install-deps.sh``.
+
 .. _boost: https://www.boost.org
 .. _libzbd: https://github.com/westerndigitalcorporation/libzbd
 .. _pmdk: https://github.com/pmem/pmdk
@@ -149,10 +187,11 @@ libpmem
 But in addition to these libraries, ``ceph-mgr-dashboard``'s frontend uses lots of
 JavaScript packages. Quite a few of them are not packaged by distros. Not to
 mention the trouble of testing different combination of versions of these
-packages. So we decided to include these JavaScript packages in our dist tarball.
+packages. So we decided to include these JavaScript packages in our dist tarball
+using ``make-dist``.
 
 Also, because our downstream might not want to use the prepackaged binaries when
-redistributing the precompiled Ceph packages, so we also need to include these
+redistributing the precompiled Ceph packages, we also need to include these
 libraries in our dist tarball. They are
 
 - boost
@@ -166,3 +205,70 @@ we need to upgrade these third party libraries, we should
 - update the CMake script
 - rebuild the prebuilt packages and
 - update this script to reflect the change.
+
+Uploading Dependencies
+----------------------
+
+To ensure that prebuilt packages are available by the jenkins agents, we need to
+upload them to either ``apt-mirror.front.sepia.ceph.com`` or `chacra`_. To upload
+packages to the former would require the help our our lab administrator, so if we
+want to maintain the package repositories on regular basis, a better choice would be
+to manage them using `chacractl`_. `chacra`_ represents packages repositories using
+a resource hierarchy, like::
+
+  <project>/<branch>/<ref>/<distro>/<distro-version>/<arch>
+
+In which:
+
+project
+    in general, it is used for denoting a set of related packages. For instance,
+    ``libboost``.
+
+branch
+    branch of project. This mirrors the concept of a Git repo.
+
+ref
+    a unique id of a given version of a set packages. This id is used to reference
+    the set packages under the ``<project>/<branch>``. It is a good practice to
+    version the packaging recipes, like the ``debian`` directory for building deb
+    packages and the ``spec`` for building rpm packages, and use ths sha1 of the
+    packaging receipe for the ``ref``. But you could also the a random string for
+    ``ref``, like the tag name of the built source tree.
+
+distro
+    the distro name for which the packages are built. Currently, following distros are
+    supported:
+
+    - centos
+    - debian
+    - fedora
+    - rhel
+    - ubuntu
+
+distro-version
+    the version of the distro. For instance, if a package is built on ubuntu focal,
+    the ``distro-version`` should be ``20.04``.
+
+arch
+    the architecture of the packages. It could be:
+
+    - arm64
+    - amd64
+    - noarch
+
+So, for example, we can upload the prebuilt boost packages to chacra like
+
+.. prompt:: bash $
+
+   ls *.deb | chacractl binary create \
+     libboost/master/099c0fd56b4a54457e288a2eff8fffdc0d416f7a/ubuntu/focal/amd64/flavors/default
+
+.. _chacra: https://github.com/ceph/chacra
+.. _chacractl: https://github.com/ceph/chacractl
+
+Update ``install-deps.sh``
+--------------------------
+
+We also need to update ``install-deps.sh`` to point the built script to the new
+repo. Please refer to the `script <https://github.com/ceph/ceph/blob/master/install-deps.sh>`_,
+for more details.
