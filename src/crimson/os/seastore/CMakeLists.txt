@@ -4,6 +4,7 @@ add_library(crimson-seastore STATIC
   segment_manager/ephemeral.cc
   segment_manager/block.cc
   transaction_manager.cc
+  transaction.cc
   journal.cc
   cache.cc
   lba_manager.cc
