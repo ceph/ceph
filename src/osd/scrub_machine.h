@@ -64,7 +64,7 @@ MEV(SelectedChunkFree)
 MEV(ChunkIsBusy)
 MEV(ActivePushesUpd)	 ///< Update to active_pushes. 'active_pushes' represents recovery
 			 ///< that is in-flight to the local ObjectStore
-MEV(UpdatesApplied)	 // external
+MEV(UpdatesApplied)	 ///< (Primary only) all updates are committed
 MEV(InternalAllUpdates)	 ///< the internal counterpart of UpdatesApplied
 MEV(GotReplicas)	 ///< got a map from a replica
 
@@ -76,8 +76,6 @@ MEV(IntLocalMapDone)
 
 MEV(DigestUpdate)  ///< external. called upon success of a MODIFY op. See
 		   ///< scrub_snapshot_metadata()
-MEV(AllChunksDone)
-
 MEV(StartReplica)	 ///< initiating replica scrub. replica_scrub_op() -> OSD Q ->
 			 ///< replica_scrub()
 MEV(StartReplicaNoWait)	 ///< 'start replica' when there are no pending updates
@@ -112,6 +110,7 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   void my_states() const;
   void assert_not_active() const;
   [[nodiscard]] bool is_reserving() const;
+  [[nodiscard]] bool is_accepting_updates() const;
 };
 
 /**
@@ -170,13 +169,9 @@ struct ActiveScrubbing : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer> 
   ~ActiveScrubbing();
 
   using reactions = mpl::list<
-    // done scrubbing
-    sc::transition<AllChunksDone, NotActive>,
-
     sc::custom_reaction<InternalError>,
     sc::custom_reaction<FullReset>>;
 
-  sc::result react(const AllChunksDone&);
   sc::result react(const FullReset&);
   sc::result react(const InternalError&);
 };
