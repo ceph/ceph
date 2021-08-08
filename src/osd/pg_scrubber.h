@@ -214,6 +214,13 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   void send_sched_replica(epoch_t epoch_queued) final;
 
   void send_replica_pushes_upd(epoch_t epoch_queued) final;
+  /**
+   *  The PG has updated its 'applied version'. It might be that we are waiting for this
+   *  information: after selecting a range of objects to scrub, we've marked the latest
+   *  version of these objects in m_subset_last_update. We will not start the map building
+   *  before we know that the PG has reached this version.
+   */
+  void on_applied_when_primary(const eversion_t& applied_version) final;
 
   void send_full_reset(epoch_t epoch_queued) final;
 
@@ -345,6 +352,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   // -------------------------------------------------------------------------------------------
   // the I/F used by the state-machine (i.e. the implementation of ScrubMachineListener)
 
+  [[nodiscard]] bool is_primary() const final { return m_pg->recovery_state.is_primary(); }
+
   void select_range_n_notify() final;
 
   Scrub::BlockedRangeWarning acquire_blocked_alarm() final;
@@ -416,8 +425,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   bool state_test(uint64_t m) const { return m_pg->state_test(m); }
   void state_set(uint64_t m) { m_pg->state_set(m); }
   void state_clear(uint64_t m) { m_pg->state_clear(m); }
-
-  [[nodiscard]] bool is_primary() const { return m_pg->recovery_state.is_primary(); }
 
   [[nodiscard]] bool is_scrub_registered() const;
 

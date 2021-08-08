@@ -11278,8 +11278,10 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   ceph_assert(applied_version <= info.last_update);
   recovery_state.local_write_applied(applied_version);
 
-  if (is_primary() && m_scrubber->should_requeue_blocked_ops(recovery_state.get_last_update_applied())) {
-    osd->queue_scrub_applied_update(this, is_scrub_blocking_ops());
+  if (is_primary() && m_scrubber) {
+    // if there's a scrub operation waiting for the selected chunk to be fully updated -
+    // allow it to continue
+    m_scrubber->on_applied_when_primary(recovery_state.get_last_update_applied());
   }
 }
 
