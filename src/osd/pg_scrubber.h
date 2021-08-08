@@ -212,6 +212,13 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   void send_sched_replica(epoch_t epoch_queued) final;
 
   void send_replica_pushes_upd(epoch_t epoch_queued) final;
+  /**
+   *  The PG has updated its 'applied version'. It might be that we are waiting for this
+   *  information: after selecting a range of objects to scrub, we've marked the latest
+   *  version of these objects in m_subset_last_update. We will not start the map building
+   *  before we know that the PG has reached this version.
+   */
+  void on_applied_when_primary(const eversion_t& applied_version) final;
 
   /**
    *  we allow some number of preemptions of the scrub, which mean we do
