@@ -152,6 +152,8 @@ struct ScrubPgIF {
 
   virtual void send_maps_compared(epoch_t epoch_queued) = 0;
 
+  virtual void on_applied_when_primary(const eversion_t &applied_version) = 0;
+
   // --------------------------------------------------
 
   [[nodiscard]] virtual bool are_callbacks_pending()
