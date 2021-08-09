@@ -125,7 +125,7 @@ class TestDevice(object):
 
     def test_is_partition(self, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert disk.is_partition
@@ -139,14 +139,14 @@ class TestDevice(object):
 
     def test_is_not_lvm_memeber(self, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
 
     def test_is_lvm_memeber(self, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
@@ -315,7 +315,7 @@ class TestDevice(object):
     def test_used_by_ceph(self, device_info,
                           monkeypatch, ceph_type):
         data = {"/dev/sda": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000",
                                  lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes = []
@@ -342,7 +342,7 @@ class TestDevice(object):
         pvolumes = []
         pvolumes.append(FooPVolume)
         data = {"/dev/sda": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         lv_data = {"lv_path": "vg/lv", "vg_name": "vg", "lv_uuid": "0000", "tags": {"ceph.osd_id": 0, "ceph.type": "journal"}}
         monkeypatch.setattr(api, 'get_pvs', lambda **kwargs: pvolumes)
 
@@ -372,26 +372,26 @@ class TestDevice(object):
 class TestDeviceEncryption(object):
 
     def test_partition_is_not_encrypted_lsblk(self, device_info):
-        lsblk = {'TYPE': 'part', 'FSTYPE': 'xfs'}
+        lsblk = {'TYPE': 'part', 'FSTYPE': 'xfs', 'PKNAME': 'sda'}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is False
 
     def test_partition_is_encrypted_lsblk(self, device_info):
-        lsblk = {'TYPE': 'part', 'FSTYPE': 'crypto_LUKS'}
+        lsblk = {'TYPE': 'part', 'FSTYPE': 'crypto_LUKS', 'PKNAME': 'sda'}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is True
 
     def test_partition_is_not_encrypted_blkid(self, device_info):
-        lsblk = {'TYPE': 'part'}
+        lsblk = {'TYPE': 'part', 'PKNAME': 'sda'}
         blkid = {'TYPE': 'ceph data'}
         device_info(lsblk=lsblk, blkid=blkid)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is False
 
     def test_partition_is_encrypted_blkid(self, device_info):
-        lsblk = {'TYPE': 'part'}
+        lsblk = {'TYPE': 'part', 'PKNAME': 'sda'}
         blkid = {'TYPE': 'crypto_LUKS'}
         device_info(lsblk=lsblk, blkid=blkid)
         disk = device.Device("/dev/sda")
