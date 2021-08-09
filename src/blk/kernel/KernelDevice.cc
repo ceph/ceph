@@ -461,7 +461,7 @@ int KernelDevice::flush()
     _exit(1);
   }
   utime_t start = ceph_clock_now();
-  int r = ::fdatasync(fd_directs[WRITE_LIFE_NOT_SET]);
+  int r = ::fdatasync(choose_fd(false, WRITE_LIFE_NOT_SET));
   utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   if (r < 0) {
@@ -1054,7 +1054,7 @@ int KernelDevice::discard(uint64_t offset, uint64_t len)
 	       << " 0x" << std::hex << offset << "~" << len << std::dec
 	       << dendl;
 
-      r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
+      r = BlkDev{choose_fd(false, WRITE_LIFE_NOT_SET)}.discard((int64_t)offset, (int64_t)len);
   }
   return r;
 }
@@ -1152,7 +1152,7 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   int r = 0;
 
   auto start1 = mono_clock::now();
-  r = ::pread(fd_directs[WRITE_LIFE_NOT_SET], p.c_str(), aligned_len, aligned_off);
+  r = ::pread(choose_fd(false, WRITE_LIFE_NOT_SET), p.c_str(), aligned_len, aligned_off);
   auto age = cct->_conf->bdev_debug_aio_log_age;
   if (mono_clock::now() - start1 >= make_timespan(age)) {
     derr << __func__ << " stalled read "
@@ -1226,7 +1226,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     }
   } else {
     //direct and aligned read
-    r = ::pread(fd_directs[WRITE_LIFE_NOT_SET], buf, len, off);
+    r = ::pread(choose_fd(false, WRITE_LIFE_NOT_SET), buf, len, off);
     if (mono_clock::now() - start1 >= make_timespan(age)) {
       derr << __func__ << " stalled read "
 	   << " 0x" << std::hex << off << "~" << len << std::dec
