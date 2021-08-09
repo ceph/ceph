@@ -585,14 +585,3 @@ void PrimaryLogScrub::stats_of_handled_objects(const object_stat_sum_t& delta_st
     }
   }
 }
-
-bool PrimaryLogScrub::should_requeue_blocked_ops(eversion_t last_recovery_applied) const
-{
-  if (!is_scrub_active()) {
-    // just verify that things indeed are quiet
-    ceph_assert(m_start == m_end);
-    return false;
-  }
-
-  return last_recovery_applied >= m_subset_last_update;
-}
