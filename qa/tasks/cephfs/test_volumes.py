@@ -2120,17 +2120,20 @@ class TestVolumes(CephFSTestCase):
         expected_mode2 = "777"
 
         # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group2, f"--mode={expected_mode2}")
         self._fs_cmd("subvolumegroup", "create", self.volname, group1)
-        self._fs_cmd("subvolumegroup", "create", self.volname, group2, "--mode", "777")
 
         group1_path = self._get_subvolume_group_path(self.volname, group1)
         group2_path = self._get_subvolume_group_path(self.volname, group2)
+        volumes_path = os.path.dirname(group1_path)
 
         # check group's mode
         actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group1_path]).stdout.getvalue().strip()
         actual_mode2 = self.mount_a.run_shell(['stat', '-c' '%a', group2_path]).stdout.getvalue().strip()
+        actual_mode3 = self.mount_a.run_shell(['stat', '-c' '%a', volumes_path]).stdout.getvalue().strip()
         self.assertEqual(actual_mode1, expected_mode1)
         self.assertEqual(actual_mode2, expected_mode2)
+        self.assertEqual(actual_mode3, expected_mode1)
 
         self._fs_cmd("subvolumegroup", "rm", self.volname, group1)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group2)
@@ -2159,6 +2162,36 @@ class TestVolumes(CephFSTestCase):
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, subvolgroupname)
+
+    def test_subvolume_create_with_desired_mode(self):
+        subvol1 = self._generate_random_subvolume_name()
+
+        # default mode
+        default_mode = "755"
+        # desired mode
+        desired_mode = "777"
+
+        self._fs_cmd("subvolume", "create", self.volname, subvol1,  "--mode", "777")
+
+        subvol1_path = self._get_subvolume_path(self.volname, subvol1)
+
+        # check subvolumegroup's mode
+        subvol_par_path = os.path.dirname(subvol1_path)
+        group_path = os.path.dirname(subvol_par_path)
+        actual_mode1 = self.mount_a.run_shell(['stat', '-c' '%a', group_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode1, default_mode)
+        # check /volumes mode
+        volumes_path = os.path.dirname(group_path)
+        actual_mode2 = self.mount_a.run_shell(['stat', '-c' '%a', volumes_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode2, default_mode)
+        # check subvolume's  mode
+        actual_mode3 = self.mount_a.run_shell(['stat', '-c' '%a', subvol1_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode3, desired_mode)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvol1)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_create_with_desired_mode_in_group(self):
         subvol1, subvol2, subvol3 = self._generate_random_subvolume_name(3)
