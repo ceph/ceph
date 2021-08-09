@@ -83,7 +83,7 @@ protected:
     ceph::bufferlist&& data_included,
     ceph::bufferlist&& omap_header,
     const std::map<std::string, bufferlist, std::less<>> &attrs,
-    std::map<string, bufferlist>&& omap_entries,
+    std::map<std::string, bufferlist>&& omap_entries,
     ceph::os::Transaction *t);
   void submit_push_complete(
     const ObjectRecoveryInfo &recovery_info,

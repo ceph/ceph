@@ -174,7 +174,7 @@ private:
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
                 std::map<std::string,bufferlist>& aset);
   int _rm_attr(const coll_t& cid, const ghobject_t& oid,
-	       string_view name);
+               std::string_view name);
   int _create_collection(const coll_t& cid, int bits);
   boost::intrusive_ptr<Collection> _get_collection(const coll_t& cid);
 };

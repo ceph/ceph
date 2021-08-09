@@ -21,6 +21,7 @@ namespace {
   }
 }
 
+using std::string;
 using crimson::common::local_conf;
 
 namespace crimson::os {

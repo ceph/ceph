@@ -29,6 +29,11 @@ seastar::logger& logger()
 }
 }  // namespace
 
+using std::string;
+using std::string_view;
+using std::stringstream;
+using std::unique_ptr;
+
 namespace crimson::admin {
 
 tell_result_t::tell_result_t(int ret, std::string&& err)

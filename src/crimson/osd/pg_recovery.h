@@ -66,7 +66,7 @@ private:
     const object_stat_sum_t& stat_diff,
     bool is_delete);
   void on_failed_recover(
-    const set<pg_shard_t>& from,
+    const std::set<pg_shard_t>& from,
     const hobject_t& soid,
     const eversion_t& v);
   void on_peer_recover(

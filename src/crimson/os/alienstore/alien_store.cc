@@ -24,6 +24,10 @@
 #include "crimson/common/log.h"
 #include "crimson/os/futurized_store.h"
 
+using std::map;
+using std::set;
+using std::string;
+
 namespace {
 
 seastar::logger& logger()
