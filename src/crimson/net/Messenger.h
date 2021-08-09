@@ -118,7 +118,7 @@ public:
     auth_server = as;
   }
 
-  virtual void print(ostream& out) const = 0;
+  virtual void print(std::ostream& out) const = 0;
 
   virtual SocketPolicy get_policy(entity_type_t peer_type) const = 0;
 
@@ -144,7 +144,7 @@ public:
          const uint64_t nonce);
 };
 
-inline ostream& operator<<(ostream& out, const Messenger& msgr) {
+inline std::ostream& operator<<(std::ostream& out, const Messenger& msgr) {
   out << "[";
   msgr.print(out);
   out << "]";

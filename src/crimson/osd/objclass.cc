@@ -18,6 +18,9 @@
 #include "auth/Crypto.h"
 #include "common/armor.h"
 
+using std::map;
+using std::string;
+
 static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
 {
   // we can expect the memory under `ret` will be still fine after

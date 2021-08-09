@@ -27,6 +27,9 @@ namespace {
   }
 }
 
+using std::map;
+using std::set;
+
 void PGRecovery::start_pglogbased_recovery()
 {
   using PglogBasedRecovery = crimson::osd::PglogBasedRecovery;

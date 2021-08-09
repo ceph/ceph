@@ -17,9 +17,6 @@
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/osd.h"
 
-using crimson::osd::OSD;
-using namespace crimson::common;
-
 namespace {
 seastar::logger& logger()
 {
@@ -27,9 +24,13 @@ seastar::logger& logger()
 }
 }  // namespace
 
-namespace crimson::admin {
-
+using std::string_view;
+using std::unique_ptr;
+using crimson::osd::OSD;
 using crimson::common::local_conf;
+using namespace crimson::common;
+
+namespace crimson::admin {
 
 template <class Hook, class... Args>
 std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args)

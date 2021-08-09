@@ -18,6 +18,10 @@ namespace {
   }
 }
 
+using std::less;
+using std::map;
+using std::string;
+
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::recover_object(
   const hobject_t& soid,

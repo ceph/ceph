@@ -30,6 +30,7 @@
 
 namespace bpo = boost::program_options;
 using config_t = crimson::common::ConfigProxy;
+using std::string;
 
 seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_osd);

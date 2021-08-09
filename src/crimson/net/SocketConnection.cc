@@ -21,6 +21,7 @@
 #include "Interceptor.h"
 #endif
 
+using std::ostream;
 using namespace crimson::net;
 using crimson::common::local_conf;
 
