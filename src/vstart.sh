@@ -672,6 +672,7 @@ EOF
         auth cluster required = none
         auth service required = none
         auth client required = none
+        ms mon client mode = crc
 EOF
     fi
     if [ "$short" -eq 1 ]; then
