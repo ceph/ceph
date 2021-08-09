@@ -5328,11 +5328,6 @@ int BlueStore::_open_bdev(bool create)
     goto fail_close;
   }
 
-#ifdef HAVE_LIBZBD
-  if (bdev->is_smr()) {
-    freelist_type = "zoned";
-  }
-#endif
   return 0;
 
  fail_close:
@@ -5397,9 +5392,20 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_resto
     uint64_t alloc_size = min_alloc_size;
 #ifdef HAVE_LIBZBD
     if (bdev->is_smr()) {
+      if (freelist_type != "zoned") {
+	derr << "SMR device but freelist_type = " << freelist_type << " (not zoned)"
+	     << dendl;
+	return -EINVAL;
+      }
       alloc_size = _zoned_piggyback_device_parameters_onto(alloc_size);
-    }
+    } else
 #endif
+    if (freelist_type == "zoned") {
+      derr << "non-SMR device (or SMR support not built-in) but freelist_type = zoned"
+	   << dendl;
+      return -EINVAL;
+    }
+
     fm->create(bdev->get_size(), alloc_size, t);
     auto reserved = _get_ondisk_reserved();
     if (fm_restore) {
@@ -5514,26 +5520,46 @@ int BlueStore::_create_alloc()
   ceph_assert(bdev->get_size());
 
   uint64_t alloc_size = min_alloc_size;
-  
+
+  std::string allocator_type = cct->_conf->bluestore_allocator;
+
 #ifdef HAVE_LIBZBD
-  if (bdev->is_smr()) {
-    int r = _zoned_check_config_settings();
-    if (r < 0)
-      return r;
+  if (freelist_type == "zoned") {
+    allocator_type = "zoned";
+
+    // At least for now we want to use large min_alloc_size with HM-SMR drives.
+    // Populating used_blocks bitset on a debug build of ceph-osd takes about 5
+    // minutes with a 14 TB HM-SMR drive and 4 KiB min_alloc_size.
+    if (min_alloc_size < 64 * 1024) {
+      dout(1) << __func__ << " The drive is HM-SMR but min_alloc_size is "
+	      << min_alloc_size << ". "
+	      << "Please set to at least 64 KiB." << dendl;
+      return -EINVAL;
+    }
+
+    // We don't want to defer writes with HM-SMR because it violates sequential
+    // write requirement.
+    if (prefer_deferred_size) {
+      dout(1) << __func__ << " The drive is HM-SMR but prefer_deferred_size is "
+	      << prefer_deferred_size << ". "
+	      << "Please set to 0." << dendl;
+      return -EINVAL;
+    }
+
     alloc_size = _zoned_piggyback_device_parameters_onto(alloc_size);
   }
 #endif
   
-  shared_alloc.set(Allocator::create(cct, cct->_conf->bluestore_allocator,
+  shared_alloc.set(Allocator::create(cct, allocator_type,
     bdev->get_size(),
     alloc_size, "block"));
 
   if (!shared_alloc.a) {
-    lderr(cct) << __func__ << "Failed to create allocator:: "
-      << cct->_conf->bluestore_allocator
-      << dendl;
+    lderr(cct) << __func__ << " failed to create " << allocator_type << " allocator"
+	       << dendl;
     return -EINVAL;
   }
+
   return 0;
 }
 
@@ -6617,8 +6643,6 @@ int BlueStore::mkfs()
     }
   }
 
-  freelist_type = "bitmap";
-
   r = _open_path();
   if (r < 0)
     return r;
@@ -6671,6 +6695,17 @@ int BlueStore::mkfs()
   r = _open_bdev(true);
   if (r < 0)
     goto out_close_fsid;
+
+  // choose freelist manager
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    freelist_type = "zoned";
+  } else
+#endif
+  {
+    freelist_type = "bitmap";
+  }
+  dout(10) << " freelist_type " << freelist_type << dendl;
 
   // choose min_alloc_size
   if (cct->_conf->bluestore_min_alloc_size) {
@@ -11857,34 +11892,6 @@ uint64_t BlueStore::_zoned_piggyback_device_parameters_onto(uint64_t min_alloc_s
   return min_alloc_size;
 }
 
-int BlueStore::_zoned_check_config_settings() {
-  if (cct->_conf->bluestore_allocator != "zoned") {
-    dout(1) << __func__ << " The drive is HM-SMR but "
-	    << cct->_conf->bluestore_allocator << " allocator is specified. "
-	    << "Only zoned allocator can be used with HM-SMR drive." << dendl;
-    return -EINVAL;
-  }
-
-  // At least for now we want to use large min_alloc_size with HM-SMR drives.
-  // Populating used_blocks bitset on a debug build of ceph-osd takes about 5
-  // minutes with a 14 TB HM-SMR drive and 4 KiB min_alloc_size.
-  if (min_alloc_size < 64 * 1024) {
-    dout(1) << __func__ << " The drive is HM-SMR but min_alloc_size is "
-	    << min_alloc_size << ". "
-	    << "Please set to at least 64 KiB." << dendl;
-    return -EINVAL;
-  }
-
-  // We don't want to defer writes with HM-SMR because it violates sequential
-  // write requirement.
-  if (prefer_deferred_size) {
-    dout(1) << __func__ << " The drive is HM-SMR but prefer_deferred_size is "
-	    << prefer_deferred_size << ". "
-	    << "Please set to 0." << dendl;
-    return -EINVAL;
-  }
-  return 0;
-}
 #endif
 
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
