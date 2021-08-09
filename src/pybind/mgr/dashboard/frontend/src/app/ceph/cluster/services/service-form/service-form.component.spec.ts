@@ -100,14 +100,15 @@ describe('ServiceFormComponent', () => {
     });
 
     it('should test unmanaged', () => {
-      formHelper.setValue('service_type', 'rgw');
+      formHelper.setValue('service_type', 'mgr');
+      formHelper.setValue('service_id', 'svc');
       formHelper.setValue('placement', 'label');
       formHelper.setValue('label', 'bar');
-      formHelper.setValue('rgw_frontend_port', 4567);
       formHelper.setValue('unmanaged', true);
       component.onSubmit();
       expect(cephServiceService.create).toHaveBeenCalledWith({
-        service_type: 'rgw',
+        service_type: 'mgr',
+        service_id: 'svc',
         placement: {},
         unmanaged: true
       });
@@ -170,32 +171,52 @@ describe('ServiceFormComponent', () => {
     describe('should test service rgw', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue('service_id', 'svc');
       });
 
       it('should test rgw valid service id', () => {
-        formHelper.setValue('service_id', 'foo.bar');
+        formHelper.setValue('service_id', 'svc.realm.zone');
         formHelper.expectValid('service_id');
-        formHelper.setValue('service_id', 'foo.bar.bas');
+        formHelper.setValue('service_id', 'svc');
         formHelper.expectValid('service_id');
       });
 
       it('should test rgw invalid service id', () => {
-        formHelper.setValue('service_id', 'foo');
+        formHelper.setValue('service_id', '.');
         formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'foo.');
+        formHelper.setValue('service_id', 'svc.');
         formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'foo.bar.');
+        formHelper.setValue('service_id', 'svc.realm');
         formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'foo.bar.bas.');
+        formHelper.setValue('service_id', 'svc.realm.');
+        formHelper.expectError('service_id', 'rgwPattern');
+        formHelper.setValue('service_id', '.svc.realm');
+        formHelper.expectError('service_id', 'rgwPattern');
+        formHelper.setValue('service_id', 'svc.realm.zone.');
         formHelper.expectError('service_id', 'rgwPattern');
       });
 
-      it('should submit rgw with port', () => {
+      it('should submit rgw with realm and zone', () => {
+        formHelper.setValue('service_id', 'svc.my-realm.my-zone');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: 'my-realm',
+          rgw_zone: 'my-zone',
+          placement: {},
+          unmanaged: false,
+          ssl: false
+        });
+      });
+
+      it('should submit rgw with port and ssl enabled', () => {
         formHelper.setValue('rgw_frontend_port', 1234);
         formHelper.setValue('ssl', true);
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'rgw',
+          service_id: 'svc',
           placement: {},
           unmanaged: false,
           rgw_frontend_port: 1234,
@@ -239,6 +260,7 @@ describe('ServiceFormComponent', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'rgw',
+          service_id: 'svc',
           placement: {},
           unmanaged: false,
           ssl: false
