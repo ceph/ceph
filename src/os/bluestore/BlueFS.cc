@@ -2220,7 +2220,7 @@ void BlueFS::_rewrite_log_and_layout_sync(bool allocate_with_fallback,
   log_writer->append(bl);
   r = _flush(log_writer, true);
   ceph_assert(r == 0);
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
     _claim_completed_aios(log_writer, &completed_ios);
@@ -2947,7 +2947,7 @@ void BlueFS::_flush_bdev_safely(FileWriter *h)
 {
   std::array<bool, MAX_BDEV> flush_devs = h->dirty_devs;
   h->dirty_devs.fill(false);
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
     _claim_completed_aios(h, &completed_ios);
