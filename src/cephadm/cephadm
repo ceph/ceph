@@ -2094,7 +2094,7 @@ def get_running_container_name(ctx: CephadmContext, c: 'CephContainer') -> Optio
             ctx.container_engine.path, 'container', 'inspect',
             '--format', '{{.State.Status}}', name
         ])
-        if out == 'running':
+        if out.strip() == 'running':
             return name
     return None
 
