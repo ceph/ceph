@@ -22,7 +22,6 @@ struct aio_t {
 #if defined(HAVE_LIBAIO)
   struct iocb iocb{};  // must be first element; see shenanigans in aio_queue_t
 #elif defined(HAVE_POSIXAIO)
-  //  static long aio_listio_max = -1;
   union {
     struct aiocb aiocb;
     struct aiocb *aiocbp;
@@ -37,6 +36,9 @@ struct aio_t {
   ceph::buffer::list bl;  ///< write payload (so that it remains stable for duration)
 
   boost::intrusive::list_member_hook<> queue_item;
+
+  aio_t(void *p, int f) : priv(p), fd(f), offset(0), length(0), rval(-1000) {
+  }
 
   aio_t(void *p, int f) : priv(p), fd(f), offset(0), length(0), rval(-1000) {
   }
@@ -85,6 +87,9 @@ struct aio_t {
 };
 
 std::ostream& operator<<(std::ostream& os, const aio_t& aio);
+#if defined(HAVE_POSIXAIO)
+std::ostream& operator<<(std::ostream& os, const struct aiocb *cb);
+#endif
 
 typedef boost::intrusive::list<
   aio_t,
@@ -102,21 +107,32 @@ struct io_queue_t {
   virtual void shutdown() = 0;
   virtual int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size,
 			   void *priv, int *retries) = 0;
+#if defined(HAVE_LIBAIO)
   virtual int get_next_completed(int timeout_ms, aio_t **paio, int max) = 0;
+#elif defined(HAVE_POSIXAIO)
+  virtual int get_next_completed(int timeout_ms, aio_t **paio, int max, int fd = 0) = 0;
+#endif
 };
 
 struct aio_queue_t final : public io_queue_t {
   int max_iodepth;
 #if defined(HAVE_LIBAIO)
   io_context_t ctx;
-#elif defined(HAVE_POSIXAIO)
-  int ctx;
-#endif
 
   explicit aio_queue_t(unsigned max_iodepth)
     : max_iodepth(max_iodepth),
       ctx(0) {
   }
+#elif defined(HAVE_POSIXAIO)
+  int ctx;
+  CephContext* cct;
+
+  explicit aio_queue_t(CephContext* cct, unsigned max_iodepth)
+    : max_iodepth(max_iodepth),
+      ctx(0),
+      cct(cct) {
+  }
+#endif
   ~aio_queue_t() final {
     ceph_assert(ctx == 0);
   }
@@ -155,5 +171,9 @@ struct aio_queue_t final : public io_queue_t {
 
   int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size,
 		   void *priv, int *retries) final;
+#if defined(HAVE_LIBAIO)
   int get_next_completed(int timeout_ms, aio_t **paio, int max) final;
+#elif defined(HAVE_POSIXAIO)
+  int get_next_completed(int timeout_ms, aio_t **paio, int max, int fd) final;
+#endif
 };
