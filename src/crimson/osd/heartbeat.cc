@@ -17,6 +17,8 @@
 
 #include "osd/OSDMap.h"
 
+using std::set;
+using std::string;
 using crimson::common::local_conf;
 
 namespace {
@@ -637,7 +639,7 @@ bool Heartbeat::FailingPeers::add_pending(
   if (failure_pending.count(peer)) {
     return false;
   }
-  auto failed_for = chrono::duration_cast<chrono::seconds>(
+  auto failed_for = std::chrono::duration_cast<std::chrono::seconds>(
       now - failed_since).count();
   auto osdmap = heartbeat.service.get_osdmap_service().get_map();
   auto failure_report =

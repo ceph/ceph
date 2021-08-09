@@ -266,7 +266,7 @@ private:
   omap_get_values_ret_t omap_list(
     CollectionRef ch,
     const ghobject_t &oid,
-    const std::optional<string> &_start,
+    const std::optional<std::string> &_start,
     OMapManager::omap_list_config_t config);
 
   SegmentManagerRef segment_manager;

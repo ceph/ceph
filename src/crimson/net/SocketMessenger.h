@@ -85,7 +85,7 @@ class SocketMessenger final : public Messenger {
 
   seastar::future<> shutdown() override;
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << get_myname()
         << "(" << logic_name
         << ") " << get_myaddr();

@@ -32,6 +32,9 @@ namespace {
   }
 }
 
+using std::runtime_error;
+using std::string;
+using std::string_view;
 using crimson::common::local_conf;
 
 std::unique_ptr<PGBackend>

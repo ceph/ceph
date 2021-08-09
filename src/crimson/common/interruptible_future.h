@@ -42,6 +42,22 @@
 // interruptor::with_interruption() and helpers can be used by users to wrap a future in
 // the interruption machinery.
 
+namespace crimson::os::seastore {
+  class TransactionConflictCondition;
+}
+
+// GCC tries to instantiate
+// seastar::lw_shared_ptr<crimson::os::seastore::TransactionConflictCondition>.
+// but we *may* not have the definition of TransactionConflictCondition at this moment,
+// a full specialization for lw_shared_ptr_accessors helps to bypass the default
+// lw_shared_ptr_accessors implementation, where std::is_base_of<.., T> is used.
+namespace seastar::internal {
+  template<>
+  struct lw_shared_ptr_accessors<::crimson::os::seastore::TransactionConflictCondition, void>
+    : lw_shared_ptr_accessors_no_esft<::crimson::os::seastore::TransactionConflictCondition>
+  {};
+}
+
 namespace crimson::interruptible {
 
 struct ready_future_marker {};
@@ -58,6 +74,8 @@ using InterruptCondRef = seastar::lw_shared_ptr<InterruptCond>;
 
 template <typename InterruptCond>
 thread_local InterruptCondRef<InterruptCond> interrupt_cond;
+extern template thread_local InterruptCondRef<crimson::os::seastore::TransactionConflictCondition>
+interrupt_cond<crimson::os::seastore::TransactionConflictCondition>;
 
 template <typename InterruptCond, typename FutureType>
 class [[nodiscard]] interruptible_future_detail {};
@@ -439,7 +457,7 @@ public:
     using ex_type = typename trait::template arg<0>::type;
     return core_type::then_wrapped(
       [func=std::forward<Func>(func),
-      interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable 
+      interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable
       -> Result {
       if (!fut.failed()) {
 	return seastar::make_ready_future<T>(fut.get());

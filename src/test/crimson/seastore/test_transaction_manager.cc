@@ -156,8 +156,6 @@ struct transaction_manager_test_t :
       public:
 	iterator(const iterator &) = default;
 	iterator(iterator &&) = default;
-	iterator &operator=(const iterator &) = default;
-	iterator &operator=(iterator &&) = default;
 
 	iterator &operator++() {
 	  assert(is_valid());

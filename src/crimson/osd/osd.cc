@@ -64,6 +64,13 @@ namespace {
   static constexpr int TICK_INTERVAL = 1;
 }
 
+using std::make_unique;
+using std::map;
+using std::pair;
+using std::string;
+using std::unique_ptr;
+using std::vector;
+
 using crimson::common::local_conf;
 using crimson::os::FuturizedStore;
 
