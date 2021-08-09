@@ -444,3 +444,8 @@
   from Octopus) will be automatically migrated when the cluster is
   upgraded.  Note that the NFS ganesha daemons will be redeployed and
   it is possible that their IPs will change.
+
+* RGW now requires a secure connection to the monitor by default
+  (``auth_client_required=cephx`` and ``ms_mon_client_mode=secure``).
+  If you have cephx authentication disabled on your cluster, you may
+  need to adjust these settings for RGW.
