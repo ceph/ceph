@@ -614,7 +614,7 @@ void MDSRankDispatcher::init()
   finisher->start();
 }
 
-void MDSRank::update_targets()
+void MDSRank::update_targets(bool send_now)
 {
   // get MonMap's idea of my export_targets
   const set<mds_rank_t>& map_targets = mdsmap->get_mds_info(get_nodeid()).export_targets;
@@ -649,7 +649,7 @@ void MDSRank::update_targets()
     send = true;
   }
 
-  if (send) {
+  if (send || send_now) {
     dout(15) << "updating export_targets, now " << new_map_targets.size() << " ranks are targets" << dendl;
     auto m = make_message<MMDSLoadTargets>(mds_gid_t(monc->get_global_id()), new_map_targets);
     monc->send_mon_message(m.detach());
@@ -660,7 +660,7 @@ void MDSRank::hit_export_target(mds_rank_t rank, double amount)
 {
   double rate = g_conf()->mds_bal_target_decay;
   if (amount < 0.0) {
-    amount = 100.0/g_conf()->mds_bal_target_decay; /* a good default for "i am trying to keep this export_target active" */
+    amount = 100.0/rate; /* a good default for "i am trying to keep this export_target active" */
   }
   auto em = export_targets.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple(DecayRate(rate)));
   auto &counter = em.first->second;

@@ -1550,6 +1550,17 @@ void Migrator::export_go(CDir *dir)
   mds->mdlog->flush();
 }
 
+class C_MDS_ExportStartFinishLogged : public MigratorLogContext {
+  CDir *dir;
+  uint64_t tid;
+public:
+  C_MDS_ExportStartFinishLogged(Migrator *m, CDir *d, uint64_t t)
+    : MigratorLogContext(m), dir(d), tid(t) {}
+  void finish(int r) override {
+    mig->exportstart_logged_finish(dir, tid);
+  }
+};
+
 void Migrator::export_go_synced(CDir *dir, uint64_t tid)
 {
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
@@ -1577,15 +1588,46 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
 
   // take away the popularity we're sending.
   mds->balancer->subtract_export(dir);
-  
+
+  // Update the export target to mdsmap right now, this could
+  // make sure that the client could see it when the target MDS
+  // has journaled the EImportStart log and crashes and then is
+  // replaced by the standby and when waiting the reconnection
+  // from the client.
+  mds->hit_export_target(dest, dir->get_num_dentreis()+1);
+  mds->update_targets(true);
+
+  // The EExportStart log will record the export targets, this
+  // could be make sure that when the both the import and export
+  // MDS daemons are crashed later the client could see the export
+  // targets and then send the reconnection to new import MDS,
+  // which will wait client's reconnection after replaying the
+  // EImportStart.
+  EExportStart *le = new EExportStart(mds->mdlog, dir, dest);;
+  mds->mdlog->start_entry(le);
+  mds->mdlog->submit_entry(le, new C_MDS_ExportStartFinishLogged(this, dir, tid));
+  mds->mdlog->flush();
+}
+
+void Migrator::exportstart_logged_finish(CDir *dir, uint64_t tid)
+{
+  map<CDir*,export_state_t>::iterator it = export_state.find(dir);
+  if (it == export_state.end() ||
+      it->second.state == EXPORT_CANCELLING ||
+      it->second.tid != tid) {
+    // export must have aborted.
+    dout(7) << "export must have aborted on " << dir << dendl;
+    return;
+  }
+  mds_rank_t dest = it->second.peer;
+
   // fill export message with cache data
   auto req = make_message<MExportDir>(dir->dirfrag(), it->second.tid);
   map<client_t,entity_inst_t> exported_client_map;
   map<client_t,client_metadata_t> exported_client_metadata_map;
   uint64_t num_exported_inodes = 0;
   encode_export_dir(req->export_data, dir, // recur start point
-                    exported_client_map, exported_client_metadata_map,
-                    num_exported_inodes);
+                    exported_client_map, exported_client_metadata_map);
   encode(exported_client_map, req->client_map, mds->mdsmap->get_up_features());
   encode(exported_client_metadata_map, req->client_map);
 
@@ -1600,8 +1642,6 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   // send
   mds->send_message_mds(req, dest);
   ceph_assert(g_conf()->mds_kill_export_at != 8);
-
-  mds->hit_export_target(dest, num_exported_inodes+1);
 
   // stats
   if (mds->logger) mds->logger->inc(l_mds_exported);
@@ -1742,8 +1782,7 @@ void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
 void Migrator::encode_export_dir(bufferlist& exportbl,
 				CDir *dir,
 				map<client_t,entity_inst_t>& exported_client_map,
-				map<client_t,client_metadata_t>& exported_client_metadata_map,
-                                uint64_t &num_exported)
+				map<client_t,client_metadata_t>& exported_client_metadata_map)
 {
   // This has to be declared before ENCODE_STARTED as it will need to be referenced after ENCODE_FINISH.
   std::vector<CDir*> subdirs;
@@ -1771,8 +1810,6 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
 
-    num_exported++;
-    
     // -- dentry
     dout(7) << " exporting " << *dn << dendl;
     
@@ -1823,7 +1860,7 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
   ENCODE_FINISH(exportbl);
   // subdirs
   for (const auto &dir : subdirs) {
-    encode_export_dir(exportbl, dir, exported_client_map, exported_client_metadata_map, num_exported);
+    encode_export_dir(exportbl, dir, exported_client_map, exported_client_metadata_map);
   }
 }
 

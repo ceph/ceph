@@ -219,8 +219,7 @@ public:
   void encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
 			std::map<client_t,entity_inst_t>& exported_client_map,
-			std::map<client_t,client_metadata_t>& exported_client_metadata_map,
-                        uint64_t &num_exported);
+			std::map<client_t,client_metadata_t>& exported_client_metadata_map);
   void finish_export_dir(CDir *dir, mds_rank_t target,
 			 std::map<inodeno_t,std::map<client_t,Capability::Import> >& peer_imported,
 			 MDSContext::vec& finished, int *num_dentries);
@@ -298,6 +297,7 @@ protected:
   typedef std::map<CDir*, export_state_t>::iterator export_state_iterator;
 
   friend class C_MDC_ExportFreeze;
+  friend class C_MDS_ExportStartFinishLogged;
   friend class C_MDS_ExportFinishLogged;
   friend class C_M_ExportGo;
   friend class C_M_ExportSessionsFlushed;
@@ -321,6 +321,7 @@ protected:
   void export_notify_abort(CDir *dir, export_state_t& stat, std::set<CDir*>& bounds);
   void handle_export_ack(const cref_t<MExportDirAck> &m);
   void export_logged_finish(CDir *dir);
+  void exportstart_logged_finish(CDir *dir, uint64_t tid);
   void handle_export_notify_ack(const cref_t<MExportDirNotifyAck> &m);
   void export_finish(CDir *dir);
   void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);

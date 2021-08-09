@@ -366,6 +366,9 @@ class MDSRank {
 		      const std::string& option, const std::string& value,
 		      std::ostream& ss);
 
+    /* Update MDSMap export_targets for this rank. Called on ::tick(). */
+    void update_targets(bool send_now=false);
+
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
@@ -537,9 +540,6 @@ class MDSRank {
 
     void handle_mds_recovery(mds_rank_t who);
     void handle_mds_failure(mds_rank_t who);
-
-    /* Update MDSMap export_targets for this rank. Called on ::tick(). */
-    void update_targets();
 
     void _mon_command_finish(int r, std::string_view cmd, std::string_view outs);
     void set_mdsmap_multimds_snaps_allowed();

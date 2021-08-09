@@ -74,6 +74,7 @@ std::string_view LogEvent::get_type_str() const
   case EVENT_SUBTREEMAP: return "SUBTREEMAP";
   case EVENT_SUBTREEMAP_TEST: return "SUBTREEMAP_TEST";
   case EVENT_EXPORT: return "EXPORT";
+  case EVENT_EXPORTSTART: return "EXPORTSTART";
   case EVENT_IMPORTSTART: return "IMPORTSTART";
   case EVENT_IMPORTFINISH: return "IMPORTFINISH";
   case EVENT_FRAGMENT: return "FRAGMENT";
@@ -100,6 +101,7 @@ const std::map<std::string, LogEvent::EventType> LogEvent::types = {
   {"SUBTREEMAP", EVENT_SUBTREEMAP},
   {"SUBTREEMAP_TEST", EVENT_SUBTREEMAP_TEST},
   {"EXPORT", EVENT_EXPORT},
+  {"EXPORTSTART", EVENT_EXPORTSTART},
   {"IMPORTSTART", EVENT_IMPORTSTART},
   {"IMPORTFINISH", EVENT_IMPORTFINISH},
   {"FRAGMENT", EVENT_FRAGMENT},
@@ -145,6 +147,9 @@ std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator& p, 
     break;
   case EVENT_EXPORT:
     le = std::make_unique<EExport>();
+    break;
+  case EVENT_EXPORTSTART:
+    le = std::make_unique<EExportStart>();
     break;
   case EVENT_IMPORTSTART:
     le = std::make_unique<EImportStart>();

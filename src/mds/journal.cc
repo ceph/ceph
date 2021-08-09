@@ -2964,6 +2964,53 @@ void dirfrag_rollback::decode(bufferlist::const_iterator &bl)
 // =========================================================================
 
 // -----------------------
+// EExportStart
+
+void EExportStart::replay(MDSRank *mds)
+{
+  dout(10) << "EExportStart.replay " << base << " export target " << target << dendl;
+  auto&& segment = get_segment();
+  metablob.replay(mds, segment);
+
+  mds->hit_export_target(target, -1);
+  mds->update_targets(true);
+}
+
+void EExportStart::encode(bufferlist& bl, uint64_t features) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(stamp, bl);
+  encode(metablob, bl, features);
+  encode(base, bl);
+  encode(target, bl);
+  ENCODE_FINISH(bl);
+}
+
+void EExportStart::decode(bufferlist::const_iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+  decode(stamp, bl);
+  decode(metablob, bl);
+  decode(base, bl);
+  decode(target, bl);
+  DECODE_FINISH(bl);
+}
+
+void EExportStart::dump(Formatter *f) const
+{
+  f->dump_float("stamp", (double)stamp);
+  f->dump_stream("base dirfrag") << base;
+  f->dump_int("export target", (int64_t)target);
+}
+
+void EExportStart::generate_test_instances(std::list<EExportStart*>& ls)
+{
+  EExportStart *sample = new EExportStart();
+  ls.push_back(sample);
+}
+
+
+// -----------------------
 // EExport
 
 void EExport::replay(MDSRank *mds)
