@@ -555,12 +555,22 @@ void KernelDevice::_aio_thread()
     dout(40) << __func__ << " polling" << dendl;
     int max = cct->_conf->bdev_aio_reap_max;
     aio_t *aio[max];
+#if defined(HAVE_LIBAIO)
     int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
-					 aio, max);
+                                         aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
       ceph_abort_msg("got unexpected error from io_getevents");
     }
+#elif defined(HAVE_POSIXAIO)
+    int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
+                                         aio, max, choose_fd(false, 0));
+    if (r < 0) {
+      derr << __func__ << " got " << cpp_strerror(r) << dendl;
+      ceph_abort_msg("got unexpected error from kevent");
+    }
+#endif
+
     if (r > 0) {
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
       for (int i = 0; i < r; ++i) {
@@ -950,7 +960,7 @@ int KernelDevice::aio_write(
 
   _aio_log_start(ioc, off, len);
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio && !buffered) {
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
@@ -970,7 +980,7 @@ int KernelDevice::aio_write(
     } else {
       if (bl.length() <= RW_IO_MAX) {
 	// fast path (non-huge write)
-	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+        ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
 	++ioc->num_pending;
 	auto& aio = ioc->pending_aios.back();
 	bl.prepare_iov(&aio.iov);
@@ -990,7 +1000,7 @@ int KernelDevice::aio_write(
 	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
 	  }
 	  auto len = tmp.length();
-	  ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+          ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
 	  ++ioc->num_pending;
 	  auto& aio = ioc->pending_aios.back();
 	  tmp.prepare_iov(&aio.iov);
@@ -1090,11 +1100,11 @@ int KernelDevice::aio_read(
 	  << dendl;
 
   int r = 0;
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
+    ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, WRITE_LIFE_NOT_SET)));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.bl.push_back(
@@ -1230,7 +1240,7 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
 	  << dendl;
   ceph_assert(off % block_size == 0);
   ceph_assert(len % block_size == 0);
-  int r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, POSIX_FADV_DONTNEED);
+  int r = posix_fadvise(choose_fd(false, WRITE_LIFE_NOT_SET), off, len, POSIX_FADV_DONTNEED);
   if (r) {
     r = -r;
     derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
