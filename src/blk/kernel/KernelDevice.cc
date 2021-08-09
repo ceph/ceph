@@ -39,7 +39,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
-#define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
+#define dout_prefix *_dout << "bdev:kd:" << __LINE__ << "(" << this << " " << path << ") "
 
 using std::list;
 using std::map;
@@ -81,7 +81,11 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
            << dendl;
       once = true;
     }
+#if defined(DEBUG_AIO)
+    io_queue = std::make_unique<aio_queue_t>(cct, iodepth);
+#else
     io_queue = std::make_unique<aio_queue_t>(iodepth);
+#endif
   }
 }
 
@@ -960,7 +964,7 @@ int KernelDevice::aio_write(
 
   _aio_log_start(ioc, off, len);
 
-#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
+#ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
@@ -969,7 +973,11 @@ int KernelDevice::aio_write(
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
+#if defined(DEBUG_AIO)
+      ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
+#else
       ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+#endif
       ++ioc->num_pending;
       auto& aio = ioc->pending_aios.back();
       aio.bl.push_back(
@@ -980,7 +988,11 @@ int KernelDevice::aio_write(
     } else {
       if (bl.length() <= RW_IO_MAX) {
 	// fast path (non-huge write)
+#if defined(DEBUG_AIO)
+        ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
+#else
         ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+#endif
 	++ioc->num_pending;
 	auto& aio = ioc->pending_aios.back();
 	bl.prepare_iov(&aio.iov);
@@ -1000,7 +1012,11 @@ int KernelDevice::aio_write(
 	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
 	  }
 	  auto len = tmp.length();
+#if defined(DEBUG_AIO)
+          ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
+#else
           ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+#endif
 	  ++ioc->num_pending;
 	  auto& aio = ioc->pending_aios.back();
 	  tmp.prepare_iov(&aio.iov);
@@ -1104,7 +1120,11 @@ int KernelDevice::aio_read(
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
+#if defined(DEBUG_AIO)
+    ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, WRITE_LIFE_NOT_SET)));
+#else
     ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, WRITE_LIFE_NOT_SET)));
+#endif
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.bl.push_back(
