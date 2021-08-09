@@ -9,6 +9,8 @@ class VolSpec(object):
     DEFAULT_SUBVOL_PREFIX = "/volumes"
     # and the default namespace
     DEFAULT_NS_PREFIX = "fsvolumens_"
+    # default mode for subvol prefix and group
+    DEFAULT_MODE = 0o755
 
     def __init__(self, snapshot_prefix, subvolume_prefix=None, pool_ns_prefix=None):
         self.snapshot_prefix = snapshot_prefix
