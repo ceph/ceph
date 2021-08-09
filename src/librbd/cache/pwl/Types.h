@@ -41,13 +41,13 @@ enum {
 
   // All write requests
   l_librbd_pwl_wr_req,             // write requests
+  l_librbd_pwl_wr_bytes,           // bytes written
   l_librbd_pwl_wr_req_def,         // write requests deferred for resources
   l_librbd_pwl_wr_req_def_lanes,   // write requests deferred for lanes
   l_librbd_pwl_wr_req_def_log,     // write requests deferred for log entries
   l_librbd_pwl_wr_req_def_buf,     // write requests deferred for buffer space
   l_librbd_pwl_wr_req_overlap,     // write requests detained for overlap
   l_librbd_pwl_wr_req_queued,      // write requests queued for prior barrier
-  l_librbd_pwl_wr_bytes,           // bytes written
 
   // Write log operations (1 .. n per request that appends to the log)
   l_librbd_pwl_log_ops,            // log append ops
@@ -137,7 +137,8 @@ enum {
   l_librbd_pwl_cmp_latency,
   l_librbd_pwl_cmp_fails,
 
-  l_librbd_pwl_flush,
+  l_librbd_pwl_internal_flush,
+  l_librbd_pwl_writeback_latency,
   l_librbd_pwl_invalidate_cache,
   l_librbd_pwl_invalidate_discard_cache,
 
