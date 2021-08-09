@@ -17,6 +17,8 @@ on_error() {
     if [ "$1" != "0" ]; then
         printf "\n\nERROR $1 thrown on line $2\n\n"
         printf "\n\nCollecting info...\n\n"
+        printf "\n\nDisplaying MGR logs:\n\n"
+        kcli ssh -u root -- ceph-node-00 'cephadm logs -n $(cephadm ls | grep -Eo "mgr\.ceph[0-9a-z.-]+" | head -n 1)'
         for vm_id in 0 1 2
         do
             local vm="ceph-node-0${vm_id}"
@@ -42,7 +44,8 @@ DEV_MODE=''
 for arg in "$@"; do
   shift
   case "$arg" in
-    "--dev-mode") DEV_MODE='true'; EXTRA_PARAMS="-P dev_mode=${DEV_MODE}" ;;
+    "--dev-mode") DEV_MODE='true'; EXTRA_PARAMS+=" -P dev_mode=${DEV_MODE}" ;;
+    "--expanded") EXTRA_PARAMS+=" -P expanded_cluster=true" ;;
   esac
 done
 
@@ -50,7 +53,11 @@ kcli delete plan -y ceph || true
 
 # Build dashboard frontend (required to start the module).
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
-NG_CLI_ANALYTICS=false npm ci
+export NG_CLI_ANALYTICS=false
+if [[ -n "$JENKINS_HOME" ]]; then
+    npm cache clean --force
+fi
+npm ci
 FRONTEND_BUILD_OPTS='-- --prod'
 if [[ -n "${DEV_MODE}" ]]; then
     FRONTEND_BUILD_OPTS+=' --deleteOutputPath=false --watch'
