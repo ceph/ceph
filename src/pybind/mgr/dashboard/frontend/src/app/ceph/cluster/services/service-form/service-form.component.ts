@@ -27,6 +27,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   styleUrls: ['./service-form.component.scss']
 })
 export class ServiceFormComponent extends CdForm implements OnInit {
+  readonly RGW_SVC_ID_PATTERN = /^([^.]+)(\.([^.]+)\.([^.]+))?$/;
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
@@ -91,7 +92,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 if (_.isEmpty(value)) {
                   return false;
                 }
-                return !/^[^.]+\.[^.]+(\.[^.]+)?$/.test(value);
+                return !this.RGW_SVC_ID_PATTERN.test(value);
               })
             ]
           )
@@ -283,13 +284,24 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   onSubmit() {
     const self = this;
     const values: object = this.serviceForm.value;
-    const serviceId: string = values['service_id'];
     const serviceType: string = values['service_type'];
     const serviceSpec: object = {
       service_type: serviceType,
       placement: {},
       unmanaged: values['unmanaged']
     };
+    let svcId: string;
+    if (serviceType === 'rgw') {
+      const svcIdMatch = values['service_id'].match(this.RGW_SVC_ID_PATTERN);
+      svcId = svcIdMatch[1];
+      if (svcIdMatch[3]) {
+        serviceSpec['rgw_realm'] = svcIdMatch[3];
+        serviceSpec['rgw_zone'] = svcIdMatch[4];
+      }
+    } else {
+      svcId = values['service_id'];
+    }
+    const serviceId: string = svcId;
     let serviceName: string = serviceType;
     if (_.isString(serviceId) && !_.isEmpty(serviceId)) {
       serviceName = `${serviceType}.${serviceId}`;
