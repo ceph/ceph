@@ -448,14 +448,24 @@ Start E2E tests by running::
   $ cd <your/ceph/repo/dir>
   $ sudo chown -R $(id -un) src/pybind/mgr/dashboard/frontend/{dist,node_modules,src/environments}
   $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
-  $ kcli delete plan -y ceph  # After tests finish.
 
-You can also start a cluster in development mode and later run E2E tests by running::
+You can also start a cluster in development mode (so the frontend build starts in watch mode and you
+only have to reload the page for the changes to be reflected) by running::
 
   $ ./src/pybind/mgr/dashboard/ci/cephadm/start-cluster.sh --dev-mode
-  $ # Work on your feature, bug fix, ...
+
+Note:
+  Add ``--expanded`` if you need a cluster ready to deploy services (one with enough monitor
+  daemons spread across different hosts and enough OSDs).
+
+Test your changes by running:
+
   $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
-  $ # Remember to kill the npm build watch process i.e.: pkill -f "ng build"
+
+Shutdown the cluster by running:
+
+  $ kcli delete plan -y ceph
+  $ # In development mode, also kill the npm build watch process (e.g., pkill -f "ng build")
 
 Other running options
 .....................
