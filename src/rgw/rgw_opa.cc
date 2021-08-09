@@ -23,15 +23,16 @@ int rgw_opa_authorize(RGWOp *& op,
   }
   ldpp_dout(op, 2) << "OPA URL= " << opa_url.c_str() << dendl;
 
-  /* get authentication token for OPA */
-  const string& opa_token = s->cct->_conf->rgw_opa_token;
-
   int ret;
   bufferlist bl;
   RGWHTTPTransceiver req(s->cct, "POST", opa_url.c_str(), &bl);
 
+  /* get authentication token for OPA */
+  if (!s->cct->_conf->rgw_opa_token.empty()) {
+    req.append_header("Authorization", "Bearer " + s->cct->_conf->rgw_opa_token);
+  }
+
   /* set required headers for OPA request */
-  req.append_header("X-Auth-Token", opa_token);
   req.append_header("Content-Type", "application/json");
   req.append_header("Expect", "100-continue");
 
