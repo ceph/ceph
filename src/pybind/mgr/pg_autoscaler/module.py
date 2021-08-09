@@ -189,7 +189,8 @@ class PgAutoscaler(MgrModule):
                                  'BIAS',
                                  'PG_NUM',
 #                                 'IDEAL',
-                                 'NEW PG_NUM', 'AUTOSCALE'],
+                                 'NEW PG_NUM', 'AUTOSCALE',
+                                 'PROFILE'],
                                 border=False)
             table.left_padding_width = 0
             table.right_padding_width = 2
@@ -206,6 +207,7 @@ class PgAutoscaler(MgrModule):
 #            table.align['IDEAL'] = 'r'
             table.align['NEW PG_NUM'] = 'r'
             table.align['AUTOSCALE'] = 'l'
+            table.align['PROFILE'] =  'l'
             for p in ps:
                 if p['would_adjust']:
                     final = str(p['pg_num_final'])
@@ -237,6 +239,7 @@ class PgAutoscaler(MgrModule):
 #                    p['pg_num_ideal'],
                     final,
                     p['pg_autoscale_mode'],
+                    profile
                 ])
             return 0, table.get_string(), ''
 
