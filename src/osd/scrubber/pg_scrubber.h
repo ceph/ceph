@@ -324,6 +324,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void scrub_clear_state() final;
 
+  bool is_queued_or_active() const final;
+
   /**
    *  add to scrub statistics, but only if the soid is below the scrub start
    */
@@ -392,6 +394,8 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void on_digest_updates() final;
 
+  void scrub_finish() final;
+
   ScrubMachineListener::MsgAndEpoch
   prep_replica_map_msg(Scrub::PreemptionNoted was_preempted) final;
 
@@ -423,6 +427,9 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   void clear_reserving_now() final;
 
   [[nodiscard]] bool was_epoch_changed() const final;
+
+  void set_queued_or_active() final;
+  void clear_queued_or_active() final;
 
   void mark_local_map_ready() final;
 
@@ -562,9 +569,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   void cleanup_on_finish();  // scrub_clear_state() as called for a Primary when
 			     // Active->NotActive
 
-  /// the part that actually finalizes a scrub
-  void scrub_finish();
-
  protected:
   PG* const m_pg;
 
@@ -611,6 +615,23 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   scrub_flags_t m_flags;
 
   bool m_active{false};
+
+  /**
+   * a flag designed to prevent the initiation of a second scrub on a PG for which scrubbing
+   * has been initiated.
+   *
+   * set once scrubbing was initiated (i.e. - even before the FSM event that
+   * will trigger a state-change out of Inactive was handled), and only reset
+   * once the FSM is back in Inactive.
+   * In other words - its ON period encompasses:
+   *   - the time period covered today by 'queued', and
+   *   - the time when m_active is set, and
+   *   - all the time from scrub_finish() calling update_stats() till the
+   *     FSM handles the 'finished' event
+   *
+   * Compared with 'm_active', this flag is asserted earlier  and remains ON for longer.
+   */
+  bool m_queued_or_active{false};
 
   eversion_t m_subset_last_update{};
 

@@ -7542,7 +7542,7 @@ Scrub::schedule_result_t OSDService::initiate_a_scrub(spg_t pgid,
   }
 
   // This has already started, so go on to the next scrub job
-  if (pg->is_scrub_active()) {
+  if (pg->is_scrub_queued_or_active()) {
     pg->unlock();
     dout(20) << __func__ << ": already in progress pgid " << pgid << dendl;
     return Scrub::schedule_result_t::already_started;

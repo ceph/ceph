@@ -15501,7 +15501,7 @@ void PrimaryLogPG::SnapTrimmer::log_exit(const char *state_name, utime_t enter_t
 bool PrimaryLogPG::SnapTrimmer::permit_trim() {
   return
     pg->is_clean() &&
-    !pg->m_scrubber->is_scrub_active() &&
+    !pg->is_scrub_queued_or_active() &&
     !pg->snap_trimq.empty();
 }
 
@@ -15537,7 +15537,7 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
     ldout(pg->cct, 10) << "NotTrimming not clean or nothing to trim" << dendl;
     return discard_event();
   }
-  if (pg->m_scrubber->is_scrub_active()) {
+  if (pg->is_scrub_queued_or_active()) {
     ldout(pg->cct, 10) << " scrubbing, will requeue snap_trimmer after" << dendl;
     return transit< WaitScrub >();
   } else {
