@@ -23,6 +23,9 @@
           forceIdentifier="true"
           selectionType="single"
           [hasDetails]="true"
+          [autoReload]="false"
+          [status]="tableStatus"
+          (fetchData)="getTargets()"
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
