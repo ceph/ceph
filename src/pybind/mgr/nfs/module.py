@@ -131,8 +131,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Reset NFS-Ganesha Config to default"""
         return self.nfs.reset_nfs_cluster_config(cluster_id=cluster_id)
 
-    def is_active(self) -> bool:
-        return True
+    def fetch_nfs_export_obj(self):
+        return self.export_mgr
 
     def export_ls(self) -> List[Dict[Any, Any]]:
         return self.export_mgr.list_all_exports()
@@ -146,6 +146,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def daemon_ls(self) -> List[Dict[Any, Any]]:
         return self.nfs.list_daemons()
 
+    # Remove this method after fixing attribute error
     def cluster_ls(self) -> List[str]:
         return [
             {
@@ -155,12 +156,3 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 'daemon_conf': None,
             } for cluster_id in available_clusters()
         ]
-
-    def cluster_fsals(self) -> List[str]:
-        return ['CEPH', 'RGW']
-
-    def export_apply(self, cluster_id: str, export: Dict[Any, Any]) -> Dict[Any, Any]:
-        ret, out, err, export = self.export_mgr._apply_export(cluster_id, export)
-        if ret:
-            return None
-        return export.to_dict()

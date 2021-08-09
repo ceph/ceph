@@ -149,6 +149,7 @@ class NFSCluster:
         except Exception as e:
             return exception_handler(e, "Failed to list NFS Cluster")
 
+    # FIXME: Remove this method. It was added for dashboard integration with mgr/nfs module.
     def list_daemons(self):
         completion = self.mgr.list_daemons(daemon_type='nfs')
         # Here completion.result is a list DaemonDescription objects
