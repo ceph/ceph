@@ -206,10 +206,6 @@ struct ScrubPgIF {
 
   virtual void add_callback(Context* context) = 0;
 
-  /// should we requeue blocked ops?
-  [[nodiscard]] virtual bool should_requeue_blocked_ops(
-    eversion_t last_recovery_applied) const = 0;
-
   /// add to scrub statistics, but only if the soid is below the scrub start
   virtual void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
 					const hobject_t& soid) = 0;

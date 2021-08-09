@@ -36,15 +36,6 @@ class PrimaryLogScrub : public PgScrubber {
   bool get_store_errors(const scrub_ls_arg_t& arg,
 			scrub_ls_result_t& res_inout) const final;
 
-  /**
-   *  should we requeue blocked ops?
-   *  Yes - if our 'subset_last_applied' is less up-to-date than the
-   *  new recovery_state.get_last_update_applied().
-   *  (used by PrimaryLogPG::op_applied())
-   */
-  [[nodiscard]] bool should_requeue_blocked_ops(
-    eversion_t last_recovery_applied) const final;
-
   void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
 				const hobject_t& soid) final;
 
