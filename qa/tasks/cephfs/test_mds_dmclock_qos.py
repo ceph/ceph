@@ -18,7 +18,6 @@ class TestMDSDmclockQoS(CephFSTestCase):
     TEST_SUBVOLUME_COUNT = 2
     TEST_DIR_COUNT = 20
     TEST_COUNT = 1000
-    subvolumes = []
 
     def setUp(self):
         super(TestMDSDmclockQoS, self).setUp()
