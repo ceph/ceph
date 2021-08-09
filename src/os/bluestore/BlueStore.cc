@@ -13849,12 +13849,16 @@ void BlueStore::_do_write_big(
   uint64_t prefer_deferred_size_snapshot = prefer_deferred_size.load();
   while (length > 0) {
     bool new_blob = false;
-    uint32_t l = std::min(max_bsize, length);
     BlobRef b;
     uint32_t b_off = 0;
+    uint32_t l = 0;
 
     //attempting to reuse existing blob
     if (!wctx->compress) {
+      // enforce target blob alignment with max_bsize
+      l = max_bsize - p2phase(offset, max_bsize);
+      l = std::min(uint64_t(l), length);
+
       auto end = o->extent_map.extent_map.end();
 
       dout(20) << __func__ << " may be defer: 0x" << std::hex
@@ -14003,6 +14007,8 @@ void BlueStore::_do_write_big(
 	}
       } while (b == nullptr && any_change);
     } else {
+      // trying to utilize as longer chunk as permitted in case of compression.
+      l = std::min(max_bsize, length);
       o->extent_map.punch_hole(c, offset, l, &wctx->old_extents);
     } // if (!wctx->compress)
 
