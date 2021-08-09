@@ -27,6 +27,7 @@
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/object_data_handler.h"
 
+using std::string;
 using crimson::common::local_conf;
 
 namespace crimson::os::seastore {

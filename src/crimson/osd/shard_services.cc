@@ -23,6 +23,8 @@ namespace {
   }
 }
 
+using std::vector;
+
 namespace crimson::osd {
 
 ShardServices::ShardServices(

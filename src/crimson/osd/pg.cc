@@ -37,6 +37,11 @@
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/replicated_recovery_backend.h"
 
+using std::ostream;
+using std::set;
+using std::string;
+using std::vector;
+
 namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_osd);

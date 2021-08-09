@@ -39,6 +39,12 @@ private:
   bool interrupt = false;
 };
 
+namespace crimson::interruptible {
+template
+thread_local InterruptCondRef<TestInterruptCondition>
+interrupt_cond<TestInterruptCondition>;
+}
+
 TEST_F(seastar_test_suite_t, basic)
 {
   using interruptor =

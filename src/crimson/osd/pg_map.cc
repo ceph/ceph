@@ -12,6 +12,8 @@ namespace {
   }
 }
 
+using std::make_pair;
+
 namespace crimson::osd {
 
 PGMap::PGCreationState::PGCreationState(spg_t pgid) : pgid(pgid) {}

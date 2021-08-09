@@ -70,7 +70,7 @@ class Client : public crimson::net::Dispatcher,
 
   ceph_tid_t last_mon_command_id = 0;
   using command_result_t =
-    seastar::future<std::tuple<std::int32_t, string, ceph::bufferlist>>;
+    seastar::future<std::tuple<std::int32_t, std::string, ceph::bufferlist>>;
   struct mon_command_t {
     ceph::ref_t<MMonCommand> req;
     typename command_result_t::promise_type result;

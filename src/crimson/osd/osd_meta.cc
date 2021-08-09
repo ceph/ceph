@@ -10,6 +10,7 @@
 #include "crimson/os/futurized_store.h"
 #include "os/Transaction.h"
 
+using std::string;
 using read_errorator = crimson::os::FuturizedStore::read_errorator;
 
 void OSDMeta::create(ceph::os::Transaction& t)

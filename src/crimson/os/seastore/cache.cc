@@ -16,6 +16,8 @@
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "test/crimson/seastore/test_block.h"
 
+using std::string_view;
+
 namespace crimson::os::seastore {
 
 Cache::Cache(SegmentManager &segment_manager) :

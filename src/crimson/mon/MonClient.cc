@@ -35,6 +35,10 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
+using std::string;
+using std::tuple;
+using std::vector;
+
 namespace {
   seastar::logger& logger()
   {
