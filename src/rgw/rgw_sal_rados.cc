@@ -1573,6 +1573,11 @@ int RadosObject::copy_obj_data(RGWObjectCtx& rctx, Bucket* dest_bucket,
 					  real_time(), NULL, dpp, y);
 }
 
+void RadosObject::set_compressed(RGWObjectCtx* rctx) {
+  rgw_obj obj = get_obj();
+  store->getRados()->set_compressed(rctx, obj);
+}
+
 void RadosObject::set_atomic(RGWObjectCtx* rctx) const
 {
   rgw_obj obj = get_obj();
