@@ -95,7 +95,6 @@ public:
 
     case LOCK_SYNC_LOCK: return "sync->lock";
     case LOCK_LOCK_SYNC: return "lock->sync";
-    case LOCK_REMOTEXLOCK: return "remote_xlock";
     case LOCK_EXCL: return "excl";
     case LOCK_EXCL_SYNC: return "excl->sync";
     case LOCK_EXCL_LOCK: return "excl->lock";
@@ -120,6 +119,7 @@ public:
       
     case LOCK_TSYN_MIX: return "tsyn->mix";
     case LOCK_TSYN_LOCK: return "tsyn->lock";
+    case LOCK_TSYN_EXCL: return "tsyn->excl";
     case LOCK_TSYN: return "tsyn";
 
     case LOCK_MIX_SYNC: return "mix->sync";

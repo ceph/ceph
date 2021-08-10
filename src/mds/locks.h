@@ -58,21 +58,19 @@ enum {
   LOCK_SYNC_LOCK,    // AR   R . .. . . / . .   R .. . . / . .
   LOCK_LOCK_SYNC,    // A    R p rd l . / . .   (lock)  <-- lc by same client only
 
+  // * = loner mode
   LOCK_EXCL,         // A    . . .. . . / c x * (lock)
   LOCK_EXCL_SYNC,    // A    . . .. . . / c . * (lock)
   LOCK_EXCL_LOCK,    // A    . . .. . . / . .   (lock)
   LOCK_SYNC_EXCL,    // Ar   R . .. . . / c . * (sync->lock)
   LOCK_LOCK_EXCL,    // A    R . .. . . / . .   (lock)
 
-  LOCK_REMOTEXLOCK,  // on NON-auth
-
-  // * = loner mode
-
   LOCK_MIX,
   LOCK_SYNC_MIX,
   LOCK_SYNC_MIX2,
   LOCK_LOCK_MIX,
   LOCK_EXCL_MIX,
+
   LOCK_MIX_SYNC,
   LOCK_MIX_SYNC2,
   LOCK_MIX_LOCK,
@@ -82,6 +80,7 @@ enum {
   LOCK_TSYN,
   LOCK_TSYN_LOCK,
   LOCK_TSYN_MIX,
+  LOCK_TSYN_EXCL,
   LOCK_LOCK_TSYN,
   LOCK_MIX_TSYN,
 
