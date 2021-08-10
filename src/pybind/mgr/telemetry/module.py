@@ -398,7 +398,7 @@ class Module(MgrModule):
 
         return result
 
-    def get_osd_histograms(self) -> Dict[str, dict]:
+    def get_osd_histograms(self) -> List[Dict[str, dict]]:
         # Initialize result dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
                                               lambda: defaultdict(
@@ -499,7 +499,7 @@ class Module(MgrModule):
                 # bt returning an empty dict.
                 except (json.decoder.JSONDecodeError, KeyError) as e:
                     self.log.debug("Error caught: {}".format(e))
-                    return {}
+                    return list()
 
         return list(result.values())
 
