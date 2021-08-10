@@ -20,7 +20,6 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
 #include "rgw_sal.h"
-#include "rgw_rados.h"
 
 #include <atomic>
 #include <tuple>
