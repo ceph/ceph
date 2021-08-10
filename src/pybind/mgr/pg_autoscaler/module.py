@@ -137,6 +137,14 @@ class PgAutoscaler(MgrModule):
                        'means starts out with full pgs and scales down when '
                        'there is pressure '),
             runtime=True),
+        Option(
+            name='threshold',
+            type='float',
+            desc='scaling threshold',
+            long_desc=('The factor by which the `NEW PG_NUM` must vary from the current'
+                       '`PG_NUM` before being accepted. Should not be less than 2.0'),
+            default=3.0,
+            min=2.0),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -151,6 +159,7 @@ class PgAutoscaler(MgrModule):
             self.autoscale_profile: 'ScaleModeT' = 'scale-up'
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
+            self.threshold = 3.0
 
     def config_notify(self) -> None:
         for opt in self.NATIVE_OPTIONS:
@@ -556,9 +565,9 @@ class PgAutoscaler(MgrModule):
             osdmap: OSDMap,
             pools: Dict[str, Dict[str, Any]],
             profile: 'ScaleModeT',
-            threshold: float = 3.0,
     ) -> Tuple[List[Dict[str, Any]],
                Dict[int, CrushSubtreeResourceStatus]]:
+        threshold = self.threshold
         assert threshold >= 2.0
 
         crush_map = osdmap.get_crush()
