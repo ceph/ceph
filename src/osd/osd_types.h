@@ -2246,6 +2246,7 @@ struct pg_stat_t {
 
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
+  int64_t objects_scrubbed;
 
   std::vector<int32_t> up, acting;
   std::vector<pg_shard_t> avail_no_missing;
@@ -2286,6 +2287,7 @@ struct pg_stat_t {
       created(0), last_epoch_clean(0),
       parent_split_bits(0),
       log_size(0), ondisk_log_size(0),
+      objects_scrubbed(0),
       mapping_epoch(0),
       up_primary(-1),
       acting_primary(-1),
