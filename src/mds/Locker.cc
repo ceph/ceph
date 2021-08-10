@@ -1507,17 +1507,20 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
   if (lock->is_stable()) {
     if (lock->get_parent()->is_auth()) {
       if (lock->get_sm() == &sm_scatterlock) {
-	// not until tempsync is fully implemented
-	//if (lock->get_parent()->is_replicated())
-	//scatter_tempsync((ScatterLock*)lock);
-	//else
-	simple_sync(lock);
+	if (lock->get_parent()->is_replicated())
+	  scatter_tempsync((ScatterLock*)lock);
+	else
+	  simple_sync(lock);
       } else if (lock->get_sm() == &sm_filelock) {
 	CInode *in = static_cast<CInode*>(lock->get_parent());
 	if (lock->get_state() == LOCK_EXCL &&
 	    in->get_target_loner() >= 0 &&
 	    !in->is_dir() && !as_anon)   // as_anon => caller wants SYNC, not XSYN
 	  file_xsyn(lock);
+	else if ((lock->get_state() == LOCK_LOCK ||
+		  lock->get_state() == LOCK_MIX) &&
+	         in->is_dir() && in->has_subtree_or_exporting_dirfrag())
+	  scatter_tempsync((ScatterLock*)lock);
 	else
 	  simple_sync(lock);
       } else
@@ -4617,9 +4620,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     in = static_cast<CInode *>(lock->get_parent());
 
   int old_state = lock->get_state();
-
   if (old_state != LOCK_TSYN) {
-
     switch (lock->get_state()) {
     case LOCK_MIX: lock->set_state(LOCK_MIX_SYNC); break;
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
@@ -5236,12 +5237,9 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
   ceph_assert(lock->get_parent()->is_auth());
   ceph_assert(lock->is_stable());
 
-  ceph_abort_msg("not fully implemented, at least not for filelock");
-
   CInode *in = static_cast<CInode *>(lock->get_parent());
 
   switch (lock->get_state()) {
-  case LOCK_SYNC: ceph_abort();   // this shouldn't happen
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_TSYN); break;
   case LOCK_MIX: lock->set_state(LOCK_MIX_TSYN); break;
   default: ceph_abort();
@@ -5254,8 +5252,8 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
     gather++;
   }
 
-  if (lock->get_cap_shift() &&
-      in->is_head() &&
+  if (in->is_head() &&
+      lock->get_cap_shift() &&
       in->issued_caps_need_gather(lock)) {
     if (need_issue)
       *need_issue = true;
@@ -5269,6 +5267,14 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
     lock->init_gather();
     send_lock_message(lock, LOCK_AC_LOCK);
     gather++;
+  }
+
+  if (lock->get_type() == CEPH_LOCK_IFILE) {
+    ceph_assert(in);
+    if (in->state_test(CInode::STATE_NEEDSRECOVER))
+      mds->mdcache->queue_file_recover(in);
+    if (in->state_test(CInode::STATE_RECOVERING))
+      gather++;
   }
 
   if (gather) {
@@ -5468,7 +5474,8 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	   !lock->is_wrlocked() &&   // drain wrlocks first!
 	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   !(wanted & CEPH_CAP_GWR) &&
-	   !((lock->get_state() == LOCK_MIX) &&
+	   !((lock->get_state() == LOCK_MIX ||
+	      lock->get_state() == LOCK_TSYN) &&
 	     in->is_dir() && in->has_subtree_or_exporting_dirfrag())  // if we are a delegation point, stay where we are
 	   //((wanted & CEPH_CAP_RD) || 
 	   //in->is_replicated() || 
@@ -5593,11 +5600,13 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   ceph_assert((in->get_loner() >= 0 && in->get_mds_caps_wanted().empty()) ||
 	 (lock->get_state() == LOCK_XSYN));  // must do xsyn -> excl -> <anything else>
   
-  switch (lock->get_state()) {
+  int old_state = lock->get_state();
+  switch (old_state) {
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
   case LOCK_MIX: lock->set_state(LOCK_MIX_EXCL); break;
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break;
+  case LOCK_TSYN: lock->set_state(LOCK_TSYN_EXCL); break;
   default: ceph_abort();
   }
   int gather = 0;
@@ -5610,8 +5619,7 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
     invalidate_lock_caches(lock);
 
   if (in->is_replicated() &&
-      lock->get_state() != LOCK_LOCK_EXCL &&
-      lock->get_state() != LOCK_XSYN_EXCL) {  // if we were lock, replicas are already lock.
+      lock->get_sm()->states[old_state].replica_state != LOCK_LOCK) {
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;
