@@ -383,7 +383,7 @@ int MultipartObjectProcessor::prepare_head()
   }
 
   rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
-  head_obj->raw_obj_to_obj(stripe_obj);
+  dynamic_cast<rgw::sal::RadosObject*>(head_obj.get())->raw_obj_to_obj(stripe_obj);
   head_obj->set_hash_source(target_obj->get_name());
 
   r = writer.set_stripe_obj(stripe_obj);

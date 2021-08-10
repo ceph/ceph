@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
@@ -95,7 +95,6 @@ class RadosObject : public Object {
       virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
       virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider* dpp) override;
       virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y) override;
-      virtual int get_manifest(const DoutPrefixProvider* dpp, RGWObjManifest **pmanifest, optional_yield y) override;
       virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override;
     };
 
@@ -189,7 +188,6 @@ class RadosObject : public Object {
     virtual int copy_obj_data(RGWObjectCtx& rctx, Bucket* dest_bucket, Object* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
-    virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) override;
     void get_raw_obj(rgw_raw_obj* raw_obj);
     virtual std::unique_ptr<Object> clone() override {
       return std::unique_ptr<Object>(new RadosObject(*this));
@@ -208,6 +206,7 @@ class RadosObject : public Object {
 				   uint64_t* alignment = nullptr) override;
     virtual void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t* max_size) override;
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
+    virtual int get_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f, RGWObjectCtx* obj_ctx) override;
 
     /* Swift versioning */
     virtual int swift_versioning_restore(RGWObjectCtx* obj_ctx,
@@ -234,6 +233,9 @@ class RadosObject : public Object {
 			      Attrs* vals) override;
     virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
 				    bool must_exist, optional_yield y) override;
+
+    /* Internal to RadosStore */
+    void raw_obj_to_obj(const rgw_raw_obj& raw_obj);
 
   private:
     int read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
@@ -424,13 +426,8 @@ class RadosStore : public Store {
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Completions> get_completions(void) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
-    virtual std::unique_ptr<GCChain> get_gc_chain(rgw::sal::Object* obj) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
-    virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) override;
-    virtual int delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio) override;
-    virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) override;
-    virtual int get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) override;
 
     virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
@@ -509,6 +506,10 @@ class RadosStore : public Store {
     /* Unique to RadosStore */
     int get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
 			   librados::IoCtx* ioctx);
+    int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj);
+    int delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio);
+    void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj);
+    int get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_obj& obj, uint64_t* chunk_size);
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados* getRados(void) { return rados; }
@@ -636,20 +637,6 @@ class RadosNotification : public Notification {
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;
-};
-
-class RadosGCChain : public GCChain {
-protected:
-  RadosStore* store;
-  cls_rgw_obj_chain chain;
-
-  public:
-    RadosGCChain(RadosStore* _store, Object* _obj) : GCChain(_obj), store(_store) {}
-    ~RadosGCChain() = default;
-
-    virtual void update(const DoutPrefixProvider *dpp, RGWObjManifest* manifest) override;
-    virtual int send(const std::string& tag) override;
-    virtual void delete_inline(const DoutPrefixProvider *dpp, const std::string& tag) override;
 };
 
 class RadosAtomicWriter : public Writer {

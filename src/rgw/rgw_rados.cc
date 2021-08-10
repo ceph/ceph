@@ -149,7 +149,7 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGW
   return raw_obj;
 }
 
-rgw_raw_obj rgw_obj_select::get_raw_obj(rgw::sal::Store* store) const
+rgw_raw_obj rgw_obj_select::get_raw_obj(rgw::sal::RadosStore* store) const
 {
   if (!is_raw) {
     rgw_raw_obj r;
@@ -5308,7 +5308,8 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, rgw::sal::Store* st
   if (mi != manifest.obj_end(dpp)) {
     if (manifest.has_tail()) // first object usually points at the head, let's skip to a more unique part
       ++mi;
-    tag = mi.get_location().get_raw_obj(store).oid;
+    rgw::sal::RadosStore* rstore = dynamic_cast<rgw::sal::RadosStore*>(store);
+    tag = mi.get_location().get_raw_obj(rstore).oid;
     tag.append("_");
   }
 

@@ -453,7 +453,7 @@ int RGWOrphanSearch::handle_stat_result(const DoutPrefixProvider *dpp, map<int, 
 
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(dpp); miter != manifest.obj_end(dpp); ++miter) {
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
       string s = loc.oid;
       obj_oids.insert(obj_fingerprint(s));
     }
@@ -1040,7 +1040,7 @@ int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(dpp); miter != manifest.obj_end(dpp); ++miter) {
       const rgw_raw_obj& loc =
-	miter.get_location().get_raw_obj(store);
+	miter.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
       string s = loc.oid;
       obj_oids.insert(s);
     }
@@ -1501,7 +1501,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 		 obj_it != manifest.obj_end(dpp);
 		 ++obj_it) {
 	      const rgw_raw_obj& loc =
-		obj_it.get_location().get_raw_obj(store);
+		obj_it.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
 	      std::cout << loc.oid << std::endl;
 	    } // for (auto obj_it
 	  } // for (auto& p
