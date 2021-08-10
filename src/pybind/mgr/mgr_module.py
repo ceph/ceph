@@ -30,13 +30,13 @@ from mgr_util import profile_method
 if sys.version_info >= (3, 8):
     from typing import get_args, get_origin
 else:
-    def get_args(tp):
+    def get_args(tp: Any) -> Any:
         if tp is Generic:
             return tp
         else:
             return getattr(tp, '__args__', ())
 
-    def get_origin(tp):
+    def get_origin(tp: Any) -> Any:
         return getattr(tp, '__origin__', None)
 
 
