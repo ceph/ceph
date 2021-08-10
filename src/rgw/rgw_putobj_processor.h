@@ -88,6 +88,9 @@ class RadosWriter : public rgw::sal::DataProcessor {
 
   ~RadosWriter();
 
+  // add alloc hint to osd
+  void add_write_hint(librados::ObjectWriteOperation& op);
+
   // change the current stripe object
   int set_stripe_obj(const rgw_raw_obj& obj);
 

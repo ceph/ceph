@@ -525,6 +525,13 @@ namespace rgw::sal {
     return;
   }
 
+  /* RGWObjectCtx will be moved out of sal */
+  /* XXX: Placeholder. Should not be needed later after Dan's patch */
+  void DBObject::set_compressed(RGWObjectCtx* rctx)
+  {
+    return;
+  }
+
   bool DBObject::is_expired() {
     return false;
   }

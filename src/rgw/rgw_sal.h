@@ -685,6 +685,7 @@ class Object {
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     virtual void set_atomic(RGWObjectCtx* rctx) const = 0;
     virtual void set_prefetch_data(RGWObjectCtx* rctx) = 0;
+    virtual void set_compressed(RGWObjectCtx* rctx) = 0;
 
     bool empty() const { return key.empty(); }
     const std::string &get_name() const { return key.name; }
