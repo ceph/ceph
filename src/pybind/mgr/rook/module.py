@@ -73,6 +73,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     MODULE_OPTIONS: List[Option] = [
         # TODO: configure k8s API addr instead of assuming local
+        Option(
+            'storage_class',
+            type='str',
+            default='local',
+            desc='storage class name for LSO-discovered PVs',
+        ),
     ]
 
     @staticmethod
@@ -102,10 +108,28 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._initialized = threading.Event()
         self._k8s_CoreV1_api: Optional[client.CoreV1Api] = None
         self._k8s_BatchV1_api: Optional[client.BatchV1Api] = None
+        self._k8s_CustomObjects_api: Optional[client.CustomObjectsApi] = None
+        self._k8s_StorageV1_api: Optional[client.StorageV1Api] = None
         self._rook_cluster: Optional[RookCluster] = None
         self._rook_env = RookEnv()
+        self.storage_class = self.get_module_option('storage_class')
 
         self._shutdown = threading.Event()
+        
+    def config_notify(self) -> None:
+        """
+        This method is called whenever one of our config options is changed.
+
+        TODO: this method should be moved into mgr_module.py
+        """
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],  # type: ignore
+                    self.get_module_option(opt['name']))  # type: ignore
+            self.log.debug(' mgr option %s = %s',
+                           opt['name'], getattr(self, opt['name']))  # type: ignore
+        assert isinstance(self.storage_class, str)
+        self.rook_cluster.storage_class = self.storage_class
 
     def shutdown(self) -> None:
         self._shutdown.set()
@@ -141,6 +165,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._k8s_CoreV1_api = client.CoreV1Api()
         self._k8s_BatchV1_api = client.BatchV1Api()
+        self._k8s_CustomObjects_api = client.CustomObjectsApi()
+        self._k8s_StorageV1_api = client.StorageV1Api()
 
         try:
             # XXX mystery hack -- I need to do an API call from
@@ -152,10 +178,15 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # Ignore here to make self.available() fail with a proper error message
             pass
 
+        assert isinstance(self.storage_class, str)
+
         self._rook_cluster = RookCluster(
             self._k8s_CoreV1_api,
             self._k8s_BatchV1_api,
-            self._rook_env)
+            self._k8s_CustomObjects_api,
+            self._k8s_StorageV1_api,
+            self._rook_env,
+            self.storage_class)
 
         self._initialized.set()
 
@@ -179,18 +210,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         for host_name, host_devs in discovered_devs.items():
             devs = []
             for d in host_devs:
-                if 'cephVolumeData' in d and d['cephVolumeData']:
-                    devs.append(inventory.Device.from_json(json.loads(d['cephVolumeData'])))
-                else:
-                    devs.append(inventory.Device(
-                        path = '/dev/' + d['name'],
-                        sys_api = dict(
-                            rotational = '1' if d['rotational'] else '0',
-                            size = d['size']
-                        ),
-                        available = False,
-                        rejected_reasons=['device data coming from ceph-volume not provided'],
-                    ))
+                devs.append(d)
 
             result.append(orchestrator.InventoryHost(host_name, inventory.Devices(devs)))
 
