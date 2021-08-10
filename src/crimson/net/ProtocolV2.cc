@@ -27,7 +27,12 @@ using crimson::common::local_conf;
 
 namespace {
 
-// TODO: apply the same logging policy to Protocol V1
+// TODO: CEPH_MSGR2_FEATURE_COMPRESSION
+const uint64_t CRIMSON_MSGR2_SUPPORTED_FEATURES =
+  (CEPH_MSGR2_FEATURE_REVISION_1 |
+   // CEPH_MSGR2_FEATURE_COMPRESSION |
+   UINT64_C(0));
+
 // Log levels in V2 Protocol:
 // * error level, something error that cause connection to terminate:
 //   - fatal errors;
@@ -395,7 +400,7 @@ ProtocolV2::banner_exchange(bool is_connect)
 {
   // 1. prepare and send banner
   bufferlist banner_payload;
-  encode((uint64_t)CEPH_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
+  encode((uint64_t)CRIMSON_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
   encode((uint64_t)CEPH_MSGR2_REQUIRED_FEATURES, banner_payload, 0);
 
   bufferlist bl;
@@ -406,7 +411,8 @@ ProtocolV2::banner_exchange(bool is_connect)
   logger().debug("{} SEND({}) banner: len_payload={}, supported={}, "
                  "required={}, banner=\"{}\"",
                  conn, bl.length(), len_payload,
-                 CEPH_MSGR2_SUPPORTED_FEATURES, CEPH_MSGR2_REQUIRED_FEATURES,
+                 CRIMSON_MSGR2_SUPPORTED_FEATURES,
+                 CEPH_MSGR2_REQUIRED_FEATURES,
                  CEPH_BANNER_V2_PREFIX);
   INTERCEPT_CUSTOM(custom_bp_t::BANNER_WRITE, bp_type_t::WRITE);
   return write_flush(std::move(bl)).then([this] {
@@ -461,7 +467,7 @@ ProtocolV2::banner_exchange(bool is_connect)
                      peer_supported_features, peer_required_features);
 
       // Check feature bit compatibility
-      uint64_t supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
+      uint64_t supported_features = CRIMSON_MSGR2_SUPPORTED_FEATURES;
       uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
       if ((required_features & peer_supported_features) != required_features) {
         logger().error("{} peer does not support all required features"
