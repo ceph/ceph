@@ -386,9 +386,9 @@ class Module(MgrModule):
             for pg in pg_dump['pg_stats']:
                 pool_id = pg['pgid'].split('.')[0]
                 if pool_id == curr_pool_id:
+                    compiled_stats_dict['pool_id'] = int(pool_id)
+                    compiled_stats_dict['pool_name'] = curr_pool_name
                     for metric in pg['stat_sum']:
-                        compiled_stats_dict['pool_id'] = int(pool_id)
-                        compiled_stats_dict['pool_name'] = curr_pool_name
                         compiled_stats_dict['stats_sum'][metric] += pg['stat_sum'][metric]
                 else:
                     continue
