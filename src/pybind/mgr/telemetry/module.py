@@ -457,16 +457,7 @@ class Module(MgrModule):
                     self.log.debug("Error caught: {}".format(e))
                     return {}
 
-        # Update result key names. The key names are currently very complicated
-        # axis configurations, such that histograms with like axis configurations are
-        # combined. However, to make the final report more readable, I will update
-        # the key names to "config_1", "config_2", etc.
-        config_num = 1
-        for k, v in list(result.items()):
-            result['config_' + str(config_num)] = result.pop(k)
-            config_num += 1
-
-        return result
+        return list(result.values())
 
     def get_io_rate(self) -> dict:
         return self.get('io_rate')
@@ -1032,17 +1023,14 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         # they are displayed horizontally instead of vertically.
         try:
             for config in report['osd_perf_histograms']:
-                for histogram in report['osd_perf_histograms'][config]:
-
+                for histogram in config:
                     # Adjust ranges by converting lists into strings
-                    for axis in report['osd_perf_histograms'][config][histogram]['axes']:
+                    for axis in config[histogram]['axes']:
                         for i in range(0, len(axis['ranges'])):
                             axis['ranges'][i] = str(axis['ranges'][i])
-
                     # Adjust values by converting lists into strings
-                    for i in range(0, len(report['osd_perf_histograms'][config][histogram]['values'])):
-                        report['osd_perf_histograms'][config][histogram]['values'][i] = \
-                                str(report['osd_perf_histograms'][config][histogram]['values'][i])
+                    for i in range(0, len(config[histogram]['values'])):
+                        config[histogram]['values'][i] = str(config[histogram]['values'][i])
         except KeyError:
             # If the perf channel is not enabled, there should be a KeyError since
             # 'osd_perf_histograms' would not be present in the report. In that case,
