@@ -48,40 +48,40 @@ using ObjectDataBlockRef = TCachedExtentRef<ObjectDataBlock>;
 
 class ObjectDataHandler {
 public:
-  using base_ertr = with_trans_ertr<TransactionManager::base_iertr>;
+  using base_iertr = TransactionManager::base_iertr;
 
   struct context_t {
-    InterruptedTransactionManager tm;
+    TransactionManager &tm;
     Transaction &t;
     Onode &onode;
   };
 
   /// Writes bl to [offset, offset + bl.length())
-  using write_ertr = base_ertr;
-  using write_ret = write_ertr::future<>;
+  using write_iertr = base_iertr;
+  using write_ret = write_iertr::future<>;
   write_ret write(
     context_t ctx,
     objaddr_t offset,
     const bufferlist &bl);
 
   /// Reads data in [offset, offset + len)
-  using read_ertr = base_ertr;
-  using read_ret = read_ertr::future<bufferlist>;
+  using read_iertr = base_iertr;
+  using read_ret = read_iertr::future<bufferlist>;
   read_ret read(
     context_t ctx,
     objaddr_t offset,
     extent_len_t len);
 
   /// Clears data past offset
-  using truncate_ertr = base_ertr;
-  using truncate_ret = truncate_ertr::future<>;
+  using truncate_iertr = base_iertr;
+  using truncate_ret = truncate_iertr::future<>;
   truncate_ret truncate(
     context_t ctx,
     objaddr_t offset);
 
   /// Clears data and reservation
-  using clear_ertr = base_ertr;
-  using clear_ret = clear_ertr::future<>;
+  using clear_iertr = base_iertr;
+  using clear_ret = clear_iertr::future<>;
   clear_ret clear(context_t ctx);
 
 private:

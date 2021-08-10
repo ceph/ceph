@@ -86,10 +86,12 @@ struct fltree_onode_manager_test_t
       ).safe_then([this] {
 	return seastar::do_with(
 	  create_mutate_transaction(),
-	  [this](auto &t) {
-	    return manager->mkfs(*t
-	    ).safe_then([this, &t] {
-	      return submit_transaction_fut(*t);
+	  [this](auto &ref_t) {
+	    return with_trans_intr(*ref_t, [&](auto &t) {
+	      return manager->mkfs(t
+	      ).si_then([this, &t] {
+	        return submit_transaction_fut(t);
+	      });
 	    });
 	  });
       }).safe_then([this] {

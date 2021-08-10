@@ -497,7 +497,6 @@ void Cache::retire_extent(CachedExtentRef ref)
 
   remove_from_dirty(ref);
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_MAX;
-  retired_extent_gate.add_extent(*ref);
 
   invalidate(*ref);
   extents.erase(*ref);
@@ -851,8 +850,6 @@ void Cache::complete_commit(
     DEBUGT("retiring {}", t, *i);
     i->dirty_from_or_retired_at = last_commit;
   }
-
-  retired_extent_gate.prune();
 }
 
 void Cache::init() {
@@ -866,21 +863,17 @@ void Cache::init() {
   add_extent(root);
 }
 
-Cache::mkfs_ertr::future<> Cache::mkfs(Transaction &t)
+Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
 {
-  return with_trans_intr(
-    t,
-    [this](auto &t) {
-      return get_root(t).si_then([this, &t](auto croot) {
-	duplicate_for_write(t, croot);
-	return base_ertr::now();
-      });
-    }).handle_error(
-      mkfs_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error in Cache::mkfs"
-      }
-    );
+  return get_root(t).si_then([this, &t](auto croot) {
+    duplicate_for_write(t, croot);
+    return mkfs_iertr::now();
+  }).handle_error_interruptible(
+    mkfs_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in Cache::mkfs"
+    }
+  );
 }
 
 Cache::close_ertr::future<> Cache::close()
