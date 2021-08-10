@@ -100,7 +100,7 @@ if ! $use_existing; then
            --without-dashboard
     else
         MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
-           --without-dashboard --memstore \
+           --without-dashboard --cyanstore \
            -o "memstore_device_bytes=34359738368" \
            --crimson --nodaemon --redirect-output \
            --osd-args "--memory 4G"
