@@ -3448,6 +3448,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 
 int BlueFS::preallocate(FileRef f, uint64_t off, uint64_t len)
 {
+  std::lock_guard ll(log.lock);
   std::lock_guard fl(f->lock);
   dout(10) << __func__ << " file " << f->fnode << " 0x"
 	   << std::hex << off << "~" << len << std::dec << dendl;
@@ -3467,7 +3468,7 @@ int BlueFS::preallocate(FileRef f, uint64_t off, uint64_t len)
     vselector->add_usage(f->vselector_hint, f->fnode);
     if (r < 0)
       return r;
-    std::lock_guard ll(log.lock);
+
     log.t.op_file_update_inc(f->fnode);
   }
   return 0;

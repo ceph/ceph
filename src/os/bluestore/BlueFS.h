@@ -706,8 +706,8 @@ public:
  * log        L |     <   <         
  * dirty      D |                   
  * nodes      N |             <     
- * File       F | <                 
- * FileWriter W | <  <        <      
+ * File       F |                  
+ * FileWriter W | <   <       <      
  * 
  * Claim: Deadlock is possible IFF graph contains cycles.
  */
