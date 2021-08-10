@@ -28,12 +28,10 @@ namespace crimson::os::seastore {
  */
 class LBAManager {
 public:
-  using base_ertr = Cache::base_ertr;
   using base_iertr = Cache::base_iertr;
 
-  using mkfs_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using mkfs_ret = mkfs_ertr::future<>;
+  using mkfs_iertr = base_iertr;
+  using mkfs_ret = mkfs_iertr::future<>;
   virtual mkfs_ret mkfs(
     Transaction &t
   ) = 0;
@@ -43,7 +41,7 @@ public:
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
    */
-  using get_mappings_iertr = trans_iertr<base_ertr>;
+  using get_mappings_iertr = base_iertr;
   using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
@@ -63,8 +61,6 @@ public:
    *
    * Future will not resolve until the pin has resolved (set_paddr called)
    */
-  using get_mapping_ertr = base_ertr::extend<
-    crimson::ct_error::enoent>;
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
   using get_mapping_ret = get_mapping_iertr::future<LBAPinRef>;
@@ -75,7 +71,6 @@ public:
   /**
    * Finds unmapped laddr extent of len len
    */
-  using find_hole_ertr = base_ertr;
   using find_hole_iertr = base_iertr;
   using find_hole_ret = find_hole_iertr::future<
     std::pair<laddr_t, extent_len_t>
@@ -92,7 +87,6 @@ public:
    * This mapping will block from transaction submission until set_paddr
    * is called on the LBAPin.
    */
-  using alloc_extent_ertr = base_ertr;
   using alloc_extent_iertr = base_iertr;
   using alloc_extent_ret = alloc_extent_iertr::future<LBAPinRef>;
   virtual alloc_extent_ret alloc_extent(
@@ -118,8 +112,6 @@ public:
     paddr_t addr;
     extent_len_t length = 0;
   };
-  using ref_ertr = base_ertr::extend<
-    crimson::ct_error::enoent>;
   using ref_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
   using ref_ret = ref_iertr::future<ref_update_result_t>;

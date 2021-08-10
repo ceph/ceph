@@ -106,7 +106,8 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
         DEBUGT("reading at {:#x}: trigger eagain", t, addr);
-        return crimson::ct_error::eagain::make();
+        t.test_set_conflict();
+        return read_iertr::make_ready_future<NodeExtentRef>();
       }
     }
     return tm.read_extent<SeastoreNodeExtent>(t, addr
@@ -125,7 +126,8 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
         DEBUGT("allocating {}B: trigger eagain", t, len);
-        return crimson::ct_error::eagain::make();
+        t.test_set_conflict();
+        return alloc_iertr::make_ready_future<NodeExtentRef>();
       }
     }
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
@@ -154,7 +156,8 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       if (trigger_eagain()) {
         DEBUGT("retiring {}B at {:#x} -- {} : trigger eagain",
                t, len, addr, *extent);
-        return crimson::ct_error::eagain::make();
+        t.test_set_conflict();
+        return retire_iertr::now();
       }
     }
     return tm.dec_ref(t, extent).si_then([addr, len, &t] (unsigned cnt) {
@@ -169,7 +172,8 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
         DEBUGT("get root: trigger eagain", t);
-        return crimson::ct_error::eagain::make();
+        t.test_set_conflict();
+        return getsuper_iertr::make_ready_future<Super::URef>();
       }
     }
     return tm.read_onode_root(t).si_then([this, &t, &tracker](auto root_addr) {

@@ -350,7 +350,6 @@ private:
   using list = boost::intrusive::list<
     CachedExtent,
     primary_ref_list_member_options>;
-  friend class retired_extent_gate_t;
 
   /**
    * dirty_from_or_retired_at
@@ -619,89 +618,6 @@ std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
 using lba_pin_list_t = std::list<LBAPinRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
-
-/**
- * retired_extent_gate_t
- *
- * We need to keep each retired extent in memory until all transactions
- * that could still reference it has completed.  live_tokens tracks the
- * set of tokens (which will be embedded in Transaction's) still live
- * in order of the commit after which it was created.  retired_extents
- * lists retired extents ordered by the commit at which they were
- * retired.
- */
-class retired_extent_gate_t {
-public:
-  class token_t {
-    friend class retired_extent_gate_t;
-    retired_extent_gate_t *parent = nullptr;
-    journal_seq_t created_after;
-
-    boost::intrusive::list_member_hook<> list_hook;
-    using list_hook_options = boost::intrusive::member_hook<
-      token_t,
-      boost::intrusive::list_member_hook<>,
-      &token_t::list_hook>;
-    using registry =  boost::intrusive::list<
-      token_t,
-      list_hook_options>;
-  public:
-    token_t(journal_seq_t created_after) : created_after(created_after) {}
-
-    void drop_self();
-    void add_self();
-
-    void reset(journal_seq_t _created_after) {
-      drop_self();
-      created_after = _created_after;
-      add_self();
-    }
-
-    ~token_t() {
-      if (parent) {
-	drop_self();
-	parent = nullptr;
-      }
-    }
-  };
-
-  void prune() {
-    journal_seq_t prune_to = live_tokens.empty() ?
-      JOURNAL_SEQ_MAX : live_tokens.front().created_after;
-    while (!retired_extents.empty() &&
-	   prune_to > retired_extents.front().get_retired_at()) {
-      auto ext = &retired_extents.front();
-      retired_extents.pop_front();
-      intrusive_ptr_release(ext);
-    }
-  }
-
-  void add_token(token_t &t) {
-    t.parent = this;
-    t.add_self();
-  }
-
-  void add_extent(CachedExtent &extent) {
-    intrusive_ptr_add_ref(&extent);
-    retired_extents.push_back(extent);
-  }
-
-private:
-  token_t::registry live_tokens;
-  CachedExtent::list retired_extents;
-};
-
-inline void retired_extent_gate_t::token_t::add_self() {
-  assert(parent);
-  parent->live_tokens.push_back(*this);
-}
-
-inline void retired_extent_gate_t::token_t::drop_self() {
-  assert(parent);
-  parent->live_tokens.erase(
-    parent->live_tokens.s_iterator_to(*this));
-  parent->prune();
-}
 
 /**
  * RetiredExtentPlaceholder

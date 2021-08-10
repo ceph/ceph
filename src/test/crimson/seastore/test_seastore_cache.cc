@@ -77,23 +77,23 @@ struct cache_test_t : public seastar_test_suite_t {
 
   seastar::future<> set_up_fut() final {
     return segment_manager->init(
-    ).safe_then(
-      [this] {
-	return seastar::do_with(
-	  get_transaction(),
-	  [this](auto &transaction) {
-	    cache.init();
-	    return cache.mkfs(*transaction).safe_then(
-	      [this, &transaction] {
-		return submit_transaction(std::move(transaction)).then(
-		  [](auto p) {});
-	      });
-	  });
-      }).handle_error(
-	crimson::ct_error::all_same_way([](auto e) {
-	  ASSERT_FALSE("failed to submit");
-	})
-      );
+    ).safe_then([this] {
+      return seastar::do_with(
+          get_transaction(),
+          [this](auto &ref_t) {
+        cache.init();
+        return with_trans_intr(*ref_t, [&](auto &t) {
+          return cache.mkfs(t);
+        }).safe_then([this, &ref_t] {
+          return submit_transaction(std::move(ref_t)
+          ).then([](auto p) {});
+        });
+      });
+    }).handle_error(
+      crimson::ct_error::all_same_way([](auto e) {
+        ASSERT_FALSE("failed to submit");
+      })
+    );
   }
 
   seastar::future<> tear_down_fut() final {

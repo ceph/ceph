@@ -213,7 +213,7 @@ struct b_dummy_tree_test_t : public seastar_test_suite_t {
       tree{std::move(moved_nm)} {}
 
   seastar::future<> set_up_fut() override final {
-    return tree.mkfs(t).handle_error(
+    return INTR(tree.mkfs, t).handle_error(
       crimson::ct_error::all_same_way([] {
         ASSERT_FALSE("Unable to mkfs");
       })
@@ -479,7 +479,7 @@ class TestTree {
       std::pair<unsigned, unsigned> range_0,
       size_t value_size) {
     return seastar::async([this, range_2, range_1, range_0, value_size] {
-      tree.mkfs(t).unsafe_get0();
+      INTR(tree.mkfs, t).unsafe_get0();
       //logger().info("\n---------------------------------------------"
       //              "\nbefore leaf node split:\n");
       auto keys = build_key_set(range_2, range_1, range_0);
@@ -498,7 +498,7 @@ class TestTree {
   seastar::future<> build_tree(
       const std::vector<ghobject_t>& keys, const std::vector<test_item_t>& values) {
     return seastar::async([this, keys, values] {
-      tree.mkfs(t).unsafe_get0();
+      INTR(tree.mkfs, t).unsafe_get0();
       //logger().info("\n---------------------------------------------"
       //              "\nbefore leaf node split:\n");
       ASSERT_EQ(keys.size(), values.size());
@@ -1129,7 +1129,7 @@ class DummyChildPool {
   DummyChildPool() = default;
   ~DummyChildPool() { reset(); }
 
-  eagain_future<> build_tree(const std::set<ghobject_t>& keys) {
+  auto build_tree(const std::set<ghobject_t>& keys) {
     reset();
     // create tree
     auto ref_dummy = NodeExtentManager::create_dummy(IS_DUMMY_SYNC);
@@ -1740,12 +1740,12 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
       auto iter = kvs.begin();
       while (iter != kvs.end()) {
         ++num_ops;
-        repeat_eagain2([this, &tree, &num_ops_eagain, &iter] {
+        repeat_eagain([this, &tree, &num_ops_eagain, &iter] {
           ++num_ops_eagain;
           auto t = create_read_transaction();
           return INTR_R(tree->validate_one, *t, iter
           ).safe_then([t=std::move(t)]{});
-        }).get0();
+        }).unsafe_get0();
         ++iter;
       }
     }

@@ -62,12 +62,7 @@ class NodeExtent : public LogicalCachedExtent {
 
 using crimson::os::seastore::TransactionManager;
 class NodeExtentManager {
-  using base_ertr = eagain_ertr::extend<
-    crimson::ct_error::input_output_error>;
-
-  using eagain_iertr = trans_iertr<eagain_ertr>;
-  using base_iertr = eagain_iertr::extend<
-    crimson::ct_error::input_output_error>;
+  using base_iertr = TransactionManager::base_iertr;
  public:
   virtual ~NodeExtentManager() = default;
 

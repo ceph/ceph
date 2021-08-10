@@ -74,13 +74,15 @@ struct btree_lba_manager_test :
     }).safe_then([this](auto addr) {
       return seastar::do_with(
 	cache.create_transaction(Transaction::src_t::MUTATE),
-	[this](auto &transaction) {
-	  cache.init();
-	  return cache.mkfs(*transaction
-	  ).safe_then([this, &transaction] {
-	    return lba_manager->mkfs(*transaction);
-	  }).safe_then([this, &transaction] {
-	    return submit_transaction(std::move(transaction));
+	[this](auto &ref_t) {
+	  return with_trans_intr(*ref_t, [&](auto &t) {
+	    cache.init();
+	    return cache.mkfs(t
+	    ).si_then([this, &t] {
+	      return lba_manager->mkfs(t);
+	    });
+	  }).safe_then([this, &ref_t] {
+	    return submit_transaction(std::move(ref_t));
 	  });
 	});
     }).handle_error(
