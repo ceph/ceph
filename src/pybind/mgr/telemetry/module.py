@@ -384,7 +384,7 @@ class Module(MgrModule):
             # their stats
             pg_dump = self.get('pg_dump')
             for pg in pg_dump['pg_stats']:
-                pool_id = pg['pgid'][0:1]
+                pool_id = pg['pgid'].split('.')[0]
                 if pool_id == curr_pool_id:
                     for metric in pg['stat_sum']:
                         compiled_stats_dict['pool_id'] = int(pool_id)
