@@ -2850,6 +2850,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_deep_scrub") << last_deep_scrub;
   f->dump_stream("last_deep_scrub_stamp") << last_deep_scrub_stamp;
   f->dump_stream("last_clean_scrub_stamp") << last_clean_scrub_stamp;
+  f->dump_int("objects_scrubbed", objects_scrubbed);
   f->dump_int("log_size", log_size);
   f->dump_int("ondisk_log_size", ondisk_log_size);
   f->dump_bool("stats_invalid", stats_invalid);
@@ -3012,6 +3013,8 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_sched_status.m_is_active, bl);
   encode((scrub_sched_status.m_is_deep==scrub_level_t::deep), bl);
   encode(scrub_sched_status.m_is_periodic, bl);
+  encode(objects_scrubbed, bl);
+
   ENCODE_FINISH(bl);
 }
 
@@ -3019,7 +3022,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(26, bl);
+  DECODE_START(27, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3099,6 +3102,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       scrub_sched_status.m_is_deep = tmp ? scrub_level_t::deep : scrub_level_t::shallow;
       decode(tmp, bl);
       scrub_sched_status.m_is_periodic = tmp;
+      decode(objects_scrubbed, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -3134,6 +3138,7 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.last_clean_scrub_stamp = utime_t(17, 18);
   a.last_scrub_duration = 3617;
   a.snaptrimq_len = 1048576;
+  a.objects_scrubbed = 0;
   list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
   a.stats = *l.back();
@@ -3208,7 +3213,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.purged_snaps == r.purged_snaps &&
     l.snaptrimq_len == r.snaptrimq_len &&
     l.last_scrub_duration == r.last_scrub_duration &&
-    l.scrub_sched_status == r.scrub_sched_status;
+    l.scrub_sched_status == r.scrub_sched_status &&
+    l.objects_scrubbed == r.objects_scrubbed;
 }
 
 // -- store_statfs_t --
