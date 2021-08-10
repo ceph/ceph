@@ -267,6 +267,7 @@ static void bluefs_import(
 int main(int argc, char **argv)
 {
   string out_dir;
+  string osd_instance;
   vector<string> devs;
   vector<string> devs_source;
   string dev_target;
@@ -285,6 +286,7 @@ int main(int argc, char **argv)
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
+    (",i", po::value<string>(&osd_instance), "OSD instance. Requires access to monitor/ceph.conf")
     ("path", po::value<string>(&path), "bluestore path")
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("input-file", po::value<string>(&input_file), "import file")
@@ -328,14 +330,12 @@ int main(int argc, char **argv)
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
-  po::positional_options_description pd;
-  pd.add("command", 1);
 
   vector<string> ceph_option_strings;
   po::variables_map vm;
   try {
     po::parsed_options parsed =
-      po::command_line_parser(argc, argv).options(po_all).allow_unregistered().positional(pd).run();
+      po::command_line_parser(argc, argv).options(po_all).allow_unregistered().run();
     po::store( parsed, vm);
     po::notify(vm);
     ceph_option_strings = po::collect_unrecognized(parsed.options,
@@ -352,9 +352,69 @@ int main(int argc, char **argv)
     usage(po_all);
     exit(EXIT_SUCCESS);
   }
+
+  vector<const char*> args;
+  if (log_file.size()) {
+    args.push_back("--log-file");
+    args.push_back(log_file.c_str());
+    static char ll[10];
+    snprintf(ll, sizeof(ll), "%d", log_level);
+    args.push_back("--debug-bluestore");
+    args.push_back(ll);
+    args.push_back("--debug-bluefs");
+    args.push_back(ll);
+    args.push_back("--debug-rocksdb");
+    args.push_back(ll);
+  } else {
+    // do not write to default-named log "osd.x.log" if --log-file is not provided
+    if (!osd_instance.empty()) {
+      args.push_back("--no-log-to-file");
+    }
+  }
+
+  if (!osd_instance.empty()) {
+    args.push_back("-i");
+    args.push_back(osd_instance.c_str());
+  }
+  args.push_back("--no-log-to-stderr");
+  args.push_back("--err-to-stderr");
+
+  for (auto& i : ceph_option_strings) {
+    args.push_back(i.c_str());
+  }
+  auto cct = global_init(NULL, args, osd_instance.empty() ? CEPH_ENTITY_TYPE_CLIENT : CEPH_ENTITY_TYPE_OSD,
+			 CODE_ENVIRONMENT_UTILITY,
+			 osd_instance.empty() ? CINIT_FLAG_NO_DEFAULT_CONFIG_FILE : 0);
+
+  common_init_finish(cct.get());
+  if (action.empty()) {
+    // if action ("command") is not yet defined try to use first param as action
+    if (args.size() > 0) {
+      if (args.size() == 1) {
+	// treat first unparsed value as action
+	action = args[0];
+      } else {
+	std::cerr << "Unknown options: " << args << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    }
+  } else {
+    if (args.size() != 0) {
+      std::cerr << "Unknown options: " << args << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+
   if (action.empty()) {
     cerr << "must specify an action; --help for help" << std::endl;
     exit(EXIT_FAILURE);
+  }
+
+  if (!osd_instance.empty()) {
+    // when "-i" is provided "osd data" can be used as path
+    if (path.size() == 0) {
+      path = cct->_conf.get_val<std::string>("osd_data");
+    }
   }
 
   if (action == "fsck" || action == "repair" || action == "quick-fix") {
@@ -476,30 +536,6 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
-  vector<const char*> args;
-  if (log_file.size()) {
-    args.push_back("--log-file");
-    args.push_back(log_file.c_str());
-    static char ll[10];
-    snprintf(ll, sizeof(ll), "%d", log_level);
-    args.push_back("--debug-bluestore");
-    args.push_back(ll);
-    args.push_back("--debug-bluefs");
-    args.push_back(ll);
-    args.push_back("--debug-rocksdb");
-    args.push_back(ll);
-  }
-  args.push_back("--no-log-to-stderr");
-  args.push_back("--err-to-stderr");
-
-  for (auto& i : ceph_option_strings) {
-    args.push_back(i.c_str());
-  }
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-
-  common_init_finish(cct.get());
 
   if (action == "fsck" ||
       action == "repair" ||

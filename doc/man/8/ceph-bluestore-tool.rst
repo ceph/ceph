@@ -11,6 +11,7 @@ Synopsis
 
 | **ceph-bluestore-tool** *command*
   [ --dev *device* ... ]
+  [ -i *osd_id* ]
   [ --path *osd path* ]
   [ --out-dir *dir* ]
   [ --log-file | -l *filename* ]
@@ -121,6 +122,11 @@ Options
 
    Add *device* to the list of devices to consider
 
+.. option:: -i *osd_id*
+
+   Operate as OSD *osd_id*. Connect to monitor for OSD specific options.
+   If monitor is unavailable, add --no-mon-config to read from ceph.conf instead.
+
 .. option:: --devs-source *device*
 
    Add *device* to the list of devices to consider as sources for migrate operation
@@ -131,7 +137,7 @@ Options
 
 .. option:: --path *osd path*
 
-   Specify an osd path.  In most cases, the device list is inferred from the symlinks present in *osd path*.  This is usually simpler than explicitly specifying the device(s) with --dev.
+   Specify an osd path.  In most cases, the device list is inferred from the symlinks present in *osd path*.  This is usually simpler than explicitly specifying the device(s) with --dev. Not necessary if -i *osd_id* is provided.
 
 .. option:: --out-dir *dir*
 
@@ -160,6 +166,12 @@ Options
    and how large should commit batch be before committing to RocksDB. Option format is:
    <iterator_refresh_bytes>/<iterator_refresh_keys>/<batch_commit_bytes>/<batch_commit_keys>
    Default: 10000000/10000/1000000/1000
+
+Additional ceph.conf options
+============================
+
+Any configuration option that is accepted by OSD can be also passed to **ceph-bluestore-tool**.
+Useful to provide necessary configuration options when access to monitor/ceph.conf is impossible and -i option cannot be used.
 
 Device labels
 =============
