@@ -7519,18 +7519,6 @@ void RGWGetObjLayout::execute(optional_yield y)
 {
   /* Make sure bucket is correct */
   s->object->set_bucket(s->bucket.get());
-
-  std::unique_ptr<rgw::sal::Object::ReadOp> stat_op(s->object->get_read_op(s->obj_ctx));
-
-
-  op_ret = stat_op->prepare(y, this);
-  if (op_ret < 0) {
-    return;
-  }
-
-  head_obj = stat_op->result.head_obj;
-
-  op_ret = stat_op->get_manifest(this, &manifest, y);
 }
 
 

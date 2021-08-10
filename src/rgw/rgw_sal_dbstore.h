@@ -302,13 +302,8 @@ namespace rgw { namespace sal {
       virtual std::unique_ptr<Completions> get_completions(void) override;
       virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, struct req_state* s, 
           rgw::notify::EventType event_type, const std::string* object_name=nullptr) override;
-      virtual std::unique_ptr<GCChain> get_gc_chain(rgw::sal::Object* obj) override;
       virtual RGWLC* get_rgwlc(void) override { return NULL; }
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
-      virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) override;
-      virtual int delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio) override;
-      virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) override;
-      virtual int get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) override;
 
       virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;
       virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
