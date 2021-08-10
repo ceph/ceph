@@ -355,7 +355,7 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rg
   std::optional<rgw_user> _user;
   std::optional<rgw_sync_pipe_acl_translation> _acl_translation;
   std::optional<string> _storage_class;
-  rgw_sync_pipe_params::Mode _mode;
+  rgw_sync_pipe_params::Mode _mode{rgw_sync_pipe_params::Mode::MODE_SYSTEM};
 
   int i = 0;
   for (auto& iter : iters) {
