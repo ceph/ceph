@@ -14,7 +14,7 @@ tasks:
 - cephadm.shell:
     host.a:
       - ceph fs volume create foofs
-      - ceph nfs cluster create foo --ingress --virtual-ip {{VIP0}}/{{VIPPREFIXLEN}}
+      - ceph nfs cluster create foo --ingress --virtual-ip {{VIP0}}/{{VIPPREFIXLEN}} --port 2999
       - ceph nfs export create cephfs foofs foo --pseudo-path /fake
 
 - cephadm.wait_for_service:
@@ -28,7 +28,7 @@ tasks:
     host.a:
       - mkdir /mnt/foo
       - sleep 5
-      - mount -t nfs {{VIP0}}:/fake /mnt/foo
+      - mount -t nfs {{VIP0}}:/fake /mnt/foo -o port=2999
       - echo test > /mnt/foo/testfile
       - sync
 
@@ -47,4 +47,24 @@ tasks:
           sync
           ceph orch daemon start $haproxy
           while ! ceph orch ps | grep $haproxy | grep running; do sleep 1 ; done
+        done
+
+# take each ganesha down in turn.
+# simulate "failure" by deleting the container
+- vip.exec:
+    all-hosts:
+      - |
+        echo "Check with $(hostname) ganesha(s) down..."
+        for c in `systemctl | grep ceph- | grep @nfs | awk '{print $1}'`; do
+            cid=`echo $c | sed 's/@/-/'`
+            id=`echo $c | cut -d @ -f 2 | sed 's/.service$//'`
+            fsid=`echo $c | cut -d @ -f 1 | cut -d - -f 2-`
+            echo "Removing daemon $id fsid $fsid..."
+            sudo $TESTDIR/cephadm rm-daemon --fsid $fsid --name $id
+
+            echo "Waking up cephadm..."
+            sudo $TESTDIR/cephadm shell -- ceph orch ps --refresh
+
+            while ! timeout 1 cat /mnt/foo/testfile ; do true ; done
+            echo "Mount is back!"
         done
