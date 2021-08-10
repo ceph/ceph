@@ -270,13 +270,28 @@ TEST_F(CmpOmap, cmp_vals_u64_invalid_default)
   ASSERT_EQ(ioctx.create(oid, true), 0);
   const std::string key = "key";
   const bufferlist input = u64_buffer(0);
-  const bufferlist def; // empty buffer can't be decoded as u64
+  const bufferlist def = string_buffer("bbb"); // can't be decoded as u64
   EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::EQ, {{key, input}}, def), -EIO);
   EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::NE, {{key, input}}, def), -EIO);
   EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::GT, {{key, input}}, def), -EIO);
   EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::GTE, {{key, input}}, def), -EIO);
   EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::LT, {{key, input}}, def), -EIO);
   EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::LTE, {{key, input}}, def), -EIO);
+}
+
+TEST_F(CmpOmap, cmp_vals_u64_empty_default)
+{
+  const std::string oid = __PRETTY_FUNCTION__;
+  ASSERT_EQ(ioctx.create(oid, true), 0);
+  const std::string key = "key";
+  const bufferlist input = u64_buffer(1);
+  const bufferlist def; // empty buffer defaults to 0
+  EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::EQ, {{key, input}}, def), -ECANCELED);
+  EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::NE, {{key, input}}, def), 0);
+  EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::GT, {{key, input}}, def), 0);
+  EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::GTE, {{key, input}}, def), 0);
+  EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::LT, {{key, input}}, def), -ECANCELED);
+  EXPECT_EQ(do_cmp_vals(oid, Mode::U64, Op::LTE, {{key, input}}, def), -ECANCELED);
 }
 
 TEST_F(CmpOmap, cmp_vals_u64_invalid_value)
@@ -663,6 +678,43 @@ TEST_F(CmpOmap, cmp_rm_keys_over_max_keys)
   }
   librados::ObjectWriteOperation op;
   EXPECT_EQ(cmp_rm_keys(op, Mode::U64, Op::EQ, std::move(comparisons)), -E2BIG);
+}
+
+// test upgrades from empty omap values to u64
+TEST_F(CmpOmap, cmp_rm_keys_u64_empty)
+{
+  const std::string oid = __PRETTY_FUNCTION__;
+  const bufferlist value1; // empty buffer
+  const bufferlist value2 = u64_buffer(42);
+  {
+    std::map<std::string, bufferlist> vals = {
+      {"eq", value1},
+      {"ne", value1},
+      {"gt", value1},
+      {"gte", value1},
+      {"lt", value1},
+      {"lte", value1},
+    };
+    ASSERT_EQ(ioctx.omap_set(oid, vals), 0);
+  }
+
+  ASSERT_EQ(do_cmp_rm_keys(oid, Mode::U64, Op::EQ, {{"eq", value2}}), 0);
+  ASSERT_EQ(do_cmp_rm_keys(oid, Mode::U64, Op::NE, {{"ne", value2}}), 0);
+  ASSERT_EQ(do_cmp_rm_keys(oid, Mode::U64, Op::GT, {{"gt", value2}}), 0);
+  ASSERT_EQ(do_cmp_rm_keys(oid, Mode::U64, Op::GTE, {{"gte", value2}}), 0);
+  ASSERT_EQ(do_cmp_rm_keys(oid, Mode::U64, Op::LT, {{"lt", value2}}), 0);
+  ASSERT_EQ(do_cmp_rm_keys(oid, Mode::U64, Op::LTE, {{"lte", value2}}), 0);
+
+  {
+    std::map<std::string, bufferlist> vals;
+    ASSERT_EQ(get_vals(oid, &vals), 0);
+    EXPECT_EQ(vals.count("eq"), 1);
+    EXPECT_EQ(vals.count("ne"), 0);
+    EXPECT_EQ(vals.count("gt"), 0);
+    EXPECT_EQ(vals.count("gte"), 0);
+    EXPECT_EQ(vals.count("lt"), 1);
+    EXPECT_EQ(vals.count("lte"), 1);
+  }
 }
 
 } // namespace cls::cmpomap
