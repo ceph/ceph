@@ -88,7 +88,10 @@ number of PGs that the pool is working towards, if a ``pg_num``
 change is in progress).  **NEW PG_NUM**, if present, is what the
 system believes the pool's ``pg_num`` should be changed to.  It is
 always a power of 2, and will only be present if the "ideal" value
-varies from the current value by more than a factor of 3.
+varies from the current value by more than a factor of 3 by default.
+This factor can be be adjusted with::
+
+  ceph config set mgr mgr/pg_autoscaler/threshold 2.0
 
 **AUTOSCALE**, is the pool ``pg_autoscale_mode``
 and will be either ``on``, ``off``, or ``warn``.
