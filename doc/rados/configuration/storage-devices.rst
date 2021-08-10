@@ -2,22 +2,26 @@
  Storage Devices
 =================
 
-There are two Ceph daemons that store data on devices:
+There are several Ceph daemons in a storage cluster:
 
-* **Ceph OSDs** (or Object Storage Daemons) are where most of the
-  data is stored in Ceph.  Generally speaking, each OSD is backed by
-  a single storage device, like a traditional hard disk (HDD) or
-  solid state disk (SSD).  OSDs can also be backed by a combination
-  of devices, like a HDD for most data and an SSD (or partition of an
-  SSD) for some metadata.  The number of OSDs in a cluster is
-  generally a function of how much data will be stored, how big each
-  storage device will be, and the level and type of redundancy
-  (replication or erasure coding).
-* **Ceph Monitor** daemons manage critical cluster state like cluster
-  membership and authentication information.  For smaller clusters a
-  few gigabytes is all that is needed, although for larger clusters
-  the monitor database can reach tens or possibly hundreds of
-  gigabytes.
+* **Ceph OSDs** (Object Storage Daemons) store most of the data
+  in Ceph. Usually each OSD is backed by a single storage device.
+  This can be a traditional hard disk (HDD) or a solid state disk
+  (SSD). OSDs can also be backed by a combination of devices: for
+  example, a HDD for most data and an SSD (or partition of an
+  SSD) for some metadata. The number of OSDs in a cluster is
+  usually a function of the amount of data to be stored, the size
+  of each storage device, and the level and type of redundancy
+  specified (replication or erasure coding).
+* **Ceph Monitor** daemons manage critical cluster state. This
+  includes cluster membership and authentication information.
+  Small clusters require only a few gigabytes of storage to hold
+  the monitor database. In large clusters, however, the monitor
+  database can reach sizes of tens of gigabytes to hundreds of
+  gigabytes.  
+* **Ceph Manager** daemons run alongside monitor daemons, providing
+  additional monitoring and providing interfaces to external
+  monitoring and management systems.
 
 
 OSD Backends
