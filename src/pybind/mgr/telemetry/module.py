@@ -501,16 +501,7 @@ class Module(MgrModule):
                     self.log.debug("Error caught: {}".format(e))
                     return {}
 
-        # Update result key names. The key names are currently very complicated
-        # axis configurations, such that histograms with like axis configurations are
-        # combined. However, to make the final report more readable, I will update
-        # the key names to "config_1", "config_2", etc.
-        config_num = 1
-        for k, v in list(result.items()):
-            result['config_' + str(config_num)] = result.pop(k)
-            config_num += 1
-
-        return result
+        return list(result.values())
 
     def get_io_rate(self) -> dict:
         return self.get('io_rate')
