@@ -29,6 +29,7 @@
 namespace librbd {
 namespace cache {
 namespace pwl {
+using namespace std;
 using namespace librbd::cache::pwl;
 namespace rwl {
 

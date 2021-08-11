@@ -136,7 +136,7 @@ public:
   bufferlist cmp_bl;
   bufferlist read_bl;
   bool is_comp_and_write = false;
-  unique_ptr<WriteLogOperationSet> op_set = nullptr;
+  std::unique_ptr<WriteLogOperationSet> op_set = nullptr;
 
   C_WriteRequest(T &pwl, const utime_t arrived, io::Extents &&image_extents,
                  bufferlist&& bl, const int fadvise_flags, ceph::mutex &lock,

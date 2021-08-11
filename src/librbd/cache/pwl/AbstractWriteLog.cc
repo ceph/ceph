@@ -31,6 +31,7 @@ namespace librbd {
 namespace cache {
 namespace pwl {
 
+using namespace std;
 using namespace librbd::cache::pwl;
 
 typedef AbstractWriteLog<ImageCtx>::Extent Extent;

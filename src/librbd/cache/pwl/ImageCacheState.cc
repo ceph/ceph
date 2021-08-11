@@ -22,6 +22,8 @@ namespace librbd {
 namespace cache {
 namespace pwl {
 
+using namespace std;
+
 namespace {
 bool get_json_format(const std::string& s, JSONFormattable *f) {
   JSONParser p;

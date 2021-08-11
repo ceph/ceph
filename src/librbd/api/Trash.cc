@@ -119,7 +119,7 @@ int list_trash_image_specs(
   uint32_t max_read = 1024;
   std::string last_read;
   do {
-    std::map<string, cls::rbd::TrashImageSpec> trash_entries;
+    std::map<std::string, cls::rbd::TrashImageSpec> trash_entries;
     int r = cls_client::trash_list(&io_ctx, last_read, max_read,
                                    &trash_entries);
     if (r < 0 && r != -ENOENT) {
@@ -347,7 +347,7 @@ int Trash<I>::get(IoCtx &io_ctx, const std::string &id,
 }
 
 template <typename I>
-int Trash<I>::list(IoCtx &io_ctx, vector<trash_image_info_t> &entries,
+int Trash<I>::list(IoCtx &io_ctx, std::vector<trash_image_info_t> &entries,
                    bool exclude_user_remove_source) {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << __func__ << " " << &io_ctx << dendl;

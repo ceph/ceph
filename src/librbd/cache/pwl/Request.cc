@@ -11,6 +11,8 @@
 #define dout_prefix *_dout << "librbd::cache::pwl::Request: " << this << " " \
                            <<  __func__ << ": "
 
+using namespace std;
+
 namespace librbd {
 namespace cache {
 namespace pwl {

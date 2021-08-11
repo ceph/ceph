@@ -27,7 +27,7 @@ struct SuperBlock{
     f->dump_object("super", root);
   }
 
-  static void generate_test_instances(list<SuperBlock*>& ls) {
+  static void generate_test_instances(std::list<SuperBlock*>& ls) {
     ls.push_back(new SuperBlock);
     ls.push_back(new SuperBlock);
     ls.back()->root.first_valid_entry = 2;
