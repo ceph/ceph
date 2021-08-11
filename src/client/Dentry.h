@@ -81,7 +81,7 @@ public:
   friend std::ostream &operator<<(std::ostream &oss, const Dentry &Dentry);
 
   Dir	   *dir;
-  const string name;
+  const std::string name;
   InodeRef inode;
   int	   ref = 1; // 1 if there's a dir beneath me.
   int64_t offset = 0;
