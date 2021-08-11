@@ -84,12 +84,15 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
 // bluestore_txc
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
 			      bluestore_txc);
+using std::byte;
 using std::deque;
 using std::min;
 using std::make_pair;
 using std::numeric_limits;
 using std::pair;
+using std::less;
 using std::list;
+using std::make_unique;
 using std::map;
 using std::max;
 using std::ostream;
@@ -97,6 +100,7 @@ using std::ostringstream;
 using std::set;
 using std::string;
 using std::stringstream;
+using std::unique_ptr;
 using std::vector;
 
 using ceph::bufferlist;

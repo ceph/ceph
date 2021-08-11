@@ -70,7 +70,7 @@ public:
 			   int64_t block_size, const std::string_view name = "");
 
 
-  const string& get_name() const;
+  const std::string& get_name() const;
   int64_t get_capacity() const
   {
     return device_size;
