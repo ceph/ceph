@@ -42,7 +42,7 @@ template<class T>
 class DencoderBase : public Dencoder {
 protected:
   T* m_object;
-  list<T*> m_list;
+  std::list<T*> m_list;
   bool stray_okay;
   bool nondeterministic;
 
@@ -66,7 +66,7 @@ public:
       return e.what();
     }
     if (!stray_okay && !p.end()) {
-      ostringstream ss;
+      std::ostringstream ss;
       ss << "stray data at end of buffer, offset " << p.get_off();
       return ss.str();
     }
@@ -84,14 +84,14 @@ public:
   int num_generated() override {
     return m_list.size();
   }
-  string select_generated(unsigned i) override {
+  std::string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
     m_object = *(std::next(m_list.begin(), i-1));
-    return string();
+    return {};
   }
 
   bool is_deterministic() override {
@@ -162,13 +162,13 @@ public:
 template<class T>
 class MessageDencoderImpl : public Dencoder {
   ref_t<T> m_object;
-  list<ref_t<T>> m_list;
+  std::list<ref_t<T>> m_list;
 
 public:
   MessageDencoderImpl() : m_object{make_message<T>()} {}
   ~MessageDencoderImpl() override {}
 
-  string decode(bufferlist bl, uint64_t seek) override {
+  std::string decode(bufferlist bl, uint64_t seek) override {
     auto p = bl.cbegin();
     p.seek(seek);
     try {
@@ -176,7 +176,7 @@ public:
       if (!n)
 	throw std::runtime_error("failed to decode");
       if (n->get_type() != m_object->get_type()) {
-	stringstream ss;
+	std::stringstream ss;
 	ss << "decoded type " << n->get_type() << " instead of expected " << m_object->get_type();
 	throw std::runtime_error(ss.str());
       }
@@ -186,11 +186,11 @@ public:
       return e.what();
     }
     if (!p.end()) {
-      ostringstream ss;
+      std::ostringstream ss;
       ss << "stray data at end of buffer, offset " << p.get_off();
       return ss.str();
     }
-    return string();
+    return {};
   }
 
   void encode(bufferlist& out, uint64_t features) override {
@@ -207,14 +207,14 @@ public:
   int num_generated() override {
     return m_list.size();
   }
-  string select_generated(unsigned i) override {
+  std::string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
     m_object = *(std::next(m_list.begin(), i-1));
-    return string();
+    return {};
   }
   bool is_deterministic() override {
     return true;

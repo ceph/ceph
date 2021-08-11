@@ -22,6 +22,10 @@
 
 using std::deque;
 using std::string;
+using std::unique_ptr;
+using std::cerr;
+using std::cout;
+using std::vector;
 
 static void usage(std::ostream& out)
 {
@@ -248,7 +252,7 @@ int main(int argc, const char **argv)
 	cerr << "unable to parse option: '" << *i << "'" << std::endl;
 	cerr << "args:";
 	for (auto arg : orig_args) {
-	  cerr << " " << quoted(arg);
+	  cerr << " " << std::quoted(arg);
 	}
 	cerr << std::endl;
 	usage(cerr);

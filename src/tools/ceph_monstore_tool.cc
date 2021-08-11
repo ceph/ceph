@@ -38,6 +38,8 @@
 
 namespace po = boost::program_options;
 
+using namespace std;
+
 class TraceIter {
   int fd;
   unsigned idx;

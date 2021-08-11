@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 
+using namespace std;
 using namespace librados;
 
 void buf_to_hex(const unsigned char *buf, int len, char *str)

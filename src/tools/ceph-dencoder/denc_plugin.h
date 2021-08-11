@@ -30,7 +30,7 @@ public:
 #endif
   }
   const dencoders_t& register_dencoders() {
-    static constexpr string_view REGISTER_DENCODERS_FUNCTION = "register_dencoders\0";
+    static constexpr std::string_view REGISTER_DENCODERS_FUNCTION = "register_dencoders\0";
 
     assert(mod);
     using register_dencoders_t = void (*)(DencoderPlugin*);
