@@ -70,7 +70,7 @@ struct TestMigration : public TestFixture {
   }
 
   void compare(const std::string &description = "") {
-    vector<librbd::snap_info_t> src_snaps, dst_snaps;
+    std::vector<librbd::snap_info_t> src_snaps, dst_snaps;
 
     EXPECT_EQ(m_ref_ictx->size, m_ictx->size);
     EXPECT_EQ(0, librbd::api::Snapshot<>::list(m_ref_ictx, src_snaps));
@@ -489,7 +489,7 @@ struct TestMigration : public TestFixture {
     migration_prepare(m_ioctx, m_image_name);
     migration_status(RBD_IMAGE_MIGRATION_STATE_PREPARED);
 
-    thread user([this]() {
+    std::thread user([this]() {
         test_stress("user", 'a');
         for (int i = 0; i < 5; i++) {
           uint64_t off = (i + 1) * m_ictx->size / 10;

@@ -29,6 +29,8 @@
 #include <utility>
 #include <vector>
 
+using namespace std;
+
 void register_test_internal() {
 }
 
