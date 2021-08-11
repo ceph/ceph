@@ -35,6 +35,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "datascan." << __func__ << ": "
 
+using namespace std;
+
 void DataScan::usage()
 {
   std::cout << "Usage: \n"
