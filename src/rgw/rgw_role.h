@@ -34,7 +34,7 @@ protected:
   std::string arn;
   std::string creation_date;
   std::string trust_policy;
-  map<std::string, std::string> perm_policy_map;
+  std::map<std::string, std::string> perm_policy_map;
   std::string tenant;
   uint64_t max_session_duration;
 
@@ -120,7 +120,7 @@ public:
   int update(const DoutPrefixProvider *dpp, optional_yield y);
   void update_trust_policy(std::string& trust_policy);
   void set_perm_policy(const std::string& policy_name, const std::string& perm_policy);
-  vector<std::string> get_role_policy_names();
+  std::vector<std::string> get_role_policy_names();
   int get_role_policy(const DoutPrefixProvider* dpp, const std::string& policy_name, std::string& perm_policy);
   int delete_policy(const DoutPrefixProvider* dpp, const std::string& policy_name);
   void dump(Formatter *f) const;

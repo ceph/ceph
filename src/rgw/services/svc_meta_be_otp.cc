@@ -9,6 +9,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 RGWSI_MetaBackend_OTP::RGWSI_MetaBackend_OTP(CephContext *cct) : RGWSI_MetaBackend_SObj(cct) {
 }

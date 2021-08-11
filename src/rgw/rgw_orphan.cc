@@ -22,6 +22,8 @@
 
 #define DEFAULT_NUM_SHARDS 64
 
+using namespace std;
+
 static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
 {
   ssize_t pos = oid.find('_');

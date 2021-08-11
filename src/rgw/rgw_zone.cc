@@ -41,6 +41,7 @@ std::string default_storage_pool_suffix = "rgw.buckets.data";
 
 }
 
+using namespace std;
 using namespace rgw_zone_defaults;
 
 RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}

@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 class RGW_MB_Handler_Module_OTP : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Zone *zone_svc;
   string prefix;

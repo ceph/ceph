@@ -70,10 +70,9 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 using namespace rgw;
 using namespace ceph::crypto;
-
-using std::get;
 
 void list_all_buckets_start(struct req_state *s)
 {

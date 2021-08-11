@@ -170,8 +170,8 @@ class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore_S3 {
   bool fetchOwner;
   bool start_after_exist;
   bool continuation_token_exist;
-  string startAfter;
-  string continuation_token;
+  std::string startAfter;
+  std::string continuation_token;
 public:
   RGWListBucket_ObjStore_S3v2() :  fetchOwner(false) {
   }
@@ -281,7 +281,7 @@ public:
                          rgw::sal::DataProcessor *cb) override;
   int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                          RGWGetObj_Filter* cb,
-                         map<string, bufferlist>& attrs,
+                         std::map<std::string, bufferlist>& attrs,
                          bufferlist* manifest_bl) override;
 };
 
@@ -291,7 +291,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   std::string content_type;
   RGWPolicyEnv env;
   RGWPolicy post_policy;
-  map<string, string> crypt_http_responses;
+  std::map<std::string, std::string> crypt_http_responses;
 
   const rgw::auth::StrategyRegistry* auth_registry_ptr = nullptr;
 
@@ -355,7 +355,7 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(rgw::sal::Store* store, struct req_state *s, stringstream& ss) override;
+  int get_policy_from_state(rgw::sal::Store* store, struct req_state *s, std::stringstream& ss) override;
   void send_response() override;
   int get_params(optional_yield y) override;
 };
@@ -470,7 +470,7 @@ public:
 
   int get_params(optional_yield y) override;
   void send_response() override;
-  int prepare_encryption(map<string, bufferlist>& attrs) override;
+  int prepare_encryption(std::map<std::string, bufferlist>& attrs) override;
 };
 
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
@@ -517,7 +517,7 @@ public:
   void send_status() override;
   void begin_response() override;
   void send_partial_response(rgw_obj_key& key, bool delete_marker,
-                             const string& marker_version_id, int ret) override;
+                             const std::string& marker_version_id, int ret) override;
   void end_response() override;
 };
 
@@ -632,8 +632,8 @@ public:
   }
   ~RGWHandler_Auth_S3() override = default;
 
-  static int validate_bucket_name(const string& bucket);
-  static int validate_object_name(const string& bucket);
+  static int validate_bucket_name(const std::string& bucket);
+  static int validate_object_name(const std::string& bucket);
 
   int init(rgw::sal::Store* store,
            struct req_state *s,
@@ -827,7 +827,7 @@ static inline bool looks_like_ip_address(const char *bucket)
   return (num_periods == 3);
 }
 
-inline int valid_s3_object_name(const string& name) {
+inline int valid_s3_object_name(const std::string& name) {
   if (name.size() > 1024) {
     return -ERR_INVALID_OBJECT_NAME;
   }
@@ -837,7 +837,7 @@ inline int valid_s3_object_name(const string& name) {
   return 0;
 }
 
-inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
+inline int valid_s3_bucket_name(const std::string& name, bool relaxed=false)
 {
   // This function enforces Amazon's spec for bucket names.
   // (The requirements, not the recommendations.)

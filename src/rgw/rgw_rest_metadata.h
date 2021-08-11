@@ -52,7 +52,7 @@ public:
 
 class RGWOp_Metadata_Put : public RGWRESTOp {
   int get_data(bufferlist& bl);
-  string update_status;
+  std::string update_status;
   obj_version ondisk_version;
 public:
   RGWOp_Metadata_Put() {}

@@ -23,19 +23,19 @@ protected:
   uint64_t MAX_DURATION_IN_SECS;
   CephContext* cct;
   uint64_t duration;
-  string err_msg;
-  string iamPolicy;
-  string roleArn;
-  string roleSessionName;
+  std::string err_msg;
+  std::string iamPolicy;
+  std::string roleArn;
+  std::string roleSessionName;
 public:
   AssumeRoleRequestBase(CephContext* cct,
-                        const string& duration,
-                        const string& iamPolicy,
-                        const string& roleArn,
-                        const string& roleSessionName);
-  const string& getRoleARN() const { return roleArn; }
-  const string& getRoleSessionName() const { return roleSessionName; }
-  const string& getPolicy() const {return iamPolicy; }
+                        const std::string& duration,
+                        const std::string& iamPolicy,
+                        const std::string& roleArn,
+                        const std::string& roleSessionName);
+  const std::string& getRoleARN() const { return roleArn; }
+  const std::string& getRoleSessionName() const { return roleSessionName; }
+  const std::string& getPolicy() const {return iamPolicy; }
   static const uint64_t& getMaxPolicySize() { return MAX_POLICY_SIZE; }
   void setMaxDuration(const uint64_t& maxDuration) { MAX_DURATION_IN_SECS = maxDuration; }
   const uint64_t& getDuration() const { return duration; }
@@ -45,27 +45,27 @@ public:
 class AssumeRoleWithWebIdentityRequest : public AssumeRoleRequestBase {
   static constexpr uint64_t MIN_PROVIDER_ID_LEN = 4;
   static constexpr uint64_t MAX_PROVIDER_ID_LEN = 2048;
-  string providerId;
-  string iamPolicy;
-  string iss;
-  string sub;
-  string aud;
+  std::string providerId;
+  std::string iamPolicy;
+  std::string iss;
+  std::string sub;
+  std::string aud;
 public:
   AssumeRoleWithWebIdentityRequest( CephContext* cct,
-                      const string& duration,
-                      const string& providerId,
-                      const string& iamPolicy,
-                      const string& roleArn,
-                      const string& roleSessionName,
-                      const string& iss,
-                      const string& sub,
-                      const string& aud)
+                      const std::string& duration,
+                      const std::string& providerId,
+                      const std::string& iamPolicy,
+                      const std::string& roleArn,
+                      const std::string& roleSessionName,
+                      const std::string& iss,
+                      const std::string& sub,
+                      const std::string& aud)
     : AssumeRoleRequestBase(cct, duration, iamPolicy, roleArn, roleSessionName),
       providerId(providerId), iss(iss), sub(sub), aud(aud) {}
-  const string& getProviderId() const { return providerId; }
-  const string& getIss() const { return iss; }
-  const string& getAud() const { return aud; }
-  const string& getSub() const { return sub; }
+  const std::string& getProviderId() const { return providerId; }
+  const std::string& getIss() const { return iss; }
+  const std::string& getAud() const { return aud; }
+  const std::string& getSub() const { return sub; }
   int validate_input() const;
 };
 
@@ -75,18 +75,18 @@ class AssumeRoleRequest : public AssumeRoleRequestBase {
   static constexpr uint64_t MIN_SERIAL_NUMBER_SIZE = 9;
   static constexpr uint64_t MAX_SERIAL_NUMBER_SIZE = 256;
   static constexpr uint64_t TOKEN_CODE_SIZE = 6;
-  string externalId;
-  string serialNumber;
-  string tokenCode;
+  std::string externalId;
+  std::string serialNumber;
+  std::string tokenCode;
 public:
   AssumeRoleRequest(CephContext* cct,
-                    const string& duration,
-                    const string& externalId,
-                    const string& iamPolicy,
-                    const string& roleArn,
-                    const string& roleSessionName,
-                    const string& serialNumber,
-                    const string& tokenCode)
+                    const std::string& duration,
+                    const std::string& externalId,
+                    const std::string& iamPolicy,
+                    const std::string& roleArn,
+                    const std::string& roleSessionName,
+                    const std::string& serialNumber,
+                    const std::string& tokenCode)
     : AssumeRoleRequestBase(cct, duration, iamPolicy, roleArn, roleSessionName),
       externalId(externalId), serialNumber(serialNumber), tokenCode(tokenCode){}
   int validate_input() const;
@@ -97,44 +97,44 @@ protected:
   static constexpr uint64_t MIN_DURATION_IN_SECS = 900;
   static constexpr uint64_t DEFAULT_DURATION_IN_SECS = 3600;
   uint64_t duration;
-  string serialNumber;
-  string tokenCode;
+  std::string serialNumber;
+  std::string tokenCode;
 
 public:
-  GetSessionTokenRequest(const string& duration, const string& serialNumber, const string& tokenCode);
+  GetSessionTokenRequest(const std::string& duration, const std::string& serialNumber, const std::string& tokenCode);
 
   const uint64_t& getDuration() const { return duration; }
   static const uint64_t& getMinDuration() { return MIN_DURATION_IN_SECS; }
 };
 
 class AssumedRoleUser {
-  string arn;
-  string assumeRoleId;
+  std::string arn;
+  std::string assumeRoleId;
 public:
   int generateAssumedRoleUser( CephContext* cct,
                                 rgw::sal::Store* store,
-                                const string& roleId,
+                                const std::string& roleId,
                                 const rgw::ARN& roleArn,
-                                const string& roleSessionName);
-  const string& getARN() const { return arn; }
-  const string& getAssumeRoleId() const { return assumeRoleId; }
+                                const std::string& roleSessionName);
+  const std::string& getARN() const { return arn; }
+  const std::string& getAssumeRoleId() const { return assumeRoleId; }
   void dump(Formatter *f) const;
 };
 
 struct SessionToken {
-  string access_key_id;
-  string secret_access_key;
-  string expiration;
-  string policy;
-  string roleId;
+  std::string access_key_id;
+  std::string secret_access_key;
+  std::string expiration;
+  std::string policy;
+  std::string roleId;
   rgw_user user;
-  string acct_name;
+  std::string acct_name;
   uint32_t perm_mask;
   bool is_admin;
   uint32_t acct_type;
-  string role_session;
-  std::vector<string> token_claims;
-  string issued_at;
+  std::string role_session;
+  std::vector<std::string> token_claims;
+  std::string issued_at;
 
   SessionToken() {}
 
@@ -185,23 +185,23 @@ WRITE_CLASS_ENCODER(SessionToken)
 class Credentials {
   static constexpr int MAX_ACCESS_KEY_LEN = 20;
   static constexpr int MAX_SECRET_KEY_LEN = 40;
-  string accessKeyId;
-  string expiration;
-  string secretAccessKey;
-  string sessionToken;
+  std::string accessKeyId;
+  std::string expiration;
+  std::string secretAccessKey;
+  std::string sessionToken;
 public:
   int generateCredentials(CephContext* cct,
                           const uint64_t& duration,
-                          const boost::optional<string>& policy,
-                          const boost::optional<string>& roleId,
-                          const boost::optional<string>& role_session,
-                          const boost::optional<std::vector<string> > token_claims,
+                          const boost::optional<std::string>& policy,
+                          const boost::optional<std::string>& roleId,
+                          const boost::optional<std::string>& role_session,
+                          const boost::optional<std::vector<std::string> > token_claims,
                           boost::optional<rgw_user> user,
                           rgw::auth::Identity* identity);
-  const string& getAccessKeyId() const { return accessKeyId; }
-  const string& getExpiration() const { return expiration; }
-  const string& getSecretAccessKey() const { return secretAccessKey; }
-  const string& getSessionToken() const { return sessionToken; }
+  const std::string& getAccessKeyId() const { return accessKeyId; }
+  const std::string& getExpiration() const { return expiration; }
+  const std::string& getSecretAccessKey() const { return secretAccessKey; }
+  const std::string& getSessionToken() const { return sessionToken; }
   void dump(Formatter *f) const;
 };
 
@@ -214,9 +214,9 @@ struct AssumeRoleResponse {
 
 struct AssumeRoleWithWebIdentityResponse {
   AssumeRoleResponse assumeRoleResp;
-  string aud;
-  string providerId;
-  string sub;
+  std::string aud;
+  std::string providerId;
+  std::string sub;
 };
 
 using AssumeRoleResponse = struct AssumeRoleResponse ;
@@ -229,13 +229,13 @@ class STSService {
   rgw_user user_id;
   std::unique_ptr<rgw::sal::RGWRole> role;
   rgw::auth::Identity* identity;
-  int storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y);
+  int storeARN(const DoutPrefixProvider *dpp, std::string& arn, optional_yield y);
 public:
   STSService() = default;
   STSService(CephContext* cct, rgw::sal::Store* store, rgw_user user_id,
 	     rgw::auth::Identity* identity)
     : cct(cct), store(store), user_id(user_id), identity(identity) {}
-  std::tuple<int, rgw::sal::RGWRole*> getRoleInfo(const DoutPrefixProvider *dpp, const string& arn, optional_yield y);
+  std::tuple<int, rgw::sal::RGWRole*> getRoleInfo(const DoutPrefixProvider *dpp, const std::string& arn, optional_yield y);
   AssumeRoleResponse assumeRole(const DoutPrefixProvider *dpp, AssumeRoleRequest& req, optional_yield y);
   GetSessionTokenResponse getSessionToken(GetSessionTokenRequest& req);
   AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(AssumeRoleWithWebIdentityRequest& req);

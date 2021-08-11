@@ -26,6 +26,8 @@
 
 #define PUBSUB_EVENTS_RETENTION_DEFAULT 7
 
+using namespace std;
+
 /*
 
 config:

@@ -19,7 +19,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-
+using namespace std;
 
 bool RGWMultiPart::xml_end(const char *el)
 {

@@ -25,7 +25,7 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 
   std::shared_ptr<RGWSI_SysObj_Cache_CB> cb;
 
-  void normalize_pool_and_obj(const rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
+  void normalize_pool_and_obj(const rgw_pool& src_pool, const std::string& src_obj, rgw_pool& dst_pool, std::string& dst_obj);
 protected:
   void init(RGWSI_RADOS *_rados_svc,
             RGWSI_Zone *_zone_svc,
@@ -38,7 +38,7 @@ protected:
   void shutdown() override;
 
   int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
-               map<string, bufferlist> *attrs, bufferlist *first_chunk,
+               std::map<std::string, bufferlist> *attrs, bufferlist *first_chunk,
                RGWObjVersionTracker *objv_tracker,
                optional_yield y) override;
 
@@ -48,7 +48,7 @@ protected:
            RGWObjVersionTracker *objv_tracker,
            const rgw_raw_obj& obj,
            bufferlist *bl, off_t ofs, off_t end,
-           map<string, bufferlist> *attrs,
+           std::map<std::string, bufferlist> *attrs,
 	   bool raw_attrs,
            rgw_cache_entry_info *cache_info,
            boost::optional<obj_version>,
@@ -59,8 +59,8 @@ protected:
 
   int set_attrs(const DoutPrefixProvider *dpp, 
                 const rgw_raw_obj& obj, 
-                map<string, bufferlist>& attrs,
-                map<string, bufferlist> *rmattrs,
+                std::map<std::string, bufferlist>& attrs,
+                std::map<std::string, bufferlist> *rmattrs,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
 
@@ -73,7 +73,7 @@ protected:
   int write(const DoutPrefixProvider *dpp, 
             const rgw_raw_obj& obj,
             real_time *pmtime,
-            map<std::string, bufferlist>& attrs,
+            std::map<std::string, bufferlist>& attrs,
             bool exclusive,
             const bufferlist& data,
             RGWObjVersionTracker *objv_tracker,
@@ -87,7 +87,7 @@ protected:
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);
 
-  int distribute_cache(const DoutPrefixProvider *dpp, const string& normal_name, const rgw_raw_obj& obj,
+  int distribute_cache(const DoutPrefixProvider *dpp, const std::string& normal_name, const rgw_raw_obj& obj,
                        ObjectCacheInfo& obj_info, int op,
                        optional_yield y);
 
@@ -125,7 +125,7 @@ public:
 
     // `call_list` must iterate over all cache entries and call
     // `cache_list_dump_helper` with the supplied Formatter on any that
-    // include `filter` as a substring.
+    // include `filter` as a substd::string.
     //
     void call_list(const std::optional<std::string>& filter, Formatter* f);
 
@@ -175,7 +175,7 @@ public:
 				    "rgw_cache_expiry_interval"));
   }
 
-  boost::optional<T> find(const string& key) {
+  boost::optional<T> find(const std::string& key) {
     std::shared_lock rl{lock};
     auto iter = entries.find(key);
     if (iter == entries.end()) {
@@ -189,7 +189,7 @@ public:
     return iter->second.first;
   }
 
-  bool put(const DoutPrefixProvider *dpp, RGWSI_SysObj_Cache *svc, const string& key, T *entry,
+  bool put(const DoutPrefixProvider *dpp, RGWSI_SysObj_Cache *svc, const std::string& key, T *entry,
 	   std::initializer_list<rgw_cache_entry_info *> cache_info_entries) {
     if (!svc) {
       return false;
@@ -201,7 +201,7 @@ public:
     return svc->chain_cache_entry(dpp, cache_info_entries, &chain_entry);
   }
 
-  void chain_cb(const string& key, void *data) override {
+  void chain_cb(const std::string& key, void *data) override {
     T *entry = static_cast<T *>(data);
     std::unique_lock wl{lock};
     entries[key].first = *entry;
@@ -210,7 +210,7 @@ public:
     }
   }
 
-  void invalidate(const string& key) override {
+  void invalidate(const std::string& key) override {
     std::unique_lock wl{lock};
     entries.erase(key);
   }

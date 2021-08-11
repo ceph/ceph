@@ -48,6 +48,8 @@ namespace {
 
 }
 
+using namespace std;
+
 void usage()
 {
   cout << "usage: radosgw-token --encode --ttype=<token type> [options...]" << std::endl;

@@ -18,6 +18,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 using Svc = RGWSI_MDLog::Svc;
 using Cursor = RGWPeriodHistory::Cursor;
 

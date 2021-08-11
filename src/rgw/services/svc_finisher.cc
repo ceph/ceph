@@ -5,6 +5,8 @@
 
 #include "svc_finisher.h"
 
+using namespace std;
+
 int RGWSI_Finisher::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   finisher = new Finisher(cct);

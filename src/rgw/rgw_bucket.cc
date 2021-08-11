@@ -57,6 +57,8 @@
 
 #define BUCKET_TAG_TIMEOUT 30
 
+using namespace std;
+
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)
 static constexpr size_t listing_max_entries = 1000;

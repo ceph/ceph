@@ -30,7 +30,7 @@ public:
   void output_header() override {};
   void output_footer() override {};
   void enable_line_break() override {};
-  void flush(ostream& os) override;
+  void flush(std::ostream& os) override;
   void reset() override;
 
   void open_array_section(std::string_view name) override;
@@ -116,13 +116,13 @@ public:
 };
 
 class RGWStreamFlusher : public RGWFormatterFlusher {
-  ostream& os;
+  std::ostream& os;
 protected:
   void do_flush() override {
     formatter->flush(os);
   }
 public:
-  RGWStreamFlusher(Formatter *f, ostream& _os) : RGWFormatterFlusher(f), os(_os) {}
+  RGWStreamFlusher(Formatter *f, std::ostream& _os) : RGWFormatterFlusher(f), os(_os) {}
 };
 
 class RGWNullFlusher : public RGWFormatterFlusher {

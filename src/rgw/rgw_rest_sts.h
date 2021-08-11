@@ -25,20 +25,20 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_applicable(const std::string& token) const noexcept;
 
-  bool is_client_id_valid(vector<string>& client_ids, const string& client_id) const;
+  bool is_client_id_valid(std::vector<std::string>& client_ids, const std::string& client_id) const;
 
-  bool is_cert_valid(const vector<string>& thumbprints, const string& cert) const;
+  bool is_cert_valid(const std::vector<std::string>& thumbprints, const std::string& cert) const;
 
-  std::unique_ptr<rgw::sal::RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const;
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const std::string& role_arn, const std::string& iss) const;
 
-  std::string get_role_tenant(const string& role_arn) const;
+  std::string get_role_tenant(const std::string& role_arn) const;
 
-  std::string get_cert_url(const string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
+  std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
 
   boost::optional<WebTokenEngine::token_t>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
-  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const;
+  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, optional_yield y) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
@@ -82,8 +82,8 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
-                                    const string& role_session,
-                                    const string& role_tenant,
+                                    const std::string& role_session,
+                                    const std::string& role_tenant,
                                     const rgw::web_idp::WebTokenClaims& token) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::WebIdentityApplier(cct, store, role_session, role_tenant, token));
@@ -123,14 +123,14 @@ public:
 
 class RGWSTSAssumeRoleWithWebIdentity : public RGWREST_STS {
 protected:
-  string duration;
-  string providerId;
-  string policy;
-  string roleArn;
-  string roleSessionName;
-  string sub;
-  string aud;
-  string iss;
+  std::string duration;
+  std::string providerId;
+  std::string policy;
+  std::string roleArn;
+  std::string roleSessionName;
+  std::string sub;
+  std::string aud;
+  std::string iss;
 public:
   RGWSTSAssumeRoleWithWebIdentity() = default;
   void execute(optional_yield y) override;
@@ -141,13 +141,13 @@ public:
 
 class RGWSTSAssumeRole : public RGWREST_STS {
 protected:
-  string duration;
-  string externalId;
-  string policy;
-  string roleArn;
-  string roleSessionName;
-  string serialNumber;
-  string tokenCode;
+  std::string duration;
+  std::string externalId;
+  std::string policy;
+  std::string roleArn;
+  std::string roleSessionName;
+  std::string serialNumber;
+  std::string tokenCode;
 public:
   RGWSTSAssumeRole() = default;
   void execute(optional_yield y) override;
@@ -158,9 +158,9 @@ public:
 
 class RGWSTSGetSessionToken : public RGWREST_STS {
 protected:
-  string duration;
-  string serialNumber;
-  string tokenCode;
+  std::string duration;
+  std::string serialNumber;
+  std::string tokenCode;
 public:
   RGWSTSGetSessionToken() = default;
   void execute(optional_yield y) override;
@@ -180,14 +180,14 @@ public:
 
 class RGWHandler_REST_STS : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
-  const string& post_body;
+  const std::string& post_body;
   RGWOp *op_post() override;
   void rgw_sts_parse_input();
 public:
 
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 
-  RGWHandler_REST_STS(const rgw::auth::StrategyRegistry& auth_registry, const string& post_body="")
+  RGWHandler_REST_STS(const rgw::auth::StrategyRegistry& auth_registry, const std::string& post_body="")
     : RGWHandler_REST(),
       auth_registry(auth_registry),
       post_body(post_body) {}

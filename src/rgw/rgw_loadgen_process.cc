@@ -16,6 +16,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 extern void signal_shutdown();
 
 void RGWLoadGenProcess::checkpoint()

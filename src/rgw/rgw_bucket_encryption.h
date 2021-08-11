@@ -8,17 +8,17 @@ class XMLObj;
 
 class ApplyServerSideEncryptionByDefault
 {
-  string kmsMasterKeyID;
-  string sseAlgorithm;
+  std::string kmsMasterKeyID;
+  std::string sseAlgorithm;
 
 public:
   ApplyServerSideEncryptionByDefault(): kmsMasterKeyID(""), sseAlgorithm("") {};
 
-  const string& kms_master_key_id() const {
+  const std::string& kms_master_key_id() const {
     return kmsMasterKeyID;
   }
 
-  const string& sse_algorithm() const {
+  const std::string& sse_algorithm() const {
     return sseAlgorithm;
   }
 
@@ -50,11 +50,11 @@ protected:
 public:
   ServerSideEncryptionConfiguration(): bucketKeyEnabled(false) {};
 
-  const string& kms_master_key_id() const {
+  const std::string& kms_master_key_id() const {
     return applyServerSideEncryptionByDefault.kms_master_key_id();
   }
 
-  const string& sse_algorithm() const {
+  const std::string& sse_algorithm() const {
     return applyServerSideEncryptionByDefault.sse_algorithm();
   }
 
@@ -90,11 +90,11 @@ protected:
 public:
   RGWBucketEncryptionConfig(): rule_exist(false) {}
 
-  const string& kms_master_key_id() const {
+  const std::string& kms_master_key_id() const {
     return rule.kms_master_key_id();
   }
 
-  const string& sse_algorithm() const {
+  const std::string& sse_algorithm() const {
     return rule.sse_algorithm();
   }
 

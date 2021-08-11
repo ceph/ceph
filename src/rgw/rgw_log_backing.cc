@@ -8,6 +8,7 @@
 #include "rgw_tools.h"
 #include "cls_fifo_legacy.h"
 
+using namespace std::chrono_literals;
 namespace cb = ceph::buffer;
 
 static constexpr auto dout_subsys = ceph_subsys_rgw;
@@ -165,7 +166,7 @@ bs::error_code log_remove(const DoutPrefixProvider *dpp,
     rados::cls::fifo::info info;
     uint32_t part_header_size = 0, part_entry_overhead = 0;
 
-    auto r = rgw::cls::fifo::get_meta(dpp, ioctx, oid, nullopt, &info,
+    auto r = rgw::cls::fifo::get_meta(dpp, ioctx, oid, std::nullopt, &info,
 				      &part_header_size, &part_entry_overhead,
 				      0, y, true);
     if (r == -ENOENT) continue;

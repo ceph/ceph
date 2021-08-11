@@ -9,6 +9,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int RGWSI_SysObj_Core_GetObjState::get_rados_obj(const DoutPrefixProvider *dpp,
                                                  RGWSI_RADOS *rados_svc,
                                                  RGWSI_Zone *zone_svc,

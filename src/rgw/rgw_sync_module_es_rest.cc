@@ -12,6 +12,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 struct es_index_obj_response {
   string bucket;
   rgw_obj_key key;

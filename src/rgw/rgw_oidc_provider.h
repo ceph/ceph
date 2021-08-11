@@ -30,8 +30,8 @@ protected:
   std::string arn;
   std::string creation_date;
   std::string tenant;
-  vector<std::string> client_ids;
-  vector<std::string> thumbprints;
+  std::vector<std::string> client_ids;
+  std::vector<std::string> thumbprints;
 
   int get_tenant_url_from_arn(std::string& tenant, std::string& url);
   virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) = 0;
@@ -57,8 +57,8 @@ public:
 
   RGWOIDCProvider(std::string provider_url,
                     std::string tenant,
-                    vector<std::string> client_ids,
-                    vector<std::string> thumbprints)
+                    std::vector<std::string> client_ids,
+                    std::vector<std::string> thumbprints)
   : provider_url(std::move(provider_url)),
     tenant(std::move(tenant)),
     client_ids(std::move(client_ids)),
@@ -105,8 +105,8 @@ public:
   const std::string& get_provider_url() const { return provider_url; }
   const std::string& get_arn() const { return arn; }
   const std::string& get_create_date() const { return creation_date; }
-  const vector<std::string>& get_client_ids() const { return client_ids;}
-  const vector<std::string>& get_thumbprints() const { return thumbprints; }
+  const std::vector<std::string>& get_client_ids() const { return client_ids;}
+  const std::vector<std::string>& get_thumbprints() const { return thumbprints; }
 
   int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;

@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 RGWSysObjectCtx RGWSI_SysObj::init_obj_ctx()
 {
   return RGWSysObjectCtx(this);

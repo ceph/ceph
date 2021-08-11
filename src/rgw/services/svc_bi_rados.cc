@@ -13,6 +13,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string dir_oid_prefix = ".dir.";
 
 RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_BucketIndex(cct)

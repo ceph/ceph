@@ -18,6 +18,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
   const char *p = s->info.env->get(name);

@@ -23,7 +23,7 @@ struct RGWUploadPartInfo {
   uint32_t num;
   uint64_t size;
   uint64_t accounted_size{0};
-  string etag;
+  std::string etag;
   ceph::real_time modified;
   RGWObjManifest manifest;
   RGWCompressionInfo cs_info;
@@ -58,7 +58,7 @@ struct RGWUploadPartInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWUploadPartInfo*>& o);
+  static void generate_test_instances(std::list<RGWUploadPartInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
@@ -69,19 +69,19 @@ public:
   ~RGWMultiCompleteUpload() override {}
   bool xml_end(const char *el) override;
 
-  std::map<int, string> parts;
+  std::map<int, std::string> parts;
 };
 
 class RGWMultiPart : public XMLObj
 {
-  string etag;
+  std::string etag;
   int num;
 public:
   RGWMultiPart() : num(0) {}
   ~RGWMultiPart() override {}
   bool xml_end(const char *el) override;
 
-  string& get_etag() { return etag; }
+  std::string& get_etag() { return etag; }
   int get_num() { return num; }
 };
 
@@ -107,6 +107,6 @@ public:
   virtual ~RGWMultiXMLParser() override;
 };
 
-extern bool is_v2_upload_id(const string& upload_id);
+extern bool is_v2_upload_id(const std::string& upload_id);
 
 #endif

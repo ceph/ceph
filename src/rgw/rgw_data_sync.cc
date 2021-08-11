@@ -44,6 +44,8 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "data sync: ")
 
+using namespace std;
+
 static string datalog_sync_status_oid_prefix = "datalog.sync-status";
 static string datalog_sync_status_shard_prefix = "datalog.sync-status.shard";
 static string datalog_sync_full_sync_index_prefix = "data.full-sync.index";

@@ -3,6 +3,8 @@
 
 #include "svc_tier_rados.h"
 
+using namespace std;
+
 const std::string MP_META_SUFFIX = ".meta";
 
 MultipartMetaFilter::~MultipartMetaFilter() {}

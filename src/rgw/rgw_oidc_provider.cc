@@ -24,6 +24,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace rgw { namespace sal {
 
 const string RGWOIDCProvider::oidc_url_oid_prefix = "oidc_url.";

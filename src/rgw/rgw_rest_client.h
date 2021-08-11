@@ -15,7 +15,7 @@ protected:
   using unique_lock = std::unique_lock<std::mutex>;
 
   std::mutex out_headers_lock;
-  map<string, string> out_headers;
+  std::map<std::string, std::string> out_headers;
   param_vec_t params;
 
   bufferlist::iterator *send_iter;
@@ -23,11 +23,11 @@ protected:
   size_t max_response; /* we need this as we don't stream out response */
   bufferlist response;
 
-  virtual int handle_header(const string& name, const string& val);
-  void get_params_str(map<string, string>& extra_args, string& dest);
+  virtual int handle_header(const std::string& name, const std::string& val);
+  void get_params_str(std::map<std::string, std::string>& extra_args, std::string& dest);
 
 public:
-  RGWHTTPSimpleRequest(CephContext *_cct, const string& _method, const string& _url,
+  RGWHTTPSimpleRequest(CephContext *_cct, const std::string& _method, const std::string& _url,
                        param_vec_t *_headers, param_vec_t *_params) : RGWHTTPClient(_cct, _method, _url),
                 http_status(0), status(0),
                 send_iter(NULL),
@@ -52,7 +52,7 @@ public:
 
   bufferlist& get_response() { return response; }
 
-  void get_out_headers(map<string, string> *pheaders); /* modifies out_headers */
+  void get_out_headers(std::map<std::string, std::string> *pheaders); /* modifies out_headers */
 
   int get_http_status() { return http_status; }
   int get_status();
@@ -61,7 +61,7 @@ public:
 class RGWRESTSimpleRequest : public RGWHTTPSimpleRequest {
   std::optional<std::string> api_name;
 public:
-  RGWRESTSimpleRequest(CephContext *_cct, const string& _method, const string& _url,
+  RGWRESTSimpleRequest(CephContext *_cct, const std::string& _method, const std::string& _url,
                        param_vec_t *_headers, param_vec_t *_params,
                        std::optional<std::string> _api_name) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params), api_name(_api_name) {}
 
@@ -79,25 +79,25 @@ class RGWRESTGenerateHTTPHeaders : public DoutPrefix {
   CephContext *cct;
   RGWEnv *new_env;
   req_info *new_info;
-  string region;
-  string service;
-  string method;
-  string url;
-  string resource;
+  std::string region;
+  std::string service;
+  std::string method;
+  std::string url;
+  std::string resource;
 
 public:
   RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv *_env, req_info *_info);
-  void init(const string& method, const string& host,
-            const string& resource_prefix, const string& url,
-            const string& resource, const param_vec_t& params,
-            std::optional<string> api_name);
-  void set_extra_headers(const map<string, string>& extra_headers);
-  int set_obj_attrs(const DoutPrefixProvider *dpp, map<string, bufferlist>& rgw_attrs);
-  void set_http_attrs(const map<string, string>& http_attrs);
+  void init(const std::string& method, const std::string& host,
+            const std::string& resource_prefix, const std::string& url,
+            const std::string& resource, const param_vec_t& params,
+            std::optional<std::string> api_name);
+  void set_extra_headers(const std::map<std::string, std::string>& extra_headers);
+  int set_obj_attrs(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& rgw_attrs);
+  void set_http_attrs(const std::map<std::string, std::string>& http_attrs);
   void set_policy(RGWAccessControlPolicy& policy);
   int sign(const DoutPrefixProvider *dpp, RGWAccessKey& key, const bufferlist *opt_content);
 
-  const string& get_url() { return url; }
+  const std::string& get_url() { return url; }
 };
 
 class RGWHTTPStreamRWRequest : public RGWHTTPSimpleRequest {
@@ -122,7 +122,7 @@ private:
 protected:
   bufferlist outbl;
 
-  int handle_header(const string& name, const string& val) override;
+  int handle_header(const std::string& name, const std::string& val) override;
 public:
   int send_data(void *ptr, size_t len, bool *pause) override;
   int receive_data(void *ptr, size_t len, bool *pause) override;
@@ -139,10 +139,10 @@ public:
       }
   };
 
-  RGWHTTPStreamRWRequest(CephContext *_cct, const string& _method, const string& _url,
+  RGWHTTPStreamRWRequest(CephContext *_cct, const std::string& _method, const std::string& _url,
                          param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params) {
   }
-  RGWHTTPStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, ReceiveCB *_cb,
+  RGWHTTPStreamRWRequest(CephContext *_cct, const std::string& _method, const std::string& _url, ReceiveCB *_cb,
                          param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params),
 									cb(_cb) {
   }
@@ -167,11 +167,11 @@ public:
   void finish_write();
 
   int complete_request(optional_yield y,
-                       string *etag = nullptr,
+                       std::string *etag = nullptr,
                        real_time *mtime = nullptr,
                        uint64_t *psize = nullptr,
-                       map<string, string> *pattrs = nullptr,
-                       map<string, string> *pheaders = nullptr);
+                       std::map<std::string, std::string> *pattrs = nullptr,
+                       std::map<std::string, std::string> *pheaders = nullptr);
 };
 
 class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
@@ -181,10 +181,10 @@ class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
   req_info new_info;
   
 protected:
-  std::optional<string> api_name;
+  std::optional<std::string> api_name;
   HostStyle host_style;
 public:
-  RGWRESTStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, RGWHTTPStreamRWRequest::ReceiveCB *_cb,
+  RGWRESTStreamRWRequest(CephContext *_cct, const std::string& _method, const std::string& _url, RGWHTTPStreamRWRequest::ReceiveCB *_cb,
                          param_vec_t *_headers, param_vec_t *_params,
                          std::optional<std::string> _api_name, HostStyle _host_style = PathStyle) :
                          RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params),
@@ -193,41 +193,41 @@ public:
   }
   virtual ~RGWRESTStreamRWRequest() override {}
 
-  int send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = nullptr /* optional input data */);
-  int send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj);
+  int send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, std::map<std::string, std::string>& extra_headers, const std::string& resource, bufferlist *send_data = nullptr /* optional input data */);
+  int send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey& key, std::map<std::string, std::string>& extra_headers, const rgw_obj& obj);
   int send(RGWHTTPManager *mgr);
 
-  int send_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr);
-  int send_request(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
+  int send_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, std::map<std::string, std::string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr);
+  int send_request(const DoutPrefixProvider *dpp, RGWAccessKey *key, std::map<std::string, std::string>& extra_headers, const std::string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
 
   void add_params(param_vec_t *params);
 
 private:
-  int do_send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = nullptr /* optional input data */);
+  int do_send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, std::map<std::string, std::string>& extra_headers, const std::string& resource, bufferlist *send_data = nullptr /* optional input data */);
 };
 
 class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {
 public:
-  RGWRESTStreamReadRequest(CephContext *_cct, const string& _url, ReceiveCB *_cb, param_vec_t *_headers,
+  RGWRESTStreamReadRequest(CephContext *_cct, const std::string& _url, ReceiveCB *_cb, param_vec_t *_headers,
 		param_vec_t *_params, std::optional<std::string> _api_name,
                 HostStyle _host_style = PathStyle) : RGWRESTStreamRWRequest(_cct, "GET", _url, _cb, _headers, _params, _api_name, _host_style) {}
 };
 
 class RGWRESTStreamHeadRequest : public RGWRESTStreamRWRequest {
 public:
-  RGWRESTStreamHeadRequest(CephContext *_cct, const string& _url, ReceiveCB *_cb, param_vec_t *_headers,
+  RGWRESTStreamHeadRequest(CephContext *_cct, const std::string& _url, ReceiveCB *_cb, param_vec_t *_headers,
 		param_vec_t *_params, std::optional<std::string> _api_name) : RGWRESTStreamRWRequest(_cct, "HEAD", _url, _cb, _headers, _params, _api_name) {}
 };
 
 class RGWRESTStreamS3PutObj : public RGWHTTPStreamRWRequest {
-  std::optional<string> api_name;
+  std::optional<std::string> api_name;
   HostStyle host_style;
   RGWGetDataCB *out_cb;
   RGWEnv new_env;
   req_info new_info;
   RGWRESTGenerateHTTPHeaders headers_gen;
 public:
-  RGWRESTStreamS3PutObj(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
+  RGWRESTStreamS3PutObj(CephContext *_cct, const std::string& _method, const std::string& _url, param_vec_t *_headers,
 		param_vec_t *_params, std::optional<std::string> _api_name,
                 HostStyle _host_style) : RGWHTTPStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params),
                 api_name(_api_name), host_style(_host_style),
@@ -235,12 +235,12 @@ public:
   ~RGWRESTStreamS3PutObj() override;
 
   void send_init(rgw::sal::Object* obj);
-  void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, bufferlist>& rgw_attrs);
-  void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, const map<string, string>& http_attrs,
+  void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, std::map<std::string, bufferlist>& rgw_attrs);
+  void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, const std::map<std::string, std::string>& http_attrs,
                   RGWAccessControlPolicy& policy);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key);
 
-  void put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw::sal::Object* obj, map<string, bufferlist>& attrs);
+  void put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw::sal::Object* obj, std::map<std::string, bufferlist>& attrs);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }
 };

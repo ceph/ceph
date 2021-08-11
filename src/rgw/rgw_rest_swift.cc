@@ -39,6 +39,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int RGWListBuckets_ObjStore_SWIFT::get_params(optional_yield y)
 {
   prefix = s->info.args.get("prefix");

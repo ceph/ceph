@@ -39,18 +39,18 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
     std::shared_ptr<RGWBucketSyncPolicyHandler> handler;
   };
 
-  unique_ptr<RGWChainedCacheImpl<bucket_sync_policy_cache_entry> > sync_policy_cache;
+  std::unique_ptr<RGWChainedCacheImpl<bucket_sync_policy_cache_entry> > sync_policy_cache;
 
   std::unique_ptr<RGWSI_Bucket_Sync_SObj_HintIndexManager> hint_index_mgr;
 
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
   struct optional_zone_bucket {
-    optional<rgw_zone_id> zone;
-    optional<rgw_bucket> bucket;
+    std::optional<rgw_zone_id> zone;
+    std::optional<rgw_bucket> bucket;
 
-    optional_zone_bucket(const optional<rgw_zone_id>& _zone,
-                         const optional<rgw_bucket>& _bucket) : zone(_zone), bucket(_bucket) {}
+    optional_zone_bucket(const std::optional<rgw_zone_id>& _zone,
+                         const std::optional<rgw_bucket>& _bucket) : zone(_zone), bucket(_bucket) {}
 
     bool operator<(const optional_zone_bucket& ozb) const {
       if (zone < ozb.zone) {

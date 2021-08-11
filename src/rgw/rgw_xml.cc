@@ -13,6 +13,8 @@
 
 #include "rgw_xml.h"
 
+using namespace std;
+
 XMLObjIter::
 XMLObjIter()
 {

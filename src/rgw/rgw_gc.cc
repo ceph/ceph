@@ -22,6 +22,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 using namespace librados;
 
 static string gc_oid_prefix = "gc";

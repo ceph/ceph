@@ -27,44 +27,44 @@ public:
   RGWSI_Bucket(CephContext *cct) : RGWServiceInstance(cct) {}
   virtual ~RGWSI_Bucket() {}
 
-  static string get_entrypoint_meta_key(const rgw_bucket& bucket);
-  static string get_bi_meta_key(const rgw_bucket& bucket);
+  static std::string get_entrypoint_meta_key(const rgw_bucket& bucket);
+  static std::string get_bi_meta_key(const rgw_bucket& bucket);
 
   virtual RGWSI_Bucket_BE_Handler& get_ep_be_handler() = 0;
   virtual RGWSI_BucketInstance_BE_Handler& get_bi_be_handler() = 0;
 
   virtual int read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                          const string& key,
+                                          const std::string& key,
                                           RGWBucketEntryPoint *entry_point,
                                           RGWObjVersionTracker *objv_tracker,
                                           real_time *pmtime,
-                                          map<string, bufferlist> *pattrs,
+                                          std::map<std::string, bufferlist> *pattrs,
                                           optional_yield y,
                                           const DoutPrefixProvider *dpp,
                                           rgw_cache_entry_info *cache_info = nullptr,
                                           boost::optional<obj_version> refresh_version = boost::none) = 0;
 
   virtual int store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                   const string& key,
+                                   const std::string& key,
                                    RGWBucketEntryPoint& info,
                                    bool exclusive,
                                    real_time mtime,
-                                   map<string, bufferlist> *pattrs,
+                                   std::map<std::string, bufferlist> *pattrs,
                                    RGWObjVersionTracker *objv_tracker,
                                    optional_yield y,
                                    const DoutPrefixProvider *dpp) = 0;
 
   virtual int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                    const string& key,
+                                    const std::string& key,
                                     RGWObjVersionTracker *objv_tracker,
                                     optional_yield y,
                                     const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                const string& key,
+                                const std::string& key,
                                 RGWBucketInfo *info,
                                 real_time *pmtime,
-                                map<string, bufferlist> *pattrs,
+                                std::map<std::string, bufferlist> *pattrs,
                                 optional_yield y,
                                 const DoutPrefixProvider *dpp,
                                 rgw_cache_entry_info *cache_info = nullptr,
@@ -74,24 +74,24 @@ public:
                        const rgw_bucket& bucket,
                        RGWBucketInfo *info,
                        real_time *pmtime,
-                       map<string, bufferlist> *pattrs,
+                       std::map<std::string, bufferlist> *pattrs,
                        boost::optional<obj_version> refresh_version,
                        optional_yield y,
                        const DoutPrefixProvider *dpp) = 0;
 
   virtual int store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                 const string& key,
+                                 const std::string& key,
                                  RGWBucketInfo& info,
                                  std::optional<RGWBucketInfo *> orig_info, /* nullopt: orig_info was not fetched,
                                                                               nullptr: orig_info was not found (new bucket instance */
                                  bool exclusive,
                                  real_time mtime,
-                                 map<string, bufferlist> *pattrs,
+                                 std::map<std::string, bufferlist> *pattrs,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) = 0;
 
   virtual int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                  const string& key,
+                                  const std::string& key,
 				  const RGWBucketInfo& bucket_info,
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y,
@@ -104,7 +104,7 @@ public:
                         const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
-                                 map<string, RGWBucketEnt>& m,
+                                 std::map<std::string, RGWBucketEnt>& m,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) = 0;
 };

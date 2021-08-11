@@ -20,11 +20,11 @@
 
 
 struct rgw_sync_symmetric_group {
-  string id;
+  std::string id;
   std::set<rgw_zone_id> zones;
 
   rgw_sync_symmetric_group() {}
-  rgw_sync_symmetric_group(const string& _id,
+  rgw_sync_symmetric_group(const std::string& _id,
                            const std::set<rgw_zone_id> _zones) : id(_id), zones(_zones) {}
 
 
@@ -74,7 +74,7 @@ struct rgw_sync_bucket_entity {
   std::optional<rgw_zone_id> zone; /* define specific zones */
   std::optional<rgw_bucket> bucket; /* define specific bucket */
 
-  static bool match_str(const string& s1, const string& s2) { /* empty string is wildcard */
+  static bool match_str(const std::string& s1, const std::string& s2) { /* empty std::string is wildcard */
     return (s1.empty() ||
             s2.empty() ||
             s1 == s2);
@@ -114,7 +114,7 @@ struct rgw_sync_bucket_entity {
     return bucket.value_or(rgw_bucket());
   }
 
-  string bucket_key() const;
+  std::string bucket_key() const;
 
   bool match_zone(const rgw_zone_id& z) const {
     if (all_zones) {
@@ -132,7 +132,7 @@ struct rgw_sync_bucket_entity {
     zone = z;
   }
 
-  static bool match_bucket_id(const string& bid1, const string& bid2) {
+  static bool match_bucket_id(const std::string& bid1, const std::string& bid2) {
     return (bid1.empty() || bid2.empty() || (bid1 == bid2));
   }
 
@@ -178,15 +178,15 @@ struct rgw_sync_bucket_entity {
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entity)
 
 struct rgw_sync_pipe_filter_tag {
-  string key;
-  string value;
+  std::string key;
+  std::string value;
 
   rgw_sync_pipe_filter_tag() {}
-  rgw_sync_pipe_filter_tag(const string& s) {
+  rgw_sync_pipe_filter_tag(const std::string& s) {
     from_str(s);
   }
-  rgw_sync_pipe_filter_tag(const string& _key,
-                           const string& _value) : key(_key),
+  rgw_sync_pipe_filter_tag(const std::string& _key,
+                           const std::string& _value) : key(_key),
                                                    value(_value) {}
 
   void encode(bufferlist& bl) const {
@@ -206,7 +206,7 @@ struct rgw_sync_pipe_filter_tag {
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  bool from_str(const string& s);
+  bool from_str(const std::string& s);
 
   bool operator<(const rgw_sync_pipe_filter_tag& t) const {
     if (key < t.key) {
@@ -218,12 +218,12 @@ struct rgw_sync_pipe_filter_tag {
     return (value < t.value);
   }
 
-  bool operator==(const string& s) const;
+  bool operator==(const std::string& s) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_filter_tag)
 
 struct rgw_sync_pipe_filter {
-  std::optional<string> prefix;
+  std::optional<std::string> prefix;
   std::set<rgw_sync_pipe_filter_tag> tags;
 
   void set_prefix(std::optional<std::string> opt_prefix,
@@ -240,9 +240,9 @@ struct rgw_sync_pipe_filter {
   bool is_subset_of(const rgw_sync_pipe_filter& f) const;
 
   bool has_tags() const;
-  bool check_tag(const string& s) const;
-  bool check_tag(const string& k, const string& v) const;
-  bool check_tags(const std::vector<string>& tags) const;
+  bool check_tag(const std::string& s) const;
+  bool check_tag(const std::string& k, const std::string& v) const;
+  bool check_tags(const std::vector<std::string>& tags) const;
   bool check_tags(const RGWObjTags::tag_map_t& tags) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_filter)
@@ -293,7 +293,7 @@ WRITE_CLASS_ENCODER(rgw_sync_pipe_source_params)
 
 struct rgw_sync_pipe_dest_params { 
   std::optional<rgw_sync_pipe_acl_translation> acl_translation;
-  std::optional<string> storage_class;
+  std::optional<std::string> storage_class;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -309,7 +309,7 @@ struct rgw_sync_pipe_dest_params {
     DECODE_FINISH(bl);
   }
 
-  void set_storage_class(const string& sc) {
+  void set_storage_class(const std::string& sc) {
     storage_class = sc;
   }
 
@@ -370,7 +370,7 @@ struct rgw_sync_pipe_params {
 WRITE_CLASS_ENCODER(rgw_sync_pipe_params)
 
 struct rgw_sync_bucket_pipe {
-  string id;
+  std::string id;
   rgw_sync_bucket_entity source;
   rgw_sync_bucket_entity dest;
 
@@ -461,12 +461,12 @@ struct rgw_sync_bucket_entities {
 
   void add_zones(const std::vector<rgw_zone_id>& new_zones);
   void remove_zones(const std::vector<rgw_zone_id>& rm_zones);
-  void set_bucket(std::optional<string> tenant,
-                  std::optional<string> bucket_name,
-                  std::optional<string> bucket_id);
-  void remove_bucket(std::optional<string> tenant,
-                     std::optional<string> bucket_name,
-                     std::optional<string> bucket_id);
+  void set_bucket(std::optional<std::string> tenant,
+                  std::optional<std::string> bucket_name,
+                  std::optional<std::string> bucket_id);
+  void remove_bucket(std::optional<std::string> tenant,
+                     std::optional<std::string> bucket_name,
+                     std::optional<std::string> bucket_id);
 
   bool match_zone(const rgw_zone_id& zone) const {
     if (!zones) {
@@ -485,7 +485,7 @@ struct rgw_sync_bucket_entities {
     return bucket.value_or(rgw_bucket());
   }
 
-  static string bucket_key(std::optional<rgw_bucket> b);
+  static std::string bucket_key(std::optional<rgw_bucket> b);
 
   void set_all_zones(bool state) {
     all_zones = state;
@@ -497,7 +497,7 @@ struct rgw_sync_bucket_entities {
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entities)
 
 struct rgw_sync_bucket_pipes {
-  string id;
+  std::string id;
   rgw_sync_bucket_entities source;
   rgw_sync_bucket_entities dest;
 
@@ -578,8 +578,8 @@ struct rgw_sync_data_flow_group {
     return (symmetrical.empty() && directional.empty());
   }
 
-  bool find_or_create_symmetrical(const string& flow_id, rgw_sync_symmetric_group **flow_group);
-  void remove_symmetrical(const string& flow_id, std::optional<std::vector<rgw_zone_id> > zones);
+  bool find_or_create_symmetrical(const std::string& flow_id, rgw_sync_symmetric_group **flow_group);
+  void remove_symmetrical(const std::string& flow_id, std::optional<std::vector<rgw_zone_id> > zones);
   bool find_or_create_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone, rgw_sync_directional_rule **flow_group);
   void remove_directional(const rgw_zone_id& source_zone, const rgw_zone_id& dest_zone);
 
@@ -589,7 +589,7 @@ WRITE_CLASS_ENCODER(rgw_sync_data_flow_group)
 
 
 struct rgw_sync_policy_group {
-  string id;
+  std::string id;
 
   rgw_sync_data_flow_group data_flow; /* override data flow, howver, will not be able to
                                                         add new flows that don't exist at higher level */
@@ -626,7 +626,7 @@ struct rgw_sync_policy_group {
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  bool set_status(const string& s) {
+  bool set_status(const std::string& s) {
     if (s == "forbidden") {
       status = rgw_sync_policy_group::Status::FORBIDDEN;
     } else if (s == "allowed") {
@@ -641,8 +641,8 @@ struct rgw_sync_policy_group {
     return true;
   }
 
-  bool find_pipe(const string& pipe_id, bool create, rgw_sync_bucket_pipes **pipe);
-  void remove_pipe(const string& pipe_id);
+  bool find_pipe(const std::string& pipe_id, bool create, rgw_sync_bucket_pipes **pipe);
+  void remove_pipe(const std::string& pipe_id);
 
   void get_potential_related_buckets(const rgw_bucket& bucket,
                                      std::set<rgw_bucket> *sources,
@@ -652,7 +652,7 @@ struct rgw_sync_policy_group {
 WRITE_CLASS_ENCODER(rgw_sync_policy_group)
 
 struct rgw_sync_policy_info {
-  std::map<string, rgw_sync_policy_group> groups;
+  std::map<std::string, rgw_sync_policy_group> groups;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

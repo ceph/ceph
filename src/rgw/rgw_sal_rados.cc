@@ -45,6 +45,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 
 namespace rgw::sal {

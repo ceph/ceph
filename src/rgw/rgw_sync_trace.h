@@ -52,7 +52,7 @@ class RGWSyncTraceNode final {
 
   uint64_t handle;
 
-  boost::circular_buffer<string> history;
+  boost::circular_buffer<std::string> history;
 
   // private constructor, create with RGWSyncTraceManager::add_node()
   RGWSyncTraceNode(CephContext *_cct, uint64_t _handle,
@@ -60,11 +60,11 @@ class RGWSyncTraceNode final {
                    const std::string& _type, const std::string& _id);
 
  public:
-  void set_resource_name(const string& s) {
+  void set_resource_name(const std::string& s) {
     resource_name = s;
   }
 
-  const string& get_resource_name() {
+  const std::string& get_resource_name() {
     return resource_name;
   }
 
@@ -83,7 +83,7 @@ class RGWSyncTraceNode final {
     return prefix + " " + status;
   }
 
-  const string& get_prefix() {
+  const std::string& get_prefix() {
     return prefix;
   }
 
@@ -92,11 +92,11 @@ class RGWSyncTraceNode final {
     return os;            
   }
 
-  boost::circular_buffer<string>& get_history() {
+  boost::circular_buffer<std::string>& get_history() {
     return history;
   }
 
-  bool match(const string& search_term, bool search_history);
+  bool match(const std::string& search_term, bool search_history);
 };
 
 class RGWSyncTraceManager : public AdminSocketHook {
@@ -113,7 +113,7 @@ class RGWSyncTraceManager : public AdminSocketHook {
 
   std::atomic<uint64_t> count = { 0 };
 
-  std::list<std::array<string, 3> > admin_commands;
+  std::list<std::array<std::string, 3> > admin_commands;
 
   uint64_t alloc_handle() {
     return ++count;
@@ -137,7 +137,7 @@ public:
 	   Formatter *f,
 	   std::ostream& ss,
 	   bufferlist& out) override;
-  string get_active_names();
+  std::string get_active_names();
 };
 
 

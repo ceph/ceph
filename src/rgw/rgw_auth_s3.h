@@ -612,7 +612,7 @@ get_v4_canonical_headers(const req_info& info,
                          bool force_boto2_compat);
 
 std::string gen_v4_canonical_headers(const req_info& info,
-                                     const map<string, string>& extra_headers,
+                                     const std::map<std::string, std::string>& extra_headers,
                                      string *signed_hdrs);
 
 extern sha256_digest_t
