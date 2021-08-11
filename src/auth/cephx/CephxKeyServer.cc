@@ -58,7 +58,7 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
   // with a bogus, possibly way into the future, validity
   ttl = service_id == CEPH_ENTITY_TYPE_AUTH ?
       cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
-  ttl = min(ttl, static_cast<double>(
+  ttl = std::min(ttl, static_cast<double>(
 		     secrets.secrets.rbegin()->second.expiration - now));
 
   ldout(cct, 30) << __func__ << " service "
