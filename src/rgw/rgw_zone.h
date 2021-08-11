@@ -151,6 +151,7 @@ public:
   virtual const std::string get_default_oid(bool old_format = false) const = 0;
   virtual const std::string& get_names_oid_prefix() const = 0;
   virtual const std::string& get_info_oid_prefix(bool old_format = false) const = 0;
+  virtual std::string get_predefined_id(CephContext *cct) const = 0;
   virtual const std::string& get_predefined_name(CephContext *cct) const = 0;
 
   void dump(Formatter *f) const;
@@ -399,6 +400,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const std::string get_default_oid(bool old_format = false) const override;
   const std::string& get_names_oid_prefix() const override;
   const std::string& get_info_oid_prefix(bool old_format = false) const override;
+  std::string get_predefined_id(CephContext *cct) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
   int init(const DoutPrefixProvider *dpp, 
@@ -831,6 +833,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   const std::string get_default_oid(bool old_region_format = false) const override;
   const std::string& get_info_oid_prefix(bool old_region_format = false) const override;
   const std::string& get_names_oid_prefix() const override;
+  std::string get_predefined_id(CephContext *cct) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
   void dump(Formatter *f) const;
@@ -863,6 +866,13 @@ struct RGWPeriodMap
   }
 
   uint32_t get_zone_short_id(const std::string& zone_id) const;
+
+  bool find_zone_by_id(const rgw_zone_id& zone_id,
+                       RGWZoneGroup *zonegroup,
+                       RGWZone *zone) const;
+  bool find_zone_by_name(const string& zone_id,
+                       RGWZoneGroup *zonegroup,
+                       RGWZone *zone) const;
 };
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
@@ -977,6 +987,7 @@ public:
   const std::string get_default_oid(bool old_format = false) const override;
   const std::string& get_names_oid_prefix() const override;
   const std::string& get_info_oid_prefix(bool old_format = false) const override;
+  std::string get_predefined_id(CephContext *cct) const override;
   const std::string& get_predefined_name(CephContext *cct) const override;
 
   using RGWSystemMetaObj::read_id; // expose as public for radosgw-admin
@@ -1000,6 +1011,13 @@ public:
   int notify_zone(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y);
   /// notify the zone of a new period
   int notify_new_period(const DoutPrefixProvider *dpp, const RGWPeriod& period, optional_yield y);
+
+  int find_zone(const DoutPrefixProvider *dpp,
+                const rgw_zone_id& zid,
+                RGWPeriod *pperiod,
+                RGWZoneGroup *pzonegroup,
+                bool *pfound,
+                optional_yield y) const;
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
@@ -1150,6 +1168,11 @@ public:
     }
     return false;
   }
+
+  bool find_zone(const DoutPrefixProvider *dpp,
+                const rgw_zone_id& zid,
+                RGWZoneGroup *pzonegroup,
+                optional_yield y) const;
 
   int get_latest_epoch(const DoutPrefixProvider *dpp, epoch_t& epoch, optional_yield y);
   int set_latest_epoch(const DoutPrefixProvider *dpp, optional_yield y,
