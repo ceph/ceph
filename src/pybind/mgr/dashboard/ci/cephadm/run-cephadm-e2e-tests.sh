@@ -13,11 +13,9 @@ get_vm_ip () {
     echo -n $ip
 }
 
-if [[ -z "${CYPRESS_BASE_URL}" ]]; then
-    CEPH_NODE_00_IP="$(get_vm_ip ceph-node-00)"
-    if [[ -z "${CEPH_NODE_00_IP}" ]]; then
-        . "$(dirname $0)"/start-cluster.sh
-    fi
+if [[ -n "${JENKINS_HOME}" || (-z "${CYPRESS_BASE_URL}" && -z "$(get_vm_ip ceph-node-00)") ]]; then
+    . "$(dirname $0)"/start-cluster.sh
+
     CYPRESS_BASE_URL="https://$(get_vm_ip ceph-node-00):${DASHBOARD_PORT}"
 fi
 
@@ -27,11 +25,13 @@ cypress_run () {
     local specs="$1"
     local timeout="$2"
     local override_config="ignoreTestFiles=*.po.ts,retries=0,testFiles=${specs}"
-
     if [[ -n "$timeout" ]]; then
         override_config="${override_config},defaultCommandTimeout=${timeout}"
     fi
-    npx cypress run ${CYPRESS_ARGS} --browser chrome --headless --config "$override_config"
+
+    rm -f cypress/reports/results-*.xml || true
+
+    npx --no-install cypress run ${CYPRESS_ARGS} --browser chrome --headless --config "$override_config"
 }
 
 : ${CEPH_DEV_FOLDER:=${PWD}}
