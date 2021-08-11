@@ -115,7 +115,7 @@ seastar::future<> run(const bpo::variables_map& config) {
     ceph_assert(erase_ratio <= 1);
 
     using crimson::common::sharded_conf;
-    sharded_conf().start(EntityName{}, string_view{"ceph"}).get();
+    sharded_conf().start(EntityName{}, std::string_view{"ceph"}).get();
     seastar::engine().at_exit([] {
       return sharded_conf().stop();
     });

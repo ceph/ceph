@@ -22,6 +22,9 @@
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
 
+using namespace std;
+using namespace std::chrono_literals;
+
 namespace bpo = boost::program_options;
 
 namespace {
