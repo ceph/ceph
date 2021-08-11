@@ -28,6 +28,7 @@ using std::map;
 using std::ostream;
 using std::pair;
 using std::set;
+using std::string;
 using std::stringstream;
 using std::vector;
 

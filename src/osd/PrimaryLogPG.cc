@@ -83,10 +83,12 @@
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
+using std::less;
 using std::list;
 using std::ostream;
 using std::pair;
 using std::make_pair;
+using std::make_unique;
 using std::map;
 using std::ostringstream;
 using std::set;
@@ -3726,7 +3728,7 @@ ceph_tid_t PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soi
     cls_cas_chunk_create_or_get_ref_op get_call;
     get_call.source = src_soid.get_head();
     ceph_assert(chunk);
-    get_call.data = move(*chunk);
+    get_call.data = std::move(*chunk);
     ::encode(get_call, in);
     obj_op.call("cas", "chunk_create_or_get_ref", in);
   } else {
@@ -10493,7 +10495,7 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
     }
     C_SetDedupChunks *fin = new C_SetDedupChunks(this, soid, get_last_peering_reset(), p.first);
     ceph_tid_t tid = refcount_manifest(soid, target, refcount_t::CREATE_OR_GET_REF, 
-			    fin, move(chunks[p.first]));
+			    fin, std::move(chunks[p.first]));
     mop->chunks[target] = make_pair(p.first, p.second.length());
     mop->num_chunks++;
     mop->tids[p.first] = tid;
@@ -10560,7 +10562,7 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi,
     bufferlist chunk;
     chunk.substr_of(bl, p.first, p.second);
     hobject_t target = get_fpoid_from_chunk(oi.soid, chunk);
-    chunks[p.first] = move(chunk);
+    chunks[p.first] = std::move(chunk);
     chunk_map[p.first] = chunk_info_t(0, p.second, target);
     total_length += p.second;
   }

@@ -278,7 +278,7 @@ public:
     OpRequestRef op;
     std::map<uint64_t, int> results;
     std::map<uint64_t, ceph_tid_t> tids; 
-    std::map<hobject_t, pair<uint64_t, uint64_t>> chunks;
+    std::map<hobject_t, std::pair<uint64_t, uint64_t>> chunks;
     uint64_t num_chunks = 0;
     object_manifest_t new_manifest;
     
@@ -1368,7 +1368,7 @@ protected:
 
   // -- cls_gather --
   std::map<hobject_t, CLSGatherOp> cls_gather_ops;
-  void cancel_cls_gather(map<hobject_t,CLSGatherOp>::iterator iter, bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_cls_gather(std::map<hobject_t,CLSGatherOp>::iterator iter, bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_cls_gather_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   // -- scrub --
@@ -1442,7 +1442,7 @@ protected:
   void process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, int r, uint64_t offset);
   void finish_promote_manifest(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_and_requeue_proxy_ops(hobject_t oid);
-  void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
+  void cancel_manifest_ops(bool requeue, std::vector<ceph_tid_t> *tids);
   ceph_tid_t refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
 			      Context *cb, std::optional<bufferlist> chunk);
   void dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx);

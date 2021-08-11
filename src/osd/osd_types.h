@@ -1517,12 +1517,12 @@ public:
     return peering_crush_bucket_count != 0;
   }
 
-  bool stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
+  bool stretch_set_can_peer(const std::set<int>& want, const OSDMap& osdmap,
 			    std::ostream *out) const;
-  bool stretch_set_can_peer(const vector<int>& want, const OSDMap& osdmap,
+  bool stretch_set_can_peer(const std::vector<int>& want, const OSDMap& osdmap,
 			    std::ostream *out) const {
     if (!is_stretch_pool()) return true;
-    set<int> swant;
+    std::set<int> swant;
     for (auto i : want) swant.insert(i);
     return stretch_set_can_peer(swant, osdmap, out);
   }
