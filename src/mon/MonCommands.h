@@ -372,7 +372,8 @@ COMMAND("fs new "
 	"name=data,type=CephString "
 	"name=force,type=CephBool,req=false "
 	"name=allow_dangerous_metadata_overlay,type=CephBool,req=false "
-	"name=fscid,type=CephInt,range=0,req=false",
+	"name=fscid,type=CephInt,range=0,req=false "
+	"name=recover,type=CephBool,req=false",
 	"make new filesystem using named pools <metadata> and <data>",
 	"fs", "rw")
 COMMAND("fs fail "
