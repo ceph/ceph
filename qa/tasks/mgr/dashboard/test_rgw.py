@@ -70,20 +70,11 @@ class RgwApiCredentialsTest(RgwTestCase):
 
     AUTH_ROLES = ['rgw-manager']
 
-    def setUp(self):
-        super(RgwApiCredentialsTest, self).setUp()
-        # Restart the Dashboard module to ensure that the connection to the
-        # RGW Admin Ops API is re-established with the new credentials.
-        self.logout()
-        self._ceph_cmd(['mgr', 'module', 'disable', 'dashboard'])
-        self._ceph_cmd(['mgr', 'module', 'enable', 'dashboard', '--force'])
-        super(RgwApiCredentialsTest, self).setUp()
-
     def test_invalid_credentials(self):
         self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'invalid')
         self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'invalid')
         resp = self._get('/api/rgw/user')
-        self.assertStatus(500)
+        self.assertStatus(404)
         self.assertIn('detail', resp)
         self.assertIn('component', resp)
         self.assertIn('Error connecting to Object Gateway', resp['detail'])
