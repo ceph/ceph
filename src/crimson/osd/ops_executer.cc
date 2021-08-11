@@ -442,6 +442,24 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
   });
 }
 
+// Defined here because there is a circular dependency between OpsExecuter and PG
+template <class Func>
+auto OpsExecuter::do_const_op(Func&& f) {
+  // TODO: pass backend as read-only
+  return std::forward<Func>(f)(pg->get_backend(), std::as_const(obc->obs));
+}
+
+// Defined here because there is a circular dependency between OpsExecuter and PG
+template <class Func>
+auto OpsExecuter::do_write_op(Func&& f, bool um) {
+  ++num_write;
+  if (!osd_op_params) {
+    osd_op_params.emplace();
+  }
+  user_modify = um;
+  return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
+}
+
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
