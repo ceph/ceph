@@ -28,7 +28,7 @@ struct Server {
     msgr->set_require_authorizer(false);
   }
   DummyAuthClientServer dummy_auth;
-  unique_ptr<Messenger> msgr;
+  std::unique_ptr<Messenger> msgr;
   struct ServerDispatcher : Dispatcher {
     unsigned msg_len = 0;
     bufferlist msg_data;
