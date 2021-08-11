@@ -6,6 +6,7 @@
 #include "rgw/rgw_sal_rados.h"
 #include "rgw/rgw_lua_request.h"
 
+using namespace std;
 using namespace rgw;
 using boost::container::flat_set;
 using rgw::auth::Identity;

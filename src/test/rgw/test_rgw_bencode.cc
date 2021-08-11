@@ -4,6 +4,8 @@
 
 #include "rgw/rgw_torrent.h"
 
+using namespace std;
+
 TEST(Bencode, String)
 {
   TorrentBencode decode;
