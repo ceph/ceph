@@ -2149,6 +2149,10 @@ private:
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
 
+  // smr-only
+  uint64_t zone_size = 0;              ///< number of SMR zones 
+  uint64_t first_sequential_zone = 0;  ///< first SMR zone that is sequential-only
+
   enum {
     // Please preserve the order since it's DB persistent
     OMAP_BULK = 0,
@@ -2419,7 +2423,6 @@ private:
 
 #ifdef HAVE_LIBZBD
   // Functions related to zoned storage.
-  uint64_t _zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size);
   void _zoned_update_cleaning_metadata(TransContext *txc);
   std::string _zoned_key(uint64_t offset, const ghobject_t *oid);
 #endif

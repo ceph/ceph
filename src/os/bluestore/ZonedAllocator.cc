@@ -21,17 +21,16 @@
 ZonedAllocator::ZonedAllocator(CephContext* cct,
 			       int64_t size,
 			       int64_t blk_size,
+			       int64_t _zone_size,
+			       int64_t _first_sequential_zone,
 			       std::string_view name)
-    : Allocator(name, size, blk_size & 0x00000000ffffffff),
+    : Allocator(name, size, blk_size),
       cct(cct),
       num_free(0),
       size(size),
-      // To avoid interface changes, we piggyback zone size and the first
-      // sequential zone number onto the first 32 bits of 64-bit |blk_size|.
-      // The last 32 bits of |blk_size| is holding the actual block size.
-      block_size((blk_size & 0x00000000ffffffff)),
-      zone_size(((blk_size & 0x0000ffff00000000) >> 32) * 1024 * 1024),
-      first_seq_zone_num((blk_size >> 48) & 0xffff),
+      block_size(blk_size),
+      zone_size(_zone_size),
+      first_seq_zone_num(_first_sequential_zone),
       starting_zone_num(first_seq_zone_num),
       num_zones(size / zone_size),
       num_zones_to_clean(0) {
