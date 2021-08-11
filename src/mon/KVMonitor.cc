@@ -10,6 +10,12 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
 
+using std::ostream;
+using std::ostringstream;
+using std::set;
+using std::string;
+using std::stringstream;
+
 static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
                         const KVMonitor *hmon) {
   return *_dout << "mon." << mon.name << "@" << mon.rank

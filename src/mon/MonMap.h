@@ -162,8 +162,8 @@ class MonMap {
   election_strategy strategy = CLASSIC;
   std::set<std::string> disallowed_leaders; // can't be leader under CONNECTIVITY/DISALLOW
   bool stretch_mode_enabled = false;
-  string tiebreaker_mon;
-  set<string> stretch_marked_down_mons; // can't be leader until fully recovered
+  std::string tiebreaker_mon;
+  std::set<std::string> stretch_marked_down_mons; // can't be leader until fully recovered
 
 public:
   void calc_legacy_ranks();

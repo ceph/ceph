@@ -42,10 +42,10 @@ class Elector : public ElectionOwner, RankProvider {
   ElectionLogic logic;
   // connectivity validation and scoring
   ConnectionTracker peer_tracker;
-  map<int, utime_t> peer_acked_ping; // rank -> last ping stamp they acked
-  map<int, utime_t> peer_sent_ping; // rank -> last ping stamp we sent
-  set<int> live_pinging; // ranks which we are currently pinging
-  set<int> dead_pinging; // ranks which didn't answer (degrading scores)
+  std::map<int, utime_t> peer_acked_ping; // rank -> last ping stamp they acked
+  std::map<int, utime_t> peer_sent_ping; // rank -> last ping stamp we sent
+  std::set<int> live_pinging; // ranks which we are currently pinging
+  std::set<int> dead_pinging; // ranks which didn't answer (degrading scores)
   double ping_timeout; // the timeout after which we consider a ping to be dead
   int PING_DIVISOR = 2;  // we time out pings
 
@@ -242,8 +242,8 @@ class Elector : public ElectionOwner, RankProvider {
   /* Retrieve monmap->size() */
   unsigned paxos_size() const;
   /* Right now we don't disallow anybody */
-  set<int> disallowed_leaders;
-  const set<int>& get_disallowed_leaders() const { return disallowed_leaders; }
+  std::set<int> disallowed_leaders;
+  const std::set<int>& get_disallowed_leaders() const { return disallowed_leaders; }
   /**
    * Reset the expire_event timer so we can limit the amount of time we 
    * will be electing. Clean up our peer_info.
@@ -383,7 +383,7 @@ class Elector : public ElectionOwner, RankProvider {
    * @returns false if the set is unchanged,
    *   true if the set changed
    */
-  bool set_disallowed_leaders(const set<int>& dl) {
+  bool set_disallowed_leaders(const std::set<int>& dl) {
     if (dl == disallowed_leaders) return false;
     disallowed_leaders = dl;
     return true;

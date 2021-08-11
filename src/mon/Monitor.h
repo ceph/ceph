@@ -251,16 +251,16 @@ private:
   bool stretch_mode_engaged{false};
   bool degraded_stretch_mode{false};
   bool recovering_stretch_mode{false};
-  string stretch_bucket_divider;
-  map<string, set<string>> dead_mon_buckets; // bucket->mon ranks, locations with no live mons
-  set<string> up_mon_buckets; // locations with a live mon
+  std::string stretch_bucket_divider;
+  std::map<std::string, std::set<std::string>> dead_mon_buckets; // bucket->mon ranks, locations with no live mons
+  std::set<std::string> up_mon_buckets; // locations with a live mon
   void do_stretch_mode_election_work();
 
   bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
   void disconnect_disallowed_stretch_sessions();
   void set_elector_disallowed_leaders(bool allow_election);
 
-  map <string,string> crush_loc;
+  std::map<std::string,std::string> crush_loc;
   bool need_set_crush_loc{false};
 public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
@@ -281,15 +281,15 @@ public:
    */
   void try_engage_stretch_mode();
   void maybe_go_degraded_stretch_mode();
-  void trigger_degraded_stretch_mode(const set<string>& dead_mons,
-				     const set<int>& dead_buckets);
+  void trigger_degraded_stretch_mode(const std::set<std::string>& dead_mons,
+				     const std::set<int>& dead_buckets);
   void set_degraded_stretch_mode();
   void go_recovery_stretch_mode();
   void set_recovery_stretch_mode();
   void trigger_healthy_stretch_mode();
   void set_healthy_stretch_mode();
   void enable_stretch_mode();
-  void set_mon_crush_location(const string& loc);
+  void set_mon_crush_location(const std::string& loc);
 
   
 private:
@@ -894,7 +894,7 @@ public:
         }
         cmdmap_t cmdmap;
         std::ostringstream ds;
-        string prefix;
+        std::string prefix;
         cmdmap_from_json(m->cmd, &cmdmap, ds);
         cmd_getval(cmdmap, "prefix", prefix);
         if (prefix != "config set" && prefix != "config-key set")
@@ -995,8 +995,8 @@ private:
   void count_metadata(const std::string& field, ceph::Formatter *f);
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
   // get_all_versions() gathers version information from daemons for health check
-  void get_all_versions(std::map<string, std::list<std::string>> &versions);
-  void get_versions(std::map<string, std::list<std::string>> &versions);
+  void get_all_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_versions(std::map<std::string, std::list<std::string>> &versions);
 
   // features
   static CompatSet get_initial_supported_features();

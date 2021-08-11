@@ -4,6 +4,7 @@
 #include "MonMap.h"
 
 #include <algorithm>
+#include <sstream>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -29,6 +30,7 @@
 using std::list;
 using std::map;
 using std::ostream;
+using std::ostringstream;
 using std::set;
 using std::string;
 using std::vector;
