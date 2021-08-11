@@ -16,9 +16,8 @@
 
 #include "test_cxx.h"
 
+using namespace std;
 using namespace librados;
-using std::pair;
-using std::ostringstream;
 
 class AioTestDataPP
 {

@@ -15,6 +15,8 @@
 #include <gtest/gtest.h>
 #include "osd/PGTransaction.h"
 
+using namespace std;
+
 TEST(pgtransaction, simple)
 {
   hobject_t h;

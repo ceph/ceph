@@ -48,6 +48,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "test-mon-msg "
 
+using namespace std;
+
 class MonClientHelper : public Dispatcher
 {
 protected:

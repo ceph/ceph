@@ -26,6 +26,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace {
   librgw_t rgw = nullptr;
   string uid("testuser");

@@ -12,6 +12,7 @@
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "tools/immutable_object_cache/CacheServer.h"
 
+using namespace std;
 using namespace ceph::immutable_obj_cache;
 
 class TestMultiSession : public ::testing::Test {

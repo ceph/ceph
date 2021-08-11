@@ -7,6 +7,8 @@
 #include "cls/lua/cls_lua_client.h"
 #include "cls/lua/cls_lua.h"
 
+using namespace std;
+
 /*
  * JSON script to test JSON I/O protocol with cls_lua
  */

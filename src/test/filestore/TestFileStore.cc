@@ -19,6 +19,8 @@
 #include "os/filestore/FileStore.h"
 #include <gtest/gtest.h>
 
+using namespace std;
+
 class TestFileStore {
 public:
   static void create_backend(FileStore &fs, unsigned long f_type) {

@@ -14,6 +14,7 @@
 #include "gtest/gtest.h"
 #include "test/unit.cc"
 
+using namespace std;
 using namespace librados;
 
 TEST(LibRadosService, RegisterEarly) {

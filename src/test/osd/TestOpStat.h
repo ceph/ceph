@@ -23,8 +23,8 @@ public:
 
   class TypeStatus {
   public:
-    map<TestOp*,uint64_t> inflight;
-    multiset<uint64_t> latencies;
+    std::map<TestOp*,uint64_t> inflight;
+    std::multiset<uint64_t> latencies;
     void begin(TestOp *in)
     {
       ceph_assert(!inflight.count(in));
@@ -39,9 +39,9 @@ public:
       inflight.erase(in);
     }
 
-    void export_latencies(map<double,uint64_t> &in) const;
+    void export_latencies(std::map<double,uint64_t> &in) const;
   };
-  map<string,TypeStatus> stats;
+  std::map<std::string,TypeStatus> stats;
 
   void begin(TestOp *in);
   void end(TestOp *in);

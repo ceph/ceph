@@ -27,6 +27,8 @@
 #include "include/stringify.h"
 #include <gtest/gtest.h>
 
+using namespace std;
+
 class KVTest : public ::testing::TestWithParam<const char*> {
 public:
   boost::scoped_ptr<KeyValueDB> db;

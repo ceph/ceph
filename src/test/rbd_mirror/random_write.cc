@@ -67,6 +67,7 @@ struct rbd_bencher {
   }
 
   void wait_for(int max) {
+    using namespace std::chrono_literals;
     std::unique_lock l{lock};
     while (in_flight > max) {
       cond.wait_for(l, 200ms);

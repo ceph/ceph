@@ -7,6 +7,8 @@
 #define MAX_CEPH_FILES	1000
 #define DIRNAME		"ino_release_cb"
 
+using namespace std;
+
 static std::atomic<bool> cb_done = false;
 
 static void cb(void *hdl, vinodeno_t vino)

@@ -16,6 +16,7 @@
 
 #include "include/stringify.h"
 
+using namespace std;
 
 namespace {
   class CheckTextTable : public TextTable {

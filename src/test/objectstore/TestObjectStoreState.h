@@ -31,7 +31,7 @@ public:
     coll_t m_cid;
     ghobject_t m_meta_obj;
     ObjectStore::CollectionHandle m_ch;
-    map<int, hobject_t*> m_objects;
+    std::map<int, hobject_t*> m_objects;
     int m_next_object_id;
 
     coll_entry_t(spg_t pgid, ObjectStore::CollectionHandle& ch,
@@ -62,8 +62,8 @@ public:
 
  protected:
   boost::shared_ptr<ObjectStore> m_store;
-  map<coll_t, coll_entry_t*> m_collections;
-  vector<coll_t> m_collections_ids;
+  std::map<coll_t, coll_entry_t*> m_collections;
+  std::vector<coll_t> m_collections_ids;
   int m_next_coll_nr;
   int m_num_objs_per_coll;
   int m_num_objects;

@@ -30,6 +30,9 @@
 
 #include "gtest/gtest.h"
 
+using namespace std::literals;
+using namespace std::string_literals;
+
 namespace R = librados;
 namespace cb = ceph::buffer;
 namespace fifo = rados::cls::fifo;

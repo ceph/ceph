@@ -31,7 +31,7 @@ struct o_bench_data {
   int started_ops;
   int completed_ops;
   std::map<int,int> freq_map;
-  pair<int,int> mode;
+  std::pair<int,int> mode;
   o_bench_data()
   : avg_latency(0.0), min_latency(DBL_MAX), max_latency(0.0),
     total_latency(0.0),
@@ -49,7 +49,7 @@ typedef int (OmapBench::*test_t)(omap_generator_t omap_gen);
 
 class Writer{
 protected:
-  string oid;
+  std::string oid;
   utime_t begin_time;
   utime_t end_time;
   std::map<std::string,bufferlist> omap;
@@ -61,7 +61,7 @@ public:
   virtual void start_time();
   virtual void stop_time();
   virtual double get_time();
-  virtual string get_oid();
+  virtual std::string get_oid();
   virtual std::map<std::string,bufferlist> & get_omap();
 };
 
@@ -94,9 +94,9 @@ protected:
   int busythreads_count;
   librados::callback_t comp;
 
-  string pool_name;
-  string rados_id;
-  string prefix;
+  std::string pool_name;
+  std::string rados_id;
+  std::string prefix;
   int threads;
   int objects;
   int entries_per_omap;
@@ -137,7 +137,7 @@ public:
   /**
    * Generates a random string len characters long
    */
-  static string random_string(int len);
+  static std::string random_string(int len);
 
   /*
    * runs the test specified by test using the omap generator specified by

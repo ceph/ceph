@@ -28,7 +28,7 @@
 #include <boost/lexical_cast.hpp>
 
 
-using std::string;
+using namespace std;
 
 TEST(DaemonConfig, SimpleSet) {
   int ret;

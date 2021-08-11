@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 #include "include/ceph_features.h"
 
+using namespace std;
 
 TEST(features, release_features)
 {

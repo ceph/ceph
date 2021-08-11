@@ -21,6 +21,8 @@
 
 #include "admin_socket_output.h"
 
+using namespace std;
+
 void AdminSocketOutput::add_target(const std::string& target) {
   if (target == "all") {
     add_target("osd");

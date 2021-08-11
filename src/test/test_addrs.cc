@@ -19,6 +19,8 @@
 
 #include <sstream>
 
+using namespace std;
+
 // input, parsed+printed addr output, leftover
 // if the parse fails, output + leftover should both be blank.
 const char *addr_checks[][3] = {
