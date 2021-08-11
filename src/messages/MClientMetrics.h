@@ -28,7 +28,7 @@ public:
     return "client_metrics";
   }
 
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "client_metrics ";
     for (auto &i : updates) {
       i.print(&out);

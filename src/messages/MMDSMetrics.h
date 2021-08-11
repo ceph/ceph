@@ -29,7 +29,7 @@ public:
     return "mds_metrics";
   }
 
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "mds_metrics from rank=" << metrics_message.rank << " carrying "
         << metrics_message.client_metrics_map.size() << " metric updates";
   }

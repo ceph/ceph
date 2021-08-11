@@ -31,7 +31,7 @@ public:
    * location. Generally the monitor will force an update if it's given a
    * location from the CLI on boot-up, and then never force again (so that it
    * can be moved/updated via the ceph tool from elsewhere). */
-  map<string,string> crush_loc;
+  std::map<std::string,std::string> crush_loc;
   bool force_loc{false};
 
   MMonJoin() : PaxosServiceMessage{MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION} {}
@@ -39,7 +39,8 @@ public:
     : PaxosServiceMessage{MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), name(n), addrs(av)
   { }
-  MMonJoin(uuid_d &f, std::string n, const entity_addrvec_t& av, const map<string,string>& cloc, bool force)
+  MMonJoin(uuid_d &f, std::string n, const entity_addrvec_t& av,
+	   const std::map<std::string,std::string>& cloc, bool force)
     : PaxosServiceMessage{MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), name(n), addrs(av), crush_loc(cloc), force_loc(force)
   { }

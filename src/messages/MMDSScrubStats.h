@@ -23,7 +23,7 @@ class MMDSScrubStats : public MMDSOp {
 
 public:
   std::string_view get_type_name() const override { return "mds_scrub_stats"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mds_scrub_stats(e" << epoch;
     if (update_scrubbing)
       o << " [" << scrubbing_tags << "]";
