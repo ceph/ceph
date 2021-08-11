@@ -169,7 +169,7 @@ rollback:
 }
 
 template <typename I>
-int Namespace<I>::list(IoCtx& io_ctx, vector<string> *names)
+int Namespace<I>::list(IoCtx& io_ctx, std::vector<std::string> *names)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 5) << dendl;

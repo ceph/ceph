@@ -56,10 +56,10 @@ QosImageDispatch<I>::QosImageDispatch(I* image_ctx)
   SafeTimer *timer;
   ceph::mutex *timer_lock;
   ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
-  for (auto flag : throttle_flags) {
-    m_throttles.push_back(make_pair(
-      flag.first,
-      new TokenBucketThrottle(cct, flag.second, 0, 0, timer, timer_lock)));
+  for (auto [flag, name] : throttle_flags) {
+    m_throttles.emplace_back(
+      flag,
+      new TokenBucketThrottle(cct, name, 0, 0, timer, timer_lock));
   }
 }
 

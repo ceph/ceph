@@ -205,7 +205,7 @@ void WriteLogOperation::init(bool has_data, std::vector<WriteBufferAllocation>::
 }
 
 std::ostream &WriteLogOperation::format(std::ostream &os) const {
-  string op_name = is_writesame ? "(Write Same) " : "(Write) ";
+  std::string op_name = is_writesame ? "(Write Same) " : "(Write) ";
   os << op_name;
   GenericWriteLogOperation::format(os);
   os << ", ";

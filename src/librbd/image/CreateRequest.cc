@@ -432,7 +432,7 @@ void CreateRequest<I>::create_image() {
   ldout(m_cct, 15) << dendl;
   ceph_assert(m_data_pool.empty() || m_data_pool_id != -1);
 
-  ostringstream oss;
+  std::ostringstream oss;
   oss << RBD_DATA_PREFIX;
   if (m_data_pool_id != -1) {
     oss << stringify(m_io_ctx.get_id()) << ".";

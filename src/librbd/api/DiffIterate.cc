@@ -263,11 +263,11 @@ int DiffIterate<I>::execute() {
 
   while (left > 0) {
     uint64_t period_off = off - (off % period);
-    uint64_t read_len = min(period_off + period - off, left);
+    uint64_t read_len = std::min(period_off + period - off, left);
 
     if (fast_diff_enabled) {
       // map to extents
-      map<object_t,vector<ObjectExtent> > object_extents;
+      std::map<object_t,std::vector<ObjectExtent> > object_extents;
       Striper::file_to_extents(cct, m_image_ctx.format_string,
                                &m_image_ctx.layout, off, read_len, 0,
                                object_extents, 0);
