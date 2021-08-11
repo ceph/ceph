@@ -80,6 +80,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-nbd: "
 
+using namespace std;
 namespace fs = std::filesystem;
 
 using boost::endian::big_to_native;
