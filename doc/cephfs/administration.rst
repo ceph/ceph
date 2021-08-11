@@ -340,6 +340,7 @@ Some flags require you to confirm your intentions with "--yes-i-really-mean-it"
 or a similar string they will prompt you with. Consider these actions carefully
 before proceeding; they are placed on especially dangerous activities.
 
+.. _advanced-cephfs-admin-settings:
 
 Advanced
 --------
