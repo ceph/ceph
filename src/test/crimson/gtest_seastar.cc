@@ -22,7 +22,7 @@ int main(int argc, char **argv)
 
   seastar_test_suite_t::seastar_env.run([] {
     return crimson::common::sharded_conf().start(
-      EntityName{}, string_view{"ceph"}
+      EntityName{}, std::string_view{"ceph"}
     ).then([] {
       return crimson::common::sharded_perf_coll().start();
     });

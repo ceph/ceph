@@ -29,6 +29,7 @@
 
 #include "test_cmds.h"
 
+using namespace std::chrono_literals;
 namespace bpo = boost::program_options;
 using crimson::common::local_conf;
 

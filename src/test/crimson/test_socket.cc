@@ -15,6 +15,8 @@
 
 namespace {
 
+using namespace std::chrono_literals;
+
 using seastar::engine;
 using seastar::future;
 using crimson::net::error;
