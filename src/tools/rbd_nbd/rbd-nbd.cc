@@ -163,7 +163,7 @@ static void usage()
             << "                                (default: " << Config().reattach_timeout << ")\n"
             << "  --try-netlink                 Use the nbd netlink interface\n"
             << "  --show-cookie                 Show device cookie\n"
-            << "  --cookie                      Specify device cookie for attach\n"
+            << "  --cookie                      Specify device cookie\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -1746,7 +1746,8 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 
   use_netlink = cfg->try_netlink || reconnect;
   if (use_netlink) {
-    if (!reconnect) {
+    // generate when the cookie is not supplied at CLI
+    if (!reconnect && cfg->cookie.empty()) {
       uuid_d uuid_gen;
       uuid_gen.generate_random();
       cfg->cookie = uuid_gen.to_string();
@@ -1794,9 +1795,9 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
       goto close_nbd;
 
     std::string cookie;
-    if (use_netlink && !cfg->cookie.empty()) {
+    if (use_netlink) {
       cookie = get_cookie(cfg->devpath);
-      ceph_assert(cookie == cfg->cookie);
+      ceph_assert(cookie == cfg->cookie || cookie.empty());
     }
     if (cfg->show_cookie && !cookie.empty()) {
       cout << cfg->devpath << " " << cookie << std::endl;
