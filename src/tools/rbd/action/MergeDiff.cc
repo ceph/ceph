@@ -18,6 +18,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 
+using std::string;
+
 namespace rbd {
 namespace action {
 namespace merge_diff {
@@ -438,7 +440,7 @@ int execute(const po::variables_map &vm,
   r = do_merge_diff(first_diff.c_str(), second_diff.c_str(), path.c_str(),
                     vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
-    cerr << "rbd: merge-diff error" << std::endl;
+    std::cerr << "rbd: merge-diff error" << std::endl;
     return -r;
   }
 
