@@ -24,6 +24,8 @@
 #define dout_prefix *_dout << "cephfs::mirror::PeerReplayer("   \
                            << m_peer.uuid << ") " << __func__
 
+using namespace std;
+
 namespace cephfs {
 namespace mirror {
 

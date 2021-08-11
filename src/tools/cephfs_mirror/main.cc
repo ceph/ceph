@@ -15,6 +15,8 @@
 
 #include <vector>
 
+using namespace std;
+
 void usage() {
   std::cout << "usage: cephfs-mirror [options...]" << std::endl;
   std::cout << "options:\n";
