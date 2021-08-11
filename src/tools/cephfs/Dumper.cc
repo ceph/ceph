@@ -34,6 +34,8 @@
 
 #define HEADER_LEN 4096
 
+using namespace std;
+
 int Dumper::init(mds_role_t role_, const std::string &type)
 {
   role = role_;
