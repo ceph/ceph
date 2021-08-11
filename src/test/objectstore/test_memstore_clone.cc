@@ -22,6 +22,8 @@
 
 #define dout_context g_ceph_context
 
+using namespace std;
+
 namespace {
 
 const coll_t cid;
