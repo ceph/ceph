@@ -750,7 +750,7 @@ PG::do_osd_ops(
   }
   return do_osd_ops_execute<MURef<MOSDOpReply>>(
     seastar::make_lw_shared<OpsExecuter>(
-      Ref<PG>{this}, std::move(obc), op_info, *m),
+      Ref<PG>{this}, std::move(obc), op_info, get_backend(), *m),
     m->ops,
     op_info,
     [this, m, rvec = op_info.allows_returnvec()] {
@@ -794,7 +794,7 @@ PG::do_osd_ops(
 {
   return do_osd_ops_execute<void>(
     seastar::make_lw_shared<OpsExecuter>(
-      Ref<PG>{this}, std::move(obc), op_info, msg_params),
+      Ref<PG>{this}, std::move(obc), op_info, get_backend(), msg_params),
     ops,
     std::as_const(op_info),
     std::move(success_func),

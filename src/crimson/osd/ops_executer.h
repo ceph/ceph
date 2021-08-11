@@ -154,7 +154,6 @@ private:
   Ref<PG> pg; // for the sake of object class
   ObjectContextRef obc;
   const OpInfo& op_info;
-  const pg_pool_t& pool_info;  // for the sake of the ObjClass API
   PGBackend& backend;
   ceph::static_ptr<ExecutableMessage,
                    sizeof(ExecutableMessagePimpl<void>)> msg;
@@ -240,13 +239,11 @@ public:
   OpsExecuter(Ref<PG> pg,
               ObjectContextRef obc,
               const OpInfo& op_info,
-              const pg_pool_t& pool_info,
               PGBackend& backend,
               const MsgT& msg)
     : pg(std::move(pg)),
       obc(std::move(obc)),
       op_info(op_info),
-      pool_info(pool_info),
       backend(backend),
       msg(std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{}, &msg) {
   }
@@ -279,9 +276,7 @@ public:
     return num_read + num_write;
   }
 
-  uint32_t get_pool_stripe_width() const {
-    return pool_info.get_stripe_width();
-  }
+  uint32_t get_pool_stripe_width() const;
 
   bool has_seen_write() const {
     return num_write > 0;
