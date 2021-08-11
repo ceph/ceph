@@ -253,7 +253,7 @@ Commands
   Show the rbd images that are mapped via the rbd kernel module
   (default) or other supported device.
 
-:command:`device map` [-t | --device-type *device-type*] [--show-cookie] [--read-only] [--exclusive] [-o | --options *device-options*] *image-spec* | *snap-spec*
+:command:`device map` [-t | --device-type *device-type*] [--cookie *device-cookie*] [--show-cookie] [--read-only] [--exclusive] [-o | --options *device-options*] *image-spec* | *snap-spec*
   Map the specified image to a block device via the rbd kernel module
   (default) or other supported device (*nbd* on Linux or *ggate* on
   FreeBSD).
@@ -268,7 +268,7 @@ Commands
   The --options argument is a comma separated list of device type
   specific options (opt1,opt2=val,...).
 
-:command:`device attach` [-t | --device-type *device-type*] --device *device-path* [--cookie *device-cookie*] [--read-only] [--exclusive] [--force] [-o | --options *device-options*] *image-spec* | *snap-spec*
+:command:`device attach` [-t | --device-type *device-type*] --device *device-path* [--cookie *device-cookie*] [--show-cookie] [--read-only] [--exclusive] [--force] [-o | --options *device-options*] *image-spec* | *snap-spec*
   Attach the specified image to the specified block device (currently only
   `nbd` on Linux). This operation is unsafe and should not be normally used.
   In particular, specifying the wrong image or the wrong block device may
