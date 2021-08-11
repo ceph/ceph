@@ -14,6 +14,7 @@ tasks:
         osd max object namespace len: 64
       osd:
         osd objectstore: filestore
+        osd op queue: wpq
     log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
