@@ -17,6 +17,9 @@ Synopsis
   [ --log-file | -l *filename* ]
   [ --deep ]
 | **ceph-bluestore-tool** fsck|repair --path *osd path* [ --deep ]
+| **ceph-bluestore-tool** qfsck       --path *osd path*
+| **ceph-bluestore-tool** allocmap    --path *osd path*
+| **ceph-bluestore-tool** restore_cfb --path *osd path*
 | **ceph-bluestore-tool** show-label --dev *device* ...
 | **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
@@ -48,6 +51,19 @@ Commands
 :command:`repair`
 
    Run a consistency check *and* repair any errors we can.
+
+:command:`qfsck`
+
+   run consistency check on BlueStore metadata comparing allocator data (from RocksDB CFB when exists and if not uses allocation-file) with ONodes state.
+
+:command:`allocmap`
+
+   performs the same check done by qfsck and then stores a new allocation-file (command is disabled by default and requires a special build)
+
+:command:`restore_cfb`
+
+   Reverses changes done by the new NCB code (either through ceph restart or when running allocmap command) and restores RocksDB B Column-Family (allocator-map).
+
 
 :command:`bluefs-export`
 
