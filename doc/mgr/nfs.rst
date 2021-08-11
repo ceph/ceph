@@ -128,6 +128,22 @@ Delete NFS Ganesha Cluster
 
 This deletes the deployed cluster.
 
+Updating an NFS Cluster
+-----------------------
+
+In order to modify cluster parameters (like the port or placement), you need to
+use the orchestrator interface to update the NFS service spec.  The safest way to do
+that is to export the current spec, modify it, and then re-apply it.  For example,
+to modify the ``nfs.foo`` service,
+
+.. code:: bash
+
+    $ ceph orch ls --service-name nfs.foo --export > nfs.foo.yaml
+    $ vi nfs.foo.yaml
+    $ ceph orch apply -i nfs.foo.yaml
+
+For more information about the NFS service spec, see :ref:`deploy-cephadm-nfs-ganesha`.
+
 List NFS Ganesha Clusters
 -------------------------
 
