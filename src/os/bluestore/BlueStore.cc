@@ -5397,7 +5397,6 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_resto
 	     << dendl;
 	return -EINVAL;
       }
-      alloc_size = _zoned_piggyback_device_parameters_onto(alloc_size);
     } else
 #endif
     if (freelist_type == "zoned") {
@@ -5406,7 +5405,13 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_resto
       return -EINVAL;
     }
 
-    fm->create(bdev->get_size(), alloc_size, t);
+    fm->create(bdev->get_size(), alloc_size,
+	       zone_size, first_sequential_zone,
+	       t);
+
+    // allocate superblock reserved space.  note that we do not mark
+    // bluefs space as allocated in the freelist; we instead rely on
+    // bluefs doing that itself.
     auto reserved = _get_ondisk_reserved();
     if (fm_restore) {
       // we need to allocate the full space in restore case
@@ -5545,14 +5550,17 @@ int BlueStore::_create_alloc()
 	      << "Please set to 0." << dendl;
       return -EINVAL;
     }
-
-    alloc_size = _zoned_piggyback_device_parameters_onto(alloc_size);
   }
 #endif
   
-  shared_alloc.set(Allocator::create(cct, allocator_type,
-    bdev->get_size(),
-    alloc_size, "block"));
+  shared_alloc.set(
+    Allocator::create(
+      cct, allocator_type,
+      bdev->get_size(),
+      alloc_size,
+      zone_size,
+      first_sequential_zone,
+      "block"));
 
   if (!shared_alloc.a) {
     lderr(cct) << __func__ << " failed to create " << allocator_type << " allocator"
@@ -6700,6 +6708,8 @@ int BlueStore::mkfs()
 #ifdef HAVE_LIBZBD
   if (bdev->is_smr()) {
     freelist_type = "zoned";
+    zone_size = bdev->get_zone_size();
+    first_sequential_zone = bdev->get_conventional_region_size() / zone_size;
   } else
 #endif
   {
@@ -6765,6 +6775,22 @@ int BlueStore::mkfs()
       bl.append(stringify(OMAP_PER_PG));
       t->set(PREFIX_SUPER, "per_pool_omap", bl);
     }
+
+#ifdef HAVE_LIBZBD
+    if (bdev->is_smr()) {
+      {
+	bufferlist bl;
+	encode((uint64_t)zone_size, bl);
+	t->set(PREFIX_SUPER, "zone_size", bl);
+      }
+      {
+	bufferlist bl;
+	encode((uint64_t)first_sequential_zone, bl);
+	t->set(PREFIX_SUPER, "first_sequential_zone", bl);
+      }
+    }
+#endif
+    
     ondisk_format = latest_ondisk_format;
     _prepare_ondisk_format_super(t);
     db->submit_transaction_sync(t);
@@ -11467,6 +11493,27 @@ int BlueStore::_open_super_meta()
 	     << std::dec << dendl;
   }
 
+  // smr fields
+  {
+    bufferlist bl;
+    int r = db->get(PREFIX_SUPER, "zone_size", &bl);
+    if (r >= 0) {
+      auto p = bl.cbegin();
+      decode(zone_size, p);
+      dout(1) << __func__ << " zone_size 0x" << std::hex << zone_size << std::dec << dendl;
+    }
+  }
+  {
+    bufferlist bl;
+    int r = db->get(PREFIX_SUPER, "first_sequential_zone", &bl);
+    if (r >= 0) {
+      auto p = bl.cbegin();
+      decode(first_sequential_zone, p);
+      dout(1) << __func__ << " first_sequential_zone 0x" << std::hex
+	      << first_sequential_zone << std::dec << dendl;
+    }
+  }
+
   _set_per_pool_omap();
 
   _open_statfs();
@@ -11878,18 +11925,6 @@ std::string BlueStore::_zoned_key(uint64_t offset, const ghobject_t *oid) {
   get_object_key(cct, *oid, &object_key);
 
   return zone_key + object_key;
-}
-
-// For now, to avoid interface changes we piggyback zone_size (in MiB) and the
-// first sequential zone number onto min_alloc_size and pass it to functions
-// Allocator::create and FreelistManager::create.
-uint64_t BlueStore::_zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size) {
-  uint64_t zone_size = bdev->get_zone_size();
-  uint64_t zone_size_mb = zone_size / (1024 * 1024);
-  uint64_t first_seq_zone = bdev->get_conventional_region_size() / zone_size;
-  min_alloc_size |= (zone_size_mb << 32);
-  min_alloc_size |= (first_seq_zone << 48);
-  return min_alloc_size;
 }
 
 #endif
@@ -17349,7 +17384,9 @@ int BlueStore::store_allocator(Allocator* src_allocator)
 Allocator* BlueStore::create_bitmap_allocator(uint64_t bdev_size) {
   // create allocator
   uint64_t alloc_size = min_alloc_size;
-  Allocator* alloc = Allocator::create(cct, "bitmap", bdev_size, alloc_size, "recovery");
+  Allocator* alloc = Allocator::create(cct, "bitmap", bdev_size, alloc_size,
+				       zone_size, first_sequential_zone,
+				       "recovery");
   if (alloc) {
     return alloc;
   } else {
