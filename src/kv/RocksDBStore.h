@@ -92,12 +92,12 @@ class RocksDBStore : public KeyValueDB {
    */
 public:
   struct ColumnFamily {
-    string name;      //< name of this individual column family
+    std::string name;      //< name of this individual column family
     size_t shard_cnt; //< count of shards
-    string options;   //< configure option string for this CF
+    std::string options;   //< configure option string for this CF
     uint32_t hash_l;  //< first character to take for hash calc.
     uint32_t hash_h;  //< last character to take for hash calc.
-    ColumnFamily(const string &name, size_t shard_cnt, const string &options,
+    ColumnFamily(const std::string &name, size_t shard_cnt, const std::string &options,
 		 uint32_t hash_l, uint32_t hash_h)
       : name(name), shard_cnt(shard_cnt), options(options), hash_l(hash_l), hash_h(hash_h) {}
   };
@@ -142,7 +142,7 @@ private:
   static void sharding_def_to_columns(const std::vector<ColumnFamily>& sharding_def,
 				      std::vector<std::string>& columns);
   int create_shards(const rocksdb::Options& opt,
-		    const vector<ColumnFamily>& sharding_def);
+		    const std::vector<ColumnFamily>& sharding_def);
   int apply_sharding(const rocksdb::Options& opt,
 		     const std::string& sharding_text);
   int verify_sharding(const rocksdb::Options& opt,
@@ -470,7 +470,7 @@ err:
     return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
 
-  virtual int64_t get_cache_usage(string prefix) const override {
+  virtual int64_t get_cache_usage(std::string prefix) const override {
     auto it = cf_bbt_opts.find(prefix);
     if (it != cf_bbt_opts.end() && it->second.block_cache) {
       return static_cast<int64_t>(it->second.block_cache->GetUsage());
@@ -486,15 +486,15 @@ err:
 
   virtual std::shared_ptr<PriorityCache::PriCache>
       get_priority_cache() const override {
-    return dynamic_pointer_cast<PriorityCache::PriCache>(
+    return std::dynamic_pointer_cast<PriorityCache::PriCache>(
         bbt_opts.block_cache);
   }
 
   virtual std::shared_ptr<PriorityCache::PriCache>
-      get_priority_cache(string prefix) const override {
+      get_priority_cache(std::string prefix) const override {
     auto it = cf_bbt_opts.find(prefix);
     if (it != cf_bbt_opts.end()) {
-      return dynamic_pointer_cast<PriorityCache::PriCache>(
+      return std::dynamic_pointer_cast<PriorityCache::PriCache>(
           it->second.block_cache);
     }
     return nullptr;
