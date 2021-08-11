@@ -3099,11 +3099,13 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
               << ", fragmentation " << alloc[id]->get_fragmentation()
               << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
 	      << std::dec << dendl;
+    } else {
+      dout(20) << __func__ << " alloc-id not set on index="<< (int)id << " unable to allocate 0x" << std::hex << need
+	       << " on bdev " << (int)id << std::dec << dendl;
     }
-
     if (id != BDEV_SLOW) {
       dout(20) << __func__ << " fallback to bdev "
-               << (int)id + 1
+	       << (int)id + 1
 	       << dendl;
       return _allocate(id + 1, len, node);
     } else {
