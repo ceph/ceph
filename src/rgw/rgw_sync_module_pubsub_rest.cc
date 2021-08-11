@@ -19,6 +19,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 // command: PUT /topics/<topic-name>[&push-endpoint=<endpoint>[&<arg1>=<value1>]]
 class RGWPSCreateTopic_ObjStore : public RGWPSCreateTopicOp {
 public:

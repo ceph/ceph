@@ -376,7 +376,7 @@ namespace rgw {
     }
 
     directory* get_directory() {
-      return get<directory>(&variant_type);
+      return boost::get<directory>(&variant_type);
     }
 
     size_t get_size() const { return state.size; }
@@ -1429,6 +1429,8 @@ public:
   }
 
   bool eof() {
+    using boost::get;
+
     if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
       bool is_offset =
 	unlikely(! get<const char*>(&offset)) ||
@@ -1573,11 +1575,11 @@ public:
 
     class DirIterator
     {
-      vector<rgw_bucket_dir_entry>& objs;
-      vector<rgw_bucket_dir_entry>::iterator obj_iter;
+      std::vector<rgw_bucket_dir_entry>& objs;
+      std::vector<rgw_bucket_dir_entry>::iterator obj_iter;
 
-      map<string, bool>& common_prefixes;
-      map<string, bool>::iterator cp_iter;
+      std::map<std::string, bool>& common_prefixes;
+      std::map<string, bool>::iterator cp_iter;
 
       boost::optional<std::string_view> obj_sref;
       boost::optional<std::string_view> cp_sref;
@@ -1585,8 +1587,8 @@ public:
 
     public:
 
-      DirIterator(vector<rgw_bucket_dir_entry>& objs,
-		  map<string, bool>& common_prefixes)
+      DirIterator(std::vector<rgw_bucket_dir_entry>& objs,
+		  std::map<string, bool>& common_prefixes)
 	: objs(objs), common_prefixes(common_prefixes), _skip_cp(false)
 	{
 	  obj_iter = objs.begin();
@@ -1668,11 +1670,11 @@ public:
 	return cp_sref.get();
       }
 
-      vector<rgw_bucket_dir_entry>::iterator& get_obj_iter() {
+      std::vector<rgw_bucket_dir_entry>::iterator& get_obj_iter() {
 	return obj_iter;
       }
 
-      map<string, bool>::iterator& get_cp_iter() {
+      std::map<string, bool>::iterator& get_cp_iter() {
 	return cp_iter;
       }
 
@@ -1757,6 +1759,8 @@ public:
   }
 
   bool eof() {
+    using boost::get;
+
     if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
       bool is_offset =
 	unlikely(! get<const char*>(&offset)) ||

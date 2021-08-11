@@ -457,7 +457,7 @@ struct Statement {
   Effect eval_conditions(const Environment& e) const;
 };
 
-std::ostream& operator <<(ostream& m, const Statement& s);
+std::ostream& operator <<(std::ostream& m, const Statement& s);
 
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
@@ -489,7 +489,7 @@ struct Policy {
   Effect eval_conditions(const Environment& e) const;
 
   template <typename F>
-  bool has_conditional(const string& conditional, F p) const {
+  bool has_conditional(const std::string& conditional, F p) const {
     for (const auto&s: statements){
       if (std::any_of(s.conditions.begin(), s.conditions.end(),
 		      [&](const Condition& c) { return c.has_key_p(conditional, p);}))
@@ -498,16 +498,16 @@ struct Policy {
     return false;
   }
 
-  bool has_conditional(const string& c) const {
+  bool has_conditional(const std::string& c) const {
     return has_conditional(c, Condition::ci_equal_to());
   }
 
-  bool has_partial_conditional(const string& c) const {
+  bool has_partial_conditional(const std::string& c) const {
     return has_conditional(c, Condition::ci_starts_with());
   }
 };
 
-std::ostream& operator <<(ostream& m, const Policy& p);
+std::ostream& operator <<(std::ostream& m, const Policy& p);
 bool is_public(const Policy& p);
 
 }

@@ -102,9 +102,9 @@ public:
                     RGWObjVersionTracker *objv_tracker,
 		    optional_yield y, bool exclusive = false);
 
-  int add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl);
+  int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section, const std::string& key, bufferlist& bl);
 
-  int get_shard_id(const string& hash_key, int *shard_id);
+  int get_shard_id(const std::string& hash_key, int *shard_id);
 
   RGWPeriodHistory *get_period_history() {
     return period_history.get();

@@ -24,6 +24,8 @@
 
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
+using namespace std;
+
 class RGWSI_User_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_User_RADOS::Svc& svc;
 

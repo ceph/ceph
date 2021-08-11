@@ -184,7 +184,7 @@ WRITE_CLASS_ENCODER(RGWZoneStorageClass)
 
 
 class RGWZoneStorageClasses {
-  map<string, RGWZoneStorageClass> m;
+  std::map<std::string, RGWZoneStorageClass> m;
 
   /* in memory only */
   RGWZoneStorageClass *standard_class;
@@ -207,7 +207,7 @@ public:
     return *standard_class;
   }
 
-  bool find(const string& sc, const RGWZoneStorageClass **pstorage_class) const {
+  bool find(const std::string& sc, const RGWZoneStorageClass **pstorage_class) const {
     auto iter = m.find(sc);
     if (iter == m.end()) {
       return false;
@@ -216,7 +216,7 @@ public:
     return true;
   }
 
-  bool exists(const string& sc) const {
+  bool exists(const std::string& sc) const {
     if (sc.empty()) {
       return true;
     }
@@ -224,16 +224,16 @@ public:
     return (iter != m.end());
   }
 
-  const map<string, RGWZoneStorageClass>& get_all() const {
+  const std::map<std::string, RGWZoneStorageClass>& get_all() const {
     return m;
   }
 
-  map<string, RGWZoneStorageClass>& get_all() {
+  std::map<std::string, RGWZoneStorageClass>& get_all() {
     return m;
   }
 
-  void set_storage_class(const string& sc, const rgw_pool *data_pool, const string *compression_type) {
-    const string *psc = &sc;
+  void set_storage_class(const std::string& sc, const rgw_pool *data_pool, const std::string *compression_type) {
+    const std::string *psc = &sc;
     if (sc.empty()) {
       psc = &RGW_STORAGE_CLASS_STANDARD;
     }
@@ -246,7 +246,7 @@ public:
     }
   }
 
-  void remove_storage_class(const string& sc) {
+  void remove_storage_class(const std::string& sc) {
     if (!sc.empty()) {
       m.erase(sc);
     }
@@ -285,7 +285,7 @@ struct RGWZonePlacementInfo {
     encode(standard_data_pool.to_str(), bl);
     encode(data_extra_pool.to_str(), bl);
     encode((uint32_t)index_type, bl);
-    string standard_compression_type = get_compression_type(RGW_STORAGE_CLASS_STANDARD);
+    std::string standard_compression_type = get_compression_type(RGW_STORAGE_CLASS_STANDARD);
     encode(standard_compression_type, bl);
     encode(storage_classes, bl);
     ENCODE_FINISH(bl);
@@ -293,14 +293,14 @@ struct RGWZonePlacementInfo {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(7, bl);
-    string index_pool_str;
-    string data_pool_str;
+    std::string index_pool_str;
+    std::string data_pool_str;
     decode(index_pool_str, bl);
     index_pool = rgw_pool(index_pool_str);
     decode(data_pool_str, bl);
     rgw_pool standard_data_pool(data_pool_str);
     if (struct_v >= 4) {
-      string data_extra_pool_str;
+      std::string data_extra_pool_str;
       decode(data_extra_pool_str, bl);
       data_extra_pool = rgw_pool(data_extra_pool_str);
     }
@@ -309,7 +309,7 @@ struct RGWZonePlacementInfo {
       decode(it, bl);
       index_type = (rgw::BucketIndexType)it;
     }
-    string standard_compression_type;
+    std::string standard_compression_type;
     if (struct_v >= 6) {
       decode(standard_compression_type, bl);
     }
@@ -328,7 +328,7 @@ struct RGWZonePlacementInfo {
     }
     return data_extra_pool;
   }
-  const rgw_pool& get_data_pool(const string& sc) const {
+  const rgw_pool& get_data_pool(const std::string& sc) const {
     const RGWZoneStorageClass *storage_class;
     static rgw_pool no_pool;
 
@@ -342,9 +342,9 @@ struct RGWZonePlacementInfo {
     return get_data_pool(RGW_STORAGE_CLASS_STANDARD);
   }
 
-  const string& get_compression_type(const string& sc) const {
+  const std::string& get_compression_type(const std::string& sc) const {
     const RGWZoneStorageClass *storage_class;
-    static string no_compression;
+    static std::string no_compression;
 
     if (!storage_classes.find(sc, &storage_class)) {
       return no_compression;
@@ -352,7 +352,7 @@ struct RGWZonePlacementInfo {
     return storage_class->compression_type.get_value_or(no_compression);
   }
 
-  bool storage_class_exists(const string& sc) const {
+  bool storage_class_exists(const std::string& sc) const {
     return storage_classes.exists(sc);
   }
 
@@ -382,7 +382,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   RGWAccessKey system_key;
 
-  map<std::string, RGWZonePlacementInfo> placement_pools;
+  std::map<std::string, RGWZonePlacementInfo> placement_pools;
 
   std::string realm_id;
 
@@ -413,7 +413,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true) override;
   int fix_pool_names(const DoutPrefixProvider *dpp, optional_yield y);
 
-  const string& get_compression_type(const rgw_placement_rule& placement_rule) const;
+  const std::string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
     ENCODE_START(14, 1, bl);
@@ -434,7 +434,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(unused_metadata_heap, bl);
     encode(realm_id, bl);
     encode(lc_pool, bl);
-    map<std::string, std::string, ltstr_nocase> old_tier_config;
+    std::map<std::string, std::string, ltstr_nocase> old_tier_config;
     encode(old_tier_config, bl);
     encode(roles_pool, bl);
     encode(reshard_pool, bl);
@@ -479,7 +479,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     } else {
       lc_pool = log_pool.name + ":lc";
     }
-    map<std::string, std::string, ltstr_nocase> old_tier_config;
+    std::map<std::string, std::string, ltstr_nocase> old_tier_config;
     if (struct_v >= 8) {
       decode(old_tier_config, bl);
     }
@@ -519,7 +519,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<RGWZoneParams*>& o);
+  static void generate_test_instances(std::list<RGWZoneParams*>& o);
 
   bool get_placement(const std::string& placement_id, RGWZonePlacementInfo *placement) const {
     auto iter = placement_pools.find(placement_id);
@@ -571,7 +571,7 @@ WRITE_CLASS_ENCODER(RGWZoneParams)
 struct RGWZone {
   std::string id;
   std::string name;
-  list<std::string> endpoints;
+  std::list<std::string> endpoints;
   bool log_meta;
   bool log_data;
   bool read_only;
@@ -594,7 +594,7 @@ struct RGWZone {
   static constexpr uint32_t default_bucket_index_max_shards = 11;
 
   bool sync_from_all;
-  set<std::string> sync_from; /* list of zones to sync from */
+  std::set<std::string> sync_from; /* list of zones to sync from */
 
   RGWZone()
     : log_meta(false), log_data(false), read_only(false),
@@ -649,7 +649,7 @@ struct RGWZone {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<RGWZone*>& o);
+  static void generate_test_instances(std::list<RGWZone*>& o);
 
   bool is_read_only() const { return read_only; }
 
@@ -681,10 +681,10 @@ WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 
 struct RGWZoneGroupPlacementTarget {
   std::string name;
-  set<std::string> tags;
-  set<std::string> storage_classes;
+  std::set<std::string> tags;
+  std::set<std::string> storage_classes;
 
-  bool user_permitted(const list<std::string>& user_tags) const {
+  bool user_permitted(const std::list<std::string>& user_tags) const {
     if (tags.empty()) {
       return true;
     }
@@ -723,24 +723,24 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 
 struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string api_name;
-  list<std::string> endpoints;
+  std::list<std::string> endpoints;
   bool is_master = false;
 
   rgw_zone_id master_zone;
-  map<rgw_zone_id, RGWZone> zones;
+  std::map<rgw_zone_id, RGWZone> zones;
 
-  map<std::string, RGWZoneGroupPlacementTarget> placement_targets;
+  std::map<std::string, RGWZoneGroupPlacementTarget> placement_targets;
   rgw_placement_rule default_placement;
 
-  list<std::string> hostnames;
-  list<std::string> hostnames_s3website;
-  // TODO: Maybe convert hostnames to a map<std::string,list<std::string>> for
+  std::list<std::string> hostnames;
+  std::list<std::string> hostnames_s3website;
+  // TODO: Maybe convert hostnames to a map<std::string,std::list<std::string>> for
   // endpoint_type->hostnames
 /*
 20:05 < _robbat21irssi> maybe I do someting like: if (hostname_map.empty()) { populate all map keys from hostnames; };
 20:05 < _robbat21irssi> but that's a later compatability migration planning bit
 20:06 < yehudasa> more like if (!hostnames.empty()) {
-20:06 < yehudasa> for (list<std::string>::iterator iter = hostnames.begin(); iter != hostnames.end(); ++iter) {
+20:06 < yehudasa> for (std::list<std::string>::iterator iter = hostnames.begin(); iter != hostnames.end(); ++iter) {
 20:06 < yehudasa> hostname_map["s3"].append(iter->second);
 20:07 < yehudasa> hostname_map["s3website"].append(iter->second);
 20:07 < yehudasa> s/append/push_back/g
@@ -748,8 +748,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 20:08 < yehudasa> yeah, probably
 20:08 < _robbat21irssi> s3, s3website, swift, swith_auth, swift_website
 */
-  map<std::string, list<std::string> > api_hostname_map;
-  map<std::string, list<std::string> > api_endpoints_map;
+  std::map<std::string, std::list<std::string> > api_hostname_map;
+  std::map<std::string, std::list<std::string> > api_endpoints_map;
 
   std::string realm_id;
 
@@ -759,7 +759,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   explicit RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
   RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWSI_SysObj* sysobj_svc,
-	       const std::string& _realm_id, const list<std::string>& _endpoints)
+	       const std::string& _realm_id, const std::list<std::string>& _endpoints)
     : RGWSystemMetaObj(_name, cct , sysobj_svc), endpoints(_endpoints), is_master(_is_master),
       realm_id(_realm_id) {}
 
@@ -822,9 +822,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int equals(const std::string& other_zonegroup) const;
   int add_zone(const DoutPrefixProvider *dpp, 
                const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
-               const list<std::string>& endpoints, const std::string *ptier_type,
-               bool *psync_from_all, list<std::string>& sync_from,
-               list<std::string>& sync_from_rm, std::string *predirect_zone,
+               const std::list<std::string>& endpoints, const std::string *ptier_type,
+               bool *psync_from_all, std::list<std::string>& sync_from,
+               std::list<std::string>& sync_from_rm, std::string *predirect_zone,
                std::optional<int> bucket_index_max_shards, RGWSyncModulesManager *sync_mgr,
 	       optional_yield y);
   int remove_zone(const DoutPrefixProvider *dpp, const std::string& zone_id, optional_yield y);
@@ -838,16 +838,16 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<RGWZoneGroup*>& o);
+  static void generate_test_instances(std::list<RGWZoneGroup*>& o);
 };
 WRITE_CLASS_ENCODER(RGWZoneGroup)
 
 struct RGWPeriodMap
 {
   std::string id;
-  map<std::string, RGWZoneGroup> zonegroups;
-  map<std::string, RGWZoneGroup> zonegroups_by_api;
-  map<std::string, uint32_t> short_zone_ids;
+  std::map<std::string, RGWZoneGroup> zonegroups;
+  std::map<std::string, RGWZoneGroup> zonegroups_by_api;
+  std::map<std::string, uint32_t> short_zone_ids;
 
   std::string master_zonegroup;
 
@@ -870,7 +870,7 @@ struct RGWPeriodMap
   bool find_zone_by_id(const rgw_zone_id& zone_id,
                        RGWZoneGroup *zonegroup,
                        RGWZone *zone) const;
-  bool find_zone_by_name(const string& zone_id,
+  bool find_zone_by_name(const std::string& zone_id,
                        RGWZoneGroup *zonegroup,
                        RGWZone *zone) const;
 };
@@ -912,7 +912,7 @@ WRITE_CLASS_ENCODER(RGWPeriodConfig)
 /* for backward comaptability */
 struct RGWRegionMap {
 
-  map<std::string, RGWZoneGroup> regions;
+  std::map<std::string, RGWZoneGroup> regions;
 
   std::string master_region;
 
@@ -929,8 +929,8 @@ WRITE_CLASS_ENCODER(RGWRegionMap)
 
 struct RGWZoneGroupMap {
 
-  map<std::string, RGWZoneGroup> zonegroups;
-  map<std::string, RGWZoneGroup> zonegroups_by_api;
+  std::map<std::string, RGWZoneGroup> zonegroups;
+  std::map<std::string, RGWZoneGroup> zonegroups_by_api;
 
   std::string master_zonegroup;
 
@@ -994,7 +994,7 @@ public:
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<RGWRealm*>& o);
+  static void generate_test_instances(std::list<RGWRealm*>& o);
 
   const std::string& get_current_period() const {
     return current_period;
@@ -1038,7 +1038,7 @@ struct RGWPeriodLatestEpochInfo {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<RGWPeriodLatestEpochInfo*>& o);
+  static void generate_test_instances(std::list<RGWPeriodLatestEpochInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 
@@ -1127,7 +1127,7 @@ public:
     period_config.bucket_quota = bucket_quota;
   }
 
-  void set_id(const string& _id) {
+  void set_id(const std::string& _id) {
     this->id = _id;
     period_map.id = _id;
   }
@@ -1233,7 +1233,7 @@ public:
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<RGWPeriod*>& o);
+  static void generate_test_instances(std::list<RGWPeriod*>& o);
 
   static std::string get_staging_id(const std::string& realm_id) {
     return realm_id + ":staging";

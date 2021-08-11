@@ -42,6 +42,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 const char* LC_STATUS[] = {
       "UNINITIAL",
       "PROCESSING",

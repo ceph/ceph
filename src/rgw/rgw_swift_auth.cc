@@ -27,6 +27,7 @@
 
 #define DEFAULT_SWIFT_PREFIX "/swift"
 
+using namespace std;
 using namespace ceph::crypto;
 
 

@@ -51,7 +51,7 @@ namespace rgw {
     std::ostream& gen_prefix(std::ostream& out) const { return out << "lib rgw: "; }
 
     int init();
-    int init(vector<const char *>& args);
+    int init(std::vector<const char *>& args);
     int stop();
   };
 

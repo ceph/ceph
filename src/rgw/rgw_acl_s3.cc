@@ -19,6 +19,8 @@
 #define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
 #define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
 
+using namespace std;
+
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
 

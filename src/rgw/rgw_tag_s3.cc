@@ -9,6 +9,8 @@
 
 #include "rgw_tag_s3.h"
 
+using namespace std;
+
 void RGWObjTagEntry_S3::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("Key", key, obj, true);
   RGWXMLDecoder::decode_xml("Value", val, obj, true);

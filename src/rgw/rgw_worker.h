@@ -67,12 +67,12 @@ protected:
 
   std::atomic<bool> down_flag = { false };
 
-  string thread_name;
+  std::string thread_name;
 
   virtual uint64_t interval_msec() = 0;
   virtual void stop_process() {}
 public:
-  RGWRadosThread(RGWRados *_store, const string& thread_name = "radosgw")
+  RGWRadosThread(RGWRados *_store, const std::string& thread_name = "radosgw")
     : worker(NULL), cct(_store->ctx()), store(_store), thread_name(thread_name) {}
   virtual ~RGWRadosThread() {
     stop();

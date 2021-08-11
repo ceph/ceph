@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 class RGWLogStatRemoteObjCBCR : public RGWStatRemoteObjCBCR {
 public:
   RGWLogStatRemoteObjCBCR(RGWDataSyncCtx *_sc,

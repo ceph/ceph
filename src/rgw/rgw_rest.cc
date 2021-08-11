@@ -32,6 +32,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 struct rgw_http_status_code {
   int code;
   const char *name;

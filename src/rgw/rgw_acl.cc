@@ -15,6 +15,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 bool operator==(const ACLPermission& lhs, const ACLPermission& rhs) {
   return lhs.flags == rhs.flags;
 }

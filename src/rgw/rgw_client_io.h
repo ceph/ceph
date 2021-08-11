@@ -431,7 +431,7 @@ class RGWClientIOStream : private RGWClientIOStreamBuf, public std::istream {
 public:
   explicit RGWClientIOStream(RGWRestfulIO &s)
     : RGWClientIOStreamBuf(s, 1, 2),
-      istream(static_cast<RGWClientIOStreamBuf *>(this)) {
+      std::istream(static_cast<RGWClientIOStreamBuf *>(this)) {
   }
 };
 

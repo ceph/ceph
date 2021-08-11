@@ -35,13 +35,13 @@ protected:
   RGWOp *op_copy() override { return NULL; }
   RGWOp *op_options() override { return NULL; }
 
-  int serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const string &errordoc_key, optional_yield y);
+  int serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const std::string &errordoc_key, optional_yield y);
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_S3Website() override = default;
 
   int init(rgw::sal::Store* store, req_state *s, rgw::io::BasicClient* cio) override;
-  int error_handler(int err_no, string *error_content, optional_yield y) override;
+  int error_handler(int err_no, std::string *error_content, optional_yield y) override;
 };
 
 class RGWHandler_REST_Service_S3Website : public RGWHandler_REST_S3Website {

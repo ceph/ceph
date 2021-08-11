@@ -19,6 +19,8 @@
 
 #define RGW_BUCKET_INSTANCE_MD_PREFIX ".bucket.meta."
 
+using namespace std;
+
 class RGWSI_Bucket_SObj_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Bucket_SObj::Svc& svc;
 

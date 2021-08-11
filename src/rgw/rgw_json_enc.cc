@@ -24,6 +24,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void encode_json(const char *name, const obj_version& v, Formatter *f)
 {
   f->open_object_section(name);

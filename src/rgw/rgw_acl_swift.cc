@@ -24,6 +24,8 @@
 
 #define SWIFT_GROUP_ALL_USERS ".r:*"
 
+using namespace std;
+
 static int parse_list(const char* uid_list,
                       std::vector<std::string>& uids)           /* out */
 {

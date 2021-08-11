@@ -15,6 +15,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 using namespace rgw_zone_defaults;
 
 RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)

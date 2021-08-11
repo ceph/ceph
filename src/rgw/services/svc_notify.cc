@@ -15,6 +15,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string notify_oid_prefix = "notify";
 
 RGWSI_Notify::~RGWSI_Notify()

@@ -14,6 +14,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static bool check_date(const string& _date)
 {
   boost::optional<ceph::real_time> date = ceph::from_iso_8601(_date);

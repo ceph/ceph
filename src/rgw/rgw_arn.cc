@@ -5,6 +5,8 @@
 #include "rgw_common.h"
 #include <regex>
 
+using namespace std;
+
 namespace rgw {
 
 namespace {

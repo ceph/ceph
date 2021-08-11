@@ -13,6 +13,7 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
+using namespace std;
 
 class RGWCompletionManager::WaitContext : public Context {
   RGWCompletionManager *manager;

@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
