@@ -188,7 +188,7 @@ void rbd_bencher_completion(void *vc, void *pc)
     std::cout << "write error: " << cpp_strerror(ret) << std::endl;
     exit(ret < 0 ? -ret : ret);
   } else if (b->io_type == IO_TYPE_READ && (unsigned int)ret != b->io_size) {
-    cout << "read error: " << cpp_strerror(ret) << std::endl;
+    std::cout << "read error: " << cpp_strerror(ret) << std::endl;
     exit(ret < 0 ? -ret : ret);
   }
   b->lock.lock();
@@ -239,7 +239,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
        << " type " << (io_type == IO_TYPE_READ ? "read" :
                        io_type == IO_TYPE_WRITE ? "write" : "readwrite")
        << (io_type == IO_TYPE_RW ? " read:write=" +
-           to_string(read_proportion) + ":" + to_string(100 - read_proportion) : "")
+           std::to_string(read_proportion) + ":" +
+	   std::to_string(100 - read_proportion) : "")
        << " io_size " << io_size
        << " io_threads " << io_threads
        << " bytes " << io_bytes
@@ -263,10 +264,10 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   srand(time(NULL) % (unsigned long) -1);
 
   coarse_mono_time start = coarse_mono_clock::now();
-  chrono::duration<double> last = chrono::duration<double>::zero();
+  std::chrono::duration<double> last = std::chrono::duration<double>::zero();
   unsigned ios = 0;
 
-  vector<uint64_t> thread_offset;
+  std::vector<uint64_t> thread_offset;
   uint64_t i;
   uint64_t seq_chunk_length = (size / io_size / io_threads) * io_size;;
 
@@ -374,8 +375,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     }
 
     coarse_mono_time now = coarse_mono_clock::now();
-    chrono::duration<double> elapsed = now - start;
-    if (last == chrono::duration<double>::zero()) {
+    std::chrono::duration<double> elapsed = now - start;
+    if (last == std::chrono::duration<double>::zero()) {
       last = elapsed;
     } else if ((int)elapsed.count() != (int)last.count()) {
       time_acc((elapsed - last).count());
@@ -408,7 +409,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   }
 
   coarse_mono_time now = coarse_mono_clock::now();
-  chrono::duration<double> elapsed = now - start;
+  std::chrono::duration<double> elapsed = now - start;
 
   std::cout << "elapsed: " << (int)elapsed.count() << "   "
             << "ops: " << ios << "   "

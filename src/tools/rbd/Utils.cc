@@ -46,9 +46,8 @@ int ProgressContext::update_progress(uint64_t offset, uint64_t total) {
   if (progress) {
     int pc = total ? (offset * 100ull / total) : 0;
     if (pc > last_pc) {
-      cerr << "\r" << operation << ": "
-           << pc << "% complete...";
-      cerr.flush();
+      std::cerr << "\r" << operation << ": "
+		<< pc << "% complete..." << std::flush;
       last_pc = pc;
     }
   }
@@ -57,14 +56,14 @@ int ProgressContext::update_progress(uint64_t offset, uint64_t total) {
 
 void ProgressContext::finish() {
   if (progress) {
-    cerr << "\r" << operation << ": 100% complete...done." << std::endl;
+    std::cerr << "\r" << operation << ": 100% complete...done." << std::endl;
   }
 }
 
 void ProgressContext::fail() {
   if (progress) {
-    cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
-         << std::endl;
+    std::cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
+	      << std::endl;
   }
 }
 
