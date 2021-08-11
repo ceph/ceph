@@ -81,7 +81,7 @@ void rbd_bencher_completion(void *vc, void *pc) {
   //cout << "complete " << c << std::endl;
   int ret = c->get_return_value();
   if (ret != 0) {
-    cout << "write error: " << cpp_strerror(ret) << std::endl;
+    std::cout << "write error: " << cpp_strerror(ret) << std::endl;
     exit(ret < 0 ? -ret : ret);
   }
   b->lock.lock();
@@ -104,7 +104,7 @@ void write_image(librbd::Image &image) {
   image.size(&size);
   ceph_assert(size != 0);
 
-  vector<uint64_t> thread_offset;
+  std::vector<uint64_t> thread_offset;
   uint64_t i;
   uint64_t start_pos;
 
@@ -152,7 +152,7 @@ int main(int argc, const char **argv)
   std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
   if (args.empty()) {
-    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
   if (ceph_argparse_need_usage(args)) {
