@@ -81,16 +81,14 @@ ZonedFreelistManager::ZonedFreelistManager(
 int ZonedFreelistManager::create(
     uint64_t new_size,
     uint64_t granularity,
+    uint64_t new_zone_size,
+    uint64_t first_sequential_zone,
     KeyValueDB::Transaction txn) {
-  // To avoid interface changes, we piggyback zone size and the first sequential
-  // zone number onto the first 32 bits of 64-bit |granularity|.  The last 32
-  // bits of |granularity| is holding the actual allocation granularity, which
-  // is bytes_per_block.
   size = new_size;
-  bytes_per_block = granularity & 0x00000000ffffffff;
-  zone_size = ((granularity & 0x0000ffff00000000) >> 32) * 1024 * 1024;
+  bytes_per_block = granularity;
+  zone_size = new_zone_size;
   num_zones = size / zone_size;
-  starting_zone_num = (granularity & 0xffff000000000000) >> 48;
+  starting_zone_num = first_sequential_zone;
   enumerate_zone_num = ~0UL;
 
   ceph_assert(size % zone_size == 0);

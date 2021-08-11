@@ -274,7 +274,7 @@ int replay_free_dump_and_apply(char* fname,
 
   unique_ptr<Allocator> alloc;
   alloc.reset(Allocator::create(g_ceph_context, alloc_type,
-    capacity, alloc_unit, alloc_name));
+				capacity, alloc_unit, 0, 0, alloc_name));
 
   auto it = o->find_first();
   while (!it.end()) {

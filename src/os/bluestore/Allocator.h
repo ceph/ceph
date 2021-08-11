@@ -66,8 +66,15 @@ public:
   virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
 
-  static Allocator *create(CephContext* cct, std::string_view type, int64_t size,
-			   int64_t block_size, const std::string_view name = "");
+  static Allocator *create(
+    CephContext* cct,
+    std::string_view type,
+    int64_t size,
+    int64_t block_size,
+    int64_t zone_size = 0,
+    int64_t firs_sequential_zone = 0,
+    const std::string_view name = ""
+    );
 
 
   const std::string& get_name() const;

@@ -109,7 +109,8 @@ public:
 Allocator::Allocator(std::string_view name,
                      int64_t _capacity,
                      int64_t _block_size)
-  : device_size(_capacity), block_size(_block_size)
+ : device_size(_capacity),
+   block_size(_block_size)
 {
   asok_hook = new SocketHook(this, name);
 }
@@ -124,8 +125,14 @@ const string& Allocator::get_name() const {
   return asok_hook->name;
 }
 
-Allocator *Allocator::create(CephContext* cct, std::string_view type,
-                             int64_t size, int64_t block_size, std::string_view name)
+Allocator *Allocator::create(
+  CephContext* cct,
+  std::string_view type,
+  int64_t size,
+  int64_t block_size,
+  int64_t zone_size,
+  int64_t first_sequential_zone,
+  std::string_view name)
 {
   Allocator* alloc = nullptr;
   if (type == "stupid") {
@@ -142,7 +149,8 @@ Allocator *Allocator::create(CephContext* cct, std::string_view type,
       name);
 #ifdef HAVE_LIBZBD
   } else if (type == "zoned") {
-    return new ZonedAllocator(cct, size, block_size, name);
+    return new ZonedAllocator(cct, size, block_size, zone_size, first_sequential_zone,
+			      name);
 #endif
   }
   if (alloc == nullptr) {
