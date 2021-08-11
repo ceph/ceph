@@ -576,8 +576,9 @@
   rbd help device attach
   usage: rbd device attach [--device-type <device-type>] [--pool <pool>] 
                            [--namespace <namespace>] [--image <image>] 
-                           [--snap <snap>] --device <device> [--cookie <cookie>] 
-                           [--read-only] [--force] [--exclusive] [--quiesce] 
+                           [--snap <snap>] --device <device> [--show-cookie] 
+                           [--cookie <cookie>] [--read-only] [--force] 
+                           [--exclusive] [--quiesce] 
                            [--quiesce-hook <quiesce-hook>] [--options <options>] 
                            <image-or-snap-spec> 
   
@@ -596,6 +597,7 @@
     --image arg              image name
     --snap arg               snapshot name
     --device arg             specify device path
+    --show-cookie            show device cookie
     --cookie arg             specify device cookie
     --read-only              attach read-only
     --force                  force attach
@@ -638,8 +640,8 @@
   rbd help device map
   usage: rbd device map [--device-type <device-type>] [--pool <pool>] 
                         [--namespace <namespace>] [--image <image>] 
-                        [--snap <snap>] [--show-cookie] [--read-only] 
-                        [--exclusive] [--quiesce] 
+                        [--snap <snap>] [--show-cookie] [--cookie <cookie>] 
+                        [--read-only] [--exclusive] [--quiesce] 
                         [--quiesce-hook <quiesce-hook>] [--options <options>] 
                         <image-or-snap-spec> 
   
@@ -658,6 +660,7 @@
     --image arg              image name
     --snap arg               snapshot name
     --show-cookie            show device cookie
+    --cookie arg             specify device cookie
     --read-only              map read-only
     --exclusive              disable automatic exclusive lock transitions
     --quiesce                use quiesce hooks
