@@ -21,6 +21,8 @@
 #include <thread>
 #include <gtest/gtest.h>
 
+using namespace std;
+
 TEST(HTTPManager, ReadTruncated)
 {
   using tcp = boost::asio::ip::tcp;
