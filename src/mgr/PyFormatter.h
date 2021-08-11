@@ -144,6 +144,14 @@ private:
 class PyJSONFormatter : public JSONFormatter {
 public:
   PyObject *get();
+  PyJSONFormatter (const PyJSONFormatter&) = default;
+  PyJSONFormatter(bool pretty=false, bool is_array=false) : JSONFormatter(pretty) {
+    if(is_array) {
+      open_array_section("");
+    } else {
+      open_object_section("");
+    }
+}
 
 private:
   using json_formatter = JSONFormatter;

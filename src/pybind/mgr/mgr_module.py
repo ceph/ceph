@@ -1254,7 +1254,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             or look at the C++ ``dump()`` methods to learn about them.
         """
         obj =  self._ceph_get(data_name)
-        return json.loads(obj)
+        if isinstance(obj, bytes):
+            obj = json.loads(obj)
+
+        return obj
 
     def _stattype_to_str(self, stattype: int) -> str:
 

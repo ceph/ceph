@@ -128,6 +128,10 @@ void PyFormatter::finish_pending_streams()
 
 PyObject* PyJSONFormatter::get()
 {
+  if(json_formatter::stack_size()) {
+    close_section();
+  }
+  ceph_assert(!json_formatter::stack_size());
   std::ostringstream ss;
   flush(ss);
   std::string s = ss.str();

@@ -21,6 +21,9 @@ void TTLCacheBase<Key, Value>::insert(Key key, Value value) {
 }
 
 template <class Key, class Value> Value TTLCacheBase<Key, Value>::get(Key key) {
+  if(!exists(key)) {
+    throw_key_not_found(key);
+  }
   if (expired(key)) {
     erase(key);
     throw_key_not_found(key);
@@ -30,6 +33,9 @@ template <class Key, class Value> Value TTLCacheBase<Key, Value>::get(Key key) {
 }
 
 template <class Key> PyObject* TTLCache<Key, PyObject*>::get(Key key) {
+  if(!this->exists(key)) {
+    this->throw_key_not_found(key);
+  }
   if (this->expired(key)) {
     this->erase(key);
     this->throw_key_not_found(key);
