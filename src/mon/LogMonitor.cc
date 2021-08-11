@@ -72,6 +72,7 @@ using std::hex;
 using std::list;
 using std::map;
 using std::make_pair;
+using std::multimap;
 using std::ostream;
 using std::ostringstream;
 using std::pair;

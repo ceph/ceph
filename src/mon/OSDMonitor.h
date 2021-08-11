@@ -788,9 +788,10 @@ public:
    * This does not make any changes to the pools or state; it's just
    * a safety-check-and-collect function.
    */
-  void try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
+  void try_enable_stretch_mode_pools(std::stringstream& ss, bool *okay,
 				     int *errcode,
-				     set<pg_pool_t*>* pools, const string& new_crush_rule);
+				     std::set<pg_pool_t*>* pools,
+				     const std::string& new_crush_rule);
   /**
    * Check validity of inputs and OSD/CRUSH state to
    * engage stretch mode. Designed to be used with
@@ -807,26 +808,26 @@ public:
    *   from try_enable_stretch_mode_pools()).
    * @param new_crush_rule: The crush rule to set the pools to.
    */
-  void try_enable_stretch_mode(stringstream& ss, bool *okay,
+  void try_enable_stretch_mode(std::stringstream& ss, bool *okay,
 			       int *errcode, bool commit,
-			       const string& dividing_bucket,
+			       const std::string& dividing_bucket,
 			       uint32_t bucket_count,
-			       const set<pg_pool_t*>& pools,
-			       const string& new_crush_rule);
+			       const std::set<pg_pool_t*>& pools,
+			       const std::string& new_crush_rule);
   /**
    * Check the input dead_buckets mapping (buckets->dead monitors) to see
    * if the OSDs are also down. If so, fill in really_down_buckets and
    * really_down_mons and return true; else return false.
    */
-  bool check_for_dead_crush_zones(const map<string,set<string>>& dead_buckets,
-				  set<int> *really_down_buckets,
-				  set<string> *really_down_mons);
+  bool check_for_dead_crush_zones(const std::map<std::string,std::set<std::string>>& dead_buckets,
+				  std::set<int> *really_down_buckets,
+				  std::set<std::string> *really_down_mons);
   /**
    * Set degraded mode in the OSDMap, adding the given dead buckets to the dead set
    * and using the live_zones (should presently be size 1)
    */
-  void trigger_degraded_stretch_mode(const set<int>& dead_buckets,
-				     const set<string>& live_zones);
+  void trigger_degraded_stretch_mode(const std::set<int>& dead_buckets,
+				     const std::set<std::string>& live_zones);
   /**
    * This is just to maintain stretch_recovery_triggered; below
    */
