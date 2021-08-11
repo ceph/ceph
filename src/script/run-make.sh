@@ -54,6 +54,30 @@ function detect_ceph_dev_pkgs() {
     echo "$cmake_opts"
 }
 
+function do_install() {
+    local install_cmd
+    local pkgs
+    local ret
+    install_cmd=$1
+    shift
+    pkgs=$@
+    shift
+    ret=0
+    $DRY_RUN sudo $install_cmd $pkgs || ret=$?
+    if test $ret -eq 0 ; then
+        return
+    fi
+    # try harder if apt-get, and it was interrutped
+    if [[ $install_cmd == *"apt-get"* ]]; then
+        if test $ret -eq 100 ; then
+            # dpkg was interrupted
+            $DRY_RUN sudo dpkg --configure -a
+            $DRY_RUN sudo $install_cmd $pkgs
+        else
+            return $ret
+        fi
+    fi
+}
 function prepare() {
     local install_cmd
     local which_pkg="which"
@@ -81,7 +105,7 @@ function prepare() {
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
-        $DRY_RUN sudo $install_cmd ccache $which_pkg
+        do_install "$install_cmd" ccache $which_pkg
     else
         echo "WARNING: Don't know how to install packages" >&2
         echo "This probably means distribution $ID is not supported by run-make-check.sh" >&2
