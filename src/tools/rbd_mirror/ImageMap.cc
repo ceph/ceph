@@ -20,6 +20,8 @@
 #define dout_prefix *_dout << "rbd::mirror::ImageMap: " << this << " " \
                            << __func__ << ": "
 
+using namespace std;
+
 namespace rbd {
 namespace mirror {
 
