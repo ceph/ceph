@@ -59,7 +59,11 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
+
+using std::string;
+using std::vector;
 using TOPNSPC::common::cmd_getval;
+
 // cons/des
 MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc,
 		     boost::asio::io_context& ioctx) :

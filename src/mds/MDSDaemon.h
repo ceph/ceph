@@ -50,9 +50,9 @@ class MDSDaemon : public Dispatcher {
   mono_time get_starttime() const {
     return starttime;
   }
-  chrono::duration<double> get_uptime() const {
+  std::chrono::duration<double> get_uptime() const {
     mono_time now = mono_clock::now();
-    return chrono::duration<double>(now-starttime);
+    return std::chrono::duration<double>(now-starttime);
   }
 
   // handle a signal (e.g., SIGTERM)

@@ -23,7 +23,7 @@
 class EUpdate : public LogEvent {
 public:
   EMetaBlob metablob;
-  string type;
+  std::string type;
   bufferlist client_map;
   version_t cmapv;
   metareqid_t reqid;
@@ -34,7 +34,7 @@ public:
     LogEvent(EVENT_UPDATE),
     type(s), cmapv(0), had_peers(false) { }
   
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     if (type.length())
       out << "EUpdate " << type << " ";
     out << metablob;

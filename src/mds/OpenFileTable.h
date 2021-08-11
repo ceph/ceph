@@ -24,6 +24,8 @@ class CDir;
 class CInode;
 class MDSRank;
 
+struct ObjectOperation;
+
 class OpenFileTable
 {
 public:
@@ -59,7 +61,7 @@ public:
 
   bool should_log_open(CInode *in);
 
-  void note_destroyed_inos(uint64_t seq, const vector<inodeno_t>& inos);
+  void note_destroyed_inos(uint64_t seq, const std::vector<inodeno_t>& inos);
   void trim_destroyed_inos(uint64_t seq);
 
 protected:
@@ -105,7 +107,7 @@ protected:
   void _prefetch_dirfrags();
 
   void _get_ancestors(const Anchor& parent,
-		      vector<inode_backpointer_t>& ancestors,
+		      std::vector<inode_backpointer_t>& ancestors,
 		      mds_rank_t& auth_hint);
 
   MDSRank *mds;
@@ -115,7 +117,7 @@ protected:
   unsigned omap_num_objs = 0;
   std::vector<unsigned> omap_num_items;
 
-  map<inodeno_t, OpenedAnchor> anchor_map;
+  std::map<inodeno_t, OpenedAnchor> anchor_map;
 
   std::map<inodeno_t, int> dirty_items; // ino -> dirty state
 
@@ -130,7 +132,7 @@ protected:
   int journal_state = 0;
 
   std::vector<std::map<std::string, bufferlist> > loaded_journals;
-  map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
+  std::map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
   MDSContext::vec waiting_for_load;
   bool load_done = false;
 
@@ -144,7 +146,7 @@ protected:
   unsigned num_opening_inodes = 0;
   MDSContext::vec waiting_for_prefetch;
 
-  std::map<uint64_t, vector<inodeno_t> > logseg_destroyed_inos;
+  std::map<uint64_t, std::vector<inodeno_t> > logseg_destroyed_inos;
   std::set<inodeno_t> destroyed_inos_set;
 
   std::unique_ptr<PerfCounters> logger;

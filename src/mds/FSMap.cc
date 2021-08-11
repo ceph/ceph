@@ -30,6 +30,7 @@ using std::list;
 using std::pair;
 using std::ostream;
 using std::string;
+using std::string_view;
 
 using ceph::bufferlist;
 using ceph::Formatter;
