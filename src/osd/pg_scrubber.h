@@ -339,7 +339,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   int asok_debug(std::string_view cmd,
 		 std::string param,
 		 Formatter* f,
-		 stringstream& ss) override;
+		 std::stringstream& ss) override;
   int m_debug_blockrange{0};
 
   // -------------------------------------------------------------------------------------------

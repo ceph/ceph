@@ -101,7 +101,7 @@ struct requested_scrub_t {
   bool check_repair{false};
 };
 
-ostream& operator<<(ostream& out, const requested_scrub_t& sf);
+std::ostream& operator<<(std::ostream& out, const requested_scrub_t& sf);
 
 /**
  *  The interface used by the PG when requesting scrub-related info or services
@@ -110,9 +110,9 @@ struct ScrubPgIF {
 
   virtual ~ScrubPgIF() = default;
 
-  friend ostream& operator<<(ostream& out, const ScrubPgIF& s) { return s.show(out); }
+  friend std::ostream& operator<<(std::ostream& out, const ScrubPgIF& s) { return s.show(out); }
 
-  virtual ostream& show(ostream& out) const = 0;
+  virtual std::ostream& show(std::ostream& out) const = 0;
 
   // --------------- triggering state-machine events:
 
@@ -283,5 +283,5 @@ struct ScrubPgIF {
   virtual int asok_debug(std::string_view cmd,
 			 std::string param,
 			 Formatter* f,
-			 stringstream& ss) = 0;
+			 std::stringstream& ss) = 0;
 };

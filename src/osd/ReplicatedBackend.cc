@@ -33,6 +33,7 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
+using std::less;
 using std::list;
 using std::make_pair;
 using std::map;

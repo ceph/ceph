@@ -3,7 +3,7 @@
 
 #include "recovery_types.h"
 
-ostream& operator<<(ostream& out, const BackfillInterval& bi)
+std::ostream& operator<<(std::ostream& out, const BackfillInterval& bi)
 {
   out << "BackfillInfo(" << bi.begin << "-" << bi.end
       << " " << bi.objects.size() << " objects";
