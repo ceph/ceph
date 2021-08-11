@@ -616,6 +616,11 @@ OpsExecuter::execute_op(OSDOp& osd_op)
   }
 }
 
+// Defined here because there is a circular dependency between OpsExecuter and PG
+uint32_t OpsExecuter::get_pool_stripe_width() const {
+  return pg->get_pool().info.get_stripe_width();
+}
+
 static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   const std::string& type,
   bufferlist::const_iterator& iter)
