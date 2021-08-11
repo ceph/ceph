@@ -287,11 +287,18 @@ class FsNewHandler : public FileSystemCommandHandler
 				   static_cast<double>(4.0));
     mon->osdmon()->propose_pending();
 
+    bool recover = false;
+    cmd_getval(cmdmap, "recover", recover);
+
     // All checks passed, go ahead and create.
     auto&& fs = fsmap.create_filesystem(fs_name, metadata, data,
-        mon->get_quorum_con_features(), fscid);
+        mon->get_quorum_con_features(), fscid, recover);
 
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
+
+    if (recover) {
+      return 0;
+    }
 
     // assign a standby to rank 0 to avoid health warnings
     auto info = fsmap.find_replacement_for({fs->fscid, 0});
