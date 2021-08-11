@@ -284,7 +284,7 @@ err_close_buffer_fd:
 } // namespace ceph::logging::detail
 
 JournaldLogger::JournaldLogger(const SubsystemMap *s) :
-  m_entry_encoder(make_unique<detail::EntryEncoder>()),
+  m_entry_encoder(std::make_unique<detail::EntryEncoder>()),
   m_subs(s)
 {
   client.m_msghdr.msg_iov = m_entry_encoder->iovec();
@@ -300,7 +300,7 @@ int JournaldLogger::log_entry(const Entry& e)
 }
 
 JournaldClusterLogger::JournaldClusterLogger() :
-  m_log_entry_encoder(make_unique<detail::LogEntryEncoder>())
+  m_log_entry_encoder(std::make_unique<detail::LogEntryEncoder>())
 {
   client.m_msghdr.msg_iov = m_log_entry_encoder->iovec();
   client.m_msghdr.msg_iovlen = m_log_entry_encoder->iovec_len();
