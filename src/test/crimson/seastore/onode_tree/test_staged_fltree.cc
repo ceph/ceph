@@ -42,7 +42,7 @@ using namespace crimson::os::seastore::onode;
   with_trans_intr(                      \
     c.t,                                \
     [=] (auto &t) {                     \
-      return fun(c, b, v);              \
+      return fun(c, L_ADDR_MIN, b, v);  \
     }                                   \
   )
 
@@ -908,7 +908,7 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, extent_len_t) override {
       ceph_abort("impossible path"); }
-    eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t) override {
+    eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t, laddr_t) override {
       ceph_abort("impossible path"); }
     node_stats_t get_stats() const override {
       ceph_abort("impossible path"); }
@@ -1062,7 +1062,7 @@ class DummyChildPool {
         crimson::ct_error::assert_all{"Invalid error during create_initial()"}
       ).si_then([c, initial](auto super) {
         initial->make_root_new(c, std::move(super));
-        return initial->upgrade_root(c).si_then([initial] {
+        return initial->upgrade_root(c, L_ADDR_MIN).si_then([initial] {
           return initial;
         });
       });
