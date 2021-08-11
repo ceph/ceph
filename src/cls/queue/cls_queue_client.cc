@@ -6,6 +6,7 @@
 #include "cls/queue/cls_queue_const.h"
 #include "cls/queue/cls_queue_client.h"
 
+using namespace std;
 using namespace librados;
 
 void cls_queue_init(ObjectWriteOperation& op, const string& queue_name, uint64_t size)

@@ -9,6 +9,7 @@
 #include "cls/queue/cls_queue_const.h"
 #include "cls/queue/cls_queue_src.h"
 
+using std::string;
 using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
