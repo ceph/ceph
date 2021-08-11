@@ -1,24 +1,167 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-public-methods
+import errno
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
+from .. import mgr
 from ..exceptions import DashboardException
 from ..services.rgw_client import NoCredentialsException, \
     NoRgwDaemonsException, RgwClient, _parse_frontend_config
 from ..settings import Settings
-from . import KVStoreMockMixin, RgwStub  # pylint: disable=no-name-in-module
+from . import CLICommandTestMixin, RgwStub  # pylint: disable=no-name-in-module
 
 
 @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
     return_value='dummy_admin'))
-class RgwClientTest(TestCase, KVStoreMockMixin):
+class RgwClientTest(TestCase, CLICommandTestMixin):
+    _dashboard_user_realm1_access_key = 'VUOFXZFK24H81ISTVBTR'
+    _dashboard_user_realm1_secret_key = '0PGsCvXPGWS3AGgibUZEcd9efLrbbshlUkY3jruR'
+    _dashboard_user_realm2_access_key = 'OMDR282VYLBC1ZYMYDL0'
+    _dashboard_user_realm2_secret_key = 'N3thf7jAiwQ90PsPrhC2DIcvCFOsBXtBvPJJMdC3'
+    _radosgw_admin_result_error = (-errno.EINVAL, '', 'fake error')
+    _radosgw_admin_result_no_realms = (0, {}, '')
+    _radosgw_admin_result_realms = (0, {"realms": ["realm1", "realm2"]}, '')
+    _radosgw_admin_result_user_realm1 = (
+        0,
+        {
+            "keys": [
+                {
+                    "user": "dashboard",
+                    "access_key": _dashboard_user_realm1_access_key,
+                    "secret_key": _dashboard_user_realm1_secret_key
+                }
+            ],
+            "system": "true"
+        },
+        '')
+    _radosgw_admin_result_user_realm2 = (
+        0,
+        {
+            "keys": [
+                {
+                    "user": "dashboard",
+                    "access_key": _dashboard_user_realm2_access_key,
+                    "secret_key": _dashboard_user_realm2_secret_key
+                }
+            ],
+            "system": "true"
+        },
+        '')
+
     def setUp(self):
         RgwStub.get_daemons()
         self.mock_kv_store()
         self.CONFIG_KEY_DICT.update({
             'RGW_API_ACCESS_KEY': 'klausmustermann',
             'RGW_API_SECRET_KEY': 'supergeheim',
+        })
+
+    def test_configure_credentials_error(self):
+        self.CONFIG_KEY_DICT.update({
+            'RGW_API_ACCESS_KEY': '',
+            'RGW_API_SECRET_KEY': '',
+        })
+        # Get no realms, get no user, user creation fails.
+        mgr.send_rgwadmin_command.side_effect = [
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_error,
+        ]
+        with self.assertRaises(NoCredentialsException) as cm:
+            RgwClient.admin_instance()
+        self.assertIn('No RGW credentials found', str(cm.exception))
+
+    def test_configure_credentials_error_with_realms(self):
+        self.CONFIG_KEY_DICT.update({
+            'RGW_API_ACCESS_KEY': '',
+            'RGW_API_SECRET_KEY': '',
+        })
+        # Get realms, get no user, user creation fails.
+        mgr.send_rgwadmin_command.side_effect = [
+            self._radosgw_admin_result_realms,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_error,
+        ]
+        with self.assertRaises(NoCredentialsException) as cm:
+            RgwClient.admin_instance()
+        self.assertIn('No RGW credentials found', str(cm.exception))
+
+    def test_set_rgw_credentials_command(self):
+        # Get no realms, get user.
+        mgr.send_rgwadmin_command.side_effect = [
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_user_realm1
+        ]
+        result = self.exec_cmd('set-rgw-credentials')
+        self.assertEqual(result, 'RGW credentials configured')
+        self.assertEqual(Settings.RGW_API_ACCESS_KEY, self._dashboard_user_realm1_access_key)
+        self.assertEqual(Settings.RGW_API_SECRET_KEY, self._dashboard_user_realm1_secret_key)
+
+        # Get no realms, get no user, user creation.
+        mgr.send_rgwadmin_command.side_effect = [
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_user_realm1
+        ]
+        result = self.exec_cmd('set-rgw-credentials')
+        self.assertEqual(result, 'RGW credentials configured')
+        self.assertEqual(Settings.RGW_API_ACCESS_KEY, self._dashboard_user_realm1_access_key)
+        self.assertEqual(Settings.RGW_API_SECRET_KEY, self._dashboard_user_realm1_secret_key)
+
+        # Get realms, get users.
+        mgr.send_rgwadmin_command.side_effect = [
+            self._radosgw_admin_result_realms,
+            self._radosgw_admin_result_user_realm1,
+            self._radosgw_admin_result_user_realm2
+        ]
+        result = self.exec_cmd('set-rgw-credentials')
+        self.assertEqual(result, 'RGW credentials configured')
+        self.assertEqual(Settings.RGW_API_ACCESS_KEY, {
+            'realm1': self._dashboard_user_realm1_access_key,
+            'realm2': self._dashboard_user_realm2_access_key
+        })
+        self.assertEqual(Settings.RGW_API_SECRET_KEY, {
+            'realm1': self._dashboard_user_realm1_secret_key,
+            'realm2': self._dashboard_user_realm2_secret_key
+        })
+
+        # Get realms, get no users, users' creation.
+        mgr.send_rgwadmin_command.side_effect = [
+            self._radosgw_admin_result_realms,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_user_realm1,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_user_realm2
+        ]
+        result = self.exec_cmd('set-rgw-credentials')
+        self.assertEqual(result, 'RGW credentials configured')
+        self.assertEqual(Settings.RGW_API_ACCESS_KEY, {
+            'realm1': self._dashboard_user_realm1_access_key,
+            'realm2': self._dashboard_user_realm2_access_key
+        })
+        self.assertEqual(Settings.RGW_API_SECRET_KEY, {
+            'realm1': self._dashboard_user_realm1_secret_key,
+            'realm2': self._dashboard_user_realm2_secret_key
+        })
+
+        # Get realms, get no users, realm 2 user creation fails.
+        mgr.send_rgwadmin_command.side_effect = [
+            self._radosgw_admin_result_realms,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_user_realm1,
+            self._radosgw_admin_result_error,
+            self._radosgw_admin_result_error,
+        ]
+        result = self.exec_cmd('set-rgw-credentials')
+        self.assertEqual(result, 'RGW credentials configured')
+        self.assertEqual(Settings.RGW_API_ACCESS_KEY, {
+            'realm1': self._dashboard_user_realm1_access_key,
+        })
+        self.assertEqual(Settings.RGW_API_SECRET_KEY, {
+            'realm1': self._dashboard_user_realm1_secret_key,
         })
 
     def test_ssl_verify(self):
@@ -36,24 +179,6 @@ class RgwClientTest(TestCase, KVStoreMockMixin):
         with self.assertRaises(NoRgwDaemonsException) as cm:
             RgwClient.admin_instance()
         self.assertIn('No RGW service is running.', str(cm.exception))
-
-    def test_no_credentials(self):
-        self.CONFIG_KEY_DICT.update({
-            'RGW_API_ACCESS_KEY': '',
-            'RGW_API_SECRET_KEY': '',
-        })
-        with self.assertRaises(NoCredentialsException) as cm:
-            RgwClient.admin_instance()
-        self.assertIn('No RGW credentials found', str(cm.exception))
-
-    def test_default_daemon_wrong_settings(self):
-        self.CONFIG_KEY_DICT.update({
-            'RGW_API_HOST': '172.20.0.2',
-            'RGW_API_PORT': '7990',
-        })
-        with self.assertRaises(DashboardException) as cm:
-            RgwClient.admin_instance()
-        self.assertIn('No RGW daemon found with user-defined host:', str(cm.exception))
 
     @patch.object(RgwClient, '_get_daemon_zone_info')
     def test_get_placement_targets_from_zone(self, zone_info):
