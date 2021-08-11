@@ -18,7 +18,7 @@ void cls_2pc_queue_init(librados::ObjectWriteOperation& op, const std::string& q
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()/exec()
 #ifndef CLS_CLIENT_HIDE_IOCTX
 // return capacity (bytes)
-int cls_2pc_queue_get_capacity(librados::IoCtx& io_ctx, const string& queue_name, uint64_t& size);
+int cls_2pc_queue_get_capacity(librados::IoCtx& io_ctx, const std::string& queue_name, uint64_t& size);
 
 // make a reservation on the queue (in bytes) and number of expected entries (to calculate overhead)
 // return a reservation id if reservations is possible, 0 otherwise

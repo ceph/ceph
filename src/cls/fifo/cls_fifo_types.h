@@ -76,7 +76,7 @@ struct objv {
   }
 };
 WRITE_CLASS_ENCODER(objv)
-inline ostream& operator <<(std::ostream& os, const objv& objv)
+inline std::ostream& operator <<(std::ostream& os, const objv& objv)
 {
   return os << objv.to_str();
 }
@@ -310,7 +310,7 @@ struct info {
   std::int64_t max_push_part_num{-1};
 
   std::string head_tag;
-  std::map<int64_t, string> tags;
+  std::map<int64_t, std::string> tags;
 
   std::multimap<int64_t, journal_entry> journal;
 
