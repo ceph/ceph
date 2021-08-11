@@ -9,6 +9,8 @@
 
 #include "common/options.h"
 
+using namespace std;
+
 TEST(Option, validate_min_max)
 {
   auto opt = Option{"foo", Option::TYPE_MILLISECS, Option::LEVEL_ADVANCED}
