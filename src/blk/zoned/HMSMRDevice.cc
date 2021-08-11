@@ -45,6 +45,8 @@ extern "C" {
 #undef dout_prefix
 #define dout_prefix *_dout << "smrbdev(" << this << " " << path << ") "
 
+using namespace std;
+
 HMSMRDevice::HMSMRDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
