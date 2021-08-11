@@ -10,6 +10,7 @@
 #include "global/global_context.h"
 #include "common/dout.h"
 
+using namespace std;
 using namespace ceph::logging;
 
 TEST(Log, Simple)

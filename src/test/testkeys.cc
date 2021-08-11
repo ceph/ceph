@@ -8,6 +8,8 @@
 
 #define AES_KEY_LEN	16
 
+using namespace std;
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;

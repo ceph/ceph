@@ -16,6 +16,7 @@
 #include <map>
 #include <set>
 
+using namespace std;
 using namespace librados;
 
 // creates a temporary pool and initializes an IoCtx shared by all tests

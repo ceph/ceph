@@ -49,6 +49,8 @@ namespace {
   bool verbose {false};
 }
 
+using namespace std;
+
 TEST(TOKEN, INIT) {
   formatter = new JSONFormatter(true /* pretty */);
   ASSERT_NE(formatter, nullptr);

@@ -30,6 +30,7 @@
 #include "msg/async/Event.h"
 #include "msg/async/Stack.h"
 
+using namespace std;
 
 class NoopConfigObserver : public md_config_obs_t {
   std::list<std::string> options;

@@ -19,6 +19,8 @@
 #include <chrono>
 #include <atomic>
 
+using namespace std;
+
 class TestCls2PCQueue : public ::testing::Test {
 protected:
   librados::Rados rados;

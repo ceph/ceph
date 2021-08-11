@@ -13,6 +13,8 @@
 #include <functional>
 #include <errno.h>
 
+using namespace std;
+
 namespace librados {
 
 TestIoCtxImpl::TestIoCtxImpl() : m_client(NULL) {

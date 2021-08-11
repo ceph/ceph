@@ -20,6 +20,8 @@
 #include "compressor/CompressionPlugin.h"
 #include "compressor_example.h"
 
+using namespace std;
+
 class CompressorPluginExample : public CompressionPlugin {
 public:
 

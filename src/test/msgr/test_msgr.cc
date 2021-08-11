@@ -59,6 +59,8 @@ typedef boost::mt11213b gen_type;
   }                                     \
 } while(0);
 
+using namespace std;
+
 class MessengerTest : public ::testing::TestWithParam<const char*> {
  public:
   DummyAuthClientServer dummy_auth;

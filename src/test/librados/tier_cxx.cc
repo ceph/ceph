@@ -26,10 +26,8 @@
 #include "cls/cas/cls_cas_client.h"
 #include "cls/cas/cls_cas_internal.h"
 
+using namespace std;
 using namespace librados;
-using std::map;
-using std::ostringstream;
-using std::string;
 
 typedef RadosTestPP LibRadosTierPP;
 typedef RadosTestECPP LibRadosTierECPP;

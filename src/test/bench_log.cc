@@ -11,6 +11,8 @@
 
 #define dout_context g_ceph_context
 
+using namespace std;
+
 struct T : public Thread {
   int num;
   set<int> myset;

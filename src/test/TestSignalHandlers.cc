@@ -29,7 +29,8 @@
 #include <string>
 
 #define dout_context g_ceph_context
-using std::string;
+
+using namespace std;
 
 // avoid compiler warning about dereferencing NULL pointer
 static int* get_null()

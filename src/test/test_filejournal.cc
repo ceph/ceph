@@ -14,6 +14,8 @@
 #include "common/safe_io.h"
 #include "os/filestore/JournalingObjectStore.h"
 
+using namespace std;
+
 Finisher *finisher;
 ceph::condition_variable sync_cond;
 char path[200];

@@ -31,6 +31,8 @@
 
 #include "crush/CrushWrapper.h"
 
+using namespace std;
+
 class CrushWrapperTest : public ::testing::Test
 {
 public:

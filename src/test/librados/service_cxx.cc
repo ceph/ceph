@@ -10,6 +10,7 @@
 #include "test/librados/testcase_cxx.h"
 #include "test/unit.cc"
 
+using namespace std;
 using namespace librados;
 
 TEST(LibRadosServicePP, RegisterEarly) {

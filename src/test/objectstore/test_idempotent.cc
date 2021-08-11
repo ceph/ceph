@@ -25,6 +25,8 @@
 #include "kv/KeyValueDB.h"
 #include "os/ObjectStore.h"
 
+using namespace std;
+
 void usage(const string &name) {
   std::cerr << "Usage: " << name << " [new|continue] store_path store_journal db_path"
 	    << std::endl;

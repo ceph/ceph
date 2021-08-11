@@ -18,6 +18,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 
+using namespace std;
+
 static void usage()
 {
   cout << "usage: ceph_objectstore_bench [flags]\n"

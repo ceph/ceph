@@ -36,6 +36,8 @@
     EXPECT_EQ(val1, val2); \
   }
 
+using namespace std;
+
 namespace ceph::msgr::v2 {
 
 // MessageFrame with the first segment not fixed to ceph_msg_header2

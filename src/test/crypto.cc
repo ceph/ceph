@@ -11,6 +11,7 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 
+using namespace std;
 
 class CryptoEnvironment: public ::testing::Environment {
 public:
