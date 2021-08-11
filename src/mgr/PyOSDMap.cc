@@ -15,6 +15,10 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 
+using std::map;
+using std::set;
+using std::string;
+using std::vector;
 
 typedef struct {
   PyObject_HEAD

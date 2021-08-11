@@ -43,6 +43,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+using namespace std::literals;
+
+using std::map;
+using std::ostringstream;
+using std::string;
 
 Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
          PyModuleRegistry *py_module_registry_,

@@ -46,6 +46,9 @@ std::string PyModule::mgr_store_prefix = "mgr/";
 #include "include/ceph_assert.h"  // boost clobbers this
 
 
+using std::string;
+using std::wstring;
+
 // decode a Python exception into a string
 std::string handle_pyerror(
   bool crash_dump,

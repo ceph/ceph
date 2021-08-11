@@ -6,6 +6,10 @@
 
 namespace {
 
+using std::unique_ptr;
+using std::vector;
+using std::ostringstream;
+
 class SlowOps final : public DaemonHealthMetricCollector {
   bool _is_relevant(daemon_metric type) const override {
     return type == daemon_metric::SLOW_OPS;
