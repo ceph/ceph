@@ -163,6 +163,10 @@ int execute_attach(const po::variables_map &vm,
     return -EINVAL;
   }
 
+  if (vm["show-cookie"].as<bool>()) {
+    args.push_back("--show-cookie");
+  }
+
   if (vm.count("cookie")) {
     args.push_back("--cookie");
     args.push_back(vm["cookie"].as<std::string>());
@@ -264,6 +268,11 @@ int execute_map(const po::variables_map &vm,
 
   if (vm["show-cookie"].as<bool>()) {
     args.push_back("--show-cookie");
+  }
+
+  if (vm.count("cookie")) {
+    args.push_back("--cookie");
+    args.push_back(vm["cookie"].as<std::string>());
   }
 
   if (vm["read-only"].as<bool>()) {
