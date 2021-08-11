@@ -15,6 +15,7 @@
 #ifndef CEPH_STRESCAPE_H
 #define CEPH_STRESCAPE_H
 
+#include <algorithm>
 #include <ostream>
 #include <string_view>
 
@@ -27,7 +28,7 @@ inline std::string binstrprint(std::string_view sv, size_t maxlen=0)
     s = std::string(sv);
   } else {
     maxlen = std::max<size_t>(8, maxlen);
-    s = std::string(sv.substr(0, maxlen-3))+"..."s;
+    s = std::string(sv.substr(0, maxlen-3)) + "...";
   }
   std::replace_if(s.begin(), s.end(), [](char c){ return !(isalnum(c) || ispunct(c)); }, '.');
   return s;
