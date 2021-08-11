@@ -67,7 +67,7 @@ struct ClientMetricPayloadBase {
     return metric_type;
   }
 
-  void print_type(ostream *out) const {
+  void print_type(std::ostream *out) const {
     *out << metric_type;
   }
 
@@ -111,7 +111,7 @@ struct CapInfoPayload : public ClientMetricPayloadBase {
     f->dump_int("num_caps", nr_caps);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     *out << "cap_hits: " << cap_hits << " "
 	 << "cap_misses: " << cap_misses << " "
 	 << "num_caps: " << nr_caps;
@@ -145,7 +145,7 @@ struct ReadLatencyPayload : public ClientMetricPayloadBase {
     f->dump_int("latency", lat);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     *out << "latency: " << lat;
   }
 };
@@ -177,7 +177,7 @@ struct WriteLatencyPayload : public ClientMetricPayloadBase {
     f->dump_int("latency", lat);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     *out << "latency: " << lat;
   }
 };
@@ -209,7 +209,7 @@ struct MetadataLatencyPayload : public ClientMetricPayloadBase {
     f->dump_int("latency", lat);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     *out << "latency: " << lat;
   }
 };
@@ -249,7 +249,7 @@ struct DentryLeasePayload : public ClientMetricPayloadBase {
     f->dump_int("num_dentries", nr_dentries);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     *out << "dlease_hits: " << dlease_hits << " "
 	 << "dlease_misses: " << dlease_misses << " "
 	 << "num_dentries: " << nr_dentries;
@@ -287,7 +287,7 @@ struct OpenedFilesPayload : public ClientMetricPayloadBase {
     f->dump_int("total_inodes", total_inodes);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     *out << "opened_files: " << opened_files << " "
 	 << "total_inodes: " << total_inodes;
   }
@@ -324,7 +324,7 @@ struct PinnedIcapsPayload : public ClientMetricPayloadBase {
     f->dump_int("total_inodes", total_inodes);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     *out << "pinned_icaps: " << pinned_icaps << " "
 	 << "total_inodes: " << total_inodes;
   }
@@ -361,7 +361,7 @@ struct OpenedInodesPayload : public ClientMetricPayloadBase {
     f->dump_int("total_inodes", total_inodes);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     *out << "opened_inodes: " << opened_inodes << " "
 	 << "total_inodes: " << total_inodes;
   }
@@ -386,7 +386,7 @@ struct UnknownPayload : public ClientMetricPayloadBase {
   void dump(Formatter *f) const {
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
   }
 };
 
@@ -455,7 +455,7 @@ public:
 
   class PrintPayloadVisitor : public boost::static_visitor<void> {
   public:
-    explicit PrintPayloadVisitor(ostream *out) : _out(out) {
+    explicit PrintPayloadVisitor(std::ostream *out) : _out(out) {
     }
 
     template <typename ClientMetricPayload>
@@ -468,7 +468,7 @@ public:
     }
 
   private:
-    ostream *_out;
+    std::ostream *_out;
   };
 
   void encode(bufferlist &bl) const {
@@ -518,7 +518,7 @@ public:
     apply_visitor(DumpPayloadVisitor(f), payload);
   }
 
-  void print(ostream *out) const {
+  void print(std::ostream *out) const {
     apply_visitor(PrintPayloadVisitor(out), payload);
   }
 

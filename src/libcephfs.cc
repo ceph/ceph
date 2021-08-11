@@ -37,6 +37,8 @@
 
 #define DEFAULT_UMASK 002
 
+using namespace std;
+
 static mode_t umask_cb(void *);
 namespace {
 // Set things up this way so we don't start up threads until mount and
