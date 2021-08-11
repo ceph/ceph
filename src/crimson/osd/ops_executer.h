@@ -154,7 +154,6 @@ private:
   Ref<PG> pg; // for the sake of object class
   ObjectContextRef obc;
   const OpInfo& op_info;
-  PGBackend& backend;
   ceph::static_ptr<ExecutableMessage,
                    sizeof(ExecutableMessagePimpl<void>)> msg;
   std::optional<osd_op_params_t> osd_op_params;
@@ -208,10 +207,7 @@ private:
     const ObjectState& os);
 
   template <class Func>
-  auto do_const_op(Func&& f) {
-    // TODO: pass backend as read-only
-    return std::forward<Func>(f)(backend, std::as_const(obc->obs));
-  }
+  auto do_const_op(Func&& f);
 
   template <class Func>
   auto do_read_op(Func&& f) {
@@ -221,14 +217,7 @@ private:
   }
 
   template <class Func>
-  auto do_write_op(Func&& f, bool um) {
-    ++num_write;
-    if (!osd_op_params) {
-      osd_op_params.emplace();
-    }
-    user_modify = um;
-    return std::forward<Func>(f)(backend, obc->obs, txn);
-  }
+  auto do_write_op(Func&& f, bool um);
 
   decltype(auto) dont_do_legacy_op() {
     return crimson::ct_error::operation_not_supported::make();
@@ -239,12 +228,10 @@ public:
   OpsExecuter(Ref<PG> pg,
               ObjectContextRef obc,
               const OpInfo& op_info,
-              PGBackend& backend,
               const MsgT& msg)
     : pg(std::move(pg)),
       obc(std::move(obc)),
       op_info(op_info),
-      backend(backend),
       msg(std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{}, &msg) {
   }
 
