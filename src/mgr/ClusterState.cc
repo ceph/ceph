@@ -24,6 +24,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+using std::ostream;
+using std::set;
+using std::string;
+using std::stringstream;
+
 ClusterState::ClusterState(
   MonClient *monc_,
   Objecter *objecter_,

@@ -43,7 +43,7 @@ protected:
 
   MgrMap mgr_map;
 
-  map<int64_t,unsigned> existing_pools; ///< pools that exist, and pg_num, as of PGMap epoch
+  std::map<int64_t,unsigned> existing_pools; ///< pools that exist, and pg_num, as of PGMap epoch
   PGMap pg_map;
   PGMap::Incremental pending_inc;
 
@@ -156,7 +156,7 @@ public:
   bool asok_command(std::string_view admin_command,
 		    const cmdmap_t& cmdmap,
 		    Formatter *f,
-		    ostream& ss);
+		    std::ostream& ss);
 };
 
 #endif
