@@ -12,6 +12,12 @@
 
 #include "mds/flock.h"
 
+using std::dec;
+using std::list;
+using std::oct;
+using std::ostream;
+using std::string;
+
 Inode::~Inode()
 {
   delay_cap_item.remove_myself();
