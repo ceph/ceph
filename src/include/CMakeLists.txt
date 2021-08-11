@@ -1,7 +1,9 @@
 install(FILES
   libcephsqlite.h
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
+install(FILES
+        libcephfssqlite.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES
   rados/librados.h
   rados/rados_types.h

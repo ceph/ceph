@@ -516,7 +516,7 @@ static int Open(sqlite3_vfs *vfs, const char *name, sqlite3_file *file,
   }
 
   dv(5) << path << " flags=" << std::hex << flags << dendl;
-
+  std::cout << "path is " << path << std::endl;
   auto f = new (file)cephsqlite_file();
   f->vfs = vfs;
   if (!parsepath(path, &f->loc)) {
