@@ -43,6 +43,7 @@
 #include "include/unordered_map.h"
 #include "store_test_fixture.h"
 
+using namespace std;
 using namespace std::placeholders;
 
 typedef boost::mt11213b gen_type;
