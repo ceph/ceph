@@ -48,7 +48,7 @@ from pathlib import Path
 FuncT = TypeVar('FuncT', bound=Callable)
 
 # Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'docker.io/ceph/ceph:v16'
+DEFAULT_IMAGE = 'quay.io/ceph/ceph:v16'
 DEFAULT_IMAGE_IS_MASTER = False
 DEFAULT_IMAGE_RELEASE = 'pacific'
 DEFAULT_PROMETHEUS_IMAGE = 'docker.io/prom/prometheus:v2.18.1'
