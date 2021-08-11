@@ -54,9 +54,9 @@ public:
       ::crimson::get_logger(ceph_subsys_osd).debug(
         "OpSequencer::start_op: {} waiting ({} > {})",
         op, prev_op->get_id(), last_unblocked->get_id());
-      have_green_light = unblocked.wait([prev_op, this] {
+      have_green_light = unblocked.wait([&op, this] {
         // wait until the previous op is unblocked
-        return last_unblocked == prev_op;
+        return last_unblocked == &op.get_prev_op();
       });
     }
     return have_green_light.then([&op, do_op=std::move(do_op), this]() mutable {
