@@ -31,9 +31,8 @@
 #include <fstream>
 #include <vector>
 #include <map>
-using std::map;
-using std::vector;
-using std::chrono::duration_cast;
+
+using namespace std;
 
 #include "common/config.h"
 #include "common/errno.h"
@@ -240,7 +239,7 @@ void MDBalancer::tick()
   if (mds->get_nodeid() == 0
       && mds->is_active()
       && bal_interval > 0
-      && duration_cast<chrono::seconds>(now - last_heartbeat).count() >= bal_interval
+      && chrono::duration_cast<chrono::seconds>(now - last_heartbeat).count() >= bal_interval
       && (num_bal_times || (bal_max_until >= 0 && mds->get_uptime().count() > bal_max_until))) {
     last_heartbeat = now;
     send_heartbeat();

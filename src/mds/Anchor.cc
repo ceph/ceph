@@ -57,7 +57,7 @@ void Anchor::generate_test_instances(std::list<Anchor*>& ls)
   ls.back()->d_type = DT_DIR;
 }
 
-ostream& operator<<(ostream& out, const Anchor &a)
+std::ostream& operator<<(std::ostream& out, const Anchor &a)
 {
   return out << "a(" << a.ino << " " << a.dirino << "/'" << a.d_name << "' " << a.d_type << ")";
 }

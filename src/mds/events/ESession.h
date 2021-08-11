@@ -52,7 +52,7 @@ class ESession : public LogEvent {
   void dump(Formatter *f) const override;
   static void generate_test_instances(std::list<ESession*>& ls);
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     if (open)
       out << "ESession " << client_inst << " open cmapv " << cmapv;
     else

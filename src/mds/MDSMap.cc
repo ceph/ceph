@@ -27,8 +27,9 @@ using std::map;
 using std::multimap;
 using std::ostream;
 using std::pair;
-using std::string;
 using std::set;
+using std::string;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::Formatter;

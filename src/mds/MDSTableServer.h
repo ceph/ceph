@@ -83,7 +83,7 @@ public:
   }
 
   // recovery
-  void finish_recovery(set<mds_rank_t>& active);
+  void finish_recovery(std::set<mds_rank_t>& active);
   void _do_server_recovery();
 
   void handle_mds_recovery(mds_rank_t who);
@@ -91,11 +91,11 @@ public:
 protected:
   int table;
   bool recovered = false;
-  set<mds_rank_t> active_clients;
+  std::set<mds_rank_t> active_clients;
 private:
   struct notify_info_t {
     notify_info_t() {}
-    set<mds_rank_t> notify_ack_gather;
+    std::set<mds_rank_t> notify_ack_gather;
     mds_rank_t mds;
     ref_t<MMDSTableRequest> reply = NULL;
     MDSContext *onfinish = nullptr;
@@ -119,9 +119,9 @@ private:
 
   void handle_notify_ack(const cref_t<MMDSTableRequest> &m);
 
-  map<version_t,mds_table_pending_t> pending_for_mds;  // ** child should encode this! **
-  set<version_t> committing_tids;
+  std::map<version_t,mds_table_pending_t> pending_for_mds;  // ** child should encode this! **
+  std::set<version_t> committing_tids;
 
-  map<version_t, notify_info_t> pending_notifies;
+  std::map<version_t, notify_info_t> pending_notifies;
 };
 #endif
