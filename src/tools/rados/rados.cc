@@ -60,8 +60,24 @@
 
 #include "osd/ECUtil.h"
 
+using namespace std::chrono_literals;
 using namespace librados;
 using ceph::util::generate_random_number;
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::less;
+using std::list;
+using std::map;
+using std::multiset;
+using std::ofstream;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::unique_ptr;
+using std::vector;
 
 // two steps seem to be necessary to do this right
 #define STR(x) _STR(x)
@@ -989,7 +1005,7 @@ int LoadGen::run()
       ++total_sec;
       std::streamsize original_precision = cout.precision();
       cout.precision(3);
-      cout << setw(5) << total_sec << ": throughput=" << rate  << "MB/sec" << " pending data=" << sent - completed << std::endl;
+      cout << std::setw(5) << total_sec << ": throughput=" << rate  << "MB/sec" << " pending data=" << sent - completed << std::endl;
       cout.precision(original_precision);
       stamp_time = now; 
     }

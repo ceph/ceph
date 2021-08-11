@@ -53,6 +53,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-wnbd: "
 
+using namespace std;
 using boost::locale::conv::utf_to_utf;
 
 std::wstring to_wstring(const std::string& str)

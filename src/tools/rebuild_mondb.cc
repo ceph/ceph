@@ -5,6 +5,8 @@
 #include "os/ObjectStore.h"
 #include "osd/OSD.h"
 
+using namespace std;
+
 static int update_auth(const string& keyring_path,
                        const OSDSuperblock& sb,
                        MonitorDBStore& ms);

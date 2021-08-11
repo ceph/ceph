@@ -41,6 +41,18 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_crush
 
+using std::cerr;
+using std::cout;
+using std::decay_t;
+using std::ifstream;
+using std::ios;
+using std::is_same_v;
+using std::map;
+using std::ofstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 const char *infn = "stdin";
 

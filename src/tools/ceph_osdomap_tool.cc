@@ -22,6 +22,7 @@
 #include "os/filestore/DBObjectMap.h"
 #include "kv/KeyValueDB.h"
 
+using namespace std;
 namespace po = boost::program_options;
 
 int main(int argc, char **argv) {

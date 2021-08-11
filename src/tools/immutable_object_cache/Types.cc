@@ -112,7 +112,7 @@ void ObjectCacheReadData::decode_payload(bufferlist::const_iterator i,
 }
 
 ObjectCacheReadReplyData::ObjectCacheReadReplyData(uint16_t t, uint64_t s,
-                                                   string cache_path)
+                                                   std::string cache_path)
   : ObjectCacheRequest(t, s), cache_path(cache_path) {}
 ObjectCacheReadReplyData::ObjectCacheReadReplyData(uint16_t t, uint64_t s)
   : ObjectCacheRequest(t, s) {}

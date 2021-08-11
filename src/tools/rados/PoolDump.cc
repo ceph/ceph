@@ -18,6 +18,10 @@
 #include "PoolDump.h"
 
 using namespace librados;
+using std::cerr;
+using std::less;
+using std::map;
+using std::string;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados

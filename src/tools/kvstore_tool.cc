@@ -12,6 +12,8 @@
 #include "kv/KeyValueDB.h"
 #include "kv/KeyValueHistogram.h"
 
+using namespace std;
+
 StoreTool::StoreTool(const string& type,
 		     const string& path,
 		     bool to_repair,
