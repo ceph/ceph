@@ -99,14 +99,16 @@ class DefaultFetcher():
         self.pvs_in_sc = [i for i in self.inventory.items if i.spec.storage_class_name == self.storage_class]
 
     def convert_size(self, size_str: str) -> int:
-        units = ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei")
-        unit = size_str[-2:]
-        try:
-            factor = units.index(unit)
+        units = ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "", "K", "M", "G", "T", "P", "E")
+        coeff_and_unit = re.search('(\d+)(\D+)', size_str)
+        assert coeff_and_unit is not None
+        coeff = int(coeff_and_unit[1])
+        unit = coeff_and_unit[2]
+        try: 
+            factor = units.index(unit) % 7
         except ValueError:
             log.error("PV size format invalid")
             raise
-        coeff = int(size_str[:-2])
         size = coeff * (2 ** (10 * factor))
         return size
 
