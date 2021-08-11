@@ -26,6 +26,8 @@
 #include "common/config.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 ErasureCodeIsaTableCache tcache;
 
 class IsaErasureCodeTest : public ::testing::Test {
