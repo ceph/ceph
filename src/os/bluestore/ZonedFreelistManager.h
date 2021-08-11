@@ -22,7 +22,7 @@
 
 using cfg_reader_t = std::function<int(const std::string&, std::string*)>;
 
-const string CLEANING_IN_PROGRESS_KEY = "cleaning_in_progress";
+const std::string CLEANING_IN_PROGRESS_KEY = "cleaning_in_progress";
 
 class ZonedFreelistManager : public FreelistManager {
   std::string meta_prefix;    ///< device size, zone size, etc.
@@ -99,7 +99,7 @@ public:
   }
 
   void get_meta(uint64_t target_size,
-		std::vector<std::pair<string, string>>*) const override;
+		std::vector<std::pair<std::string, std::string>>*) const override;
 
   std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
   std::set<uint64_t> get_cleaning_in_progress_zones(KeyValueDB *kvdb) const;

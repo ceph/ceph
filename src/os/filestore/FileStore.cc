@@ -109,6 +109,7 @@
 #define __FUNC__ __func__ << "(" << __LINE__ << ")"
 
 using std::cerr;
+using std::less;
 using std::list;
 using std::make_pair;
 using std::map;

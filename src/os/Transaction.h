@@ -744,7 +744,7 @@ public:
 	return t->get_fadvise_flags();
     }
 
-    const vector<ghobject_t> &get_objects() const {
+    const std::vector<ghobject_t> &get_objects() const {
       return objects;
     }
   };

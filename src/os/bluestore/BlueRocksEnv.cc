@@ -7,6 +7,8 @@
 #include "kv/RocksDBStore.h"
 #include "string.h"
 
+using std::string_view;
+
 namespace {
 
 rocksdb::Status err_to_status(int r)
