@@ -22,6 +22,8 @@
 #include "common/config.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 class ErasureCodeTest : public ErasureCode {
 public:
   map<int, bufferlist> encode_chunks_encoded;

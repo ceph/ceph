@@ -31,6 +31,8 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 unsigned int count_num = 0;
 unsigned int unexpected_count = 0;
 unsigned int value_count = 0;
