@@ -65,11 +65,22 @@ class RGWSI_Zone : public RGWServiceInstance
   void shutdown() override;
 
   int replace_region_with_zonegroup(const DoutPrefixProvider *dpp, optional_yield y);
-  int init_zg_from_period(const DoutPrefixProvider *dpp, bool *initialized, optional_yield y);
-  int init_zg_from_local(const DoutPrefixProvider *dpp, bool *creating_defaults, optional_yield y);
+  int init_zg_from_period(const DoutPrefixProvider *dpp, optional_yield y);
+  int init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield y);
   int convert_regionmap(const DoutPrefixProvider *dpp, optional_yield y);
 
   int update_placement_map(const DoutPrefixProvider *dpp, optional_yield y);
+
+  int create_default_zg(const DoutPrefixProvider *dpp, optional_yield y);
+  int init_default_zone(const DoutPrefixProvider *dpp, optional_yield y);
+
+  int search_realm_with_zone(const DoutPrefixProvider *dpp,
+                             const rgw_zone_id& zid,
+                             RGWRealm *prealm,
+                             RGWPeriod *pperiod,
+                             RGWZoneGroup *pzonegroup,
+                             bool *pfound,
+                             optional_yield y);
 public:
   RGWSI_Zone(CephContext *cct);
   ~RGWSI_Zone();
