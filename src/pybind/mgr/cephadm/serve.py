@@ -986,6 +986,7 @@ class CephadmServe:
     def _create_daemon(self,
                        daemon_spec: CephadmDaemonDeploySpec,
                        reconfig: bool = False,
+                       redeploy: bool = False,
                        osd_uuid_map: Optional[Dict[str, Any]] = None,
                        ) -> str:
 
@@ -1074,6 +1075,12 @@ class CephadmServe:
                 self.mgr.cache.update_daemon_config_deps(
                     daemon_spec.host, daemon_spec.name(), daemon_spec.deps, start_time)
                 self.mgr.cache.save_host(daemon_spec.host)
+                if redeploy:
+                    self.mgr.check_mon_command({
+                        'prefix': 'config rm',
+                        'name': 'container_image',
+                        'who': utils.name_to_config_section(daemon_spec.daemon_type + '.' + daemon_spec.daemon_id),
+                    })
                 msg = "{} {} on host '{}'".format(
                     'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
                 if not code:

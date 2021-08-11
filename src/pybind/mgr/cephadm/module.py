@@ -1867,7 +1867,8 @@ Then run the following:
             if daemon_spec.daemon_type != 'osd':
                 daemon_spec = self.cephadm_services[daemon_type_to_service(
                     daemon_spec.daemon_type)].prepare_create(daemon_spec)
-            return CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig'))
+            return CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig'),
+                                                     redeploy=(action == 'redeploy'))
 
         actions = {
             'start': ['reset-failed', 'start'],
