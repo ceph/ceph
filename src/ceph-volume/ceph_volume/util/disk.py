@@ -24,7 +24,7 @@ def get_partuuid(device):
     device
     """
     out, err, rc = process.call(
-        ['blkid', '-s', 'PARTUUID', '-o', 'value', device]
+        ['blkid', '-c', '/dev/null', '-s', 'PARTUUID', '-o', 'value', device]
     )
     return ' '.join(out).strip()
 
@@ -98,7 +98,7 @@ def blkid(device):
     PART_ENTRY_UUID                 PARTUUID
     """
     out, err, rc = process.call(
-        ['blkid', '-p', device]
+        ['blkid', '-c', '/dev/null', '-p', device]
     )
     return _blkid_parser(' '.join(out))
 
@@ -110,7 +110,7 @@ def get_part_entry_type(device):
     used for udev rules, but it is useful in this case as it is the only
     consistent way to retrieve the GUID used by ceph-disk to identify devices.
     """
-    out, err, rc = process.call(['blkid', '-p', '-o', 'udev', device])
+    out, err, rc = process.call(['blkid', '-c', '/dev/null', '-p', '-o', 'udev', device])
     for line in out:
         if 'ID_PART_ENTRY_TYPE=' in line:
             return line.split('=')[-1].strip()
@@ -123,7 +123,7 @@ def get_device_from_partuuid(partuuid):
     device is
     """
     out, err, rc = process.call(
-        ['blkid', '-t', 'PARTUUID="%s"' % partuuid, '-o', 'device']
+        ['blkid', '-c', '/dev/null', '-t', 'PARTUUID="%s"' % partuuid, '-o', 'device']
     )
     return ' '.join(out).strip()
 
