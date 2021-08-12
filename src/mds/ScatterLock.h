@@ -150,6 +150,8 @@ public:
 	s = LOCK_MIX_SYNC;
       else
 	s = LOCK_MIX_LOCK;
+    } else if (s == LOCK_MIX) {
+      remove_lazy_scatter(rep);
     }
 
     // If there is a recovering mds who replcated an object when it failed
@@ -167,8 +169,7 @@ public:
     if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)
       mark_need_recover();
 
-    using ceph::encode;
-    encode(s, bl);
+    ceph::encode(s, bl);
   }
 
   void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
@@ -179,6 +180,47 @@ public:
     }
   }
 
+  void add_lazy_scatter(int i) {
+    more()->lazy_set.insert(i);
+  }
+  bool remove_lazy_scatter(int i) {
+    if (_more && _more->lazy_set.erase(i)) {
+      if (_more->empty())
+	_more.reset();
+      return true;
+    }
+    return false;
+  }
+  void clear_lazy_scatter() {
+    if (_more) {
+      _more->lazy_set.clear();
+      if (_more->empty())
+	_more.reset();
+    }
+  }
+
+  void encode(ceph::buffer::list& bl) const {
+    SimpleLock::encode(bl);
+    if (_more)
+      ceph::encode(_more->lazy_set, bl);
+    else
+      ceph::encode(std::set<int32_t>{}, bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    SimpleLock::decode(p);
+    std::set<int32_t> l;
+    ceph::decode(l, p);
+    if (l.empty())
+      clear_lazy_scatter();
+    else
+      more()->lazy_set.swap(l);
+  }
+
+  void export_twiddle() {
+    clear_lazy_scatter();
+    SimpleLock::export_twiddle();
+  }
+
   bool remove_replica(int from, bool rejoin) {
     if (rejoin &&
 	(state == LOCK_MIX ||
@@ -187,12 +229,17 @@ public:
 	 state == LOCK_MIX_TSYN ||
 	 state == LOCK_MIX_EXCL))
       return false;
+
+    remove_lazy_scatter(from);
+
     return SimpleLock::remove_replica(from);
   }
 
   void print(std::ostream& out) const override {
     out << "(";
     _print(out);
+    if (_more && !_more->lazy_set.empty())
+      out << " l=" << _more->lazy_set;
     if (is_dirty())
       out << " dirty";
     if (is_flushing())
@@ -208,6 +255,12 @@ private:
   struct more_bits_t {
     xlist<ScatterLock*>::item item_updated;
     utime_t update_stamp;
+
+    std::set<__s32> lazy_set;
+
+    bool empty() const {
+      return !item_updated.is_on_list() && lazy_set.empty();
+    }
 
     explicit more_bits_t(ScatterLock *lock) :
       item_updated(lock)
@@ -244,11 +297,13 @@ private:
     state_flags &= ~DIRTY;
     if (_more) {
       _more->item_updated.remove_myself();
-      _more.reset();
+      if (_more->empty())
+	_more.reset();
     }
   }
 
   mutable std::unique_ptr<more_bits_t> _more;
 };
+WRITE_CLASS_ENCODER(ScatterLock)
 
 #endif

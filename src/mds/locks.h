@@ -107,6 +107,7 @@ enum {
 #define LOCK_AC_MIX         -2
 #define LOCK_AC_LOCK        -3
 #define LOCK_AC_LOCKFLUSHED -4
+#define LOCK_AC_MIXSYNC     -5
 
 // for auth
 #define LOCK_AC_SYNCACK      1
@@ -117,6 +118,7 @@ enum {
 #define LOCK_AC_REQUNSCATTER 8
 #define LOCK_AC_NUDGE        9
 #define LOCK_AC_REQRDLOCK   10
+#define LOCK_AC_UNLAZY			11
 
 #define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
 #define LOCK_AC_FOR_AUTH(a)     ((a) > 0)

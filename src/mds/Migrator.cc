@@ -1066,7 +1066,8 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     return;
   }
 
-  if (!dir->inode->get_parent_dn()) {
+  CInode *diri = dir->get_inode();
+  if (!diri->get_parent_dn()) {
     dout(7) << "waiting for dir to become stable before export: " << *dir << dendl;
     dir->add_waiter(CDir::WAIT_CREATED, new C_M_ExportDirWait(this, mdr, 1));
     return;
@@ -1082,13 +1083,13 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     // are not auth MDS of the subtree root at the time they receive the
     // lock messages. So the auth MDS of the subtree root inode may get no
     // or duplicated fragstat/neststat for the subtree root dirfrag.
-    lov.lock_scatter_gather(&dir->get_inode()->filelock);
-    lov.lock_scatter_gather(&dir->get_inode()->nestlock);
-    if (dir->get_inode()->is_auth()) {
-      dir->get_inode()->filelock.set_scatter_wanted();
-      dir->get_inode()->nestlock.set_scatter_wanted();
+    lov.add_wrlock(&diri->filelock);
+    lov.add_wrlock(&diri->nestlock);
+    if (diri->is_auth()) {
+      diri->filelock.set_scatter_wanted();
+      diri->nestlock.set_scatter_wanted();
     }
-    lov.add_rdlock(&dir->get_inode()->dirfragtreelock);
+    lov.add_rdlock(&diri->dirfragtreelock);
 
     if (!mds->locker->acquire_locks(mdr, lov, nullptr, true)) {
       if (mdr->aborted) {
@@ -1124,7 +1125,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     if (!mds->locker->rdlock_try_set(lov, mdr))
       return;
 
-    if (!mds->locker->try_rdlock_snap_layout(dir->get_inode(), mdr))
+    if (!mds->locker->try_rdlock_snap_layout(diri, mdr))
       return;
 
     mdr->locking_state |= MutationImpl::ALL_LOCKED;
@@ -1136,6 +1137,12 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   maybe_split_export(it->second, max_export_size, results);
 
   if (results.size() == 1 && results.front().first == dir) {
+
+    if (diri->is_auth()) {
+      mds->locker->scatter_unlazy(&diri->filelock, dest);
+      mds->locker->scatter_unlazy(&diri->nestlock, dest);
+    }
+
     num_locking_exports--;
     it->second.state = EXPORT_DISCOVERING;
     // send ExportDirDiscover (ask target)
@@ -1793,15 +1800,7 @@ void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
   in->clear_replica_map();
   
   // twiddle lock states for auth -> replica transition
-  in->authlock.export_twiddle();
-  in->linklock.export_twiddle();
-  in->dirfragtreelock.export_twiddle();
-  in->filelock.export_twiddle();
-  in->nestlock.export_twiddle();
-  in->xattrlock.export_twiddle();
-  in->snaplock.export_twiddle();
-  in->flocklock.export_twiddle();
-  in->policylock.export_twiddle();
+  in->twiddle_locks();
   
   // mark auth
   ceph_assert(in->is_auth());
@@ -2466,6 +2465,11 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
   ceph_assert(in->is_dir());
   in->get(CInode::PIN_IMPORTING);
 
+  if (!in->is_auth()) {
+    mds->locker->scatter_unlazy(&in->filelock);
+    mds->locker->scatter_unlazy(&in->nestlock);
+  }
+
   // reply
   dout(7) << " sending export_discover_ack on " << *in << dendl;
   mds->send_message_mds(make_message<MExportDirDiscoverAck>(df, m->get_tid()), p_state->peer);
@@ -3062,10 +3066,7 @@ void Migrator::import_reverse(CDir *dir, import_state_iterator it, bool notify)
 	in->clear_clientwriteable();
 	in->state_clear(CInode::STATE_NEEDSRECOVER);
 
-	in->authlock.clear_gather();
-	in->linklock.clear_gather();
-	in->dirfragtreelock.clear_gather();
-	in->filelock.clear_gather();
+	in->twiddle_locks();
 
 	in->clear_file_locks();
 
@@ -3438,8 +3439,11 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export
   in->add_replica(oldauth, CInode::EXPORT_NONCE);
-  if (in->is_replica(mds->get_nodeid()))
-    in->remove_replica(mds->get_nodeid());
+  if (in->is_replica(mds->get_nodeid())) {
+    mds_rank_t whoami = mds->get_nodeid();
+    in->remove_replica(whoami);
+    in->remove_lazy_scatter(whoami);
+  }
 
   if (in->snaplock.is_stable() &&
       in->snaplock.get_state() != LOCK_SYNC)

@@ -812,7 +812,7 @@ void CInode::close_dirfrag(frag_t fg)
   }
 
   if (dir->is_subtree_root())
-    num_subtree_roots--;
+    dec_subtree_root_auth(dir->dir_auth.first);
   
   // dump any remaining dentries, for debugging purposes
   for (const auto &p : dir->items)
@@ -836,23 +836,16 @@ void CInode::close_dirfrags()
     close_dirfrag(dirfrags.begin()->first);
 }
 
-bool CInode::has_subtree_root_dirfrag(int auth)
+bool CInode::has_subtree_root_dirfrag(mds_rank_t auth)
 {
-  if (num_subtree_roots > 0) {
-    if (auth == -1)
-      return true;
-    for (const auto &p : dirfrags) {
-      if (p.second->is_subtree_root() &&
-	  p.second->dir_auth.first == auth)
-	return true;
-    }
-  }
-  return false;
+  if (auth == MDS_RANK_NONE)
+    return !subtree_auth_map.empty();
+  return subtree_auth_map.count(auth);
 }
 
 bool CInode::has_subtree_or_exporting_dirfrag()
 {
-  if (num_subtree_roots > 0 || num_exporting_dirs > 0)
+  if (num_exporting_dirs > 0 || has_subtree_root_dirfrag())
     return true;
   return false;
 }
@@ -2241,6 +2234,13 @@ void CInode::clear_scatter_dirty()
   filelock.remove_dirty();
   nestlock.remove_dirty();
   dirfragtreelock.remove_dirty();
+}
+
+void CInode::remove_lazy_scatter(mds_rank_t who)
+{
+  filelock.remove_lazy_scatter(who);
+  nestlock.remove_lazy_scatter(who);
+  dirfragtreelock.remove_lazy_scatter(who);
 }
 
 void CInode::clear_dirty_scattered(int type)
@@ -4488,6 +4488,18 @@ void CInode::decode_import(bufferlist::const_iterator& p,
   DECODE_FINISH(p);
 }
 
+void CInode::twiddle_locks()
+{
+  authlock.export_twiddle();
+  linklock.export_twiddle();
+  dirfragtreelock.export_twiddle();
+  filelock.export_twiddle();
+  nestlock.export_twiddle();
+  xattrlock.export_twiddle();
+  snaplock.export_twiddle();
+  flocklock.export_twiddle();
+  policylock.export_twiddle();
+}
 
 void InodeStoreBase::dump(Formatter *f) const
 {

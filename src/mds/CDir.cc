@@ -2922,7 +2922,11 @@ void CDir::set_dir_auth(const mds_authority_t &a)
   bool was_ambiguous = dir_auth.second >= 0;
 
   // set it.
+  if (was_subtree)
+    inode->dec_subtree_root_auth(dir_auth.first);
   dir_auth = a;
+  if (is_subtree_root())
+    inode->inc_subtree_root_auth(dir_auth.first);
 
   // new subtree root?
   if (!was_subtree && is_subtree_root()) {
@@ -2933,8 +2937,6 @@ void CDir::set_dir_auth(const mds_authority_t &a)
       ceph_assert(is_freezing_tree_root());
     }
 
-    inode->num_subtree_roots++;   
-    
     // unpin parent of frozen dir/tree?
     if (inode->is_auth()) {
       ceph_assert(!is_frozen_tree_root());
@@ -2944,8 +2946,6 @@ void CDir::set_dir_auth(const mds_authority_t &a)
   } 
   if (was_subtree && !is_subtree_root()) {
     dout(10) << " old subtree root, adjusting auth_pins" << dendl;
-
-    inode->num_subtree_roots--;
 
     // pin parent of frozen dir/tree?
     if (inode->is_auth()) {
