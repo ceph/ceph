@@ -5,6 +5,7 @@ import argparse
 from ceph_volume import terminal
 from ceph_volume.devices.lvm.activate import Activate as LVMActivate
 from ceph_volume.devices.raw.activate import Activate as RAWActivate
+from ceph_volume.devices.simple.activate import Activate as SimpleActivate
 
 
 class Activate(object):
@@ -69,5 +70,18 @@ class Activate(object):
             return
         except Exception as e:
             terminal.info(f'Failed to activate via lvm: {e}')
+
+        # then try simple
+        try:
+            SimpleActivate([]).activate(
+                argparse.Namespace(
+                    osd_id=self.args.osd_id,
+                    osd_fsid=self.args.osd_uuid,
+                    no_systemd=self.args.no_systemd,
+                )
+            )
+            return
+        except Exception as e:
+            terminal.info(f'Failed to activate via simple: {e}')
 
         terminal.error('Failed to activate any OSD(s)')
