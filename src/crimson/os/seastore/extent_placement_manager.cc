@@ -298,4 +298,130 @@ SegmentedAllocator::Writer::roll_segment(bool set_rolling) {
   );
 }
 
+RBAllocator::RBAllocator(
+  RandomBlockManager& rbm,
+  LBAManager& lba_manager,
+  Cache& cache)
+  : rbm(rbm),
+    lba_manager(lba_manager),
+    cache(cache)
+{
+  std::generate_n(
+    std::back_inserter(writers),
+    crimson::common::get_conf<uint64_t>(
+      "seastore_init_rewrite_segments_num_per_device"),
+    [&] {
+      return Writer{
+	rbm,
+	lba_manager,
+	cache};
+      });
+}
+
+RBAllocator::Writer::finish_record_ret
+RBAllocator::Writer::finish_write(
+  Transaction& t,
+  ool_record_t& record) {
+  return trans_intr::do_for_each(record.get_extents(),
+    [this, &t](auto& ool_extent) {
+    auto& lextent = ool_extent.get_lextent();
+    logger().debug("RBAllocator::Writer::finish_write: extent: {}", *lextent);
+    return lba_manager.update_mapping(
+      t,
+      lextent->get_laddr(),
+      lextent->get_paddr(),
+      ool_extent.get_ool_paddr()
+    ).si_then([&ool_extent, &t, &lextent, this] {
+      lextent->backend_type = device_type_t::NONE;
+      lextent->hint = {};
+      cache.mark_delayed_extent_ool(t, lextent, ool_extent.get_ool_paddr());
+      return finish_record_iertr::now();
+    });
+  }).si_then([&record] {
+    record.clear();
+  });
+}
+
+RBAllocator::Writer::write_iertr::future<>
+RBAllocator::Writer::_write(
+  Transaction& t,
+  ool_record_t& record)
+{
+  // ool_record_t's extents has one entry in case of RBM
+  ceph_assert(record.get_extents().size() == 1);
+  auto extent = record.get_extents().back();
+  paddr_t addr = extent.get_ool_paddr();
+  record_size_t record_size = record.get_encoded_record_length();
+  bufferlist bl = record.encode(
+    record_size, 0);
+
+  logger().debug(
+    "RBAllocator::Writer::write: written {} extents,"
+    " {} bytes at {}",
+    record.get_num_extents(),
+    bl.length(),
+    addr);
+
+  auto bptr = bufferptr(ceph::buffer::create_page_aligned(bl.length()));
+  auto iter = bl.cbegin();
+  iter.copy(bl.length(), bptr.c_str());
+  return rbm.write(addr,
+      bptr
+  ).handle_error(
+    write_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error when writing record"}
+  ).safe_then([this, &record, &t]() mutable {
+    return finish_write(t, record);
+  });
+}
+
+RBAllocator::Writer::write_iertr::future<>
+RBAllocator::Writer::write(
+  Transaction& t,
+  std::list<LogicalCachedExtentRef>& extents)
+{
+  // rbm allocates non-aligned paddr to each extent
+  // so, call write() on each extent
+  return trans_intr::do_for_each(extents,
+    [this, &t](auto& ex) {
+    auto record = ool_record_t(rbm.get_block_size());
+    auto extent = ex;
+    auto wouldbe_length =
+      record.get_wouldbe_encoded_record_length(extent);
+    record.set_base(0);
+    return rbm.alloc_extent(t, wouldbe_length
+    ).handle_error(
+      write_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Invalid error when writing record"}
+    ).safe_then([this, &record, &t, &extent](auto paddr)
+     -> write_iertr::future<> {
+      /*
+       * TODO: For now, record itself is stored in RBM space.
+       * However, RBM is not journal, so record can be distributed
+       * anywhere, resulting in we can not enumerate all object nodes
+       * at mount() time.
+       * To avoid this, it seems that adding metadata area---
+       * including onode related data, not data block---is reasonable.
+       *
+       */
+      extent->set_paddr(paddr);
+      add_extent_to_write(record, extent);
+      auto ool_extent = record.get_extents().back();
+      ool_extent.set_ool_paddr(paddr);
+      return _write(t, record);
+    });
+  }).si_then([]() {
+    return seastar::now();
+  });;
+}
+
+void RBAllocator::Writer::add_extent_to_write(
+  ool_record_t& record,
+  LogicalCachedExtentRef& extent) {
+  extent->prepare_write();
+  record.add_extent(extent);
+}
+
 }

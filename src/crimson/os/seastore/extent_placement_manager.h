@@ -10,6 +10,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/random_block_manager.h"
 
 namespace crimson::os::seastore {
 
@@ -71,6 +72,10 @@ public:
     assert(extent_offset == (segment_off_t)(base + rsize.mdlength + rsize.dlength));
     return encode_record(rsize, std::move(record), block_size, journal_seq_t(), nonce);
   }
+  ceph::bufferlist encode(const record_size_t& rsize, segment_nonce_t nonce) {
+    return encode_record(rsize, std::move(record), block_size, journal_seq_t(), nonce);
+  }
+
   void add_extent(LogicalCachedExtentRef& extent) {
     extents.emplace_back(extent);
     ceph::bufferlist bl;
@@ -286,6 +291,97 @@ private:
   std::vector<Writer> writers;
   LBAManager& lba_manager;
   Journal& journal;
+  Cache& cache;
+};
+
+/*
+ * RandomBlock allocator
+ *
+ */
+class RBAllocator : public ExtentAllocator {
+  class Writer : public ExtentOolWriter {
+  public:
+    Writer(
+      RandomBlockManager& rbm,
+      LBAManager& lba_manager,
+      Cache& cache)
+      : rbm(rbm),
+        lba_manager(lba_manager),
+	cache(cache)
+    {}
+    Writer(Writer &&) = default;
+
+    write_iertr::future<> write(
+      Transaction& t,
+      std::list<LogicalCachedExtentRef>& extent) final;
+    stop_ertr::future<> stop() final {
+      return writer_guard.close().then([] {
+	  return stop_ertr::now();
+      });
+    }
+  private:
+    using update_lba_mapping_iertr = LBAManager::update_le_mapping_iertr;
+    using finish_record_iertr = update_lba_mapping_iertr;
+    using finish_record_ret = finish_record_iertr::future<>;
+    finish_record_ret finish_write(
+      Transaction& t,
+      ool_record_t& record);
+
+    write_iertr::future<> _write(
+      Transaction& t,
+      ool_record_t& record);
+
+    using extents_to_write_t = std::vector<LogicalCachedExtentRef>;
+    void add_extent_to_write(
+      ool_record_t&,
+      LogicalCachedExtentRef& extent);
+
+    RandomBlockManager& rbm;
+    LBAManager& lba_manager;
+    seastar::gate writer_guard;
+    Cache& cache;
+  };
+public:
+  RBAllocator(
+    RandomBlockManager& rbm,
+    LBAManager& lba_manager,
+    Cache& cache);
+
+  Writer &get_writer(placement_hint_t hint) {
+    return writers[std::rand() % writers.size()];
+  }
+
+  alloc_paddr_iertr::future<> alloc_ool_extents_paddr(
+    Transaction& t,
+    std::list<LogicalCachedExtentRef>& extents) final {
+    return seastar::do_with(
+      std::map<Writer*, std::list<LogicalCachedExtentRef>>(),
+      [this, extents=std::move(extents), &t](auto& alloc_map) {
+      for (auto& extent : extents) {
+        auto writer = &(get_writer(extent->hint));
+        alloc_map[writer].emplace_back(extent);
+      }
+      return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
+        auto writer = p.first;
+        auto& extents_to_persist = p.second;
+	return writer->write(t, extents_to_persist);
+      });
+    });
+  }
+
+  size_t get_block_size() {
+    return rbm.get_block_size();
+  }
+
+  stop_ertr::future<> stop() {
+    return crimson::do_for_each(writers, [](auto& writer) {
+      return writer.stop();
+    });
+  }
+private:
+  RandomBlockManager& rbm;
+  std::vector<Writer> writers;
+  LBAManager& lba_manager;
   Cache& cache;
 };
 
