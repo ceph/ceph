@@ -77,10 +77,11 @@ else
 fi
 
 if test -d wheelhouse ; then
-    export NO_INDEX=--no-index
+    NO_INDEX=--no-index
+    FIND_LINKS_OPT=--find-links=file://$(pwd)/wheelhouse
 fi
 
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse 'tox >=2.9.1'
+pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX $FIND_LINKS_OPT 'tox >=2.9.1'
 
 require_files=$(ls *requirements*.txt 2>/dev/null) || true
 constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
@@ -90,7 +91,8 @@ md5=wheelhouse/md5
 if test "$require"; then
     if ! test -f $md5 || ! md5sum -c wheelhouse/md5 > /dev/null; then
         NO_INDEX=''
+        FIND_LINKS_OPT=''
     fi
-    pip --exists-action i $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX \
-      --find-links=file://$(pwd)/wheelhouse $require $constraint 
+    pip --exists-action i $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install \
+        $NO_INDEX $FIND_LINKS_OPT $require $constraint
 fi
