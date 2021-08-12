@@ -91,7 +91,7 @@ always a power of 2, and will only be present if the "ideal" value
 varies from the current value by more than a factor of 3 by default.
 This factor can be be adjusted with::
 
-  ceph config set mgr mgr/pg_autoscaler/threshold 2.0
+  ceph osd pool set threshold 2.0
 
 **AUTOSCALE**, is the pool ``pg_autoscale_mode``
 and will be either ``on``, ``off``, or ``warn``.

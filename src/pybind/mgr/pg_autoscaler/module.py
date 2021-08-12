@@ -252,6 +252,17 @@ class PgAutoscaler(MgrModule):
                 ])
             return 0, table.get_string(), ''
 
+    @CLIWriteCommand("osd pool set threshold")
+    def set_scaling_threshold(self, num: float) -> Tuple[int, str, str]:
+        """
+        set the autoscaler threshold 
+        A.K.A. the factor by which the new PG_NUM must vary from the existing PG_NUM
+        """
+        if num < 2.0:
+            return 22, "", "threshold can not be set less than 2.0"
+        self.set_module_option("threshold", num)
+        return 0, "threshold updated", ""
+
     @CLIWriteCommand("osd pool set autoscale-profile scale-up")
     def set_profile_scale_up(self) -> Tuple[int, str, str]:
         """
