@@ -247,7 +247,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   } else {
     return ctx.tm.reserve_region(
       ctx.t,
-      0 /* TODO -- pass hint based on object hash */,
+      ctx.onode.get_hint(),
       MAX_OBJECT_SIZE
     ).si_then([&object_data](auto pin) {
       ceph_assert(pin->get_length() == MAX_OBJECT_SIZE);
