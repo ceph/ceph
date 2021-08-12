@@ -71,7 +71,7 @@ function main() {
     fi
     FOR_MAKE_CHECK=1 prepare
     # Init defaults after deps are installed.
-    local cmake_opts=" -DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_CEPHFS_SHELL=ON -DWITH_GRAFANA=ON -DWITH_SPDK=ON -DENABLE_GIT_VERSION=OFF"
+    local cmake_opts=" -DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_CEPHFS_SHELL=ON -DWITH_SPDK=ON -DENABLE_GIT_VERSION=OFF"
     if [ $WITH_SEASTAR ]; then
         cmake_opts+=" -DWITH_SEASTAR=ON"
     fi
