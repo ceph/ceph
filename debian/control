@@ -1235,16 +1235,6 @@ Description: This package provides a top(1) like utility to display various
  .
  This package contains utility for displaying filesystem metrics.
 
-Package: ceph-grafana-dashboards
-Architecture: all
-Description: grafana dashboards for the ceph dashboard
- Ceph is a massively scalable, open-source, distributed
- storage system that runs on commodity hardware and delivers object,
- block and file system storage.
- .
- This package contains Grafana dashboards that are used by the Ceph Dashboard
- for monitoring.
-
 Package: ceph-prometheus-alerts
 Architecture: all
 Description: prometheus alerts for the ceph dashboard
