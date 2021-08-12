@@ -393,7 +393,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     clear_file_locks();
     ceph_assert(num_projected_srnodes == 0);
     ceph_assert(num_caps_notable == 0);
-    ceph_assert(num_subtree_roots == 0);
+    ceph_assert(!has_subtree_root_dirfrag());
     ceph_assert(num_exporting_dirs == 0);
     ceph_assert(batch_ops.empty());
   }
@@ -602,15 +602,22 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     get_subtree_dirfrags(v);
     return v;
   }
-  int get_num_subtree_roots() const {
-    return num_subtree_roots;
-  }
 
   CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
   CDir *add_dirfrag(CDir *dir);
   void close_dirfrag(frag_t fg);
   void close_dirfrags();
-  bool has_subtree_root_dirfrag(int auth=-1);
+
+  void inc_subtree_root_auth(mds_rank_t auth) {
+    ++subtree_auth_map[auth];
+  }
+  void dec_subtree_root_auth(mds_rank_t auth) {
+    auto it = subtree_auth_map.find(auth);
+    ceph_assert(it != subtree_auth_map.end() && it->second > 0);
+    if (--it->second == 0)
+      subtree_auth_map.erase(it);
+  }
+  bool has_subtree_root_dirfrag(mds_rank_t auth=MDS_RANK_NONE);
   bool has_subtree_or_exporting_dirfrag();
 
   void force_dirfrags();
@@ -772,6 +779,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     put(PIN_EXPORTINGCAPS);
   }
   void decode_import(ceph::buffer::list::const_iterator& p, LogSegment *ls);
+  void twiddle_locks();
   
   // for giving to clients
   int encode_inodestat(ceph::buffer::list& bl, Session *session, SnapRealm *realm,
@@ -809,6 +817,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void clear_dirty_scattered(int type) override;
   bool is_dirty_scattered();
   void clear_scatter_dirty();  // on rejoin ack
+  void remove_lazy_scatter(mds_rank_t who);
 
   void start_scatter(ScatterLock *lock);
   void finish_scatter_update(ScatterLock *lock, CDir *dir,
@@ -1192,7 +1201,7 @@ private:
   mempool::mds_co::compact_map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
 
   //for the purpose of quickly determining whether there's a subtree root or exporting dir
-  int num_subtree_roots = 0;
+  mempool::mds_co::compact_map<mds_rank_t, unsigned> subtree_auth_map;
   int num_exporting_dirs = 0;
 
   int stickydir_ref = 0;
