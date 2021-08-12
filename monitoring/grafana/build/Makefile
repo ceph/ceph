@@ -32,7 +32,6 @@ build :
 	sudo buildah run $(CONTAINER) grafana-cli plugins install grafana-piechart-panel ${PIECHART_VERSION}
 	sudo buildah run $(CONTAINER) grafana-cli plugins install vonage-status-panel ${STATUS_PANEL_VERSION}
 	sudo buildah run $(CONTAINER) mkdir -p /etc/grafana/dashboards/ceph-dashboard
-	sudo buildah copy $(CONTAINER) ${DASHBOARD_DIR}/*.json /etc/grafana/dashboards/ceph-dashboard
 
 	@/bin/echo -e "\
 apiVersion: 1 \\n\
