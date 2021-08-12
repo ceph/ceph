@@ -9,10 +9,12 @@ testlist='001 002 003 004 005 008 009 010 011 021 025 032 033'
 
 git clone https://github.com/qemu/qemu.git
 cd qemu
-if lsb_release -da 2>&1 | grep -iqE '(bionic|focal)'; then
+
+
+if grep -iqE '(bionic|focal)' /etc/os-release; then
     # Bionic requires a matching test harness
     git checkout v2.11.0
-elif lsb_release -da 2>&1 | grep -iqE '(xenial|linux release 8|stream release 8)'; then
+elif grep -iqE '(xenial|platform:el8)' /etc/os-release; then
     # Xenial requires a recent test harness
     git checkout v2.3.0
 else
