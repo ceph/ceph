@@ -13,4 +13,4 @@ set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SQLITE_COMPILE_FLAGS}")
 
 add_library(sqlite_db ${sqlite_db_srcs})
-target_link_libraries(sqlite_db sqlite3 dbstore_lib)
+target_link_libraries(sqlite_db sqlite3 dbstore_lib rgw_common)
