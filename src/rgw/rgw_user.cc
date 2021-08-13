@@ -636,8 +636,9 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 
   // don't check for secret key because we may be doing a removal
 
-  check_existing_key(op_state);
-
+  if (check_existing_key(op_state)) {
+    op_state.set_access_key_exist();
+  }
   return 0;
 }
 
@@ -1178,6 +1179,11 @@ int RGWSubUserPool::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_s
   if (ret < 0) {
     set_err_msg(err_msg, "unable to parse request, " + subprocess_msg);
     return ret;
+  }
+
+  if (op_state.get_access_key_exist()) {
+    set_err_msg(err_msg, "cannot create existing key");
+    return -ERR_KEY_EXIST;
   }
 
   if (key_type == KEY_TYPE_S3 && op_state.get_access_key().empty()) {
