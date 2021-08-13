@@ -14,21 +14,23 @@ namespace crimson::os::seastore {
 TransactionManager::TransactionManager(
   SegmentManager &_segment_manager,
   SegmentCleanerRef _segment_cleaner,
-  JournalRef _journal,
+  SegmentJournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef&& epm,
-  ExtentReader& scanner)
+  ExtentReader& scanner,
+  JournalManagerRef _jm)
   : segment_manager(_segment_manager),
     segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
-    scanner(scanner)
+    scanner(scanner),
+    jm(std::move(_jm))
 {
   segment_cleaner->set_extent_callback(this);
-  journal->set_write_pipeline(&write_pipeline);
+  jm->set_write_pipeline(&write_pipeline, segment_manager.get_device_id());
   register_metrics();
 }
 
@@ -38,7 +40,8 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   segment_cleaner->mount(
     segment_manager.get_device_id(),
     scanner.get_segment_managers());
-  return journal->open_for_write().safe_then([this, FNAME](auto addr) {
+  return jm->open_for_write(segment_manager.get_device_id()
+  ).safe_then([this, FNAME](auto addr) {
     DEBUG("about to do_with");
     segment_cleaner->init_mkfs(addr);
     return with_transaction_intr(
@@ -73,6 +76,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     scanner.get_segment_managers());
   return segment_cleaner->init_segments().safe_then(
     [this](auto&& segments) {
+    auto journal = static_cast<SegmentJournal*>(jm->get_journal(
+      segment_manager.get_device_id()));
     return journal->replay(
       std::move(segments),
       [this](const auto &offsets, const auto &e) {
@@ -85,7 +90,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           e);
     });
   }).safe_then([this] {
-    return journal->open_for_write();
+    return jm->open_for_write(segment_manager.get_device_id());
   }).safe_then([this, FNAME](auto addr) {
     segment_cleaner->set_journal_head(addr);
     return seastar::do_with(
@@ -135,7 +140,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
     return cache->close();
   }).safe_then([this] {
     cache->dump_contents();
-    return journal->close();
+    return jm->close(segment_manager.get_device_id());
   }).safe_then([FNAME] {
     DEBUG("completed");
     return seastar::now();
@@ -275,7 +280,8 @@ TransactionManager::submit_transaction_direct(
 
     DEBUGT("about to submit to journal", tref);
 
-    return journal->submit_record(std::move(record), tref.get_handle()
+    return jm->submit_record(std::move(record), tref.get_handle(),
+      segment_manager.get_device_id()
     ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
       auto start_seq = submit_result.write_result.start_seq;
       auto end_seq = submit_result.write_result.get_end_seq();

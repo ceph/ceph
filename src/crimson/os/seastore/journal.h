@@ -27,13 +27,103 @@ namespace crimson::os::seastore {
 class SegmentProvider;
 class SegmentedAllocator;
 
+class Journal {
+public:
+  using open_for_write_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error
+    >;
+  using open_for_write_ret = open_for_write_ertr::future<journal_seq_t>;
+  virtual open_for_write_ret open_for_write() = 0;
+
+  using close_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  virtual close_ertr::future<> close() = 0;
+
+  struct write_result_t {
+    journal_seq_t start_seq;
+    segment_off_t length;
+
+    journal_seq_t get_end_seq() const {
+      return start_seq.add_offset(length);
+    }
+  };
+  struct submit_result_t {
+    paddr_t record_block_base;
+    write_result_t write_result;
+  };
+  using submit_record_ertr = crimson::errorator<
+    crimson::ct_error::erange,
+    crimson::ct_error::input_output_error
+    >;
+  using submit_record_ret = submit_record_ertr::future<
+    submit_result_t
+    >;
+  virtual submit_record_ret submit_record(
+    record_t &&record,
+    OrderingHandle &handle
+  ) = 0;
+
+  virtual void set_write_pipeline(WritePipeline *_write_pipeline) = 0;
+  virtual ~Journal() {}
+};
+using JournalRef = std::unique_ptr<Journal>;
+
+class JournalManager {
+public:
+  JournalManager() {}
+
+  void add_journal(device_id_t d_id, Journal* j) {
+    journals[d_id] = j;
+  }
+
+  Journal::open_for_write_ret open_for_write(
+      device_id_t d_id = 0
+  ) {
+    ceph_assert(journals[d_id]);
+    return journals[d_id]->open_for_write();
+  }
+
+  Journal::close_ertr::future<> close(
+      device_id_t d_id = 0
+  ) {
+    ceph_assert(journals[d_id]);
+    return journals[d_id]->close();
+  }
+
+  void set_write_pipeline(
+      WritePipeline *_write_pipeline,
+      device_id_t d_id = 0
+  ) {
+    ceph_assert(journals[d_id]);
+    return journals[d_id]->set_write_pipeline(_write_pipeline);
+  }
+
+  Journal::submit_record_ret submit_record(
+      record_t &&record,
+      OrderingHandle &handle,
+      device_id_t d_id = 0
+  ) {
+    ceph_assert(journals[d_id]);
+    return journals[d_id]->submit_record(std::move(record), handle);
+  }
+
+  Journal* get_journal(device_id_t d_id) {
+    ceph_assert(journals[d_id]);
+    return journals[d_id];
+  }
+
+private:
+  std::map<device_id_t, Journal*> journals;
+};
+using JournalManagerRef = std::unique_ptr<JournalManager>;
+
 /**
  * Manages stream of atomically written records to a SegmentManager.
  */
-class Journal {
+class SegmentJournal : public Journal {
 public:
-  Journal(SegmentManager &segment_manager, ExtentReader& scanner);
-
+  SegmentJournal(SegmentManager &segment_manager, ExtentReader& scanner);
+  ~SegmentJournal() {}
   /**
    * Gets the current journal segment sequence.
    */
@@ -85,25 +175,6 @@ public:
    *
    * write record with the ordering handle
    */
-  struct write_result_t {
-    journal_seq_t start_seq;
-    segment_off_t length;
-
-    journal_seq_t get_end_seq() const {
-      return start_seq.add_offset(length);
-    }
-  };
-  struct submit_result_t {
-    paddr_t record_block_base;
-    write_result_t write_result;
-  };
-  using submit_record_ertr = crimson::errorator<
-    crimson::ct_error::erange,
-    crimson::ct_error::input_output_error
-    >;
-  using submit_record_ret = submit_record_ertr::future<
-    submit_result_t
-    >;
   submit_record_ret submit_record(
     record_t &&record,
     OrderingHandle &handle
@@ -483,6 +554,6 @@ private:
 
   void register_metrics();
 };
-using JournalRef = std::unique_ptr<Journal>;
+using SegmentJournalRef = std::unique_ptr<SegmentJournal>;
 
 }

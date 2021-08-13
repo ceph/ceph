@@ -29,7 +29,7 @@ struct btree_test_base :
 
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   ExtentReaderRef scanner;
-  JournalRef journal;
+  SegmentJournalRef journal;
   CacheRef cache;
 
   size_t block_size;
@@ -71,7 +71,7 @@ struct btree_test_base :
   seastar::future<> set_up_fut() final {
     segment_manager = segment_manager::create_test_ephemeral();
     scanner.reset(new ExtentReader());
-    journal.reset(new Journal(*segment_manager, *scanner));
+    journal.reset(new SegmentJournal(*segment_manager, *scanner));
     cache.reset(new Cache(*scanner));
 
     block_size = segment_manager->get_block_size();

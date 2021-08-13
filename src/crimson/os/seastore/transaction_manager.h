@@ -68,11 +68,12 @@ public:
   TransactionManager(
     SegmentManager &segment_manager,
     SegmentCleanerRef segment_cleaner,
-    JournalRef journal,
+    SegmentJournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
     ExtentPlacementManagerRef&& epm,
-    ExtentReader& scanner);
+    ExtentReader& scanner,
+    JournalManagerRef jm);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -526,9 +527,10 @@ private:
   SegmentCleanerRef segment_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
-  JournalRef journal;
+  SegmentJournalRef journal;
   ExtentPlacementManagerRef epm;
   ExtentReader& scanner;
+  JournalManagerRef jm;
 
   WritePipeline write_pipeline;
 

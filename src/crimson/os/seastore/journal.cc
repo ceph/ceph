@@ -50,7 +50,7 @@ segment_nonce_t generate_nonce(
     sizeof(meta.seastore_id.uuid));
 }
 
-Journal::Journal(
+SegmentJournal::SegmentJournal(
   SegmentManager& segment_manager,
   ExtentReader& scanner)
   : journal_segment_manager(segment_manager),
@@ -66,8 +66,8 @@ Journal::Journal(
   register_metrics();
 }
 
-Journal::prep_replay_segments_fut
-Journal::prep_replay_segments(
+SegmentJournal::prep_replay_segments_fut
+SegmentJournal::prep_replay_segments(
   std::vector<std::pair<segment_id_t, segment_header_t>> segments)
 {
   logger().debug(
@@ -100,7 +100,7 @@ Journal::prep_replay_segments(
   segment_provider->update_journal_tail_committed(journal_tail);
   auto replay_from = journal_tail.offset;
   logger().debug(
-    "Journal::prep_replay_segments: journal_tail={}",
+    "SegmentJournal::prep_replay_segments: journal_tail={}",
     journal_tail);
   auto from = segments.begin();
   if (replay_from != P_ADDR_NULL) {
@@ -133,7 +133,7 @@ Journal::prep_replay_segments(
 	  p.first,
 	  (segment_off_t)journal_segment_manager.get_block_size())};
       logger().debug(
-	"Journal::prep_replay_segments: replaying from  {}",
+	"SegmentJournal::prep_replay_segments: replaying from  {}",
 	ret);
       return std::make_pair(ret, p.second);
     });
@@ -143,7 +143,7 @@ Journal::prep_replay_segments(
     std::move(ret));
 }
 
-std::optional<std::vector<delta_info_t>> Journal::try_decode_deltas(
+std::optional<std::vector<delta_info_t>> SegmentJournal::try_decode_deltas(
   record_header_t header,
   const bufferlist &bl)
 {
@@ -163,8 +163,8 @@ std::optional<std::vector<delta_info_t>> Journal::try_decode_deltas(
   return deltas;
 }
 
-Journal::replay_ertr::future<>
-Journal::replay_segment(
+SegmentJournal::replay_ertr::future<>
+SegmentJournal::replay_segment(
   journal_seq_t seq,
   segment_header_t header,
   delta_handler_t &handler)
@@ -182,7 +182,7 @@ Journal::replay_segment(
 	if (!deltas) {
 	  // This should be impossible, we did check the crc on the mdbuf
 	  logger().error(
-	    "Journal::replay_segment: unable to decode deltas for record {}",
+	    "SegmentJournal::replay_segment: unable to decode deltas for record {}",
 	    base);
 	  assert(deltas);
 	}
@@ -238,7 +238,7 @@ Journal::replay_segment(
     });
 }
 
-Journal::replay_ret Journal::replay(
+SegmentJournal::replay_ret SegmentJournal::replay(
   std::vector<std::pair<segment_id_t, segment_header_t>>&& segment_headers,
   delta_handler_t &&delta_handler)
 {
@@ -257,7 +257,7 @@ Journal::replay_ret Journal::replay(
     });
 }
 
-void Journal::register_metrics()
+void SegmentJournal::register_metrics()
 {
   record_submitter.reset_stats();
   namespace sm = seastar::metrics;
@@ -296,15 +296,15 @@ void Journal::register_metrics()
   );
 }
 
-Journal::JournalSegmentManager::JournalSegmentManager(
+SegmentJournal::JournalSegmentManager::JournalSegmentManager(
   SegmentManager& segment_manager)
   : segment_manager{segment_manager}
 {
   reset();
 }
 
-Journal::JournalSegmentManager::close_ertr::future<>
-Journal::JournalSegmentManager::close()
+SegmentJournal::JournalSegmentManager::close_ertr::future<>
+SegmentJournal::JournalSegmentManager::close()
 {
   return (
     current_journal_segment ?
@@ -320,8 +320,8 @@ Journal::JournalSegmentManager::close()
   });
 }
 
-Journal::JournalSegmentManager::roll_ertr::future<>
-Journal::JournalSegmentManager::roll()
+SegmentJournal::JournalSegmentManager::roll_ertr::future<>
+SegmentJournal::JournalSegmentManager::roll()
 {
   auto old_segment_id = current_journal_segment ?
     current_journal_segment->get_segment_id() :
@@ -353,8 +353,8 @@ Journal::JournalSegmentManager::roll()
   );
 }
 
-Journal::JournalSegmentManager::write_ret
-Journal::JournalSegmentManager::write(ceph::bufferlist to_write)
+SegmentJournal::JournalSegmentManager::write_ret
+SegmentJournal::JournalSegmentManager::write(ceph::bufferlist to_write)
 {
   auto write_length = to_write.length();
   auto write_start_seq = get_current_write_seq();
@@ -385,7 +385,7 @@ Journal::JournalSegmentManager::write(ceph::bufferlist to_write)
   });
 }
 
-void Journal::JournalSegmentManager::mark_committed(
+void SegmentJournal::JournalSegmentManager::mark_committed(
   const journal_seq_t& new_committed_to)
 {
   logger().debug(
@@ -396,8 +396,8 @@ void Journal::JournalSegmentManager::mark_committed(
   committed_to = new_committed_to;
 }
 
-Journal::JournalSegmentManager::initialize_segment_ertr::future<>
-Journal::JournalSegmentManager::initialize_segment(Segment& segment)
+SegmentJournal::JournalSegmentManager::initialize_segment_ertr::future<>
+SegmentJournal::JournalSegmentManager::initialize_segment(Segment& segment)
 {
   auto new_tail = segment_provider->get_journal_tail_target();
   // write out header
@@ -436,8 +436,8 @@ Journal::JournalSegmentManager::initialize_segment(Segment& segment)
   });
 }
 
-Journal::RecordBatch::add_pending_ret
-Journal::RecordBatch::add_pending(
+SegmentJournal::RecordBatch::add_pending_ret
+SegmentJournal::RecordBatch::add_pending(
   record_t&& record,
   const record_size_t& rsize)
 {
@@ -478,7 +478,7 @@ Journal::RecordBatch::add_pending(
   });
 }
 
-ceph::bufferlist Journal::RecordBatch::encode_records(
+ceph::bufferlist SegmentJournal::RecordBatch::encode_records(
   size_t block_size,
   const journal_seq_t& committed_to,
   segment_nonce_t segment_nonce)
@@ -508,7 +508,7 @@ ceph::bufferlist Journal::RecordBatch::encode_records(
   return bl;
 }
 
-void Journal::RecordBatch::set_result(
+void SegmentJournal::RecordBatch::set_result(
   maybe_result_t maybe_write_result)
 {
   if (maybe_write_result.has_value()) {
@@ -534,7 +534,7 @@ void Journal::RecordBatch::set_result(
   io_promise.reset();
 }
 
-ceph::bufferlist Journal::RecordBatch::submit_pending_fast(
+ceph::bufferlist SegmentJournal::RecordBatch::submit_pending_fast(
   record_t&& record,
   const record_size_t& rsize,
   size_t block_size,
@@ -557,7 +557,7 @@ ceph::bufferlist Journal::RecordBatch::submit_pending_fast(
   return bl;
 }
 
-Journal::RecordSubmitter::RecordSubmitter(
+SegmentJournal::RecordSubmitter::RecordSubmitter(
   std::size_t io_depth,
   std::size_t batch_capacity,
   std::size_t batch_flush_size,
@@ -578,8 +578,8 @@ Journal::RecordSubmitter::RecordSubmitter(
   pop_free_batch();
 }
 
-Journal::RecordSubmitter::submit_ret
-Journal::RecordSubmitter::submit(
+SegmentJournal::RecordSubmitter::submit_ret
+SegmentJournal::RecordSubmitter::submit(
   record_t&& record,
   OrderingHandle& handle)
 {
@@ -600,7 +600,7 @@ Journal::RecordSubmitter::submit(
   return do_submit(std::move(record), rsize, handle);
 }
 
-void Journal::RecordSubmitter::update_state()
+void SegmentJournal::RecordSubmitter::update_state()
 {
   if (num_outstanding_io == 0) {
     state = state_t::IDLE;
@@ -613,7 +613,7 @@ void Journal::RecordSubmitter::update_state()
   }
 }
 
-void Journal::RecordSubmitter::finish_submit_batch(
+void SegmentJournal::RecordSubmitter::finish_submit_batch(
   RecordBatch* p_batch,
   maybe_result_t maybe_result)
 {
@@ -623,7 +623,7 @@ void Journal::RecordSubmitter::finish_submit_batch(
   decrement_io_with_flush();
 }
 
-void Journal::RecordSubmitter::flush_current_batch()
+void SegmentJournal::RecordSubmitter::flush_current_batch()
 {
   RecordBatch* p_batch = p_current_batch;
   assert(p_batch->is_pending());
@@ -653,8 +653,8 @@ void Journal::RecordSubmitter::flush_current_batch()
   });
 }
 
-Journal::RecordSubmitter::submit_pending_ret
-Journal::RecordSubmitter::submit_pending(
+SegmentJournal::RecordSubmitter::submit_pending_ret
+SegmentJournal::RecordSubmitter::submit_pending(
   record_t&& record,
   const record_size_t& rsize,
   OrderingHandle& handle,
@@ -705,8 +705,8 @@ Journal::RecordSubmitter::submit_pending(
   });
 }
 
-Journal::RecordSubmitter::do_submit_ret
-Journal::RecordSubmitter::do_submit(
+SegmentJournal::RecordSubmitter::do_submit_ret
+SegmentJournal::RecordSubmitter::do_submit(
   record_t&& record,
   const record_size_t& rsize,
   OrderingHandle& handle)

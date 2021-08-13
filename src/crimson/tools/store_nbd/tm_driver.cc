@@ -136,7 +136,7 @@ void TMDriver::init()
     false /* detailed */);
   std::vector<SegmentManager*> sms;
   segment_cleaner->mount(segment_manager->get_device_id(), sms);
-  auto journal = std::make_unique<Journal>(*segment_manager, scanner_ref);
+  auto journal = std::make_unique<SegmentJournal>(*segment_manager, scanner_ref);
   auto cache = std::make_unique<Cache>(scanner_ref);
   auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
 
@@ -153,6 +153,11 @@ void TMDriver::init()
 
   journal->set_segment_provider(&*segment_cleaner);
 
+  auto jm = std::make_unique<JournalManager>();
+  jm->add_journal(
+      segment_manager->get_device_id(),
+      journal.get());
+
   tm = std::make_unique<TransactionManager>(
     *segment_manager,
     std::move(segment_cleaner),
@@ -160,7 +165,8 @@ void TMDriver::init()
     std::move(cache),
     std::move(lba_manager),
     std::move(epm),
-    scanner_ref);
+    scanner_ref,
+    std::move(jm));
 }
 
 void TMDriver::clear()

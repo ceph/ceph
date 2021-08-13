@@ -79,7 +79,7 @@ auto get_transaction_manager(
     SegmentCleaner::config_t::get_default(),
     std::move(scanner),
     true);
-  auto journal = std::make_unique<Journal>(segment_manager, scanner_ref);
+  auto journal = std::make_unique<SegmentJournal>(segment_manager, scanner_ref);
   auto cache = std::make_unique<Cache>(scanner_ref);
   auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache);
 
@@ -96,6 +96,11 @@ auto get_transaction_manager(
 
   journal->set_segment_provider(&*segment_cleaner);
 
+  auto jm = std::make_unique<JournalManager>();
+  jm->add_journal(
+      segment_manager.get_device_id(),
+      journal.get());
+
   return std::make_unique<TransactionManager>(
     segment_manager,
     std::move(segment_cleaner),
@@ -103,7 +108,8 @@ auto get_transaction_manager(
     std::move(cache),
     std::move(lba_manager),
     std::move(epm),
-    scanner_ref);
+    scanner_ref,
+    std::move(jm));
 }
 
 auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
