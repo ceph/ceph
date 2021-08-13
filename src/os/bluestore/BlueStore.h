@@ -136,10 +136,10 @@ enum {
   l_bluestore_write_penalty_read_ops,
   l_bluestore_write_new,
 
-  l_bluestore_write_deferred,
-  l_bluestore_write_deferred_bytes,
-  l_bluestore_deferred_write_ops,
-  l_bluestore_deferred_write_bytes,
+  l_bluestore_issued_deferred_writes,
+  l_bluestore_issued_deferred_write_bytes,
+  l_bluestore_submitted_deferred_writes,
+  l_bluestore_submitted_deferred_write_bytes,
   //****************************************
 
   // compressions stats
