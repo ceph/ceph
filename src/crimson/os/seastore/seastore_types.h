@@ -1233,6 +1233,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::rbm_alloc_delta_t)
 
 template<>
 struct denc_traits<crimson::os::seastore::device_type_t> {

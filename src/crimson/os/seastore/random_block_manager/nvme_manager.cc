@@ -293,13 +293,7 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
 	);
 }
 
-NVMeManager::free_block_ertr::future<> NVMeManager::free_extent(
-    Transaction &t, blk_paddr_t from, size_t len)
-{
-  return free_block_ertr::now();
-}
-
-NVMeManager::free_block_ertr::future<> NVMeManager::add_free_extent(
+void NVMeManager::add_free_extent(
     std::vector<rbm_alloc_delta_t>& v, blk_paddr_t from, size_t len)
 {
   ceph_assert(!(len % super.block_size));
@@ -312,7 +306,6 @@ NVMeManager::free_block_ertr::future<> NVMeManager::add_free_extent(
   alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
   alloc_info.op = rbm_alloc_delta_t::op_types_t::CLEAR;
   v.push_back(alloc_info);
-  return free_block_ertr::now();
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::rbm_sync_block_bitmap_by_range(
