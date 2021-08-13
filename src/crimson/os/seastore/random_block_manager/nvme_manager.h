@@ -203,7 +203,7 @@ public:
    * TODO: multiple allocation
    *
    */
-  allocate_ertr::future<> alloc_extent(
+  allocate_ret alloc_extent(
       Transaction &t, size_t size) final; // allocator, return blocks
 
   /*
