@@ -496,6 +496,9 @@ public:
     Transaction &t,
     F &&f)
   {
+    // journal replay should has been finished at this point,
+    // Cache::root should have been inserted to the dirty list
+    assert(root->is_dirty());
     std::vector<CachedExtentRef> dirty;
     for (auto &e : extents) {
       dirty.push_back(CachedExtentRef(&e));
