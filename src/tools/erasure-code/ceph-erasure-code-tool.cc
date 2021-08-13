@@ -19,6 +19,8 @@
 
 #include <boost/algorithm/string.hpp>
 
+using namespace std;
+
 std::vector<std::string> display_params = {
   "chunk_count", "data_chunk_count", "coding_chunk_count"
 };

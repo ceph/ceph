@@ -26,6 +26,8 @@
 
 #include "kvstore_tool.h"
 
+using namespace std;
+
 void usage(const char *pname)
 {
   std::cout << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"

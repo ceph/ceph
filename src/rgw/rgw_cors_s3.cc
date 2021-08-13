@@ -27,6 +27,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
 

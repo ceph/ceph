@@ -22,6 +22,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace rgw::putobj {
 
 int HeadObjectProcessor::process(bufferlist&& data, uint64_t logical_offset)

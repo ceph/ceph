@@ -57,7 +57,7 @@ options:
   - runtime
   validator: |
     [](std::string *value, std::string *error_message) {
-      stringstream ss;
+      std::stringstream ss;
       uint64_t features = librbd::rbd_features_from_string(*value, &ss);
       // Leave this in integer form to avoid breaking Cinder.  Someday
       // we would like to present this in string form instead...
@@ -748,7 +748,7 @@ options:
   - runtime
   validator: |
     [](std::string *value, std::string *error_message) {
-        ostringstream ss;
+        std::ostringstream ss;
         uint64_t exclude_ops = librbd::io::rbd_io_operations_from_string(*value, &ss);
         // Leave this in integer form to avoid breaking Cinder.  Someday
         // we would like to present this in string form instead...

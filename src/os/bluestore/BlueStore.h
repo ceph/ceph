@@ -2420,7 +2420,7 @@ public:
 private:
   int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
 			       bool create);
-  int _set_bdev_label_size(const string& path, uint64_t size);
+  int _set_bdev_label_size(const std::string& path, uint64_t size);
 
   int _open_super_meta();
 
@@ -2700,7 +2700,7 @@ public:
   int expand_devices(std::ostream& out);
   std::string get_device_path(unsigned id);
 
-  int dump_bluefs_sizes(ostream& out);
+  int dump_bluefs_sizes(std::ostream& out);
 
 public:
   int statfs(struct store_statfs_t *buf,
@@ -3086,7 +3086,7 @@ private:
     std::lock_guard l(qlock);
     disk_size_mismatch_alert = s;
   }
-  void _set_spurious_read_errors_alert(const string& s) {
+  void _set_spurious_read_errors_alert(const std::string& s) {
     std::lock_guard l(qlock);
     spurious_read_errors_alert = s;
   }

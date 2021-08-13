@@ -23,6 +23,8 @@
 #define dout_subsys ceph_subsys_rgw
 #define PKI_ANS1_PREFIX "MII"
 
+using namespace std;
+
 bool rgw_is_pki_token(const string& token)
 {
   return token.compare(0, sizeof(PKI_ANS1_PREFIX) - 1, PKI_ANS1_PREFIX) == 0;

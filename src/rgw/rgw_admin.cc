@@ -74,6 +74,8 @@ extern "C" {
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
+using namespace std;
+
 static rgw::sal::Store* store = NULL;
 
 static const DoutPrefixProvider* dpp() {

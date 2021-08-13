@@ -122,19 +122,20 @@ private:
   std::map<int, Continuation::stagePtr> callbacks;
 
   bool _continue_function(int r, int n) {
-    set<int>::iterator stage_iter = stages_in_flight.find(n);
-    ceph_assert(stage_iter != stages_in_flight.end());
+    std::set<int>::iterator in_flight_iter = stages_in_flight.find(n);
+    ceph_assert(in_flight_iter != stages_in_flight.end());
     ceph_assert(callbacks.count(n));
     stagePtr p = callbacks[n];
 
-    pair<set<int>::iterator,bool> insert_r = stages_processing.insert(n);
+    [[maybe_unused]] auto [processing_iter, inserted] =
+      stages_processing.insert(n);
 
     bool done = (this->*p)(r);
     if (done)
       reported_done = true;
 
-    stages_processing.erase(insert_r.first);
-    stages_in_flight.erase(stage_iter);
+    stages_processing.erase(processing_iter);
+    stages_in_flight.erase(in_flight_iter);
     return done;
   }
 

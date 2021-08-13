@@ -22,6 +22,12 @@
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
 
+using std::map;
+using std::string;
+using std::vector;
+using std::cerr;
+using std::cout;
+
 void usage()
 {
   cout << "usage: ceph-authtool keyringfile [OPTIONS]...\n"

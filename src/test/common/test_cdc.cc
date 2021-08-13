@@ -11,6 +11,8 @@
 #include "common/CDC.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 class CDCTest : public ::testing::Test,
 		public ::testing::WithParamInterface<const char*> {
 public:

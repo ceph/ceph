@@ -30,6 +30,8 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 void* thread1(void* pParam);
 void* thread2(void* pParam);
 void* thread3(void* pParam);

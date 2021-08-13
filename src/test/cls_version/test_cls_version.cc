@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+using namespace std;
+
 static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();
 }

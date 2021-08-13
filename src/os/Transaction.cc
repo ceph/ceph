@@ -4,6 +4,7 @@
 #include "os/Transaction.h"
 #include "common/Formatter.h"
 
+using std::less;
 using std::list;
 using std::map;
 using std::ostream;

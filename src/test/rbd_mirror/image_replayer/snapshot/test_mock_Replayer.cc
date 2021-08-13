@@ -23,6 +23,8 @@
 #include "test/rbd_mirror/mock/MockContextWQ.h"
 #include "test/rbd_mirror/mock/MockSafeTimer.h"
 
+using namespace std::chrono_literals;
+
 namespace librbd {
 namespace {
 

@@ -27,10 +27,8 @@
 #include <string>
 #include <regex>
 
+using namespace std;
 using namespace librados;
-using std::map;
-using std::ostringstream;
-using std::string;
 
 typedef RadosTest LibRadosMisc;
 

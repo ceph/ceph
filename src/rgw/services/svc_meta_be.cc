@@ -8,6 +8,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 RGWSI_MetaBackend::Context::~Context() {} // needed, even though destructor is pure virtual
 RGWSI_MetaBackend::Module::~Module() {} // ditto

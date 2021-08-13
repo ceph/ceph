@@ -68,12 +68,12 @@ struct RGWClusterStat {
 class RGWGetBucketStats_CB : public RefCountedObject {
 protected:
   rgw_bucket bucket;
-  map<RGWObjCategory, RGWStorageStats>* stats;
+  std::map<RGWObjCategory, RGWStorageStats>* stats;
 public:
   explicit RGWGetBucketStats_CB(const rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   ~RGWGetBucketStats_CB() override {}
   virtual void handle_response(int r) = 0;
-  virtual void set_response(map<RGWObjCategory, RGWStorageStats>* _stats) {
+  virtual void set_response(std::map<RGWObjCategory, RGWStorageStats>* _stats) {
     stats = _stats;
   }
 };
@@ -210,12 +210,12 @@ class Store {
     virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) = 0;
     virtual int get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) = 0;
 
-    virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) = 0;
+    virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) = 0;
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) = 0;
     virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
-					const map<std::string, std::string>& meta) = 0;
+					const std::map<std::string, std::string>& meta) = 0;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) = 0;
-    virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled) = 0;
+    virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled) = 0;
     virtual uint64_t get_new_req_id() = 0;
     virtual int get_sync_policy_handler(const DoutPrefixProvider* dpp,
 					std::optional<rgw_zone_id> zone,
@@ -223,17 +223,17 @@ class Store {
 					RGWBucketSyncPolicyHandlerRef* phandler,
 					optional_yield y) = 0;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;
-    virtual void wakeup_meta_sync_shards(set<int>& shard_ids) = 0;
-    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) = 0;
+    virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) = 0;
+    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, std::map<int, std::set<std::string> >& shard_ids) = 0;
     virtual int clear_usage(const DoutPrefixProvider *dpp) = 0;
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
 			       RGWUsageIter& usage_iter,
-			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
+			       std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual int get_config_key_val(std::string name, bufferlist* bl) = 0;
     virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) = 0;
-    virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<std::string>& keys, bool* truncated) = 0;
+    virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) = 0;
     virtual void meta_list_keys_complete(void* handle) = 0;
     virtual std::string meta_get_marker(void* handle) = 0;
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) = 0;
@@ -250,11 +250,11 @@ class Store {
 			  optional_yield y,
 			  const std::string& path_prefix,
 			  const std::string& tenant,
-			  vector<std::unique_ptr<RGWRole>>& roles) = 0;
+			  std::vector<std::unique_ptr<RGWRole>>& roles) = 0;
     virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() = 0;
     virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
-				   vector<std::unique_ptr<RGWOIDCProvider>>& providers) = 0;
+				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) = 0;
     virtual std::unique_ptr<MultipartUpload> get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id=std::nullopt, ceph::real_time mtime=real_clock::now()) = 0;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
@@ -324,7 +324,7 @@ class User {
     virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
-			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
+			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual RGWObjVersionTracker& get_version_tracker() { return objv_tracker; }
     virtual Attrs& get_attrs() { return attrs; }
@@ -337,12 +337,12 @@ class User {
     /* dang temporary; will be removed when User is complete */
     RGWUserInfo& get_info() { return info; }
 
-    friend inline ostream& operator<<(ostream& out, const User& u) {
+    friend inline std::ostream& operator<<(std::ostream& out, const User& u) {
       out << u.info.user_id;
       return out;
     }
 
-    friend inline ostream& operator<<(ostream& out, const User* u) {
+    friend inline std::ostream& operator<<(std::ostream& out, const User* u) {
       if (!u)
 	out << "<NULL>";
       else
@@ -350,7 +350,7 @@ class User {
       return out;
     }
 
-    friend inline ostream& operator<<(ostream& out, const std::unique_ptr<User>& p) {
+    friend inline std::ostream& operator<<(std::ostream& out, const std::unique_ptr<User>& p) {
       out << p.get();
       return out;
     }
@@ -381,8 +381,8 @@ class Bucket {
       int shard_id{RGW_NO_SHARD};
     };
     struct ListResults {
-      vector<rgw_bucket_dir_entry> objs;
-      map<std::string, bool> common_prefixes;
+      std::vector<rgw_bucket_dir_entry> objs;
+      std::map<std::string, bool> common_prefixes;
       bool is_truncated{false};
       rgw_obj_key next_marker;
     };
@@ -450,7 +450,7 @@ class Bucket {
     virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) = 0;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
-			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
+			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) = 0;
     virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) = 0;
@@ -482,27 +482,27 @@ class Bucket {
     virtual std::unique_ptr<Bucket> clone() = 0;
 
     virtual int list_multiparts(const DoutPrefixProvider *dpp,
-				const string& prefix,
-				string& marker,
-				const string& delim,
+				const std::string& prefix,
+				std::string& marker,
+				const std::string& delim,
 				const int& max_uploads,
-				vector<std::unique_ptr<MultipartUpload>>& uploads,
-				map<string, bool> *common_prefixes,
+				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
+				std::map<std::string, bool> *common_prefixes,
 				bool *is_truncated) = 0;
     virtual int abort_multiparts(const DoutPrefixProvider *dpp,
 				 CephContext *cct,
-				 string& prefix, string& delim) = 0;
+				 std::string& prefix, std::string& delim) = 0;
 
     /* dang - This is temporary, until the API is completed */
     rgw_bucket& get_key() { return info.bucket; }
     RGWBucketInfo& get_info() { return info; }
 
-    friend inline ostream& operator<<(ostream& out, const Bucket& b) {
+    friend inline std::ostream& operator<<(std::ostream& out, const Bucket& b) {
       out << b.info.bucket;
       return out;
     }
 
-    friend inline ostream& operator<<(ostream& out, const Bucket* b) {
+    friend inline std::ostream& operator<<(std::ostream& out, const Bucket* b) {
       if (!b)
 	out << "<NULL>";
       else
@@ -510,7 +510,7 @@ class Bucket {
       return out;
     }
 
-    friend inline ostream& operator<<(ostream& out, const std::unique_ptr<Bucket>& p) {
+    friend inline std::ostream& operator<<(std::ostream& out, const std::unique_ptr<Bucket>& p) {
       out << p.get();
       return out;
     }
@@ -551,7 +551,7 @@ public:
     return *this;
   };
 
-  map<std::string, std::unique_ptr<Bucket>>& get_buckets() { return buckets; }
+  std::map<std::string, std::unique_ptr<Bucket>>& get_buckets() { return buckets; }
   bool is_truncated(void) const { return truncated; }
   void set_truncated(bool trunc) { truncated = trunc; }
   void add(std::unique_ptr<Bucket> bucket) {
@@ -650,7 +650,7 @@ class Object {
         uint64_t olh_epoch{0};
 	std::string marker_version_id;
         uint32_t bilog_flags{0};
-        list<rgw_obj_index_key>* remove_objs{nullptr};
+        std::list<rgw_obj_index_key>* remove_objs{nullptr};
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
         ceph::real_time mtime;
@@ -820,20 +820,20 @@ class Object {
     const std::string &get_instance() const { return key.instance; }
     bool have_instance(void) { return key.have_instance(); }
 
-    friend inline ostream& operator<<(ostream& out, const Object& o) {
+    friend inline std::ostream& operator<<(std::ostream& out, const Object& o) {
       if (o.bucket)
 	out << o.bucket << ":";
       out << o.key;
       return out;
     }
-    friend inline ostream& operator<<(ostream& out, const Object* o) {
+    friend inline std::ostream& operator<<(std::ostream& out, const Object* o) {
       if (!o)
 	out << "<NULL>";
       else
 	out << *o;
       return out;
     }
-    friend inline ostream& operator<<(ostream& out, const std::unique_ptr<Object>& p) {
+    friend inline std::ostream& operator<<(std::ostream& out, const std::unique_ptr<Object>& p) {
       out << p.get();
       return out;
     }
@@ -880,8 +880,8 @@ public:
 		    RGWObjectCtx* obj_ctx) = 0;
   virtual int complete(const DoutPrefixProvider* dpp, CephContext* cct,
 		       std::string& etag, RGWObjManifest& manifest,
-		       map<int, string>& part_etags,
-		       list<rgw_obj_index_key>& remove_objs,
+		       std::map<int, std::string>& part_etags,
+		       std::list<rgw_obj_index_key>& remove_objs,
 		       uint64_t& accounted_size, bool& compressed,
 		       RGWCompressionInfo& cs_info, off_t& ofs) = 0;
 
@@ -895,20 +895,20 @@ public:
 			  uint64_t part_num,
 			  const std::string& part_num_str) = 0;
 
-  friend inline ostream& operator<<(ostream& out, const MultipartUpload& u) {
+  friend inline std::ostream& operator<<(std::ostream& out, const MultipartUpload& u) {
     out << u.get_meta();
     if (!u.get_upload_id().empty())
       out << ":" << u.get_upload_id();
     return out;
   }
-  friend inline ostream& operator<<(ostream& out, const MultipartUpload* u) {
+  friend inline std::ostream& operator<<(std::ostream& out, const MultipartUpload* u) {
     if (!u)
       out << "<NULL>";
     else
       out << *u;
     return out;
   }
-  friend inline ostream& operator<<(ostream& out, const
+  friend inline std::ostream& operator<<(std::ostream& out, const
 				    std::unique_ptr<MultipartUpload>& p) {
     out << p.get();
     return out;
@@ -965,7 +965,7 @@ public:
   virtual int get_next_entry(const std::string& oid, std::string& marker, LCEntry& entry) = 0;
   virtual int set_entry(const std::string& oid, const LCEntry& entry) = 0;
   virtual int list_entries(const std::string& oid, const std::string& marker,
-			   uint32_t max_entries, vector<LCEntry>& entries) = 0;
+			   uint32_t max_entries, std::vector<LCEntry>& entries) = 0;
   virtual int rm_entry(const std::string& oid, const LCEntry& entry) = 0;
   virtual int get_head(const std::string& oid, LCHead& head) = 0;
   virtual int put_head(const std::string& oid, const LCHead& head) = 0;

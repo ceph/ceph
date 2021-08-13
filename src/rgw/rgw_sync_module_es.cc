@@ -22,6 +22,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 /*
  * allowlist utility. Config string is a list of entries, where an entry is either an item,

@@ -553,6 +553,7 @@ void Mirror::run()
 {
   dout(20) << "enter" << dendl;
 
+  using namespace std::chrono_literals;
   utime_t next_refresh_pools = ceph_clock_now();
 
   while (!m_stopping) {

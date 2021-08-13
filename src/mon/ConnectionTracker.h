@@ -136,7 +136,7 @@ class ConnectionTracker {
  private:
   epoch_t epoch;
   uint64_t version;
-  map<int,ConnectionReport> peer_reports;
+  std::map<int,ConnectionReport> peer_reports;
   ConnectionReport my_reports;
   double half_life;
   RankProvider *owner;
@@ -190,7 +190,7 @@ class ConnectionTracker {
   void notify_rank_removed(int rank_removed);
   friend std::ostream& operator<<(std::ostream& o, const ConnectionTracker& c);
   friend ConnectionReport *get_connection_reports(ConnectionTracker& ct);
-  friend map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct);
+  friend std::map<int,ConnectionReport> *get_peer_reports(ConnectionTracker& ct);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<ConnectionTracker*>& o);
 };

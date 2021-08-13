@@ -757,7 +757,7 @@ private:
     auto e = ba::get_associated_executor(handler, get_executor());
     auto a = ba::get_associated_allocator(handler);
     _read_meta_(r, oid, ioc,
-		nullopt,
+		std::nullopt,
 		ca::bind_ea(
 		  e, a,
 		  [this,

@@ -347,7 +347,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkNoPeer) {
   MockUnlinkPeerRequest mock_unlink_peer_request;
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
-  std::list<string> peer_uuids = {"uuid"};
+  std::list<std::string> peer_uuids = {"uuid"};
   expect_unlink_peer(mock_image_ctx, mock_unlink_peer_request, snap_id, "uuid",
                      false, 0);
 

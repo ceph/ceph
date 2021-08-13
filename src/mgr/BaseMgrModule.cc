@@ -38,6 +38,8 @@
 
 #define PLACEHOLDER ""
 
+using std::list;
+using std::string;
 
 typedef struct {
   PyObject_HEAD

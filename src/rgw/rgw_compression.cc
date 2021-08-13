@@ -5,6 +5,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int rgw_compression_info_from_attr(const bufferlist& attr,
                                    bool& need_decompress,
                                    RGWCompressionInfo& cs_info)

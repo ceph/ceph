@@ -43,6 +43,8 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "trim: ")
 
+using namespace std;
+
 using rgw::BucketTrimConfig;
 using BucketChangeCounter = BoundedKeyCounter<std::string, int>;
 

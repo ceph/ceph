@@ -27,6 +27,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 const std::string RGWMetadataLogHistory::oid = "meta.history";
 
 void LogStatusDump::dump(Formatter *f) const {

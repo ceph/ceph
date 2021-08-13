@@ -19,6 +19,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int RGWRestRole::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {

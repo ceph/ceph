@@ -12,6 +12,7 @@
 #include "common/ceph_json.h"
 #include "rgw_es_query.h"
 
+using namespace std;
 
 int main(int argc, char *argv[])
 {

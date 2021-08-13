@@ -8,6 +8,8 @@
 #include "common/WorkQueue.h"
 #include "journal/Settings.h"
 
+using namespace std::chrono_literals;
+
 RadosTestFixture::RadosTestFixture()
   : m_timer_lock(ceph::make_mutex("m_timer_lock")),
     m_listener(this) {

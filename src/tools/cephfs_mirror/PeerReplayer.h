@@ -31,10 +31,10 @@ public:
   void shutdown();
 
   // add a directory to mirror queue
-  void add_directory(string_view dir_root);
+  void add_directory(std::string_view dir_root);
 
   // remove a directory from queue
-  void remove_directory(string_view dir_root);
+  void remove_directory(std::string_view dir_root);
 
   // admin socket helpers
   void peer_status(Formatter *f);

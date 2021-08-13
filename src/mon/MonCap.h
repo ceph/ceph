@@ -183,8 +183,8 @@ struct MonCap {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<MonCap*>& ls);
 
-  std::vector<string> allowed_fs_names() const {
-    std::vector<string> ret;
+  std::vector<std::string> allowed_fs_names() const {
+    std::vector<std::string> ret;
     for (auto& g : grants) {
       if (not g.fs_name.empty()) {
 	ret.push_back(g.fs_name);
@@ -195,7 +195,7 @@ struct MonCap {
     return ret;
   }
 
-  bool fs_name_capable(const EntityName& ename, string_view fs_name,
+  bool fs_name_capable(const EntityName& ename, std::string_view fs_name,
 		       __u8 mask) {
     for (auto& g : grants) {
       if (g.is_allow_all()) {

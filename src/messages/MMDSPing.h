@@ -27,7 +27,7 @@ public:
     return "mdsping";
   }
 
-  void print(ostream &out) const override {
+  void print(std::ostream &out) const override {
     out << "mdsping";
   }
 

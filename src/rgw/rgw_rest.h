@@ -75,24 +75,24 @@ std::tuple<int, bufferlist > rgw_rest_get_json_input_keep_data(CephContext *cct,
 
 class RESTArgs {
 public:
-  static int get_string(struct req_state *s, const string& name,
-			const string& def_val, string *val,
+  static int get_string(struct req_state *s, const std::string& name,
+			const std::string& def_val, std::string *val,
 			bool *existed = NULL);
-  static int get_uint64(struct req_state *s, const string& name,
+  static int get_uint64(struct req_state *s, const std::string& name,
 			uint64_t def_val, uint64_t *val, bool *existed = NULL);
-  static int get_int64(struct req_state *s, const string& name,
+  static int get_int64(struct req_state *s, const std::string& name,
 		       int64_t def_val, int64_t *val, bool *existed = NULL);
-  static int get_uint32(struct req_state *s, const string& name,
+  static int get_uint32(struct req_state *s, const std::string& name,
 			uint32_t def_val, uint32_t *val, bool *existed = NULL);
-  static int get_int32(struct req_state *s, const string& name,
+  static int get_int32(struct req_state *s, const std::string& name,
 		       int32_t def_val, int32_t *val, bool *existed = NULL);
-  static int get_time(struct req_state *s, const string& name,
+  static int get_time(struct req_state *s, const std::string& name,
 		      const utime_t& def_val, utime_t *val,
 		      bool *existed = NULL);
-  static int get_epoch(struct req_state *s, const string& name,
+  static int get_epoch(struct req_state *s, const std::string& name,
 		       uint64_t def_val, uint64_t *epoch,
 		       bool *existed = NULL);
-  static int get_bool(struct req_state *s, const string& name, bool def_val,
+  static int get_bool(struct req_state *s, const std::string& name, bool def_val,
 		      bool *val, bool *existed = NULL);
 };
 
@@ -556,8 +556,8 @@ public:
   RGWHandler_REST() {}
   ~RGWHandler_REST() override {}
 
-  static int validate_bucket_name(const string& bucket);
-  static int validate_object_name(const string& object);
+  static int validate_bucket_name(const std::string& bucket);
+  static int validate_object_name(const std::string& object);
   static int reallocate_formatter(struct req_state *s, int type);
 
   int init_permissions(RGWOp* op, optional_yield y) override;
@@ -664,7 +664,7 @@ public:
     mgr.put_handler(handler);
   }
 
-  void register_resource(string resource, RGWRESTMgr *m,
+  void register_resource(std::string resource, RGWRESTMgr *m,
 			 bool register_empty = false) {
     if (!register_empty && resource.empty())
       return;
@@ -690,8 +690,8 @@ public:
 static constexpr int64_t NO_CONTENT_LENGTH = -1;
 static constexpr int64_t CHUNKED_TRANSFER_ENCODING = -2;
 
-extern void dump_errno(int http_ret, string& out);
-extern void dump_errno(const struct rgw_err &err, string& out);
+extern void dump_errno(int http_ret, std::string& out);
+extern void dump_errno(const struct rgw_err &err, std::string& out);
 extern void dump_errno(struct req_state *s);
 extern void dump_errno(struct req_state *s, int http_ret);
 extern void end_header(struct req_state *s,
@@ -703,7 +703,7 @@ extern void end_header(struct req_state *s,
 		       bool force_no_error = false);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
-extern void dump_owner(struct req_state *s, const rgw_user& id, string& name,
+extern void dump_owner(struct req_state *s, const rgw_user& id, std::string& name,
 		       const char *section = NULL);
 extern void dump_header(struct req_state* s,
                         const std::string_view& name,
@@ -804,7 +804,7 @@ extern void list_all_buckets_end(struct req_state *s);
 extern void dump_time(struct req_state *s, const char *name, real_time *t);
 extern std::string dump_time_to_str(const real_time& t);
 extern void dump_bucket_from_state(struct req_state *s);
-extern void dump_redirect(struct req_state *s, const string& redirect);
+extern void dump_redirect(struct req_state *s, const std::string& redirect);
 extern bool is_valid_url(const char *url);
 extern void dump_access_control(struct req_state *s, const char *origin,
 				const char *meth,

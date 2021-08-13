@@ -24,6 +24,8 @@
 #include "gtest/gtest.h"
 #include "common/hostname.h"
 
+using namespace std;
+
 extern std::string exec(const char* cmd); // defined in test_hostname.cc
 
 class test_config_proxy : public ConfigProxy, public ::testing::Test {

@@ -16,6 +16,8 @@
 
 #define dout_context g_ceph_context
 
+using namespace std;
+
 RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, uint64_t _handle,
                                    const RGWSyncTraceNodeRef& _parent,
                                    const string& _type, const string& _id) : cct(_cct),

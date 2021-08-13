@@ -119,8 +119,8 @@ private:
   std::condition_variable lock_keeper_cvar;
   std::mutex lock_keeper_mutex;
   time last_renewal = time::min();
-  std::chrono::milliseconds lock_keeper_interval = 2000ms;
-  std::chrono::milliseconds lock_keeper_timeout = 30000ms;
+  std::chrono::milliseconds lock_keeper_interval{2000};
+  std::chrono::milliseconds lock_keeper_timeout{30000};
   std::atomic<bool> blocklisted = false;
   bool shutdown = false;
   version_t version = 0;

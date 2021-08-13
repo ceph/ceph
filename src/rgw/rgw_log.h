@@ -19,25 +19,25 @@ struct rgw_log_entry {
 
   rgw_user object_owner;
   rgw_user bucket_owner;
-  string bucket;
+  std::string bucket;
   Clock::time_point time;
-  string remote_addr;
-  string user;
+  std::string remote_addr;
+  std::string user;
   rgw_obj_key obj;
-  string op;
-  string uri;
-  string http_status;
-  string error_code;
+  std::string op;
+  std::string uri;
+  std::string http_status;
+  std::string error_code;
   uint64_t bytes_sent = 0;
   uint64_t bytes_received = 0;
   uint64_t obj_size = 0;
   Clock::duration total_time{};
-  string user_agent;
-  string referrer;
-  string bucket_id;
+  std::string user_agent;
+  std::string referrer;
+  std::string bucket_id;
   headers_map x_headers;
-  string trans_id;
-  std::vector<string> token_claims;
+  std::string trans_id;
+  std::vector<std::string> token_claims;
   uint32_t identity_type;
 
   void encode(bufferlist &bl) const {
@@ -128,7 +128,7 @@ struct rgw_log_entry {
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<rgw_log_entry*>& o);
+  static void generate_test_instances(std::list<rgw_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 
@@ -151,7 +151,7 @@ public:
 class RGWREST;
 
 int rgw_log_op(rgw::sal::Store* store, RGWREST* const rest, struct req_state* s,
-	       const string& op_name, OpsLogSocket* olog);
+	       const std::string& op_name, OpsLogSocket* olog);
 void rgw_log_usage_init(CephContext* cct, rgw::sal::Store* store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,

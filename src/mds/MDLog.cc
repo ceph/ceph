@@ -36,6 +36,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".log "
 
+using namespace std;
+
 // cons/des
 MDLog::~MDLog()
 {

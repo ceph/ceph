@@ -6,8 +6,9 @@
 
 #include "cls/rgw/cls_rgw_client.h"
 
-
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 RGWSI_BILog_RADOS::RGWSI_BILog_RADOS(CephContext *cct) : RGWServiceInstance(cct)
 {

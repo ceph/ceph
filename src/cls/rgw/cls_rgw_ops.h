@@ -1221,7 +1221,7 @@ struct cls_rgw_lc_list_entries_op {
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_op)
 
 struct cls_rgw_lc_list_entries_ret {
-  vector<cls_rgw_lc_entry> entries;
+  std::vector<cls_rgw_lc_entry> entries;
   bool is_truncated{false};
   uint8_t compat_v;
 
@@ -1231,7 +1231,7 @@ cls_rgw_lc_list_entries_ret(uint8_t compat_v = 3)
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(compat_v, 1, bl);
     if (compat_v <= 2) {
-      map<string, int> oes;
+      std::map<std::string, int> oes;
       std::for_each(entries.begin(), entries.end(),
                    [&oes](const cls_rgw_lc_entry& elt)
                      {oes.insert({elt.bucket, elt.status});});
@@ -1247,10 +1247,10 @@ cls_rgw_lc_list_entries_ret(uint8_t compat_v = 3)
     DECODE_START(3, bl);
     compat_v = struct_v;
     if (struct_v <= 2) {
-      map<string, int> oes;
+      std::map<std::string, int> oes;
       decode(oes, bl);
       std::for_each(oes.begin(), oes.end(),
-		    [this](const std::pair<string, int>& oe)
+		    [this](const std::pair<std::string, int>& oe)
 		      {entries.push_back({oe.first, 0 /* start */,
 					  uint32_t(oe.second)});});
     } else {

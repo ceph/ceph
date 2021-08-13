@@ -30,6 +30,8 @@
 
 namespace fs = std::filesystem;
 
+using namespace std;
+
 void usage(ostream &out)
 {
   out << "usage: ceph-dencoder [commands ...]" << std::endl;

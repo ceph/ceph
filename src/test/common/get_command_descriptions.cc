@@ -25,6 +25,8 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 
+using namespace std;
+
 static void usage(ostream &out)
 {
   out << "usage: get_command_descriptions [options ...]" << std::endl;

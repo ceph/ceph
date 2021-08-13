@@ -162,6 +162,7 @@ rgw_http_errors rgw_http_iam_errors({
     { ERR_INTERNAL_ERROR, {500, "ServiceFailure" }},
 });
 
+using namespace std;
 using namespace ceph::crypto;
 
 rgw_err::

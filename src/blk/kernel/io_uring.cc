@@ -8,6 +8,9 @@
 #include "liburing.h"
 #include <sys/epoll.h>
 
+using std::list;
+using std::make_unique;
+
 struct ioring_data {
   struct io_uring io_uring;
   pthread_mutex_t cq_mutex;

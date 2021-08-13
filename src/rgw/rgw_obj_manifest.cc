@@ -10,6 +10,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int RGWObjManifest::generator::create_next(uint64_t ofs)
 {
   if (ofs < last_ofs) /* only going forward */

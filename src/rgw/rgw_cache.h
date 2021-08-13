@@ -45,7 +45,7 @@ struct ObjectMetaInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<ObjectMetaInfo*>& o);
+  static void generate_test_instances(std::list<ObjectMetaInfo*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectMetaInfo)
 
@@ -54,8 +54,8 @@ struct ObjectCacheInfo {
   uint32_t flags = 0;
   uint64_t epoch = 0;
   bufferlist data;
-  map<string, bufferlist> xattrs;
-  map<string, bufferlist> rm_xattrs;
+  std::map<std::string, bufferlist> xattrs;
+  std::map<std::string, bufferlist> rm_xattrs;
   ObjectMetaInfo meta;
   obj_version version = {};
   ceph::coarse_mono_time time_added;
@@ -90,7 +90,7 @@ struct ObjectCacheInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<ObjectCacheInfo*>& o);
+  static void generate_test_instances(std::list<ObjectCacheInfo*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectCacheInfo)
 
@@ -99,7 +99,7 @@ struct RGWCacheNotifyInfo {
   rgw_raw_obj obj;
   ObjectCacheInfo obj_info;
   off_t ofs;
-  string ns;
+  std::string ns;
 
   RGWCacheNotifyInfo() : op(0), ofs(0) {}
 
@@ -122,7 +122,7 @@ struct RGWCacheNotifyInfo {
     DECODE_FINISH(ibl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWCacheNotifyInfo*>& o);
+  static void generate_test_instances(std::list<RGWCacheNotifyInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 inline std::ostream& operator <<(std::ostream& m, const RGWCacheNotifyInfo& cni) {
@@ -134,48 +134,48 @@ inline std::ostream& operator <<(std::ostream& m, const RGWCacheNotifyInfo& cni)
 class RGWChainedCache {
 public:
   virtual ~RGWChainedCache() {}
-  virtual void chain_cb(const string& key, void *data) = 0;
-  virtual void invalidate(const string& key) = 0;
+  virtual void chain_cb(const std::string& key, void *data) = 0;
+  virtual void invalidate(const std::string& key) = 0;
   virtual void invalidate_all() = 0;
   virtual void unregistered() {}
 
   struct Entry {
     RGWChainedCache *cache;
-    const string& key;
+    const std::string& key;
     void *data;
 
-    Entry(RGWChainedCache *_c, const string& _k, void *_d) : cache(_c), key(_k), data(_d) {}
+    Entry(RGWChainedCache *_c, const std::string& _k, void *_d) : cache(_c), key(_k), data(_d) {}
   };
 };
 
 
 struct ObjectCacheEntry {
   ObjectCacheInfo info;
-  std::list<string>::iterator lru_iter;
+  std::list<std::string>::iterator lru_iter;
   uint64_t lru_promotion_ts;
   uint64_t gen;
-  std::vector<pair<RGWChainedCache *, string> > chained_entries;
+  std::vector<std::pair<RGWChainedCache *, std::string> > chained_entries;
 
   ObjectCacheEntry() : lru_promotion_ts(0), gen(0) {}
 };
 
 class ObjectCache {
-  std::unordered_map<string, ObjectCacheEntry> cache_map;
-  std::list<string> lru;
+  std::unordered_map<std::string, ObjectCacheEntry> cache_map;
+  std::list<std::string> lru;
   unsigned long lru_size;
   unsigned long lru_counter;
   unsigned long lru_window;
   ceph::shared_mutex lock = ceph::make_shared_mutex("ObjectCache");
   CephContext *cct;
 
-  vector<RGWChainedCache *> chained_cache;
+  std::vector<RGWChainedCache *> chained_cache;
 
   bool enabled;
   ceph::timespan expiry;
 
-  void touch_lru(const DoutPrefixProvider *dpp, const string& name, ObjectCacheEntry& entry,
-		 std::list<string>::iterator& lru_iter);
-  void remove_lru(const string& name, std::list<string>::iterator& lru_iter);
+  void touch_lru(const DoutPrefixProvider *dpp, const std::string& name, ObjectCacheEntry& entry,
+		 std::list<std::string>::iterator& lru_iter);
+  void remove_lru(const std::string& name, std::list<std::string>::iterator& lru_iter);
   void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();

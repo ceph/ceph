@@ -1064,7 +1064,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     } else {
       r = -errno;
     }
-    derr << __func__ << " 0x" << std::hex << off << "~" << left
+    derr << __func__ << " 0x" << std::hex << off << "~" << std::left
          << std::dec << " error: " << cpp_strerror(r) << dendl;
     goto out;
   }

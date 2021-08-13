@@ -293,7 +293,7 @@ double estimate_clock_resolution()
   double v = *(head++);
   double range=0;
   while (head != tail) {
-    range = max(range, *head - v);
+    range = std::max(range, *head - v);
     v = *head;
     head++;
   }

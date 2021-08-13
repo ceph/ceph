@@ -21,6 +21,7 @@
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
 
+using std::less;
 using std::make_pair;
 using std::map;
 using std::pair;

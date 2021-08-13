@@ -27,6 +27,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "fuse "
 
+using std::less;
 using std::list;
 using std::map;
 using std::set;

@@ -28,6 +28,7 @@
 #include <sstream>
 #include <vector>
 
+using namespace std::chrono_literals;
 using namespace ceph;
 using namespace boost::assign;
 using namespace librbd::watch_notify;

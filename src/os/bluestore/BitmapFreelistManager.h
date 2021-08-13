@@ -93,7 +93,7 @@ public:
     return bytes_per_block;
   }
   void get_meta(uint64_t target_size,
-    std::vector<std::pair<string, string>>*) const override;
+    std::vector<std::pair<std::string, std::string>>*) const override;
 };
 
 #endif

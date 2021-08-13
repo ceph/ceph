@@ -47,6 +47,8 @@
 
 #define dout_context g_ceph_context
 
+using namespace std;
+
 ceph::async::io_context_pool icp;
 
 static void fuse_usage()

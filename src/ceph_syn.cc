@@ -34,6 +34,8 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
+using namespace std;
+
 extern int syn_filer_flags;
 
 int main(int argc, const char **argv, char *envp[]) 

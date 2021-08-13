@@ -2,6 +2,8 @@
 #include "svc_rados.h"
 #include "svc_config_key_rados.h"
 
+using namespace std;
+
 RGWSI_ConfigKey_RADOS::~RGWSI_ConfigKey_RADOS(){}
 
 int RGWSI_ConfigKey_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)

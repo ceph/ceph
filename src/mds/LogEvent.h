@@ -89,7 +89,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  virtual void print(ostream& out) const { 
+  virtual void print(std::ostream& out) const {
     out << "event(" << _type << ")";
   }
 
@@ -125,7 +125,7 @@ private:
   LogSegment *_segment = nullptr;
 };
 
-inline ostream& operator<<(ostream& out, const LogEvent &le) {
+inline std::ostream& operator<<(std::ostream& out, const LogEvent &le) {
   le.print(out);
   return out;
 }

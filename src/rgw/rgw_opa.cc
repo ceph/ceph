@@ -7,6 +7,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int rgw_opa_authorize(RGWOp *& op,
                       req_state * const s)
 {

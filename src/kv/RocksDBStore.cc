@@ -757,7 +757,7 @@ void RocksDBStore::sharding_def_to_columns(const std::vector<ColumnFamily>& shar
 	columns.push_back(sharding_def[i].name);
     } else {
       for (size_t j = 0; j < sharding_def[i].shard_cnt; j++) {
-	columns.push_back(sharding_def[i].name + "-" + to_string(j));
+	columns.push_back(sharding_def[i].name + "-" + std::to_string(j));
       }
     }
   }
@@ -781,7 +781,7 @@ int RocksDBStore::create_shards(const rocksdb::Options& opt,
       if (p.shard_cnt == 1)
 	cf_name = p.name;
       else
-	cf_name = p.name + "-" + to_string(idx);
+	cf_name = p.name + "-" + std::to_string(idx);
       rocksdb::ColumnFamilyHandle *cf;
       status = db->CreateColumnFamily(cf_opt, cf_name, &cf);
       if (!status.ok()) {
@@ -1040,7 +1040,7 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
       emplace_cf(column, 0, column.name, cf_opt);
     } else {
       for (size_t i = 0; i < column.shard_cnt; i++) {
-	std::string cf_name = column.name + "-" + to_string(i);
+	std::string cf_name = column.name + "-" + std::to_string(i);
 	emplace_cf(column, i, cf_name, cf_opt);
       }
     }
@@ -2772,14 +2772,14 @@ public:
       if (iters[0]->Valid()) {
 	if (iters[i]->Valid()) {
 	  if (keyless(iters[0], iters[i])) {
-	    swap(iters[0], iters[i]);
+	    std::swap(iters[0], iters[i]);
 	  }
 	} else {
 	  //iters[i] empty
 	}
       } else {
 	if (iters[i]->Valid()) {
-	  swap(iters[0], iters[i]);
+	  std::swap(iters[0], iters[i]);
 	}
       }
       //it might happen that cf was empty
@@ -3171,7 +3171,7 @@ int RocksDBStore::reshard_cleanup(const RocksDBStore::columns_t& current_columns
       new_sharding_columns.push_back(name);
     } else {
       for (size_t i = 0; i < handle.handles.size(); i++) {
-	new_sharding_columns.push_back(name + "-" + to_string(i));
+	new_sharding_columns.push_back(name + "-" + std::to_string(i));
       }
     }
   }

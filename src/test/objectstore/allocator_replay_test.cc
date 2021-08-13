@@ -15,6 +15,7 @@
 #include "global/global_init.h"
 #include "os/bluestore/Allocator.h"
 
+using namespace std;
 
 void usage(const string &name) {
   cerr << "Usage: " << name << " <log_to_replay> <raw_duplicate|free_dump>"

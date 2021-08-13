@@ -19,10 +19,16 @@
 #include "ScrubStore.h"
 #include "scrub_machine.h"
 
+using std::list;
+using std::map;
+using std::pair;
+using std::set;
+using std::stringstream;
+using std::vector;
 using namespace Scrub;
 using namespace std::chrono;
 using namespace std::chrono_literals;
-
+using namespace std::literals;
 
 #define dout_context (m_pg->cct)
 #define dout_subsys ceph_subsys_osd
@@ -838,7 +844,7 @@ std::string PgScrubber::dump_awaited_maps() const
 void PgScrubber::update_op_mode_text()
 {
   auto visible_repair = state_test(PG_STATE_REPAIR);
-  m_mode_desc = (visible_repair ? "repair"sv : (m_is_deep ? "deep-scrub"sv : "scrub"sv));
+  m_mode_desc = (visible_repair ? "repair" : (m_is_deep ? "deep-scrub" : "scrub"));
 
   dout(10) << __func__ << ": repair: visible: " << (visible_repair ? "true" : "false")
 	   << ", internal: " << (m_is_repair ? "true" : "false")

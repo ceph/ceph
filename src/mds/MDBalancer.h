@@ -96,7 +96,7 @@ private:
                     double amount,
                     std::vector<CDir*>* exports,
                     double& have,
-                    set<CDir*>& already_exporting);
+                    std::set<CDir*>& already_exporting);
 
   double try_match(balance_state_t &state,
                    mds_rank_t ex, double& maxex,
@@ -127,8 +127,8 @@ private:
   MonClient *mon_client;
   int beat_epoch = 0;
 
-  string bal_code;
-  string bal_version;
+  std::string bal_code;
+  std::string bal_version;
 
   time last_heartbeat = clock::zero();
   time last_sample = clock::zero();
@@ -144,12 +144,12 @@ private:
   // just as soon as a delayed context comes back and triggers it.
   // These sets just prevent us from spawning extra timer contexts for
   // dirfrags that already have one in flight.
-  set<dirfrag_t> split_pending, merge_pending;
+  std::set<dirfrag_t> split_pending, merge_pending;
 
   // per-epoch scatter/gathered info
   std::map<mds_rank_t, mds_load_t> mds_load;
   std::map<mds_rank_t, double> mds_meta_load;
-  std::map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
+  std::map<mds_rank_t, std::map<mds_rank_t, float> > mds_import_map;
   std::map<mds_rank_t, int> mds_last_epoch_under_map;
 
   // per-epoch state

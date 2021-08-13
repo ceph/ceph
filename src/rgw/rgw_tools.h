@@ -54,15 +54,15 @@ static inline int rgw_shards_mod(unsigned hval, int max_shards)
 }
 
 // used for logging and tagging
-inline int rgw_shard_id(const string& key, int max_shards)
+inline int rgw_shard_id(const std::string& key, int max_shards)
 {
   return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
 			max_shards);
 }
 
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id);
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
-void rgw_shard_name(const string& prefix, unsigned shard_id, string& name);
+void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& key, std::string& name, int *shard_id);
+void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& section, const std::string& key, std::string& name);
+void rgw_shard_name(const std::string& prefix, unsigned shard_id, std::string& name);
 
 struct rgw_name_to_flag {
   const char *type_name;
@@ -70,22 +70,22 @@ struct rgw_name_to_flag {
 };
 
 int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
-			    const string& str, uint32_t *perm);
+			    const std::string& str, uint32_t *perm);
 
-int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
-int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs = NULL,
+int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const std::string& oid, bufferlist& data, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, std::map<std::string, bufferlist> *pattrs = NULL);
+int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const std::string& key, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
 int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
-                          RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
+                          RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const std::string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y);
 
-const char *rgw_find_mime_by_ext(string& ext);
+const char *rgw_find_mime_by_ext(std::string& ext);
 
-void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
-                        map<string, bufferlist> *attrset);
+void rgw_filter_attrset(std::map<std::string, bufferlist>& unfiltered_attrset, const std::string& check_prefix,
+                        std::map<std::string, bufferlist> *attrset);
 
 /// indicates whether the current thread is in boost::asio::io_context::run(),
 /// used to log warnings if synchronous librados calls are made
@@ -123,12 +123,12 @@ public:
     }
   }
 
-  void update(const string& s) {
+  void update(const std::string& s) {
     if (!s.empty()) {
       update(s.c_str(), s.size());
     }
   }
-  void finish(string *etag) {
+  void finish(std::string *etag) {
     char etag_buf[S];
     char etag_buf_str[S * 2 + 16];
 
@@ -155,31 +155,31 @@ public:
   using BucketRef = std::shared_ptr<Bucket>;
   using ObjectRef = std::shared_ptr<Object>;
 
-  class Bucket : public enable_shared_from_this<Bucket> {
+  class Bucket : public std::enable_shared_from_this<Bucket> {
     friend class RGWDataAccess;
     friend class Object;
 
     RGWDataAccess *sd{nullptr};
     RGWBucketInfo bucket_info;
-    string tenant;
-    string name;
-    string bucket_id;
+    std::string tenant;
+    std::string name;
+    std::string bucket_id;
     ceph::real_time mtime;
-    map<std::string, bufferlist> attrs;
+    std::map<std::string, bufferlist> attrs;
 
     RGWAccessControlPolicy policy;
     int finish_init();
     
     Bucket(RGWDataAccess *_sd,
-	   const string& _tenant,
-	   const string& _name,
-	   const string& _bucket_id) : sd(_sd),
+	   const std::string& _tenant,
+	   const std::string& _name,
+	   const std::string& _bucket_id) : sd(_sd),
                                        tenant(_tenant),
                                        name(_name),
 				       bucket_id(_bucket_id) {}
     Bucket(RGWDataAccess *_sd) : sd(_sd) {}
     int init(const DoutPrefixProvider *dpp, optional_yield y);
-    int init(const RGWBucketInfo& _bucket_info, const map<string, bufferlist>& _attrs);
+    int init(const RGWBucketInfo& _bucket_info, const std::map<std::string, bufferlist>& _attrs);
   public:
     int get_object(const rgw_obj_key& key,
 		   ObjectRef *obj);
@@ -193,10 +193,10 @@ public:
     rgw_obj_key key;
 
     ceph::real_time mtime;
-    string etag;
+    std::string etag;
     uint64_t olh_epoch{0};
     ceph::real_time delete_at;
-    std::optional<string> user_data;
+    std::optional<std::string> user_data;
 
     std::optional<bufferlist> aclbl;
 
@@ -206,13 +206,13 @@ public:
                                       bucket(_bucket),
                                       key(_key) {}
   public:
-    int put(bufferlist& data, map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
+    int put(bufferlist& data, std::map<std::string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
 
     void set_mtime(const ceph::real_time& _mtime) {
       mtime = _mtime;
     }
 
-    void set_etag(const string& _etag) {
+    void set_etag(const std::string& _etag) {
       etag = _etag;
     }
 
@@ -224,7 +224,7 @@ public:
       delete_at = _delete_at;
     }
 
-    void set_user_data(const string& _user_data) {
+    void set_user_data(const std::string& _user_data) {
       user_data = _user_data;
     }
 
@@ -234,9 +234,9 @@ public:
   };
 
   int get_bucket(const DoutPrefixProvider *dpp, 
-                 const string& tenant,
-		 const string name,
-		 const string bucket_id,
+                 const std::string& tenant,
+		 const std::string name,
+		 const std::string bucket_id,
 		 BucketRef *bucket,
 		 optional_yield y) {
     bucket->reset(new Bucket(this, tenant, name, bucket_id));
@@ -244,7 +244,7 @@ public:
   }
 
   int get_bucket(const RGWBucketInfo& bucket_info,
-		 const map<string, bufferlist>& attrs,
+		 const std::map<std::string, bufferlist>& attrs,
 		 BucketRef *bucket) {
     bucket->reset(new Bucket(this));
     return (*bucket)->init(bucket_info, attrs);

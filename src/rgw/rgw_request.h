@@ -29,12 +29,12 @@ struct RGWRequest
 }; /* RGWRequest */
 
 struct RGWLoadGenRequest : public RGWRequest {
-	string method;
-	string resource;
+	std::string method;
+	std::string resource;
 	int content_length;
 	std::atomic<bool>* fail_flag = nullptr;
 
-RGWLoadGenRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
+RGWLoadGenRequest(uint64_t req_id, const std::string& _m, const std::string& _r, int _cl,
 		std::atomic<bool> *ff)
 	: RGWRequest(req_id), method(_m), resource(_r), content_length(_cl),
 		fail_flag(ff) {}

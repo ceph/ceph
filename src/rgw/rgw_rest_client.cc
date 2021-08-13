@@ -14,6 +14,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int RGWHTTPSimpleRequest::get_status()
 {
   int retcode = get_req_retcode();

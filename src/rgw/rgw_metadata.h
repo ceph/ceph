@@ -33,17 +33,17 @@ class RGWMetadataObject {
 protected:
   obj_version objv;
   ceph::real_time mtime;
-  std::map<string, bufferlist> *pattrs{nullptr};
+  std::map<std::string, bufferlist> *pattrs{nullptr};
   
 public:
   RGWMetadataObject() {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
   real_time& get_mtime() { return mtime; }
-  void set_pattrs(std::map<string, bufferlist> *_pattrs) {
+  void set_pattrs(std::map<std::string, bufferlist> *_pattrs) {
     pattrs = _pattrs;
   }
-  std::map<string, bufferlist> *get_pattrs() {
+  std::map<std::string, bufferlist> *get_pattrs() {
     return pattrs;
   }
 
@@ -61,7 +61,7 @@ protected:
 public:
   RGWMetadataHandler() {}
   virtual ~RGWMetadataHandler() {}
-  virtual string get_type() = 0;
+  virtual std::string get_type() = 0;
 
   void base_init(CephContext *_cct) {
     cct = _cct;
@@ -69,17 +69,17 @@ public:
 
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
-  virtual int get(string& entry, RGWMetadataObject **obj, optional_yield, const DoutPrefixProvider *dpp) = 0;
-  virtual int put(string& entry,
+  virtual int get(std::string& entry, RGWMetadataObject **obj, optional_yield, const DoutPrefixProvider *dpp) = 0;
+  virtual int put(std::string& entry,
                   RGWMetadataObject *obj,
                   RGWObjVersionTracker& objv_tracker,
                   optional_yield, 
                   const DoutPrefixProvider *dpp,
                   RGWMDLogSyncType type,
                   bool from_remote_zone) = 0;
-  virtual int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp) = 0;
+  virtual int remove(std::string& entry, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp) = 0;
 
-  virtual int mutate(const string& entry,
+  virtual int mutate(const std::string& entry,
 		     const ceph::real_time& mtime,
 		     RGWObjVersionTracker *objv_tracker,
                      optional_yield y,
@@ -87,13 +87,13 @@ public:
 		     RGWMDLogStatus op_type,
 		     std::function<int()> f) = 0;
 
-  virtual int list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle) = 0;
-  virtual int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated) = 0;
+  virtual int list_keys_init(const DoutPrefixProvider *dpp, const std::string& marker, void **phandle) = 0;
+  virtual int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 
-  virtual string get_marker(void *handle) = 0;
+  virtual std::string get_marker(void *handle) = 0;
 
-  virtual int get_shard_id(const string& entry, int *shard_id) {
+  virtual int get_shard_id(const std::string& entry, int *shard_id) {
     *shard_id = 0;
     return 0;
   }
@@ -111,13 +111,13 @@ public:
 protected:
   RGWSI_MetaBackend_Handler *be_handler;
 
-  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) = 0;
-  virtual int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject *obj,
+  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, std::string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+  virtual int do_put(RGWSI_MetaBackend_Handler::Op *op, std::string& entry, RGWMetadataObject *obj,
                      RGWObjVersionTracker& objv_tracker, optional_yield y,
                      const DoutPrefixProvider *dpp, RGWMDLogSyncType type, 
                      bool from_remote_zone) = 0;
   virtual int do_put_operate(Put *put_op, const DoutPrefixProvider *dpp);
-  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, std::string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) = 0;
 
 public:
   RGWMetadataHandler_GenericMetaBE() {}
@@ -136,7 +136,7 @@ public:
   protected:
     RGWMetadataHandler_GenericMetaBE *handler;
     RGWSI_MetaBackend_Handler::Op *op;
-    string& entry;
+    std::string& entry;
     RGWMetadataObject *obj;
     RGWObjVersionTracker& objv_tracker;
     RGWMDLogSyncType apply_type;
@@ -148,7 +148,7 @@ public:
     }
   public:
     Put(RGWMetadataHandler_GenericMetaBE *_handler, RGWSI_MetaBackend_Handler::Op *_op,
-        string& _entry, RGWMetadataObject *_obj,
+        std::string& _entry, RGWMetadataObject *_obj,
         RGWObjVersionTracker& _objv_tracker, optional_yield _y,
         RGWMDLogSyncType _type, bool from_remote_zone);
 
@@ -168,11 +168,11 @@ public:
     }
   };
 
-  int get(string& entry, RGWMetadataObject **obj, optional_yield, const DoutPrefixProvider *dpp) override;
-  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp, RGWMDLogSyncType type, bool from_remote_zone) override;
-  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp) override;
+  int get(std::string& entry, RGWMetadataObject **obj, optional_yield, const DoutPrefixProvider *dpp) override;
+  int put(std::string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp, RGWMDLogSyncType type, bool from_remote_zone) override;
+  int remove(std::string& entry, RGWObjVersionTracker& objv_tracker, optional_yield, const DoutPrefixProvider *dpp) override;
 
-  int mutate(const string& entry,
+  int mutate(const std::string& entry,
 	     const ceph::real_time& mtime,
 	     RGWObjVersionTracker *objv_tracker,
              optional_yield y,
@@ -180,10 +180,10 @@ public:
 	     RGWMDLogStatus op_type,
 	     std::function<int()> f) override;
 
-  int get_shard_id(const string& entry, int *shard_id) override;
+  int get_shard_id(const std::string& entry, int *shard_id) override;
 
   int list_keys_init(const DoutPrefixProvider *dpp, const std::string& marker, void **phandle) override;
-  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<string>& keys, bool *truncated) override;
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated) override;
   void list_keys_complete(void *handle) override;
 
   std::string get_marker(void *handle) override;
@@ -226,27 +226,27 @@ class RGWMetadataManager {
 
   CephContext *cct;
   RGWSI_Meta *meta_svc;
-  map<string, RGWMetadataHandler *> handlers;
+  std::map<std::string, RGWMetadataHandler *> handlers;
   std::unique_ptr<RGWMetadataTopHandler> md_top_handler;
 
-  int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
+  int find_handler(const std::string& metadata_key, RGWMetadataHandler **handler, std::string& entry);
   int register_handler(RGWMetadataHandler *handler);
 
 public:
   RGWMetadataManager(RGWSI_Meta *_meta_svc);
   ~RGWMetadataManager();
 
-  RGWMetadataHandler *get_handler(const string& type);
+  RGWMetadataHandler *get_handler(const std::string& type);
 
-  int get(string& metadata_key, Formatter *f, optional_yield y, const DoutPrefixProvider *dpp);
-  int put(string& metadata_key, bufferlist& bl, optional_yield y,
+  int get(std::string& metadata_key, Formatter *f, optional_yield y, const DoutPrefixProvider *dpp);
+  int put(std::string& metadata_key, bufferlist& bl, optional_yield y,
           const DoutPrefixProvider *dpp,
           RGWMDLogSyncType sync_mode,
           bool from_remote_zone,
           obj_version *existing_version = NULL);
-  int remove(string& metadata_key, optional_yield y, const DoutPrefixProvider *dpp);
+  int remove(std::string& metadata_key, optional_yield y, const DoutPrefixProvider *dpp);
 
-  int mutate(const string& metadata_key,
+  int mutate(const std::string& metadata_key,
 	     const ceph::real_time& mtime,
 	     RGWObjVersionTracker *objv_tracker,
              optional_yield y,
@@ -254,20 +254,20 @@ public:
 	     RGWMDLogStatus op_type,
 	     std::function<int()> f);
 
-  int list_keys_init(const DoutPrefixProvider *dpp, const string& section, void **phandle);
-  int list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void **phandle);
-  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated);
+  int list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, void **phandle);
+  int list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void **phandle);
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 
-  string get_marker(void *handle);
+  std::string get_marker(void *handle);
 
   void dump_log_entry(cls_log_entry& entry, Formatter *f);
 
-  void get_sections(list<string>& sections);
+  void get_sections(std::list<std::string>& sections);
 
-  void parse_metadata_key(const string& metadata_key, string& type, string& entry);
+  void parse_metadata_key(const std::string& metadata_key, std::string& type, std::string& entry);
 
-  int get_shard_id(const string& section, const string& key, int *shard_id);
+  int get_shard_id(const std::string& section, const std::string& key, int *shard_id);
 };
 
 class RGWMetadataHandlerPut_SObj : public RGWMetadataHandler_GenericMetaBE::Put
@@ -279,7 +279,7 @@ protected:
 
 public:
   RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
-                             string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+                             std::string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
 			     optional_yield y,
                              RGWMDLogSyncType type, bool from_remote_zone);
   ~RGWMetadataHandlerPut_SObj();

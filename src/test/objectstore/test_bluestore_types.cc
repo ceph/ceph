@@ -17,6 +17,8 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
+using namespace std;
+
 TEST(bluestore, sizeof) {
 #define P(t) cout << STRINGIFY(t) << "\t" << sizeof(t) << std::endl
   P(BlueStore::Onode);

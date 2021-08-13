@@ -48,7 +48,7 @@ public:
 
   virtual ~RGWSI_ConfigKey_RADOS() override;
 
-  int get(const string& key, bool secure, bufferlist *result) override;
+  int get(const std::string& key, bool secure, bufferlist *result) override;
 };
 
 

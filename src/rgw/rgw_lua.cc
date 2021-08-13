@@ -142,7 +142,7 @@ int add_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_
 int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name) {
   librados::ObjectWriteOperation op;
   size_t pos = package_name.find(" ");
-  if (pos != string::npos) {
+  if (pos != package_name.npos) {
     // remove specfic version of the the package
     op.omap_rm_keys(std::set<std::string>({package_name}));
     auto ret = rgw_rados_operate(dpp, *(static_cast<rgw::sal::RadosStore*>(store)->getRados()->get_lc_pool_ctx()),

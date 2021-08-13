@@ -32,7 +32,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-
+using namespace std;
 
 extern void op_type_to_str(uint32_t mask, char *buf, int len);
 

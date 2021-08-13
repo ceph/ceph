@@ -68,6 +68,7 @@
 
 #define rbd_howmany(x, y)  (((x) + (y) - 1) / (y))
 
+using std::istringstream;
 using std::map;
 using std::pair;
 using std::set;
@@ -1325,7 +1326,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         }
       }
 
-      uint64_t len = min(period, src_size - offset);
+      uint64_t len = std::min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
       auto ctx = new C_CopyRead(&throttle, dest, offset, bl, sparse_size);
       auto comp = io::AioCompletion::create_and_start<Context>(
@@ -1536,7 +1537,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     start_time = coarse_mono_clock::now();
     while (left > 0) {
       uint64_t period_off = off - (off % period);
-      uint64_t read_len = min(period_off + period - off, left);
+      uint64_t read_len = std::min(period_off + period - off, left);
 
       bufferlist bl;
 

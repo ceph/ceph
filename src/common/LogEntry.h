@@ -136,7 +136,7 @@ struct LogSummary {
 
   // ---- quincy+ ----
   LRUSet<LogEntryKey> recent_keys;
-  std::map<std::string, pair<uint64_t,uint64_t>> channel_info; // channel -> [begin, end)
+  std::map<std::string, std::pair<uint64_t,uint64_t>> channel_info; // channel -> [begin, end)
 
   LogSummary() : version(0) {}
 

@@ -27,14 +27,14 @@ void sigterm_handler(int signum)
   for (auto& shard : shards) {
     total += shard.bytes;
   }
-  cout << total << std::endl;
+  std::cout << total << std::endl;
   exit(0);
 }
 
 int main(int argc, const char **argv)
 {
   int ret = 0;
-  vector<const char*> args;
+  std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,

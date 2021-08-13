@@ -130,7 +130,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   void count_metadata(const std::string& field, ceph::Formatter *f);
 
 public:
-  void print_fs_summary(ostream& out) {
+  void print_fs_summary(std::ostream& out) {
     get_fsmap().print_fs_summary(out);
   }
   void count_metadata(const std::string& field, std::map<std::string,int> *out);

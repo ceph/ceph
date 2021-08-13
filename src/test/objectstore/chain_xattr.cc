@@ -32,6 +32,8 @@
 #define LARGE_BLOCK_LEN CHAIN_XATTR_MAX_BLOCK_LEN + 1024
 #define FILENAME "chain_xattr"
 
+using namespace std;
+
 TEST(chain_xattr, get_and_set) {
   const char* file = FILENAME;
   ::unlink(file);

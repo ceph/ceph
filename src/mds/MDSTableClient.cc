@@ -226,9 +226,7 @@ void MDSTableClient::got_journaled_ack(version_t tid)
 
 void MDSTableClient::resend_commits()
 {
-  for (map<version_t,LogSegment*>::iterator p = pending_commit.begin();
-       p != pending_commit.end();
-       ++p) {
+  for (auto p = pending_commit.begin(); p != pending_commit.end(); ++p) {
     dout(10) << "resending commit on " << p->first << dendl;
     auto req = make_message<MMDSTableRequest>(table, TABLESERVER_OP_COMMIT, 0, p->first);
     mds->send_message_mds(req, mds->get_mds_map()->get_tableserver());
@@ -242,9 +240,7 @@ void MDSTableClient::resend_prepares()
     waiting_for_reqid.pop_front();
   }
 
-  for (map<uint64_t, _pending_prepare>::iterator p = pending_prepare.begin();
-       p != pending_prepare.end();
-       ++p) {
+  for (auto p = pending_prepare.begin(); p != pending_prepare.end(); ++p) {
     dout(10) << "resending prepare on " << p->first << dendl;
     auto req = make_message<MMDSTableRequest>(table, TABLESERVER_OP_PREPARE, p->first);
     req->bl = p->second.mutation;

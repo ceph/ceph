@@ -33,6 +33,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
 
+using namespace std;
 
 class MDSTableIOContext : public MDSIOContextBase
 {

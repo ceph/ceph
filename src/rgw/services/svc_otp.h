@@ -53,7 +53,7 @@ public:
             RGWSI_MetaBackend *_meta_be_svc);
 
   int read_all(RGWSI_OTP_BE_Ctx& ctx,
-               const string& key,
+               const std::string& key,
                otp_devices_list_t *devices,
                real_time *pmtime,
                RGWObjVersionTracker *objv_tracker,
@@ -68,7 +68,7 @@ public:
                const DoutPrefixProvider *dpp);
   int store_all(const DoutPrefixProvider *dpp, 
                 RGWSI_OTP_BE_Ctx& ctx,
-                const string& key,
+                const std::string& key,
                 const otp_devices_list_t& devices,
                 real_time mtime,
                 RGWObjVersionTracker *objv_tracker,
@@ -82,7 +82,7 @@ public:
                 optional_yield y);
   int remove_all(const DoutPrefixProvider *dpp, 
                  RGWSI_OTP_BE_Ctx& ctx,
-                 const string& key,
+                 const std::string& key,
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);
   int remove_all(const DoutPrefixProvider *dpp, 

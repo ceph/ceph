@@ -114,7 +114,7 @@ struct RGWObjManifestRule {
   uint64_t start_ofs;
   uint64_t part_size; /* each part size, 0 if there's no part size, meaning it's unlimited */
   uint64_t stripe_max_size; /* underlying obj max size */
-  string override_prefix;
+  std::string override_prefix;
 
   RGWObjManifestRule() : start_part_num(0), start_ofs(0), part_size(0), stripe_max_size(0) {}
   RGWObjManifestRule(uint32_t _start_part_num, uint64_t _start_ofs, uint64_t _part_size, uint64_t _stripe_max_size) :
@@ -147,7 +147,7 @@ WRITE_CLASS_ENCODER(RGWObjManifestRule)
 class RGWObjManifest {
 protected:
   bool explicit_objs{false}; /* really old manifest? */
-  map<uint64_t, RGWObjManifestPart> objs;
+  std::map<uint64_t, RGWObjManifestPart> objs;
 
   uint64_t obj_size{0};
 
@@ -156,16 +156,16 @@ protected:
   rgw_placement_rule head_placement_rule;
 
   uint64_t max_head_size{0};
-  string prefix;
+  std::string prefix;
   rgw_bucket_placement tail_placement; /* might be different than the original bucket,
                                        as object might have been copied across pools */
-  map<uint64_t, RGWObjManifestRule> rules;
+  std::map<uint64_t, RGWObjManifestRule> rules;
 
-  string tail_instance; /* tail object's instance */
+  std::string tail_instance; /* tail object's instance */
 
   void convert_to_explicit(const DoutPrefixProvider *dpp, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
   int append_explicit(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
-  void append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& iter, string *override_prefix);
+  void append_rules(RGWObjManifest& m, std::map<uint64_t, RGWObjManifestRule>::iterator& iter, std::string *override_prefix);
 
 public:
 
@@ -187,19 +187,19 @@ public:
     return *this;
   }
 
-  map<uint64_t, RGWObjManifestPart>& get_explicit_objs() {
+  std::map<uint64_t, RGWObjManifestPart>& get_explicit_objs() {
     return objs;
   }
 
 
-  void set_explicit(uint64_t _size, map<uint64_t, RGWObjManifestPart>& _objs) {
+  void set_explicit(uint64_t _size, std::map<uint64_t, RGWObjManifestPart>& _objs) {
     explicit_objs = true;
     objs.swap(_objs);
     set_obj_size(_size);
   }
 
   void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs,
-                             string *override_prefix, rgw_obj_select *location) const;
+                             std::string *override_prefix, rgw_obj_select *location) const;
 
   void set_trivial_rule(uint64_t tail_ofs, uint64_t stripe_max_size) {
     RGWObjManifestRule rule(0, tail_ofs, 0, stripe_max_size);
@@ -253,7 +253,7 @@ public:
     } else {
       explicit_objs = true;
       if (!objs.empty()) {
-        map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
+        std::map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
         obj = iter->second.loc;
         head_size = iter->second.size;
         max_head_size = head_size;
@@ -312,7 +312,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWObjManifest*>& o);
+  static void generate_test_instances(std::list<RGWObjManifest*>& o);
 
   int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);
@@ -370,19 +370,19 @@ public:
     return head_placement_rule;
   }
 
-  void set_prefix(const string& _p) {
+  void set_prefix(const std::string& _p) {
     prefix = _p;
   }
 
-  const string& get_prefix() const {
+  const std::string& get_prefix() const {
     return prefix;
   }
 
-  void set_tail_instance(const string& _ti) {
+  void set_tail_instance(const std::string& _ti) {
     tail_instance = _ti;
   }
 
-  const string& get_tail_instance() const {
+  const std::string& get_tail_instance() const {
     return tail_instance;
   }
 
@@ -416,13 +416,13 @@ public:
 
     int cur_part_id = 0;
     int cur_stripe = 0;
-    string cur_override_prefix;
+    std::string cur_override_prefix;
 
     rgw_obj_select location;
 
-    map<uint64_t, RGWObjManifestRule>::const_iterator rule_iter;
-    map<uint64_t, RGWObjManifestRule>::const_iterator next_rule_iter;
-    map<uint64_t, RGWObjManifestPart>::const_iterator explicit_iter;
+    std::map<uint64_t, RGWObjManifestRule>::const_iterator rule_iter;
+    std::map<uint64_t, RGWObjManifestRule>::const_iterator next_rule_iter;
+    std::map<uint64_t, RGWObjManifestPart>::const_iterator explicit_iter;
 
     void update_explicit_pos();
 
@@ -507,9 +507,9 @@ public:
     int cur_part_id;
     int cur_stripe;
     uint64_t cur_stripe_size;
-    string cur_oid;
+    std::string cur_oid;
     
-    string oid_prefix;
+    std::string oid_prefix;
 
     rgw_obj_select cur_obj;
 

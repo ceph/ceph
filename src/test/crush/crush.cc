@@ -20,6 +20,8 @@
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 
+using namespace std;
+
 std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
                               int num_host, int num_osd)
 {

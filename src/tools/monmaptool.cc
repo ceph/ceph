@@ -20,6 +20,15 @@
 #include "include/str_list.h"
 #include "mon/MonMap.h"
 
+using std::cerr;
+using std::cout;
+using std::list;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+using std::string_view;
+using std::vector;
 
 void usage()
 {

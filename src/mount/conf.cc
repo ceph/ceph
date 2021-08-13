@@ -17,6 +17,7 @@
 
 #include "mount.ceph.h"
 
+using namespace std;
 
 extern "C" void mount_ceph_get_config_info(const char *config_file,
 					   const char *name,

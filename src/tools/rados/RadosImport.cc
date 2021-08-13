@@ -21,6 +21,11 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
+using std::cerr;
+using std::cout;
+using std::map;
+using std::string;
+
 int RadosImport::import(std::string pool, bool no_overwrite)
 {
   librados::IoCtx ioctx;

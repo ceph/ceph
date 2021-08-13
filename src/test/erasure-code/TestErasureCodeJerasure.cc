@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "gtest/gtest.h"
 
+using namespace std;
 
 template <typename T>
 class ErasureCodeTest : public ::testing::Test {

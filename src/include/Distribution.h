@@ -19,8 +19,8 @@
 #include <vector>
 
 class Distribution {
-  vector<float> p;
-  vector<int> v;
+  std::vector<float> p;
+  std::vector<int> v;
 
  public:
   //Distribution() { 

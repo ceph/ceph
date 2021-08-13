@@ -34,8 +34,8 @@ struct WorkerEntry {
   librbd::Image img;
   librbd::RBD::AioCompletion* completion;
   WorkerState state;
-  string name;
-  string id;
+  std::string name;
+  std::string id;
 
   WorkerEntry() {
     state = STATE_IDLE;

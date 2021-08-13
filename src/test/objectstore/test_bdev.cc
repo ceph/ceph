@@ -14,6 +14,8 @@
 
 #include "blk/BlockDevice.h"
 
+using namespace std;
+
 class TempBdev {
 public:
   TempBdev(uint64_t size)
