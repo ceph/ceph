@@ -70,7 +70,10 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     return journal->replay(
       std::move(segments),
       [this](auto seq, auto paddr, const auto &e) {
-      return cache->replay_delta(seq, paddr, e);
+      auto fut = cache->replay_delta(seq, paddr, e);
+      segment_cleaner->update_journal_tail_target(
+	cache->get_oldest_dirty_from().value_or(seq));
+      return fut;
     });
   }).safe_then([this] {
     return journal->open_for_write();
