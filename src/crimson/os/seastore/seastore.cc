@@ -1414,12 +1414,10 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
       std::move(scanner),
       false /* detailed */);
 
-    auto journal = std::make_unique<Journal>(*sm, scanner_ref);
+    auto journal = journal::make_segmented(*sm, scanner_ref, *segment_cleaner);
     auto epm = std::make_unique<ExtentPlacementManager>();
     auto cache = std::make_unique<Cache>(scanner_ref, *epm);
     auto lba_manager = lba_manager::create_lba_manager(*sm, *cache);
-
-    journal->set_segment_provider(&*segment_cleaner);
 
     auto tm = std::make_unique<TransactionManager>(
       *sm,
