@@ -432,49 +432,71 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
   });
 }
 
-SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
-  logger().debug("SegmentCleaner::init_segments: {} segments", segments.size());
-  return seastar::do_with(
-    std::vector<std::pair<segment_id_t, segment_header_t>>(),
-    [this](auto& segment_set) {
-    return crimson::do_for_each(
-      segments.begin(),
-      segments.end(),
-      [this, &segment_set](auto& it) {
-	auto segment_id = it.first;
-	return scanner->read_segment_header(
-	  segment_id
-	).safe_then([&segment_set, segment_id, this](auto header) {
-	  logger().debug(
-	    "ExtentReader::init_segments: segment_id={} -- {}",
+SegmentCleaner::mount_ret SegmentCleaner::mount(
+  device_id_t pdevice_id,
+  std::vector<SegmentManager*>& sms)
+{
+  logger().debug(
+    "SegmentCleaner::mount: {} segment managers", sms.size());
+  init_complete = false;
+  stats = {};
+  journal_tail_target = journal_seq_t{};
+  journal_tail_committed = journal_seq_t{};
+  journal_head = journal_seq_t{};
+  journal_device_id = pdevice_id;
+  
+  space_tracker.reset(
+    detailed ?
+    (SpaceTrackerI*)new SpaceTrackerDetailed(
+      sms) :
+    (SpaceTrackerI*)new SpaceTrackerSimple(
+      sms));
+  
+  segments.clear();
+  for (auto sm : sms) {
+    // sms is a vector that is indexed by device id and
+    // always has "max_device" elements, some of which
+    // may be null.
+    if (!sm) {
+      continue;
+    }
+    segments.add_segment_manager(*sm);
+    stats.empty_segments += sm->get_num_segments();
+  }
+  metrics.clear();
+  register_metrics();
+
+  logger().debug("SegmentCleaner::mount: {} segments", segments.size());
+  return crimson::do_for_each(
+    segments.begin(),
+    segments.end(),
+    [this](auto& it) {
+      auto segment_id = it.first;
+      return scanner->read_segment_header(
+	segment_id
+      ).safe_then([segment_id, this](auto header) {
+	logger().debug(
+	  "ExtentReader::mount: segment_id={} -- {}",
+	  segment_id, header);
+	auto s_type = header.get_type();
+	if (s_type == segment_type_t::NULL_SEG) {
+	  logger().error(
+	    "ExtentReader::mount: got null segment, segment_id={} -- {}",
 	    segment_id, header);
-	  auto s_type = header.get_type();
-	  if (s_type == segment_type_t::NULL_SEG) {
-	    logger().error(
-	      "ExtentReader::init_segments: got null segment, segment_id={} -- {}",
-	      segment_id, header);
-	    ceph_abort();
-	  }
-	  if (s_type == segment_type_t::JOURNAL) {
-	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
-	  }
-	  init_mark_segment_closed(
-	    segment_id,
-	    header.journal_segment_seq);
-	}).handle_error(
-	  crimson::ct_error::enoent::handle([](auto) {
-	    return init_segments_ertr::now();
-	  }),
-	  crimson::ct_error::enodata::handle([](auto) {
-	    return init_segments_ertr::now();
-	  }),
-	  crimson::ct_error::input_output_error::pass_further{}
-	);
-      }).safe_then([&segment_set] {
-	return seastar::make_ready_future<
-	  std::vector<std::pair<segment_id_t, segment_header_t>>>(
-	    std::move(segment_set));
-      });
+	  ceph_abort();
+	}
+	init_mark_segment_closed(
+	  segment_id,
+	  header.journal_segment_seq);
+      }).handle_error(
+	crimson::ct_error::enoent::handle([](auto) {
+	  return mount_ertr::now();
+	}),
+	crimson::ct_error::enodata::handle([](auto) {
+	  return mount_ertr::now();
+	}),
+	crimson::ct_error::input_output_error::pass_further{}
+      );
     });
 }
 

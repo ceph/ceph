@@ -138,9 +138,8 @@ void TMDriver::init()
     SegmentCleaner::config_t::get_default(),
     std::move(scanner),
     false /* detailed */);
-  std::vector<SegmentManager*> sms;
-  segment_cleaner->mount(segment_manager->get_device_id(), sms);
-  auto journal = std::make_unique<Journal>(*segment_manager, *scanner);
+  auto journal = journal::make_segmented(
+    *segment_manager, *scanner, *segment_cleaner);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(scanner_ref, *epm);
   auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
@@ -150,8 +149,6 @@ void TMDriver::init()
     std::make_unique<SegmentedAllocator>(
       *segment_cleaner,
       *segment_manager));
-
-  journal->set_segment_provider(&*segment_cleaner);
 
   tm = std::make_unique<TransactionManager>(
     *segment_manager,
