@@ -250,7 +250,7 @@ NVMeManager::find_block_ret NVMeManager::find_free_block(Transaction &t, size_t 
 }
 
 /* TODO : block allocator */
-NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
+NVMeManager::allocate_ret NVMeManager::alloc_extent(
     Transaction &t, size_t size)
 {
 
@@ -264,8 +264,8 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
    *
    */
   return find_free_block(t, size
-      ).safe_then([this] (auto alloc_extent) mutable
-	-> allocate_ertr::future<> {
+      ).safe_then([this, &t] (auto alloc_extent) mutable
+	-> allocate_ertr::future<paddr_t> {
 	logger().debug("after find_free_block: allocated {}", alloc_extent);
 	if (!alloc_extent.empty()) {
 	  rbm_alloc_delta_t alloc_info;
@@ -279,11 +279,18 @@ NVMeManager::allocate_ertr::future<> NVMeManager::alloc_extent(
 	    alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
 	    alloc_info.op = rbm_alloc_delta_t::op_types_t::SET;
 	  }
-	  // TODO: add alloc info to delta
+	  t.add_rbm_alloc_info_blocks(alloc_info);
 	} else {
 	  return crimson::ct_error::enospc::make();
 	}
-	return allocate_ertr::now();
+	paddr_t paddr = convert_blk_paddr_to_paddr(
+	  alloc_extent.range_start() * super.block_size,
+	  super.block_size,
+	  super.blocks_per_segment,
+	  0);
+	return allocate_ret(
+	  allocate_ertr::ready_future_marker{},
+	  paddr);
 	}
       ).handle_error(
 	allocate_ertr::pass_further{},
