@@ -5057,16 +5057,18 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_write_new, "write_new",
     "Write into new blob");
 
-  b.add_u64_counter(l_bluestore_write_deferred,
-		    "write_deferred",
-		    "Total deferred writes submitted");
-  b.add_u64_counter(l_bluestore_write_deferred_bytes,
-		    "write_deferred_bytes",
-		    "Total bytes submitted as deferred writes");
-  b.add_u64_counter(l_bluestore_deferred_write_ops, "write_deferred_ops",
-		    "Sum for deferred write op");
-  b.add_u64_counter(l_bluestore_deferred_write_bytes, "write_deferred_bytes",
-		    "Sum for deferred write bytes", "def", 0, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluestore_issued_deferred_writes,
+		    "issued_deferred_writes",
+		    "Total deferred writes issued");
+  b.add_u64_counter(l_bluestore_issued_deferred_write_bytes,
+		    "issued_deferred_write_bytes",
+		    "Total bytes in issued deferred writes");
+  b.add_u64_counter(l_bluestore_submitted_deferred_writes,
+		    "submitted_deferred_writes",
+		    "Total deferred writes submitted to disk");
+  b.add_u64_counter(l_bluestore_submitted_deferred_write_bytes,
+		    "submitted_deferred_write_bytes",
+		    "Total bytes submitted to disk by deferred writes");
   //****************************************
 
   // compressions stats
@@ -13316,8 +13318,8 @@ bluestore_deferred_op_t *BlueStore::_get_deferred_op(
     txc->deferred_txn = new bluestore_deferred_transaction_t;
   }
   txc->deferred_txn->ops.push_back(bluestore_deferred_op_t());
-  logger->inc(l_bluestore_write_deferred);
-  logger->inc(l_bluestore_write_deferred_bytes, len);
+  logger->inc(l_bluestore_issued_deferred_writes);
+  logger->inc(l_bluestore_issued_deferred_write_bytes, len);
   return &txc->deferred_txn->ops.back();
 }
 
@@ -13432,8 +13434,8 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 		 << start << "~" << bl.length()
 		 << " crc " << bl.crc32c(-1) << std::dec << dendl;
 	if (!g_conf()->bluestore_debug_omit_block_device_write) {
-	  logger->inc(l_bluestore_deferred_write_ops);
-	  logger->inc(l_bluestore_deferred_write_bytes, bl.length());
+	  logger->inc(l_bluestore_submitted_deferred_writes);
+	  logger->inc(l_bluestore_submitted_deferred_write_bytes, bl.length());
 	  int r = bdev->aio_write(start, bl, &b->ioc, false);
 	  ceph_assert(r == 0);
 	}
