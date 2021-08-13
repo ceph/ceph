@@ -54,7 +54,8 @@ static const struct sm_state_t scatterlock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   fwr  l    x    caps,other
     [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   0,   ANY, 0,   CEPH_CAP_GSHARED,0,0,CEPH_CAP_GSHARED },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,   0,0,0,0 },
-    [LOCK_MIX_SYNC]  = { LOCK_SYNC, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
+    [LOCK_MIX_SYNC]  = { LOCK_SYNC, false, LOCK_MIX_SYNC2,0,0,   0,   0,   0,   0,   0,   0,0,0,0 },
+    [LOCK_MIX_SYNC2] = { LOCK_SYNC, false, 0,         0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SNAP_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, 0,    0,   0,   0,   AUTH,0,   0,   0,0,0,0 },
    
     [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   REQ, AUTH,0,   0,   ANY, 0,0,0,0 },
