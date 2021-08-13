@@ -826,10 +826,6 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
 
   ceph_assert(m_initialized);
 
-  /* Split images because PMDK doesn't support allocating too big extent
-   * TODO: If the bluestore allocator is implemented as a library,
-   * the split operation is not necessary
-   */
   Extents split_image_extents;
   uint64_t max_extent_size = get_max_extent();
   if (max_extent_size != 0) {
