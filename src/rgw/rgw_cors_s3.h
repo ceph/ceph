@@ -45,7 +45,7 @@ class RGWCORSConfiguration_S3 : public RGWCORSConfiguration, public XMLObj
     ~RGWCORSConfiguration_S3() override {}
 
     bool xml_end(const char *el) override;
-    void to_xml(ostream& out);
+    void to_xml(std::ostream& out);
 };
 
 class RGWCORSXMLParser_S3 : public RGWXMLParser

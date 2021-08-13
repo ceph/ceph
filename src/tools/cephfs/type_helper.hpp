@@ -10,7 +10,7 @@ T1 conv_t(T2 s){
     return target;
 }
 
-void string_split(std::string str, vector<string>& out, string split = ":"){
+void string_split(std::string str, std::vector<std::string>& out, std::string split = ":") {
     std::cout << str << std::endl;
     auto pos = str.find(split);
     while(pos != std::string::npos){

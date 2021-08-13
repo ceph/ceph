@@ -31,7 +31,7 @@ struct BlockExtent {
     : block_start(block_start), block_end(block_end) {
   }
 
-  friend ostream& operator<< (ostream& os, const BlockExtent& block_extent) {
+  friend std::ostream& operator<< (std::ostream& os, const BlockExtent& block_extent) {
     os << "[block_start = " << block_extent.block_start << ", "
        << "block_end = " << block_extent.block_end << ")";
     return os;

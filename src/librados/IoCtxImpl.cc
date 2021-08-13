@@ -28,6 +28,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librados: "
 
+using std::string;
+using std::map;
+using std::unique_lock;
+using std::vector;
+
 namespace bs = boost::system;
 namespace ca = ceph::async;
 namespace cb = ceph::buffer;

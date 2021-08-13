@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+using namespace std;
 
 /// creates a temporary pool and initializes an IoCtx for each test
 class cls_cas : public ::testing::Test {

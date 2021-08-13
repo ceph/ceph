@@ -23,11 +23,11 @@
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
-using namespace librados;
-
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_ops.h"
 
+using namespace std;
+using namespace librados;
 using namespace rados::cls::lock;
 
 void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_info_t>& lockers,

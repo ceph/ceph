@@ -221,7 +221,7 @@ int Shell::execute(int argc, const char **argv) {
           if (!result.empty()) {
             print_deprecated_warning(option, description);
           }
-        } catch (exception& e) {
+        } catch (std::exception& e) {
           continue;
         }
       }

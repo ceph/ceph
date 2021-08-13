@@ -28,6 +28,8 @@
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
 
+using namespace std;
+
 // test fixture for global setup/teardown
 class AsioRados : public ::testing::Test {
   static constexpr auto poolname = "ceph_test_rados_api_asio";

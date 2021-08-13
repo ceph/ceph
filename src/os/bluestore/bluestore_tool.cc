@@ -23,6 +23,7 @@
 #include "common/admin_socket.h"
 #include "kv/RocksDBStore.h"
 
+using namespace std;
 namespace fs = std::filesystem;
 namespace po = boost::program_options;
 

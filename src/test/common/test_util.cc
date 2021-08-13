@@ -18,6 +18,8 @@
 #include "common/ceph_context.h"
 #include "include/util.h"
 
+using namespace std;
+
 namespace fs = std::filesystem;
 
 #if defined(__linux__)

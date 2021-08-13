@@ -54,6 +54,10 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
+using std::cerr;
+using std::cout;
+using std::vector;
+
 static void usage()
 {
   cout << "usage: ceph-mds -i <ID> [flags]\n"

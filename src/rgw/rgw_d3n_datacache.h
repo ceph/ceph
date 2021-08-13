@@ -24,8 +24,8 @@ struct D3nChunkDataInfo : public LRUObject {
 	CephContext *cct;
 	uint64_t size;
 	time_t access_time;
-	string address;
-	string oid;
+	std::string address;
+	std::string oid;
 	bool complete;
 	struct D3nChunkDataInfo* lru_prev;
 	struct D3nChunkDataInfo* lru_next;
@@ -37,11 +37,11 @@ struct D3nChunkDataInfo : public LRUObject {
 	}
 
 	void dump(Formatter *f) const;
-	static void generate_test_instances(list<D3nChunkDataInfo*>& o);
+	static void generate_test_instances(std::list<D3nChunkDataInfo*>& o);
 };
 
 struct D3nCacheAioWriteRequest {
-	string oid;
+	std::string oid;
 	void *data;
 	int fd;
 	struct aiocb *cb;
@@ -49,7 +49,7 @@ struct D3nCacheAioWriteRequest {
 	CephContext *cct;
 
 	D3nCacheAioWriteRequest(CephContext *_cct) : cct(_cct) {}
-	int d3n_prepare_libaio_write_op(bufferlist& bl, unsigned int len, string oid, string cache_location);
+	int d3n_prepare_libaio_write_op(bufferlist& bl, unsigned int len, std::string oid, std::string cache_location);
 
   ~D3nCacheAioWriteRequest() {
     ::close(fd);
@@ -63,8 +63,8 @@ struct D3nCacheAioWriteRequest {
 struct D3nDataCache {
 
 private:
-  std::unordered_map <string, D3nChunkDataInfo*> d3n_cache_map;
-  std::set<string> d3n_outstanding_write_list;
+  std::unordered_map<std::string, D3nChunkDataInfo*> d3n_cache_map;
+  std::set<std::string> d3n_outstanding_write_list;
   std::mutex d3n_cache_lock;
   std::mutex d3n_eviction_lock;
 
@@ -95,8 +95,8 @@ public:
 
   std::string cache_location;
 
-  bool get(const string& oid, const off_t len);
-  void put(bufferlist& bl, unsigned int len, string& obj_key);
+  bool get(const std::string& oid, const off_t len);
+  void put(bufferlist& bl, unsigned int len, std::string& obj_key);
   int d3n_io_write(bufferlist& bl, unsigned int len, std::string oid);
   int d3n_libaio_create_write_request(bufferlist& bl, unsigned int len, std::string oid);
   void d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c);
@@ -171,7 +171,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
   lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache::" << __func__ << "(): is head object : " << is_head_obj << dendl;
   librados::ObjectReadOperation op;
   struct get_obj_data* d = static_cast<struct get_obj_data*>(arg);
-  string oid, key;
+  std::string oid, key;
 
   if (is_head_obj) {
     // only when reading from the head object do we need to do the atomic test

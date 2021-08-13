@@ -20,8 +20,8 @@ class Context;
 namespace ceph {
 namespace immutable_obj_cache {
 
-typedef shared_ptr<librados::Rados> RadosRef;
-typedef shared_ptr<librados::IoCtx> IoCtxRef;
+typedef std::shared_ptr<librados::Rados> RadosRef;
+typedef std::shared_ptr<librados::IoCtx> IoCtxRef;
 
 class ObjectCacheStore {
  public:

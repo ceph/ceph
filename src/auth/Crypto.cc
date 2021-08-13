@@ -33,18 +33,18 @@
 #include "common/debug.h"
 #include <errno.h>
 
-// use getentropy() if available. it uses the same source of randomness
-// as /dev/urandom without the filesystem overhead
-#ifdef HAVE_GETENTROPY
-
-#include <unistd.h>
-
 using std::ostringstream;
 using std::string;
 
 using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
+
+// use getentropy() if available. it uses the same source of randomness
+// as /dev/urandom without the filesystem overhead
+#ifdef HAVE_GETENTROPY
+
+#include <unistd.h>
 
 static bool getentropy_works()
 {

@@ -189,7 +189,7 @@ TEST_F(LogBacking, TestFIFOEmpty)
 }
 
 TEST(CursorGen, RoundTrip) {
-  const auto pcurs = "fded"sv;
+  const std::string_view pcurs = "fded";
   {
     auto gc = gencursor(0, pcurs);
     ASSERT_EQ(pcurs, gc);

@@ -118,6 +118,7 @@ public:
   }
 
   bool wait_for_watch(MockImageCtx &mock_image_ctx, size_t count) {
+    using namespace std::chrono_literals;
     std::unique_lock locker{m_lock};
     while (m_watch_count < count) {
       if (m_cond.wait_for(locker, 10s) == std::cv_status::timeout) {

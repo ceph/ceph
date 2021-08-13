@@ -29,13 +29,13 @@ static_assert(feature_names.size() == CEPHFS_FEATURE_MAX + 1);
 std::string_view cephfs_feature_name(size_t id)
 {
   if (id > feature_names.size())
-    return "unknown"sv;
+    return "unknown";
   return feature_names[id];
 }
 
 int cephfs_feature_from_name(std::string_view name)
 {
-  if (name == "reserved"sv) {
+  if (name == "reserved") {
     return -1;
   }
   for (size_t i = 0; i < feature_names.size(); ++i) {

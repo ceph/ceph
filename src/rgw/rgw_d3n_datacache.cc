@@ -20,7 +20,7 @@ namespace efs = std::experimental::filesystem;
 
 #define dout_subsys ceph_subsys_rgw
 
-
+using namespace std;
 
 int D3nCacheAioWriteRequest::d3n_prepare_libaio_write_op(bufferlist& bl, unsigned int len, string oid, string cache_location)
 {

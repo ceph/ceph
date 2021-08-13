@@ -59,7 +59,7 @@ namespace rgw {
 
       lsubdout(g_ceph_context, rgw, 10)
 	<< __func__ << " enqueue request req="
-	<< hex << req << dec << dendl;
+	<< std::hex << req << std::dec << dendl;
 
       req_throttle.get(1);
       req_wq.queue(req);

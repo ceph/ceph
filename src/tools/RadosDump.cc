@@ -14,6 +14,9 @@
 
 #include "RadosDump.h"
 
+using std::cerr;
+using std::cout;
+
 int RadosDump::read_super()
 {
   bufferlist ebl;

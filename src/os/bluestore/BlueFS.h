@@ -214,7 +214,7 @@ public:
       buffer_appender.append(buf, len);
     }
 
-    void append(const byte *buf, size_t len) {
+    void append(const std::byte *buf, size_t len) {
       // allow callers to use byte type instead of char* as we simply pass byte array
       append((const char*)buf, len);
     }

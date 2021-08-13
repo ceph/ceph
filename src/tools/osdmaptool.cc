@@ -26,6 +26,7 @@
 #include "global/global_init.h"
 #include "osd/OSDMap.h"
 
+using namespace std;
 
 void usage()
 {

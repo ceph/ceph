@@ -14,6 +14,8 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this->m_pg)
 
+using std::vector;
+
 template <class T> static ostream& _prefix(std::ostream* _dout, T* t)
 {
   return t->gen_prefix(*_dout) << " PrimaryLog scrubber pg(" << t->pg_id << ") ";

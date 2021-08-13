@@ -14,6 +14,8 @@
 
 #include "common/Formatter.h"
 
+using namespace std;
+
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
 static void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id)

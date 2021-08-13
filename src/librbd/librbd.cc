@@ -61,6 +61,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd: "
 
+using std::list;
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
 using std::vector;
 

@@ -25,6 +25,8 @@
 #include "global/global_context.h"
 #include "osd/OSDMap.h"
 
+using namespace std;
+
 class CompressorTest : public ::testing::Test,
 			public ::testing::WithParamInterface<const char*> {
 public:

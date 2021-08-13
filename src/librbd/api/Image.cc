@@ -32,6 +32,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::api::Image: " << __func__ << ": "
 
+using std::map;
+using std::string;
 using librados::snap_t;
 
 namespace librbd {

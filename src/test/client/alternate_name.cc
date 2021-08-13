@@ -48,7 +48,7 @@ TEST_F(TestClient, AlternateNameMkdir) {
   {
     Client::walk_dentry_result wdr;
     ASSERT_EQ(0, client->walk(dir.c_str(), &wdr, myperm));
-    ASSERT_EQ(wdr.alternate_name, "foo"s);
+    ASSERT_EQ(wdr.alternate_name, "foo");
   }
 
   ASSERT_EQ(0, client->rmdir(dir.c_str(), myperm));

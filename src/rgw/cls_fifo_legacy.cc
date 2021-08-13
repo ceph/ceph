@@ -404,7 +404,7 @@ std::optional<marker> FIFO::to_marker(std::string_view s)
   }
 
   auto pos = s.find(':');
-  if (pos == string::npos) {
+  if (pos == s.npos) {
     return std::nullopt;
   }
 
@@ -1222,7 +1222,7 @@ int FIFO::read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_y
   std::uint32_t _phs;
   std::uint32_t _peo;
 
-  auto r = get_meta(dpp, ioctx, oid, nullopt, &_info, &_phs, &_peo, tid, y);
+  auto r = get_meta(dpp, ioctx, oid, std::nullopt, &_info, &_phs, &_peo, tid, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " get_meta failed: r=" << r << " tid=" << tid << dendl;

@@ -79,7 +79,7 @@ class SecretCache {
     token_envelope_t token;
     std::string secret;
     utime_t expires;
-    list<std::string>::iterator lru_iter;
+    std::list<std::string>::iterator lru_iter;
   };
 
   const boost::intrusive_ptr<CephContext> cct;

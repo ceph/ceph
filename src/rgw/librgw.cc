@@ -69,6 +69,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 bool global_stop = false;
 
 static void handle_sigterm(int signum)

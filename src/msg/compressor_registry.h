@@ -65,5 +65,5 @@ private:
   std::vector<uint32_t> ms_osd_compression_methods;
 
   void _refresh_config();
-  std::vector<uint32_t> _parse_method_list(const string& s);
+  std::vector<uint32_t> _parse_method_list(const std::string& s);
 };

@@ -118,7 +118,7 @@ class LZ4Compressor : public Compressor {
 
     ceph::buffer::ptr cur_ptr = p.get_current_ptr();
     ceph::buffer::ptr *ptr = &cur_ptr;
-    optional<ceph::buffer::ptr> data_holder;
+    std::optional<ceph::buffer::ptr> data_holder;
     if (compressed_len != cur_ptr.length()) {
       data_holder.emplace(compressed_len);
       p.copy_deep(compressed_len, *data_holder);

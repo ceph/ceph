@@ -80,6 +80,8 @@
 #define LIBRADOS_C_API_DEFAULT_F(fn) fn
 #endif
 
+using std::ostringstream;
+using std::pair;
 using std::string;
 using std::map;
 using std::set;

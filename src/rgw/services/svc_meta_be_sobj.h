@@ -26,9 +26,9 @@
 
 class RGWSI_MBSObj_Handler_Module : public RGWSI_MetaBackend::Module {
 protected:
-  string section;
+  std::string section;
 public:
-  RGWSI_MBSObj_Handler_Module(const string& _section) : section(_section) {}
+  RGWSI_MBSObj_Handler_Module(const std::string& _section) : section(_section) {}
   virtual void get_pool_and_oid(const std::string& key, rgw_pool *pool, std::string *oid) = 0;
   virtual const std::string& get_oid_prefix() = 0;
   virtual std::string key_to_oid(const std::string& key) = 0;
@@ -47,13 +47,13 @@ public:
 
 struct RGWSI_MBSObj_GetParams : public RGWSI_MetaBackend::GetParams {
   bufferlist *pbl{nullptr};
-  map<string, bufferlist> *pattrs{nullptr};
+  std::map<std::string, bufferlist> *pattrs{nullptr};
   rgw_cache_entry_info *cache_info{nullptr};
   boost::optional<obj_version> refresh_version;
 
   RGWSI_MBSObj_GetParams() {}
   RGWSI_MBSObj_GetParams(bufferlist *_pbl,
-                         std::map<string, bufferlist> *_pattrs,
+                         std::map<std::string, bufferlist> *_pattrs,
                          ceph::real_time *_pmtime) : RGWSI_MetaBackend::GetParams(_pmtime),
                                                      pbl(_pbl),
                                                      pattrs(_pattrs) {}
@@ -70,15 +70,15 @@ struct RGWSI_MBSObj_GetParams : public RGWSI_MetaBackend::GetParams {
 
 struct RGWSI_MBSObj_PutParams : public RGWSI_MetaBackend::PutParams {
   bufferlist bl;
-  map<string, bufferlist> *pattrs{nullptr};
+  std::map<std::string, bufferlist> *pattrs{nullptr};
   bool exclusive{false};
 
   RGWSI_MBSObj_PutParams() {}
-  RGWSI_MBSObj_PutParams(std::map<string, bufferlist> *_pattrs,
+  RGWSI_MBSObj_PutParams(std::map<std::string, bufferlist> *_pattrs,
                          const ceph::real_time& _mtime) : RGWSI_MetaBackend::PutParams(_mtime),
                                                           pattrs(_pattrs) {}
   RGWSI_MBSObj_PutParams(bufferlist& _bl,
-                         std::map<string, bufferlist> *_pattrs,
+                         std::map<std::string, bufferlist> *_pattrs,
                          const ceph::real_time& _mtime,
                          bool _exclusive) : RGWSI_MetaBackend::PutParams(_mtime),
                                             bl(_bl),
@@ -134,44 +134,44 @@ public:
 
   int pre_modify(const DoutPrefixProvider *dpp, 
                  RGWSI_MetaBackend::Context *ctx,
-                 const string& key,
+                 const std::string& key,
                  RGWMetadataLogData& log_data,
                  RGWObjVersionTracker *objv_tracker,
                  RGWMDLogStatus op_type,
                  optional_yield y);
   int post_modify(const DoutPrefixProvider *dpp, 
                   RGWSI_MetaBackend::Context *ctx,
-                  const string& key,
+                  const std::string& key,
                   RGWMetadataLogData& log_data,
                   RGWObjVersionTracker *objv_tracker, int ret,
                   optional_yield y);
 
   int get_entry(RGWSI_MetaBackend::Context *ctx,
-                const string& key,
+                const std::string& key,
                 RGWSI_MetaBackend::GetParams& params,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y,
                 const DoutPrefixProvider *dpp) override;
   int put_entry(const DoutPrefixProvider *dpp, 
                 RGWSI_MetaBackend::Context *ctx,
-                const string& key,
+                const std::string& key,
                 RGWSI_MetaBackend::PutParams& params,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y) override;
   int remove_entry(const DoutPrefixProvider *dpp, 
                    RGWSI_MetaBackend::Context *ctx,
-                   const string& key,
+                   const std::string& key,
                    RGWSI_MetaBackend::RemoveParams& params,
                    RGWObjVersionTracker *objv_tracker,
                    optional_yield y) override;
 
-  int list_init(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *_ctx, const string& marker) override;
+  int list_init(const DoutPrefixProvider *dpp, RGWSI_MetaBackend::Context *_ctx, const std::string& marker) override;
   int list_next(const DoutPrefixProvider *dpp,
                 RGWSI_MetaBackend::Context *_ctx,
-                int max, list<string> *keys,
+                int max, std::list<std::string> *keys,
                 bool *truncated) override;
   int list_get_marker(RGWSI_MetaBackend::Context *ctx,
-                      string *marker) override;
+                      std::string *marker) override;
 
   int get_shard_id(RGWSI_MetaBackend::Context *ctx,
 		   const std::string& key,

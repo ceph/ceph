@@ -33,6 +33,8 @@
 
 #define READ_CHUNK_LEN (512 * 1024)
 
+using namespace std;
+
 static std::map<std::string, std::string>* ext_mime_map;
 
 int rgw_init_ioctx(const DoutPrefixProvider *dpp,

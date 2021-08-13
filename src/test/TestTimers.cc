@@ -13,6 +13,8 @@
  */
 #define MAX_TEST_CONTEXTS 5
 
+using namespace std;
+
 class TestContext;
 
 namespace

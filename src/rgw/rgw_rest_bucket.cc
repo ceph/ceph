@@ -13,6 +13,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 class RGWOp_Bucket_Info : public RGWRESTOp {
 

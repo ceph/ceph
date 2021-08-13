@@ -30,6 +30,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
+using namespace std;
 
 ostream& CDentry::print_db_line_prefix(ostream& out)
 {

@@ -20,6 +20,7 @@
 
 #define dout_context g_ceph_context
 
+using std::cerr;
 using namespace rbd_replay;
 
 namespace {

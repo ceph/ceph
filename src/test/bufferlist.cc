@@ -43,6 +43,8 @@
 #define MAX_TEST 1000000
 #define FILENAME "bufferlist"
 
+using namespace std;
+
 static char cmd[128];
 
 struct instrumented_bptr : public ceph::buffer::ptr {

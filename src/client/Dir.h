@@ -1,15 +1,19 @@
 #ifndef CEPH_CLIENT_DIR_H
 #define CEPH_CLIENT_DIR_H
 
+#include <string>
+#include <vector>
+
+class Dentry;
 struct Inode;
 
 class Dir {
  public:
   Inode    *parent_inode;  // my inode
-  ceph::unordered_map<string, Dentry*> dentries;
+  ceph::unordered_map<std::string, Dentry*> dentries;
   unsigned num_null_dentries = 0;
 
-  vector<Dentry*> readdir_cache;
+  std::vector<Dentry*> readdir_cache;
 
   explicit Dir(Inode* in) { parent_inode = in; }
 

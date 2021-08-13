@@ -21,6 +21,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void RGWBWRedirectInfo::dump_xml(Formatter *f) const
 {
   if (!redirect.protocol.empty()) {

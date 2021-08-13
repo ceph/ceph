@@ -50,7 +50,7 @@ public:
   virtual uint64_t get_alloc_size() const = 0;
 
   virtual void get_meta(uint64_t target_size,
-    std::vector<std::pair<string, string>>*) const = 0;
+  std::vector<std::pair<std::string, std::string>>*) const = 0;
 
   void set_null_manager() {
     null_manager = true;

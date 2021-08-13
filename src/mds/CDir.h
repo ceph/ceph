@@ -58,7 +58,7 @@ public:
   }
 
   struct dentry_commit_item {
-    string key;
+    std::string key;
     snapid_t first;
     bool is_remote = false;
 
@@ -646,7 +646,7 @@ protected:
 
   void _omap_fetch(MDSContext *fin, const std::set<dentry_key_t>& keys);
   void _omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
-			map<string, bufferlist>& omap, MDSContext *fin);
+			std::map<std::string, bufferlist>& omap, MDSContext *fin);
   CDentry *_load_dentry(
       std::string_view key,
       std::string_view dname,
@@ -673,14 +673,14 @@ protected:
   // -- commit --
   void _commit(version_t want, int op_prio);
   void _omap_commit_ops(int r, int op_prio, int64_t metapool, version_t version, bool _new,
-			vector<dentry_commit_item> &to_set, bufferlist &dfts,
-			vector<string> &to_remove,
+			std::vector<dentry_commit_item> &to_set, bufferlist &dfts,
+			std::vector<std::string> &to_remove,
 			mempool::mds_co::compact_set<mempool::mds_co::string> &_stale);
   void _encode_primary_inode_base(dentry_commit_item &item, bufferlist &dfts,
                                   bufferlist &bl);
   void _omap_commit(int op_prio);
   void _parse_dentry(CDentry *dn, dentry_commit_item &item,
-                     const set<snapid_t> *snaps, bufferlist &bl);
+                     const std::set<snapid_t> *snaps, bufferlist &bl);
   void _committed(int r, version_t v);
 
   static fnode_const_ptr empty_fnode;

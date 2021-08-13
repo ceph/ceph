@@ -12,6 +12,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 int RGWFrontendConfig::parse_config(const string& config,
 				    std::multimap<string, string>& config_map)
 {

@@ -7,9 +7,9 @@
 class RGWRestUserPolicy : public RGWRESTOp {
 protected:
   static constexpr int MAX_POLICY_NAME_LEN = 128;
-  string policy_name;
-  string user_name;
-  string policy;
+  std::string policy_name;
+  std::string user_name;
+  std::string policy;
 
   bool validate_input();
 

@@ -45,6 +45,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
 
+using namespace std;
+
 int CDir::num_frozen_trees = 0;
 int CDir::num_freezing_trees = 0;
 

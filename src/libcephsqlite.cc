@@ -510,7 +510,7 @@ static int Open(sqlite3_vfs *vfs, const char *name, sqlite3_file *file,
     return SQLITE_CANTOPEN;
   }
   auto path = std::string_view(name);
-  if (path == ":memory:"sv) {
+  if (path == ":memory:") {
     dv(-1) << " cannot open temporary database" << dendl;
     return SQLITE_IOERR;
   }

@@ -40,11 +40,11 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
   struct bucket_info_cache_entry {
     RGWBucketInfo info;
     real_time mtime;
-    map<string, bufferlist> attrs;
+    std::map<std::string, bufferlist> attrs;
   };
 
   using RGWChainedCacheImpl_bucket_info_cache_entry = RGWChainedCacheImpl<bucket_info_cache_entry>;
-  unique_ptr<RGWChainedCacheImpl_bucket_info_cache_entry> binfo_cache;
+  std::unique_ptr<RGWChainedCacheImpl_bucket_info_cache_entry> binfo_cache;
 
   RGWSI_Bucket_BE_Handler ep_be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> ep_be_module;
@@ -54,10 +54,10 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
   int do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                   const string& key,
+                                   const std::string& key,
                                    RGWBucketInfo *info,
                                    real_time *pmtime,
-                                   map<string, bufferlist> *pattrs,
+                                   std::map<std::string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info,
                                    boost::optional<obj_version> refresh_version,
                                    optional_yield y,
@@ -103,37 +103,37 @@ public:
 
 
   int read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                  const string& key,
+                                  const std::string& key,
                                   RGWBucketEntryPoint *entry_point,
                                   RGWObjVersionTracker *objv_tracker,
                                   real_time *pmtime,
-                                  map<string, bufferlist> *pattrs,
+                                  std::map<std::string, bufferlist> *pattrs,
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp,
                                   rgw_cache_entry_info *cache_info = nullptr,
                                   boost::optional<obj_version> refresh_version = boost::none) override;
 
   int store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                   const string& key,
+                                   const std::string& key,
                                    RGWBucketEntryPoint& info,
                                    bool exclusive,
                                    real_time mtime,
-                                   map<string, bufferlist> *pattrs,
+                                   std::map<std::string, bufferlist> *pattrs,
                                    RGWObjVersionTracker *objv_tracker,
                                    optional_yield y,
                                    const DoutPrefixProvider *dpp) override;
 
   int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                    const string& key,
+                                    const std::string& key,
                                     RGWObjVersionTracker *objv_tracker,
                                     optional_yield y,
                                     const DoutPrefixProvider *dpp) override;
 
   int read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                const string& key,
+                                const std::string& key,
                                 RGWBucketInfo *info,
                                 real_time *pmtime,
-                                map<string, bufferlist> *pattrs,
+                                std::map<std::string, bufferlist> *pattrs,
                                 optional_yield y,
                                 const DoutPrefixProvider *dpp,
                                 rgw_cache_entry_info *cache_info = nullptr,
@@ -143,24 +143,24 @@ public:
                        const rgw_bucket& bucket,
                        RGWBucketInfo *info,
                        real_time *pmtime,
-                       map<string, bufferlist> *pattrs,
+                       std::map<std::string, bufferlist> *pattrs,
                        boost::optional<obj_version> refresh_version,
                        optional_yield y,
                        const DoutPrefixProvider *dpp) override;
 
   int store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                 const string& key,
+                                 const std::string& key,
                                  RGWBucketInfo& info,
                                  std::optional<RGWBucketInfo *> orig_info, /* nullopt: orig_info was not fetched,
                                                                               nullptr: orig_info was not found (new bucket instance */
                                  bool exclusive,
                                  real_time mtime,
-                                 map<string, bufferlist> *pattrs,
+                                 std::map<std::string, bufferlist> *pattrs,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) override;
 
   int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                  const string& key,
+                                  const std::string& key,
                                   const RGWBucketInfo& bucket_info,
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y,
@@ -173,7 +173,7 @@ public:
                         const DoutPrefixProvider *dpp) override;
 
   int read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
-                         map<string, RGWBucketEnt>& m,
+                         std::map<std::string, RGWBucketEnt>& m,
                          optional_yield y,
                          const DoutPrefixProvider *dpp) override;
 };

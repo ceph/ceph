@@ -252,21 +252,21 @@ public:
 
   const CompatSet &get_default_compat() const {return default_compat;}
 
-  void filter(const std::vector<string>& allowed)
+  void filter(const std::vector<std::string>& allowed)
   {
     if (allowed.empty()) {
       return;
     }
 
     for (auto &f : filesystems) {
-      string_view fs_name = f.second->mds_map.get_fs_name();
+      std::string_view fs_name = f.second->mds_map.get_fs_name();
       if (std::find(allowed.begin(), allowed.end(), fs_name) == allowed.end()) {
 	filesystems.erase(f.first);
       }
     }
 
     for (auto r : mds_roles) {
-      string_view fs_name = fs_name_from_gid(r.first);
+      std::string_view fs_name = fs_name_from_gid(r.first);
       if (std::find(allowed.begin(), allowed.end(), fs_name) == allowed.end()) {
 	mds_roles.erase(r.first);
       }
@@ -324,10 +324,10 @@ public:
    * Does a daemon exist with this GID?
    */
   bool gid_exists(mds_gid_t gid,
-		  const std::vector<string>& in = {}) const
+		  const std::vector<std::string>& in = {}) const
   {
     try {
-      string_view m = fs_name_from_gid(gid);
+      std::string_view m = fs_name_from_gid(gid);
       return in.empty() || std::find(in.begin(), in.end(), m) != in.end();
     } catch (const std::out_of_range&) {
       return false;
@@ -537,7 +537,7 @@ public:
       std::string_view role_str,
       mds_role_t *role,
       std::ostream &ss,
-      const std::vector<string> &filter) const;
+      const std::vector<std::string> &filter) const;
 
   int parse_role(
       std::string_view role_str,

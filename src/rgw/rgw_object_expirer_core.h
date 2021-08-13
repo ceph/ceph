@@ -32,6 +32,8 @@
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 
+using namespace std;
+
 class RGWSI_RADOS;
 class RGWSI_Zone;
 class RGWBucketInfo;

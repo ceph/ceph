@@ -67,7 +67,7 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   std::uniform_int_distribution<uint32_t> distribution{0, 0xFFFFFFFF};
   uint32_t extra = distribution(generator);
 
-  ostringstream bid_ss;
+  std::ostringstream bid_ss;
   bid_ss << std::hex << bid << std::hex << extra;
   std::string id = bid_ss.str();
 

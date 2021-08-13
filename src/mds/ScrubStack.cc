@@ -22,7 +22,10 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mdcache->mds)
-static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
+
+using namespace std;
+
+static std::ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".scrubstack ";
 }
 

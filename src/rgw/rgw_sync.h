@@ -32,9 +32,9 @@ struct rgw_mdlog_info {
 
 
 struct rgw_mdlog_entry {
-  string id;
-  string section;
-  string name;
+  std::string id;
+  std::string section;
+  std::string name;
   ceph::real_time timestamp;
   RGWMetadataLogData log_data;
 
@@ -56,9 +56,9 @@ struct rgw_mdlog_entry {
 };
 
 struct rgw_mdlog_shard_data {
-  string marker;
+  std::string marker;
   bool truncated;
-  vector<rgw_mdlog_entry> entries;
+  std::vector<rgw_mdlog_entry> entries;
 
   void decode_json(JSONObj *obj);
 };
@@ -72,24 +72,24 @@ class RGWSyncTraceManager;
 class RGWSyncErrorLogger {
   rgw::sal::RadosStore* store;
 
-  vector<string> oids;
+  std::vector<std::string> oids;
   int num_shards;
 
   std::atomic<int64_t> counter = { 0 };
 public:
-  RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const string &oid_prefix, int _num_shards);
-  RGWCoroutine *log_error_cr(const DoutPrefixProvider *dpp, const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message);
+  RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const std::string &oid_prefix, int _num_shards);
+  RGWCoroutine *log_error_cr(const DoutPrefixProvider *dpp, const std::string& source_zone, const std::string& section, const std::string& name, uint32_t error_code, const std::string& message);
 
-  static string get_shard_oid(const string& oid_prefix, int shard_id);
+  static std::string get_shard_oid(const std::string& oid_prefix, int shard_id);
 };
 
 struct rgw_sync_error_info {
-  string source_zone;
+  std::string source_zone;
   uint32_t error_code;
-  string message;
+  std::string message;
 
   rgw_sync_error_info() : error_code(0) {}
-  rgw_sync_error_info(const string& _source_zone, uint32_t _error_code, const string& _message) : source_zone(_source_zone), error_code(_error_code), message(_message) {}
+  rgw_sync_error_info(const std::string& _source_zone, uint32_t _error_code, const std::string& _message) : source_zone(_source_zone), error_code(_error_code), message(_message) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -188,8 +188,8 @@ struct RGWMetaSyncEnv {
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer);
 
-  string shard_obj_name(int shard_id);
-  string status_oid();
+  std::string shard_obj_name(int shard_id);
+  std::string status_oid();
 };
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
@@ -231,8 +231,8 @@ public:
   void finish();
 
   int read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info);
-  int read_master_log_shards_info(const DoutPrefixProvider *dpp, const string& master_period, map<int, RGWMetadataLogInfo> *shards_info);
-  int read_master_log_shards_next(const DoutPrefixProvider *dpp, const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
+  int read_master_log_shards_info(const DoutPrefixProvider *dpp, const std::string& master_period, std::map<int, RGWMetadataLogInfo> *shards_info);
+  int read_master_log_shards_next(const DoutPrefixProvider *dpp, const std::string& period, std::map<int, std::string> shard_markers, std::map<int, rgw_mdlog_shard_data> *result);
   int read_sync_status(const DoutPrefixProvider *dpp, rgw_meta_sync_status *sync_status);
   int init_sync_status(const DoutPrefixProvider *dpp);
   int run_sync(const DoutPrefixProvider *dpp, optional_yield y);
@@ -250,7 +250,7 @@ class RGWMetaSyncStatusManager : public DoutPrefixProvider {
 
   RGWRemoteMetaLog master_log;
 
-  map<int, rgw_raw_obj> shard_objs;
+  std::map<int, rgw_raw_obj> shard_objs;
 
   struct utime_shard {
     real_time ts;
@@ -267,8 +267,8 @@ class RGWMetaSyncStatusManager : public DoutPrefixProvider {
   };
 
   ceph::shared_mutex ts_to_shard_lock = ceph::make_shared_mutex("ts_to_shard_lock");
-  map<utime_shard, int> ts_to_shard;
-  vector<string> clone_markers;
+  std::map<utime_shard, int> ts_to_shard;
+  std::vector<std::string> clone_markers;
 
 public:
   RGWMetaSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados)
@@ -286,10 +286,10 @@ public:
   int read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info) {
     return master_log.read_log_info(dpp, log_info);
   }
-  int read_master_log_shards_info(const DoutPrefixProvider *dpp, const string& master_period, map<int, RGWMetadataLogInfo> *shards_info) {
+  int read_master_log_shards_info(const DoutPrefixProvider *dpp, const std::string& master_period, std::map<int, RGWMetadataLogInfo> *shards_info) {
     return master_log.read_master_log_shards_info(dpp, master_period, shards_info);
   }
-  int read_master_log_shards_next(const DoutPrefixProvider *dpp, const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result) {
+  int read_master_log_shards_next(const DoutPrefixProvider *dpp, const std::string& period, std::map<int, std::string> shard_markers, std::map<int, rgw_mdlog_shard_data> *result) {
     return master_log.read_master_log_shards_next(dpp, period, shard_markers, result);
   }
 
@@ -348,7 +348,7 @@ class RGWSyncShardMarkerTrack {
   };
   typename std::map<T, marker_entry> pending;
 
-  map<T, marker_entry> finish_markers;
+  std::map<T, marker_entry> finish_markers;
 
   int window_size;
   int updates_since_flush;
@@ -483,13 +483,13 @@ class RGWMetaSyncShardMarkerTrack;
 class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
 
-  string raw_key;
-  string entry_marker;
+  std::string raw_key;
+  std::string entry_marker;
   RGWMDLogStatus op_status;
 
   ssize_t pos;
-  string section;
-  string key;
+  std::string section;
+  std::string key;
 
   int sync_status;
 
@@ -505,7 +505,7 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
 public:
   RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
-                           const string& _raw_key, const string& _entry_marker,
+                           const std::string& _raw_key, const std::string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
                            RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent);
 

@@ -30,6 +30,8 @@
 #include <set>
 #include <vector>
 
+using namespace std::chrono_literals;
+
 using rbd::mirror::ImageId;
 using rbd::mirror::ImageIds;
 using rbd::mirror::PoolWatcher;
@@ -218,7 +220,7 @@ public:
   ceph::mutex m_lock = ceph::make_mutex("TestPoolWatcherLock");
   RadosRef m_cluster;
   PoolWatcherListener m_pool_watcher_listener;
-  unique_ptr<PoolWatcher<> > m_pool_watcher;
+  std::unique_ptr<PoolWatcher<> > m_pool_watcher;
 
   set<string> m_pools;
   ImageIds m_mirrored_images;

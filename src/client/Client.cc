@@ -149,6 +149,14 @@
 #define S_IXUGO	(S_IXUSR|S_IXGRP|S_IXOTH)
 #endif
 
+using std::dec;
+using std::hex;
+using std::list;
+using std::oct;
+using std::pair;
+using std::string;
+using std::vector;
+
 using namespace TOPNSPC::common;
 
 namespace bs = boost::system;
@@ -5616,7 +5624,7 @@ out:
   return r;
 }
 
-ostream& operator<<(ostream &out, const UserPerm& perm) {
+std::ostream& operator<<(std::ostream &out, const UserPerm& perm) {
   out << "UserPerm(uid: " << perm.uid() << ", gid: " << perm.gid() << ")";
   return out;
 }
@@ -11039,7 +11047,7 @@ void Client::_encode_filelocks(Inode *in, bufferlist& bl)
   encode(nr_fcntl_locks, bl);
   if (nr_fcntl_locks) {
     auto &lock_state = in->fcntl_locks;
-    for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
+    for(auto p = lock_state->held_locks.begin();
 	p != lock_state->held_locks.end();
 	++p)
       encode(p->second, bl);
@@ -11049,7 +11057,7 @@ void Client::_encode_filelocks(Inode *in, bufferlist& bl)
   encode(nr_flock_locks, bl);
   if (nr_flock_locks) {
     auto &lock_state = in->flock_locks;
-    for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
+    for(auto p = lock_state->held_locks.begin();
 	p != lock_state->held_locks.end();
 	++p)
       encode(p->second, bl);

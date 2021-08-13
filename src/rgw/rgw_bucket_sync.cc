@@ -10,6 +10,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 ostream& operator<<(ostream& os, const rgw_sync_bucket_entity& e) {
   os << "{b=" << rgw_sync_bucket_entities::bucket_key(e.bucket) << ",z=" << e.zone.value_or(rgw_zone_id()) << ",az=" << (int)e.all_zones << "}";

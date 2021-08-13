@@ -38,7 +38,7 @@ class HMSMRDevice final : public BlockDevice {
   bool aio, dio;
 
   int vdo_fd = -1;      ///< fd for vdo sysfs directory
-  string vdo_name;
+  std::string vdo_name;
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
   int zbd_fd = -1;	///< fd for the zoned block device
@@ -124,7 +124,7 @@ public:
   void discard_drain() final;
 
   int collect_metadata(const std::string& prefix,
-                       map<std::string,std::string> *pm) const final;
+                       std::map<std::string,std::string> *pm) const final;
   int get_devname(std::string *s) const final {
     if (devname.empty()) {
       return -ENOENT;

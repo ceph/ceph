@@ -58,6 +58,7 @@
 
 #include <atomic>
 
+using namespace std;
 using namespace ceph;
 
 /**

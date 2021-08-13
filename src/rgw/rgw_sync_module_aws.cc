@@ -23,6 +23,8 @@
 
 #define DEFAULT_MULTIPART_SYNC_PART_SIZE (32 * 1024 * 1024)
 
+using namespace std;
+
 static string default_target_path = "rgw-${zonegroup}-${sid}/${bucket}";
 
 static string get_key_oid(const rgw_obj_key& key)

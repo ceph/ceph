@@ -32,6 +32,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "test_idempotent_sequence "
 
+using namespace std;
+
 void usage(const char *name, std::string command = "") {
   ceph_assert(name != NULL);
 

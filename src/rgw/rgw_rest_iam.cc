@@ -16,6 +16,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void RGWHandler_REST_IAM::rgw_iam_parse_input()
 {
   if (post_body.size() > 0) {

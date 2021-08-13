@@ -47,22 +47,22 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
   int open_bucket_index_base(const DoutPrefixProvider *dpp,
                              const RGWBucketInfo& bucket_info,
                              RGWSI_RADOS::Pool *index_pool,
-                             string *bucket_oid_base);
+                             std::string *bucket_oid_base);
 
-  void get_bucket_index_object(const string& bucket_oid_base,
+  void get_bucket_index_object(const std::string& bucket_oid_base,
                                uint32_t num_shards,
                                int shard_id,
                                uint64_t gen_id,
-                               string *bucket_obj);
-  int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
+                               std::string *bucket_obj);
+  int get_bucket_index_object(const std::string& bucket_oid_base, const std::string& obj_key,
                               uint32_t num_shards, rgw::BucketHashType hash_type,
-                              string *bucket_obj, int *shard_id);
+                              std::string *bucket_obj, int *shard_id);
 
   int cls_bucket_head(const DoutPrefixProvider *dpp,
                       const RGWBucketInfo& bucket_info,
                       int shard_id,
-                      vector<rgw_bucket_dir_header> *headers,
-                      map<int, string> *bucket_instance_ids,
+                      std::vector<rgw_bucket_dir_header> *headers,
+                      std::map<int, std::string> *bucket_instance_ids,
                       optional_yield y);
 
 public:
@@ -85,7 +85,7 @@ public:
     return RGW_SHARDS_PRIME_1;
   }
 
-  static int shard_id(const string& key, int max_shards) {
+  static int shard_id(const std::string& key, int max_shards) {
     return rgw_shard_id(key, max_shards);
   }
 
@@ -115,7 +115,7 @@ public:
 
   int open_bucket_index_shard(const DoutPrefixProvider *dpp,
                               const RGWBucketInfo& bucket_info,
-                              const string& obj_key,
+                              const std::string& obj_key,
                               RGWSI_RADOS::Obj *bucket_obj,
                               int *shard_id);
 
@@ -128,14 +128,14 @@ public:
   int open_bucket_index(const DoutPrefixProvider *dpp,
                         const RGWBucketInfo& bucket_info,
                         RGWSI_RADOS::Pool *index_pool,
-                        string *bucket_oid);
+                        std::string *bucket_oid);
 
   int open_bucket_index(const DoutPrefixProvider *dpp,
                         const RGWBucketInfo& bucket_info,
                         std::optional<int> shard_id,
                         RGWSI_RADOS::Pool *index_pool,
-                        map<int, string> *bucket_objs,
-                        map<int, string> *bucket_instance_ids);
+                        std::map<int, std::string> *bucket_objs,
+                        std::map<int, std::string> *bucket_instance_ids);
 };
 
 

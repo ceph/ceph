@@ -538,7 +538,7 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
   };
 
   std::unique_lock image_locker{ictx->image_lock};
-  map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
+  std::map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
   for (auto &info : snap_info) {
     cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
                                           ictx->md_ctx.get_namespace(),
@@ -1115,7 +1115,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
   }
 
   if (next_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
-    map<string, string> images;
+    std::map<std::string, std::string> images;
     r = Image<I>::list_images_v2(io_ctx, &images);
     if (r < 0) {
       lderr(cct) << "failed listing images: " << cpp_strerror(r) << dendl;
@@ -1552,7 +1552,7 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
     return r;
   }
 
-  vector<string> names;
+  std::vector<std::string> names;
   r = Namespace<I>::list(io_ctx, &names);
   if (r < 0) {
     return r;
@@ -1829,9 +1829,9 @@ int Mirror<I>::image_global_status_list(
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   int r;
 
-  map<string, string> id_to_name;
+  std::map<std::string, std::string> id_to_name;
   {
-    map<string, string> name_to_id;
+    std::map<std::string, std::string> name_to_id;
     r = Image<I>::list_images_v2(io_ctx, &name_to_id);
     if (r < 0) {
       return r;
@@ -1841,8 +1841,8 @@ int Mirror<I>::image_global_status_list(
     }
   }
 
-  map<std::string, cls::rbd::MirrorImage> images_;
-  map<std::string, cls::rbd::MirrorImageStatus> statuses_;
+  std::map<std::string, cls::rbd::MirrorImage> images_;
+  std::map<std::string, cls::rbd::MirrorImageStatus> statuses_;
 
   r = librbd::cls_client::mirror_image_status_list(&io_ctx, start_id, max,
       					           &images_, &statuses_);
@@ -1969,8 +1969,8 @@ int Mirror<I>::image_info_list(
   entries->clear();
 
   while (entries->size() < max) {
-    map<std::string, cls::rbd::MirrorImage> images;
-    map<std::string, cls::rbd::MirrorImageStatus> statuses;
+    std::map<std::string, cls::rbd::MirrorImage> images;
+    std::map<std::string, cls::rbd::MirrorImageStatus> statuses;
 
     int r = librbd::cls_client::mirror_image_status_list(&io_ctx, last_read,
                                                          max, &images,

@@ -13,6 +13,8 @@
 #endif
 #include "store_test_fixture.h"
 
+using namespace std;
+
 static void rm_r(const string& path)
 {
   string cmd = string("rm -r ") + path;

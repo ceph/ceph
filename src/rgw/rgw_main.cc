@@ -62,6 +62,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace {
 TracepointProvider::Traits rgw_op_tracepoint_traits("librgw_op_tp.so",
                                                  "rgw_op_tracing");

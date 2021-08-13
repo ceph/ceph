@@ -31,6 +31,8 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 struct Param_d {
   char* k;
   char* m;

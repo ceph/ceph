@@ -20,7 +20,7 @@
 #include "rbd_replay_debug.hpp"
 #include "ImageNameMap.hpp"
 
-
+using namespace std;
 using namespace rbd_replay;
 
 

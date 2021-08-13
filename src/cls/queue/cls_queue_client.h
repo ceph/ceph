@@ -6,11 +6,11 @@
 #include "cls_queue_ops.h"
 #include "common/ceph_time.h"
 
-void cls_queue_init(librados::ObjectWriteOperation& op, const string& queue_name, uint64_t size);
-int cls_queue_get_capacity(librados::IoCtx& io_ctx, const string& oid, uint64_t& size);
-void cls_queue_enqueue(librados::ObjectWriteOperation& op, uint32_t expiration_secs, vector<bufferlist> bl_data_vec);
-int cls_queue_list_entries(librados::IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max,
-                    vector<cls_queue_entry>& entries, bool *truncated, string& next_marker);
-void cls_queue_remove_entries(librados::ObjectWriteOperation& op, const string& end_marker);
+void cls_queue_init(librados::ObjectWriteOperation& op, const std::string& queue_name, uint64_t size);
+int cls_queue_get_capacity(librados::IoCtx& io_ctx, const std::string& oid, uint64_t& size);
+void cls_queue_enqueue(librados::ObjectWriteOperation& op, uint32_t expiration_secs, std::vector<bufferlist> bl_data_vec);
+int cls_queue_list_entries(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, uint32_t max,
+                    std::vector<cls_queue_entry>& entries, bool *truncated, std::string& next_marker);
+void cls_queue_remove_entries(librados::ObjectWriteOperation& op, const std::string& end_marker);
 
 #endif

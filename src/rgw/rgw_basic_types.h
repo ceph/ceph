@@ -82,15 +82,15 @@ struct rgw_user {
     size_t pos = str.find('$');
     if (pos != std::string::npos) {
       tenant = str.substr(0, pos);
-      string_view sv = str;
-      string_view ns_id = sv.substr(pos + 1);
+      std::string_view sv = str;
+      std::string_view ns_id = sv.substr(pos + 1);
       size_t ns_pos = ns_id.find('$');
       if (ns_pos != std::string::npos) {
-        ns = string(ns_id.substr(0, ns_pos));
-        id = string(ns_id.substr(ns_pos + 1));
+        ns = std::string(ns_id.substr(0, ns_pos));
+        id = std::string(ns_id.substr(ns_pos + 1));
       } else {
         ns.clear();
-        id = string(ns_id);
+        id = std::string(ns_id);
       }
     } else {
       tenant.clear();
@@ -599,11 +599,11 @@ public:
     return idp_url;
   }
 
-  const string& get_role_session() const {
+  const std::string& get_role_session() const {
     return u.id;
   }
 
-  const string& get_role() const {
+  const std::string& get_role() const {
     return u.id;
   }
 

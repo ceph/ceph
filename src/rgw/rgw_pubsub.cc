@@ -15,6 +15,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
   char buf[64];
   const auto len = snprintf(buf, sizeof(buf), "%010ld.%06ld.%s", (long)ts.sec(), (long)ts.usec(), hash.c_str());

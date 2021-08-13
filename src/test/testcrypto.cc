@@ -10,6 +10,8 @@
 
 #define dout_context g_ceph_context
 
+using namespace std;
+
 int main(int argc, char *argv[])
 {
   char aes_key[AES_KEY_LEN];

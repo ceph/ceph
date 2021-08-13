@@ -46,6 +46,7 @@
 #include "include/compat.h"
 #include "include/util.h"
 
+using namespace std;
 namespace po = boost::program_options;
 
 #ifdef INTERNAL_TEST

@@ -21,10 +21,8 @@
 #include <sstream>
 #include <string>
 
+using namespace std;
 using namespace librados;
-using std::map;
-using std::ostringstream;
-using std::string;
 
 int get_primary_osd(Rados& rados, const string& pool_name,
 		    const string& oid, int *pprimary)

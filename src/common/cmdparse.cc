@@ -26,6 +26,8 @@ using std::stringstream;
 using std::string_view;
 using std::vector;
 
+using namespace std::literals;
+
 /**
  * Given a cmddesc like "foo baz name=bar,type=CephString",
  * return the prefix "foo baz".

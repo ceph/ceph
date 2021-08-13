@@ -36,7 +36,7 @@ struct ETableClient : public LogEvent {
   void dump(Formatter *f) const override;
   static void generate_test_instances(std::list<ETableClient*>& ls);
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "ETableClient " << get_mdstable_name(table) << " " << get_mdstableserver_opname(op);
     if (tid) out << " tid " << tid;
   }  

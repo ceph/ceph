@@ -293,7 +293,7 @@ int main(int argc, char** argv)
     return seastar::async([&] {
       seastar_apps_lib::stop_signal should_stop;
       crimson::common::sharded_conf()
-        .start(EntityName{}, string_view{"ceph"}).get();
+        .start(EntityName{}, std::string_view{"ceph"}).get();
       auto stop_conf = seastar::defer([] {
         crimson::common::sharded_conf().stop().get();
       });

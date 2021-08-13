@@ -26,14 +26,14 @@ class ETagVerifier : public rgw::putobj::Pipe
 protected:
   CephContext* cct;
   MD5 hash;
-  string calculated_etag;
+  std::string calculated_etag;
 
 public:
   ETagVerifier(CephContext* cct_, rgw::sal::DataProcessor *next)
     : Pipe(next), cct(cct_) {}
 
   virtual void calculate_etag() = 0;
-  string get_calculated_etag() { return calculated_etag;}
+  std::string get_calculated_etag() { return calculated_etag;}
 
 }; /* ETagVerifier */
 

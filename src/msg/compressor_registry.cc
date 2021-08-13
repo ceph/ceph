@@ -39,7 +39,7 @@ void CompressorRegistry::handle_conf_change(
   _refresh_config();
 }
 
-std::vector<uint32_t> CompressorRegistry::_parse_method_list(const string& s)
+std::vector<uint32_t> CompressorRegistry::_parse_method_list(const std::string& s)
 {
   std::vector<uint32_t> methods;
 
@@ -64,7 +64,7 @@ std::vector<uint32_t> CompressorRegistry::_parse_method_list(const string& s)
 
 void CompressorRegistry::_refresh_config()
 {
-  auto c_mode = Compressor::get_comp_mode_type(cct->_conf.get_val<string>("ms_osd_compress_mode"));
+  auto c_mode = Compressor::get_comp_mode_type(cct->_conf.get_val<std::string>("ms_osd_compress_mode"));
 
   if (c_mode) {
     ms_osd_compress_mode = *c_mode;
@@ -75,7 +75,7 @@ void CompressorRegistry::_refresh_config()
     ms_osd_compress_mode = Compressor::COMP_NONE;
   }
 
-  ms_osd_compression_methods = _parse_method_list(cct->_conf.get_val<string>("ms_osd_compression_algorithm"));
+  ms_osd_compression_methods = _parse_method_list(cct->_conf.get_val<std::string>("ms_osd_compression_algorithm"));
   ms_osd_compress_min_size = cct->_conf.get_val<std::uint64_t>("ms_osd_compress_min_size");
 
   ms_compress_secure = cct->_conf.get_val<bool>("ms_compress_secure");

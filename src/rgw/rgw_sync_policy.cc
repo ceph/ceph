@@ -5,6 +5,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 string rgw_sync_bucket_entity::bucket_key() const
 {

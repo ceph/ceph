@@ -18,15 +18,15 @@ struct SnapRealm {
   
   inodeno_t parent;
   snapid_t parent_since;
-  vector<snapid_t> prior_parent_snaps;  // snaps prior to parent_since
-  vector<snapid_t> my_snaps;
+  std::vector<snapid_t> prior_parent_snaps;  // snaps prior to parent_since
+  std::vector<snapid_t> my_snaps;
 
   SnapRealm *pparent;
-  set<SnapRealm*> pchildren;
+  std::set<SnapRealm*> pchildren;
 
 private:
   SnapContext cached_snap_context;  // my_snaps + parent snaps + past_parent_snaps
-  friend ostream& operator<<(ostream& out, const SnapRealm& r);
+  friend std::ostream& operator<<(std::ostream& out, const SnapRealm& r);
 
 public:
   xlist<Inode*> inodes_with_caps;
@@ -49,7 +49,7 @@ public:
   void dump(Formatter *f) const;
 };
 
-inline ostream& operator<<(ostream& out, const SnapRealm& r) {
+inline std::ostream& operator<<(std::ostream& out, const SnapRealm& r) {
   return out << "snaprealm(" << r.ino << " nref=" << r.nref << " c=" << r.created << " seq=" << r.seq
 	     << " parent=" << r.parent
 	     << " my_snaps=" << r.my_snaps

@@ -26,6 +26,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_client
 
+using namespace std;
+
 void usage()
 {
   std::cout << "Usage: ceph-client-debug [options] <inode number>" << std::endl;

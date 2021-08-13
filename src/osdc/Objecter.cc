@@ -75,6 +75,9 @@ using ceph::encode;
 using ceph::Formatter;
 
 using std::defer_lock;
+using std::scoped_lock;
+using std::shared_lock;
+using std::unique_lock;
 
 using ceph::real_time;
 using ceph::real_clock;

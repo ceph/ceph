@@ -75,12 +75,12 @@ public:
   virtual uint32_t get_identity_type() const = 0;
 
   /* Name of Account */
-  virtual string get_acct_name() const = 0;
+  virtual std::string get_acct_name() const = 0;
 
   /* Subuser of Account */
-  virtual string get_subuser() const = 0;
+  virtual std::string get_subuser() const = 0;
 
-  virtual string get_role_tenant() const { return ""; }
+  virtual std::string get_role_tenant() const { return ""; }
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -367,21 +367,21 @@ class WebIdentityApplier : public IdentityApplier {
 protected:
   CephContext* const cct;
   rgw::sal::Store* store;
-  string role_session;
-  string role_tenant;
+  std::string role_session;
+  std::string role_tenant;
   rgw::web_idp::WebTokenClaims token_claims;
 
-  string get_idp_url() const;
+  std::string get_idp_url() const;
 
   void create_account(const DoutPrefixProvider* dpp,
                       const rgw_user& acct_user,
-                      const string& display_name,
+                      const std::string& display_name,
                       RGWUserInfo& user_info) const;     /* out */
 public:
   WebIdentityApplier( CephContext* const cct,
                       rgw::sal::Store* store,
-                      const string& role_session,
-                      const string& role_tenant,
+                      const std::string& role_session,
+                      const std::string& role_tenant,
                       const rgw::web_idp::WebTokenClaims& token_claims)
     : cct(cct),
       store(store),
@@ -421,11 +421,11 @@ public:
     return TYPE_WEB;
   }
 
-  string get_acct_name() const override {
+  std::string get_acct_name() const override {
     return token_claims.user_name;
   }
 
-  string get_subuser() const override {
+  std::string get_subuser() const override {
     return {};
   }
 
@@ -434,8 +434,8 @@ public:
 
     virtual aplptr_t create_apl_web_identity( CephContext* cct,
                                               const req_state* s,
-                                              const string& role_session,
-                                              const string& role_tenant,
+                                              const std::string& role_session,
+                                              const std::string& role_tenant,
                                               const rgw::web_idp::WebTokenClaims& token) const = 0;
   };
 };
@@ -561,8 +561,8 @@ public:
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return info.acct_type; }
-  string get_acct_name() const override { return info.acct_name; }
-  string get_subuser() const override { return {}; }
+  std::string get_acct_name() const override { return info.acct_name; }
+  std::string get_subuser() const override { return {}; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -623,8 +623,8 @@ public:
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return TYPE_RGW; }
-  string get_acct_name() const override { return {}; }
-  string get_subuser() const override { return subuser; }
+  std::string get_acct_name() const override { return {}; }
+  std::string get_subuser() const override { return subuser; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -639,27 +639,27 @@ public:
 class RoleApplier : public IdentityApplier {
 public:
   struct Role {
-    string id;
-    string name;
-    string tenant;
-    vector<string> role_policies;
+    std::string id;
+    std::string name;
+    std::string tenant;
+    std::vector<std::string> role_policies;
   } role;
 protected:
   const rgw_user user_id;
-  string token_policy;
-  string role_session_name;
-  std::vector<string> token_claims;
-  string token_issued_at;
+  std::string token_policy;
+  std::string role_session_name;
+  std::vector<std::string> token_claims;
+  std::string token_issued_at;
 
 public:
 
   RoleApplier(CephContext* const cct,
                const Role& role,
                const rgw_user& user_id,
-               const string& token_policy,
-               const string& role_session_name,
-               const std::vector<string>& token_claims,
-               const string& token_issued_at)
+               const std::string& token_policy,
+               const std::string& role_session_name,
+               const std::vector<std::string>& token_claims,
+               const std::string& token_issued_at)
     : role(role),
       user_id(user_id),
       token_policy(token_policy),
@@ -683,10 +683,10 @@ public:
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return TYPE_ROLE; }
-  string get_acct_name() const override { return {}; }
-  string get_subuser() const override { return {}; }
+  std::string get_acct_name() const override { return {}; }
+  std::string get_subuser() const override { return {}; }
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
-  string get_role_tenant() const override { return role.tenant; }
+  std::string get_role_tenant() const override { return role.tenant; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -696,7 +696,7 @@ public:
                                       const rgw_user& user_id,
                                       const std::string& token_policy,
                                       const std::string& role_session,
-                                      const std::vector<string>& token_claims,
+                                      const std::vector<std::string>& token_claims,
                                       const std::string& token_issued_at) const = 0;
     };
 };

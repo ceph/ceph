@@ -16,6 +16,8 @@
 #define dout_prefix *_dout << "librbd::managed_lock::ReleaseRequest: " \
                             << this << " " << __func__ << ": "
 
+using std::string;
+
 namespace librbd {
 namespace managed_lock {
 

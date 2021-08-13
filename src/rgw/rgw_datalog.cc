@@ -204,7 +204,7 @@ public:
     return r;
   }
   std::string_view max_marker() const override {
-    return "99999999"sv;
+    return "99999999";
   }
   int is_empty(const DoutPrefixProvider *dpp) override {
     for (auto shard = 0u; shard < oids.size(); ++shard) {
@@ -321,7 +321,7 @@ public:
     fifo.meta(dpp, m, null_yield);
     auto p = m.head_part_num;
     if (p < 0) {
-      info->marker = ""s;
+      info->marker = "";
       info->last_update = ceph::real_clock::zero();
       return 0;
     }

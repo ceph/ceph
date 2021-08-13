@@ -215,7 +215,7 @@ global_init(const std::map<std::string,std::string> *defaults,
     g_ceph_context->_log->set_flush_on_exit();
 
   // drop privileges?
-  ostringstream priv_ss;
+  std::ostringstream priv_ss;
 
   #ifndef _WIN32
   // consider --setuser root a no-op, even if we're not root

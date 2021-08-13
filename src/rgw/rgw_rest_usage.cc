@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 class RGWOp_Usage_Get : public RGWRESTOp {
 
 public:

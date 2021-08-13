@@ -38,6 +38,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+using std::pair;
+using std::string;
+using namespace std::literals;
+
 ActivePyModules::ActivePyModules(
   PyModuleConfig &module_config_,
   std::map<std::string, std::string> store_data,

@@ -22,7 +22,9 @@ constexpr int dout_subsys = ceph_subsys_rgw;
 }
 
 using std::bitset;
+using std::dec;
 using std::find;
+using std::hex;
 using std::int64_t;
 using std::move;
 using std::pair;

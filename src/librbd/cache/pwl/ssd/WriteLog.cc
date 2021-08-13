@@ -30,6 +30,7 @@ namespace cache {
 namespace pwl {
 namespace ssd {
 
+using namespace std;
 using namespace librbd::cache::pwl;
 
 // SSD: this number can be updated later
@@ -76,7 +77,7 @@ void WriteLog<I>::collect_read_extents(
   // Make a bl for this hit extent. This will add references to the
   // write_entry->cache_bl */
   ldout(m_image_ctx.cct, 5) << dendl;
-  auto write_entry = static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
+  auto write_entry = std::static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
   buffer::list hit_bl;
   hit_bl = write_entry->get_cache_bl();
   bool writesame = write_entry->is_writesame_entry();

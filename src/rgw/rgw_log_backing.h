@@ -242,7 +242,7 @@ inline std::string gencursor(uint64_t gen_id, std::string_view cursor) {
 inline std::pair<uint64_t, std::string_view>
 cursorgen(std::string_view cursor_) {
   if (cursor_.empty()) {
-    return { 0, ""sv };
+    return { 0, "" };
   }
   std::string_view cursor = cursor_;
   if (cursor[0] != 'G') {

@@ -41,7 +41,7 @@ public:
     LogEvent(EVENT_FRAGMENT),
     op(o), ino(df.ino), basefrag(df.frag), bits(b) { }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "EFragment " << op_name(op) << " " << ino << " " << basefrag << " by " << bits << " " << metablob;
   }
 

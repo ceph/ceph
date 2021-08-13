@@ -15,6 +15,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 template<>
 int RGWUserCreateCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {

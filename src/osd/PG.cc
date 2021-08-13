@@ -2092,7 +2092,7 @@ void PG::replica_scrub(epoch_t epoch_queued,
   dout(10) << __func__ << " queued at: " << epoch_queued
 	   << (is_primary() ? " (primary)" : " (replica)") << dendl;
   scrub_queued = false;
-  forward_scrub_event(&ScrubPgIF::send_start_replica, epoch_queued, "StartReplica/nw"sv);
+  forward_scrub_event(&ScrubPgIF::send_start_replica, epoch_queued, "StartReplica/nw");
 }
 
 bool PG::ops_blocked_by_scrub() const

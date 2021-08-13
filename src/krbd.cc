@@ -64,6 +64,8 @@ DEFINE_UDEV_UPTR(monitor)  /* udev_monitor_uptr */
 DEFINE_UDEV_UPTR(enumerate)  /* udev_enumerate_uptr */
 DEFINE_UDEV_UPTR(device)  /* udev_device_uptr */
 
+using std::string;
+
 struct krbd_ctx {
   CephContext *cct;
   struct udev *udev;
@@ -188,7 +190,7 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
                          const string& options, string *pbuf)
 {
   bool msgr2 = false;
-  ostringstream oss;
+  std::ostringstream oss;
   int r;
 
   boost::char_separator<char> sep(",");
@@ -201,7 +203,7 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
   }
 
   MonMap monmap;
-  r = monmap.build_initial(cct, false, cerr);
+  r = monmap.build_initial(cct, false, std::cerr);
   if (r < 0)
     return r;
 
@@ -232,7 +234,7 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
     if (r == -ENOENT && keyfile.empty() && key.empty())
       r = 0;
     if (r < 0) {
-      cerr << "rbd: failed to get secret" << std::endl;
+      std::cerr << "rbd: failed to get secret" << std::endl;
       return r;
     }
   }
@@ -246,13 +248,13 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
     r = set_kernel_secret(secret_str.c_str(), key_name.c_str());
     if (r >= 0) {
       if (r == 0)
-        cerr << "rbd: warning: secret has length 0" << std::endl;
+        std::cerr << "rbd: warning: secret has length 0" << std::endl;
       oss << ",key=" << key_name;
     } else if (r == -ENODEV || r == -ENOSYS) {
       // running against older kernel; fall back to secret= in options
       oss << ",secret=" << secret_str;
     } else {
-      cerr << "rbd: failed to add secret '" << key_name << "' to kernel"
+      std::cerr << "rbd: failed to add secret '" << key_name << "' to kernel"
            << std::endl;
       return r;
     }
@@ -545,7 +547,7 @@ static int map_image(struct krbd_ctx *ctx, const krbd_spec& spec,
 
     r = module_load("rbd", module_options);
     if (r) {
-      cerr << "rbd: failed to load rbd kernel module (" << r << ")"
+      std::cerr << "rbd: failed to load rbd kernel module (" << r << ")"
            << std::endl;
       /*
        * Ignore the error: modprobe failing doesn't necessarily prevent
@@ -717,14 +719,14 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const krbd_spec& spec,
   maj = strict_strtoll(udev_device_get_sysattr_value(dev.get(), "major"), 10,
                        &err);
   if (!err.empty()) {
-    cerr << "rbd: couldn't parse major: " << err << std::endl;
+    std::cerr << "rbd: couldn't parse major: " << err << std::endl;
     return -EINVAL;
   }
   if (have_minor_attr()) {
     min = strict_strtoll(udev_device_get_sysattr_value(dev.get(), "minor"), 10,
                          &err);
     if (!err.empty()) {
-      cerr << "rbd: couldn't parse minor: " << err << std::endl;
+      std::cerr << "rbd: couldn't parse minor: " << err << std::endl;
       return -EINVAL;
     }
   }
@@ -735,7 +737,7 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const krbd_spec& spec,
    * ran map.
    */
   if (udev_list_entry_get_next(l))
-    cerr << "rbd: " << spec << ": mapped more than once, unmapping "
+    std::cerr << "rbd: " << spec << ": mapped more than once, unmapping "
          << get_devnode(dev.get()) << " only" << std::endl;
 
   *pdevno = makedev(maj, min);
@@ -855,13 +857,13 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
   int r;
 
   if (stat(devnode, &sb) < 0 || !S_ISBLK(sb.st_mode)) {
-    cerr << "rbd: '" << devnode << "' is not a block device" << std::endl;
+    std::cerr << "rbd: '" << devnode << "' is not a block device" << std::endl;
     return -EINVAL;
   }
 
   r = blkid_devno_to_wholedisk(sb.st_rdev, NULL, 0, &wholedevno);
   if (r < 0) {
-    cerr << "rbd: couldn't compute wholedevno: " << cpp_strerror(r)
+    std::cerr << "rbd: couldn't compute wholedevno: " << cpp_strerror(r)
          << std::endl;
     /*
      * Ignore the error: we are given whole disks most of the time, and
@@ -1009,10 +1011,10 @@ static int dump_images(struct krbd_ctx *ctx, Formatter *f)
 
   if (f) {
     f->close_section();
-    f->flush(cout);
+    f->flush(std::cout);
   } else {
     if (r > 0)
-      cout << tbl;
+      std::cout << tbl;
   }
 
   return r;

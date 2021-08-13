@@ -27,8 +27,8 @@
 
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
-static string lc_oid_prefix = "lc";
-static string lc_index_lock_name = "lc_process";
+static std::string lc_oid_prefix = "lc";
+static std::string lc_index_lock_name = "lc_process";
 
 extern const char* LC_STATUS[];
 
@@ -42,12 +42,12 @@ typedef enum {
 class LCExpiration
 {
 protected:
-  string days;
+  std::string days;
   //At present only current object has expiration date
-  string date;
+  std::string date;
 public:
   LCExpiration() {}
-  LCExpiration(const string& _days, const string& _date) : days(_days), date(_date) {}
+  LCExpiration(const std::string& _days, const std::string& _date) : days(_days), date(_date) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);
@@ -65,16 +65,16 @@ public:
   }
   void dump(Formatter *f) const;
 //  static void generate_test_instances(list<ACLOwner*>& o);
-  void set_days(const string& _days) { days = _days; }
-  string get_days_str() const {
+  void set_days(const std::string& _days) { days = _days; }
+  std::string get_days_str() const {
     return days;
   }
   int get_days() const {return atoi(days.c_str()); }
   bool has_days() const {
     return !days.empty();
   }
-  void set_date(const string& _date) { date = _date; }
-  string get_date() const {
+  void set_date(const std::string& _date) { date = _date; }
+  std::string get_date() const {
     return date;
   }
   bool has_date() const {
@@ -98,20 +98,20 @@ WRITE_CLASS_ENCODER(LCExpiration)
 class LCTransition
 {
 protected:
-  string days;
-  string date;
-  string storage_class;
+  std::string days;
+  std::string date;
+  std::string storage_class;
 
 public:
   int get_days() const {
     return atoi(days.c_str());
   }
 
-  string get_date() const {
+  std::string get_date() const {
     return date;
   }
 
-  string get_storage_class() const {
+  std::string get_storage_class() const {
     return storage_class;
   }
 
@@ -216,15 +216,15 @@ WRITE_CLASS_ENCODER(LCFilter)
 class LCRule
 {
 protected:
-  string id;
-  string prefix;
-  string status;
+  std::string id;
+  std::string prefix;
+  std::string status;
   LCExpiration expiration;
   LCExpiration noncur_expiration;
   LCExpiration mp_expiration;
   LCFilter filter;
-  map<string, LCTransition> transitions;
-  map<string, LCTransition> noncur_transitions;
+  std::map<std::string, LCTransition> transitions;
+  std::map<std::string, LCTransition> noncur_transitions;
   bool dm_expiration = false;
 
 public:
@@ -232,11 +232,11 @@ public:
   LCRule(){};
   ~LCRule(){};
 
-  const string& get_id() const {
+  const std::string& get_id() const {
       return id;
   }
 
-  const string& get_status() const {
+  const std::string& get_status() const {
       return status;
   }
 
@@ -248,7 +248,7 @@ public:
     status = (flag ? "Enabled" : "Disabled");
   }
 
-  const string& get_prefix() const {
+  const std::string& get_prefix() const {
       return prefix;
   }
 
@@ -272,23 +272,23 @@ public:
     return dm_expiration;
   }
 
-  const map<string, LCTransition>& get_transitions() const {
+  const std::map<std::string, LCTransition>& get_transitions() const {
     return transitions;
   }
 
-  const map<string, LCTransition>& get_noncur_transitions() const {
+  const std::map<std::string, LCTransition>& get_noncur_transitions() const {
     return noncur_transitions;
   }
 
-  void set_id(const string& _id) {
+  void set_id(const std::string& _id) {
     id = _id;
   }
 
-  void set_prefix(const string& _prefix) {
+  void set_prefix(const std::string& _prefix) {
     prefix = _prefix;
   }
 
-  void set_status(const string& _status) {
+  void set_status(const std::string& _status) {
     status = _status;
   }
 
@@ -368,7 +368,7 @@ struct transition_action
 {
   int days;
   boost::optional<ceph::real_time> date;
-  string storage_class;
+  std::string storage_class;
   transition_action() : days(0) {}
   void dump(Formatter *f) const {
     if (!date) {
@@ -383,7 +383,7 @@ struct transition_action
 /* XXX why not LCRule? */
 struct lc_op
 {
-  string id;
+  std::string id;
   bool status{false};
   bool dm_expiration{false};
   int expiration{0};
@@ -391,8 +391,8 @@ struct lc_op
   int mp_expiration{0};
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
-  map<string, transition_action> transitions;
-  map<string, transition_action> noncur_transitions;
+  std::map<std::string, transition_action> transitions;
+  std::map<std::string, transition_action> noncur_transitions;
 
   /* ctors are nice */
   lc_op() = delete;
@@ -407,8 +407,8 @@ class RGWLifecycleConfiguration
 {
 protected:
   CephContext *cct;
-  multimap<string, lc_op> prefix_map;
-  multimap<string, LCRule> rule_map;
+  std::multimap<std::string, lc_op> prefix_map;
+  std::multimap<std::string, LCRule> rule_map;
   bool _add_rule(const LCRule& rule);
   bool has_same_action(const lc_op& first, const lc_op& second);
 public:
@@ -421,7 +421,7 @@ public:
 
   virtual ~RGWLifecycleConfiguration() {}
 
-//  int get_perm(string& id, int perm_mask);
+//  int get_perm(std::string& id, int perm_mask);
 //  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -431,7 +431,7 @@ public:
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(rule_map, bl);
-    multimap<string, LCRule>::iterator iter;
+    std::multimap<std::string, LCRule>::iterator iter;
     for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
       LCRule& rule = iter->second;
       _add_rule(rule);
@@ -439,7 +439,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWLifecycleConfiguration*>& o);
+  static void generate_test_instances(std::list<RGWLifecycleConfiguration*>& o);
 
   void add_rule(const LCRule& rule);
 
@@ -447,10 +447,10 @@ public:
 
   bool valid();
 
-  multimap<string, LCRule>& get_rule_map() { return rule_map; }
-  multimap<string, lc_op>& get_prefix_map() { return prefix_map; }
+  std::multimap<std::string, LCRule>& get_rule_map() { return rule_map; }
+  std::multimap<std::string, lc_op>& get_prefix_map() { return prefix_map; }
 /*
-  void create_default(string id, string name) {
+  void create_default(std::string id, std::string name) {
     ACLGrant grant;
     grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
     add_grant(&grant);
@@ -464,9 +464,9 @@ class RGWLC : public DoutPrefixProvider {
   rgw::sal::Store* store;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
   int max_objs{0};
-  string *obj_names{nullptr};
+  std::string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
-  string cookie;
+  std::string cookie;
 
 public:
 
@@ -516,10 +516,10 @@ public:
   bool if_already_run_today(time_t start_date);
   bool expired_session(time_t started);
   time_t thread_stop_at();
-  int list_lc_progress(string& marker, uint32_t max_entries,
-		       vector<rgw::sal::Lifecycle::LCEntry>&, int& index);
+  int list_lc_progress(std::string& marker, uint32_t max_entries,
+		       std::vector<rgw::sal::Lifecycle::LCEntry>&, int& index);
   int bucket_lc_prepare(int index, LCWorker* worker);
-  int bucket_lc_process(string& shard_id, LCWorker* worker, time_t stop_at,
+  int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
 		     rgw::sal::Lifecycle::LCEntry& entry, int& result, LCWorker* worker);
@@ -540,7 +540,7 @@ public:
   private:
 
   int handle_multipart_expiration(rgw::sal::Bucket* target,
-				  const multimap<string, lc_op>& prefix_map,
+				  const std::multimap<std::string, lc_op>& prefix_map,
 				  LCWorker* worker, time_t stop_at, bool once);
 };
 

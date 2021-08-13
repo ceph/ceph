@@ -12,6 +12,8 @@
 #include "cls_lua.h"
 #include "cls_lua_ops.h"
 
+using namespace std;
+
 CLS_VER(1,0)
 CLS_NAME(lua)
 

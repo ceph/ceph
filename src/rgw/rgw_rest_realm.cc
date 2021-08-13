@@ -15,6 +15,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 // reject 'period push' if we would have to fetch too many intermediate periods
 static const uint32_t PERIOD_HISTORY_FETCH_MAX = 64;
 

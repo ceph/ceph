@@ -44,7 +44,7 @@ public:
 
   void set_default_config(RGWFrontendConfig& def_conf);
 
-  std::optional<string> get_val(const std::string& key);
+  std::optional<std::string> get_val(const std::string& key);
 
   bool get_val(const std::string& key,
                const std::string& def_val,
@@ -156,7 +156,7 @@ public:
 
     pprocess = pp;
 
-    string uid_str;
+    std::string uid_str;
     conf->get_val("uid", "", &uid_str);
     if (uid_str.empty()) {
       derr << "ERROR: uid param must be specified for loadgen frontend"
@@ -174,7 +174,7 @@ public:
       return ret;
     }
 
-    map<string, RGWAccessKey>::iterator aiter = user->get_info().access_keys.begin();
+    auto aiter = user->get_info().access_keys.begin();
     if (aiter == user->get_info().access_keys.end()) {
       derr << "ERROR: user has no S3 access keys set" << dendl;
       return -EINVAL;

@@ -21,6 +21,8 @@ typedef boost::mt11213b gen_type;
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 
+using namespace std;
+
 class AllocTest : public ::testing::TestWithParam<const char*> {
 
 public:

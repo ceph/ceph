@@ -14,6 +14,8 @@
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
 
+using namespace std;
+
 typedef boost::mt11213b gen_type;
 
 class AllocTest : public ::testing::TestWithParam<const char*> {

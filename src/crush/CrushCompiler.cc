@@ -793,7 +793,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
   for (unsigned p = start + 3; p < i->children.size()-1; ++p) {
     string tag = string_node(i->children[p]);
     if (tag == "min_size" || tag == "max_size") {
-      cerr << "WARNING: " << tag << " is no longer supported, ignoring" << std::endl;
+      std::cerr << "WARNING: " << tag << " is no longer supported, ignoring" << std::endl;
       ++p;
       continue;
     }

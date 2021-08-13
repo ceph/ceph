@@ -10,6 +10,7 @@
 #include "test/journal/RadosTestFixture.h"
 #include <limits>
 
+using namespace std::chrono_literals;
 using std::shared_ptr;
 
 class TestObjectRecorder : public RadosTestFixture {

@@ -19,6 +19,8 @@
 
 #include "os/bluestore/BlueFS.h"
 
+using namespace std;
+
 std::unique_ptr<char[]> gen_buffer(uint64_t size)
 {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size);

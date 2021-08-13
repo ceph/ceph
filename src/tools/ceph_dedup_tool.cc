@@ -49,6 +49,8 @@
 #include "global/signal_handler.h"
 #include "common/CDC.h"
 
+using namespace std;
+
 struct EstimateResult {
   std::unique_ptr<CDC> cdc;
 

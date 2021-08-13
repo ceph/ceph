@@ -228,7 +228,7 @@ const char** Throttler<I>::get_tracked_conf_keys() const {
 
 template <typename I>
 void Throttler<I>::handle_conf_change(const ConfigProxy& conf,
-                                      const set<string> &changed) {
+                                      const std::set<std::string> &changed) {
   if (changed.count(m_config_key)) {
     set_max_concurrent_ops(conf.get_val<uint64_t>(m_config_key));
   }

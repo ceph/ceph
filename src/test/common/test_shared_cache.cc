@@ -26,6 +26,8 @@
 #include "common/Thread.h"
 #include "common/shared_cache.hpp"
 
+using namespace std;
+
 class SharedLRUTest : public SharedLRU<unsigned int, int> {
 public:
   auto& get_lock() { return lock; }

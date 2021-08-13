@@ -21,6 +21,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static const char* AWS_SNS_NS("https://sns.amazonaws.com/doc/2010-03-31/");
 
 // command (AWS compliant): 
