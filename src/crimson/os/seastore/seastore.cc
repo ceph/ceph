@@ -119,15 +119,17 @@ seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
   }).safe_then([this] {
     return transaction_manager->mount();
   }).safe_then([this] {
-    return transaction_manager->with_transaction_intr(
-        Transaction::src_t::MUTATE, [this](auto& t) {
-      return onode_manager->mkfs(t
-      ).si_then([this, &t] {
-        return collection_manager->mkfs(t);
-      }).si_then([this, &t](auto coll_root) {
-        transaction_manager->write_collection_root(
-          t, coll_root);
-        return transaction_manager->submit_transaction(t);
+    return repeat_eagain([this] {
+      return transaction_manager->with_transaction_intr(
+	  Transaction::src_t::MUTATE, [this](auto& t) {
+	return onode_manager->mkfs(t
+	).si_then([this, &t] {
+	  return collection_manager->mkfs(t);
+	}).si_then([this, &t](auto coll_root) {
+	  transaction_manager->write_collection_root(
+	    t, coll_root);
+	  return transaction_manager->submit_transaction(t);
+	});
       });
     });
   }).safe_then([this] {
