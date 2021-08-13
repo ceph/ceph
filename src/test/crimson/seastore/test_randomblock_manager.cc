@@ -133,7 +133,7 @@ struct rbm_test_t : public  seastar_test_suite_t,
       logger().debug("free_extent: start {} len {}", off * DEFAULT_BLOCK_SIZE,
 		      len * DEFAULT_BLOCK_SIZE);
       rbm_manager->add_free_extent(t.allocated_blocks, off * DEFAULT_BLOCK_SIZE,
-				    len * DEFAULT_BLOCK_SIZE).unsafe_get();
+				    len * DEFAULT_BLOCK_SIZE);
     }
   }
 

@@ -75,13 +75,6 @@ public:
     >;
   virtual allocate_ertr::future<> alloc_extent(Transaction &t, size_t size) = 0; // allocator, return blocks
 
-  using free_block_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg
-    >;
-  // TODO: will include trim if necessary
-  virtual free_block_ertr::future<> free_extent(Transaction &t, blk_paddr_t from, size_t len) = 0;
-
   using abort_allocation_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg
