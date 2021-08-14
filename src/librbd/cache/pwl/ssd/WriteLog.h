@@ -105,6 +105,7 @@ private:
   Builder<This> *m_builderobj;
 
   Builder<This>* create_builder();
+  int create_and_open_bdev();
   void load_existing_entries(pwl::DeferredContexts &later);
   void collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
