@@ -6,9 +6,10 @@ Lua Scripting
 
 .. contents::
 
-This feature allows users to upload Lua scripts to different context in the radosgw. The two supported context are "preRequest" that will execute a script before the
-operation was taken, and "postRequest" that will execute after each operation is taken. Script may be uploaded to address requests for users of a specific tenant.
-The script can access fields in the request and modify some fields. All Lua language features can be used in the script.
+This feature allows users to upload Lua scripts to different context in the radosgw. The three supported contexts are "preRequest" that will execute a script before the
+operation was taken, "postRequest" that will execute after each operation is taken and "background" that will execute a script in a given time interval.
+Request context script may be uploaded to address requests for users of a specific tenant.
+The request context script can also access fields in the request and modify some fields. All Lua language features can be used in the script.
 
 By default, all lua standard libraries are available in the script, however, in order to allow for other lua modules to be used in the script, we support adding packages to an allowlist:
 
@@ -28,23 +29,27 @@ Script Management via CLI
 
 To upload a script:
    
+
 ::
    
-   # radosgw-admin script put --infile={lua-file} --context={preRequest|postRequest} [--tenant={tenant-name}]
+   # radosgw-admin script put --infile={lua-file} --context={preRequest|postRequest|background} [--tenant={tenant-name}]
+
+
+* When uploading a script in background context, tenant name could not be specified.
 
 
 To print the content of the script to standard output:
 
 ::
    
-   # radosgw-admin script get --context={preRequest|postRequest} [--tenant={tenant-name}]
+   # radosgw-admin script get --context={preRequest|postRequest|background} [--tenant={tenant-name}]
 
 
 To remove the script:
 
 ::
    
-   # radosgw-admin script rm --context={preRequest|postRequest} [--tenant={tenant-name}]
+   # radosgw-admin script rm --context={preRequest|postRequest|background} [--tenant={tenant-name}]
 
 
 Package Management via CLI
@@ -296,6 +301,23 @@ Request Functions
 Operations Log
 ~~~~~~~~~~~~~~
 The ``Request.Log()`` function prints the requests into the operations log. This function has no parameters. It returns 0 for success and an error code if it fails.
+
+Background Context
+--------------------
+The background context may be used for various need such as analytics, monitoring and
+caching data from other context executions.
+
+The ``RGW`` Lua table which is accesible from any context saves the data written into it
+while execution and this data could be read and used later in any other execution.
+
+- Background script execution default interval is 5 seconds.
+
+- Each RGW instance has its own ``RGW`` Lua table, while the Background Context script
+  will run on every instance.
+
+- The maximum number of entries in the table is 100,000. Each entry has a key and string value
+  of no more than 1KB (together). Lua script will abort with an error if the
+  number of entries or entry size exceeds their limits.
 
 Lua Code Samples
 ----------------
