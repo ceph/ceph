@@ -106,8 +106,7 @@ void WriteLog<I>::complete_read(
 }
 
 template <typename I>
-bool WriteLog<I>::initialize_pool(Context *on_finish,
-                                  pwl::DeferredContexts &later) {
+int WriteLog<I>::create_and_open_bdev() {
   CephContext *cct = m_image_ctx.cct;
 
   bdev = BlockDevice::create(cct, this->m_log_pool_name, aio_cache_cb,
