@@ -331,9 +331,12 @@ static int get_objectdata(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_s
   blob = sqlite3_column_blob(stmt, 3);
   datalen = sqlite3_column_bytes(stmt, 3);
 
-  char data[datalen+1] = {};
-  if (blob)
+  char data[datalen+1];
+  data[0] = '\0';
+  if (blob) {
     strncpy(data, (const char *)blob, datalen);
+    data[datalen] = '\0';
+  }
 
   return 0;
 }
