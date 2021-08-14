@@ -107,9 +107,36 @@ void WriteLog<I>::complete_read(
 }
 
 template <typename I>
+int WriteLog<I>::create_and_open_bdev() {
+  CephContext *cct = m_image_ctx.cct;
+
+  bdev = BlockDevice::create(cct, this->m_log_pool_name, aio_cache_cb,
+                             nullptr, nullptr, nullptr);
+  int r = bdev->open(this->m_log_pool_name);
+  if (r < 0) {
+    lderr(cct) << "failed to open bdev" << dendl;
+    delete bdev;
+    return r;
+  }
+
+  ceph_assert(this->m_log_pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+  if (bdev->get_size() != this->m_log_pool_size) {
+    lderr(cct) << "size mismatch: bdev size " << bdev->get_size()
+               << " (block size " << bdev->get_block_size()
+               << ") != pool size " << this->m_log_pool_size << dendl;
+    bdev->close();
+    delete bdev;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+template <typename I>
 bool WriteLog<I>::initialize_pool(Context *on_finish,
                                   pwl::DeferredContexts &later) {
-  CephContext *cct = m_image_ctx.cct;
+  int r;
+
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   if (access(this->m_log_pool_name.c_str(), F_OK) != 0) {
     int fd = ::open(this->m_log_pool_name.c_str(), O_RDWR|O_CREAT, 0644);
@@ -132,12 +159,8 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
       return false;
     }
 
-    bdev = BlockDevice::create(cct, this->m_log_pool_name, aio_cache_cb,
-                               nullptr, nullptr, nullptr);
-    int r = bdev->open(this->m_log_pool_name);
+    r = create_and_open_bdev();
     if (r < 0) {
-      lderr(m_image_ctx.cct) << "fail to open block device." << dendl;
-      delete bdev;
       on_finish->complete(r);
       return false;
     }
@@ -176,12 +199,8 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     }
   } else {
     m_cache_state->present = true;
-    bdev = BlockDevice::create(
-        cct, this->m_log_pool_name, aio_cache_cb,
-        static_cast<void*>(this), nullptr, static_cast<void*>(this));
-    int r = bdev->open(this->m_log_pool_name);
+    r = create_and_open_bdev();
     if (r < 0) {
-      delete bdev;
       on_finish->complete(r);
       return false;
     }
