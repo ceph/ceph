@@ -584,7 +584,7 @@ class NodeExtentAccessorT {
         ceph_abort("fatal error");
       })
 #ifndef NDEBUG
-    ).si_then([this, c] {
+    ).si_then([c] {
       assert(!c.t.is_conflicted());
     }
 #endif
