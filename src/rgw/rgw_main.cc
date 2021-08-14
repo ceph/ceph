@@ -58,6 +58,7 @@
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
+#include "rgw_lua_background.h"
 
 #include "services/svc_zone.h"
 
@@ -605,6 +606,8 @@ int radosgw_Main(int argc, const char **argv)
 
   int fe_count = 0;
 
+  rgw::lua::Background lua_background(&dp, store, cct.get(), store->get_luarocks_path());
+
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
        fiter != fe_map.end(); ++fiter, ++fe_count) {
     RGWFrontendConfig *config = fiter->second;
@@ -623,7 +626,8 @@ int radosgw_Main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, auth_registry, &ratelimiting };
+      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, 
+                            auth_registry, &ratelimiting, &lua_background};
 
       fe = new RGWLoadGenFrontend(env, config);
     }
@@ -632,7 +636,8 @@ int radosgw_Main(int argc, const char **argv)
       config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry, &ratelimiting };
+      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, 
+                         auth_registry, &ratelimiting, &lua_background};
       fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
 
@@ -739,6 +744,8 @@ int radosgw_Main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   rgw::kafka::shutdown();
 #endif
+
+  lua_background.shutdown();
 
   rgw_perf_stop(g_ceph_context);
 
