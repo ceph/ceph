@@ -513,6 +513,9 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
 
   m_log_pool_name = m_cache_state->path;
   m_log_pool_size = max(m_cache_state->size, MIN_POOL_SIZE);
+  m_log_pool_size = p2align(m_log_pool_size, POOL_SIZE_ALIGN);
+  ldout(cct, 5) << "pool " << m_log_pool_name << " size " << m_log_pool_size
+                << " (adjusted from " << m_cache_state->size << ")" << dendl;
 
   if ((!m_cache_state->present) &&
       (access(m_log_pool_name.c_str(), F_OK) == 0)) {
