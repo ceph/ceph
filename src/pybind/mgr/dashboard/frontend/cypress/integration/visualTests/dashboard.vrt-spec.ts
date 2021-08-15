@@ -16,7 +16,7 @@ describe('Dashboard Landing Page', () => {
   it('should take screenshot of dashboard landing page', () => {
     login.navigateTo();
     login.doLogin();
-    cy.get('.chart-container').should('be.visible');
-    cy.eyesCheckWindow({ tag: 'Dashboard landing page', ignore: { selector: '.chart-container' } });
+    cy.get('.card-text').should('be.visible');
+    cy.eyesCheckWindow({ tag: 'Dashboard landing page', ignore: { selector: '.card-text' } });
   });
 });
