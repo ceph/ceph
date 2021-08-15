@@ -576,8 +576,14 @@ try_decode_deltas(
       }
     }
     for (auto& i: r.extent_infos) {
-      auto& seg_addr = record_block_base.as_seg_paddr();
-      seg_addr.set_segment_off(seg_addr.get_segment_off() + i.len);
+      if (record_block_base.get_addr_type() == addr_types_t::SEGMENT) {
+	auto& seg_addr = record_block_base.as_seg_paddr();
+	seg_addr.set_segment_off(seg_addr.get_segment_off() + i.len);
+      } else if (record_block_base.get_addr_type() ==
+	  addr_types_t::RANDOM_BLOCK) {
+	auto& blk_addr = record_block_base.as_blk_paddr();
+	blk_addr.set_block_off(blk_addr.get_block_off() + i.len);
+      }
     }
     ++result_iter;
   }

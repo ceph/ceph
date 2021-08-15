@@ -43,6 +43,10 @@ public:
     write_pipeline = _write_pipeline;
   }
 
+  journal_type get_type() final {
+    return journal_type::SEGMENT_JOURNAL;
+  }
+
 private:
   submit_record_ret do_submit_record(
     record_t &&record,
