@@ -38,6 +38,7 @@ add_library(crimson-seastore STATIC
   seastore.cc
   random_block_manager/nvme_manager.cc
   random_block_manager/nvmedevice.cc
+  circular_bounded_journal.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
