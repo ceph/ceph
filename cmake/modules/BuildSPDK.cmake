@@ -14,10 +14,16 @@ macro(build_spdk)
 
   set(spdk_CFLAGS "-fPIC")
   include(CheckCCompilerFlag)
-  check_c_compiler_flag("-Wno-address-of-packed-member" HAS_WARNING_ADDRESS_OF_PACKED_MEMBER)
-  if(HAS_WARNING_ADDRESS_OF_PACKED_MEMBER)
+  check_c_compiler_flag("-Wno-address-of-packed-member" HAVE_WARNING_ADDRESS_OF_PACKED_MEMBER)
+  if(HAVE_WARNING_ADDRESS_OF_PACKED_MEMBER)
     string(APPEND spdk_CFLAGS " -Wno-address-of-packed-member")
   endif()
+  check_c_compiler_flag("-Wno-unused-but-set-variable"
+    HAVE_UNUSED_BUT_SET_VARIABLE)
+  if(HAVE_UNUSED_BUT_SET_VARIABLE)
+    string(APPEND spdk_CFLAGS " -Wno-unused-but-set-variable")
+  endif()
+
   include(ExternalProject)
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
     # a safer option than relying on the build host's arch
