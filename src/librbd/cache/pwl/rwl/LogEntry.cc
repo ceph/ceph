@@ -80,6 +80,14 @@ void WriteLogEntry::copy_cache_bl(bufferlist *out_bl) {
   this->init_bl(cloned_bp, *out_bl);
 }
 
+unsigned int WriteLogEntry::reader_count() const {
+  if (cache_bp.have_raw()) {
+    return (cache_bp.raw_nref() - bl_refs - 1);
+  } else {
+    return 0;
+  }
+}
+
 void WriteSameLogEntry::writeback(
     librbd::cache::ImageWritebackInterface &image_writeback, Context *ctx) {
   bufferlist entry_bl;

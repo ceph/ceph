@@ -217,7 +217,7 @@ public:
   virtual buffer::list &get_cache_bl() = 0;
 
   BlockExtent block_extent();
-  unsigned int reader_count() const;
+  virtual unsigned int reader_count() const = 0;
   /* Constructs a new bl containing copies of cache_bp */
   void copy_cache_bl(bufferlist *out_bl) override {};
   bool can_retire() const override {
