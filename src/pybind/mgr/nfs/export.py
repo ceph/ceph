@@ -214,6 +214,7 @@ class ExportMgr:
             fsal.cephx_key = self._create_user_key(
                 export.cluster_id, fsal.user_id, export.path, fsal.fs_name, not rw
             )
+            log.debug("Successfully created user %s for cephfs path %s", fsal.user_id, export.path)
 
         elif isinstance(export.fsal, RGWFSAL):
             rgwfsal = cast(RGWFSAL, export.fsal)
@@ -236,6 +237,7 @@ class ExportMgr:
             # FIXME: make this more tolerate of unexpected output?
             rgwfsal.access_key_id = j['keys'][0]['access_key']
             rgwfsal.secret_access_key = j['keys'][0]['secret_key']
+            log.debug("Successfully fetched user %s for RGW path %s", rgwfsal.user_id, export.path)
 
     def _gen_export_id(self, cluster_id: str) -> int:
         exports = sorted([ex.export_id for ex in self.exports[cluster_id]])
@@ -290,6 +292,7 @@ class ExportMgr:
                 self._delete_export_user(export)
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
+                    log.debug("Deleted all exports for cluster %s", cluster_id)
                 return 0, "Successfully deleted export", ""
             return 0, "", "Export does not exist"
         except Exception as e:
@@ -566,6 +569,7 @@ class ExportMgr:
         ex_dict["cluster_id"] = cluster_id
         export = Export.from_dict(ex_id, ex_dict)
         export.validate(self.mgr)
+        log.debug("Successfully created %s export-%s from dict for cluster %s", fsal_type, ex_id, cluster_id)
         return export
 
     def create_cephfs_export(self,
@@ -672,7 +676,8 @@ class ExportMgr:
                 # re-fetch via old pseudo
                 old_export = self._fetch_export(cluster_id, old_export.pseudo)
                 assert old_export
-                self.mgr.log.debug(f"export {old_export.export_id} pseudo {old_export.pseudo} -> {new_export_dict['pseudo']}")
+                log.debug("export %s pseudo %s -> %s",
+                          old_export.export_id, old_export.pseudo, new_export_dict['pseudo'])
 
         new_export = self.create_export_from_dict(
             cluster_id,
