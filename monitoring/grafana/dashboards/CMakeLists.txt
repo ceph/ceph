@@ -21,7 +21,10 @@ if(WITH_GRAFANA)
     URL_MD5 0798752ed40864fa8b3db40a3c970642
     BUILD_COMMAND ""
     CONFIGURE_COMMAND ""
-    INSTALL_COMMAND "")
+    INSTALL_COMMAND ""
+    LOG_DOWNLOAD ON
+    LOG_MERGED_STDOUTERR ON
+    LOG_OUTPUT_ON_FAILURE ON)
   add_dependencies(tests
     ${name})
   ExternalProject_Get_Property(${name} SOURCE_DIR)

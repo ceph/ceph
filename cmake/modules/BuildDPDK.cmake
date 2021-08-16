@@ -96,7 +96,11 @@ function(do_build_dpdk dpdk_dir)
     CONFIGURE_COMMAND ${make_cmd} config O=${dpdk_dir} T=${target}
     BUILD_COMMAND ${make_cmd} O=${dpdk_dir} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=${extra_cflags}
     BUILD_IN_SOURCE 1
-    INSTALL_COMMAND "")
+    INSTALL_COMMAND ""
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_MERGED_STDOUTERR ON
+    LOG_OUTPUT_ON_FAILURE ON)
   if(NUMA_FOUND)
     set(numa "y")
   else()
