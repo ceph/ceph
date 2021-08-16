@@ -105,7 +105,7 @@ function prepare() {
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
-        do_install "$install_cmd" ccache $which_pkg
+        do_install "$install_cmd" ccache $which_pkg clang
     else
         echo "WARNING: Don't know how to install packages" >&2
         echo "This probably means distribution $ID is not supported by run-make-check.sh" >&2
