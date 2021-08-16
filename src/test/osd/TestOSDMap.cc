@@ -2073,7 +2073,7 @@ TEST_P(OSDMapTest, BUG_51842) {
     }
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   OSDMap,
   OSDMapTest,
   ::testing::Values(

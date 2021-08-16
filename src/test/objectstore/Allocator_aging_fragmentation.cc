@@ -456,7 +456,7 @@ TEST_P(AllocTest, test_bonus_empty_fragmented)
   std::cout << "    empty storage frag.score=" << frag_score << std::endl;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap", "avl", "btree"));
