@@ -33,7 +33,7 @@ backtraceDir="${depsToolsetDir}/libbacktrace"
 backtraceSrcDir="${depsSrcDir}/libbacktrace"
 snappySrcDir="${depsSrcDir}/snappy"
 snappyDir="${depsToolsetDir}/snappy"
-snappyTag="1.1.7"
+snappyTag="1.1.9"
 # Additional Windows libraries, which aren't provided by Mingw
 winLibDir="${depsToolsetDir}/windows/lib"
 
@@ -103,8 +103,8 @@ _make BINARY_PATH=$zlibDir \
 echo "Building lz4."
 cd $depsToolsetDir
 if [[ ! -d $lz4Dir ]]; then
-    git clone https://github.com/lz4/lz4
-    cd $lz4Dir; git checkout $lz4Tag
+    git clone --branch $lz4Tag --depth 1 https://github.com/lz4/lz4
+    cd $lz4Dir
 fi
 cd $lz4Dir
 _make BUILD_STATIC=no CC=${MINGW_CC%-posix*} \
@@ -115,8 +115,8 @@ _make BUILD_STATIC=no CC=${MINGW_CC%-posix*} \
 echo "Building OpenSSL."
 cd $depsSrcDir
 if [[ ! -d $sslSrcDir ]]; then
-    git clone https://github.com/openssl/openssl
-    cd $sslSrcDir; git checkout $sslTag
+    git clone --branch $sslTag --depth 1 https://github.com/openssl/openssl
+    cd $sslSrcDir
 fi
 cd $sslSrcDir
 mkdir -p $sslDir
@@ -129,8 +129,8 @@ _make install
 echo "Building libcurl."
 cd $depsSrcDir
 if [[ ! -d $curlSrcDir ]]; then
-    git clone https://github.com/curl/curl
-    cd $curlSrcDir && git checkout $curlTag
+    git clone --branch $curlTag --depth 1 https://github.com/curl/curl
+    cd $curlSrcDir
 fi
 cd $curlSrcDir
 ./buildconf
@@ -221,8 +221,8 @@ _make install
 echo "Building snappy."
 cd $depsSrcDir
 if [[ ! -d $snappySrcDir ]]; then
-    git clone https://github.com/google/snappy
-    cd $snappySrcDir && git checkout $snappyTag
+    git clone --branch $snappyTag --depth 1 https://github.com/google/snappy
+    cd $snappySrcDir
 fi
 mkdir -p $snappySrcDir/build
 cd $snappySrcDir/build
@@ -231,6 +231,7 @@ cmake -DCMAKE_INSTALL_PREFIX=$snappyDir \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_SHARED_LIBS=ON \
       -DSNAPPY_BUILD_TESTS=OFF \
+      -DSNAPPY_BUILD_BENCHMARKS=OFF \
       -DCMAKE_TOOLCHAIN_FILE=$MINGW_CMAKE_FILE \
       ../
 _make
