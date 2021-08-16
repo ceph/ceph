@@ -235,6 +235,7 @@ class NFSCluster:
                     return 0, "", "NFS-Ganesha User Config already exists"
                 rados_obj.write_obj(nfs_config, self._get_user_conf_obj_name(cluster_id),
                                     self._get_common_conf_obj_name(cluster_id))
+                log.debug("Successfully saved %s's user config: \n %s", cluster_id, nfs_config)
                 restart_nfs_service(self.mgr, cluster_id)
                 return 0, "NFS-Ganesha Config Set Successfully", ""
             raise ClusterNotFound()
