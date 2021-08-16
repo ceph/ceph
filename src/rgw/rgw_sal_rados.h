@@ -98,21 +98,6 @@ class RadosObject : public Object {
       virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) override;
     };
 
-    struct RadosWriteOp : public WriteOp {
-    private:
-      RadosObject* source;
-      RGWObjectCtx* rctx;
-      RGWRados::Object op_target;
-      RGWRados::Object::Write parent_op;
-
-    public:
-      RadosWriteOp(RadosObject* _source, RGWObjectCtx* _rctx);
-
-      virtual int prepare(optional_yield y) override;
-      virtual int write_meta(const DoutPrefixProvider* dpp, uint64_t size, uint64_t accounted_size, optional_yield y) override;
-      //virtual int write_data(const char* data, uint64_t ofs, uint64_t len, bool exclusive) override;
-    };
-
     struct RadosDeleteOp : public DeleteOp {
     private:
       RadosObject* source;
@@ -218,7 +203,6 @@ class RadosObject : public Object {
 
     /* OPs */
     virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx *) override;
-    virtual std::unique_ptr<WriteOp> get_write_op(RGWObjectCtx *) override;
     virtual std::unique_ptr<DeleteOp> get_delete_op(RGWObjectCtx*) override;
     virtual std::unique_ptr<StatOp> get_stat_op(RGWObjectCtx*) override;
 
@@ -546,6 +530,7 @@ class RadosMultipartUpload : public MultipartUpload {
   RGWMPObj mp_obj;
   ceph::real_time mtime;
   rgw_placement_rule placement;
+  RGWObjManifest manifest;
 
 public:
   RadosMultipartUpload(RadosStore* _store, Bucket* _bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time _mtime) : MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), mtime(_mtime) {}
@@ -563,12 +548,16 @@ public:
 			 bool assume_unsorted = false) override;
   virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct,
 		    RGWObjectCtx* obj_ctx) override;
-  virtual int complete(const DoutPrefixProvider* dpp, CephContext* cct,
-		       std::string& etag, RGWObjManifest& manifest,
+  virtual int complete(const DoutPrefixProvider* dpp,
+		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
 		       std::list<rgw_obj_index_key>& remove_objs,
 		       uint64_t& accounted_size, bool& compressed,
-		       RGWCompressionInfo& cs_info, off_t& ofs) override;
+		       RGWCompressionInfo& cs_info, off_t& ofs,
+		       std::string& tag, ACLOwner& owner,
+		       uint64_t olh_epoch,
+		       rgw::sal::Object* target_obj,
+		       RGWObjectCtx* obj_ctx) override;
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,

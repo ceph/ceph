@@ -5993,12 +5993,9 @@ void RGWCompleteMultipart::execute(optional_yield y)
   RGWMultiCompleteUpload *parts;
   RGWMultiXMLParser parser;
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
-  rgw::sal::Attrs attrs;
   off_t ofs = 0;
-  bufferlist etag_bl;
   std::unique_ptr<rgw::sal::Object> meta_obj;
   std::unique_ptr<rgw::sal::Object> target_obj;
-  RGWObjManifest manifest;
   uint64_t olh_epoch = 0;
 
   op_ret = get_params(y);
@@ -6045,8 +6042,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
-  bool versioned_object = s->bucket->versioning_enabled();
-
   meta_obj = upload->get_meta_obj();
   meta_obj->set_in_extra_data(true);
   meta_obj->set_hash_source(s->object->get_name());
@@ -6077,7 +6072,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
 		     << " ret=" << op_ret << dendl;
     return;
   }
-  attrs = meta_obj->get_attrs();
   
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(meta_obj.get(),
@@ -6087,25 +6081,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  op_ret = upload->complete(this, s->cct, etag, manifest, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
-    return;
-  }
-
-  etag_bl.append(etag);
-
-  attrs[RGW_ATTR_ETAG] = etag_bl;
-
-  if (compressed) {
-    // write compression attribute to full object
-    bufferlist tmp;
-    encode(cs_info, tmp);
-    attrs[RGW_ATTR_COMPRESSION] = tmp;
-  }
-
   target_obj = s->bucket->get_object(rgw_obj_key(s->object->get_name()));
-  if (versioned_object) {
+  if (s->bucket->versioning_enabled()) {
     if (!version_id.empty()) {
       target_obj->set_instance(version_id);
     } else {
@@ -6113,30 +6090,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
       version_id = target_obj->get_instance();
     }
   }
+  target_obj->set_attrs(meta_obj->get_attrs());
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-
-  target_obj->set_atomic(&obj_ctx);
-
-  std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = target_obj->get_write_op(&obj_ctx);
-
-  obj_op->params.manifest = &manifest;
-  obj_op->params.remove_objs = &remove_objs;
-
-  obj_op->params.ptag = &s->req_id; /* use req_id as operation tag */
-  obj_op->params.owner = s->owner;
-  obj_op->params.flags = PUT_OBJ_CREATE;
-  obj_op->params.modify_tail = true;
-  obj_op->params.completeMultipart = true;
-  obj_op->params.olh_epoch = olh_epoch;
-  obj_op->params.attrs = &attrs;
-  op_ret = obj_op->prepare(s->yield);
-  if (op_ret < 0)
+  op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, target_obj.get(), s->obj_ctx);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
-
-  op_ret = obj_op->write_meta(this, ofs, accounted_size, s->yield);
-  if (op_ret < 0)
-    return;
+  }
 
   // remove the upload meta object ; the meta object is not versioned
   // when the bucket is, as that would add an unneeded delete marker
