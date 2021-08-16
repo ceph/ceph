@@ -365,7 +365,7 @@ public:
 		std::invoke_result_t<Func, seastar::future<T>>>>
   [[gnu::always_inline]]
   Result then_wrapped_interruptible(Func&& func) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     return core_type::then_wrapped(
       [func=std::move(func), interrupt_condition=interrupt_cond<InterruptCond>]
       (auto&& fut) mutable {
@@ -379,7 +379,7 @@ public:
   template <typename Func>
   [[gnu::always_inline]]
   auto then_interruptible(Func&& func) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     if constexpr (std::is_void_v<T>) {
       auto fut = core_type::then(
 	[func=std::move(func), interrupt_condition=interrupt_cond<InterruptCond>]
@@ -415,7 +415,7 @@ public:
 		std::result_of_t<Func(std::exception_ptr)>>>
   [[gnu::always_inline]]
   Result handle_exception_interruptible(Func&& func) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     return core_type::then_wrapped(
       [func=std::forward<Func>(func),
       interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable {
@@ -436,7 +436,7 @@ public:
   [[gnu::always_inline]]
   Result finally_interruptible(Func&& func) {
     if constexpr (may_interrupt) {
-      assert(interrupt_cond<InterruptCond>);
+      ceph_assert(interrupt_cond<InterruptCond>);
       return core_type::then_wrapped(
 	[func=std::forward<Func>(func),
 	interrupt_condition=interrupt_cond<InterruptCond>](auto&& fut) mutable {
@@ -455,7 +455,7 @@ public:
 		  typename seastar::function_traits<Func>::template arg<0>::type)>>>
   [[gnu::always_inline]]
   Result handle_exception_type_interruptible(Func&& func) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     using trait = seastar::function_traits<Func>;
     static_assert(trait::arity == 1, "func can take only one parameter");
     using ex_type = typename trait::template arg<0>::type;
@@ -683,7 +683,7 @@ public:
 	   typename U = T, std::enable_if_t<!std::is_void_v<U> && interruptible, int> = 0>
   [[gnu::always_inline]]
   auto safe_then_interruptible(ValueInterruptCondT&& valfunc, ErrorVisitorT&& errfunc) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     auto fut = core_type::safe_then(
       [func=std::move(valfunc), interrupt_condition=interrupt_cond<InterruptCond>]
       (T&& args) mutable {
@@ -719,7 +719,7 @@ public:
 	   typename U = T, std::enable_if_t<std::is_void_v<U> && interruptible, int> = 0>
   [[gnu::always_inline]]
   auto safe_then_interruptible(ValueInterruptCondT&& valfunc, ErrorVisitorT&& errfunc) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     auto fut = core_type::safe_then(
       [func=std::move(valfunc), interrupt_condition=interrupt_cond<InterruptCond>]
       () mutable {
@@ -754,7 +754,7 @@ public:
 	    typename U = T, std::enable_if_t<std::is_void_v<T> && interruptible, int> = 0>
   [[gnu::always_inline]]
   auto safe_then_interruptible(ValueInterruptCondT&& valfunc) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     auto fut = core_type::safe_then(
       [func=std::move(valfunc),
        interrupt_condition=interrupt_cond<InterruptCond>]
@@ -786,7 +786,7 @@ public:
 	    typename U = T, std::enable_if_t<!std::is_void_v<T> && interruptible, int> = 0>
   [[gnu::always_inline]]
   auto safe_then_interruptible(ValueInterruptCondT&& valfunc) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     auto fut = core_type::safe_then(
       [func=std::move(valfunc),
        interrupt_condition=interrupt_cond<InterruptCond>]
@@ -852,7 +852,7 @@ public:
   template <bool interruptible = true, typename ErrorFunc>
   auto handle_error_interruptible(ErrorFunc&& errfunc) {
     if constexpr (interruptible) {
-      assert(interrupt_cond<InterruptCond>);
+      ceph_assert(interrupt_cond<InterruptCond>);
       auto fut = core_type::handle_error(
 	[errfunc=std::move(errfunc),
 	 interrupt_condition=interrupt_cond<InterruptCond>]
@@ -885,7 +885,7 @@ public:
 	    typename... ErrorFuncTail>
   auto handle_error_interruptible(ErrorFuncHead&& error_func_head,
 				  ErrorFuncTail&&... error_func_tail) {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     static_assert(sizeof...(ErrorFuncTail) > 0);
     return this->handle_error_interruptible(
       ::crimson::composer(
@@ -1355,7 +1355,7 @@ public:
   }
 
   static void yield() {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     auto interruption_condition = interrupt_cond<InterruptCond>;
     interrupt_cond<InterruptCond>.release();
     seastar::thread::yield();
@@ -1363,7 +1363,7 @@ public:
   }
 
   static void maybe_yield() {
-    assert(interrupt_cond<InterruptCond>);
+    ceph_assert(interrupt_cond<InterruptCond>);
     if (seastar::thread::should_yield()) {
       auto interruption_condition = interrupt_cond<InterruptCond>;
       interrupt_cond<InterruptCond>.release();
