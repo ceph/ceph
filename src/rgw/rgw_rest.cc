@@ -1474,7 +1474,7 @@ static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const ui
   int total = need_to_read;
   bufferlist bl;
 
-  int read_len = 0, len = 0;
+  int read_len = 0;
   do {
     bufferptr bp(need_to_read + 1);
     read_len = recv_body(s, bp.c_str(), need_to_read);
@@ -1485,7 +1485,6 @@ static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const ui
     bp.c_str()[read_len] = '\0';
     bp.set_length(read_len);
     bl.append(bp);
-    len += read_len;
 
     if (read_len == need_to_read) {
       if (need_to_read < MAX_READ_CHUNK)
