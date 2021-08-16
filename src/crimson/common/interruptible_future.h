@@ -117,14 +117,18 @@ auto call_with_interruption_impl(
   // need to be interrupted, return an interruption; otherwise, restore the
   // global "interrupt_cond" with the interruption condition, and go ahead
   // executing the Func.
-  if (!interrupt_cond<InterruptCond> && interrupt_condition) {
+  if (interrupt_condition) {
     auto [interrupt, fut] = interrupt_condition->template may_interrupt<
       typename futurator_t::type>();
     if (interrupt) {
       return std::move(*fut);
     }
-    set_int_cond = true;
-    interrupt_cond<InterruptCond> = interrupt_condition;
+    if (!interrupt_cond<InterruptCond>) {
+      set_int_cond = true;
+      interrupt_cond<InterruptCond> = interrupt_condition;
+    }
+    ceph_assert(interrupt_cond<InterruptCond>.get()
+      == interrupt_condition.get());
   }
 
   auto fut = seastar::futurize_invoke(
