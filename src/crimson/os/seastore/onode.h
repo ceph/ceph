@@ -58,6 +58,7 @@ public:
   virtual const onode_layout_t &get_layout() const = 0;
   virtual onode_layout_t &get_mutable_layout(Transaction &t) = 0;
   virtual ~Onode() = default;
+  virtual laddr_t get_hint() const = 0;
 };
 
 

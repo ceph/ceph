@@ -400,7 +400,7 @@ void Node::test_make_destructable(
 eagain_ifuture<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::Node::mkfs);
-  return LeafNode::allocate_root(c, root_tracker
+  return LeafNode::allocate_root(c, L_ADDR_MIN, root_tracker
   ).si_then([c, FNAME](auto ret) {
     INFOT("allocated root {}", c.t, ret->get_name());
   });
@@ -462,13 +462,13 @@ Super::URef Node::deref_super()
   return ret;
 }
 
-eagain_ifuture<> Node::upgrade_root(context_t c)
+eagain_ifuture<> Node::upgrade_root(context_t c, laddr_t hint)
 {
   LOG_PREFIX(OTree::Node::upgrade_root);
   assert(impl->field_type() == field_type_t::N0);
   auto super_to_move = deref_super();
   return InternalNode::allocate_root(
-      c, impl->level(), impl->laddr(), std::move(super_to_move)
+      c, hint, impl->level(), impl->laddr(), std::move(super_to_move)
   ).si_then([this, c, FNAME](auto new_root) {
     as_child(search_position_t::end(), new_root);
     INFOT("upgraded from {} to {}",
@@ -604,7 +604,7 @@ Node::try_merge_adjacent(
         // so use rebuild_extent() as a workaround to rebuild the node from a
         // fresh extent, thus no need to generate delta.
         auto left_addr = left_for_merge->impl->laddr();
-        return left_for_merge->rebuild_extent(c
+        return left_for_merge->rebuild_extent(c, L_ADDR_MIN
         ).si_then([c, update_index_after_merge,
                      left_addr,
                      merge_stage = merge_stage,
@@ -743,7 +743,7 @@ eagain_ifuture<Ref<Node>> Node::load(
   });
 }
 
-eagain_ifuture<NodeExtentMutable> Node::rebuild_extent(context_t c)
+eagain_ifuture<NodeExtentMutable> Node::rebuild_extent(context_t c, laddr_t hint)
 {
   LOG_PREFIX(OTree::Node::rebuild_extent);
   DEBUGT("{} ...", c.t, get_name());
@@ -752,7 +752,7 @@ eagain_ifuture<NodeExtentMutable> Node::rebuild_extent(context_t c)
 
   // note: laddr can be changed after rebuild, but we don't fix the parent
   // mapping as it is part of the merge process.
-  return impl->rebuild_extent(c);
+  return impl->rebuild_extent(c, hint);
 }
 
 eagain_ifuture<> Node::retire(context_t c, Ref<Node>&& this_ref)
@@ -1214,12 +1214,12 @@ eagain_ifuture<std::pair<Ref<Node>, Ref<Node>>> InternalNode::get_child_peers(
 }
 
 eagain_ifuture<Ref<InternalNode>> InternalNode::allocate_root(
-    context_t c, level_t old_root_level,
+    context_t c, laddr_t hint, level_t old_root_level,
     laddr_t old_root_addr, Super::URef&& super)
 {
   // support tree height up to 256
   ceph_assert(old_root_level < MAX_LEVEL);
-  return InternalNode::allocate(c, field_type_t::N0, true, old_root_level + 1
+  return InternalNode::allocate(c, hint, field_type_t::N0, true, old_root_level + 1
   ).si_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
     auto root = fresh_node.node;
@@ -1379,7 +1379,7 @@ eagain_ifuture<> InternalNode::test_clone_root(
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
-  return InternalNode::allocate(c_other, field_type_t::N0, true, impl->level()
+  return InternalNode::allocate(c_other, L_ADDR_MIN, field_type_t::N0, true, impl->level()
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
@@ -1489,10 +1489,11 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
 
   // proceed to split with insert
   // assume I'm already ref-counted by caller
-  return (is_root() ? upgrade_root(c) : eagain_iertr::now()
-  ).si_then([this, c] {
+  auto hint = insert_key.get_hint();
+  return (is_root() ? upgrade_root(c, hint) : eagain_iertr::now()
+  ).si_then([this, c, hint] {
     return InternalNode::allocate(
-        c, impl->field_type(), impl->is_level_tail(), impl->level());
+        c, hint, impl->field_type(), impl->is_level_tail(), impl->level());
   }).si_then([this, insert_key, insert_child, insert_pos,
                 insert_stage=insert_stage, insert_size=insert_size,
                 outdated_child, c, FNAME](auto fresh_right) mutable {
@@ -1735,9 +1736,9 @@ void InternalNode::validate_child_inconsistent(const Node& child) const
 }
 
 eagain_ifuture<InternalNode::fresh_node_t> InternalNode::allocate(
-    context_t c, field_type_t field_type, bool is_level_tail, level_t level)
+    context_t c, laddr_t hint, field_type_t field_type, bool is_level_tail, level_t level)
 {
-  return InternalNodeImpl::allocate(c, field_type, is_level_tail, level
+  return InternalNodeImpl::allocate(c, hint, field_type, is_level_tail, level
   ).si_then([](auto&& fresh_impl) {
     auto node = Ref<InternalNode>(new InternalNode(
           fresh_impl.impl.get(), std::move(fresh_impl.impl)));
@@ -2013,7 +2014,7 @@ eagain_ifuture<> LeafNode::test_clone_root(
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
   Ref<const Node> this_ref = this;
-  return LeafNode::allocate(c_other, field_type_t::N0, true
+  return LeafNode::allocate(c_other, L_ADDR_MIN, field_type_t::N0, true
   ).si_then([this, c_other, &tracker_other](auto fresh_other) {
     impl->test_copy_to(fresh_other.mut);
     auto cloned_root = fresh_other.node;
@@ -2060,9 +2061,10 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   }
   // split and insert
   Ref<Node> this_ref = this;
-  return (is_root() ? upgrade_root(c) : eagain_iertr::now()
-  ).si_then([this, c] {
-    return LeafNode::allocate(c, impl->field_type(), impl->is_level_tail());
+  auto hint = key.get_hint();
+  return (is_root() ? upgrade_root(c, hint) : eagain_iertr::now()
+  ).si_then([this, c, hint] {
+    return LeafNode::allocate(c, hint, impl->field_type(), impl->is_level_tail());
   }).si_then([this_ref = std::move(this_ref), this, c, &key, vconf, FNAME,
                 insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
@@ -2096,10 +2098,10 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
 }
 
 eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
-    context_t c, RootNodeTracker& root_tracker)
+    context_t c, laddr_t hint, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::LeafNode::allocate_root);
-  return LeafNode::allocate(c, field_type_t::N0, true
+  return LeafNode::allocate(c, hint, field_type_t::N0, true
   ).si_then([c, &root_tracker, FNAME](auto fresh_node) {
     auto root = fresh_node.node;
     return c.nm.get_super(c.t, root_tracker
@@ -2221,9 +2223,9 @@ void LeafNode::track_erase(
 }
 
 eagain_ifuture<LeafNode::fresh_node_t> LeafNode::allocate(
-    context_t c, field_type_t field_type, bool is_level_tail)
+    context_t c, laddr_t hint, field_type_t field_type, bool is_level_tail)
 {
-  return LeafNodeImpl::allocate(c, field_type, is_level_tail
+  return LeafNodeImpl::allocate(c, hint, field_type, is_level_tail
   ).si_then([](auto&& fresh_impl) {
     auto node = Ref<LeafNode>(new LeafNode(
           fresh_impl.impl.get(), std::move(fresh_impl.impl)));

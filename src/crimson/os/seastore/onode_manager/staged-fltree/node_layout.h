@@ -66,7 +66,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   static eagain_ifuture<typename parent_t::fresh_impl_t> allocate(
-      context_t c, bool is_level_tail, level_t level) {
+      context_t c, laddr_t hint, bool is_level_tail, level_t level) {
     LOG_PREFIX(OTree::Layout::allocate);
     extent_len_t extent_size;
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
@@ -74,7 +74,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       extent_size = c.vb.get_internal_node_size();
     }
-    return c.nm.alloc_extent(c.t, extent_size
+    return c.nm.alloc_extent(c.t, hint, extent_size
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::handle(
@@ -306,8 +306,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   eagain_ifuture<NodeExtentMutable>
-  rebuild_extent(context_t c) override {
-    return extent.rebuild(c).si_then([this] (auto mut) {
+  rebuild_extent(context_t c, laddr_t hint) override {
+    return extent.rebuild(c, hint).si_then([this] (auto mut) {
       // addr may change
       build_name();
       return mut;
