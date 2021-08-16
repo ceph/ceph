@@ -68,7 +68,6 @@ QosImageDispatch<I>::~QosImageDispatch() {
   for (auto t : m_throttles) {
     delete t.second;
   }
-  delete m_flush_tracker;
 }
 
 template <typename I>

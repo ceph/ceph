@@ -4,6 +4,9 @@
 #ifndef CEPH_LIBRBD_IO_QOS_IMAGE_DISPATCH_H
 #define CEPH_LIBRBD_IO_QOS_IMAGE_DISPATCH_H
 
+#include <list>
+#include <memory>
+
 #include "librbd/io/ImageDispatchInterface.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
@@ -11,7 +14,6 @@
 #include "common/Throttle.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
-#include <list>
 
 struct Context;
 
@@ -112,7 +114,7 @@ private:
   uint64_t m_qos_enabled_flag = 0;
   uint64_t m_qos_exclude_ops = 0;
 
-  FlushTracker<ImageCtxT>* m_flush_tracker;
+  std::unique_ptr<FlushTracker<ImageCtxT>> m_flush_tracker;
 
   void handle_finished(int r, uint64_t tid);
 
