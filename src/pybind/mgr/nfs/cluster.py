@@ -41,6 +41,7 @@ def create_ganesha_pool(mgr: 'MgrModule') -> None:
         mgr.check_mon_command({'prefix': 'osd pool application enable',
                                'pool': POOL_NAME,
                                'app': 'nfs'})
+        log.debug(f"Successfully created nfs-ganesha pool {POOL_NAME}")
 
 
 class NFSCluster:
@@ -86,6 +87,7 @@ class NFSCluster:
                                   port=port)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
+        log.debug(f"Successfully deployed nfs daemons with cluster id {cluster_id} and placement {placement}")
 
     def create_empty_rados_obj(self, cluster_id: str) -> None:
         common_conf = self._get_common_conf_obj_name(cluster_id)
@@ -191,6 +193,7 @@ class NFSCluster:
                     r['port'] = i.ports[0]
                     if len(i.ports) > 1:
                         r['monitor_port'] = i.ports[1]
+        log.debug(f"Successfully fetched {cluster_id} info: {r}")
         return r
 
     def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
