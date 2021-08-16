@@ -65,8 +65,8 @@ class NFSRados:
             if not config_obj:
                 # Return after creating empty common config object
                 return
-            log.debug("write configuration into rados object "
-                      f"{self.pool}/{self.namespace}/{obj}:\n{conf_block}")
+            log.debug("write configuration into rados object %s/%s/%s",
+                      self.pool, self.namespace, obj)
 
             # Add created obj url to common config obj
             ioctx.append(config_obj, GaneshaConfParser.write_block(
@@ -78,8 +78,8 @@ class NFSRados:
         with self.mgr.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
-            log.debug("write configuration into rados object "
-                      f"{self.pool}/{self.namespace}/{obj}:\n{conf_block}")
+            log.debug("write configuration into rados object %s/%s/%s",
+                      self.pool, self.namespace, obj)
             ExportMgr._check_rados_notify(ioctx, config_obj)
             log.debug(f"Update export {obj} in {config_obj}")
 
@@ -244,8 +244,8 @@ class ExportMgr:
                     raw_config = obj.read(size)
                     raw_config = raw_config.decode("utf-8")
                     log.debug("read export configuration from rados "
-                              "object %s/%s/%s:\n%s", self.rados_pool,
-                              rados_namespace, obj.key, raw_config)
+                              "object %s/%s/%s", self.rados_pool,
+                              rados_namespace, obj.key)
                     self.export_conf_objs.append(Export.from_export_block(
                         GaneshaConfParser(raw_config).parse()[0], rados_namespace))
 
@@ -570,6 +570,7 @@ class ExportMgr:
                     "clients": clients,
                 }
             )
+            log.debug("creating cephfs export %s", export)
             self._create_export_user(export)
             self._save_export(cluster_id, export)
             result = {
@@ -605,6 +606,7 @@ class ExportMgr:
                     "clients": clients,
                 }
             )
+            log.debug("creating rgw export %s", export)
             self._create_export_user(export)
             self._save_export(cluster_id, export)
             result = {
