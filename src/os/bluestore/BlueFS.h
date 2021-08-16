@@ -452,9 +452,10 @@ private:
 
   int _open_super();
   int _write_super(int dev);
-  int _check_new_allocations(const bluefs_fnode_t& fnode,
-    size_t dev_count,
-    boost::dynamic_bitset<uint64_t>* used_blocks);
+  int _check_allocations(const bluefs_fnode_t& fnode,
+    boost::dynamic_bitset<uint64_t>* used_blocks,
+    bool is_alloc, //true when allocating, false when deallocating
+    const char* op_name);
   int _verify_alloc_granularity(
     __u8 id, uint64_t offset, uint64_t length,
     const char *op);
