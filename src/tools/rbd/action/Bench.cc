@@ -265,7 +265,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
   coarse_mono_time start = coarse_mono_clock::now();
   std::chrono::duration<double> last = std::chrono::duration<double>::zero();
-  unsigned ios = 0;
+  uint64_t ios = 0;
 
   std::vector<uint64_t> thread_offset;
   uint64_t i;
@@ -389,7 +389,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       std::cout.width(5);
       std::cout << (int)elapsed.count();
       std::cout.width(10);
-      std::cout << (int)(ios - io_threads);
+      std::cout << ios - io_threads;
       std::cout.width(10);
       std::cout << boost::accumulators::rolling_sum(ios_acc) / time_sum;
       std::cout.width(10);
@@ -438,7 +438,7 @@ void add_bench_common_options(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 
   options->add_options()
-    ("io-size", po::value<Size>(), "IO size (in B/K/M/G/T) [default: 4K]")
+    ("io-size", po::value<Size>(), "IO size (in B/K/M/G) (< 4G) [default: 4K]")
     ("io-threads", po::value<uint32_t>(), "ios in flight [default: 16]")
     ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T) [default: 1G]")
     ("io-pattern", po::value<IOPattern>(), "IO pattern (rand, seq, or full-seq) [default: seq]")
