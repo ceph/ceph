@@ -173,6 +173,7 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("referrer", referrer);
   f->dump_string("bucket_id", bucket_id);
   f->dump_string("trans_id", trans_id);
+  f->dump_unsigned("identity_type", identity_type);
 }
 
 void ACLPermission::dump(Formatter *f) const
