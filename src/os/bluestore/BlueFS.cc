@@ -967,29 +967,36 @@ int BlueFS::_open_super()
   return 0;
 }
 
-int BlueFS::_check_new_allocations(const bluefs_fnode_t& fnode,
-  size_t dev_count,
-  boost::dynamic_bitset<uint64_t>* used_blocks)
+int BlueFS::_check_allocations(const bluefs_fnode_t& fnode,
+  boost::dynamic_bitset<uint64_t>* used_blocks,
+  bool is_alloc, //true when allocating, false when deallocating
+  const char* op_name)
 {
   auto& fnode_extents = fnode.extents;
   for (auto e : fnode_extents) {
     auto id = e.bdev;
     bool fail = false;
-    ceph_assert(id < dev_count);
+    ceph_assert(id < MAX_BDEV);
+    if (int r = _verify_alloc_granularity(id, e.offset, e.length,
+					  op_name); r < 0) {
+      return r;
+    }
 
     apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
       [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-        if (bs.test(pos)) {
-          fail = true;
-        }
-        bs.set(pos);
+	if (is_alloc == bs.test(pos)) {
+	  fail = true;
+	} else {
+	  bs.flip(pos);
+	}
       }
     );
     if (fail) {
-      derr << __func__ << " invalid extent " << int(e.bdev)
-        << ": 0x" << std::hex << e.offset << "~" << e.length
-        << std::dec << ": duplicate reference, ino " << fnode.ino
-        << dendl;
+      derr << __func__ << " " << op_name << " invalid extent " << int(e.bdev)
+        << ": 0x" << std::hex << e.offset << "~" << e.length << std::dec
+	<< (is_alloc == true ?
+	    ": duplicate reference, ino " : ": double free, ino ")
+	<< fnode.ino << dendl;
       return -EFAULT;
     }
   }
@@ -1067,10 +1074,14 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	  used_blocks[i].resize(round_up_to(bdev[i]->get_size(), alloc_size[i]) / alloc_size[i]);
 	}
       }
+      // check initial log layout
+      int r = _check_allocations(log_file->fnode,
+				 used_blocks, true, "Log from super");
+      if (r < 0) {
+	return r;
+      }
     }
   }
-  
-  bool first_log_check = true;
   
   while (true) {
     ceph_assert((log_reader->buf.pos & ~super.block_mask()) == 0);
@@ -1375,34 +1386,13 @@ int BlueFS::_replay(bool noop, bool to_stdout)
           }
           if (!noop) {
 	    FileRef f = _get_file(fnode.ino);
-            if (cct->_conf->bluefs_log_replay_check_allocations) {
-              // check initial log layout
-              if (first_log_check) {
-                first_log_check = false;
-                int r = _check_new_allocations(log_file->fnode,
-                  MAX_BDEV, used_blocks);
-                if (r < 0) {
-                  return r;
-                }
-              }
-            
-              auto& fnode_extents = f->fnode.extents;
-              for (auto e : fnode_extents) {
-                auto id = e.bdev;
-		if (int r = _verify_alloc_granularity(id, e.offset, e.length,
-						      "OP_FILE_UPDATE"); r < 0) {
-		  return r;
-		}
-                apply_for_bitset_range(e.offset, e.length, alloc_size[id],
-				       used_blocks[id],
-                  [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                    ceph_assert(bs.test(pos));
-                    bs.reset(pos);
-                  }
-                );
+	    if (cct->_conf->bluefs_log_replay_check_allocations) {
+              int r = _check_allocations(f->fnode,
+		used_blocks, false, "OP_FILE_UPDATE");
+              if (r < 0) {
+                return r;
               }
             }
-
             if (fnode.ino != 1) {
               vselector->sub_usage(f->vselector_hint, f->fnode);
             }
@@ -1415,8 +1405,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	      ino_last = fnode.ino;
 	    }
             if (cct->_conf->bluefs_log_replay_check_allocations) {
-              int r = _check_new_allocations(f->fnode,
-                MAX_BDEV, used_blocks);
+              int r = _check_allocations(f->fnode,
+		used_blocks, true, "OP_FILE_UPDATE");
               if (r < 0) {
                 return r;
               }
@@ -1441,27 +1431,10 @@ int BlueFS::_replay(bool noop, bool to_stdout)
             ceph_assert(p != file_map.end());
             vselector->sub_usage(p->second->vselector_hint, p->second->fnode);
             if (cct->_conf->bluefs_log_replay_check_allocations) {
-              auto& fnode_extents = p->second->fnode.extents;
-              for (auto e : fnode_extents) {
-                auto id = e.bdev;
-                bool fail = false;
-
-                apply_for_bitset_range(e.offset, e.length, alloc_size[id], used_blocks[id],
-                  [&](uint64_t pos, boost::dynamic_bitset<uint64_t> &bs) {
-                    if (!bs.test(pos)) {
-                      fail = true;
-                    }
-                    bs.reset(pos);
-                  }
-                );
-                if (fail) {
-                  derr << __func__ << " invalid extent " << int(id)
-                    << ": 0x" << std::hex << e.offset << "~" << e.length
-                    << std::dec
-                    << ": not in use but is allocated for removed ino " << ino
-                    << dendl;
-                  return -EFAULT;
-                }
+	      int r = _check_allocations(p->second->fnode,
+		used_blocks, false, "OP_FILE_REMOVE");
+              if (r < 0) {
+		return r;
               }
             }
             file_map.erase(p);
@@ -1484,14 +1457,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   }
   if (!noop) {
     vselector->add_usage(log_file->vselector_hint, log_file->fnode);
-  }
-  if (!noop && first_log_check &&
-        cct->_conf->bluefs_log_replay_check_allocations) {
-    int r = _check_new_allocations(log_file->fnode,
-      MAX_BDEV, used_blocks);
-    if (r < 0) {
-      return r;
-    }
   }
 
   dout(10) << __func__ << " log file size was 0x"
