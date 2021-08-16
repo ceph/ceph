@@ -155,7 +155,7 @@ function(do_build_boost version)
     set(boost_sha256 4eb3b8d442b426dc35346235c8733b5ae35ba431690e38c6a8263dce9fcbb402)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     set(boost_url 
-      https://dl.bintray.com/boostorg/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
+      https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
     if(CMAKE_VERSION VERSION_GREATER 3.7)
       set(boost_url
         "${boost_url} http://downloads.sourceforge.net/project/boost/boost/${boost_version}/boost_${boost_version_underscore}.tar.bz2")
