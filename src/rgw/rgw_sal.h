@@ -600,43 +600,6 @@ class Object {
       virtual int get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y) = 0;
     };
 
-    struct WriteOp {
-      struct Params {
-	bool versioning_disabled{false};
-	ceph::real_time* mtime{nullptr};
-	Attrs* rmattrs{nullptr};
-	const bufferlist* data{nullptr};
-	RGWObjManifest* manifest{nullptr};
-	const std::string* ptag{nullptr};
-	std::list<rgw_obj_index_key>* remove_objs{nullptr};
-	ceph::real_time set_mtime;
-	ACLOwner owner;
-	RGWObjCategory category{RGWObjCategory::Main};
-	int flags{0};
-	const char* if_match{nullptr};
-	const char* if_nomatch{nullptr};
-	std::optional<uint64_t> olh_epoch;
-	ceph::real_time delete_at;
-	bool canceled{false};
-	const std::string* user_data{nullptr};
-	rgw_zone_set* zones_trace{nullptr};
-	bool modify_tail{false};
-	bool completeMultipart{false};
-	bool appendable{false};
-	Attrs* attrs{nullptr};
-	// In MultipartObjectProcessor::complete, we need this parameter
-	// to tell the exact placement rule since it may be different from
-	// bucket.placement_rule when Storage Class is specified explicitly
-	const rgw_placement_rule *pmeta_placement_rule{nullptr};
-      } params;
-
-      virtual ~WriteOp() = default;
-
-      virtual int prepare(optional_yield y) = 0;
-      virtual int write_meta(const DoutPrefixProvider* dpp, uint64_t size, uint64_t accounted_size, optional_yield y) = 0;
-      //virtual int write_data(const char* data, uint64_t ofs, uint64_t len, bool exclusive) = 0;
-    };
-
     struct DeleteOp {
       struct Params {
         ACLOwner bucket_owner;
@@ -757,6 +720,7 @@ class Object {
 
     Attrs& get_attrs(void) { return attrs; }
     const Attrs& get_attrs(void) const { return attrs; }
+    virtual int set_attrs(Attrs a) { attrs = a; return 0; }
     ceph::real_time get_mtime(void) const { return mtime; }
     uint64_t get_obj_size(void) const { return obj_size; }
     Bucket* get_bucket(void) const { return bucket; }
@@ -788,7 +752,6 @@ class Object {
 
     /* OPs */
     virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx*) = 0;
-    virtual std::unique_ptr<WriteOp> get_write_op(RGWObjectCtx*) = 0;
     virtual std::unique_ptr<DeleteOp> get_delete_op(RGWObjectCtx*) = 0;
     virtual std::unique_ptr<StatOp> get_stat_op(RGWObjectCtx*) = 0;
 
@@ -873,12 +836,16 @@ public:
 			 bool assume_unsorted = false) = 0;
   virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct,
 		    RGWObjectCtx* obj_ctx) = 0;
-  virtual int complete(const DoutPrefixProvider* dpp, CephContext* cct,
-		       std::string& etag, RGWObjManifest& manifest,
+  virtual int complete(const DoutPrefixProvider* dpp,
+		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
 		       std::list<rgw_obj_index_key>& remove_objs,
 		       uint64_t& accounted_size, bool& compressed,
-		       RGWCompressionInfo& cs_info, off_t& ofs) = 0;
+		       RGWCompressionInfo& cs_info, off_t& ofs,
+		       std::string& tag, ACLOwner& owner,
+		       uint64_t olh_epoch,
+		       rgw::sal::Object* target_obj,
+		       RGWObjectCtx* obj_ctx) = 0;
 
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;
 

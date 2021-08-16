@@ -2022,57 +2022,6 @@ int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
   return parent_op.iterate(dpp, ofs, end, cb, y);
 }
 
-std::unique_ptr<Object::WriteOp> RadosObject::get_write_op(RGWObjectCtx* ctx)
-{
-  return std::unique_ptr<Object::WriteOp>(new RadosObject::RadosWriteOp(this, ctx));
-}
-
-RadosObject::RadosWriteOp::RadosWriteOp(RadosObject* _source, RGWObjectCtx* _rctx) :
-	source(_source),
-	rctx(_rctx),
-	op_target(_source->store->getRados(),
-		  _source->get_bucket()->get_info(),
-		  *static_cast<RGWObjectCtx *>(rctx),
-		  _source->get_obj()),
-	parent_op(&op_target)
-{ }
-
-int RadosObject::RadosWriteOp::prepare(optional_yield y)
-{
-  op_target.set_versioning_disabled(params.versioning_disabled);
-  op_target.set_meta_placement_rule(params.pmeta_placement_rule);
-  parent_op.meta.mtime = params.mtime;
-  parent_op.meta.rmattrs = params.rmattrs;
-  parent_op.meta.data = params.data;
-  parent_op.meta.manifest = params.manifest;
-  parent_op.meta.ptag = params.ptag;
-  parent_op.meta.remove_objs = params.remove_objs;
-  parent_op.meta.set_mtime = params.set_mtime;
-  parent_op.meta.owner = params.owner.get_id();
-  parent_op.meta.category = params.category;
-  parent_op.meta.flags = params.flags;
-  parent_op.meta.if_match = params.if_match;
-  parent_op.meta.if_nomatch = params.if_nomatch;
-  parent_op.meta.olh_epoch = params.olh_epoch;
-  parent_op.meta.delete_at = params.delete_at;
-  parent_op.meta.canceled = params.canceled;
-  parent_op.meta.user_data = params.user_data;
-  parent_op.meta.zones_trace = params.zones_trace;
-  parent_op.meta.modify_tail = params.modify_tail;
-  parent_op.meta.completeMultipart = params.completeMultipart;
-  parent_op.meta.appendable = params.appendable;
-
-  return 0;
-}
-
-int RadosObject::RadosWriteOp::write_meta(const DoutPrefixProvider* dpp, uint64_t size, uint64_t accounted_size, optional_yield y)
-{
-  int ret = parent_op.write_meta(dpp, size, accounted_size, *params.attrs, y);
-  params.canceled = parent_op.meta.canceled;
-
-  return ret;
-}
-
 int RadosObject::swift_versioning_restore(RGWObjectCtx* obj_ctx,
 					     bool& restored,
 					     const DoutPrefixProvider* dpp)
@@ -2203,25 +2152,25 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     obj->set_in_extra_data(true);
     obj->set_hash_source(oid);
 
-    std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = obj->get_write_op(obj_ctx);
+    RGWRados::Object op_target(store->getRados(),
+			       obj->get_bucket()->get_info(),
+			       *obj_ctx, obj->get_obj());
+    RGWRados::Object::Write obj_op(&op_target);
 
-    obj_op->params.versioning_disabled = true; /* no versioning for multipart meta */
-    obj_op->params.owner = owner;
-    obj_op->params.category = RGWObjCategory::MultiMeta;
-    obj_op->params.flags = PUT_OBJ_CREATE_EXCL;
-    obj_op->params.mtime = &mtime;
-    obj_op->params.attrs = &attrs;
+    op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
+    obj_op.meta.owner = owner.get_id();
+    obj_op.meta.category = RGWObjCategory::MultiMeta;
+    obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
+    obj_op.meta.mtime = &mtime;
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
 
     bufferlist bl;
     encode(upload_info, bl);
-    obj_op->params.data = &bl;
+    obj_op.meta.data = &bl;
 
-    ret = obj_op->prepare(y);
-
-    ret = obj_op->write_meta(dpp, bl.length(), 0, y);
+    ret = obj_op.write_meta(dpp, bl.length(), 0, attrs, y);
   } while (ret == -EEXIST);
 
   return ret;
@@ -2327,15 +2276,21 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
   return 0;
 }
 
-int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp, CephContext* cct,
-				   std::string& etag, RGWObjManifest& manifest,
+int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
+				   optional_yield y, CephContext* cct,
 				   map<int, string>& part_etags,
 				   list<rgw_obj_index_key>& remove_objs,
 				   uint64_t& accounted_size, bool& compressed,
-				   RGWCompressionInfo& cs_info, off_t& ofs)
+				   RGWCompressionInfo& cs_info, off_t& ofs,
+				   std::string& tag, ACLOwner& owner,
+				   uint64_t olh_epoch,
+				   rgw::sal::Object* target_obj,
+				   RGWObjectCtx* obj_ctx)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+  std::string etag;
+  bufferlist etag_bl;
   MD5 hash;
   bool truncated;
   int ret;
@@ -2346,6 +2301,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp, CephContext* c
   int marker = 0;
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
+  rgw::sal::Attrs attrs = target_obj->get_attrs();
 
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated);
@@ -2455,6 +2411,38 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp, CephContext* c
            "-%lld", (long long)part_etags.size());
   etag = final_etag_str;
   ldpp_dout(dpp, 10) << "calculated etag: " << etag << dendl;
+
+  etag_bl.append(etag);
+
+  attrs[RGW_ATTR_ETAG] = etag_bl;
+
+  if (compressed) {
+    // write compression attribute to full object
+    bufferlist tmp;
+    encode(cs_info, tmp);
+    attrs[RGW_ATTR_COMPRESSION] = tmp;
+  }
+
+  target_obj->set_atomic(obj_ctx);
+
+  RGWRados::Object op_target(store->getRados(),
+			     target_obj->get_bucket()->get_info(),
+			     *obj_ctx, target_obj->get_obj());
+  RGWRados::Object::Write obj_op(&op_target);
+
+  obj_op.meta.manifest = &manifest;
+  obj_op.meta.remove_objs = &remove_objs;
+
+  obj_op.meta.ptag = &tag; /* use req_id as operation tag */
+  obj_op.meta.owner = owner.get_id();
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.modify_tail = true;
+  obj_op.meta.completeMultipart = true;
+  obj_op.meta.olh_epoch = olh_epoch;
+
+  ret = obj_op.write_meta(dpp, ofs, accounted_size, attrs, y);
+  if (ret < 0)
+    return ret;
 
   return ret;
 }
