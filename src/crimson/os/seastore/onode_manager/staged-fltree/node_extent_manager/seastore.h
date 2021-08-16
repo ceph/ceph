@@ -107,8 +107,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       if (trigger_eagain()) {
         DEBUGT("reading at {:#x}: trigger eagain", t, addr);
         t.test_set_conflict();
-        // FIXME: interruptive-future failed to check invalidation
-        // return read_iertr::make_ready_future<NodeExtentRef>();
+        return read_iertr::make_ready_future<NodeExtentRef>();
       }
     }
     return tm.read_extent<SeastoreNodeExtent>(t, addr
@@ -128,8 +127,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       if (trigger_eagain()) {
         DEBUGT("allocating {}B: trigger eagain", t, len);
         t.test_set_conflict();
-        // FIXME: interruptive-future failed to check invalidation
-        // return alloc_iertr::make_ready_future<NodeExtentRef>();
+        return alloc_iertr::make_ready_future<NodeExtentRef>();
       }
     }
     return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
@@ -159,8 +157,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         DEBUGT("retiring {}B at {:#x} -- {} : trigger eagain",
                t, len, addr, *extent);
         t.test_set_conflict();
-        // FIXME: interruptive-future failed to check invalidation
-        // return retire_iertr::now();
+        return retire_iertr::now();
       }
     }
     return tm.dec_ref(t, extent).si_then([addr, len, &t] (unsigned cnt) {
@@ -176,8 +173,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       if (trigger_eagain()) {
         DEBUGT("get root: trigger eagain", t);
         t.test_set_conflict();
-        // FIXME: interruptive-future failed to check invalidation
-        // return getsuper_iertr::make_ready_future<Super::URef>();
+        return getsuper_iertr::make_ready_future<Super::URef>();
       }
     }
     return tm.read_onode_root(t).si_then([this, &t, &tracker](auto root_addr) {
