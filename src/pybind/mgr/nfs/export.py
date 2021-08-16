@@ -66,7 +66,7 @@ class NFSRados:
                 # Return after creating empty common config object
                 return
             log.debug("write configuration into rados object "
-                      f"{self.pool}/{self.namespace}/{obj}:\n{conf_block}")
+                      f"{self.pool}/{self.namespace}/{obj}")
 
             # Add created obj url to common config obj
             ioctx.append(config_obj, GaneshaConfParser.write_block(
@@ -244,8 +244,8 @@ class ExportMgr:
                     raw_config = obj.read(size)
                     raw_config = raw_config.decode("utf-8")
                     log.debug("read export configuration from rados "
-                              "object %s/%s/%s:\n%s", self.rados_pool,
-                              rados_namespace, obj.key, raw_config)
+                              "object %s/%s/%s", self.rados_pool,
+                              rados_namespace, obj.key)
                     self.export_conf_objs.append(Export.from_export_block(
                         GaneshaConfParser(raw_config).parse()[0], rados_namespace))
 
@@ -570,6 +570,7 @@ class ExportMgr:
                     "clients": clients,
                 }
             )
+            log.debug(f"creating cephfs export {export}")
             self._create_export_user(export)
             self._save_export(cluster_id, export)
             result = {
@@ -605,6 +606,7 @@ class ExportMgr:
                     "clients": clients,
                 }
             )
+            log.debug(f"creating rgw export {export}")
             self._create_export_user(export)
             self._save_export(cluster_id, export)
             result = {
