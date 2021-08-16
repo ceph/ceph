@@ -34,6 +34,7 @@
 
 using ceph::bufferlist;
 
+
 enum {
   ADD_PREFIX = 1,
   MAKE_OBJECT = 2,
@@ -46,7 +47,6 @@ enum {
 
 struct rebalance_args;
 
-
 /**
  * stores information about a key in the index.
  *
@@ -54,8 +54,8 @@ struct rebalance_args;
  * the object with key "" will always be the highest key in the index.
  */
 struct key_data {
-  string raw_key;
-  string prefix;
+  std::string raw_key;
+  std::string prefix;
 
   key_data()
   {}
@@ -63,7 +63,7 @@ struct key_data {
   /**
    * @pre: key is a raw key (does not contain a prefix)
    */
-  key_data(string key)
+  key_data(std::string key)
   : raw_key(key)
   {
     raw_key == "" ? prefix = "1" : prefix = "0";
@@ -90,7 +90,7 @@ struct key_data {
    *
    * @pre: encoded has a prefix
    */
-  void parse(string encoded) {
+  void parse(std::string encoded) {
     prefix = encoded[0];
     raw_key = encoded.substr(1,encoded.length());
   }
@@ -98,7 +98,7 @@ struct key_data {
   /**
    * returns a string containing the encoded (prefixed) key
    */
-  string encoded() const {
+  std::string encoded() const {
     return prefix + raw_key;
   }
 
@@ -124,8 +124,8 @@ WRITE_CLASS_ENCODER(key_data)
 struct object_data {
   key_data min_kdata; //the max key from the previous index entry
   key_data max_kdata; //the max key, from the index
-  string name; //the object's name
-  map<std::string, bufferlist> omap; // the omap of the object
+  std::string name; //the object's name
+  std::map<std::string, bufferlist> omap; // the omap of the object
   bool unwritable; // an xattr that, if false, means an op is in
 		  // progress and other clients should not write to it.
   uint64_t version; //the version at time of read
@@ -137,14 +137,14 @@ struct object_data {
     size(0) 
   {}
 
-  object_data(string the_name)
+  object_data(std::string the_name)
   : name(the_name),
     unwritable(false),
     version(0),
     size(0) 
   {}
 
-  object_data(key_data min, key_data kdat, string the_name)
+  object_data(key_data min, key_data kdat, std::string the_name)
   : min_kdata(min),
     max_kdata(kdat),
     name(the_name),
@@ -153,8 +153,8 @@ struct object_data {
     size(0) 
   {}
 
-  object_data(key_data min, key_data kdat, string the_name,
-      map<std::string, bufferlist> the_omap)
+  object_data(key_data min, key_data kdat, std::string the_name,
+	      std::map<std::string, bufferlist> the_omap)
   : min_kdata(min),
     max_kdata(kdat),
     name(the_name),
@@ -164,7 +164,7 @@ struct object_data {
     size(0) 
   {}
 
-  object_data(key_data min, key_data kdat, string the_name, int the_version)
+  object_data(key_data min, key_data kdat, std::string the_name, int the_version)
   : min_kdata(min),
     max_kdata(kdat),
     name(the_name),
@@ -205,12 +205,12 @@ WRITE_CLASS_ENCODER(object_data)
 struct create_data {
   key_data min;
   key_data max;
-  string obj;
+  std::string obj;
 
   create_data()
   {}
 
-  create_data(key_data n, key_data x, string o)
+  create_data(key_data n, key_data x, std::string o)
   : min(n),
     max(x),
     obj(o)
@@ -253,14 +253,14 @@ WRITE_CLASS_ENCODER(create_data)
 struct delete_data {
   key_data min;
   key_data max;
-  string obj;
+  std::string obj;
   uint64_t version;
 
   delete_data()
   : version(0)
   {}
 
-  delete_data(key_data n, key_data x, string o, uint64_t v)
+  delete_data(key_data n, key_data x, std::string o, uint64_t v)
   : min(n),
     max(x),
     obj(o),
@@ -310,7 +310,7 @@ struct index_data {
 
   //"1" if there is a prefix (because a split or merge is
   //in progress), otherwise ""
-  string prefix;
+  std::string prefix;
 
   //the kdata of the previous index entry
   key_data min_kdata;
@@ -318,22 +318,22 @@ struct index_data {
   utime_t ts; //time that a split/merge started
 
   //objects to be created
-  vector<create_data > to_create;
+  std::vector<create_data > to_create;
 
   //objects to be deleted
-  vector<delete_data > to_delete;
+  std::vector<delete_data > to_delete;
 
   //the name of the object where the key range is located.
-  string obj;
+  std::string obj;
 
   index_data()
   {}
 
-  index_data(string raw_key)
+  index_data(std::string raw_key)
   : kdata(raw_key)
   {}
 
-  index_data(key_data max, key_data min, string o)
+  index_data(key_data max, key_data min, std::string o)
   : kdata(max),
     min_kdata(min),
     obj(o)
@@ -387,19 +387,19 @@ struct index_data {
    * :
    * val)
    */
-  string str() const {
-    stringstream strm;
+  std::string str() const {
+    std::stringstream strm;
     strm << '(' << min_kdata.encoded() << "/" << kdata.encoded() << ','
 	<< prefix;
     if (prefix == "1") {
       strm << ts.sec() << '.' << ts.usec();
-      for(vector<create_data>::const_iterator it = to_create.begin();
+      for(std::vector<create_data>::const_iterator it = to_create.begin();
 	  it != to_create.end(); ++it) {
 	  strm << '(' << it->min.encoded() << '/' << it->max.encoded() << '|'
 	      << it->obj << ')';
       }
       strm << ';';
-      for(vector<delete_data >::const_iterator it = to_delete.begin();
+      for(std::vector<delete_data >::const_iterator it = to_delete.begin();
 	  it != to_delete.end(); ++it) {
 	  strm << '(' << it->min.encoded() << '/' << it->max.encoded() << '|'
 	      << it->obj << '|'
@@ -418,8 +418,8 @@ WRITE_CLASS_ENCODER(index_data)
  */
 class IndexCache {
 protected:
-  map<key_data, pair<index_data, utime_t> > k2itmap;
-  map<utime_t, key_data> t2kmap;
+  std::map<key_data, std::pair<index_data, utime_t> > k2itmap;
+  std::map<utime_t, key_data> t2kmap;
   int cache_size;
 
 public:
@@ -430,7 +430,7 @@ public:
    * Inserts idata into the cache and removes whatever key mapped to before.
    * If the cache is full, pops the oldest entry.
    */
-  void push(const string &key, const index_data &idata);
+  void push(const std::string &key, const index_data &idata);
 
   /**
    * Inserts idata into the cache. If idata.kdata is already in the cache,
@@ -451,13 +451,13 @@ public:
   /**
    * gets the idata where key belongs. If none, returns -ENODATA.
    */
-  int get(const string &key, index_data *idata) const;
+  int get(const std::string &key, index_data *idata) const;
 
   /**
    * Gets the idata where key goes and the one after it. If there are not
    * valid entries for both of them, returns -ENODATA.
    */
-  int get(const string &key, index_data *idata, index_data * next_idata) const;
+  int get(const std::string &key, index_data *idata, index_data * next_idata) const;
   void clear();
 };
 
@@ -470,7 +470,7 @@ class KvFlatBtreeAsync;
  */
 struct aio_set_args {
   KvFlatBtreeAsync * kvba;
-  string key;
+  std::string key;
   bufferlist val;
   bool exc;
   callback cb;
@@ -480,7 +480,7 @@ struct aio_set_args {
 
 struct aio_rm_args {
   KvFlatBtreeAsync * kvba;
-  string key;
+  std::string key;
   callback cb;
   void * cb_args;
   int * err;
@@ -488,7 +488,7 @@ struct aio_rm_args {
 
 struct aio_get_args {
   KvFlatBtreeAsync * kvba;
-  string key;
+  std::string key;
   bufferlist * val;
   bool exc;
   callback cb;
@@ -502,12 +502,12 @@ protected:
   //don't change these once operations start being called - they are not
   //protected with mutexes!
   int k;
-  string index_name;
+  std::string index_name;
   librados::IoCtx io_ctx;
-  string rados_id;
-  string client_name;
+  std::string rados_id;
+  std::string client_name;
   librados::Rados rados;
-  string pool_name;
+  std::string pool_name;
   injection_t interrupt;
   int wait_ms;
   utime_t timeout; //declare a client dead if it goes this long without
@@ -565,7 +565,7 @@ protected:
    * @post: idata contains complete information
    * stored
    */
-  int read_index(const string &key, index_data * idata,
+  int read_index(const std::string &key, index_data * idata,
       index_data * next_idata, bool force_update);
 
   /**
@@ -600,13 +600,13 @@ protected:
    *
    * @post: odata has all information about obj except for key (which is "")
    */
-  int read_object(const string &obj, object_data * odata);
+  int read_object(const std::string &obj, object_data * odata);
 
   /**
    * performs a maybe_read_for_balance ObjectOperation so the omap is only
    * read if the object is out of bounds.
    */
-  int read_object(const string &obj, rebalance_args * args);
+  int read_object(const std::string &obj, rebalance_args * args);
 
   /**
    * sets up owo to change the index in preparation for a split/merge.
@@ -619,8 +619,8 @@ protected:
    * @pre: entries in to_create and to_delete must have keys and names.
    */
   void set_up_prefix_index(
-      const vector<object_data> &to_create,
-      const vector<object_data> &to_delete,
+      const std::vector<object_data> &to_create,
+      const std::vector<object_data> &to_delete,
       librados::ObjectWriteOperation * owo,
       index_data * idata,
       int * err);
@@ -643,9 +643,9 @@ protected:
    * @param err: the int to get the error value for omap_cmp
    */
   void set_up_ops(
-      const vector<object_data> &create_vector,
-      const vector<object_data> &delete_vector,
-      vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > * ops,
+      const std::vector<object_data> &create_vector,
+      const std::vector<object_data> &delete_vector,
+      std::vector<std::pair<std::pair<int, std::string>, librados::ObjectWriteOperation*> > * ops,
       const index_data &idata,
       int * err);
 
@@ -654,7 +654,7 @@ protected:
    * unwritable to "0"
    */
   void set_up_make_object(
-      const map<std::string, bufferlist> &to_set,
+      const std::map<std::string, bufferlist> &to_set,
       librados::ObjectWriteOperation *owo);
 
   /**
@@ -693,9 +693,9 @@ protected:
    * (e.g., cleans up if an assertion fails). If an unknown error is found,
    * returns it.
    */
-  int perform_ops( const string &debug_prefix,
+  int perform_ops( const std::string &debug_prefix,
       const index_data &idata,
-      vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > * ops);
+      std::vector<std::pair<std::pair<int, std::string>, librados::ObjectWriteOperation*> > * ops);
 
   /**
    * Called when a client discovers that another client has died during  a
@@ -713,26 +713,26 @@ protected:
    * does the ObjectWriteOperation and splits, reads the index, and/or retries
    * until success.
    */
-  int set_op(const string &key, const bufferlist &val,
+  int set_op(const std::string &key, const bufferlist &val,
       bool update_on_existing, index_data &idata);
 
   /**
    * does the ObjectWriteOperation and merges, reads the index, and/or retries
    * until success.
    */
-  int remove_op(const string &key, index_data &idata, index_data &next_idata);
+  int remove_op(const std::string &key, index_data &idata, index_data &next_idata);
 
   /**
    * does the ObjectWriteOperation and reads the index and/or retries
    * until success.
    */
-  int get_op(const string &key, bufferlist * val, index_data &idata);
+  int get_op(const std::string &key, bufferlist * val, index_data &idata);
 
   /**
    * does the ObjectWriteOperation and splits, reads the index, and/or retries
    * until success.
    */
-  int handle_set_rm_errors(int &err, string key, string obj,
+  int handle_set_rm_errors(int &err, std::string key, std::string obj,
       index_data * idata, index_data * next_idata);
 
   /**
@@ -758,12 +758,12 @@ public:
    */
   int suicide() override;
 
-KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
+KvFlatBtreeAsync(int k_val, std::string name, int cache, double cache_r,
     bool verb)
   : k(k_val),
     index_name("index_object"),
     rados_id(name),
-    client_name(string(name).append(".")),
+    client_name(std::string(name).append(".")),
     pool_name("rbd"),
     interrupt(&KeyValueStructure::nothing),
     wait_ms(0),
@@ -782,12 +782,12 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    * @param i: the int to be appended to the string
    * @return the string
    */
-  static string to_string(string s, int i);
+  static std::string to_string(std::string s, int i);
 
   /**
    * returns in encoded
    */
-  static bufferlist to_bl(const string &in) {
+  static bufferlist to_bl(const std::string &in) {
     bufferlist bl;
     bl.append(in);
     return bl;
@@ -805,7 +805,7 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
   /**
    * returns the rados_id of this KvFlatBtreeAsync
    */
-  string get_name();
+  std::string get_name();
 
   /**
    * sets this kvba to call inject before every ObjectWriteOperation.
@@ -820,10 +820,10 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    */
   int setup(int argc, const char** argv) override;
 
-  int set(const string &key, const bufferlist &val,
+  int set(const std::string &key, const bufferlist &val,
         bool update_on_existing) override;
 
-  int remove(const string &key) override;
+  int remove(const std::string &key) override;
 
   /**
    * returns true if all of the following are true:
@@ -844,16 +844,16 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    * stats about each object and all omaps. Don't use if you have more than
    * about 10 objects.
    */
-  string str() override;
+  std::string str() override;
 
-  int get(const string &key, bufferlist *val) override;
+  int get(const std::string &key, bufferlist *val) override;
 
   //async versions of these methods
-  void aio_get(const string &key, bufferlist *val, callback cb,
+  void aio_get(const std::string &key, bufferlist *val, callback cb,
       void *cb_args, int * err) override;
-  void aio_set(const string &key, const bufferlist &val, bool exclusive,
+  void aio_set(const std::string &key, const bufferlist &val, bool exclusive,
       callback cb, void * cb_args, int * err) override;
-  void aio_remove(const string &key, callback cb, void *cb_args, int * err) override;
+  void aio_remove(const std::string &key, callback cb, void *cb_args, int * err) override;
 
   //these methods that deal with multiple keys at once are efficient, but make
   //no guarantees about atomicity!
@@ -887,10 +887,10 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    * * The keys are distributed across the range of keys in the store
    * * there is a small number of keys compared to k
    */
-  int set_many(const map<string, bufferlist> &in_map) override;
+  int set_many(const std::map<std::string, bufferlist> &in_map) override;
 
-  int get_all_keys(std::set<string> *keys) override;
-  int get_all_keys_and_values(map<string,bufferlist> *kv_map) override;
+  int get_all_keys(std::set<std::string> *keys) override;
+  int get_all_keys_and_values(std::map<std::string,bufferlist> *kv_map) override;
 
 };
 
