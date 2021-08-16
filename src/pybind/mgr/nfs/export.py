@@ -540,7 +540,7 @@ class ExportMgr:
         ex_dict["cluster_id"] = cluster_id
         export = Export.from_dict(ex_id, ex_dict)
         export.validate(self.mgr)
-        log.debug(f"Succefully created {fsal_type} export-{ex_id} from dict for cluster {cluster_id}")
+        log.debug(f"Successfully created {fsal_type} export-{ex_id} from dict for cluster {cluster_id}")
         return export
 
     def create_cephfs_export(self,
