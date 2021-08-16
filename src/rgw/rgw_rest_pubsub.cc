@@ -38,7 +38,7 @@ public:
     opaque_data = s->info.args.get("OpaqueData");
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
-    dest.persistent = s->info.args.exists("persistent");
+    s->info.args.get_bool("persistent", &dest.persistent, false);
 
     if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
       return -EINVAL;
