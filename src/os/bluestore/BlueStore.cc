@@ -17410,7 +17410,7 @@ int BlueStore::restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *
 //-------------------------------------------------------------------------
 void BlueStore::ExtentMap::provide_shard_info_to_onode(bufferlist v, uint32_t shard_id)
 {
-  auto cct  = onode->c->store->cct;
+  [[maybe_unused]] auto cct  = onode->c->store->cct;
   auto path = onode->c->store->path;
   if (shard_id < shards.size()) {
     auto p = &shards[shard_id];
