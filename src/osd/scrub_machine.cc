@@ -60,6 +60,14 @@ bool ScrubMachine::is_reserving() const
   return state_cast<const ReservingReplicas*>();
 }
 
+bool ScrubMachine::is_accepting_updates() const
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  ceph_assert(scrbr->is_primary());
+
+  return state_cast<const WaitLastUpdate*>();
+}
+
 // for the rest of the code in this file - we know what PG we are dealing with:
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this->context<ScrubMachine>().m_pg)
@@ -242,6 +250,15 @@ WaitLastUpdate::WaitLastUpdate(my_context ctx) : my_base(ctx)
   post_event(UpdatesApplied{});
 }
 
+/**
+ *  Note:
+ *  Updates are locally readable immediately. Thus, on the replicas we do need
+ *  to wait for the update notifications before scrubbing. For the Primary it's
+ *  a bit different: on EC (and only there) rmw operations have an additional
+ *  read roundtrip. That means that on the Primary we need to wait for
+ *  last_update_applied (the replica side, even on EC, is still safe
+ *  since the actual transaction will already be readable by commit time.
+ */
 void WaitLastUpdate::on_new_updates(const UpdatesApplied&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
