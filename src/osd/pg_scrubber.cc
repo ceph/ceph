@@ -564,6 +564,17 @@ void PgScrubber::set_subset_last_update(eversion_t e)
   dout(15) << __func__ << " last-update: " << e << dendl;
 }
 
+void PgScrubber::on_applied_when_primary(const eversion_t& applied_version)
+{
+  // we are only interested in updates if we are the Primary, and in state
+  // WaitLastUpdate
+  if (m_fsm->is_accepting_updates() && (applied_version >= m_subset_last_update)) {
+    m_osds->queue_scrub_applied_update(m_pg, m_pg->is_scrub_blocking_ops());
+    dout(15) << __func__ << " update: " << applied_version
+	     << " vs. required: " << m_subset_last_update << dendl;
+  }
+}
+
 /*
  * The selected range is set directly into 'm_start' and 'm_end'
  * setting:
@@ -1117,6 +1128,7 @@ int PgScrubber::build_scrub_map_chunk(
   while (!pos.done()) {
 
     int r = m_pg->get_pgbackend()->be_scan_list(map, pos);
+    dout(30) << __func__ << " BE returned " << r << dendl;
     if (r == -EINPROGRESS) {
       dout(20) << __func__ << " in progress" << dendl;
       return r;
@@ -1206,7 +1218,6 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
 
   // are we still processing a previous scrub-map request without noticing that the
   // interval changed? won't see it here, but rather at the reservation stage.
-
 
   if (msg->map_epoch < m_pg->info.history.same_interval_since) {
     dout(10) << "replica_scrub_op discarding old replica_scrub from " << msg->map_epoch
@@ -1471,12 +1482,13 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
    *  otherwise the interval would have changed.
    *  Ostensibly we can discard & redo the reservation. But then we
    *  will be temporarily releasing the OSD resource - and might not be able to grab it
-   *  again. Thus we simple treat this as a successful new request.
+   *  again. Thus, we simply treat this as a successful new request.
    */
 
   if (m_remote_osd_resource.has_value() && m_remote_osd_resource->is_stale()) {
     // we are holding a stale reservation from a past epoch
     m_remote_osd_resource.reset();
+    dout(10) << __func__ << " stale reservation request" << dendl;
   }
 
   if (request_ep < m_pg->get_same_interval_since()) {

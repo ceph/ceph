@@ -152,6 +152,8 @@ struct ScrubPgIF {
 
   virtual void send_maps_compared(epoch_t epoch_queued) = 0;
 
+  virtual void on_applied_when_primary(const eversion_t &applied_version) = 0;
+
   // --------------------------------------------------
 
   [[nodiscard]] virtual bool are_callbacks_pending()
@@ -203,10 +205,6 @@ struct ScrubPgIF {
 					      unsigned int suggested_priority) const = 0;
 
   virtual void add_callback(Context* context) = 0;
-
-  /// should we requeue blocked ops?
-  [[nodiscard]] virtual bool should_requeue_blocked_ops(
-    eversion_t last_recovery_applied) const = 0;
 
   /// add to scrub statistics, but only if the soid is below the scrub start
   virtual void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
