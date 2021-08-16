@@ -1,4 +1,7 @@
+import errno
 import json
+import logging
+import time
 import uuid
 from io import StringIO
 from os.path import join as os_path_join
@@ -10,6 +13,7 @@ from tasks.cephfs.filesystem import FileLayout, FSMissing
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.caps_helper import CapsHelper
 
+log = logging.getLogger(__name__)
 
 class TestAdminCommands(CephFSTestCase):
     """
@@ -193,6 +197,77 @@ class TestAdminCommands(CephFSTestCase):
         for i in range(2):
             self._check_pool_application_metadata_key_value(
                 pool_names[i], 'cephfs', keys[i], fs_name)
+
+
+class TestDump(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
+    def test_fs_dump_epoch(self):
+        """
+        That dumping a specific epoch works.
+        """
+
+        status1 = self.fs.status()
+        status2 = self.fs.status(epoch=status1["epoch"]-1)
+        self.assertEqual(status1["epoch"], status2["epoch"]+1)
+
+    def test_fsmap_trim(self):
+        """
+        That the fsmap is trimmed normally.
+        """
+
+        paxos_service_trim_min = 25
+        self.config_set('mon', 'paxos_service_trim_min', paxos_service_trim_min)
+        mon_max_mdsmap_epochs = 20
+        self.config_set('mon', 'mon_max_mdsmap_epochs', mon_max_mdsmap_epochs)
+
+        status = self.fs.status()
+        epoch = status["epoch"]
+
+        # for N mutations
+        mutations = paxos_service_trim_min + mon_max_mdsmap_epochs
+        b = False
+        for i in range(mutations):
+            self.fs.set_joinable(b)
+            b = not b
+
+        time.sleep(10) # for tick/compaction
+
+        try:
+            self.fs.status(epoch=epoch)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT, "invalid error code when trying to fetch FSMap that was trimmed")
+        else:
+            self.fail("trimming did not occur as expected")
+
+    def test_fsmap_force_trim(self):
+        """
+        That the fsmap is trimmed forcefully.
+        """
+
+        status = self.fs.status()
+        epoch = status["epoch"]
+
+        paxos_service_trim_min = 1
+        self.config_set('mon', 'paxos_service_trim_min', paxos_service_trim_min)
+        mon_mds_force_trim_to = epoch+1
+        self.config_set('mon', 'mon_mds_force_trim_to', mon_mds_force_trim_to)
+
+        # force a new fsmap
+        self.fs.set_joinable(False)
+        time.sleep(10) # for tick/compaction
+
+        status = self.fs.status()
+        log.debug(f"new epoch is {status['epoch']}")
+        self.fs.status(epoch=epoch+1) # epoch+1 is not trimmed, may not == status["epoch"]
+
+        try:
+            self.fs.status(epoch=epoch)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT, "invalid error code when trying to fetch FSMap that was trimmed")
+        else:
+            self.fail("trimming did not occur as expected")
 
 class TestRequiredClientFeatures(CephFSTestCase):
     CLIENTS_REQUIRED = 0
