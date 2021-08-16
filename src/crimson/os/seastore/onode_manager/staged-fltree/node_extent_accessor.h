@@ -561,7 +561,9 @@ class NodeExtentAccessorT {
         })
       );
     }).si_then([this, c] {
-      assert(!c.t.is_conflicted());
+      // FIXME: interruptive-future failed to check invalidation
+      // assert(!c.t.is_conflicted());
+      std::ignore = c;
       return *mut;
     });
   }
@@ -585,7 +587,9 @@ class NodeExtentAccessorT {
       })
 #ifndef NDEBUG
     ).si_then([c] {
-      assert(!c.t.is_conflicted());
+      // FIXME: interruptive-future failed to check invalidation
+      // assert(!c.t.is_conflicted());
+      std::ignore = c;
     }
 #endif
     );
