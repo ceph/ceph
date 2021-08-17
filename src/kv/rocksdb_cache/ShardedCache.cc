@@ -44,7 +44,7 @@ void ShardedCache::SetStrictCapacityLimit(bool strict_capacity_limit) {
 }
 
 rocksdb::Status ShardedCache::Insert(const rocksdb::Slice& key, void* value, size_t charge,
-                            void (*deleter)(const rocksdb::Slice& key, void* value),
+                            DeleterFn deleter,
                             rocksdb::Cache::Handle** handle, Priority priority) {
   uint32_t hash = HashSlice(key);
   return GetShard(Shard(hash))
