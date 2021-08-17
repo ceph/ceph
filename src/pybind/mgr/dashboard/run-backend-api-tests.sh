@@ -153,6 +153,8 @@ cleanup_teuthology() {
     unset cleanup_teuthology
 }
 
+export LC_ALL=en_US.UTF-8
+
 get_build_py_version
 setup_teuthology
 setup_coverage
