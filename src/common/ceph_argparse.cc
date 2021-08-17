@@ -132,6 +132,12 @@ void argv_to_vec(int argc, const char **argv,
   args.insert(args.end(), argv + 1, argv + argc);
 }
 
+std::vector<const char*> argv_to_vec(int argc, const char** argv)
+{
+  assert(argc > 0);
+  return {argv + 1, argv + argc};
+}
+
 void vec_to_argv(const char *argv0, std::vector<const char*>& args,
                  int *argc, const char ***argv)
 {
