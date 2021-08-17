@@ -149,6 +149,8 @@ cleanup_teuthology() {
     unset cleanup_teuthology
 }
 
+export LC_ALL=en_US.UTF-8
+
 setup_teuthology
 setup_coverage
 run_teuthology_tests --create-cluster-only
