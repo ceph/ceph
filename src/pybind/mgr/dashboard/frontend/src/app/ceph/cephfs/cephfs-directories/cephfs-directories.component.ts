@@ -219,7 +219,8 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           icon: Icons.add,
           permission: 'create',
           canBePrimary: (selection) => !selection.hasSelection,
-          click: () => this.createSnapshot()
+          click: () => this.createSnapshot(),
+          disable: () => this.disableCreateSnapshot()
         },
         {
           name: this.actionLabels.DELETE,
@@ -231,6 +232,16 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         }
       ]
     };
+  }
+
+  private disableCreateSnapshot(): string | boolean {
+    const folders = this.selectedDir.path.split('/').slice(1);
+    // With deph of 4 or more we have the subvolume files/folders for which we cannot create
+    // a snapshot. Somehow, you can create a snapshot of the subvolume but not its files.
+    if (folders.length >= 4 && folders[0] === 'volumes') {
+      return $localize`Cannot create snapshots for files/folders in the subvolume ${folders[2]}`;
+    }
+    return false;
   }
 
   ngOnChanges() {
