@@ -46,6 +46,7 @@ extern void clear_g_str_vec();
 extern void env_to_vec(std::vector<const char*>& args, const char *name=NULL);
 extern void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args);
+extern std::vector<const char*> argv_to_vec(int argc, const char** argv);
 extern void vec_to_argv(const char *argv0, std::vector<const char*>& args,
 			int *argc, const char ***argv);
 
