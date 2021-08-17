@@ -157,6 +157,10 @@ protected:
     return tm->create_weak_transaction(Transaction::src_t::READ);
   }
 
+  auto submit_transaction_fut2(Transaction& t) {
+    return tm->submit_transaction(t);
+  }
+
   auto submit_transaction_fut(Transaction &t) {
     return with_trans_intr(
       t,
