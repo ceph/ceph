@@ -43,6 +43,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
   // Devices
   @Input() devices: InventoryDevice[] = [];
 
+  @Input() showAvailDeviceOnly = false;
   // Do not display these columns
   @Input() hiddenColumns: string[] = [];
 
@@ -172,6 +173,22 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
       this.fetchInventorySub = this.table.fetchData.subscribe(() => {
         this.fetchInventory.emit();
       });
+    }
+  }
+
+  getDevices() {
+    if (this.showAvailDeviceOnly) {
+      this.hostService.inventoryDeviceList().subscribe(
+        (devices: InventoryDevice[]) => {
+          this.devices = _.filter(devices, 'available');
+          this.devices = [...this.devices];
+        },
+        () => {
+          this.devices = [];
+        }
+      );
+    } else {
+      this.devices = [...this.devices];
     }
   }
 

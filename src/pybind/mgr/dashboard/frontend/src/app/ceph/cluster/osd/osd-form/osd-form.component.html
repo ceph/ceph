@@ -8,7 +8,8 @@
         novalidate>
     <div class="card">
       <div i18n="form title|Example: Create Pool@@formTitle"
-           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+           class="card-header"
+           *ngIf="!clusterCreation">{{ action | titlecase }} {{ resource | upperFirst }}</div>
       <div class="card-body">
         <fieldset>
           <cd-osd-devices-selection-groups #dataDeviceSelectionGroups
@@ -121,7 +122,8 @@
           </div>
         </fieldset>
       </div>
-      <div class="card-footer">
+      <div class="card-footer"
+           *ngIf="!clusterCreation">
         <cd-form-button-panel #previewButtonPanel
                               (submitActionEvent)="submit()"
                               [form]="form"

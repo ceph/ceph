@@ -7,6 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -23,6 +24,7 @@ describe('InventoryDevicesComponent', () => {
   let component: InventoryDevicesComponent;
   let fixture: ComponentFixture<InventoryDevicesComponent>;
   let orchService: OrchestratorService;
+  let hostService: HostService;
 
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -59,6 +61,7 @@ describe('InventoryDevicesComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(InventoryDevicesComponent);
     component = fixture.componentInstance;
+    hostService = TestBed.inject(HostService);
     orchService = TestBed.inject(OrchestratorService);
   });
 
@@ -68,6 +71,15 @@ describe('InventoryDevicesComponent', () => {
 
   it('should have columns that are sortable', () => {
     expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+  });
+
+  it('should call inventoryDataList only when showOnlyAvailableData is true', () => {
+    const hostServiceSpy = spyOn(hostService, 'inventoryDeviceList').and.callThrough();
+    component.getDevices();
+    expect(hostServiceSpy).toBeCalledTimes(0);
+    component.showAvailDeviceOnly = true;
+    component.getDevices();
+    expect(hostServiceSpy).toBeCalledTimes(1);
   });
 
   describe('table actions', () => {
