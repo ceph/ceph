@@ -170,6 +170,15 @@ if(WITH_RADOSGW_DBSTORE)
 endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
+
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
+  COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+  target_compile_definitions(common-objs PRIVATE
+    HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+endif()
+
 target_link_libraries(rgw_common
   PRIVATE
     ceph-common

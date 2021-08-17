@@ -18,10 +18,14 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/tokenizer.hpp>
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
+#ifdef HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wimplicit-const-int-float-conversion"
+#endif
 #include <s3select/include/s3select.h>
+#ifdef HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION
 #pragma clang diagnostic pop
+#endif
 #undef BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 #include <liboath/oath.h>
