@@ -41,6 +41,16 @@ template<> struct _full_key_type<KeyT::HOBJ> { using type = key_hobj_t; };
 template <KeyT type>
 using full_key_t = typename _full_key_type<type>::type;
 
+static laddr_t get_lba_hint(shard_t shard, pool_t pool, crush_hash_t crush)
+{
+  if (shard == shard_id_t::NO_SHARD) {
+    return (uint64_t)(pool & 0xFF)<<56 | (uint64_t)(crush)<<24;
+  } else {
+    return (uint64_t)(shard & 0X7F)<<56 | (uint64_t)(pool& 0xFF)<<48 |
+	   (uint64_t)(crush)<<16;
+  }
+}
+
 struct node_offset_packed_t {
   node_offset_t value;
 } __attribute__((packed));
@@ -515,6 +525,9 @@ class key_hobj_t {
   crush_hash_t crush() const {
     return ghobj.hobj.get_hash();
   }
+  laddr_t get_hint() const {
+    return get_lba_hint(shard(), pool(), crush());
+  }
   std::string_view nspace() const {
     // TODO(cross-node string dedup)
     return ghobj.hobj.nspace;
@@ -607,6 +620,9 @@ class key_view_t {
   }
   crush_hash_t crush() const {
     return crush_packed().crush;
+  }
+  laddr_t get_hint() const {
+    return get_lba_hint(shard(), pool(), crush());
   }
   std::string_view nspace() const {
     // TODO(cross-node string dedup)

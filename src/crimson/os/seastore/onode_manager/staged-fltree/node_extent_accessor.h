@@ -505,7 +505,7 @@ class NodeExtentAccessorT {
     std::memcpy(to.get_write(), extent->get_read(), get_length());
   }
 
-  eagain_ifuture<NodeExtentMutable> rebuild(context_t c) {
+  eagain_ifuture<NodeExtentMutable> rebuild(context_t c, laddr_t hint) {
     LOG_PREFIX(OTree::Extent::rebuild);
     assert(!is_retired());
     if (state == nextent_state_t::FRESH) {
@@ -515,7 +515,7 @@ class NodeExtentAccessorT {
     }
     assert(!extent->is_initial_pending());
     auto alloc_size = get_length();
-    return c.nm.alloc_extent(c.t, alloc_size
+    return c.nm.alloc_extent(c.t, hint, alloc_size
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::handle(

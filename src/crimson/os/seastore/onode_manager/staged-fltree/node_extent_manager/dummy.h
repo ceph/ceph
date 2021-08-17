@@ -89,7 +89,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   }
 
   alloc_iertr::future<NodeExtentRef> alloc_extent(
-      Transaction& t, extent_len_t len) override {
+      Transaction& t, laddr_t hint, extent_len_t len) override {
     TRACET("allocating {}B ...", t, len);
     if constexpr (SYNC) {
       return alloc_extent_sync(t, len);

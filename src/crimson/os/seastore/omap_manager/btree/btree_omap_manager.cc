@@ -22,17 +22,17 @@ BtreeOMapManager::BtreeOMapManager(
   : tm(tm) {}
 
 BtreeOMapManager::initialize_omap_ret
-BtreeOMapManager::initialize_omap(Transaction &t)
+BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint)
 {
 
   logger().debug("{}", __func__);
-  return tm.alloc_extent<OMapLeafNode>(t, L_ADDR_MIN, OMAP_BLOCK_SIZE)
-    .si_then([](auto&& root_extent) {
+  return tm.alloc_extent<OMapLeafNode>(t, hint, OMAP_BLOCK_SIZE)
+    .si_then([hint](auto&& root_extent) {
       root_extent->set_size(0);
       omap_node_meta_t meta{1};
       root_extent->set_meta(meta);
       omap_root_t omap_root;
-      omap_root.update(root_extent->get_laddr(), 1);
+      omap_root.update(root_extent->get_laddr(), 1, hint);
       return initialize_omap_iertr::make_ready_future<omap_root_t>(omap_root);
   });
 }
@@ -51,7 +51,7 @@ BtreeOMapManager::handle_root_split(
   omap_root_t &omap_root,
   const OMapNode::mutation_result_t& mresult)
 {
-  return oc.tm.alloc_extent<OMapInnerNode>(oc.t, L_ADDR_MIN, OMAP_BLOCK_SIZE)
+  return oc.tm.alloc_extent<OMapInnerNode>(oc.t, omap_root.hint, OMAP_BLOCK_SIZE)
     .si_then([&omap_root, mresult](auto&& nroot) -> handle_root_split_ret {
     auto [left, right, pivot] = *(mresult.split_tuple);
     omap_node_meta_t meta{omap_root.depth + 1};
@@ -60,7 +60,7 @@ BtreeOMapManager::handle_root_split(
                                 "", nroot->maybe_get_delta_buffer());
     nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
                                 pivot, nroot->maybe_get_delta_buffer());
-    omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1);
+    omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint);
     return seastar::now();
   });
 }
@@ -75,7 +75,8 @@ BtreeOMapManager::handle_root_merge(
   auto iter = root->cast<OMapInnerNode>()->iter_begin();
   omap_root.update(
     iter->get_val(),
-    omap_root.depth -= 1);
+    omap_root.depth -= 1,
+    omap_root.hint);
   return oc.tm.dec_ref(oc.t, root->get_laddr()
   ).si_then([](auto &&ret) -> handle_root_merge_ret {
     return seastar::now();
@@ -95,10 +96,10 @@ BtreeOMapManager::omap_get_value(
 {
   logger().debug("{}: {}", __func__, key);
   return get_omap_root(
-    get_omap_context(t),
+    get_omap_context(t, omap_root.hint),
     omap_root
-  ).si_then([this, &t, &key](auto&& extent) {
-    return extent->get_value(get_omap_context(t), key);
+  ).si_then([this, &t, &key, &omap_root](auto&& extent) {
+    return extent->get_value(get_omap_context(t, omap_root.hint), key);
   }).si_then([](auto &&e) {
     return omap_get_value_ret(
         interruptible::ready_future_marker{},
@@ -131,15 +132,15 @@ BtreeOMapManager::omap_set_key(
 {
   logger().debug("{}: {} -> {}", __func__, key, value);
   return get_omap_root(
-    get_omap_context(t),
+    get_omap_context(t, omap_root.hint),
     omap_root
-  ).si_then([this, &t, &key, &value](auto root) {
-    return root->insert(get_omap_context(t), key, value);
+  ).si_then([this, &t, &key, &value, &omap_root](auto root) {
+    return root->insert(get_omap_context(t, omap_root.hint), key, value);
   }).si_then([this, &omap_root, &t](auto mresult) -> omap_set_key_ret {
     if (mresult.status == mutation_status_t::SUCCESS)
       return seastar::now();
     else if (mresult.status == mutation_status_t::WAS_SPLIT)
-      return handle_root_split(get_omap_context(t), omap_root, mresult);
+      return handle_root_split(get_omap_context(t, omap_root.hint), omap_root, mresult);
     else
       return seastar::now();
   });
@@ -153,19 +154,19 @@ BtreeOMapManager::omap_rm_key(
 {
   logger().debug("{}: {}", __func__, key);
   return get_omap_root(
-    get_omap_context(t),
+    get_omap_context(t, omap_root.hint),
     omap_root
-  ).si_then([this, &t, &key](auto root) {
-    return root->rm_key(get_omap_context(t), key);
+  ).si_then([this, &t, &key, &omap_root](auto root) {
+    return root->rm_key(get_omap_context(t, omap_root.hint), key);
   }).si_then([this, &omap_root, &t](auto mresult) -> omap_rm_key_ret {
     if (mresult.status == mutation_status_t::SUCCESS) {
       return seastar::now();
     } else if (mresult.status == mutation_status_t::WAS_SPLIT) {
-      return handle_root_split(get_omap_context(t), omap_root, mresult);
+      return handle_root_split(get_omap_context(t, omap_root.hint), omap_root, mresult);
     } else if (mresult.status == mutation_status_t::NEED_MERGE) {
       auto root = *(mresult.need_merge);
       if (root->get_node_size() == 1 && omap_root.depth != 1) {
-        return handle_root_merge(get_omap_context(t), omap_root, mresult);
+        return handle_root_merge(get_omap_context(t, omap_root.hint), omap_root, mresult);
       } else {
         return seastar::now(); 
       }
@@ -185,11 +186,11 @@ BtreeOMapManager::omap_list(
 {
   logger().debug("{}", __func__);
   return get_omap_root(
-    get_omap_context(t),
+    get_omap_context(t, omap_root.hint),
     omap_root
-  ).si_then([this, config, &t, &start](auto extent) {
+  ).si_then([this, config, &t, &start, &omap_root](auto extent) {
     return extent->list(
-      get_omap_context(t),
+      get_omap_context(t, omap_root.hint),
       start,
       config);
   });
@@ -202,17 +203,17 @@ BtreeOMapManager::omap_clear(
 {
   logger().debug("{}", __func__);
   return get_omap_root(
-    get_omap_context(t),
+    get_omap_context(t, omap_root.hint),
     omap_root
-  ).si_then([this, &t](auto extent) {
-    return extent->clear(get_omap_context(t));
+  ).si_then([this, &t, &omap_root](auto extent) {
+    return extent->clear(get_omap_context(t, omap_root.hint));
   }).si_then([this, &omap_root, &t] {
     return tm.dec_ref(
       t, omap_root.get_location()
     ).si_then([&omap_root] (auto ret) {
       omap_root.update(
 	L_ADDR_NULL,
-	0);
+	0, L_ADDR_MIN);
       return omap_clear_iertr::now();
     });
   }).handle_error_interruptible(

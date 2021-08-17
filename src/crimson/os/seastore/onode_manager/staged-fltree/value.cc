@@ -82,6 +82,11 @@ Value::do_prepare_mutate_payload(Transaction& t)
    return p_cursor->prepare_mutate_value_payload(get_context(t));
 }
 
+laddr_t Value::get_hint() const
+{
+  return p_cursor->get_key_view(vb.get_header_magic()).get_hint();
+}
+
 std::unique_ptr<ValueDeltaRecorder>
 build_value_recorder_by_type(ceph::bufferlist& encoded,
                              const value_magic_t& magic)
