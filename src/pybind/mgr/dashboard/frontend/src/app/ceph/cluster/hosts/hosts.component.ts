@@ -115,10 +115,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.enter,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) ||
-          this.isExecuting ||
-          this.enableButton ||
-          this.clusterCreation
+          this.getDisable('maintenance', selection) || this.isExecuting || this.enableButton
       },
       {
         name: this.actionLabels.EXIT_MAINTENANCE,
@@ -126,10 +123,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.exit,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) ||
-          this.isExecuting ||
-          !this.enableButton ||
-          this.clusterCreation
+          this.getDisable('maintenance', selection) || this.isExecuting || !this.enableButton
       }
     ];
   }
