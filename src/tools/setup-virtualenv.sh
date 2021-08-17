@@ -50,6 +50,11 @@ while true ; do
     esac
 done
 
+if ! $PYTHON -VV; then
+    echo "$SCRIPTNAME: unable to locate a valid PYTHON_BINARY"
+    usage
+fi
+
 DIR=$1
 if [ -z "$DIR" ] ; then
     echo "$SCRIPTNAME: need a directory path, but none was provided"
