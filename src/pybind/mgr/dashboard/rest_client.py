@@ -18,21 +18,19 @@ import logging
 import re
 
 import requests
+from requests.auth import AuthBase
 from requests.exceptions import ConnectionError, InvalidURL, Timeout
 
 from .settings import Settings
-from .tools import build_url
 
 try:
     from requests.packages.urllib3.exceptions import SSLError
 except ImportError:
     from urllib3.exceptions import SSLError  # type: ignore
 
-try:
-    from typing import List
-except ImportError:
-    pass  # Just for type checking
+from typing import List, Optional
 
+from mgr_util import build_url
 
 logger = logging.getLogger('rest_client')
 
@@ -331,7 +329,13 @@ class _Request(object):
 
 
 class RestClient(object):
-    def __init__(self, host, port, client_name=None, ssl=False, auth=None, ssl_verify=True):
+    def __init__(self,
+                 host: str,
+                 port: int,
+                 client_name: Optional[str] = None,
+                 ssl: bool = False,
+                 auth: Optional[AuthBase] = None,
+                 ssl_verify: bool = True) -> None:
         super(RestClient, self).__init__()
         self.client_name = client_name if client_name else ''
         self.host = host
