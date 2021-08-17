@@ -6307,7 +6307,7 @@ int main(int argc, const char **argv)
   } /* OPT::BUCKETS_LIST */
 
   if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
-    RGWRadosList lister(store,
+    RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(store),
 			max_concurrent_ios, orphan_stale_secs, tenant);
     if (rgw_obj_fs) {
       lister.set_field_separator(*rgw_obj_fs);
@@ -7514,7 +7514,7 @@ next:
 	   << std::endl;
     }
 
-    RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
+    RGWOrphanSearch search(static_cast<rgw::sal::RadosStore*>(store), max_concurrent_ios, orphan_stale_secs);
 
     if (job_id.empty()) {
       cerr << "ERROR: --job-id not specified" << std::endl;
@@ -7554,7 +7554,7 @@ next:
 	   << std::endl;
     }
 
-    RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
+    RGWOrphanSearch search(static_cast<rgw::sal::RadosStore*>(store), max_concurrent_ios, orphan_stale_secs);
 
     if (job_id.empty()) {
       cerr << "ERROR: --job-id not specified" << std::endl;
@@ -7584,7 +7584,7 @@ next:
 	   << std::endl;
     }
 
-    RGWOrphanStore orphan_store(store);
+    RGWOrphanStore orphan_store(static_cast<rgw::sal::RadosStore*>(store));
     int ret = orphan_store.init(dpp());
     if (ret < 0){
       cerr << "connection to cluster failed!" << std::endl;

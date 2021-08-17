@@ -628,18 +628,6 @@ class Object {
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     };
 
-    struct StatOp {
-      struct Result {
-	Object* obj;
-        RGWObjManifest* manifest;
-      } result;
-
-      virtual ~StatOp() = default;
-
-      virtual int stat_async(const DoutPrefixProvider *dpp) = 0;
-      virtual int wait(const DoutPrefixProvider *dpp) = 0;
-    };
-
     Object()
       : key(),
       bucket(nullptr),
@@ -753,7 +741,6 @@ class Object {
     /* OPs */
     virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx*) = 0;
     virtual std::unique_ptr<DeleteOp> get_delete_op(RGWObjectCtx*) = 0;
-    virtual std::unique_ptr<StatOp> get_stat_op(RGWObjectCtx*) = 0;
 
     /* OMAP */
     virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
