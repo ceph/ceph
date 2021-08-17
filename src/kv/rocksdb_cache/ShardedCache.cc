@@ -109,13 +109,36 @@ size_t ShardedCache::GetPinnedUsage() const {
   return usage;
 }
 
+#if (ROCKSDB_MAJOR >= 6 && ROCKSDB_MINOR >= 22)
+DeleterFn ShardedCache::GetDeleter(Handle* handle) const
+{
+  uint32_t hash = GetHash(handle);
+  return GetShard(Shard(hash))->GetDeleter(handle);
+}
+
+void ShardedCache::ApplyToAllEntries(
+    const std::function<void(const rocksdb::Slice& key, void* value, size_t charge,
+                             DeleterFn deleter)>& callback,
+    const ApplyToAllEntriesOptions& opts)
+{
+  int num_shards = 1 << num_shard_bits_;
+  for (int s = 0; s < num_shards; s++) {
+    GetShard(s)->ApplyToAllCacheEntries(callback, true /* thread_safe */);
+  }
+}
+#else
 void ShardedCache::ApplyToAllCacheEntries(void (*callback)(void*, size_t),
                                           bool thread_safe) {
   int num_shards = 1 << num_shard_bits_;
   for (int s = 0; s < num_shards; s++) {
-    GetShard(s)->ApplyToAllCacheEntries(callback, thread_safe);
+    GetShard(s)->ApplyToAllCacheEntries(
+      [callback](const rocksdb::Slice&, void* value, size_t charge, DeleterFn) {
+        callback(value, charge);
+      },
+      thread_safe);
   }
 }
+#endif
 
 void ShardedCache::EraseUnRefEntries() {
   int num_shards = 1 << num_shard_bits_;
