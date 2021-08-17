@@ -9,6 +9,13 @@
               class="bold">Hosts</td>
           <td>{{ hostsCount }}</td>
         </tr>
+        <tr>
+          <td i18n
+              class="bold">Storage Capacity</td>
+          <td><span i18n
+                    *ngIf="filteredDevices && capacity">Number of devices: {{ filteredDevices.length }}. Raw capacity:
+            {{ capacity | dimlessBinary }}.</span></td>
+        </tr>
       </table>
     </fieldset>
   </div>

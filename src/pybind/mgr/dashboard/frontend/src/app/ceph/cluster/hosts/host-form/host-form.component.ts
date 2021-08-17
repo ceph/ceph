@@ -25,7 +25,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   hostnames: string[];
   addr: string;
   status: string;
-  allLabels: any;
+  allLabels: string[];
   pageURL: string;
 
   messages = new SelectMessages({
@@ -60,7 +60,6 @@ export class HostFormComponent extends CdForm implements OnInit {
   }
 
   private createForm() {
-    const disableMaintenance = this.pageURL !== 'hosts';
     this.hostForm = new CdFormGroup({
       hostname: new FormControl('', {
         validators: [
@@ -74,7 +73,7 @@ export class HostFormComponent extends CdForm implements OnInit {
         validators: [CdValidators.ip()]
       }),
       labels: new FormControl([]),
-      maintenance: new FormControl({ value: disableMaintenance, disabled: disableMaintenance })
+      maintenance: new FormControl({ value: false, disabled: this.pageURL !== 'hosts' })
     });
   }
 
@@ -83,6 +82,9 @@ export class HostFormComponent extends CdForm implements OnInit {
     this.addr = this.hostForm.get('addr').value;
     this.status = this.hostForm.get('maintenance').value ? 'maintenance' : '';
     this.allLabels = this.hostForm.get('labels').value;
+    if (this.pageURL !== 'hosts' && !this.allLabels.includes('_no_schedule')) {
+      this.allLabels.push('_no_schedule');
+    }
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('host/' + URLVerbs.ADD, {
