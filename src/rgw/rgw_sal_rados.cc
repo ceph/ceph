@@ -1916,47 +1916,6 @@ int RadosObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* asta
 					   raio->handles, keep_index_consistent, y);
 }
 
-std::unique_ptr<Object::StatOp> RadosObject::get_stat_op(RGWObjectCtx* ctx)
-{
-  return std::unique_ptr<Object::StatOp>(new RadosObject::RadosStatOp(this, ctx));
-}
-
-RadosObject::RadosStatOp::RadosStatOp(RadosObject *_source, RGWObjectCtx *_rctx) :
-	source(_source),
-	rctx(_rctx),
-	op_target(_source->store->getRados(),
-		  _source->get_bucket()->get_info(),
-		  *static_cast<RGWObjectCtx *>(rctx),
-		  _source->get_obj()),
-	parent_op(&op_target)
-{ }
-
-int RadosObject::RadosStatOp::stat_async(const DoutPrefixProvider *dpp)
-{
-  return parent_op.stat_async(dpp);
-}
-
-int RadosObject::RadosStatOp::wait(const DoutPrefixProvider *dpp)
-{
-  result.obj = source;
-  int ret =  parent_op.wait(dpp);
-  if (ret < 0)
-    return ret;
-
-  source->obj_size = parent_op.result.size;
-  source->mtime = ceph::real_clock::from_timespec(parent_op.result.mtime);
-  source->attrs = parent_op.result.attrs;
-  source->key = parent_op.result.obj.key;
-  source->in_extra_data = parent_op.result.obj.in_extra_data;
-  source->index_hash_source = parent_op.result.obj.index_hash_source;
-  if (parent_op.result.manifest)
-    result.manifest = &(*parent_op.result.manifest);
-  else
-    result.manifest = nullptr;
-
-  return ret;
-}
-
 int RadosObject::copy_object(RGWObjectCtx& obj_ctx,
 				User* user,
 				req_info* info,
