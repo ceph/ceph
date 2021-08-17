@@ -195,7 +195,7 @@ int main(int argc, char* argv[])
     ("mkfs", "create a [new] data directory")
     ("debug", "enable debug output on all loggers")
     ("no-mon-config", "do not retrieve configuration from monitors on boot")
-    ("prometheus_port", bpo::value<uint16_t>()->default_value(9180),
+    ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
      "Prometheus port. Set to zero to disable")
     ("prometheus_address", bpo::value<string>()->default_value("0.0.0.0"),
      "Prometheus listening address")
