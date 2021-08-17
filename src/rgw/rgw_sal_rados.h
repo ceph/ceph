@@ -111,20 +111,6 @@ class RadosObject : public Object {
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
     };
 
-    struct RadosStatOp : public StatOp {
-    private:
-      RadosObject* source;
-      RGWObjectCtx* rctx;
-      RGWRados::Object op_target;
-      RGWRados::Object::Stat parent_op;
-
-    public:
-      RadosStatOp(RadosObject* _source, RGWObjectCtx* _rctx);
-
-      virtual int stat_async(const DoutPrefixProvider *dpp) override;
-      virtual int wait(const DoutPrefixProvider *dpp) override;
-    };
-
     RadosObject() = default;
 
     RadosObject(RadosStore *_st, const rgw_obj_key& _k)
@@ -204,7 +190,6 @@ class RadosObject : public Object {
     /* OPs */
     virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx *) override;
     virtual std::unique_ptr<DeleteOp> get_delete_op(RGWObjectCtx*) override;
-    virtual std::unique_ptr<StatOp> get_stat_op(RGWObjectCtx*) override;
 
     /* OMAP */
     virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
