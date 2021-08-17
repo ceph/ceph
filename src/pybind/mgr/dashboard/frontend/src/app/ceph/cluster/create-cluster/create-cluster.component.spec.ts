@@ -9,6 +9,7 @@ import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
+import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { AppConstants } from '~/app/shared/constants/app.constants';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
@@ -24,16 +25,19 @@ describe('CreateClusterComponent', () => {
   let modalServiceShowSpy: jasmine.Spy;
   const projectConstants: typeof AppConstants = AppConstants;
 
-  configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      RouterTestingModule,
-      ToastrModule.forRoot(),
-      SharedModule,
-      CoreModule,
-      CephModule
-    ]
-  });
+  configureTestBed(
+    {
+      imports: [
+        HttpClientTestingModule,
+        RouterTestingModule,
+        ToastrModule.forRoot(),
+        SharedModule,
+        CoreModule,
+        CephModule
+      ]
+    },
+    [LoadingPanelComponent]
+  );
 
   beforeEach(() => {
     fixture = TestBed.createComponent(CreateClusterComponent);
@@ -91,7 +95,7 @@ describe('CreateClusterComponent', () => {
     component.onNextStep();
     fixture.detectChanges();
     expect(wizardStepServiceSpy).toHaveBeenCalledTimes(1);
-    expect(hostServiceSpy).toBeCalledTimes(2);
+    expect(hostServiceSpy).toBeCalledTimes(1);
   });
 
   it('should show the button labels correctly', () => {
@@ -101,6 +105,13 @@ describe('CreateClusterComponent', () => {
     expect(submitBtnLabel).toEqual('Next');
     let cancelBtnLabel = component.showCancelButtonLabel();
     expect(cancelBtnLabel).toEqual('Cancel');
+
+    component.onNextStep();
+    fixture.detectChanges();
+    submitBtnLabel = component.showSubmitButtonLabel();
+    expect(submitBtnLabel).toEqual('Next');
+    cancelBtnLabel = component.showCancelButtonLabel();
+    expect(cancelBtnLabel).toEqual('Back');
 
     // Last page of the wizard
     component.onNextStep();

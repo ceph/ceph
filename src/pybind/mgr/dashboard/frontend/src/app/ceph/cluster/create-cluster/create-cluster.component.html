@@ -44,6 +44,15 @@
         </div>
         <div *ngSwitchCase="'2'"
              class="ml-5">
+          <h4 class="title"
+              i18n>Create OSDs</h4>
+          <br>
+          <div class="alignForm">
+            <cd-osd-form [clusterCreation]="true"></cd-osd-form>
+          </div>
+        </div>
+        <div *ngSwitchCase="'3'"
+             class="ml-5">
           <cd-create-cluster-review></cd-create-cluster-review>
         </div>
       </ng-container>

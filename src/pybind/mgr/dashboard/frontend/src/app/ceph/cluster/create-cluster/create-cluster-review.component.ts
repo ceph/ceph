@@ -4,6 +4,8 @@ import _ from 'lodash';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
+import { InventoryDevice } from '../inventory/inventory-devices/inventory-device.model';
 
 @Component({
   selector: 'cd-create-cluster-review',
@@ -18,8 +20,10 @@ export class CreateClusterReviewComponent implements OnInit {
   labelOccurrences = {};
   hostsCountPerLabel: object[] = [];
   uniqueLabels: Set<string> = new Set();
+  filteredDevices: InventoryDevice[] = [];
+  capacity = 0;
 
-  constructor(private hostService: HostService) {}
+  constructor(private hostService: HostService, public wizardStepService: WizardStepsService) {}
 
   ngOnInit() {
     this.hostsDetails = {
@@ -82,5 +86,8 @@ export class CreateClusterReviewComponent implements OnInit {
       this.hostsByLabel['data'] = [...this.hostsCountPerLabel];
       this.hostsDetails['data'] = [...this.hosts];
     });
+
+    this.filteredDevices = this.wizardStepService.osdDevices;
+    this.capacity = this.wizardStepService.osdCapacity;
   }
 }
