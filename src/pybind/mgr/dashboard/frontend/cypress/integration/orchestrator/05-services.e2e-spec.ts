@@ -23,7 +23,7 @@ describe('Services page', () => {
 
       services.checkExist('ingress.rgw.rgw.foo', true);
 
-      services.deleteService('ingress.rgw.rgw.foo', 5000);
+      services.deleteService('ingress.rgw.rgw.foo');
     });
   });
 });

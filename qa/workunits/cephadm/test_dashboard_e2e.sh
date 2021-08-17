@@ -87,23 +87,10 @@ find cypress # List all specs
 
 cypress_run "orchestrator/01-hosts.e2e-spec.ts"
 
-ceph orch apply rgw foo --placement=3
-sleep 15
-ceph orch device ls --refresh
-ceph orch ps --refresh
-sleep 10  # the previous call is asynchronous
-ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
-ceph orch ps --format=json | tee cypress/fixtures/orchestrator/services.json
-
-cypress_run "orchestrator/01-hosts-force-maintenance.e2e-spec.ts"
-
 # Hosts are removed and added in the previous step. Do a refresh again.
-ceph orch rm rgw.foo
 ceph orch device ls --refresh
-ceph orch ps --refresh
 sleep 10
 ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
-ceph orch ps --format=json | tee cypress/fixtures/orchestrator/services.json
 
 cypress_run "orchestrator/02-hosts-inventory.e2e-spec.ts"
 cypress_run "orchestrator/03-inventory.e2e-spec.ts"
