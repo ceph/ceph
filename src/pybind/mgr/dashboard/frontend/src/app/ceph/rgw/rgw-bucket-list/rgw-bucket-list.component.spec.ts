@@ -36,7 +36,7 @@ describe('RgwBucketListComponent', () => {
     rgwBucketServiceListSpy.and.returnValue(of([]));
     fixture = TestBed.createComponent(RgwBucketListComponent);
     component = fixture.componentInstance;
-    spyOn(component, 'timeConditionReached').and.stub();
+    spyOn(component, 'setTableRefreshTimeout').and.stub();
     fixture.detectChanges();
   });
 

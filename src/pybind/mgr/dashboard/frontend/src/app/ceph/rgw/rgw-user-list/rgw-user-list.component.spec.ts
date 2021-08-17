@@ -30,7 +30,7 @@ describe('RgwUserListComponent', () => {
     rgwUserServiceListSpy.and.returnValue(of([]));
     fixture = TestBed.createComponent(RgwUserListComponent);
     component = fixture.componentInstance;
-    spyOn(component, 'timeConditionReached').and.stub();
+    spyOn(component, 'setTableRefreshTimeout').and.stub();
     fixture.detectChanges();
   });
 
