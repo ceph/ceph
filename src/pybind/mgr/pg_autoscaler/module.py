@@ -142,9 +142,9 @@ class PgAutoscaler(MgrModule):
             type='float',
             desc='scaling threshold',
             long_desc=('The factor by which the `NEW PG_NUM` must vary from the current'
-                       '`PG_NUM` before being accepted. Should not be less than 2.0'),
+                       '`PG_NUM` before being accepted. Cannot be less than 1.0'),
             default=3.0,
-            min=2.0),
+            min=1.0),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -258,8 +258,8 @@ class PgAutoscaler(MgrModule):
         set the autoscaler threshold 
         A.K.A. the factor by which the new PG_NUM must vary from the existing PG_NUM
         """
-        if num < 2.0:
-            return 22, "", "threshold can not be set less than 2.0"
+        if num < 1.0:
+            return 22, "", "threshold cannot be set less than 1.0"
         self.set_module_option("threshold", num)
         return 0, "threshold updated", ""
 
@@ -579,7 +579,7 @@ class PgAutoscaler(MgrModule):
     ) -> Tuple[List[Dict[str, Any]],
                Dict[int, CrushSubtreeResourceStatus]]:
         threshold = self.threshold
-        assert threshold >= 2.0
+        assert threshold >= 1.0
 
         crush_map = osdmap.get_crush()
         root_map, overlapped_roots = self.get_subtree_resource_status(osdmap, crush_map)
