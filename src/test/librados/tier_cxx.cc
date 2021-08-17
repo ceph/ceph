@@ -139,7 +139,7 @@ void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t co
   } catch (buffer::error& err) {
     ASSERT_TRUE(0);
   }
-  ASSERT_EQ(count, refs.count());
+  ASSERT_LE(count, refs.count());
 }
 
 string get_fp_oid(string oid, std::string fp_algo = NULL)
@@ -3447,7 +3447,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, refs.count());
+    ASSERT_LE(2u, refs.count());
   }
 
   // wait for maps to settle before next test
@@ -3544,7 +3544,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, refs.count());
+    ASSERT_LE(1u, refs.count());
   }
 
   // create a snapshot, clone
@@ -3610,7 +3610,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, refs.count());
+    ASSERT_LE(2u, refs.count());
   }
   
   // and another
@@ -3675,7 +3675,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, refs.count());
+    ASSERT_LE(2u, refs.count());
   }
 
   // remove snap
@@ -3915,7 +3915,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, refs.count());
+    ASSERT_LE(2u, refs.count());
   }
 
   // check chunk's refcount
@@ -3936,7 +3936,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, refs.count());
+    ASSERT_LE(2u, refs.count());
   }
 
   // check chunk's refcount
@@ -3957,7 +3957,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, refs.count());
+    ASSERT_LE(2u, refs.count());
   }
 
   // remove snap
@@ -5325,7 +5325,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, refs.count());
+    ASSERT_LE(1u, refs.count());
   }
 
   bufferlist chunk2;
@@ -5349,7 +5349,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, refs.count());
+    ASSERT_LE(1u, refs.count());
   }
 
   // make a dirty chunks
