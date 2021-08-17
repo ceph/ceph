@@ -24,6 +24,7 @@ from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
 from ceph.utils import datetime_now
+from ceph.deployment.drive_selection.matchers import SizeMatcher
 from mgr_module import NFS_POOL_NAME
 from mgr_util import merge_dicts
 
@@ -331,49 +332,6 @@ class DefaultCreator():
         self.storage_class = storage_class
         self.inventory = inventory
 
-    def parse_drive_group_size(self, drive_group_size: Optional[str]) -> Tuple[int, int]:
-        no_bound = -1
-        if not drive_group_size:
-            return (no_bound,no_bound)
-        if ':' in drive_group_size:
-            bounds = drive_group_size.split(':')
-            low_str = bounds[0]
-            high_str = bounds[1]
-            low = self.parse_bound(low_str)
-            high = self.parse_bound(high_str)
-            return (low, high)
-        else:
-            exact = self.parse_bound(drive_group_size)
-            return (exact, exact)
-
-    def parse_bound(self, bound: str) -> int:
-        no_bound = -1
-        if not bound:
-            return no_bound
-        else:
-            coeff_and_unit = re.search('(\d+)(\D+)', bound)
-            assert coeff_and_unit is not None
-            coeff = int(coeff_and_unit[1])
-            unit = coeff_and_unit[2]
-            units = ("M", "G", "T", "MB", "GB", "TB")
-            factor = units.index(unit) % 3
-            result = coeff * (1000 ** (factor + 2))
-            return result
-
-    def check_bounds(self, low: int, high: int, size: int) -> bool:
-        if low == -1 and high == -1:
-            return True
-        elif low == -1:
-            if size <= high:
-                return True
-        elif high == -1:
-            if size >= low:
-                return True
-        else:
-            if size <= high and size >= low:
-                return True
-        return False
-
     def device_to_device_set(self, drive_group: DriveGroupSpec, d: Device) -> ccl.StorageClassDeviceSetsItem:
         device_set = ccl.StorageClassDeviceSetsItem(
                     name=d.sys_api['pv_name'],
@@ -405,7 +363,9 @@ class DefaultCreator():
     def filter_devices(self, rook_pods: KubernetesResource, drive_group: DriveGroupSpec, matching_hosts: List[str]) -> List[Device]:
         device_list = []
         assert drive_group.data_devices is not None
-        low, high = self.parse_drive_group_size(drive_group.data_devices.size)
+        sizematcher: Optional[SizeMatcher] = None
+        if drive_group.data_devices.size:
+            sizematcher = SizeMatcher('size', drive_group.data_devices.size)
         limit = getattr(drive_group.data_devices, 'limit', None)
         count = 0
         all = getattr(drive_group.data_devices, 'all', None)
@@ -430,8 +390,8 @@ class DefaultCreator():
                         if (
                             all 
                             or (
-                                device.sys_api['node'] in matching_hosts 
-                                and self.check_bounds(low, high, int(device.sys_api['size']))
+                                device.sys_api['node'] in matching_hosts
+                                and ((sizematcher != None) or sizematcher.compare(device))
                                 and (
                                     not drive_group.data_devices.paths
                                     or (device.path in paths)
@@ -440,6 +400,7 @@ class DefaultCreator():
                         ):
                             device_list.append(device)
                             count += 1
+        
         return device_list
 
     def add_osds(self, rook_pods: KubernetesResource, drive_group: DriveGroupSpec, matching_hosts: List[str]) -> Any:
@@ -463,13 +424,15 @@ class LSOCreator(DefaultCreator):
     def filter_devices(self, rook_pods: KubernetesResource, drive_group: DriveGroupSpec, matching_hosts: List[str]) -> List[Device]:
         device_list = []
         assert drive_group.data_devices is not None
-        low, high = self.parse_drive_group_size(drive_group.data_devices.size)
+        sizematcher = None
+        if drive_group.data_devices.size:
+            sizematcher = SizeMatcher('size', drive_group.data_devices.size)
         limit = getattr(drive_group.data_devices, 'limit', None)
-        count = 0
         all = getattr(drive_group.data_devices, 'all', None)
         paths = [device.path for device in drive_group.data_devices.paths]
         vendor = getattr(drive_group.data_devices, 'vendor', None)
         model = getattr(drive_group.data_devices, 'model', None)
+        count = 0
         osd_list = []
         for pod in rook_pods.items:
             if (
@@ -491,7 +454,7 @@ class LSOCreator(DefaultCreator):
                             all 
                             or (
                                 device.sys_api['node'] in matching_hosts
-                                and self.check_bounds(low, high, int(device.sys_api['size']))
+                                and ((sizematcher != None) or sizematcher.compare(device))
                                 and (
                                     not drive_group.data_devices.paths
                                     or device.path in paths
