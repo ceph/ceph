@@ -561,14 +561,14 @@ TEST_F(cls_rgw, bi_list)
   cls_rgw_bucket_init_index(op);
   ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
 
-  string name;
-  string marker;
+  const std::string empty_name_filter;
   uint64_t max = 10;
-  list<rgw_cls_bi_entry> entries;
+  std::list<rgw_cls_bi_entry> entries;
   bool is_truncated;
+  std::string marker;
 
-  int ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
-			    &is_truncated);
+  int ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+			    &entries, &is_truncated);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(entries.size(), 0u) <<
     "The listing of an empty bucket as 0 entries.";
@@ -577,7 +577,7 @@ TEST_F(cls_rgw, bi_list)
 
   uint64_t epoch = 1;
   uint64_t obj_size = 1024;
-  uint64_t num_objs = 35;
+  const uint64_t num_objs = 35;
 
   for (uint64_t i = 0; i < num_objs; i++) {
     string obj = str_int(i % 4 ? "obj" : "об'єкт", i);
@@ -593,8 +593,8 @@ TEST_F(cls_rgw, bi_list)
 		   RGW_BILOG_FLAG_VERSIONED_OP);
   }
 
-  ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, num_objs + 10, &entries,
-			    &is_truncated);
+  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs + 10,
+			&entries, &is_truncated);
   ASSERT_EQ(ret, 0);
   if (is_truncated) {
     ASSERT_LT(entries.size(), num_objs);
@@ -605,9 +605,10 @@ TEST_F(cls_rgw, bi_list)
   uint64_t num_entries = 0;
 
   is_truncated = true;
+  marker.clear();
   while(is_truncated) {
-    ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
-			  &is_truncated);
+    ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+			  &entries, &is_truncated);
     ASSERT_EQ(ret, 0);
     if (is_truncated) {
       ASSERT_LT(entries.size(), num_objs - num_entries);
@@ -618,8 +619,9 @@ TEST_F(cls_rgw, bi_list)
     marker = entries.back().idx;
   }
 
-  ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
-			&is_truncated);
+  // try with marker as final entry
+  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+			&entries, &is_truncated);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(entries.size(), 0u);
   ASSERT_EQ(is_truncated, false);
@@ -630,8 +632,8 @@ TEST_F(cls_rgw, bi_list)
     is_truncated = true;
     marker.clear();
     while(is_truncated) {
-      ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
-			    &is_truncated);
+      ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+			    &entries, &is_truncated);
       ASSERT_EQ(ret, 0);
       if (is_truncated) {
 	ASSERT_LT(entries.size(), num_objs - num_entries);
@@ -641,13 +643,57 @@ TEST_F(cls_rgw, bi_list)
       num_entries += entries.size();
       marker = entries.back().idx;
     }
+
+    // try with marker as final entry
+    ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+			  &entries, &is_truncated);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(entries.size(), 0u);
+    ASSERT_EQ(is_truncated, false);
   }
 
-  ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
-			&is_truncated);
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entries.size(), 0u);
-  ASSERT_EQ(is_truncated, false);
+  // test with name filters; pairs contain filter and expected number of elements returned
+  const std::list<std::pair<const std::string,unsigned>> filters_results =
+    { { str_int("obj", 9), 1 },
+      { str_int("об'єкт", 8), 1 },
+      { str_int("obj", 8), 0 } };
+  for (const auto& filter_result : filters_results) {
+    is_truncated = true;
+    entries.clear();
+    marker.clear();
+
+    ret = cls_rgw_bi_list(ioctx, bucket_oid, filter_result.first, marker, max,
+			  &entries, &is_truncated);
+
+    ASSERT_EQ(ret, 0) << "bi list test with name filters should succeed";
+    ASSERT_EQ(entries.size(), filter_result.second) <<
+      "bi list test with filters should return the correct number of results";
+    ASSERT_EQ(is_truncated, false) <<
+      "bi list test with filters should return correct truncation indicator";
+  }
+
+  // test whether combined segment count is correcgt
+  is_truncated = false;
+  entries.clear();
+  marker.clear();
+
+  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs - 1,
+			&entries, &is_truncated);
+  ASSERT_EQ(ret, 0) << "combined segment count should succeed";
+  ASSERT_EQ(entries.size(), num_objs - 1) <<
+    "combined segment count should return the correct number of results";
+  ASSERT_EQ(is_truncated, true) <<
+    "combined segment count should return correct truncation indicator";
+
+
+  marker = entries.back().idx; // advance marker
+  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs - 1,
+			&entries, &is_truncated);
+  ASSERT_EQ(ret, 0) << "combined segment count should succeed";
+  ASSERT_EQ(entries.size(), 1) <<
+    "combined segment count should return the correct number of results";
+  ASSERT_EQ(is_truncated, false) <<
+    "combined segment count should return correct truncation indicator";
 }
 
 /* test garbage collection */
