@@ -5,7 +5,6 @@ import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { TableStatus } from '~/app/shared/classes/table-status';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -42,7 +41,6 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  tableStatus = new TableStatus();
   staleTimeout: number;
 
   constructor(
@@ -53,9 +51,9 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
-    private ngZone: NgZone
+    protected ngZone: NgZone
   ) {
-    super();
+    super(ngZone);
   }
 
   ngOnInit() {
@@ -120,7 +118,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.tableActions = [addAction, editAction, deleteAction];
-    this.timeConditionReached();
+    this.setTableRefreshTimeout();
   }
 
   transformBucketData() {
@@ -140,23 +138,8 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     });
   }
 
-  timeConditionReached() {
-    clearTimeout(this.staleTimeout);
-    this.ngZone.runOutsideAngular(() => {
-      this.staleTimeout = window.setTimeout(() => {
-        this.ngZone.run(() => {
-          this.tableStatus = new TableStatus(
-            'warning',
-            $localize`The bucket list data might be stale. If needed, you can manually reload it.`
-          );
-        });
-      }, 10000);
-    });
-  }
-
   getBucketList(context: CdTableFetchDataContext) {
-    this.tableStatus = new TableStatus();
-    this.timeConditionReached();
+    this.setTableRefreshTimeout();
     this.rgwBucketService.list().subscribe(
       (resp: object[]) => {
         this.buckets = resp;
