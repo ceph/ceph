@@ -22,7 +22,6 @@
 #ifndef CACHE_LINE_SIZE
 #define CACHE_LINE_SIZE 64 // XXX arch-specific define 
 #endif
-#define ROCKSDB_PRIszt "zu"
 
 namespace rocksdb_cache {
 

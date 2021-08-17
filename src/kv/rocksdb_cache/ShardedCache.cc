@@ -131,7 +131,7 @@ std::string ShardedCache::GetPrintableOptions() const {
   char buffer[kBufferSize];
   {
     std::lock_guard<std::mutex> l(capacity_mutex_);
-    snprintf(buffer, kBufferSize, "    capacity : %" ROCKSDB_PRIszt "\n",
+    snprintf(buffer, kBufferSize, "    capacity : %zu\n",
              capacity_);
     ret.append(buffer);
     snprintf(buffer, kBufferSize, "    num_shard_bits : %d\n", num_shard_bits_);
