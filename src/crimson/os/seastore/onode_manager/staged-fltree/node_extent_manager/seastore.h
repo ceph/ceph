@@ -122,7 +122,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
   }
 
   alloc_iertr::future<NodeExtentRef> alloc_extent(
-      Transaction& t, extent_len_t len) override {
+      Transaction& t, laddr_t hint, extent_len_t len) override {
     TRACET("allocating {}B ...", t, len);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
@@ -132,7 +132,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         // return alloc_iertr::make_ready_future<NodeExtentRef>();
       }
     }
-    return tm.alloc_extent<SeastoreNodeExtent>(t, addr_min, len
+    return tm.alloc_extent<SeastoreNodeExtent>(t, hint, len
     ).si_then([len, &t](auto extent) {
       DEBUGT("allocated {}B at {:#x} -- {}",
              t, extent->get_length(), extent->get_laddr(), *extent);

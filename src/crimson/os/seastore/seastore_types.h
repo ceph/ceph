@@ -484,12 +484,14 @@ struct __attribute__((packed)) object_data_le_t {
 struct omap_root_t {
   laddr_t addr = L_ADDR_NULL;
   depth_t depth = 0;
+  laddr_t hint = L_ADDR_MIN;
   bool mutated = false;
 
   omap_root_t() = default;
-  omap_root_t(laddr_t addr, depth_t depth)
+  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min)
     : addr(addr),
-      depth(depth) {}
+      depth(depth),
+      hint(addr_min) {}
 
   omap_root_t(const omap_root_t &o) = default;
   omap_root_t(omap_root_t &&o) = default;
@@ -504,10 +506,11 @@ struct omap_root_t {
     return mutated;
   }
   
-  void update(laddr_t _addr, depth_t _depth) {
+  void update(laddr_t _addr, depth_t _depth, laddr_t _hint) {
     mutated = true;
     addr = _addr;
     depth = _depth;
+    hint = _hint;
   }
   
   laddr_t get_location() const {
@@ -516,6 +519,10 @@ struct omap_root_t {
 
   depth_t get_depth() const {
     return depth;
+  }
+
+  laddr_t get_hint() const {
+    return hint;
   }
 };
 
@@ -539,8 +546,8 @@ public:
     depth = init_depth_le(nroot.get_depth());
   }
   
-  omap_root_t get() const {
-    return omap_root_t(addr, depth);
+  omap_root_t get(laddr_t hint) const {
+    return omap_root_t(addr, depth, hint);
   }
 };
 

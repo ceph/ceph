@@ -201,6 +201,8 @@ class Value {
     return read_value_header()->payload_size;
   }
 
+  laddr_t get_hint() const;
+
   bool operator==(const Value& v) const { return p_cursor == v.p_cursor; }
   bool operator!=(const Value& v) const { return !(*this == v); }
 
@@ -240,7 +242,9 @@ class Value {
 
  private:
   const value_header_t* read_value_header() const;
-  context_t get_context(Transaction& t) { return {nm, vb, t}; }
+  context_t get_context(Transaction& t) {
+    return {nm, vb, t};
+  }
 
   std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
   do_prepare_mutate_payload(Transaction&);

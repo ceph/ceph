@@ -405,7 +405,7 @@ class Node
     make_root(c, std::move(_super));
   }
   void as_root(Super::URef&& _super);
-  eagain_ifuture<> upgrade_root(context_t);
+  eagain_ifuture<> upgrade_root(context_t, laddr_t);
 
   Super::URef deref_super();
 
@@ -428,7 +428,7 @@ class Node
   eagain_ifuture<> erase_node(context_t, Ref<Node>&&);
   template <bool FORCE_MERGE = false>
   eagain_ifuture<> fix_parent_index(context_t, Ref<Node>&&, bool);
-  eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t);
+  eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t, laddr_t);
   eagain_ifuture<> retire(context_t, Ref<Node>&&);
   void make_tail(context_t);
 
@@ -539,7 +539,7 @@ class InternalNode final : public Node {
   void track_make_tail(const search_position_t&);
 
   static eagain_ifuture<Ref<InternalNode>> allocate_root(
-      context_t, level_t, laddr_t, Super::URef&&);
+      context_t, laddr_t, level_t, laddr_t, Super::URef&&);
 
  protected:
   eagain_ifuture<Ref<tree_cursor_t>> lookup_smallest(context_t) override;
@@ -580,7 +580,7 @@ class InternalNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, field_type_t, bool, level_t);
+  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_t, field_type_t, bool, level_t);
 
  private:
   /**
@@ -681,7 +681,7 @@ class LeafNode final : public Node {
       context_t, const key_hobj_t&, value_config_t,
       const search_position_t&, const MatchHistory&,
       match_stat_t mstat);
-  static eagain_ifuture<Ref<LeafNode>> allocate_root(context_t, RootNodeTracker&);
+  static eagain_ifuture<Ref<LeafNode>> allocate_root(context_t, laddr_t, RootNodeTracker&);
   friend class Node;
 
  private:
@@ -712,7 +712,7 @@ class LeafNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, field_type_t, bool);
+  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_t, field_type_t, bool);
 
  private:
   /**
