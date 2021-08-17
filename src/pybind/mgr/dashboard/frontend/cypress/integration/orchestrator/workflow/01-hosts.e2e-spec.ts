@@ -1,8 +1,16 @@
 import { HostsPageHelper } from 'cypress/integration/cluster/hosts.po';
+import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
 
 describe('Hosts page', () => {
   const hosts = new HostsPageHelper();
-  const hostnames = ['ceph-node-00.cephlab.com', 'ceph-node-01.cephlab.com'];
+  const services = new ServicesPageHelper();
+
+  const serviceName = 'rgw.foo';
+  const hostnames = [
+    'ceph-node-00.cephlab.com',
+    'ceph-node-01.cephlab.com',
+    'ceph-node-02.cephlab.com'
+  ];
   const addHost = (hostname: string, exist?: boolean, maintenance?: boolean) => {
     hosts.navigateTo('create');
     hosts.add(hostname, exist, maintenance);
@@ -16,6 +24,10 @@ describe('Hosts page', () => {
   });
 
   describe('when Orchestrator is available', () => {
+    it('should add a host', () => {
+      addHost(hostnames[2], false, false);
+    });
+
     it('should display inventory', function () {
       hosts.clickHostTab(hostnames[0], 'Physical Disks');
       cy.get('cd-host-details').within(() => {
@@ -52,6 +64,28 @@ describe('Hosts page', () => {
 
     it('should exit host from maintenance', function () {
       hosts.maintenance(hostnames[1], true);
+    });
+
+    it('should check if mon service is running', () => {
+      hosts.clickHostTab(hostnames[1], 'Daemons');
+      cy.get('cd-host-details').within(() => {
+        services.checkServiceStatus('mon');
+      });
+    });
+
+    it('should create rgw services', () => {
+      services.navigateTo('create');
+      services.addService('rgw', false, '3');
+      services.checkExist(serviceName, true);
+      hosts.navigateTo();
+      hosts.clickHostTab(hostnames[1], 'Daemons');
+      cy.get('cd-host-details').within(() => {
+        services.checkServiceStatus('rgw');
+      });
+    });
+
+    it('should force maintenance', () => {
+      hosts.maintenance(hostnames[1], true, true);
     });
   });
 });
