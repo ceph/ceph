@@ -2342,7 +2342,6 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     _rm.emplace(std::move(key));
   }
 
-  uint64_t off = 0;
   bufferlist bl;
   using ceph::encode;
   for (auto &item : to_set) {
@@ -2359,7 +2358,6 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       _encode_primary_inode_base(item, dfts, bl);
       ENCODE_FINISH(bl);
     }
-    off += item.dft_len;
 
     unsigned size = item.key.length() + bl.length() + 2 * sizeof(__u32);
     if (write_size + size > max_write_size)
