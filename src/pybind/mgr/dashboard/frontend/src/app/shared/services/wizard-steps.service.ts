@@ -12,6 +12,9 @@ const initialStep = [{ stepIndex: 1, isComplete: false }];
 export class WizardStepsService {
   steps$: BehaviorSubject<WizardStepModel[]>;
   currentStep$: BehaviorSubject<WizardStepModel> = new BehaviorSubject<WizardStepModel>(null);
+  sharedData: any;
+  osdDevices: any;
+  osdCapacity: any;
 
   constructor() {
     this.steps$ = new BehaviorSubject<WizardStepModel[]>(initialStep);

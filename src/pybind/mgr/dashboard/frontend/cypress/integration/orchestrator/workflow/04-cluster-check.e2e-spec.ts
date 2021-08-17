@@ -26,9 +26,9 @@ describe('when cluster creation is completed', () => {
     beforeEach(() => {
       hosts.navigateTo();
     });
-    it('should have already exited from maintenance', () => {
+    it('should have removed "_no_schedule" label', () => {
       for (let host = 0; host < hostnames.length; host++) {
-        cy.get('datatable-row-wrapper').should('not.have.text', 'maintenance');
+        cy.get('datatable-row-wrapper').should('not.have.text', '_no_schedule');
       }
     });
 

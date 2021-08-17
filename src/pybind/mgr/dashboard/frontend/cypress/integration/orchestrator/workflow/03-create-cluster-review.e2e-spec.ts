@@ -27,6 +27,7 @@ describe('Create Cluster Review page', () => {
 
       // check for fields in table
       createCluster.getStatusTables().should('contain.text', 'Hosts');
+      createCluster.getStatusTables().should('contain.text', 'Storage Capacity');
     });
 
     it('should check Hosts by Label and Host Details tables are present', () => {

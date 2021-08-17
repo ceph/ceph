@@ -36,6 +36,7 @@ import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.c
 import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
 import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component';
+import { LoadingPanelComponent } from './shared/components/loading-panel/loading-panel.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
@@ -381,6 +382,7 @@ const routes: Routes = [
       relativeLinkResolution: 'legacy'
     })
   ],
+  entryComponents: [LoadingPanelComponent],
   exports: [RouterModule],
   providers: [StartCaseBreadcrumbsResolver, PerformanceCounterBreadcrumbsResolver]
 })
