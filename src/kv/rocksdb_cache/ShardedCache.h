@@ -120,7 +120,7 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
 //    return Hash(s.data(), s.size(), 0);
   }
 
-  uint32_t Shard(uint32_t hash) {
+  uint32_t Shard(uint32_t hash) const {
     // Note, hash >> 32 yields hash in gcc, not the zero we expect!
     return (num_shard_bits_ > 0) ? (hash >> (32 - num_shard_bits_)) : 0;
   }
