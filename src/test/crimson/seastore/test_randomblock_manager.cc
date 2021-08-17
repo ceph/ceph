@@ -115,12 +115,12 @@ struct rbm_test_t : public  seastar_test_suite_t,
     }
   }
 
-  auto free_extent(rbm_transaction &t, interval_set<blk_id_t> range) {
-    for (auto r : range) {
-      logger().debug("free_extent: start {} len {}", r.first * DEFAULT_BLOCK_SIZE,
-		      r.second * DEFAULT_BLOCK_SIZE);
-      rbm_manager->add_free_extent(t.allocated_blocks, r.first * DEFAULT_BLOCK_SIZE,
-				    r.second * DEFAULT_BLOCK_SIZE);
+  void free_extent(rbm_transaction &t, interval_set<blk_id_t> range) {
+    for (auto [off, len] : range) {
+      logger().debug("free_extent: start {} len {}", off * DEFAULT_BLOCK_SIZE,
+		      len * DEFAULT_BLOCK_SIZE);
+      rbm_manager->add_free_extent(t.allocated_blocks, off * DEFAULT_BLOCK_SIZE,
+				    len * DEFAULT_BLOCK_SIZE).unsafe_get();
     }
   }
 
