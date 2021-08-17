@@ -1073,5 +1073,39 @@ describe('CephfsDirectoriesComponent', () => {
         expect(component.loadingIndicator).toBe(true);
       });
     });
+    describe('disable create snapshot', () => {
+      let actions: CdTableAction[];
+      beforeEach(() => {
+        actions = component.snapshot.tableActions;
+        mockLib.mkDir('/', 'volumes', 2, 2);
+        mockLib.mkDir('/volumes', 'group1', 2, 2);
+        mockLib.mkDir('/volumes/group1', 'subvol', 2, 2);
+        mockLib.mkDir('/volumes/group1/subvol', 'subfile', 2, 2);
+      });
+
+      const empty = (): CdTableSelection => new CdTableSelection();
+
+      it('should return a descriptive message to explain why it is disabled', () => {
+        const path = '/volumes/group1/subvol/subfile';
+        const res = 'Cannot create snapshots for files/folders in the subvolume subvol';
+        mockLib.selectNode(path);
+        expect(actions[0].disable(empty())).toContain(res);
+      });
+
+      it('should return false if it is not a subvolume node', () => {
+        const testCases = [
+          '/volumes/group1/subvol',
+          '/volumes/group1',
+          '/volumes',
+          '/',
+          '/a',
+          '/a/b'
+        ];
+        testCases.forEach((testCase) => {
+          mockLib.selectNode(testCase);
+          expect(actions[0].disable(empty())).toBeFalsy();
+        });
+      });
+    });
   });
 });
