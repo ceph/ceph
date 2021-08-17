@@ -901,7 +901,7 @@ int HMSMRDevice::write(
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-  dout(40) << "data: ";
+  dout(40) << "data:\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
@@ -930,7 +930,7 @@ int HMSMRDevice::aio_write(
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-  dout(40) << "data: ";
+  dout(40) << "data:\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
@@ -1056,7 +1056,7 @@ int HMSMRDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   ceph_assert((uint64_t)r == len);
   pbl->push_back(std::move(p));
 
-  dout(40) << "data: ";
+  dout(40) << "data:\n";
   pbl->hexdump(*_dout);
   *_dout << dendl;
 
@@ -1126,7 +1126,7 @@ int HMSMRDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   ceph_assert((uint64_t)r == aligned_len);
   memcpy(buf, p.c_str() + (off - aligned_off), len);
 
-  dout(40) << __func__ << " data: ";
+  dout(40) << __func__ << " data:\n";
   bufferlist bl;
   bl.append(buf, len);
   bl.hexdump(*_dout);
@@ -1199,7 +1199,7 @@ int HMSMRDevice::read_random(uint64_t off, uint64_t len, char *buf,
     ceph_assert((uint64_t)r == len);
   }
 
-  dout(40) << __func__ << " data: ";
+  dout(40) << __func__ << " data:\n";
   bufferlist bl;
   bl.append(buf, len);
   bl.hexdump(*_dout);
