@@ -90,7 +90,7 @@ struct fltree_onode_manager_test_t
 	    return with_trans_intr(*ref_t, [&](auto &t) {
 	      return manager->mkfs(t
 	      ).si_then([this, &t] {
-	        return submit_transaction_fut(t);
+	        return submit_transaction_fut2(t);
 	      });
 	    });
 	  });
