@@ -403,7 +403,9 @@ int ErasureCodeLrc::parse_rule(ErasureCodeProfile &profile,
   err |= to_string("crush-device-class", profile,
 		   &rule_device_class,
 		   "", ss);
-
+  if (err) {
+    return err;
+  }
   if (profile.count("crush-steps") != 0) {
     rule_steps.clear();
     string str = profile.find("crush-steps")->second;
