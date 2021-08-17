@@ -8,7 +8,7 @@ describe('Create cluster add host page', () => {
     'ceph-node-02.cephlab.com'
   ];
   const addHost = (hostname: string, exist?: boolean) => {
-    createCluster.add(hostname, exist, true);
+    createCluster.add(hostname, exist, false);
     createCluster.checkExist(hostname, true);
   };
 
@@ -25,11 +25,16 @@ describe('Create cluster add host page', () => {
     cy.get('.title').should('contain.text', 'Add Hosts');
   });
 
-  it('should check existing host and add new hosts into maintenance mode', () => {
+  it('should check existing host and add new hosts', () => {
     createCluster.checkExist(hostnames[0], true);
 
     addHost(hostnames[1], false);
     addHost(hostnames[2], false);
+  });
+
+  it('should verify "_no_schedule" label is added', () => {
+    createCluster.checkLabelExists(hostnames[1], ['_no_schedule'], true);
+    createCluster.checkLabelExists(hostnames[2], ['_no_schedule'], true);
   });
 
   it('should not add an existing host', () => {

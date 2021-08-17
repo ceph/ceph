@@ -2,6 +2,8 @@ import { Injectable } from '@angular/core';
 
 import { BehaviorSubject, Observable } from 'rxjs';
 
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { DriveGroup } from '~/app/ceph/cluster/osd/osd-form/drive-group.model';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 
 const initialStep = [{ stepIndex: 1, isComplete: false }];
@@ -12,6 +14,9 @@ const initialStep = [{ stepIndex: 1, isComplete: false }];
 export class WizardStepsService {
   steps$: BehaviorSubject<WizardStepModel[]>;
   currentStep$: BehaviorSubject<WizardStepModel> = new BehaviorSubject<WizardStepModel>(null);
+  sharedData = new DriveGroup();
+  osdDevices: InventoryDevice[] = [];
+  osdCapacity = 0;
 
   constructor() {
     this.steps$ = new BehaviorSubject<WizardStepModel[]>(initialStep);

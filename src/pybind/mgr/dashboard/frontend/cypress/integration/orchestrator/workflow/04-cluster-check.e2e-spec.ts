@@ -1,5 +1,6 @@
 import { CreateClusterWizardHelper } from 'cypress/integration/cluster/create-cluster.po';
 import { HostsPageHelper } from 'cypress/integration/cluster/hosts.po';
+import { OSDsPageHelper } from 'cypress/integration/cluster/osds.po';
 
 describe('when cluster creation is completed', () => {
   const createCluster = new CreateClusterWizardHelper();
@@ -15,6 +16,7 @@ describe('when cluster creation is completed', () => {
 
     cy.get('button[aria-label="Next"]').click();
     cy.get('button[aria-label="Next"]').click();
+    cy.get('button[aria-label="Next"]').click();
 
     cy.get('cd-dashboard').should('exist');
   });
@@ -26,9 +28,9 @@ describe('when cluster creation is completed', () => {
     beforeEach(() => {
       hosts.navigateTo();
     });
-    it('should have already exited from maintenance', () => {
+    it('should have removed "_no_schedule" label', () => {
       for (let host = 0; host < hostnames.length; host++) {
-        cy.get('datatable-row-wrapper').should('not.have.text', 'maintenance');
+        cy.get('datatable-row-wrapper').should('not.have.text', '_no_schedule');
       }
     });
 
@@ -44,6 +46,18 @@ describe('when cluster creation is completed', () => {
       cy.get('cd-host-details').within(() => {
         hosts.getTableCount('total').should('be.gte', 0);
       });
+    });
+  });
+
+  describe('OSDs page', () => {
+    const osds = new OSDsPageHelper();
+
+    beforeEach(() => {
+      osds.navigateTo();
+    });
+
+    it('should check if osds are created', { retries: 1 }, () => {
+      osds.expectTableCount('total', 2);
     });
   });
 });

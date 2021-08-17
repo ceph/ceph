@@ -93,7 +93,10 @@ export class CreateClusterWizardHelper extends PageHelper {
       }
     }
     cy.get('cd-modal cd-submit-button').click();
+    this.checkLabelExists(hostname, labels, add);
+  }
 
+  checkLabelExists(hostname: string, labels: string[], add: boolean) {
     // Verify labels are added or removed from Labels column
     // First find row with hostname, then find labels in the row
     this.getTableCell(this.columnIndex.hostname, hostname)
@@ -109,5 +112,19 @@ export class CreateClusterWizardHelper extends PageHelper {
           }
         }
       });
+  }
+
+  createOSD(deviceType: 'hdd' | 'ssd') {
+    // Click Primary devices Add button
+    cy.get('cd-osd-devices-selection-groups[name="Primary"]').as('primaryGroups');
+    cy.get('@primaryGroups').find('button').click();
+
+    // Select all devices with `deviceType`
+    cy.get('cd-osd-devices-selection-modal').within(() => {
+      cy.get('.modal-footer .tc_submitButton').as('addButton').should('be.disabled');
+      this.filterTable('Type', deviceType);
+      this.getTableCount('total').should('be.gte', 1);
+      cy.get('@addButton').click();
+    });
   }
 }

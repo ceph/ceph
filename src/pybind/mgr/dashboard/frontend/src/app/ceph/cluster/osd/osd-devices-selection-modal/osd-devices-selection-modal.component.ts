@@ -11,6 +11,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
+import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 
 @Component({
   selector: 'cd-osd-devices-selection-modal',
@@ -42,7 +43,8 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
   constructor(
     private formBuilder: CdFormBuilder,
     public activeModal: NgbActiveModal,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    public wizardStepService: WizardStepsService
   ) {
     this.action = actionLabels.ADD;
     this.createForm();
@@ -80,6 +82,8 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
       this.filteredDevices = event.data;
       this.capacity = _.sumBy(this.filteredDevices, 'sys_api.size');
       this.event = event;
+      this.wizardStepService.osdDevices = this.filteredDevices;
+      this.wizardStepService.osdCapacity = this.capacity;
     }
   }
 

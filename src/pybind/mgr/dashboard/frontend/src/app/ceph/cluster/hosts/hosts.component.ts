@@ -115,10 +115,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.enter,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) ||
-          this.isExecuting ||
-          this.enableButton ||
-          this.clusterCreation
+          this.getDisable('maintenance', selection) || this.isExecuting || this.enableButton,
+        visible: () => !this.clusterCreation
       },
       {
         name: this.actionLabels.EXIT_MAINTENANCE,
@@ -126,10 +124,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.exit,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) ||
-          this.isExecuting ||
-          !this.enableButton ||
-          this.clusterCreation
+          this.getDisable('maintenance', selection) || this.isExecuting || this.enableButton,
+        visible: () => !this.clusterCreation
       }
     ];
   }
@@ -189,6 +185,13 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     this.orchService.status().subscribe((status: OrchestratorStatus) => {
       this.orchStatus = status;
     });
+
+    if (this.clusterCreation) {
+      const hiddenColumns = ['services', 'ceph_version'];
+      this.columns = this.columns.filter((col: any) => {
+        return !hiddenColumns.includes(col.prop);
+      });
+    }
   }
 
   updateSelection(selection: CdTableSelection) {
