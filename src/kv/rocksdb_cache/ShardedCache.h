@@ -25,6 +25,8 @@
 
 namespace rocksdb_cache {
 
+using DeleterFn = void (*)(const rocksdb::Slice& key, void* value);
+
 // Single cache shard interface.
 class CacheShard {
  public:
@@ -33,7 +35,7 @@ class CacheShard {
 
   virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash, void* value,
                                  size_t charge,
-                                 void (*deleter)(const rocksdb::Slice& key, void* value),
+                                 DeleterFn deleter,
                                  rocksdb::Cache::Handle** handle, rocksdb::Cache::Priority priority) = 0;
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, uint32_t hash) = 0;
   virtual bool Ref(rocksdb::Cache::Handle* handle) = 0;
@@ -59,7 +61,7 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   // rocksdb::Cache
   virtual const char* Name() const override = 0;
   virtual rocksdb::Status Insert(const rocksdb::Slice& key, void* value, size_t charge,
-                                 void (*deleter)(const rocksdb::Slice& key, void* value),
+                                 DeleterFn,
                                  rocksdb::Cache::Handle** handle, Priority priority) override;
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, rocksdb::Statistics* stats) override;
   virtual bool Ref(rocksdb::Cache::Handle* handle) override;

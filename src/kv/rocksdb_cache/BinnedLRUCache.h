@@ -56,7 +56,7 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
 
 struct BinnedLRUHandle {
   void* value;
-  void (*deleter)(const rocksdb::Slice&, void* value);
+  DeleterFn deleter;
   BinnedLRUHandle* next_hash;
   BinnedLRUHandle* next;
   BinnedLRUHandle* prev;
@@ -189,7 +189,7 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // Like Cache methods, but with an extra "hash" parameter.
   virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash, void* value,
                         size_t charge,
-                        void (*deleter)(const rocksdb::Slice& key, void* value),
+                        DeleterFn deleter,
                         rocksdb::Cache::Handle** handle,
                         rocksdb::Cache::Priority priority) override;
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, uint32_t hash) override;
