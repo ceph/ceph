@@ -54,7 +54,7 @@ int PMEMDevice::_lock()
   return 0;
 }
 
-int PMEMDevice::open(const string& p)
+int PMEMDevice::open(const std::string& p)
 {
   path = p;
   int r = 0;
@@ -128,7 +128,7 @@ void PMEMDevice::close()
   path.clear();
 }
 
-int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
+int PMEMDevice::collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const
 {
   (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
   (*pm)[prefix + "size"] = stringify(get_size());
