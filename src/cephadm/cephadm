@@ -3947,7 +3947,7 @@ def prepare_ssh(
     try:
         args = ['orch', 'host', 'add', host]
         if ctx.mon_ip:
-            args.append(ctx.mon_ip)
+            args.append(unwrap_ipv6(ctx.mon_ip))
         cli(args)
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
