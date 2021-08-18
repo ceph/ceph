@@ -141,6 +141,7 @@ class HostAssignment(object):
     def __init__(self,
                  spec,  # type: ServiceSpec
                  hosts: List[orchestrator.HostSpec],
+                 unreachable_hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
                  networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
@@ -153,6 +154,7 @@ class HostAssignment(object):
         self.spec = spec  # type: ServiceSpec
         self.primary_daemon_type = primary_daemon_type or spec.service_type
         self.hosts: List[orchestrator.HostSpec] = hosts
+        self.unreachable_hosts: List[orchestrator.HostSpec] = unreachable_hosts
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
@@ -231,6 +233,9 @@ class HostAssignment(object):
                     to_remove.append(dd)
             to_add += host_slots
 
+        to_remove = [d for d in to_remove if d.hostname not in [
+            h.hostname for h in self.unreachable_hosts]]
+
         return slots, to_add, to_remove
 
     def place(self):
@@ -286,6 +291,7 @@ class HostAssignment(object):
         existing_active: List[orchestrator.DaemonDescription] = []
         existing_standby: List[orchestrator.DaemonDescription] = []
         existing_slots: List[DaemonPlacement] = []
+        to_add: List[DaemonPlacement] = []
         to_remove: List[orchestrator.DaemonDescription] = []
         ranks: List[int] = list(range(len(candidates)))
         others: List[DaemonPlacement] = candidates.copy()
@@ -308,11 +314,17 @@ class HostAssignment(object):
             if not found:
                 to_remove.append(dd)
 
+        # TODO: At some point we want to deploy daemons that are on offline hosts
+        # at what point we do this differs per daemon type. Stateless daemons we could
+        # do quickly to improve availability. Steful daemons we might want to wait longer
+        # to see if the host comes back online
+
         existing = existing_active + existing_standby
 
         # build to_add
         if not count:
-            to_add = others
+            to_add = [dd for dd in others if dd.hostname not in [
+                h.hostname for h in self.unreachable_hosts]]
         else:
             # The number of new slots that need to be selected in order to fulfill count
             need = count - len(existing)
@@ -323,8 +335,12 @@ class HostAssignment(object):
                 del existing_slots[count:]
                 return self.place_per_host_daemons(existing_slots, [], to_remove)
 
-            if need > 0:
-                to_add = others[:need]
+            for dp in others:
+                if need <= 0:
+                    break
+                if dp.hostname not in [h.hostname for h in self.unreachable_hosts]:
+                    to_add.append(dp)
+                    need -= 1  # this is last use of need in this function so it can work as a counter
 
         if self.rank_map is not None:
             # assign unused ranks (and rank_generations) to to_add
