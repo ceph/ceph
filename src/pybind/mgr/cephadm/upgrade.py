@@ -138,7 +138,7 @@ class CephadmUpgrade:
         completed_types = list(set([completion[0] for completion in completed_daemons if all(
             c[1] for c in completed_daemons if c[0] == completion[0])]))
 
-        return '%s/%s ceph daemons upgraded' % (done, len(daemons)), completed_types
+        return '%s/%s daemons upgraded' % (done, len(daemons)), completed_types
 
     def _check_target_version(self, version: str) -> Optional[str]:
         try:
