@@ -131,17 +131,23 @@ describe('PrometheusAlertService', () => {
     });
 
     it('should notify on alert change', () => {
-      alerts = [prometheus.createAlert('alert0', 'suppressed')];
+      alerts = [prometheus.createAlert('alert0', 'resolved')];
       service.refresh();
       expect(notificationService.show).toHaveBeenCalledWith(
         new CdNotificationConfig(
-          NotificationType.info,
-          'alert0 (suppressed)',
-          'alert0 is suppressed ' + prometheus.createLink('http://alert0'),
+          NotificationType.success,
+          'alert0 (resolved)',
+          'alert0 is resolved ' + prometheus.createLink('http://alert0'),
           undefined,
           'Prometheus'
         )
       );
+    });
+
+    it('should not notify on change to suppressed', () => {
+      alerts = [prometheus.createAlert('alert0', 'suppressed')];
+      service.refresh();
+      expect(notificationService.show).not.toHaveBeenCalled();
     });
 
     it('should notify on a new alert', () => {
