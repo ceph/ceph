@@ -37,7 +37,7 @@ struct assert_size_args {
 WRITE_CLASS_ENCODER(assert_size_args)
 
 struct idata_from_key_args {
-  string key;
+  std::string key;
   index_data idata;
   index_data next_idata;
 
@@ -78,7 +78,7 @@ struct idata_from_idata_args {
 WRITE_CLASS_ENCODER(idata_from_idata_args)
 
 struct omap_set_args {
-  map<string, bufferlist> omap;
+  std::map<std::string, bufferlist> omap;
   uint64_t bound;
   bool exclusive;
 
@@ -100,7 +100,7 @@ struct omap_set_args {
 WRITE_CLASS_ENCODER(omap_set_args)
 
 struct omap_rm_args {
-  std::set<string> omap;
+  std::set<std::string> omap;
   uint64_t bound;
 
   void encode(bufferlist &bl) const {

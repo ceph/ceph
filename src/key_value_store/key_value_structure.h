@@ -18,9 +18,6 @@
 #include "include/utime.h"
 #include <vector>
 
-using std::string;
-using std::map;
-using std::set;
 using ceph::bufferlist;
 
 class KeyValueStructure;
@@ -39,7 +36,7 @@ typedef void (*callback)(int * err, void *arg);
 
 class KeyValueStructure{
 public:
-  map<char, int> opmap;
+  std::map<char, int> opmap;
 
   //these are injection methods. By default, nothing is called at each
   //interruption point.
@@ -77,18 +74,18 @@ public:
    * if update_on_existing is false, returns an error if
    * key already exists in the structure
    */
-  virtual int set(const string &key, const bufferlist &val,
+  virtual int set(const std::string &key, const bufferlist &val,
       bool update_on_existing) = 0;
 
   /**
    * efficiently insert the contents of in_map into the structure
    */
-  virtual int set_many(const map<string, bufferlist> &in_map) = 0;
+  virtual int set_many(const std::map<std::string, bufferlist> &in_map) = 0;
 
   /**
    * removes the key-value for key. returns an error if key does not exist
    */
-  virtual int remove(const string &key) = 0;
+  virtual int remove(const std::string &key) = 0;
 
   /**
    * removes all keys and values
@@ -99,19 +96,19 @@ public:
   /**
    * launches a thread to get the value of key. When complete, calls cb(cb_args)
    */
-  virtual void aio_get(const string &key, bufferlist *val, callback cb,
+  virtual void aio_get(const std::string &key, bufferlist *val, callback cb,
       void *cb_args, int * err) = 0;
 
   /**
    * launches a thread to set key to val. When complete, calls cb(cb_args)
    */
-  virtual void aio_set(const string &key, const bufferlist &val, bool exclusive,
+  virtual void aio_set(const std::string &key, const bufferlist &val, bool exclusive,
       callback cb, void * cb_args, int * err) = 0;
 
   /**
    * launches a thread to remove key. When complete, calls cb(cb_args)
    */
-  virtual void aio_remove(const string &key, callback cb, void *cb_args,
+  virtual void aio_remove(const std::string &key, callback cb, void *cb_args,
       int * err) = 0;
 
   ////////////////READERS////////////////////
@@ -122,17 +119,17 @@ public:
    * @param val the value is stored in this
    * @return error code
    */
-  virtual int get(const string &key, bufferlist *val) = 0;
+  virtual int get(const std::string &key, bufferlist *val) = 0;
 
   /**
    * stores all keys in keys. set should put them in order by key.
    */
-  virtual int get_all_keys(std::set<string> *keys) = 0;
+  virtual int get_all_keys(std::set<std::string> *keys) = 0;
 
   /**
    * stores all keys and values in kv_map. map should put them in order by key.
    */
-  virtual int get_all_keys_and_values(map<string,bufferlist> *kv_map) = 0;
+  virtual int get_all_keys_and_values(std::map<std::string,bufferlist> *kv_map) = 0;
 
   /**
    * True if the structure meets its own requirements for consistency.
@@ -142,7 +139,7 @@ public:
   /**
    * prints a string representation of the structure
    */
-  virtual string str() = 0;
+  virtual std::string str() = 0;
 };
 
 
