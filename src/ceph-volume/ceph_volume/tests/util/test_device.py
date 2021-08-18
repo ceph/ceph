@@ -2,6 +2,7 @@ import pytest
 from copy import deepcopy
 from ceph_volume.util import device
 from ceph_volume.api import lvm as api
+from mock.mock import patch, mock_open
 
 
 class TestDevice(object):
@@ -124,7 +125,7 @@ class TestDevice(object):
 
     def test_is_partition(self, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert disk.is_partition
@@ -138,14 +139,14 @@ class TestDevice(object):
 
     def test_is_not_lvm_memeber(self, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
 
     def test_is_lvm_memeber(self, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
@@ -258,6 +259,14 @@ class TestDevice(object):
         assert not disk.available
         assert "Has BlueStore device label" in disk.rejected_reasons
 
+    def test_reject_device_with_oserror(self, monkeypatch, patch_bluestore_label, device_info):
+        patch_bluestore_label.side_effect = OSError('test failure')
+        lsblk = {"TYPE": "disk"}
+        device_info(lsblk=lsblk)
+        disk = device.Device("/dev/sda")
+        assert not disk.available
+        assert "Failed to determine if device is BlueStore" in disk.rejected_reasons
+
     @pytest.mark.usefixtures("device_info_not_ceph_disk_member",
                              "disable_kernel_queries")
     def test_is_not_ceph_disk_member_lsblk(self, patch_bluestore_label):
@@ -306,7 +315,7 @@ class TestDevice(object):
     def test_used_by_ceph(self, device_info,
                           monkeypatch, ceph_type):
         data = {"/dev/sda": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000",
                                  lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes = []
@@ -333,7 +342,7 @@ class TestDevice(object):
         pvolumes = []
         pvolumes.append(FooPVolume)
         data = {"/dev/sda": {"foo": "bar"}}
-        lsblk = {"TYPE": "part"}
+        lsblk = {"TYPE": "part", "PKNAME": "sda"}
         lv_data = {"lv_path": "vg/lv", "vg_name": "vg", "lv_uuid": "0000", "tags": {"ceph.osd_id": 0, "ceph.type": "journal"}}
         monkeypatch.setattr(api, 'get_pvs', lambda **kwargs: pvolumes)
 
@@ -348,31 +357,41 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk._get_device_id() == 'ID_VENDOR_ID_MODEL_ID_SCSI_SERIAL'
 
+    def test_has_bluestore_label(self):
+        # patch device.Device __init__ function to do nothing since we want to only test the
+        # low-level behavior of has_bluestore_label
+        with patch.object(device.Device, "__init__", lambda self, path, with_lsm=False: None):
+            disk = device.Device("/dev/sda")
+            disk.abspath = "/dev/sda"
+            with patch('builtins.open', mock_open(read_data=b'bluestore block device\n')):
+                assert disk.has_bluestore_label
+            with patch('builtins.open', mock_open(read_data=b'not a bluestore block device\n')):
+                assert not disk.has_bluestore_label
 
 
 class TestDeviceEncryption(object):
 
     def test_partition_is_not_encrypted_lsblk(self, device_info):
-        lsblk = {'TYPE': 'part', 'FSTYPE': 'xfs'}
+        lsblk = {'TYPE': 'part', 'FSTYPE': 'xfs', 'PKNAME': 'sda'}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is False
 
     def test_partition_is_encrypted_lsblk(self, device_info):
-        lsblk = {'TYPE': 'part', 'FSTYPE': 'crypto_LUKS'}
+        lsblk = {'TYPE': 'part', 'FSTYPE': 'crypto_LUKS', 'PKNAME': 'sda'}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is True
 
     def test_partition_is_not_encrypted_blkid(self, device_info):
-        lsblk = {'TYPE': 'part'}
+        lsblk = {'TYPE': 'part', 'PKNAME': 'sda'}
         blkid = {'TYPE': 'ceph data'}
         device_info(lsblk=lsblk, blkid=blkid)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is False
 
     def test_partition_is_encrypted_blkid(self, device_info):
-        lsblk = {'TYPE': 'part'}
+        lsblk = {'TYPE': 'part', 'PKNAME': 'sda'}
         blkid = {'TYPE': 'crypto_LUKS'}
         device_info(lsblk=lsblk, blkid=blkid)
         disk = device.Device("/dev/sda")
