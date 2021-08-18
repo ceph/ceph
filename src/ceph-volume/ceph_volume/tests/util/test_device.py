@@ -218,7 +218,7 @@ class TestDevice(object):
         assert not disk.available
 
     def test_reject_readonly_device(self, device_info):
-        data = {"/dev/cdrom": {"ro": 1}}
+        data = {"/dev/sr0": {"ro": 1}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/cdrom")
