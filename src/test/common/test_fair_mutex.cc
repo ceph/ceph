@@ -34,7 +34,7 @@ TEST(FairMutex, fair)
   ceph::fair_mutex mutex{"fair::fair"};
   const int NR_TEAMS = 2;
   std::array<unsigned, NR_TEAMS> scoreboard{0, 0};
-  const int NR_ROUNDS = 256;
+  const int NR_ROUNDS = 512;
   auto play = [&](int team) {
     for (int i = 0; i < NR_ROUNDS; i++) {
       std::unique_lock lock{mutex};
