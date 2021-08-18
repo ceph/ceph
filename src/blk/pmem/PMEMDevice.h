@@ -18,6 +18,8 @@
 #define CEPH_BLK_PMEMDEVICE_H
 
 #include <atomic>
+#include <map>
+#include <string>
 
 #include "os/fs/FS.h"
 #include "include/interval_set.h"
@@ -41,7 +43,7 @@ public:
 
   void aio_submit(IOContext *ioc) override;
 
-  int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
+  int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;
 
   static bool support(const std::string& path);
 
