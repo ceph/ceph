@@ -65,7 +65,8 @@ class IngressService(CephService):
         spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         assert spec.backend_service
         if spec.backend_service not in self.mgr.spec_store:
-            raise RuntimeError(f'{spec.service_name()} backend service {spec.backend_service} does not exist')
+            raise RuntimeError(
+                f'{spec.service_name()} backend service {spec.backend_service} does not exist')
         backend_spec = self.mgr.spec_store[spec.backend_service].spec
         daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
         deps = [d.name() for d in daemons]
@@ -183,6 +184,11 @@ class IngressService(CephService):
             password = spec.keepalived_password
 
         daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+
+        if not daemons:
+            raise OrchestratorError(
+                f'Failed to generate keepalived.conf: No daemons deployed for {spec.service_name()}')
+
         deps = sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
 
         host = daemon_spec.host
@@ -198,10 +204,10 @@ class IngressService(CephService):
                     f'{bare_ip} is in {subnet} on {host} interface {interface}'
                 )
                 break
-        if not interface and spec.networks:
-            # hmm, try spec.networks
+        # try to find interface by matching spec.virtual_interface_networks
+        if not interface and spec.virtual_interface_networks:
             for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-                if subnet in spec.networks:
+                if subnet in spec.virtual_interface_networks:
                     interface = list(ifaces.keys())[0]
                     logger.info(
                         f'{spec.virtual_ip} will be configured on {host} interface '

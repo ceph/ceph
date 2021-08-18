@@ -124,6 +124,20 @@ This means we should do very few synchronous calls to remote hosts.
 As a guideline, cephadm should do at most ``O(1)`` network calls in CLI handlers.
 Everything else should be done asynchronously in other threads, like ``serve()``.
 
+Note regarding different variables used in the code
+===================================================
+
+* a ``service_type`` is something like mon, mgr, alertmanager etc defined 
+  in ``ServiceSpec``
+* a ``service_id`` is the name of the service. Some services don't have 
+  names.
+* a ``service_name`` is ``<service_type>.<service_id>``
+* a ``daemon_type`` is the same as the service_type, except for ingress,
+  which has the haproxy and keepalived daemon types.
+* a ``daemon_id`` is typically ``<service_id>.<hostname>.<random-string>``. 
+  (Not the case for e.g. OSDs. OSDs are always called OSD.N)
+* a ``daemon_name`` is ``<daemon_type>.<daemon_id>``
+
 Kcli: a virtualization management tool to make easy orchestrators development
 =============================================================================
 `Kcli <https://github.com/karmab/kcli>`_ is meant to interact with existing

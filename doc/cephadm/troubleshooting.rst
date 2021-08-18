@@ -1,46 +1,70 @@
 Troubleshooting
 ===============
 
-Sometimes there is a need to investigate why a cephadm command failed or why
-a specific service no longer runs properly.
+You might need to investigate why a cephadm command failed
+or why a certain service no longer runs properly.
 
-As cephadm deploys daemons as containers, troubleshooting daemons is slightly
-different. Here are a few tools and commands to help investigating issues.
+Cephadm deploys daemons as containers. This means that
+troubleshooting those containerized daemons might work
+differently than you expect (and that is certainly true if
+you expect this troubleshooting to work the way that
+troubleshooting does when the daemons involved aren't
+containerized). 
+
+Here are some tools and commands to help you troubleshoot
+your Ceph environment.
 
 .. _cephadm-pause:
 
 Pausing or disabling cephadm
 ----------------------------
 
-If something goes wrong and cephadm is doing behaving in a way you do
-not like, you can pause most background activity with::
+If something goes wrong and cephadm is behaving badly, you can
+pause most of the Ceph cluster's background activity by running
+the following command: 
+
+.. prompt:: bash #
 
   ceph orch pause
 
-This will stop any changes, but cephadm will still periodically check hosts to
-refresh its inventory of daemons and devices.  You can disable cephadm
-completely with::
+This stops all changes in the Ceph cluster, but cephadm will
+still periodically check hosts to refresh its inventory of
+daemons and devices.  You can disable cephadm completely by
+running the following commands:
+
+.. prompt:: bash #
 
   ceph orch set backend ''
   ceph mgr module disable cephadm
 
-This will disable all of the ``ceph orch ...`` CLI commands but the previously
-deployed daemon containers will still continue to exist and start as they
-did before.
+These commands disable all of the ``ceph orch ...`` CLI commands.
+All previously deployed daemon containers continue to exist and
+will start as they did before you ran these commands.
 
-Please refer to :ref:`cephadm-spec-unmanaged` for disabling individual
-services.
+See :ref:`cephadm-spec-unmanaged` for information on disabling
+individual services.
 
 
 Per-service and per-daemon events
 ---------------------------------
 
-In order to aid debugging failed daemon deployments, cephadm stores 
-events per service and per daemon. They often contain relevant information::
+In order to help with the process of debugging failed daemon
+deployments, cephadm stores events per service and per daemon.
+These events often contain information relevant to
+troubleshooting
+your Ceph cluster. 
+
+Listing service events
+~~~~~~~~~~~~~~~~~~~~~~
+
+To see the events associated with a certain service, run a
+command of the and following form:
+
+.. prompt:: bash #
 
   ceph orch ls --service_name=<service-name> --format yaml
 
-for example:
+This will return something in the following form:
 
 .. code-block:: yaml
 
@@ -58,9 +82,17 @@ for example:
   - '2021-02-01T12:09:25.264584 service:alertmanager [ERROR] "Failed to apply: Cannot
     place <AlertManagerSpec for service_name=alertmanager> on unknown_host: Unknown hosts"'
 
-Or per daemon::
+Listing daemon events
+~~~~~~~~~~~~~~~~~~~~~
+
+To see the events associated with a certain daemon, run a
+command of the and following form:
+
+.. prompt:: bash #
 
   ceph orch ps --service-name <service-name> --daemon-id <daemon-id> --format yaml
+
+This will return something in the following form:
 
 .. code-block:: yaml
 
@@ -77,16 +109,11 @@ Or per daemon::
 Checking cephadm logs
 ---------------------
 
-You can monitor the cephadm log in real time with::
+To learn how to monitor the cephadm logs as they are generated, read :ref:`watching_cephadm_logs`.
 
-  ceph -W cephadm
-
-You can see the last few messages with::
-
-  ceph log last cephadm
-
-If you have enabled logging to files, you can see a cephadm log file called
-``ceph.cephadm.log`` on monitor hosts (see :ref:`cephadm-logs`).
+If your Ceph cluster has been configured to log events to files, there will exist a
+cephadm log file called ``ceph.cephadm.log`` on all monitor hosts (see
+:ref:`cephadm-logs` for a more complete explanation of this).
 
 Gathering log files
 -------------------
@@ -190,7 +217,8 @@ Things users can do:
      [root@mon1 ~]# ssh -F config -i ~/cephadm_private_key root@mon1
 
 Verifying that the Public Key is Listed in the authorized_keys file
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 To verify that the public key is in the authorized_keys file, run the following commands::
 
      [root@mon1 ~]# cephadm shell -- ceph cephadm get-pub-key > ~/ceph.pub

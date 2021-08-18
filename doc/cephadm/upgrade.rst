@@ -12,26 +12,32 @@ The automated upgrade process follows Ceph best practices.  For example:
 * Each daemon is restarted only after Ceph indicates that the cluster
   will remain available.
 
-Keep in mind that the Ceph cluster health status is likely to switch to
-``HEALTH_WARNING`` during the upgrade.
+.. note::
+
+   The Ceph cluster health status is likely to switch to
+   ``HEALTH_WARNING`` during the upgrade.
+
+.. note:: 
+
+   In case a host of the cluster is offline, the upgrade is paused.
 
 
 Starting the upgrade
 ====================
 
-Before you begin using cephadm to upgrade Ceph, verify that all hosts are currently online and that your cluster is healthy:
+Before you use cephadm to upgrade Ceph, verify that all hosts are currently online and that your cluster is healthy by running the following command:
 
 .. prompt:: bash #
 
    ceph -s
 
-To upgrade (or downgrade) to a specific release:
+To upgrade (or downgrade) to a specific release, run the following command:
 
 .. prompt:: bash #
 
   ceph orch upgrade start --ceph-version <version>
 
-For example, to upgrade to v15.2.1:
+For example, to upgrade to v15.2.1, run the following command:
 
 .. prompt:: bash #
 
@@ -76,11 +82,11 @@ Watch the cephadm log by running the following command:
 Canceling an upgrade
 ====================
 
-You can stop the upgrade process at any time with:
+You can stop the upgrade process at any time by running the following command:
 
 .. prompt:: bash #
 
-  # ceph orch upgrade stop
+  ceph orch upgrade stop
 
 
 Potential problems
@@ -91,22 +97,27 @@ There are a few health alerts that can arise during the upgrade process.
 UPGRADE_NO_STANDBY_MGR
 ----------------------
 
-This alert means that Ceph requires an active and standby manager daemon in
-order to proceed, but there is currently no standby.
+This alert (``UPGRADE_NO_STANDBY_MGR``) means that Ceph does not detect an
+active standby manager daemon. In order to proceed with the upgrade, Ceph
+requires an active standby manager daemon (which you can think of in this
+context as "a second manager").
 
-You can ensure that Cephadm is configured to run 2 (or more) managers by running the following command:
+You can ensure that Cephadm is configured to run 2 (or more) managers by
+running the following command:
 
 .. prompt:: bash #
 
   ceph orch apply mgr 2  # or more
 
-You can check the status of existing mgr daemons by running the following command:
+You can check the status of existing mgr daemons by running the following
+command:
 
 .. prompt:: bash #
 
   ceph orch ps --daemon-type mgr
 
-If an existing mgr daemon has stopped, you can try to restart it by running the following command: 
+If an existing mgr daemon has stopped, you can try to restart it by running the
+following command: 
 
 .. prompt:: bash #
 
@@ -115,12 +126,13 @@ If an existing mgr daemon has stopped, you can try to restart it by running the 
 UPGRADE_FAILED_PULL
 -------------------
 
-This alert means that Ceph was unable to pull the container image for the
-target version. This can happen if you specify a version or container image
-that does not exist (e.g. "1.2.3"), or if the container registry can not
-be reached by one or more hosts in the cluster.
+This alert (``UPGRADE_FAILED_PULL``) means that Ceph was unable to pull the
+container image for the target version. This can happen if you specify a
+version or container image that does not exist (e.g. "1.2.3"), or if the
+container registry can not be reached by one or more hosts in the cluster.
 
-To cancel the existing upgrade and to specify a different target version, run the following commands: 
+To cancel the existing upgrade and to specify a different target version, run
+the following commands: 
 
 .. prompt:: bash #
 

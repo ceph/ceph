@@ -150,12 +150,13 @@ class IscsiService(CephService):
         """
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
-        # remove config for dashboard iscsi gateways
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'dashboard iscsi-gateway-rm',
-            'name': daemon.hostname,
-        })
-        logger.info(f'{daemon.hostname} removed from iscsi gateways dashboard config')
+        if 'dashboard' in self.mgr.get('mgr_map')['modules']:
+            # remove config for dashboard iscsi gateways
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'dashboard iscsi-gateway-rm',
+                'name': daemon.hostname,
+            })
+            logger.info(f'{daemon.hostname} removed from iscsi gateways dashboard config')
 
         # needed to know if we have ssl stuff for iscsi in ceph config
         iscsi_config_dict = {}

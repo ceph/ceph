@@ -69,6 +69,8 @@ def cephadm_fs(
     gid = os.getgid()
 
     with mock.patch('os.fchown'), \
+         mock.patch('os.fchmod'), \
+         mock.patch('platform.processor', return_value='x86_64'), \
          mock.patch('cephadm.extract_uid_gid', return_value=(uid, gid)):
 
             fs.create_dir(cd.DATA_DIR)
@@ -98,9 +100,9 @@ def with_cephadm_ctx(
     if not hostname:
         hostname = 'host1'
 
-    with mock.patch('cephadm.get_parm'), \
-         mock.patch('cephadm.attempt_bind'), \
+    with mock.patch('cephadm.attempt_bind'), \
          mock.patch('cephadm.call', return_value=('', '', 0)), \
+         mock.patch('cephadm.call_timeout', return_value=0), \
          mock.patch('cephadm.find_executable', return_value='foo'), \
          mock.patch('cephadm.is_available', return_value=True), \
          mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \

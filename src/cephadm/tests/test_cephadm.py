@@ -1,6 +1,7 @@
 # type: ignore
 
 import errno
+import json
 import mock
 import os
 import pytest
@@ -30,10 +31,20 @@ with mock.patch('builtins.open', create=True):
     cd = SourceFileLoader('cephadm', 'cephadm').load_module()
 
 
+def get_ceph_conf(
+        fsid='00000000-0000-0000-0000-0000deadbeef',
+        mon_host='[v2:192.168.1.1:3300/0,v1:192.168.1.1:6789/0]'):
+    return f'''
+# minimal ceph.conf for {fsid}
+[global]
+        fsid = {fsid}
+        mon_host = {mon_host}
+'''
+
 class TestCephAdm(object):
 
     def test_docker_unit_file(self):
-        ctx = mock.Mock()
+        ctx = cd.CephadmContext()
         ctx.container_engine = mock_docker()
         r = cd.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
         assert 'Requires=docker.service' in r
@@ -91,7 +102,7 @@ class TestCephAdm(object):
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
     def test_check_ip_port_success(self, logger, _socket):
-        ctx = mock.Mock()
+        ctx = cd.CephadmContext()
         ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
 
         for address, address_family in (
@@ -108,7 +119,7 @@ class TestCephAdm(object):
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
     def test_check_ip_port_failure(self, logger, _socket):
-        ctx = mock.Mock()
+        ctx = cd.CephadmContext()
         ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
 
         def os_error(errno):
@@ -147,6 +158,11 @@ class TestCephAdm(object):
     def test__get_parser_image(self):
         args = cd._parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
+
+    def test_parse_mem_usage(self):
+        cd.logger = mock.Mock()
+        len, summary = cd._parse_mem_usage(0, 'c6290e3f1489,-- / --')
+        assert summary == {}
 
     def test_CustomValidation(self):
         assert cd._parse_args(['deploy', '--name', 'mon.a', '--fsid', 'fsid'])
@@ -521,6 +537,184 @@ docker.io/ceph/daemon-base:octopus
 
         s = 'ceph/ceph:latest'
         assert cd.normalize_image_digest(s) == f'{cd.DEFAULT_REGISTRY}/{s}'
+
+    @pytest.mark.parametrize('fsid, ceph_conf, list_daemons, result, err, ',
+        [
+            (
+                None,
+                None,
+                [],
+                None,
+                None,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                [],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                None,
+                [
+                    {'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                None,
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                None,
+                r'Cannot infer an fsid',
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [
+                    {'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+            ),
+            (
+                None,
+                get_ceph_conf(fsid='00000000-0000-0000-0000-0000deadbeef'),
+                [
+                    {'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'fsid': '20000000-0000-0000-0000-0000deadbeef'},
+                ],
+                None,
+                r'Cannot infer an fsid',
+            ),
+        ])
+    @mock.patch('cephadm.call')
+    def test_infer_fsid(self, _call, fsid, ceph_conf, list_daemons, result, err, cephadm_fs):
+        # build the context
+        ctx = cd.CephadmContext()
+        ctx.fsid = fsid
+
+        # mock the decorator
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        infer_fsid = cd.infer_fsid(mock_fn)
+
+        # mock the ceph.conf file content
+        if ceph_conf:
+            f = cephadm_fs.create_file('ceph.conf', contents=ceph_conf)
+            ctx.config = f.path
+
+        # test
+        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+            if err:
+                with pytest.raises(cd.Error, match=err):
+                    infer_fsid(ctx)
+            else:
+                infer_fsid(ctx)
+            assert ctx.fsid == result
+
+    @pytest.mark.parametrize('fsid, config, name, list_daemons, result, ',
+        [
+            (
+                None,
+                '/foo/bar.conf',
+                None,
+                [],
+                '/foo/bar.conf',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [{'name': 'mon.a'}],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [{'name': 'osd.0'}],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                '/foo/bar.conf',
+                'mon.a',
+                [{'name': 'mon.a'}],
+                '/foo/bar.conf',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                'mon.a',
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                'osd.0',
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/osd.0/config',
+            ),
+            (
+                None,
+                None,
+                None,
+                [],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+        ])
+    @mock.patch('cephadm.call')
+    def test_infer_config(self, _call, fsid, config, name, list_daemons, result, cephadm_fs):
+        # build the context
+        ctx = cd.CephadmContext()
+        ctx.fsid = fsid
+        ctx.config = config
+        ctx.name = name
+
+        # mock the decorator
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        infer_config = cd.infer_config(mock_fn)
+
+        # mock the shell config
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+
+        # test
+        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+            infer_config(ctx)
+            assert ctx.config == result
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
@@ -925,7 +1119,8 @@ class TestMaintenance:
 class TestMonitoring(object):
     @mock.patch('cephadm.call')
     def test_get_version_alertmanager(self, _call):
-        ctx = mock.Mock()
+        ctx = cd.CephadmContext()
+        ctx.container_engine = mock_podman()
         daemon_type = 'alertmanager'
 
         # binary `prometheus`
@@ -943,7 +1138,8 @@ class TestMonitoring(object):
 
     @mock.patch('cephadm.call')
     def test_get_version_prometheus(self, _call):
-        ctx = mock.Mock()
+        ctx = cd.CephadmContext()
+        ctx.container_engine = mock_podman()
         daemon_type = 'prometheus'
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
         version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
@@ -951,20 +1147,14 @@ class TestMonitoring(object):
 
     @mock.patch('cephadm.call')
     def test_get_version_node_exporter(self, _call):
-        ctx = mock.Mock()
+        ctx = cd.CephadmContext()
+        ctx.container_engine = mock_podman()
         daemon_type = 'node-exporter'
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type.replace('-', '_')), 0
         version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
-    @mock.patch('cephadm.os.fchown')
-    @mock.patch('cephadm.get_parm')
-    @mock.patch('cephadm.makedirs')
-    @mock.patch('cephadm.open')
-    @mock.patch('cephadm.make_log_dir')
-    @mock.patch('cephadm.make_data_dir')
-    def test_create_daemon_dirs_prometheus(self, make_data_dir, make_log_dir, _open, makedirs,
-                                           get_parm, fchown):
+    def test_create_daemon_dirs_prometheus(self, cephadm_fs):
         """
         Ensures the required and optional files given in the configuration are
         created and mapped correctly inside the container. Tests absolute and
@@ -975,15 +1165,14 @@ class TestMonitoring(object):
         daemon_type = 'prometheus'
         uid, gid = 50, 50
         daemon_id = 'home'
-        ctx = mock.Mock()
+        ctx = cd.CephadmContext()
         ctx.data_dir = '/somedir'
-        files = {
+        ctx.config_json = json.dumps({
             'files': {
                 'prometheus.yml': 'foo',
                 '/etc/prometheus/alerting/ceph_alerts.yml': 'bar'
             }
-        }
-        get_parm.return_value = files
+        })
 
         cd.create_daemon_dirs(ctx,
                               fsid,
@@ -1000,14 +1189,17 @@ class TestMonitoring(object):
             daemon_type=daemon_type,
             daemon_id=daemon_id
         )
-        assert _open.call_args_list == [
-            mock.call('{}/etc/prometheus/prometheus.yml'.format(prefix), 'w',
-                 encoding='utf-8'),
-            mock.call('{}/etc/prometheus/alerting/ceph_alerts.yml'.format(prefix), 'w',
-                 encoding='utf-8'),
-        ]
-        assert mock.call().__enter__().write('foo') in _open.mock_calls
-        assert mock.call().__enter__().write('bar') in _open.mock_calls
+
+        expected = {
+            'etc/prometheus/prometheus.yml': 'foo',
+            'etc/prometheus/alerting/ceph_alerts.yml': 'bar',
+        }
+
+        for file,content in expected.items():
+            file = os.path.join(prefix, file)
+            assert os.path.exists(file)
+            with open(file) as f:
+                assert f.read() == content
 
 
 class TestBootstrap(object):
@@ -1127,6 +1319,57 @@ class TestBootstrap(object):
                 retval = cd.command_bootstrap(ctx)
                 assert retval == 0
 
+    @pytest.mark.parametrize('mon_addrv, list_networks, err',
+        [
+            # IPv4
+            (
+                '192.168.1.1',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                r'must use square backets',
+            ),
+            (
+                '[192.168.1.1]',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                r'must include port number',
+            ),
+            (
+                '[192.168.1.1:1234]',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                None,
+            ),
+            (
+                '[v2:192.168.1.1:3300,v1:192.168.1.1:6789]',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                None,
+            ),
+            # IPv6
+            (
+                '[::ffff:192.168.1.1:1234]',
+                {'ffff::/64': {'eth0': ['::ffff:c0a8:101']}},
+                None,
+            ),
+            (
+                '[0000:0000:0000:0000:0000:FFFF:C0A8:0101:1234]',
+                {'ffff::/64': {'eth0': ['::ffff:c0a8:101']}},
+                None,
+            ),
+            (
+                '[v2:0000:0000:0000:0000:0000:FFFF:C0A8:0101:3300,v1:0000:0000:0000:0000:0000:FFFF:C0A8:0101:6789]',
+                {'ffff::/64': {'eth0': ['::ffff:c0a8:101']}},
+                None,
+            ),
+        ])
+    def test_mon_addrv(self, mon_addrv, list_networks, err, cephadm_fs):
+        cmd = self._get_cmd('--mon-addrv', mon_addrv)
+        if err:
+            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+                with pytest.raises(cd.Error, match=err):
+                    cd.command_bootstrap(ctx)
+        else:
+            with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
+                retval = cd.command_bootstrap(ctx)
+                assert retval == 0
+
     def test_allow_fqdn_hostname(self, cephadm_fs):
         hostname = 'foo.bar'
         cmd = self._get_cmd(
@@ -1164,3 +1407,228 @@ class TestBootstrap(object):
             else:
                 retval = cd.command_bootstrap(ctx)
                 assert retval == 0
+
+
+class TestShell(object):
+
+    def test_fsid(self, cephadm_fs):
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+
+        cmd = ['shell', '--fsid', fsid]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.fsid == fsid
+
+        cmd = ['shell', '--fsid', '00000000-0000-0000-0000-0000deadbeez']
+        with with_cephadm_ctx(cmd) as ctx:
+            err = 'not an fsid'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+                assert ctx.fsid == None
+
+        s = get_ceph_conf(fsid=fsid)
+        f = cephadm_fs.create_file('ceph.conf', contents=s)
+
+        cmd = ['shell', '--fsid', fsid, '--config', f.path]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.fsid == fsid
+
+        cmd = ['shell', '--fsid', '10000000-0000-0000-0000-0000deadbeef', '--config', f.path]
+        with with_cephadm_ctx(cmd) as ctx:
+            err = 'fsid does not match ceph.conf'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+                assert ctx.fsid == None
+
+    def test_name(self, cephadm_fs):
+        cmd = ['shell', '--name', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+
+        cmd = ['shell', '--name', 'foo.bar']
+        with with_cephadm_ctx(cmd) as ctx:
+            err = r'must pass --fsid'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+        cmd = ['shell', '--name', 'foo.bar', '--fsid', fsid]
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+
+    def test_config(self, cephadm_fs):
+        cmd = ['shell']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == None
+
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == cd.SHELL_DEFAULT_CONF
+
+        cmd = ['shell', '--config', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.config == 'foo'
+
+    def test_keyring(self, cephadm_fs):
+        cmd = ['shell']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == None
+
+        cephadm_fs.create_file(cd.SHELL_DEFAULT_KEYRING)
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == cd.SHELL_DEFAULT_KEYRING
+
+        cmd = ['shell', '--keyring', 'foo']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_shell(ctx)
+            assert retval == 0
+            assert ctx.keyring == 'foo'
+
+
+class TestCephVolume(object):
+
+    @staticmethod
+    def _get_cmd(*args):
+        return [
+            'ceph-volume',
+            *args,
+            '--', 'inventory', '--format', 'json'
+        ]
+
+    def test_noop(self):
+        cmd = self._get_cmd()
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.fsid == None
+            assert ctx.config == None
+            assert ctx.keyring == None
+            assert ctx.config_json == None
+
+    def test_fsid(self, cephadm_fs):
+        fsid = '00000000-0000-0000-0000-0000deadbeef'
+
+        cmd = self._get_cmd('--fsid', fsid)
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.fsid == fsid
+
+        cmd = self._get_cmd('--fsid', '00000000-0000-0000-0000-0000deadbeez')
+        with with_cephadm_ctx(cmd) as ctx:
+            err = 'not an fsid'
+            with pytest.raises(cd.Error, match=err):
+                retval = cd.command_shell(ctx)
+                assert retval == 1
+                assert ctx.fsid == None
+
+        s = get_ceph_conf(fsid=fsid)
+        f = cephadm_fs.create_file('ceph.conf', contents=s)
+
+        cmd = self._get_cmd('--fsid', fsid, '--config', f.path)
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.fsid == fsid
+
+        cmd = self._get_cmd('--fsid', '10000000-0000-0000-0000-0000deadbeef', '--config', f.path)
+        with with_cephadm_ctx(cmd) as ctx:
+            err = 'fsid does not match ceph.conf'
+            with pytest.raises(cd.Error, match=err):
+                cd.command_ceph_volume(ctx)
+                assert ctx.fsid == None
+
+    def test_config(self, cephadm_fs):
+        cmd = self._get_cmd('--config', 'foo')
+        with with_cephadm_ctx(cmd) as ctx:
+            err = r'No such file or directory'
+            with pytest.raises(cd.Error, match=err):
+                cd.command_ceph_volume(ctx)
+
+        cephadm_fs.create_file('bar')
+        cmd = self._get_cmd('--config', 'bar')
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.config == 'bar'
+
+    def test_keyring(self, cephadm_fs):
+        cmd = self._get_cmd('--keyring', 'foo')
+        with with_cephadm_ctx(cmd) as ctx:
+            err = r'No such file or directory'
+            with pytest.raises(cd.Error, match=err):
+                cd.command_ceph_volume(ctx)
+
+        cephadm_fs.create_file('bar')
+        cmd = self._get_cmd('--keyring', 'bar')
+        with with_cephadm_ctx(cmd) as ctx:
+            cd.command_ceph_volume(ctx)
+            assert ctx.keyring == 'bar'
+
+
+class TestIscsi:
+    def test_unit_run(self, cephadm_fs):
+        fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
+        config_json = {
+                'files': {'iscsi-gateway.cfg': ''}
+            }
+        with with_cephadm_ctx(['--image=ceph/ceph'], list_networks={}) as ctx:
+            import json
+            ctx.config_json = json.dumps(config_json)
+            ctx.fsid = fsid
+            cd.get_parm.return_value = config_json
+            iscsi = cd.CephIscsi(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'daemon_id', config_json)
+            c = iscsi.get_tcmu_runner_container()
+
+            cd.make_data_dir(ctx, fsid, 'iscsi', 'daemon_id')
+            cd.deploy_daemon_units(
+                ctx,
+                fsid,
+                0, 0,
+                'iscsi',
+                'daemon_id',
+                c,
+                True, True
+            )
+
+            with open('/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/unit.run') as f:
+                assert f.read() == """set -e
+if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs /proc/mounts; then mount -t configfs none /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs; fi
+# iscsi tcmu-runnter container
+! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id-tcmu 2> /dev/null
+! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
+/usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log/rbd-target-api:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
+# iscsi.daemon_id
+! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id-tcmu 2> /dev/null
+! /usr/bin/podman rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
+/usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log/rbd-target-api:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
+"""
+
+    def test_get_container(self):
+        """
+        Due to a combination of socket.getfqdn() and podman's behavior to
+        add the container name into the /etc/hosts file, we cannot use periods
+        in container names. But we need to be able to detect old existing containers.
+        Assert this behaviour. I think we can remove this in Ceph R
+        """
+        fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
+        with with_cephadm_ctx(['--image=ceph/ceph'], list_networks={}) as ctx:
+            ctx.fsid = fsid
+            c = cd.get_container(ctx, fsid, 'iscsi', 'something')
+            assert c.cname == 'ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-something'
+            assert c.old_cname == 'ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.something'
+

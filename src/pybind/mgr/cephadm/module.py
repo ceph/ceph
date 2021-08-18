@@ -97,6 +97,7 @@ DEFAULT_NODE_EXPORTER_IMAGE = 'docker.io/prom/node-exporter:v0.18.1'
 DEFAULT_GRAFANA_IMAGE = 'docker.io/ceph/ceph-grafana:6.7.4'
 DEFAULT_ALERT_MANAGER_IMAGE = 'docker.io/prom/alertmanager:v0.20.0'
 DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
+DEFAULT_KEEPALIVED_IMAGE = 'docker.io/arcts/keepalived'
 # ------------------------------------------------------------------------------
 
 
@@ -214,7 +215,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'container_image_keepalived',
-            default='arcts/keepalived',
+            default=DEFAULT_KEEPALIVED_IMAGE,
             desc='Keepalived container image',
         ),
         Option(
@@ -1230,6 +1231,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @orchestrator._cli_read_command('orch client-keyring ls')
     def _client_keyring_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        """
+        List client keyrings under cephadm management
+        """
         if format != Format.plain:
             output = to_format(self.keys.keys.values(), format, many=True, cls=ClientKeyringSpec)
         else:
@@ -1257,6 +1261,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             owner: Optional[str] = None,
             mode: Optional[str] = None,
     ) -> HandleCommandResult:
+        """
+        Add or update client keyring under cephadm management
+        """
         if not entity.startswith('client.'):
             raise OrchestratorError('entity must start with client.')
         if owner:
@@ -1285,6 +1292,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self,
             entity: str,
     ) -> HandleCommandResult:
+        """
+        Remove client keyring from cephadm management
+        """
         self.keys.rm(entity)
         self._kick_serve_loop()
         return HandleCommandResult()
@@ -1382,6 +1392,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if (
                 self.cache.host_had_daemon_refresh(h.hostname)
                 and h.status.lower() not in ['maintenance', 'offline']
+                and h.hostname not in self.offline_hosts
                 and '_no_schedule' not in h.labels
             )
         ]
@@ -1463,6 +1474,22 @@ Then run the following:
 
         :param host: host name
         """
+        # Verify if it is possible to remove the host safely
+        daemons = self.cache.get_daemons_by_host(host)
+        if daemons:
+            self.log.warning(f"Blocked {host} removal. Daemons running: {daemons}")
+
+            daemons_table = ""
+            daemons_table += "{:<20} {:<15}\n".format("type", "id")
+            daemons_table += "{:<20} {:<15}\n".format("-" * 20, "-" * 15)
+            for d in daemons:
+                daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
+
+            return "Not allowed to remove %s from cluster. " \
+                "The following daemons are running in the host:" \
+                "\n%s\nPlease run 'ceph orch host drain %s' to remove daemons from host" % (
+                    host, daemons_table, host)
+
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
         self._reset_con(host)
@@ -1634,7 +1661,7 @@ Then run the following:
 
         self._set_maintenance_healthcheck()
 
-        return f"Ceph cluster {self._cluster_fsid} on {hostname} moved to maintenance"
+        return f'Daemons for Ceph cluster {self._cluster_fsid} stopped on host {hostname}. Host {hostname} moved to maintenance mode'
 
     @handle_orch_error
     @host_exists()
@@ -1820,6 +1847,8 @@ Then run the following:
         if not dds:
             raise OrchestratorError(f'No daemons exist under service name "{service_name}".'
                                     + ' View currently running services using "ceph orch ls"')
+        if action == 'stop' and service_name.split('.')[0].lower() in ['mgr', 'mon', 'osd']:
+            return [f'Stopping entire {service_name} service is prohibited.']
         self.log.info('%s service %s' % (action.capitalize(), service_name))
         return [
             self._schedule_daemon_action(dd.name(), action)
@@ -2564,3 +2593,25 @@ Then run the following:
         The CLI call to retrieve an osd removal report
         """
         return self.to_remove_osds.all_osds()
+
+    @handle_orch_error
+    def drain_host(self, hostname):
+        # type: (str) -> str
+        """
+        Drain all daemons from a host.
+        :param host: host name
+        """
+        self.add_host_label(hostname, '_no_schedule')
+
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_host(hostname)
+
+        osds_to_remove = [d.daemon_id for d in daemons if d.daemon_type == 'osd']
+        self.remove_osds(osds_to_remove)
+
+        daemons_table = ""
+        daemons_table += "{:<20} {:<15}\n".format("type", "id")
+        daemons_table += "{:<20} {:<15}\n".format("-" * 20, "-" * 15)
+        for d in daemons:
+            daemons_table += "{:<20} {:<15}\n".format(d.daemon_type, d.daemon_id)
+
+        return "Scheduled to remove the following daemons from host '{}'\n{}".format(hostname, daemons_table)

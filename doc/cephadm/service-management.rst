@@ -158,6 +158,54 @@ or in a YAML files.
 
    cephadm will not deploy daemons on hosts with the ``_no_schedule`` label; see :ref:`cephadm-special-host-labels`.
 
+  .. note::
+     The **apply** command can be confusing. For this reason, we recommend using
+     YAML specifications.
+
+     Each ``ceph orch apply <service-name>`` command supersedes the one before it.
+     If you do not use the proper syntax, you will clobber your work
+     as you go.
+
+     For example:
+
+     .. prompt:: bash #
+
+          ceph orch apply mon host1
+          ceph orch apply mon host2
+          ceph orch apply mon host3
+
+     This results in only one host having a monitor applied to it: host 3.
+
+     (The first command creates a monitor on host1. Then the second command
+     clobbers the monitor on host1 and creates a monitor on host2. Then the
+     third command clobbers the monitor on host2 and creates a monitor on
+     host3. In this scenario, at this point, there is a monitor ONLY on
+     host3.)
+
+     To make certain that a monitor is applied to each of these three hosts,
+     run a command like this:
+
+     .. prompt:: bash #
+
+       ceph orch apply mon "host1,host2,host3"
+
+     There is another way to apply monitors to multiple hosts: a ``yaml`` file
+     can be used. Instead of using the "ceph orch apply mon" commands, run a
+     command of this form:
+
+     .. prompt:: bash #
+
+        ceph orch apply -i file.yaml
+
+     Here is a sample **file.yaml** file::
+
+          service_type: mon
+          placement:
+            hosts:
+             - host1
+             - host2
+             - host3
+
 Explicit placements
 -------------------
 
@@ -192,7 +240,39 @@ and ``=name`` specifies the name of the new monitor.
 Placement by labels
 -------------------
 
-Daemons can be explicitly placed on hosts that match a specific label:
+Daemon placement can be limited to hosts that match a specific label. To set
+a label ``mylabel`` to the appropriate hosts, run this command:
+
+  .. prompt:: bash #
+
+    ceph orch host label add *<hostname>* mylabel
+
+  To view the current hosts and labels, run this command:
+
+  .. prompt:: bash #
+
+    ceph orch host ls
+
+  For example:
+
+  .. prompt:: bash #
+
+    ceph orch host label add host1 mylabel
+    ceph orch host label add host2 mylabel
+    ceph orch host label add host3 mylabel
+    ceph orch host ls
+
+  .. code-block:: bash
+
+    HOST   ADDR   LABELS  STATUS
+    host1         mylabel
+    host2         mylabel
+    host3         mylabel
+    host4
+    host5
+
+Now, Tell cephadm to deploy daemons based on the label by running
+this command:
 
    .. prompt:: bash #
 
@@ -240,8 +320,8 @@ Or in YAML:
       host_pattern: "*"
 
 
-Setting a limit
----------------
+Changing the number of monitors
+-------------------------------
 
 By specifying ``count``, only the number of daemons specified will be created:
 
@@ -402,7 +482,17 @@ To disable the automatic management of dameons, set ``unmanaged=True`` in the
 Deploying a daemon on a host manually
 -------------------------------------
 
-To manually deploy a daemon on a host, run a command of the following form:
+.. note::
+
+  This workflow has a very limited use case and should only be used
+  in rare circumstances. 
+
+To manually deploy a daemon on a host, follow these steps:
+
+Modify the service spec for a service by getting the 
+existing spec, adding ``unmanaged: true``, and applying the modified spec. 
+
+Then manually deploy the daemon using the following:
 
    .. prompt:: bash #
 
@@ -413,6 +503,13 @@ For example :
    .. prompt:: bash #
 
      ceph orch daemon add mgr --placement=my_host
+
+.. note:: 
+
+  Removing ``unmanaged: true`` from the service spec will 
+  enable the reconciliation loop for this service and will
+  potentially lead to the removal of the daemon, depending
+  on the placement spec. 
 
 Removing a daemon from a host manually
 --------------------------------------
