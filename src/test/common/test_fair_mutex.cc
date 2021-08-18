@@ -3,7 +3,7 @@
 #include <array>
 #include <mutex>
 #include <numeric>
-#include <thread>
+#include <future>
 #include <gtest/gtest.h>
 #include "common/fair_mutex.h"
 
@@ -61,11 +61,8 @@ TEST(FairMutex, fair)
       };
     }
   };
-  std::array<std::thread, NR_TEAMS> teams;
+  std::array<std::future<void>, NR_TEAMS> completed;
   for (int team = 0; team < NR_TEAMS; team++) {
-    teams[team] = std::thread(play, team);
-  }
-  for (auto& team : teams) {
-    team.join();
+    completed[team] = std::async(std::launch::async, play, team);
   }
 }
