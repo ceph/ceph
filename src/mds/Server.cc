@@ -588,8 +588,8 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
         dout(2) << css->strv() << dendl;
       };
 
-      auto send_reject_message = [this, &session, &log_session_status](std::string_view err_str) {
-	auto m = make_message<MClientSession>(CEPH_SESSION_REJECT);
+      auto send_reject_message = [this, &session, &log_session_status](std::string_view err_str, unsigned flags=0) {
+	auto m = make_message<MClientSession>(CEPH_SESSION_REJECT, 0, flags);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
 	  m->metadata["error_string"] = err_str;
 	mds->send_message_client(m, session);
@@ -603,6 +603,8 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 
       if (blacklisted) {
 	dout(10) << "rejecting blacklisted client " << addr << dendl;
+        unsigned flags = 0;
+	flags |= MClientSession::SESSION_BLOCKLISTED;
 	send_reject_message("blacklisted");
 	session->clear();
 	break;

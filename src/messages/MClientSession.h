@@ -20,12 +20,14 @@
 
 class MClientSession : public SafeMessage {
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
   ceph_mds_session_head head;
+  static constexpr unsigned SESSION_BLOCKLISTED = (1<<0);
 
+  unsigned flags = 0;
   std::map<std::string, std::string> metadata;
   feature_bitset_t supported_features;
   metric_spec_t metric_spec;
@@ -38,8 +40,9 @@ public:
 
 protected:
   MClientSession() : SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} { }
-  MClientSession(int o, version_t s=0) : 
-    SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
+  MClientSession(int o, version_t s=0, unsigned msg_flags=0) :
+    SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION},
+    flags(msg_flags) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
@@ -74,6 +77,9 @@ public:
     if (header.version >= 4) {
       decode(metric_spec, p);
     }
+    if (header.version >= 5) {
+      decode(flags, p);
+    }
   }
   void encode_payload(uint64_t features) override { 
     using ceph::encode;
@@ -88,6 +94,7 @@ public:
       encode(metadata, payload);
       encode(supported_features, payload);
       encode(metric_spec, payload);
+      encode(flags, payload);
     }
   }
 private:
