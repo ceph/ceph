@@ -1441,11 +1441,13 @@ Then run the following:
             addr=addr,
             error_ok=True, no_fsid=True)
         if code:
+            msg = 'check-host failed:\n' + '\n'.join(err)
             # err will contain stdout and stderr, so we filter on the message text to
             # only show the errors
             errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
-            raise OrchestratorError('Host %s (%s) failed check(s): %s' % (
-                host, addr, errors))
+            if errors:
+                msg = f'Host {host} ({addr}) failed check(s): {errors}'
+            raise OrchestratorError(msg)
         return ip_addr
 
     def _add_host(self, spec):
