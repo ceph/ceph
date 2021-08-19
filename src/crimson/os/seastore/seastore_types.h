@@ -581,6 +581,10 @@ public:
     return depth;
   }
 
+  void set_depth(depth_t ndepth) {
+    depth = ndepth;
+  }
+
   void adjust_addrs_from_base(paddr_t base) {
     paddr_t _root_addr = root_addr;
     if (_root_addr.is_relative()) {
