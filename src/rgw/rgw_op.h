@@ -42,8 +42,8 @@
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_putobj.h"
-#include "rgw_multi.h"
 #include "rgw_sal.h"
+#include "rgw_compression_types.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -63,6 +63,7 @@ using ceph::crypto::SHA1;
 struct req_state;
 class RGWOp;
 class RGWRados;
+class RGWMultiCompleteUpload;
 
 
 namespace rgw {
@@ -2319,10 +2320,6 @@ public:
 }; /* RGWRMAttrs */
 
 class RGWGetObjLayout : public RGWOp {
-protected:
-  RGWObjManifest *manifest{nullptr};
-  rgw_raw_obj head_obj;
-
 public:
   RGWGetObjLayout() {
   }

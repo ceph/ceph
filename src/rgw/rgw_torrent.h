@@ -11,7 +11,6 @@
 
 #include "common/ceph_time.h"
 
-#include "rgw_rados.h"
 #include "rgw_common.h"
 
 using ceph::crypto::SHA1;

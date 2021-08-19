@@ -149,7 +149,7 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGW
   return raw_obj;
 }
 
-rgw_raw_obj rgw_obj_select::get_raw_obj(rgw::sal::Store* store) const
+rgw_raw_obj rgw_obj_select::get_raw_obj(rgw::sal::RadosStore* store) const
 {
   if (!is_raw) {
     rgw_raw_obj r;
@@ -5106,7 +5106,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       result.version_id = instance;
     }
 
-    BucketShard *bs;
+    BucketShard *bs = nullptr;
     int r = target->get_bucket_shard(&bs, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 5) << "failed to get BucketShard object: r=" << r << dendl;
@@ -5308,7 +5308,8 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, rgw::sal::Store* st
   if (mi != manifest.obj_end(dpp)) {
     if (manifest.has_tail()) // first object usually points at the head, let's skip to a more unique part
       ++mi;
-    tag = mi.get_location().get_raw_obj(store).oid;
+    rgw::sal::RadosStore* rstore = dynamic_cast<rgw::sal::RadosStore*>(store);
+    tag = mi.get_location().get_raw_obj(rstore).oid;
     tag.append("_");
   }
 
@@ -6069,7 +6070,7 @@ int RGWRados::Object::Read::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_
 int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, BucketShard **pbs, std::function<int(BucketShard *)> call)
 {
   RGWRados *store = target->get_store();
-  BucketShard *bs;
+  BucketShard *bs = nullptr;
   int r;
 
 #define NUM_RESHARD_RETRIES 10
@@ -6203,7 +6204,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
     return 0;
   }
   RGWRados *store = target->get_store();
-  BucketShard *bs;
+  BucketShard *bs = nullptr;
 
   int ret = get_bucket_shard(&bs, dpp);
   if (ret < 0) {

@@ -148,13 +148,6 @@ struct RGWUsageBatch {
   }
 };
 
-class RGWGetDataCB {
-public:
-  virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) = 0;
-  RGWGetDataCB() {}
-  virtual ~RGWGetDataCB() {}
-};
-
 struct RGWCloneRangeInfo {
   rgw_obj src;
   off_t src_ofs;

@@ -737,31 +737,6 @@ namespace rgw::sal {
     return 0;
   }
 
-  std::unique_ptr<GCChain> DBStore::get_gc_chain(rgw::sal::Object* obj)
-  {
-    return 0;
-  }
-
-  int DBStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
-  {
-    return 0;
-  }
-
-  int DBStore::delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio)
-  {
-    return 0;
-  }
-
-  void DBStore::get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj)
-  {
-    return;
-  }
-
-  int DBStore::get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t* chunk_size)
-  {
-    return 0;
-  }
-
   int DBStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
   {
     return 0;
