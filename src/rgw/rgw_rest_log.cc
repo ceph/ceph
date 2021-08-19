@@ -1012,8 +1012,6 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       this,
       static_cast<rgw::sal::RadosStore*>(store),
       pipe,
-      bucket->get_info(),
-      nullptr,
       status.sync_status.incremental_gen,
       &status.inc_status);
     if (op_ret < 0) {
@@ -1076,7 +1074,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     current_status.resize(status.sync_status.shards_done_with_gen.size());
     int r = rgw_read_bucket_inc_sync_status(this, static_cast<rgw::sal::RadosStore*>(store),
-					    pipe, *pinfo, &bucket->get_info(), status.sync_status.incremental_gen, &current_status);
+					    pipe, status.sync_status.incremental_gen, &current_status);
     if (r < 0) {
       ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_inc_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
       op_ret = r;

@@ -779,8 +779,6 @@ int rgw_read_bucket_full_sync_status(const DoutPrefixProvider *dpp,
 int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
                                     rgw::sal::RadosStore *store,
                                     const rgw_sync_bucket_pipe& pipe,
-                                    const RGWBucketInfo& dest_bucket_info,
-                                    const RGWBucketInfo *psource_bucket_info,
                                     uint64_t gen,
                                     std::vector<rgw_bucket_shard_sync_info> *status);
 
