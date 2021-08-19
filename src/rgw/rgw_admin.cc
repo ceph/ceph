@@ -2536,7 +2536,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
 
   std::vector<rgw_bucket_shard_sync_info> status;
   status.resize(full_status.shards_done_with_gen.size());
-  r = rgw_read_bucket_inc_sync_status(dpp, store, pipe, bucket_info, &source_bucket->get_info(), full_status.incremental_gen,  &status);
+  r = rgw_read_bucket_inc_sync_status(dpp, store, pipe, full_status.incremental_gen, &status);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read bucket incremental sync status: " << cpp_strerror(r) << dendl;
     return r;
