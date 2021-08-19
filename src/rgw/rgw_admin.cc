@@ -2514,35 +2514,53 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
 
   pipe.dest.bucket = bucket_info.bucket;
 
+  uint64_t gen = 0;
+  std::vector<rgw_bucket_shard_sync_info> shard_status;
+
+  // check for full sync status
   rgw_bucket_sync_status full_status;
   r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, null_yield);
-  if (r < 0) {
+  if (r >= 0) {
+    if (full_status.state == BucketSyncState::Init) {
+      out << indented{width} << "init: bucket sync has not started\n";
+      return 0;
+    }
+    if (full_status.state == BucketSyncState::Stopped) {
+      out << indented{width} << "stopped: bucket sync is disabled\n";
+      return 0;
+    }
+    if (full_status.state == BucketSyncState::Full) {
+      out << indented{width} << "full sync: " << full_status.full.count << " objects completed\n";
+      return 0;
+    }
+    gen = full_status.incremental_gen;
+    shard_status.resize(full_status.shards_done_with_gen.size());
+  } else if (r == -ENOENT) {
+    // no full status, but there may be per-shard status from before upgrade
+    const auto& log = source_bucket->get_info().layout.logs.front();
+    if (log.gen > 0) {
+      // this isn't the backward-compatible case, so we just haven't started yet
+      out << indented{width} << "init: bucket sync has not started\n";
+      return 0;
+    }
+    if (log.layout.type != rgw::BucketLogType::InIndex) {
+      ldpp_dout(dpp, -1) << "unrecognized log layout type " << log.layout.type << dendl;
+      return -EINVAL;
+    }
+    // use shard count from our log gen=0
+    shard_status.resize(log.layout.in_index.layout.num_shards);
+  } else {
     lderr(store->ctx()) << "failed to read bucket full sync status: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  if (full_status.state == BucketSyncState::Init) {
-    out << indented{width} << "init: bucket sync has not started\n";
-    return 0;
-  }
-  if (full_status.state == BucketSyncState::Stopped) {
-    out << indented{width} << "stopped: bucket sync is disabled\n";
-    return 0;
-  }
-  if (full_status.state == BucketSyncState::Full) {
-    out << indented{width} << "full sync: " << full_status.full.count << " objects completed\n";
-    return 0;
-  }
-
-  std::vector<rgw_bucket_shard_sync_info> status;
-  status.resize(full_status.shards_done_with_gen.size());
-  r = rgw_read_bucket_inc_sync_status(dpp, store, pipe, full_status.incremental_gen, &status);
+  r = rgw_read_bucket_inc_sync_status(dpp, store, pipe, gen, &shard_status);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read bucket incremental sync status: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  const size_t total_shards = status.size();
+  const size_t total_shards = shard_status.size();
 
   out << indented{width} << "incremental sync on " << total_shards << " shards\n";
 
@@ -2558,7 +2576,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   std::set<int> shards_behind;
   for (auto& r : remote_markers.get()) {
     auto shard_id = r.first;
-    auto& m = status[shard_id];
+    auto& m = shard_status[shard_id];
     if (r.second.empty()) {
       continue; // empty bucket index shard
     }
