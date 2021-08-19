@@ -10,7 +10,7 @@ if(NOT CEPH_BUILD_VIRTUALENV)
   set(CEPH_BUILD_VIRTUALENV ${CMAKE_BINARY_DIR})
 endif()
 
-if(WITH_GRAFANA)
+if(WITH_GRAFANA AND WITH_GRAFANA_TESTS)
   include(AddCephTest)
   add_tox_test(grafana TOX_ENVS grafonnet-check)
   set(ver 0.1.0)

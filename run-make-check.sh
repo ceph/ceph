@@ -88,6 +88,7 @@ function main() {
     cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
     cmake_opts+=" -DWITH_FIO=ON"
     cmake_opts+=" -DWITH_CEPHFS_SHELL=ON"
+    cmake_opts+=" -DWITH_GRAFANA_TESTS=ON"
     cmake_opts+=" -DWITH_GRAFANA=ON"
     cmake_opts+=" -DWITH_SPDK=ON"
     if [ $WITH_SEASTAR ]; then
