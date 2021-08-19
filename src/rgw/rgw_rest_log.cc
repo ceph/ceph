@@ -996,17 +996,15 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     ldpp_dout(this, 20) << "RGWOp_BILog_Status::execute(optional_yield y): getting sync status for pipe=" << pipe << dendl;
 
-    if (version > 1) {
-      op_ret = rgw_read_bucket_full_sync_status(
-	this,
-	static_cast<rgw::sal::RadosStore*>(store),
-	pipe,
-	&status.sync_status,
-	s->yield);
-      if (op_ret < 0) {
-	ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_full_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
-	return;
-      }
+    op_ret = rgw_read_bucket_full_sync_status(
+      this,
+      static_cast<rgw::sal::RadosStore*>(store),
+      pipe,
+      &status.sync_status,
+      s->yield);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_full_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+      return;
     }
 
     op_ret = rgw_read_bucket_inc_sync_status(
@@ -1064,18 +1062,17 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       pipe.dest.bucket = pinfo->bucket;
     }
 
-    if (version > 1) {
-      op_ret = rgw_read_bucket_full_sync_status(
-	this,
-	static_cast<rgw::sal::RadosStore*>(store),
-	pipe,
-	&status.sync_status,
-	s->yield);
-      if (op_ret < 0) {
-	ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_full_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
-	return;
-      }
+    op_ret = rgw_read_bucket_full_sync_status(
+      this,
+      static_cast<rgw::sal::RadosStore*>(store),
+      pipe,
+      &status.sync_status,
+      s->yield);
+    if (op_ret < 0) {
+      ldpp_dout(this, -1) << "ERROR: rgw_read_bucket_full_sync_status() on pipe=" << pipe << " returned ret=" << op_ret << dendl;
+      return;
     }
+
     int r = rgw_read_bucket_inc_sync_status(this, static_cast<rgw::sal::RadosStore*>(store),
 					    pipe, *pinfo, &bucket->get_info(), status.sync_status.incremental_gen, &current_status);
     if (r < 0) {
