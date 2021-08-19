@@ -2489,11 +2489,11 @@ def get_container(ctx: CephadmContext,
     entrypoint: str = ''
     name: str = ''
     ceph_args: List[str] = []
-    envs: List[str] = [
-        'TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728',
-    ]
+    envs: List[str] = []
     host_network: bool = True
 
+    if daemon_type in Ceph.daemons:
+        envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
     if container_args is None:
         container_args = []
     if daemon_type in ['mon', 'osd']:
