@@ -247,6 +247,17 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
   }
 }
 
+void rgw_fix_etag(CephContext *cct, map<std::string, bufferlist> *attrset)
+{
+  if (!attrset)
+    return;
+  map<string, bufferlist>::iterator iter;
+  iter = attrset->find(RGW_ATTR_ETAG);
+  if (iter == attrset->end())
+    return;
+  rgw_fix_etag(cct, iter->second);
+}
+
 RGWDataAccess::RGWDataAccess(rgw::sal::Driver* _driver) : driver(_driver)
 {
 }
@@ -421,4 +432,63 @@ void rgw_complete_aio_completion(librados::AioCompletion* c, int r) {
   auto pc = c->pc;
   librados::CB_AioCompleteAndSafe cb(pc);
   cb(r);
+}
+
+void rgw_fix_etag(CephContext *cct, bufferlist& etagbl)
+{
+  auto l { etagbl.length() };
+  if (l <= CEPH_CRYPTO_MD5_DIGESTSIZE*2) {
+    return;
+  }
+  if (l > CEPH_CRYPTO_MD5_DIGESTSIZE*2+1 &&
+	etagbl[CEPH_CRYPTO_MD5_DIGESTSIZE*2] == '-' &&
+	std::isdigit(etagbl[CEPH_CRYPTO_MD5_DIGESTSIZE*2+1])) {
+    while ((--l)) {
+      if (std::isdigit(etagbl[l])) {
+        break;
+      }
+    }
+    ++l;
+    if (l == etagbl.length()) {
+      return;
+    }
+  } else {
+      l = CEPH_CRYPTO_MD5_DIGESTSIZE*2;
+  }
+  std::string etag = etagbl.to_str();
+  if (l < etagbl.length() && etagbl[l]) {
+    ldout(cct, 2) << "trimming junk from etag <" << etag << ">" << dendl;
+  }
+  etagbl.clear();
+  etagbl.append(etag.c_str(), l);
+  return;
+}
+
+void rgw_fix_etag(CephContext *cct, std::string& etag)
+{
+  auto l { etag.length() };
+  if (l <= CEPH_CRYPTO_MD5_DIGESTSIZE*2) {
+    return;
+  }
+  if (l > CEPH_CRYPTO_MD5_DIGESTSIZE*2+1 &&
+	etag[CEPH_CRYPTO_MD5_DIGESTSIZE*2] == '-' &&
+	std::isdigit(etag[CEPH_CRYPTO_MD5_DIGESTSIZE*2+1])) {
+    while ((--l)) {
+      if (std::isdigit(etag[l])) {
+        break;
+      }
+    }
+    ++l;
+    if (l == etag.length()) {
+      return;
+    }
+  }
+  else {
+    l = CEPH_CRYPTO_MD5_DIGESTSIZE*2;
+  }
+  if (l < etag.length() && etag[l]) {
+    ldout(cct, 2) << "trimming junk from etag <" << etag << ">" << dendl;
+  }
+  etag.resize(l);
+  return;
 }

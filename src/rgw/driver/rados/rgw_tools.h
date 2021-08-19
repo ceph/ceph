@@ -88,6 +88,10 @@ const char *rgw_find_mime_by_ext(std::string& ext);
 void rgw_filter_attrset(std::map<std::string, bufferlist>& unfiltered_attrset, const std::string& check_prefix,
                         std::map<std::string, bufferlist> *attrset);
 
+void rgw_fix_etag(CephContext *, std::map<std::string, bufferlist> *);
+void rgw_fix_etag(CephContext *cct, bufferlist& etagbl);
+void rgw_fix_etag(CephContext *cct, std::string& etag);
+
 /// indicates whether the current thread is in boost::asio::io_context::run(),
 /// used to log warnings if synchronous librados calls are made
 extern thread_local bool is_asio_thread;
