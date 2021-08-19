@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_etag_verifier.h"
+#include "rgw_obj_manifest.h"
 
 #define dout_subsys ceph_subsys_rgw
 
