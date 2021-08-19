@@ -509,6 +509,7 @@ class DefaultRemover():
 
     def remove_device_sets(self) -> str:
         self.to_remove: Dict[str, int] = {}
+        self.pvc_to_remove: List[str] = []
         for pod in self.pods.items:
             if (
                 hasattr(pod, 'metadata') 
@@ -520,6 +521,7 @@ class DefaultRemover():
                     self.to_remove[pod.metadata.labels['ceph.rook.io/DeviceSet']] = self.to_remove[pod.metadata.labels['ceph.rook.io/DeviceSet']] + 1
                 else:
                     self.to_remove[pod.metadata.labels['ceph.rook.io/DeviceSet']] = 1
+                self.pvc_to_remove.append(pod.metadata.labels['ceph.rook.io/pvc'])
         def _remove_osds(current_cluster, new_cluster):
             # type: (ccl.CephCluster, ccl.CephCluster) -> ccl.CephCluster
             assert new_cluster.spec.storage is not None and new_cluster.spec.storage.storageClassDeviceSets is not None
@@ -575,7 +577,7 @@ class DefaultRemover():
 
     def clean_up_prepare_jobs_and_pvc(self) -> None:
         for job in self.jobs.items:
-            if job.metadata.labels['app'] == 'rook-ceph-osd-prepare' and job.metadata.labels['ceph.rook.io/DeviceSet'] in self.to_remove:
+            if job.metadata.labels['app'] == 'rook-ceph-osd-prepare' and job.metadata.labels['ceph.rook.io/pvc'] in self.pvc_to_remove:
                 self.batchV1_api.delete_namespaced_job(name=job.metadata.name, namespace='rook-ceph', propagation_policy='Foreground')
                 self.coreV1_api.delete_namespaced_persistent_volume_claim(name=job.metadata.labels['ceph.rook.io/pvc'], namespace='rook-ceph', propagation_policy='Foreground')
 
