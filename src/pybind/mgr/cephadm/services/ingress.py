@@ -5,6 +5,7 @@ import string
 from typing import List, Dict, Any, Tuple, cast, Optional
 
 from ceph.deployment.service_spec import IngressSpec
+from mgr_util import build_url
 from cephadm.utils import resolve_ip
 from orchestrator import OrchestratorError
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
@@ -226,7 +227,7 @@ class IngressService(CephService):
                 if d.daemon_type == 'haproxy':
                     assert d.ports
                     port = d.ports[1]   # monitoring port
-                    script = f'/usr/bin/curl http://{d.ip or "localhost"}:{port}/health'
+                    script = f'/usr/bin/curl {build_url(scheme="http", host=d.ip or "localhost", port=port)}/health'
         assert script
 
         # set state. first host in placement is master all others backups
