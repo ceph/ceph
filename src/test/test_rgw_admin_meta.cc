@@ -894,8 +894,7 @@ TEST(TestRGWAdmin, meta_delete){
 }
 
 int main(int argc, char *argv[]){
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,

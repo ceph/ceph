@@ -998,8 +998,7 @@ int construct_devpath_if_missing(Config* cfg)
 boost::intrusive_ptr<CephContext> do_global_init(
   int argc, const char *argv[], Config *cfg)
 {
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   code_environment_t code_env;
   int flags;
@@ -1593,10 +1592,8 @@ static int parse_args(std::vector<const char*>& args,
 
 static int rbd_wnbd(int argc, const char *argv[])
 {
-  int r;
   Config cfg;
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   // Avoid using dout before calling "do_global_init"
   if (args.empty()) {
@@ -1605,7 +1602,7 @@ static int rbd_wnbd(int argc, const char *argv[])
   }
 
   std::ostringstream err_msg;
-  r = parse_args(args, &err_msg, &cmd, &cfg);
+  int r = parse_args(args, &err_msg, &cmd, &cfg);
   if (r == HELP_INFO) {
     usage();
     return 0;

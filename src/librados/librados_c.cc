@@ -317,8 +317,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_conf_parse_argv)(
   }
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   auto& conf = client->cct->_conf;
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   int ret = conf.parse_argv(args);
   if (ret) {
     tracepoint(librados, rados_conf_parse_argv_exit, ret);

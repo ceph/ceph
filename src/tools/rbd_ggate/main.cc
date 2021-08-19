@@ -87,9 +87,7 @@ static int do_map(int argc, const char *argv[])
 
   Preforker forker;
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON,
                          CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
@@ -402,9 +400,7 @@ int main(int argc, const char *argv[]) {
     List
   } cmd = None;
 
-  vector<const char*> args;
-
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -418,9 +414,8 @@ int main(int argc, const char *argv[]) {
 
   std::string format;
   bool pretty_format = false;
-  std::vector<const char*>::iterator i;
 
-  for (i = args.begin(); i != args.end(); ) {
+  for (auto i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
       return 0;
