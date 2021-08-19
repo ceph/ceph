@@ -41,7 +41,7 @@ private:
 
 namespace crimson::interruptible {
 template
-thread_local InterruptCondRef<TestInterruptCondition>
+thread_local interrupt_cond_t<TestInterruptCondition>
 interrupt_cond<TestInterruptCondition>;
 }
 
@@ -230,6 +230,30 @@ TEST_F(seastar_test_suite_t, expand_errorated_value)
 	});
       });
     ret.unsafe_get0();
+  });
+}
+
+TEST_F(seastar_test_suite_t, interruptible_async)
+{
+  using interruptor =
+    interruptible::interruptor<TestInterruptCondition>;
+
+  run_async([] {
+    interruptor::with_interruption([] {
+      auto fut = interruptor::async([] {
+	  interruptor::make_interruptible(
+	    seastar::sleep(std::chrono::milliseconds(10))).get();
+	ceph_assert(interruptible::interrupt_cond<
+	  TestInterruptCondition>.interrupt_cond);
+	ceph_assert(interruptible::interrupt_cond<
+	  TestInterruptCondition>.ref_count == 1);
+      });
+      ceph_assert(interruptible::interrupt_cond<
+	TestInterruptCondition>.interrupt_cond);
+      ceph_assert(interruptible::interrupt_cond<
+	TestInterruptCondition>.ref_count == 1);
+      return fut;
+    }, [](std::exception_ptr) {}, false).get0();
   });
 }
 
