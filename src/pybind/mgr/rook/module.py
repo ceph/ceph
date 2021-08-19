@@ -457,6 +457,24 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def remove_daemons(self, names: List[str]) -> List[str]:
         return self.rook_cluster.remove_pods(names)
+
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> OrchResult[List[str]]:
+        result_list = []
+        all_hosts = raise_if_exception(self.get_hosts())
+        for drive_group in specs:
+            matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts)
+
+            if not self.rook_cluster.node_exists(matching_hosts[0]):
+                raise RuntimeError("Node '{0}' is not in the Kubernetes "
+                               "cluster".format(matching_hosts))
+
+            # Validate whether cluster CRD can accept individual OSD
+            # creations (i.e. not useAllDevices)
+            if not self.rook_cluster.can_create_osd():
+                raise RuntimeError("Rook cluster configuration does not "
+                                "support OSD creation.")
+            result_list.append(self.rook_cluster.add_osds(drive_group, matching_hosts))
+        return OrchResult(result_list)
     """
     @handle_orch_error
     def create_osds(self, drive_group):
