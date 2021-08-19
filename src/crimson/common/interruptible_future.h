@@ -8,7 +8,10 @@
 #include <seastar/core/when_all.hh>
 #include <seastar/core/thread.hh>
 
+#include "crimson/common/log.h"
 #include "crimson/common/errorator.h"
+
+#define INTR_FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_osd).debug(FMT_MSG, ##__VA_ARGS__)
 
 // The interrupt condition generally works this way:
 //
@@ -120,6 +123,14 @@ auto call_with_interruption_impl(
   if (interrupt_condition) {
     auto [interrupt, fut] = interrupt_condition->template may_interrupt<
       typename futurator_t::type>();
+    INTR_FUT_DEBUG(
+      "call_with_interruption_impl: may_interrupt: {}, "
+      "local interrupt_condintion: {}, "
+      "global interrupt_cond: {},{}",
+      interrupt,
+      (void*)interrupt_condition.get(),
+      (void*)interrupt_cond<InterruptCond>.get(),
+      typeid(InterruptCond).name());
     if (interrupt) {
       return std::move(*fut);
     }
@@ -136,8 +147,18 @@ auto call_with_interruption_impl(
       std::forward<Args>(args)...);
   // Clear the global "interrupt_cond" to prevent it from interfering other
   // continuation chains.
-  if (set_int_cond && interrupt_cond<InterruptCond>)
+  if (set_int_cond && interrupt_cond<InterruptCond>) {
+    INTR_FUT_DEBUG(
+      "call_with_interruption_impl clearing interrupt_cond: {},{}",
+      (void*)interrupt_cond<InterruptCond>.get(),
+      typeid(InterruptCond).name());
     interrupt_cond<InterruptCond>.release();
+  } else {
+    INTR_FUT_DEBUG(
+      "call_with_interruption_impl end without clearing interrupt_cond: {},{}",
+      (void*)interrupt_cond<InterruptCond>.get(),
+      typeid(InterruptCond).name());
+  }
   return fut;
 }
 
@@ -224,6 +245,13 @@ Result non_futurized_call_with_interruption(
       std::rethrow_exception(fut->get_exception());
     }
     set_int_cond = true;
+    INTR_FUT_DEBUG(
+      "non_futurized_call_with_interruption may_interrupt: {}, "
+      "interrupt_condition: {}, interrupt_cond: {},{}",
+      interrupt,
+      (void*)interrupt_condition.get(),
+      (void*)interrupt_cond<InterruptCond>.get(),
+      typeid(InterruptCond).name());
     interrupt_cond<InterruptCond> = std::move(interrupt_condition);
   }
   try {
@@ -232,20 +260,50 @@ Result non_futurized_call_with_interruption(
 
       // Clear the global "interrupt_cond" to prevent it from interfering other
       // continuation chains.
-      if (set_int_cond && interrupt_cond<InterruptCond>)
+      if (set_int_cond && interrupt_cond<InterruptCond>) {
+	INTR_FUT_DEBUG(
+	  "non_futurized_call_with_interruption clearing interrupt_cond: {},{}",
+	  (void*)interrupt_cond<InterruptCond>.get(),
+	  typeid(InterruptCond).name());
 	interrupt_cond<InterruptCond>.release();
+      } else {
+	INTR_FUT_DEBUG(
+	  "non_futurized_call_with_interruption end without clearing interrupt_cond: {},{}",
+	  (void*)interrupt_cond<InterruptCond>.get(),
+	  typeid(InterruptCond).name());
+      }
       return;
     } else {
       auto&& err = std::invoke(std::forward<Func>(func), std::forward<T>(args)...);
-      if (set_int_cond && interrupt_cond<InterruptCond>)
+      if (set_int_cond && interrupt_cond<InterruptCond>) {
+	INTR_FUT_DEBUG(
+	  "non_futurized_call_with_interruption clearing interrupt_cond: {},{}",
+	  (void*)interrupt_cond<InterruptCond>.get(),
+	  typeid(InterruptCond).name());
 	interrupt_cond<InterruptCond>.release();
+      } else {
+	INTR_FUT_DEBUG(
+	  "non_futurized_call_with_interruption end without clearing interrupt_cond: {},{}",
+	  (void*)interrupt_cond<InterruptCond>.get(),
+	  typeid(InterruptCond).name());
+      }
       return std::forward<Result>(err);
     }
   } catch (std::exception& e) {
     // Clear the global "interrupt_cond" to prevent it from interfering other
     // continuation chains.
-    if (set_int_cond && interrupt_cond<InterruptCond>)
+    if (set_int_cond && interrupt_cond<InterruptCond>) {
+      INTR_FUT_DEBUG(
+	"non_futurized_call_with_interruption clearing interrupt_cond: {},{}",
+	(void*)interrupt_cond<InterruptCond>.get(),
+	typeid(InterruptCond).name());
       interrupt_cond<InterruptCond>.release();
+    } else {
+      INTR_FUT_DEBUG(
+	"non_futurized_call_with_interruption end without clearing interrupt_cond: {},{}",
+	(void*)interrupt_cond<InterruptCond>.get(),
+	typeid(InterruptCond).name());
+    }
     throw e;
   }
 }
@@ -351,8 +409,16 @@ public:
     } else {
       // destined to wait!
       auto interruption_condition = interrupt_cond<InterruptCond>;
+      INTR_FUT_DEBUG(
+	"interruptible_future_detail::get() waiting, interrupt_cond: {},{}",
+	(void*)interrupt_cond<InterruptCond>.get(),
+	typeid(InterruptCond).name());
       auto&& value = core_type::get();
       interrupt_cond<InterruptCond> = interruption_condition;
+      INTR_FUT_DEBUG(
+	"interruptible_future_detail::get() got, interrupt_cond: {},{}",
+	(void*)interrupt_cond<InterruptCond>.get(),
+	typeid(InterruptCond).name());
       return std::move(value);
     }
   }
@@ -1056,6 +1122,8 @@ public:
 	    typename... Params>
   static inline auto with_interruption_cond(
     OpFunc&& opfunc, OnInterrupt&& efunc, InterruptCond &&cond, Params&&... params) {
+    INTR_FUT_DEBUG(
+      "with_interruption_cond: interrupt_cond: {}", (void*)interrupt_cond<InterruptCond>.get());
     return internal::call_with_interruption_impl(
       seastar::make_lw_shared<InterruptCond>(std::move(cond)),
       std::forward<OpFunc>(opfunc),
@@ -1358,8 +1426,16 @@ public:
     ceph_assert(interrupt_cond<InterruptCond>);
     auto interruption_condition = interrupt_cond<InterruptCond>;
     interrupt_cond<InterruptCond>.release();
+    INTR_FUT_DEBUG(
+      "interruptible_future_detail::yield() yielding out, interrupt_cond {},{} cleared",
+      (void*)interruption_condition.get(),
+      typeid(InterruptCond).name());
     seastar::thread::yield();
     interrupt_cond<InterruptCond> = interruption_condition;
+    INTR_FUT_DEBUG(
+      "interruptible_future_detail::yield() yield back, interrupt_cond: {},{}",
+      (void*)interrupt_cond<InterruptCond>.get(),
+      typeid(InterruptCond).name());
   }
 
   static void maybe_yield() {
@@ -1367,8 +1443,16 @@ public:
     if (seastar::thread::should_yield()) {
       auto interruption_condition = interrupt_cond<InterruptCond>;
       interrupt_cond<InterruptCond>.release();
+      INTR_FUT_DEBUG(
+	"interruptible_future_detail::may_yield() yielding out, interrupt_cond {},{} cleared",
+	(void*)interruption_condition.get(),
+	typeid(InterruptCond).name());
       seastar::thread::yield();
       interrupt_cond<InterruptCond> = interruption_condition;
+      INTR_FUT_DEBUG(
+	"interruptible_future_detail::may_yield() yield back, interrupt_cond: {},{}",
+	(void*)interrupt_cond<InterruptCond>.get(),
+	typeid(InterruptCond).name());
     }
   }
 };
