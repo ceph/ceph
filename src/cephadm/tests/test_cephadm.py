@@ -1460,4 +1460,21 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
             assert c.old_cname == 'ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.something'
 
 
+class TestCheckHost:
 
+    @mock.patch('cephadm.find_executable', return_value='foo')
+    def test_container_engine(self, find_executable):
+        cmd = ['check-host']
+
+        ctx = cd.CephadmContext()
+        ctx.container_engine = None
+
+        err = r'No container engine binary found'
+        with pytest.raises(cd.Error, match=err):
+            cd.command_check_host(ctx)
+
+        ctx.container_engine = mock_podman()
+        cd.command_check_host(ctx)
+
+        ctx.container_engine = mock_docker()
+        cd.command_check_host(ctx)
