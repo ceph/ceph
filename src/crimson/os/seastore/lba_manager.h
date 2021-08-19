@@ -151,7 +151,7 @@ public:
     scan_mappings_func_t &&f) = 0;
 
   /**
-   * Calls f for each mapped space usage in [begin, end)
+   * Calls f for each mapped space usage
    */
   using scan_mapped_space_iertr = base_iertr::extend_ertr<
     SegmentManager::read_ertr>;
