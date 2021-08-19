@@ -1566,8 +1566,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   Preforker forker;
   NBDServer *server;
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -2152,9 +2151,7 @@ static int rbd_nbd(int argc, const char *argv[])
 {
   int r;
   Config cfg;
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   std::ostringstream err_msg;
   r = parse_args(args, &err_msg, &cfg);
   if (r == HELP_INFO) {

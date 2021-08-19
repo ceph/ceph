@@ -84,8 +84,7 @@ int lookup_trace(ceph_mount_info *client, inodeno_t const ino)
 int main(int argc, const char **argv)
 {
   // Argument handling
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);

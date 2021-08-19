@@ -990,11 +990,10 @@ int get_id_interval(int &first, int &last, string &str)
 
 int main(int argc, const char *argv[])
 {
-  vector<const char*> args;
   our_name = argv[0];
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
-  auto cct = global_init(NULL, args,
+  auto cct = global_init(nullptr, args,
 			 CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 

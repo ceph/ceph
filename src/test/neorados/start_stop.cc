@@ -30,11 +30,10 @@ int main(int argc, char** argv)
 {
   using namespace std::literals;
 
-  std::vector<const char*> args;
-  argv_to_vec(argc, const_cast<const char**>(argv), args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(cct.get());
 
