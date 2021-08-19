@@ -3,6 +3,6 @@
 
 namespace crimson::interruptible {
 template
-thread_local InterruptCondRef<::crimson::os::seastore::TransactionConflictCondition>
+thread_local interrupt_cond_t<::crimson::os::seastore::TransactionConflictCondition>
 interrupt_cond<::crimson::os::seastore::TransactionConflictCondition>;
 }
