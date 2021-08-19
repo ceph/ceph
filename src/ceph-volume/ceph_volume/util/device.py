@@ -150,7 +150,7 @@ class Device(object):
                                             os.readlink(self.abspath))
             # check if we are not a device mapper
             if "dm-" not in temp_path:
-                self.abspath = temp_path;
+                self.abspath = temp_path
         self.sys_api = sys_info.devices.get(self.abspath, {})
         if not self.sys_api:
             # if no device was found check if we are a partition
