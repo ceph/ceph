@@ -73,6 +73,7 @@ struct connection_t {
   const boost::optional<std::string> ca_location;
   const std::string user;
   const std::string password;
+  utime_t timestamp = ceph_clock_now();
 
   // cleanup of all internal connection resource
   // the object can still remain, and internal connection
@@ -294,6 +295,7 @@ public:
   const size_t max_connections;
   const size_t max_inflight;
   const size_t max_queue;
+  const size_t max_idle_time;
 private:
   std::atomic<size_t> connection_count;
   bool stopped;
@@ -310,6 +312,8 @@ private:
   void publish_internal(message_wrapper_t* message) {
     const std::unique_ptr<message_wrapper_t> msg_owner(message);
     auto& conn = message->conn;
+
+    conn->timestamp = ceph_clock_now(); 
 
     if (!conn->is_ok()) {
       // connection had an issue while message was in the queue
@@ -416,6 +420,12 @@ private:
         
         auto& conn = conn_it->second;
 
+        // Checking the connection idlesness
+        if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
+          ldout(conn->cct, 20) << "Time for deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
+          ERASE_AND_CONTINUE(conn_it, connections);
+        }
+
         // try to reconnect the connection if it has an error
         if (!conn->is_ok()) {
           ldout(conn->cct, 10) << "Kafka run: connection status is: " << status_to_string(conn->status) << dendl;
@@ -458,6 +468,7 @@ public:
     max_connections(_max_connections),
     max_inflight(_max_inflight),
     max_queue(_max_queue),
+    max_idle_time(30),
     connection_count(0),
     stopped(false),
     read_timeout_ms(_read_timeout_ms),
