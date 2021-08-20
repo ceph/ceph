@@ -796,14 +796,6 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_jaeger_enable
-  type: bool
-  level: advanced
-  desc: should RGW use jaeger tracing system
-  default: false
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_s3_auth_use_keystone
   type: bool
   level: advanced
