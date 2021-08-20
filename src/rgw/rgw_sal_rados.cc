@@ -594,7 +594,7 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, User* new_user, User* old_
 			   old_user->get_display_name(), *marker, y, dpp);
 }
 
-int RadosBucket::put_instance_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
+int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
 {
   mtime = _mtime;
   return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp);
@@ -631,10 +631,11 @@ int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_q
 					  user_quota, bucket_quota, obj_size, y, check_size_only);
 }
 
-int RadosBucket::set_instance_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y)
+int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
 {
-    return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
-				attrs, &get_info().objv_tracker, y, dpp);
+  Bucket::merge_and_store_attrs(dpp, new_attrs, y);
+  return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
+				new_attrs, &get_info().objv_tracker, y, dpp);
 }
 
 int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime)
