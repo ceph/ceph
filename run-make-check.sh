@@ -40,7 +40,7 @@ function run() {
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     if in_jenkins; then
-        if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure -T Test; then
+        if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure --test-output-size-failed 1024000 -T Test; then
             # do not return failure, as the jenkins publisher will take care of this
             rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
         fi
