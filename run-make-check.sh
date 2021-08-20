@@ -69,6 +69,7 @@ function main() {
         echo "Please fix 'hostname --fqdn', otherwise 'make check' will fail"
         return 1
     fi
+    # uses run-make.sh to install-deps
     FOR_MAKE_CHECK=1 prepare
     local cxx_compiler=g++
     local c_compiler=gcc
@@ -98,7 +99,7 @@ function main() {
     if [ $WITH_PMEM ]; then
         cmake_opts+=" -DWITH_RBD_RWL=ON -DWITH_SYSTEM_PMDK=ON"
     fi
-    configure $cmake_opts $@
+    configure "$cmake_opts" "$@"
     build tests
     echo "make check: successful build on $(git rev-parse HEAD)"
     run
