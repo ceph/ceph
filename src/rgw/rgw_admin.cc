@@ -2574,12 +2574,17 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   }
 
   std::set<int> shards_behind;
-  for (auto& r : remote_markers.get()) {
+  for (const auto& r : remote_markers.get()) {
     auto shard_id = r.first;
-    auto& m = shard_status[shard_id];
     if (r.second.empty()) {
       continue; // empty bucket index shard
     }
+    if (shard_id >= total_shards) {
+      // unexpected shard id. we don't have status for it, so we're behind
+      shards_behind.insert(shard_id);
+      continue;
+    }
+    auto& m = shard_status[shard_id];
     const auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
     if (pos < r.second) {
       shards_behind.insert(shard_id);
