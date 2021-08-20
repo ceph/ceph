@@ -138,7 +138,7 @@ public:
   }
 
   static inline bool raw_obj_to_obj(const rgw_bucket& bucket, const rgw_raw_obj& raw_obj, rgw_obj *obj) {
-    ssize_t pos = raw_obj.oid.find('_');
+    ssize_t pos = raw_obj.oid.find('_', bucket.marker.length());
     if (pos < 0) {
       return false;
     }
