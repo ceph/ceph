@@ -10,6 +10,7 @@
 #elif defined(HAVE_POSIXAIO)
 #include <aio.h>
 #include <sys/event.h>
+#define DEBUG_AIO 1
 #endif
 
 #include <boost/intrusive/list.hpp>
@@ -37,11 +38,19 @@ struct aio_t {
 
   boost::intrusive::list_member_hook<> queue_item;
 
+#if defined(DEBUG_AIO)
+  // Only include CephContect in the code that is specifically build for debugging
+  // It adds 8-bytes to every aio_t block, which is redundant if not debugging
+  CephContext *cct;
+  aio_t(CephContext *c, void *p, int f)
+      : priv(p), fd(f), offset(0), length(0), rval(-1000)
+        , cct(c)
+  {
+  }
+#else
   aio_t(void *p, int f) : priv(p), fd(f), offset(0), length(0), rval(-1000) {
   }
-
-  aio_t(void *p, int f) : priv(p), fd(f), offset(0), length(0), rval(-1000) {
-  }
+#endif
 
   void pwritev(uint64_t _offset, uint64_t len) {
     offset = _offset;
@@ -125,13 +134,15 @@ struct aio_queue_t final : public io_queue_t {
   }
 #elif defined(HAVE_POSIXAIO)
   int ctx;
+#if defined(DEBUG_AIO)
   CephContext* cct;
-
   explicit aio_queue_t(CephContext* cct, unsigned max_iodepth)
     : max_iodepth(max_iodepth),
       ctx(0),
       cct(cct) {
   }
+#endif
+
 #endif
   ~aio_queue_t() final {
     ceph_assert(ctx == 0);
