@@ -143,6 +143,11 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
  *    not required to reserve resources.
  *  - (for a replica) 'StartReplica' or 'StartReplicaNoWait', triggered by an incoming
  *    MOSDRepScrub message.
+ *
+ *  note (20.8.21): originally, AfterRepairScrub was triggering a scrub without waiting
+ *   for replica resources to be acquired. But once replicas started using the
+ *   resource-request to identify and tag the scrub session, this bypass cannot be
+ *   supported anymore.
  */
 struct NotActive : sc::state<NotActive, ScrubMachine> {
   explicit NotActive(my_context ctx);
@@ -150,7 +155,7 @@ struct NotActive : sc::state<NotActive, ScrubMachine> {
   using reactions = mpl::list<sc::transition<StartScrub, ReservingReplicas>,
 			      // a scrubbing that was initiated at recovery completion,
 			      // and requires no resource reservations:
-			      sc::transition<AfterRepairScrub, ActiveScrubbing>,
+			      sc::transition<AfterRepairScrub, ReservingReplicas>,
 			      sc::transition<StartReplica, ReplicaWaitUpdates>,
 			      sc::transition<StartReplicaNoWait, ActiveReplica>>;
 };
