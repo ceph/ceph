@@ -520,6 +520,7 @@ public:
 	return t.root;
       } else {
 	t.add_to_read_set(extent);
+	t.root = extent->cast<RootBlock>();
 	return extent;
       }
     } else {
@@ -545,11 +546,17 @@ public:
     return out;
   }
 
-  /// returns extents with get_dirty_from() < seq
-  using get_next_dirty_extents_ertr = crimson::errorator<>;
-  using get_next_dirty_extents_ret = get_next_dirty_extents_ertr::future<
+  /**
+   * get_next_dirty_extents
+   *
+   * Returns extents with get_dirty_from() < seq and adds to read set of
+   * t.
+   */
+  using get_next_dirty_extents_iertr = base_iertr;
+  using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
     std::vector<CachedExtentRef>>;
   get_next_dirty_extents_ret get_next_dirty_extents(
+    Transaction &t,
     journal_seq_t seq,
     size_t max_bytes);
 
