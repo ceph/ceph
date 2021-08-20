@@ -37,17 +37,20 @@ static int compare_values(Op op, const T& lhs, const T& rhs)
 
 static int compare_values_u64(Op op, uint64_t lhs, const bufferlist& value)
 {
-  try {
-    // decode existing value as rhs
-    uint64_t rhs;
-    auto p = value.cbegin();
-    using ceph::decode;
-    decode(rhs, p);
-    return compare_values(op, lhs, rhs);
-  } catch (const buffer::error&) {
-    // failures to decode existing values are reported as EIO
-    return -EIO;
+  // empty values compare as 0 for backward compat
+  uint64_t rhs = 0;
+  if (value.length()) {
+    try {
+      // decode existing value as rhs
+      auto p = value.cbegin();
+      using ceph::decode;
+      decode(rhs, p);
+    } catch (const buffer::error&) {
+      // failures to decode existing values are reported as EIO
+      return -EIO;
+    }
   }
+  return compare_values(op, lhs, rhs);
 }
 
 static int compare_value(Mode mode, Op op, const bufferlist& input,
