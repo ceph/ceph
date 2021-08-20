@@ -390,6 +390,7 @@ public:
   /**
    *  a special version of PG::scrub(), which:
    *  - is initiated after repair, and
+   * (not true anymore:)
    *  - is not required to allocate local/remote OSD scrub resources
    */
   void recovery_scrub(epoch_t queued, ThreadPool::TPHandle& handle)
