@@ -21,6 +21,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
+#include "rgw_tracer.h"
 
 #include "rgw_rados.h"
 #include "rgw_zone.h"
@@ -51,7 +52,6 @@
 #include "rgw_notify_event_type.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
-#include "rgw_tracer.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -3924,7 +3924,7 @@ void RGWPutObj::execute(optional_yield y)
   rgw_placement_rule *pdest_placement = &s->dest_placement;
 
   if (multipart) {
-    s->trace->SetTag(tracing::UPLOAD_ID, multipart_upload_id);
+    s->trace->SetTag(tracing::rgw::UPLOAD_ID, multipart_upload_id);
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(),
 					 multipart_upload_id);
@@ -6158,7 +6158,7 @@ void RGWInitMultipart::execute(optional_yield y)
   if (op_ret == 0) {
     upload_id = upload->get_upload_id();
   }
-  s->trace->SetTag(tracing::UPLOAD_ID, upload_id);
+  s->trace->SetTag(tracing::rgw::UPLOAD_ID, upload_id);
 
 }
 
@@ -6280,7 +6280,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   upload = store->get_multipart_upload(s->bucket.get(), s->object->get_name(), upload_id);
 
-  s->trace->SetTag(tracing::UPLOAD_ID, upload_id);
+  s->trace->SetTag(tracing::rgw::UPLOAD_ID, upload_id);
 
   RGWCompressionInfo cs_info;
   bool compressed = false;

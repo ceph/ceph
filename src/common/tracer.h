@@ -1,32 +1,94 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef TRACER_H_
-#define TRACER_H_
+#ifndef TRACER_H
+#define TRACER_H
+
+#include "acconfig.h"
+
+#ifdef HAVE_JAEGER
 
 #define SIGNED_RIGHT_SHIFT_IS 1
 #define ARITHMETIC_RIGHT_SHIFT 1
-
 #include <jaegertracing/Tracer.h>
 
 typedef std::unique_ptr<opentracing::Span> jspan;
+namespace tracing {
 
-namespace jaeger_tracing {
+class Tracer {
+ private:
+  const static std::shared_ptr<opentracing::Tracer> noop_tracer;
+  std::shared_ptr<opentracing::Tracer> open_tracer;
 
-  extern std::shared_ptr<opentracing::v3::Tracer> tracer;
+ public:
+  Tracer() = default;
+  Tracer(opentracing::string_view service_name);
 
-  void init_tracer(const char* tracer_name);
+  void init(opentracing::string_view service_name);
+  void shutdown();
 
-  //create a root jspan
-  jspan new_span(const char*);
+  bool is_enabled() const;
+  // creates and returns a new span with `trace_name`
+  // this span represents a trace, since it has no parent.
+  jspan start_trace(opentracing::string_view trace_name);
+  // creates and returns a new span with `span_name` which parent span is `parent_span'
+  jspan add_span(opentracing::string_view span_name, jspan& parent_span);
 
-  //create a child_span used given parent_span
-  jspan child_span(const char*, const jspan&);
+};
 
-  //finish tracing of a single jspan
-  void finish_span(const jspan&);
 
-  //setting tags in sundefined reference topans
-  void set_span_tag(const jspan&, const char*, const char*);
+} // namespace tracing
+
+namespace jaeger_configuration {
+
+inline const jaegertracing::samplers::Config const_sampler("const", 1, "", 0, jaegertracing::samplers::Config::defaultSamplingRefreshInterval());
+
+inline const jaegertracing::reporters::Config reporter_default_config(jaegertracing::reporters::Config::kDefaultQueueSize, jaegertracing::reporters::Config::defaultBufferFlushInterval(), true, jaegertracing::reporters::Config::kDefaultLocalAgentHostPort, "");
+
+inline const jaegertracing::propagation::HeadersConfig headers_config("", "", "", "");
+
+inline const jaegertracing::baggage::RestrictionsConfig baggage_config(false, "", std::chrono::steady_clock::duration());
+
 }
-#endif // TRACER_H_
+
+#else  // !HAVE_JAEGER
+
+#include <string_view>
+
+class Value {
+ public:
+  template <typename T> Value(T val) {}
+};
+
+struct span_stub {
+  template <typename T>
+  void SetTag(std::string_view key, const T& value) const noexcept {}
+  void Log(std::initializer_list<std::pair<std::string_view, Value>> fields) {}
+};
+
+class jspan {
+  span_stub span;
+ public:
+  span_stub& operator*() { return span; }
+  const span_stub& operator*() const { return span; }
+
+  span_stub* operator->() { return &span; }
+  const span_stub* operator->() const { return &span; }
+
+  operator bool() const { return false; }
+};
+
+namespace tracing {
+
+struct Tracer {
+  bool is_enabled() const { return false; }
+  jspan start_trace(std::string_view) { return {}; }
+  jspan add_span(std::string_view, const jspan&) { return {}; }
+  void init(std::string_view service_name) {}
+  void shutdown() {}
+};
+}
+
+#endif // !HAVE_JAEGER
+
+#endif // TRACER_H
