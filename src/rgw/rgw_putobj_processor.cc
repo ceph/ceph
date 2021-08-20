@@ -290,41 +290,38 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 
   head_obj->set_atomic(&obj_ctx);
 
-  std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
+  RGWRados::Object op_target(store->getRados(),
+		  head_obj->get_bucket()->get_info(),
+		  obj_ctx, head_obj->get_obj());
+  RGWRados::Object::Write obj_op(&op_target);
 
   /* some object types shouldn't be versioned, e.g., multipart parts */
-  obj_op->params.versioning_disabled = !head_obj->get_bucket()->versioning_enabled();
-  obj_op->params.data = &first_chunk;
-  obj_op->params.manifest = &manifest;
-  obj_op->params.ptag = &unique_tag; /* use req_id as operation tag */
-  obj_op->params.if_match = if_match;
-  obj_op->params.if_nomatch = if_nomatch;
-  obj_op->params.mtime = mtime;
-  obj_op->params.set_mtime = set_mtime;
-  obj_op->params.owner = ACLOwner(owner);
-  obj_op->params.flags = PUT_OBJ_CREATE;
-  obj_op->params.olh_epoch = olh_epoch;
-  obj_op->params.delete_at = delete_at;
-  obj_op->params.user_data = user_data;
-  obj_op->params.zones_trace = zones_trace;
-  obj_op->params.modify_tail = true;
-  obj_op->params.attrs = &attrs;
+  op_target.set_versioning_disabled(!head_obj->get_bucket()->versioning_enabled());
+  obj_op.meta.data = &first_chunk;
+  obj_op.meta.manifest = &manifest;
+  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
+  obj_op.meta.if_match = if_match;
+  obj_op.meta.if_nomatch = if_nomatch;
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.owner = owner;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.delete_at = delete_at;
+  obj_op.meta.user_data = user_data;
+  obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.modify_tail = true;
 
-  r = obj_op->prepare(y);
+  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
   if (r < 0) {
     return r;
   }
-
-  r = obj_op->write_meta(dpp, actual_size, accounted_size, y);
-  if (r < 0) {
-    return r;
-  }
-  if (!obj_op->params.canceled) {
+  if (!obj_op.meta.canceled) {
     // on success, clear the set of objects for deletion
     writer.clear_written();
   }
   if (pcanceled) {
-    *pcanceled = obj_op->params.canceled;
+    *pcanceled = obj_op.meta.canceled;
   }
   return 0;
 }
@@ -427,23 +424,21 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
+  RGWRados::Object op_target(store->getRados(),
+		  head_obj->get_bucket()->get_info(),
+		  obj_ctx, head_obj->get_obj());
+  RGWRados::Object::Write obj_op(&op_target);
 
-  obj_op->params.versioning_disabled = true;
-  obj_op->params.set_mtime = set_mtime;
-  obj_op->params.mtime = mtime;
-  obj_op->params.owner = ACLOwner(owner);
-  obj_op->params.delete_at = delete_at;
-  obj_op->params.zones_trace = zones_trace;
-  obj_op->params.modify_tail = true;
-  obj_op->params.attrs = &attrs;
-  obj_op->params.pmeta_placement_rule = &tail_placement_rule;
-  r = obj_op->prepare(y);
-  if (r < 0) {
-    return r;
-  }
+  op_target.set_versioning_disabled(true);
+  op_target.set_meta_placement_rule(&tail_placement_rule);
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.owner = owner;
+  obj_op.meta.delete_at = delete_at;
+  obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.modify_tail = true;
 
-  r = obj_op->write_meta(dpp, actual_size, accounted_size, y);
+  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
   if (r < 0)
     return r;
 
@@ -484,12 +479,12 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
 
-  if (!obj_op->params.canceled) {
+  if (!obj_op.meta.canceled) {
     // on success, clear the set of objects for deletion
     writer.clear_written();
   }
   if (pcanceled) {
-    *pcanceled = obj_op->params.canceled;
+    *pcanceled = obj_op.meta.canceled;
   }
   return 0;
 }
@@ -610,26 +605,28 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     return r;
   }
   head_obj->set_atomic(&obj_ctx);
-  std::unique_ptr<rgw::sal::Object::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
+  RGWRados::Object op_target(store->getRados(),
+		  head_obj->get_bucket()->get_info(),
+		  obj_ctx, head_obj->get_obj());
+  RGWRados::Object::Write obj_op(&op_target);
   //For Append obj, disable versioning
-  obj_op->params.versioning_disabled = true;
+  op_target.set_versioning_disabled(true);
   if (cur_manifest) {
     cur_manifest->append(dpp, manifest, store->get_zone());
-    obj_op->params.manifest = cur_manifest;
+    obj_op.meta.manifest = cur_manifest;
   } else {
-    obj_op->params.manifest = &manifest;
+    obj_op.meta.manifest = &manifest;
   }
-  obj_op->params.ptag = &unique_tag; /* use req_id as operation tag */
-  obj_op->params.mtime = mtime;
-  obj_op->params.set_mtime = set_mtime;
-  obj_op->params.owner = ACLOwner(owner);
-  obj_op->params.flags = PUT_OBJ_CREATE;
-  obj_op->params.delete_at = delete_at;
-  obj_op->params.user_data = user_data;
-  obj_op->params.zones_trace = zones_trace;
-  obj_op->params.modify_tail = true;
-  obj_op->params.appendable = true;
-  obj_op->params.attrs = &attrs;
+  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.owner = owner;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.delete_at = delete_at;
+  obj_op.meta.user_data = user_data;
+  obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.modify_tail = true;
+  obj_op.meta.appendable = true;
   //Add the append part number
   bufferlist cur_part_num_bl;
   using ceph::encode;
@@ -653,20 +650,18 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
     attrs[RGW_ATTR_ETAG] = etag_bl;
   }
-  r = obj_op->prepare(y);
+  r = obj_op.write_meta(dpp, actual_size + cur_size,
+			accounted_size + *cur_accounted_size,
+			attrs, y);
   if (r < 0) {
     return r;
   }
-  r = obj_op->write_meta(dpp, actual_size + cur_size, accounted_size + *cur_accounted_size, y);
-  if (r < 0) {
-    return r;
-  }
-  if (!obj_op->params.canceled) {
+  if (!obj_op.meta.canceled) {
     // on success, clear the set of objects for deletion
     writer.clear_written();
   }
   if (pcanceled) {
-    *pcanceled = obj_op->params.canceled;
+    *pcanceled = obj_op.meta.canceled;
   }
   *cur_accounted_size += accounted_size;
 

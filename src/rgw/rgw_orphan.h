@@ -19,7 +19,7 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
-#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -123,13 +123,13 @@ struct RGWOrphanSearchState {
 WRITE_CLASS_ENCODER(RGWOrphanSearchState)
 
 class RGWOrphanStore {
-  rgw::sal::Store* store;
+  rgw::sal::RadosStore* store;
   librados::IoCtx ioctx;
 
   std::string oid;
 
 public:
-  explicit RGWOrphanStore(rgw::sal::Store* _store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
+  explicit RGWOrphanStore(rgw::sal::RadosStore* _store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 
@@ -147,7 +147,7 @@ public:
 
 
 class RGWOrphanSearch {
-  rgw::sal::Store* store;
+  rgw::sal::RadosStore* store;
 
   RGWOrphanStore orphan_store;
 
@@ -179,12 +179,12 @@ class RGWOrphanSearch {
     return ceph_str_hash_linux(str.c_str(), str.size()) % RGW_ORPHANSEARCH_HASH_PRIME % search_info.num_shards;
   }
 
-  int handle_stat_result(const DoutPrefixProvider *dpp, std::map<int, std::list<std::string> >& oids, rgw::sal::Object::StatOp::Result& result);
-  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, std::map<int, std::list<std::string> >& oids, std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops);
+  int handle_stat_result(const DoutPrefixProvider *dpp, std::map<int, std::list<std::string> >& oids, RGWRados::Object::Stat::Result& result);
+  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, std::map<int, std::list<std::string> >& oids, std::deque<RGWRados::Object::Stat>& ops);
 
   int remove_index(std::map<int, std::string>& index);
 public:
-  RGWOrphanSearch(rgw::sal::Store* _store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
+  RGWOrphanSearch(rgw::sal::RadosStore* _store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
 
   int save_state() {
     RGWOrphanSearchState state;
@@ -250,7 +250,7 @@ class RGWRadosList {
     p.first->second.filter_keys.insert(obj_key);
   }
 
-  rgw::sal::Store* store;
+  rgw::sal::RadosStore* store;
 
   uint16_t max_concurrent_ios;
   uint64_t stale_secs;
@@ -260,17 +260,17 @@ class RGWRadosList {
   std::string field_separator;
 
   int handle_stat_result(const DoutPrefixProvider *dpp,
-                         rgw::sal::Object::StatOp::Result& result,
+			 RGWRados::Object::Stat::Result& result,
 			 std::string& bucket_name,
 			 rgw_obj_key& obj_key,
 			 std::set<std::string>& obj_oids);
   int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, 
                              RGWObjectCtx& obj_ctx,
-			     std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops);
+			     std::deque<RGWRados::Object::Stat>& ops);
 
 public:
 
-  RGWRadosList(rgw::sal::Store* _store,
+  RGWRadosList(rgw::sal::RadosStore* _store,
 	       int _max_ios,
 	       uint64_t _stale_secs,
 	       const std::string& _tenant_name) :
