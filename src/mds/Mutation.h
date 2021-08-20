@@ -260,6 +260,8 @@ public:
   bool aborted = false;
   bool killed = false;
 
+  bool set_filelock_to_xlockdone2 = false;
+
   // for applying projected inode changes
   std::set<MDSCacheObject*> projected_nodes;
   std::list<ScatterLock*> updated_locks;

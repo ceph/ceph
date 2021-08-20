@@ -52,6 +52,7 @@ enum {
   LOCK_PREXLOCK,    // A    . . .. . . / . .   (lock)
   LOCK_XLOCK,       // A    . . .. . . / . .   (lock)
   LOCK_XLOCKDONE,   // A    r p rd l x / . .   (lock)  <-- by same client only!!
+  LOCK_XLOCKDONE2,  // forbid the same client acquire xlock !!
   LOCK_XLOCKSNAP,   // also revoke Fb
   LOCK_LOCK_XLOCK,
 

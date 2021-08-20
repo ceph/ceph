@@ -56,7 +56,7 @@ public:
   void set_xlock_snap_sync(MDSContext *c)
   {
     ceph_assert(get_type() == CEPH_LOCK_IFILE);
-    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || state == LOCK_XLOCKDONE2);
     state = LOCK_XLOCKSNAP;
     add_waiter(WAIT_STABLE, c);
   }

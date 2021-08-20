@@ -6425,6 +6425,10 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
     in->filelock.set_xlock_snap_sync(new C_MDC_RetryTruncate(this, in, ls));
     mds->locker->issue_caps(in);
     return;
+  } else {
+    /* reset the lock state to XLOCKDONE */
+    ceph_assert(in->filelock.get_state() == LOCK_XLOCKDONE2);
+    in->filelock.set_state(LOCK_XLOCKDONE);
   }
 
   _truncate_inode(in, ls);

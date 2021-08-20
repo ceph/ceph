@@ -90,6 +90,7 @@ public:
     case LOCK_PREXLOCK: return "prexlock";
     case LOCK_XLOCK: return "xlock";
     case LOCK_XLOCKDONE: return "xlockdone";
+    case LOCK_XLOCKDONE2: return "xlockdone(2)";
     case LOCK_XLOCKSNAP: return "xlocksnap";
     case LOCK_LOCK_XLOCK: return "lock->xlock";
 
@@ -404,16 +405,18 @@ public:
     more()->xlock_by = who; 
     more()->xlock_by_client = client;
   }
-  void set_xlock_done() {
+  void set_xlock_done(int s=LOCK_XLOCKDONE) {
+    ceph_assert(s == LOCK_XLOCKDONE || s == LOCK_XLOCKDONE2);
     ceph_assert(more()->xlock_by);
     ceph_assert(state == LOCK_XLOCK || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a peer */);
+	        state == LOCK_LOCK /* if we are a peer */);
     if (!is_locallock())
-      state = LOCK_XLOCKDONE;
+      state = s;
     more()->xlock_by.reset();
   }
   void put_xlock() {
     ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
+	   state == LOCK_XLOCKDONE2 ||
 	   state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
 	   state == LOCK_LOCK  || /* if we are a leader of a peer */
 	   is_locallock());

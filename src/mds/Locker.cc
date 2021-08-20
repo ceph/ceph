@@ -620,6 +620,7 @@ void Locker::notify_freeze_waiter(MDSCacheObject *o)
 void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
 {
   for (const auto &p : mut->locks) {
+    int state = LOCK_XLOCKDONE;
     if (!p.is_xlock())
       continue;
     MDSCacheObject *obj = p.lock->get_parent();
@@ -627,8 +628,11 @@ void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
     if (skip_dentry &&
 	(p.lock->get_type() == CEPH_LOCK_DN || p.lock->get_type() == CEPH_LOCK_DVERSION))
       continue;
-    dout(10) << "set_xlocks_done on " << *p.lock << " " << *obj << dendl;
-    p.lock->set_xlock_done();
+    if (mut->set_filelock_to_xlockdone2 && p.lock->get_sm() == &sm_filelock)
+      state = LOCK_XLOCKDONE2;
+    dout(10) << "set_xlocks_done(" << p.lock->get_state_name(state) << ") on "
+	     << *p.lock << " " << *obj << dendl;
+    p.lock->set_xlock_done(state);
   }
 }
 
@@ -1223,6 +1227,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSCon
 
       case LOCK_XLOCK:
       case LOCK_XLOCKDONE:
+      case LOCK_XLOCKDONE2:
 	if (next != LOCK_SYNC)
 	  break;
 	// fall-thru

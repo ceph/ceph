@@ -1922,10 +1922,13 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
     } else {
       dout(10) << " journaled last replay op" << dendl;
     }
-  } else if (mdr->did_early_reply)
+  } else if (mdr->did_early_reply) {
     mds->locker->drop_rdlocks_for_early_reply(mdr.get());
-  else
+    if (mdr->set_filelock_to_xlockdone2)
+      mdlog->flush();
+  } else {
     mdlog->flush();
+  }
 }
 
 void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestRef& mdr,
@@ -5094,7 +5097,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-  
+
+  if (truncating_smaller)
+    mdr->set_filelock_to_xlockdone2 = true;
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
 								   truncating_smaller, changed_ranges));
 
@@ -5160,6 +5165,8 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
     dn = mdr->dn[0].back();
   }
 
+  if (old_size > 0)
+    mdr->set_filelock_to_xlockdone2 = true;
   journal_and_reply(mdr, in, dn, le, new C_MDS_inode_update_finish(this, mdr, in, old_size > 0,
 								   changed_ranges));
   // Although the `open` part can give an early reply, the truncation won't
