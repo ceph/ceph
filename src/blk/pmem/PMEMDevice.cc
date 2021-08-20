@@ -202,7 +202,7 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered, int write_hin
   dout(20) << __func__ << " " << off << "~" << len  << dendl;
   ceph_assert(is_valid_io(off, len));
 
-  dout(40) << "data: ";
+  dout(40) << "data:\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
@@ -250,7 +250,7 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   pbl->clear();
   pbl->push_back(std::move(p));
 
-  dout(40) << "data: ";
+  dout(40) << "data:\n";
   pbl->hexdump(*_dout);
   *_dout << dendl;
 
