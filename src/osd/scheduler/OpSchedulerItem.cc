@@ -14,9 +14,8 @@
 
 #include "osd/scheduler/OpSchedulerItem.h"
 #include "osd/OSD.h"
-#ifdef HAVE_JAEGER
-#include "common/tracer.h"
-#endif
+#include "osd/osd_tracer.h"
+
 
 namespace ceph::osd::scheduler {
 
@@ -26,9 +25,7 @@ void PGOpItem::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
-#ifdef HAVE_JAEGER
-  auto PGOpItem_span = jaeger_tracing::child_span("PGOpItem::run", op->osd_parent_span);
-#endif
+  [[maybe_unused]] auto span = tracing::osd::tracer.add_span("PGOpItem::run", op->osd_parent_span);
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }
