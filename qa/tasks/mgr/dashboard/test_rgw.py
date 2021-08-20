@@ -211,6 +211,11 @@ class RgwBucketTest(RgwTestCase):
             'tenant': JLeaf(str),
         }, allow_unknown=True))
 
+        # List all buckets names without stats.
+        data = self._get('/api/rgw/bucket?stats=false')
+        self.assertStatus(200)
+        self.assertEqual(data, ['teuth-test-bucket'])
+
         # Get the bucket.
         data = self._get('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(200)

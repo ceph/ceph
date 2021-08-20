@@ -234,7 +234,7 @@ class RgwBucket(RgwRESTController):
 
     def list(self, stats=False, daemon_name=None):
         # type: (bool, Optional[str]) -> List[Any]
-        query_params = '?stats' if stats else ''
+        query_params = '?stats' if str_to_bool(stats) else ''
         result = self.proxy(daemon_name, 'GET', 'bucket{}'.format(query_params))
 
         if stats:
