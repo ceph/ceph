@@ -25,6 +25,7 @@
 #include "ECMsgTypes.h"
 
 #include "PrimaryLogPG.h"
+#include "osd_tracer.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -938,14 +939,13 @@ void ECBackend::handle_sub_write(
   ECSubWrite &op,
   const ZTracer::Trace &trace)
 {
-  if (msg)
+  jspan span;
+  if (msg) {
     msg->mark_event("sub_op_started");
-  trace.event("handle_sub_write");
-#ifdef HAVE_JAEGER
-  if (msg && msg->osd_parent_span) {
-    auto ec_sub_trans = jaeger_tracing::child_span(__func__, msg->osd_parent_span);
+    span = tracing::osd::tracer.add_span(__func__, msg->osd_parent_span);
   }
-#endif
+  trace.event("handle_sub_write");
+
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction localt;
@@ -1541,14 +1541,11 @@ void ECBackend::submit_transaction(
   op->tid = tid;
   op->reqid = reqid;
   op->client_op = client_op;
-  if (client_op)
+  jspan span;
+  if (client_op) {
     op->trace = client_op->pg_trace;
-
-#ifdef HAVE_JAEGER
-  if (client_op && client_op->osd_parent_span) {
-    auto ec_sub_trans = jaeger_tracing::child_span("ECBackend::submit_transaction", client_op->osd_parent_span);
+    span = tracing::osd::tracer.add_span("ECBackend::submit_transaction", client_op->osd_parent_span);
   }
-#endif
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
   start_rmw(op, std::move(t));
 }
@@ -2117,12 +2114,11 @@ bool ECBackend::try_reads_to_commit()
       messages.push_back(std::make_pair(i->osd, r));
     }
   }
+  jspan span;
+  if (op->client_op) {
+    span = tracing::osd::tracer.add_span("EC sub write", op->client_op->osd_parent_span);
+  }
 
-#ifdef HAVE_JAEGER
-   if (op->client_op && op->client_op->osd_parent_span) {
-      auto sub_write_span = jaeger_tracing::child_span("EC sub write", op->client_op->osd_parent_span);
-    }
-#endif
   if (!messages.empty()) {
     get_parent()->send_message_osd_cluster(messages, get_osdmap_epoch());
   }
