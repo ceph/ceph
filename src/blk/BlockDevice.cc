@@ -43,7 +43,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
-#define dout_prefix *_dout << "bdev "
+#define dout_prefix *_dout << "bdev:bd: " << __LINE__ << " "
 
 using std::string;
 
