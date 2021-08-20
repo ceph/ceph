@@ -1053,40 +1053,72 @@ Cache::replay_delta(
 }
 
 Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
+  Transaction &t,
   journal_seq_t seq,
   size_t max_bytes)
 {
   LOG_PREFIX(Cache::get_next_dirty_extents);
-  std::vector<CachedExtentRef> ret;
+  std::vector<CachedExtentRef> cand;
   size_t bytes_so_far = 0;
   for (auto i = dirty.begin();
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
-    CachedExtentRef cand;
     if (i->get_dirty_from() != journal_seq_t() && i->get_dirty_from() < seq) {
-      DEBUG("next {}", *i);
-      if (!(ret.empty() ||
-	    ret.back()->get_dirty_from() <= i->get_dirty_from())) {
-	DEBUG("last {}, next {}", *ret.back(), *i);
+      DEBUGT("next {}", t, *i);
+      if (!(cand.empty() ||
+	    cand.back()->get_dirty_from() <= i->get_dirty_from())) {
+	ERRORT("last {}, next {}", t, *cand.back(), *i);
       }
-      assert(ret.empty() || ret.back()->get_dirty_from() <= i->get_dirty_from());
+      assert(cand.empty() || cand.back()->get_dirty_from() <= i->get_dirty_from());
       bytes_so_far += i->get_length();
-      ret.push_back(&*i);
+      cand.push_back(&*i);
+
     } else {
       break;
     }
   }
   return seastar::do_with(
-    std::move(ret),
-    [FNAME](auto &ret) {
-      return seastar::do_for_each(
-	ret,
-	[FNAME](auto &ext) {
+    std::move(cand),
+    decltype(cand)(),
+    [FNAME, this, &t](auto &cand, auto &ret) {
+      return trans_intr::do_for_each(
+	cand,
+	[FNAME, this, &t, &ret](auto &ext) {
 	  DEBUG("waiting on {}", *ext);
-	  return ext->wait_io();
-	}).then([&ret]() mutable {
-	  return seastar::make_ready_future<std::vector<CachedExtentRef>>(
-	    std::move(ret));
+
+	  return trans_intr::make_interruptible(
+	    ext->wait_io()
+	  ).then_interruptible([FNAME, this, ext, &t, &ret] {
+	    if (!ext->is_valid()) {
+	      invalidate(t, *ext);
+	      return;
+	    }
+
+	    CachedExtentRef on_transaction;
+	    auto result = t.get_extent(ext->get_paddr(), &on_transaction);
+	    if (result == Transaction::get_extent_ret::ABSENT) {
+	      DEBUGT("{} absent on t", t, *ext);
+	      t.add_to_read_set(ext);
+	      if (ext->get_type() == extent_types_t::ROOT) {
+		if (t.root) {
+		  assert(&*t.root == &*ext);
+		  assert(0 == "t.root would have to already be in the read set");
+		} else {
+		  assert(&*ext == &*root);
+		  t.root = root;
+		}
+	      }
+	      ret.push_back(ext);
+	    } else if (result == Transaction::get_extent_ret::PRESENT) {
+	      DEBUGT("{} present on t as {}", t, *ext, *on_transaction);
+	      ret.push_back(on_transaction);
+	    } else {
+	      assert(result == Transaction::get_extent_ret::RETIRED);
+	      DEBUGT("{} retired on t", t, *ext);
+	    }
+	  });
+	}).then_interruptible([&ret] {
+	  return std::move(ret);
 	});
     });
 }

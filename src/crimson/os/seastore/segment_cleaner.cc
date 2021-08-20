@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/transaction_manager.h"
@@ -220,20 +221,19 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
   Transaction &t,
   journal_seq_t limit)
 {
-  return trans_intr::make_interruptible(
-    ecb->get_next_dirty_extents(
-      limit,
-      config.journal_rewrite_per_cycle)
-  ).then_interruptible([=, &t](auto dirty_list) {
+  LOG_PREFIX(SegmentCleaner::rewrite_dirty);
+  return ecb->get_next_dirty_extents(
+    t,
+    limit,
+    config.journal_rewrite_per_cycle
+  ).si_then([=, &t](auto dirty_list) {
     return seastar::do_with(
       std::move(dirty_list),
-      [this, &t](auto &dirty_list) {
+      [FNAME, this, &t](auto &dirty_list) {
 	return trans_intr::do_for_each(
 	  dirty_list,
-	  [this, &t](auto &e) {
-	    logger().debug(
-	      "SegmentCleaner::rewrite_dirty cleaning {}",
-	      *e);
+	  [FNAME, this, &t](auto &e) {
+	    DEBUGT("cleaning {}", t, *e);
 	    return ecb->rewrite_extent(t, e);
 	  });
       });

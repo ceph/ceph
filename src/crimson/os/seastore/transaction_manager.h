@@ -370,6 +370,7 @@ public:
 
   using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
+    Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
 

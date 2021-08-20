@@ -264,19 +264,18 @@ public:
       );
     }
 
-    /**
-     * get_next_dirty_extent
-     *
-     * returns all extents with dirty_from < bound
-     */
-    using get_next_dirty_extents_iertr = crimson::errorator<>;
+    /// See Cache::get_next_dirty_extents
+    using get_next_dirty_extents_iertr = trans_iertr<
+      crimson::errorator<
+        crimson::ct_error::input_output_error>
+      >;
     using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
       std::vector<CachedExtentRef>>;
     virtual get_next_dirty_extents_ret get_next_dirty_extents(
+      Transaction &t,     ///< [in] current transaction
       journal_seq_t bound,///< [in] return extents with dirty_from < bound
       size_t max_bytes    ///< [in] return up to max_bytes of extents
     ) = 0;
-
 
     using extent_mapping_ertr = crimson::errorator<
       crimson::ct_error::input_output_error,
