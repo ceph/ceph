@@ -181,6 +181,7 @@ seastar::future<> TMDriver::mkfs()
     return segment_manager->close();
   }).safe_then([this] {
     clear();
+    segment_manager.reset();
     logger().debug("mkfs complete");
     return TransactionManager::mkfs_ertr::now();
   }).handle_error(
