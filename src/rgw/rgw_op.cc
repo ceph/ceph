@@ -1064,7 +1064,7 @@ void RGWPutBucketTags::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_TAGS] = tags_bl;
-    return s->bucket->set_instance_attrs(this, attrs, y);
+    return s->bucket->merge_and_store_attrs(this, attrs, y);
   });
 
 }
@@ -1091,7 +1091,7 @@ void RGWDeleteBucketTags::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs.erase(RGW_ATTR_TAGS);
-    op_ret = s->bucket->set_instance_attrs(this, attrs, y);
+    op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "RGWDeleteBucketTags() failed to remove RGW_ATTR_TAGS on bucket="
 			 << s->bucket->get_name()
@@ -1145,7 +1145,7 @@ void RGWPutBucketReplication::execute(optional_yield y) {
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = s->bucket->put_instance_info(this, false, real_time());
+    int ret = s->bucket->put_info(this, false, real_time());
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
@@ -1185,7 +1185,7 @@ void RGWDeleteBucketReplication::execute(optional_yield y)
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = s->bucket->put_instance_info(this, false, real_time());
+    int ret = s->bucket->put_info(this, false, real_time());
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
@@ -2535,7 +2535,7 @@ void RGWSetBucketVersioning::execute(optional_yield y)
 	return op_ret;
       }
       s->bucket->set_attrs(rgw::sal::Attrs(s->bucket_attrs));
-      return s->bucket->put_instance_info(this, false, real_time());
+      return s->bucket->put_info(this, false, real_time());
     });
 
   if (!modified) {
@@ -2597,7 +2597,7 @@ void RGWSetBucketWebsite::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
       s->bucket->get_info().has_website = true;
       s->bucket->get_info().website_conf = website_conf;
-      op_ret = s->bucket->put_instance_info(this, false, real_time());
+      op_ret = s->bucket->put_info(this, false, real_time());
       return op_ret;
     });
 
@@ -2636,7 +2636,7 @@ void RGWDeleteBucketWebsite::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
       s->bucket->get_info().has_website = false;
       s->bucket->get_info().website_conf = RGWBucketWebsiteConf();
-      op_ret = s->bucket->put_instance_info(this, false, real_time());
+      op_ret = s->bucket->put_info(this, false, real_time());
       return op_ret;
     });
   if (op_ret < 0) {
@@ -3163,7 +3163,7 @@ void RGWCreateBucket::execute(optional_yield y)
       s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
 
       /* This will also set the quota on the bucket. */
-      op_ret = s->bucket->set_instance_attrs(this, attrs, y);
+      op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
     /* Restore the proper return code. */
@@ -4493,7 +4493,7 @@ void RGWPutMetadataBucket::execute(optional_yield y)
       /* Setting attributes also stores the provided bucket info. Due
        * to this fact, the new quota settings can be serialized with
        * the same call. */
-      op_ret = s->bucket->set_instance_attrs(this, attrs, s->yield);
+      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
       return op_ret;
     });
 }
@@ -5520,7 +5520,7 @@ void RGWPutACLs::execute(optional_yield y)
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
-    op_ret = s->bucket->set_instance_attrs(this, attrs, y);
+    op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   }
   if (op_ret == -ECANCELED) {
     op_ret = 0; /* lost a race, but it's ok because acls are immutable */
@@ -5675,7 +5675,7 @@ void RGWPutCORS::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_CORS] = cors_bl;
-      return s->bucket->set_instance_attrs(this, attrs, s->yield);
+      return s->bucket->merge_and_store_attrs(this, attrs, s->yield);
     });
 }
 
@@ -5707,7 +5707,7 @@ void RGWDeleteCORS::execute(optional_yield y)
 
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_CORS);
-      op_ret = s->bucket->set_instance_attrs(this, attrs, s->yield);
+      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
       if (op_ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket->get_name()
 			 << " returned err=" << op_ret << dendl;
@@ -5810,7 +5810,7 @@ void RGWSetRequestPayment::execute(optional_yield y)
     return;
 
   s->bucket->get_info().requester_pays = requester_pays;
-  op_ret = s->bucket->put_instance_info(this, false, real_time());
+  op_ret = s->bucket->put_info(this, false, real_time());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
 		     << " returned err=" << op_ret << dendl;
@@ -7465,7 +7465,7 @@ void RGWSetAttrs::execute(optional_yield y)
     rgw::sal::Attrs a(attrs);
     op_ret = s->object->set_obj_attrs(this, s->obj_ctx, &a, nullptr, y);
   } else {
-    op_ret = s->bucket->set_instance_attrs(this, attrs, y);
+    op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   }
 
 } /* RGWSetAttrs::execute() */
@@ -7506,7 +7506,7 @@ void RGWConfigBucketMetaSearch::execute(optional_yield y)
 
   s->bucket->get_info().mdsearch_config = mdsearch_config;
 
-  op_ret = s->bucket->put_instance_info(this, false, real_time());
+  op_ret = s->bucket->put_info(this, false, real_time());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
         << " returned err=" << op_ret << dendl;
@@ -7547,7 +7547,7 @@ void RGWDelBucketMetaSearch::execute(optional_yield y)
 {
   s->bucket->get_info().mdsearch_config.clear();
 
-  op_ret = s->bucket->put_instance_info(this, false, real_time());
+  op_ret = s->bucket->put_info(this, false, real_time());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
         << " returned err=" << op_ret << dendl;
@@ -7687,7 +7687,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
     op_ret = retry_raced_bucket_write(this, s->bucket.get(), [&p, this, &attrs] {
 	attrs[RGW_ATTR_IAM_POLICY].clear();
 	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
-	op_ret = s->bucket->set_instance_attrs(this, attrs, s->yield);
+	op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -7768,7 +7768,7 @@ void RGWDeleteBucketPolicy::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_IAM_POLICY);
-      op_ret = s->bucket->set_instance_attrs(this, attrs, s->yield);
+      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
       return op_ret;
     });
 }
@@ -7829,7 +7829,7 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
     s->bucket->get_info().obj_lock = obj_lock;
-    op_ret = s->bucket->put_instance_info(this, false, real_time());
+    op_ret = s->bucket->put_info(this, false, real_time());
     return op_ret;
   });
   return;
@@ -8166,7 +8166,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, &bl] {
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_PUBLIC_ACCESS] = bl;
-      return s->bucket->set_instance_attrs(this, attrs, s->yield);
+      return s->bucket->merge_and_store_attrs(this, attrs, s->yield);
     });
 
 }
@@ -8232,7 +8232,7 @@ void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
-      op_ret = s->bucket->set_instance_attrs(this, attrs, s->yield);
+      op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
       return op_ret;
     });
 }
@@ -8308,7 +8308,7 @@ void RGWPutBucketEncryption::execute(optional_yield y)
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY] = conf_bl;
     attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = key_id_bl;
-    return s->bucket->set_instance_attrs(this, attrs, y);
+    return s->bucket->merge_and_store_attrs(this, attrs, y);
   });
 }
 
@@ -8362,7 +8362,7 @@ void RGWDeleteBucketEncryption::execute(optional_yield y)
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs.erase(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
     attrs.erase(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
-    op_ret = s->bucket->set_instance_attrs(this, attrs, y);
+    op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
     return op_ret;
   });
 }
