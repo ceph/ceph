@@ -419,7 +419,6 @@ class Bucket {
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) = 0;
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) = 0;
-    virtual Object* create_object(const rgw_obj_key& key /* Attributes */) = 0;
     virtual Attrs& get_attrs(void) { return attrs; }
     virtual int set_attrs(Attrs a) { attrs = a; return 0; }
     virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) = 0;

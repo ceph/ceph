@@ -223,12 +223,6 @@ int RadosUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 					  RGWUserCtl::RemoveParams().set_objv_tracker(&objv_tracker));
 }
 
-/* Placeholder */
-Object* RadosBucket::create_object(const rgw_obj_key &key)
-{
-  return nullptr;
-}
-
 RadosBucket::~RadosBucket() {}
 
 int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,

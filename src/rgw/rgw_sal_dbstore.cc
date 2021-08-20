@@ -125,11 +125,6 @@ namespace rgw::sal {
     return ret;
   }
 
-  Object *DBBucket::create_object(const rgw_obj_key &key)
-  {
-    return nullptr;
-  }
-
   int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y)
   {
     int ret;
