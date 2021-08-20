@@ -251,10 +251,17 @@ int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
   ceph_assert(0);
 }
 
+#if defined(HAVE_LIBAIO)
 int ioring_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 {
   ceph_assert(0);
 }
+#elif defined(HAVE_POSIXAIO)
+int ioring_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max, int fd)
+{
+  ceph_assert(0);
+}
+#endif
 
 bool ioring_queue_t::supported()
 {

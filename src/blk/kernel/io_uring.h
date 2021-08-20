@@ -29,5 +29,9 @@ struct ioring_queue_t final : public io_queue_t {
 
   int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size,
                    void *priv, int *retries) final;
-  int get_next_completed(int timeout_ms, aio_t **paio, int max) final;
+#if defined(HAVE_LIBAIO)
+    int get_next_completed(int timeout_ms, aio_t **paio, int max) final;
+#elif defined(HAVE_POSIXAIO)
+  int get_next_completed(int timeout_ms, aio_t **paio, int max, int fd) final;
+#endif
 };
