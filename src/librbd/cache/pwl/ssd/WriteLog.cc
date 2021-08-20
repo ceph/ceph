@@ -660,9 +660,21 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             this->m_blocks_to_log_entries.remove_log_entry(write_entry);
           }
         }
+
+        ldout(cct, 20) << "span with " << retiring_subentries.size()
+                       << " entries: control_block_pos=" << control_block_pos
+                       << " data_length=" << data_length
+                       << dendl;
         retiring_entries.insert(
             retiring_entries.end(), retiring_subentries.begin(),
             retiring_subentries.end());
+
+        first_valid_entry = control_block_pos + data_length +
+            MIN_WRITE_ALLOC_SSD_SIZE;
+        if (first_valid_entry >= this->m_log_pool_size) {
+          first_valid_entry = first_valid_entry % this->m_log_pool_size +
+              DATA_RING_BUFFER_OFFSET;
+        }
       } else {
         break;
       }
@@ -680,18 +692,6 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
       flushed_sync_gen = this->m_flushed_sync_gen;
     }
 
-    //calculate new first_valid_entry based on last entry to retire
-    auto entry = retiring_entries.back();
-    if (entry->is_write_entry() || entry->is_writesame_entry()) {
-      first_valid_entry = entry->ram_entry.write_data_pos +
-        entry->get_aligned_data_size();
-    } else {
-      first_valid_entry = entry->log_entry_index + MIN_WRITE_ALLOC_SSD_SIZE;
-    }
-    if (first_valid_entry >= this->m_log_pool_size) {
-      first_valid_entry = first_valid_entry % this->m_log_pool_size +
-          DATA_RING_BUFFER_OFFSET;
-    }
     ceph_assert(first_valid_entry != initial_first_valid_entry);
     auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
     new_root->flushed_sync_gen = flushed_sync_gen;
