@@ -609,6 +609,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   if (!force_no_error && s->is_err()) {
     dump_start(s);
     dump(s);
+    s->formatter->output_footer();
     dump_content_length(s, s->formatter->get_len());
   } else {
     if (proposed_content_length == CHUNKED_TRANSFER_ENCODING) {
@@ -1725,7 +1726,7 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
 					int default_type,
 					bool configurable)
 {
-  s->format = -1; // set to invalid value to allocation happens anyway 
+  s->format = -1; // set to invalid value to allocation happens anyway
   auto type = default_type;
   if (configurable) {
     string format_str = s->info.args.get("format");
