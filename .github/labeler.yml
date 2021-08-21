@@ -94,6 +94,12 @@ orchestrator:
   - src/pybind/mgr/test_orchestrator/**
   - qa/tasks/mgr/test_orchestrator_cli.py
 
+rook:
+  - doc/mgr/rook.rst
+  - src/pybind/mgr/rook/**
+  - qa/tasks/rook.py
+  - qa/suites/orch/rook/smoke/**
+
 bluestore:
   - src/os/bluestore/**
 
