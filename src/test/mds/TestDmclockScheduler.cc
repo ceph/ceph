@@ -275,7 +275,7 @@ TEST(MDSDmclockScheduler, SessionSanity)
   Session *session_b[VOLUME_NUM][SESSION_NUM];
 
   for (int i = 0; i < VOLUME_NUM; i++) {
-    vid_a[i]  = "/volumes/_nogroup/4c55ad20-9c44-4a5e-9233-8ac64340b98" + i;
+    vid_a[i]  = "/volumes/_nogroup/4c55ad20-9c44-4a5e-9233-8ac64340b98" + std::to_string(i);
     scheduler->create_volume_info(vid_a[i], ClientInfo(100.0, 300.0, 400.0), false);
 
     for (int j = 0; j < SESSION_NUM; j++) {
@@ -408,7 +408,7 @@ TEST(MDSDmclockScheduler, IssueUpdateRequest)
 {
   MDSDmclockScheduler *scheduler = create_dmclock_scheduler();
   scheduler->enable_qos_feature();
-  atomic_int update_count = 0;
+  std::atomic_int update_count = 0;
 
   SessionId sid = "323423";
   VolumeId vid = "/volumes/_nogroup/subvol";
@@ -457,7 +457,7 @@ TEST(MDSDmclockScheduler, IssueClientUpdateMixedRequest)
 {
   MDSDmclockScheduler *scheduler = create_dmclock_scheduler();
   scheduler->enable_qos_feature();
-  atomic_int update_count = 0;
+  std::atomic_int update_count = 0;
 
   SessionId sid = "33343";
   VolumeId vid = "/volumes/_nogroup/subvol";
