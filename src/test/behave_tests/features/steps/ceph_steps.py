@@ -36,6 +36,23 @@ def execute_step(context, shell):
     print(f"Executed output : {context.output}")
 
 
+
+@when("I execute in {shell} and store output as {op_keyword}")
+@then("I execute in {shell} and store output as {op_keyword}")
+def execute_and_store_output(context, shell, op_keyword):
+    
+    if context.node is None:
+        raise Exception("Failed not logged into virtual machine")
+    for command in context.text.split("\n"):
+        output, return_code = execute_ssh_cmd(context.node, shell, command)
+        context.last_executed_cmd = command
+        if return_code != 0:
+            raise Exception(f"Failed to execute ssh\n Message:{output}")
+        context.output = str_to_list(output)
+    context.op_stored_dict[op_keyword] = context.output
+    print(f"Executed output : {context.output}")
+
+
 @then("Execute in {shell} only {command}")
 def execute_only_one_step(context, shell, command):
     """

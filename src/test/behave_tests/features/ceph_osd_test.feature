@@ -47,3 +47,78 @@ Feature: Tests related to OSD creation
           mon: 3 daemons, quorum ceph-node-00.cephlab.com,ceph-node-01,ceph-node-02
           osd: 3 osds: 3 up
         """
+
+
+  Scenario: Create block devices
+    Given I log as root into ceph-node-00
+    When I execute in cephadm_shell
+        """
+        ceph -s
+        """
+    Then I get results which contain
+        """
+        cluster:
+            health: HEALTH_OK
+        """
+    Then I execute in cephadm_shell
+        """
+        ceph osd pool create test_pool
+        rbd pool init test_pool
+        rbd pool stats test_pool
+        """
+    Then I get results which contain
+        """
+            Total Images: 0
+            Total Snapshots: 0
+            Provisioned Size: 0 B
+        """
+    Then I execute in cephadm_shell
+        """
+        rbd create test_image --size 4096 --image-feature layering -m <host1:ip> -k /etc/ceph/ceph.keyring -p test_pool
+        rbd ls test_pool
+        """
+    Then I get results which contain
+        """
+        test_image
+        """
+    Then I execute in cephadm_shell
+        """
+        rbd info test_pool/test_image
+        """
+    Then I get results which contain
+        """
+        size 4 GiB in 1024 objects
+        order 22 (4 MiB objects)
+        snapshot_count: 0
+        format: 2
+        features: layering
+        """
+    Then I execute in host
+        """
+        sudo modprobe rbd
+        """
+    Then I execute in cephadm_shell and store output as rbd_map_op
+        """
+        in cephadm : rbd map test_pool/test_image --id admin -k /etc/ceph/ceph.keyring
+        in cephadm : sudo mkfs.ext4 -m0 <exec_output:rbd_map_op>
+        """
+    Then I get results which contain
+        """
+        Discarding device blocks: don
+        Allocating group tables: done
+        Writing inode tables: done
+        Creating journal : done
+        Writing superblocks and filesystem accounting information: done
+        """
+    Then I execute in host
+        """
+        sudo mkdir -p /mnt/ceph-block-device
+        sudo mount <exec_output:rbd_map_op> /mnt/ceph-block-device
+---------------------REQUIRED command to create files wth large sizes---------------------------{copy files command}
+        df -h
+        """
+    Then I get results which contain
+        """
+        Filesystem      Size  Used Avail Use% Mounted on
+        /dev/rbd0       3.9G   16M  3.9G   1% /mnt/ceph-block-device
+        """

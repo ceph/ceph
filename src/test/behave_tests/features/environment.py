@@ -68,10 +68,9 @@ def _parse_value(value):
     return value
 
 
-def _parse_to_config_dict(values, config):
-    for key in values.keys():
-        config[key] = _parse_value(values[key])
-
+def _parse_vm_details_to_dict():
+    #TODO: Execute kcli command and parse details from the output
+    pass
 
 def _parse_vm_description(specs):
     """
@@ -199,7 +198,8 @@ def before_feature(context, feature):
         _handle_kcli_plan("delete")
         exit(1)
     context.last_executed = {}
-
+    context.op_stored_dict = {}
+    context.vm_details = _parse_vm_details_to_dict()
 
 def after_feature(context, feature):
     if os.path.exists(KCLI_PLANS_DIR):
