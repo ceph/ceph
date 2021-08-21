@@ -21,6 +21,7 @@
 #include <map>
 #include <mutex>
 #include <deque>
+#include <vector>
 
 #include "include/types.h"
 #include "mdstypes.h"
@@ -49,6 +50,9 @@ using std::placeholders::_1;
 using std::placeholders::_2;
 using std::placeholders::_3;
 using std::placeholders::_4;
+using std::ostream;
+using std::to_string;
+using std::vector;
 
 using Queue = crimson::dmclock::PushPriorityQueue<VolumeId, ClientRequest>;
 

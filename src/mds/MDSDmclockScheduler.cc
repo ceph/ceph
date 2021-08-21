@@ -56,7 +56,7 @@ const VolumeId MDSDmclockScheduler::get_volume_id(Session *session)
 const VolumeId MDSDmclockScheduler::get_session_id(Session *session)
 {
   ceph_assert(session != nullptr);
-  return to_string(session->info.inst.name.num());
+  return std::to_string(session->info.inst.name.num());
 }
 
 template<typename R>
@@ -245,7 +245,7 @@ void MDSDmclockScheduler::create_volume_info(const VolumeId &vid, const ClientIn
   VolumeInfo* vi = get_volume_info_ptr(vid);
 
   if (vi == nullptr) {
-    auto [it, success]  = volume_info_map.insert(std::make_pair(std::move(vid), std::move(VolumeInfo())));
+    auto [it, success]  = volume_info_map.insert(std::make_pair(std::move(vid), VolumeInfo()));
     ceph_assert(success==true);
     vi = &it->second;
   }
