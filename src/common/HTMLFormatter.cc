@@ -30,7 +30,7 @@
 namespace ceph {
 
 HTMLFormatter::HTMLFormatter(bool pretty)
-: XMLFormatter(pretty), m_status(0), m_status_name(NULL)
+: XMLFormatter(pretty), m_pretty(pretty), m_status(0), m_status_name(NULL)
 {
 }
 
@@ -86,6 +86,12 @@ void HTMLFormatter::output_header() {
       m_ss << "\n";
     open_object_section("ul");
   }
+}
+
+void HTMLFormatter::flush(std::ostream& os)
+{
+  m_pretty = false;
+  XMLFormatter::flush(os);
 }
 
 template <typename T>

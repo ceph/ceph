@@ -14,7 +14,7 @@ namespace ceph {
 
     void set_status(int status, const char* status_name) override;
     void output_header() override;
-
+    void flush(std::ostream & os) override;
     void dump_unsigned(std::string_view name, uint64_t u) override;
     void dump_int(std::string_view name, int64_t u) override;
     void dump_float(std::string_view name, double d) override;
@@ -24,6 +24,8 @@ namespace ceph {
 
     /* with attrs */
     void dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs) override;
+  protected:
+    bool m_pretty;
   private:
     template <typename T> void dump_template(std::string_view name, T arg);
 
