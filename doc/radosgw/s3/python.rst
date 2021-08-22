@@ -106,6 +106,17 @@ This creates a file ``hello.txt`` with the string ``"Hello World!"``
 
 	key = bucket.new_key('hello.txt')
 	key.set_contents_from_string('Hello World!')
+	
+
+Uploading an Object or a File
+-----------------------------
+
+This creates a file ``logo.png`` with the contents from the file ``"logo.png"``
+
+.. code-block:: python
+
+	key = bucket.new_key('logo.png')
+	key.set_contents_from_filename('logo.png')
 
 
 Change an Object's ACL
