@@ -6,7 +6,7 @@
 #include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/FlushTracker.h"
-#include <map>
+#include <utility>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -36,7 +36,7 @@ uint64_t calculate_tokens(bool read_op, uint64_t extent_length, uint64_t flag) {
   return (((flag & IMAGE_DISPATCH_FLAG_QOS_BPS_MASK) != 0) ? extent_length : 1);
 }
 
-static std::map<uint64_t, std::string> throttle_flags = {
+static const std::pair<uint64_t, const char*> throttle_flags[] = {
   {IMAGE_DISPATCH_FLAG_QOS_IOPS_THROTTLE,       "rbd_qos_iops_throttle"       },
   {IMAGE_DISPATCH_FLAG_QOS_BPS_THROTTLE,        "rbd_qos_bps_throttle"        },
   {IMAGE_DISPATCH_FLAG_QOS_READ_IOPS_THROTTLE,  "rbd_qos_read_iops_throttle"  },
@@ -68,7 +68,6 @@ QosImageDispatch<I>::~QosImageDispatch() {
   for (auto t : m_throttles) {
     delete t.second;
   }
-  delete m_flush_tracker;
 }
 
 template <typename I>
