@@ -175,6 +175,9 @@ class ContainerEngine:
     def EXE(cls) -> str:
         raise NotImplementedError()
 
+    def __str__(self) -> str:
+        return f'{self.EXE} ({self.path})'
+
 
 class Podman(ContainerEngine):
     EXE = 'podman'
@@ -192,6 +195,10 @@ class Podman(ContainerEngine):
     def get_version(self, ctx: CephadmContext) -> None:
         out, _, _ = call_throws(ctx, [self.path, 'version', '--format', '{{.Client.Version}}'])
         self._version = _parse_podman_version(out)
+
+    def __str__(self) -> str:
+        version = '.'.join(map(str, self.version))
+        return f'{self.EXE} ({self.path}) version {version}'
 
 
 class Docker(ContainerEngine):
@@ -5775,7 +5782,7 @@ def command_check_host(ctx: CephadmContext) -> None:
 
     try:
         engine = check_container_engine(ctx)
-        logger.info('podman|docker (%s) is present' % engine.path)
+        logger.info(f'{engine} is present')
     except Error as e:
         errors.append(str(e))
 
