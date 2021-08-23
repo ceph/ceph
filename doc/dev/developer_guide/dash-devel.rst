@@ -647,6 +647,57 @@ grammatical sense with ``it()`` as the prefix whereas the second message does
 not. ``it()`` should describe what the individual test is doing and what it
 expects to happen.
 
+
+Visual Regression Testing
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For visual regression testing, we use `Applitools Eyes <https://applitools.com/products-eyes/>`_
+an AI powered automated  visual regression testing tool.
+Applitools integrates with our existing Cypress E2E tests.
+The tests currently are located at: ``ceph/src/pybind/mgr/dashboard/frontend/cypress/integration/visualTests`` and
+follow the naming convention: ``<component-name>.vrt-spec.ts``.
+
+Running Visual Regression Tests Locally
+.......................................
+
+To run the tests locally, you'll need an Applitools API key, if you don't have one, you can sign up
+for a free account. After obtaining the API key, export it as an environment variable: ``APPLITOOLS_API_KEY``.
+
+Now you can run the tests like normal cypress E2E tests, using either ``npx cypress open`` or in headless mode by running ``npx cypress run``.
+
+Capturing Screenshots
+.....................
+
+Baseline screenshots are the screenshots against which checkpoint screenshots
+(or the screenshots from your feature branch) will be tested.
+
+To capture baseline screenshots, you can run the tests against the master branch,
+and then switch to your feature branch and run the tests again to capture checkpoint screenshots.
+
+Now to see your screenshots, login to applitools.com and on the landing page you'll be greeted with
+applitools eyes test runner, where you can see all your screenshots. And if there's any visual regression or difference (diff) between your baseline and checkpoint screenshots, they'll be highlighted with a mask over the diff.
+
+Writing More Visual Regression Tests
+....................................
+
+Please refer to `Applitools's official cypress sdk documentation <https://github.com/applitools/eyes.sdk.javascript1/tree/master/packages/eyes-cypress>`_ to write more tests.
+
+Visual Regression Tests In Jenkins
+..................................
+
+Currently, all visual regression tests are being run under `ceph dashboard tests <https://jenkins.ceph.com/job/ceph-dashboard-pull-requests>`_ GitHub check in the Jenkins job.
+
+Accepting or Rejecting Differences
+..................................
+
+Currently, only the ceph dashboard team has read and write access to the applitools test runner. If any differences are reported by the tests, and you want to accept them and update the baseline screenshots, or if the differences are due to a genuine regression you can fail them. To perform the above actions, please follow `this <https://applitools.com/docs/topics/test-manager/pages/page-test-results/tm-accepting-and-rejecting-steps.html>`_ guide.
+
+Debugging Regressions
+.....................
+
+If you're running the tests locally and regressions are reported, you can take advantage of `Applitools's Root Cause Analysis feature <https://applitools.com/docs/topics/test-manager/viewers/root-cause-analysis.html>`_ to find the cause of the regression.
+
+
 Differences between Frontend Unit Tests and End-to-End (E2E) Tests / FAQ
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
