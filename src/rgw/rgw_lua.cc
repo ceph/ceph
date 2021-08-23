@@ -198,7 +198,8 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, opti
   // luarocks directory cleanup
   std::error_code ec;
   const auto& luarocks_path = store->get_luarocks_path();
-  if (!std::filesystem::remove_all(luarocks_path, ec) &&
+  if (std::filesystem::remove_all(luarocks_path, ec)
+      == static_cast<std::uintmax_t>(-1) &&
       ec != std::errc::no_such_file_or_directory) {
     output.append("failed to clear luarock directory: ");
     output.append(ec.message());
