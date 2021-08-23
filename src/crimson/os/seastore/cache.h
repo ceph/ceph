@@ -628,6 +628,16 @@ private:
     counter_by_extent_t<effort_t> fresh_by_ext;
   };
 
+  struct tree_efforts_t {
+    uint64_t num_inserts = 0;
+    uint64_t num_erases = 0;
+
+    void increment(const Transaction::tree_stats_t& incremental) {
+      num_inserts += incremental.num_inserts;
+      num_erases += incremental.num_erases;
+    }
+  };
+
   template <typename CounterT>
   using counter_by_src_t = std::array<CounterT, Transaction::SRC_MAX>;
 
@@ -641,10 +651,14 @@ private:
     uint64_t read_transactions_successful;
     effort_t read_effort_successful;
     uint64_t dirty_bytes;
-    Transaction::tree_stats_t committed_onode_tree_stats;
-    Transaction::tree_stats_t committed_lba_tree_stats;
-    Transaction::tree_stats_t invalidated_onode_tree_stats;
-    Transaction::tree_stats_t invalidated_lba_tree_stats;
+
+    uint64_t onode_tree_depth;
+    counter_by_src_t<tree_efforts_t> committed_onode_tree_efforts;
+    counter_by_src_t<tree_efforts_t> invalidated_onode_tree_efforts;
+
+    uint64_t lba_tree_depth;
+    counter_by_src_t<tree_efforts_t> committed_lba_tree_efforts;
+    counter_by_src_t<tree_efforts_t> invalidated_lba_tree_efforts;
   } stats;
 
   template <typename CounterT>
