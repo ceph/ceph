@@ -156,7 +156,8 @@ set(librgw_common_srcs
   rgw_lua_utils.cc
   rgw_lua.cc
   rgw_lua_request.cc
-  rgw_bucket_encryption.cc)
+  rgw_bucket_encryption.cc
+  rgw_tracer.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -238,7 +239,7 @@ if(WITH_LTTNG)
 endif()
 
 if(WITH_JAEGER)
-  add_dependencies(rgw_common jaegertracing::libjaegertracing)
+  add_dependencies(rgw_common jaeger-base)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)
