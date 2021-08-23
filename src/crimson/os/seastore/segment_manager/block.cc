@@ -139,14 +139,6 @@ block_sm_superblock_t make_superblock(
   auto config_size = get_conf<Option::size_t>(
     "seastore_device_size");
 
-  logger().debug(
-    "{}: size {}, block_size {}, allocated_size {}, configured_size {}",
-    __func__,
-    data.size,
-    data.block_size,
-    data.allocated_size,
-    config_size);
-
   size_t size = (data.size == 0) ? config_size : data.size;
 
   auto config_segment_size = get_conf<Option::size_t>(
@@ -157,6 +149,18 @@ block_sm_superblock_t make_superblock(
     data.block_size);
   size_t segments = (size - tracker_size - data.block_size)
     / config_segment_size;
+
+  logger().debug(
+    "{}: size {}, block_size {}, allocated_size {}, configured_size {}, "
+    "segment_size {}",
+    __func__,
+    data.size,
+    data.block_size,
+    data.allocated_size,
+    config_size,
+    config_segment_size
+  );
+
   return block_sm_superblock_t{
     size,
     config_segment_size,
