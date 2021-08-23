@@ -1,11 +1,11 @@
 meta:
-- desc: install ceph/octopus v15.2.11
+- desc: install ceph/octopus v15.2.14
 tasks:
 - install:
-    tag: v15.2.11
+    tag: v15.2.14
     exclude_packages: ['librados3']
     extra_packages: ['librados2']
-- print: "**** done install octopus v15.2.11"
+- print: "**** done install octopus v15.2.14"
 - ceph:
 - exec:
     osd.0:
