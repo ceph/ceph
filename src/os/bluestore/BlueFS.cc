@@ -3624,6 +3624,7 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
          << ", allocator type " << alloc[id]->get_type()
          << ", capacity 0x" << alloc[id]->get_capacity()
          << ", block size 0x" << alloc[id]->get_block_size()
+         << ", alloc size 0x" << alloc_size[id]
          << ", free 0x" << alloc[id]->get_free()
          << ", fragmentation " << alloc[id]->get_fragmentation()
          << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
@@ -3670,6 +3671,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
               << ", allocator type " << alloc[id]->get_type()
               << ", capacity 0x" << alloc[id]->get_capacity()
               << ", block size 0x" << alloc[id]->get_block_size()
+              << ", alloc size 0x" << alloc_size[id]
               << ", free 0x" << alloc[id]->get_free()
               << ", fragmentation " << alloc[id]->get_fragmentation()
               << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
