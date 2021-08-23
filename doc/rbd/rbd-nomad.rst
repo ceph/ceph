@@ -2,15 +2,18 @@
  Block Devices and Nomad
 =========================
 
-Like Kubernetes, Nomad can use Ceph Block Device thanks to `ceph-csi`_, 
-which allow to dynamically provision RBD images or import existing one.
+Like Kubernetes, Nomad can use Ceph Block Device. This is made possible by
+`ceph-csi`_, which allows you to dynamically provision RBD images or import
+existing RBD images.
 
-Every nomad version can use `ceph-csi`_, however we'll here describe the
-latest version available at writing time, Nomad v1.1.2 .
+Every version of Nomad is compatible with `ceph-csi`_, but the reference
+version of Nomad that was used to generate the procedures and guidance in this
+document is Nomad v1.1.2, the latest version available at the time of the
+writing of the document.
 
 To use Ceph Block Devices with Nomad, you must install
 and configure ``ceph-csi`` within your Nomad environment. The following
-diagram depicts the Nomad/Ceph technology stack.
+diagram shows the Nomad/Ceph technology stack.
 
 .. ditaa::
             +-------------------------+-------------------------+
@@ -43,11 +46,11 @@ diagram depicts the Nomad/Ceph technology stack.
             +------------------------+ +------------------------+
 
 .. note::
-    Nomad has many task drivers, but we'll only use a Docker container in this example.
+    Nomad has many possible task drivers, but this example uses only a Docker container.
 
 .. important::
-   ``ceph-csi`` uses the RBD kernel modules by default which may not support all
-   Ceph `CRUSH tunables`_ or `RBD image features`_.
+   ``ceph-csi`` uses the RBD kernel modules by default, which may not support
+   all Ceph `CRUSH tunables`_ or `RBD image features`_.
 
 Create a Pool
 =============
