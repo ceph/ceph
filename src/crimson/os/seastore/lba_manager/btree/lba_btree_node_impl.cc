@@ -420,9 +420,11 @@ LBAInternalNode::merge_entry(
 	    croot = mut_croot->cast<RootBlock>();
 	  }
 	  auto new_root_addr = begin()->get_val().maybe_relative_to(get_paddr());
+	  auto new_depth = get_meta().depth - 1;
 	  croot->get_root().lba_root = lba_root_t{
 	    new_root_addr,
-	    get_meta().depth - 1};
+	    new_depth};
+	  c.trans.get_lba_tree_stats().depth = new_depth;
 	  logger().debug(
 	    "LBAInternalNode::merge_entry: collapsing root {} to addr {}",
 	    *this,
@@ -607,6 +609,7 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping_internal(
       interruptible::ready_future_marker{},
       mutated);
   } else {
+    ++(c.trans.get_lba_tree_stats().num_erases);
     journal_remove(mutation_pt, maybe_get_delta_buffer());
     return mutate_mapping_ret(
       interruptible::ready_future_marker{},

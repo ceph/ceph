@@ -429,6 +429,88 @@ void Cache::register_metrics()
       ),
     }
   );
+
+  /**
+   * tree stats
+   */
+  auto tree_label = sm::label("tree");
+  auto onode_label = tree_label("ONODE");
+  stats.committed_onode_tree_stats = {};
+  stats.invalidated_onode_tree_stats = {};
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "tree_depth",
+        stats.committed_onode_tree_stats.depth,
+        sm::description("the depth of tree"),
+        {onode_label}
+      ),
+      sm::make_counter(
+        "tree_inserts_committed",
+        stats.committed_onode_tree_stats.num_inserts,
+        sm::description("total number of committed insert operations"),
+        {onode_label}
+      ),
+      sm::make_counter(
+        "tree_erases_committed",
+        stats.committed_onode_tree_stats.num_erases,
+        sm::description("total number of committed erase operations"),
+        {onode_label}
+      ),
+      sm::make_counter(
+        "tree_inserts_invalidated",
+        stats.invalidated_onode_tree_stats.num_inserts,
+        sm::description("total number of invalidated insert operations"),
+        {onode_label}
+      ),
+      sm::make_counter(
+        "tree_erases_invalidated",
+        stats.invalidated_onode_tree_stats.num_erases,
+        sm::description("total number of invalidated erase operations"),
+        {onode_label}
+      ),
+    }
+  );
+
+  auto lba_label = tree_label("LBA");
+  stats.committed_lba_tree_stats = {};
+  stats.invalidated_lba_tree_stats = {};
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "tree_depth",
+        stats.committed_lba_tree_stats.depth,
+        sm::description("the depth of tree"),
+        {lba_label}
+      ),
+      sm::make_counter(
+        "tree_inserts_committed",
+        stats.committed_lba_tree_stats.num_inserts,
+        sm::description("total number of committed insert operations"),
+        {lba_label}
+      ),
+      sm::make_counter(
+        "tree_erases_committed",
+        stats.committed_lba_tree_stats.num_erases,
+        sm::description("total number of committed erase operations"),
+        {lba_label}
+      ),
+      sm::make_counter(
+        "tree_inserts_invalidated",
+        stats.invalidated_lba_tree_stats.num_inserts,
+        sm::description("total number of invalidated insert operations"),
+        {lba_label}
+      ),
+      sm::make_counter(
+        "tree_erases_invalidated",
+        stats.invalidated_lba_tree_stats.num_erases,
+        sm::description("total number of invalidated erase operations"),
+        {lba_label}
+      ),
+    }
+  );
 }
 
 void Cache::add_extent(CachedExtentRef ref)
@@ -581,11 +663,16 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
       efforts.mutate.increment(i->get_length());
       efforts.mutate_delta_bytes += i->get_delta().length();
     }
+
+    stats.invalidated_onode_tree_stats.increment(t.onode_tree_stats);
+    stats.invalidated_lba_tree_stats.increment(t.lba_tree_stats);
   } else {
     // read transaction won't have non-read efforts
     assert(t.retired_set.empty());
     assert(t.fresh_block_list.empty());
     assert(t.mutated_block_list.empty());
+    assert(t.onode_tree_stats.is_clear());
+    assert(t.lba_tree_stats.is_clear());
   }
 }
 
@@ -607,6 +694,8 @@ void Cache::on_transaction_destruct(Transaction& t)
     assert(t.retired_set.empty());
     assert(t.fresh_block_list.empty());
     assert(t.mutated_block_list.empty());
+    assert(t.onode_tree_stats.is_clear());
+    assert(t.lba_tree_stats.is_clear());
   }
 }
 
@@ -680,6 +769,8 @@ record_t Cache::prepare_record(Transaction &t)
 
   assert(!t.is_weak());
   assert(t.get_src() != Transaction::src_t::READ);
+  stats.committed_onode_tree_stats.increment(t.onode_tree_stats);
+  stats.committed_lba_tree_stats.increment(t.lba_tree_stats);
   ++(get_by_src(stats.trans_committed_by_src, t.get_src()));
   auto& efforts = get_by_src(stats.committed_efforts_by_src,
                              t.get_src());
