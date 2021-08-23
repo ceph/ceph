@@ -227,14 +227,6 @@ public:
               num_inserts == 0 &&
               num_erases == 0);
     }
-    void increment(const tree_stats_t& incremental) {
-      if (incremental.depth != 0) {
-        // depth is an absolute value
-        depth = incremental.depth;
-      }
-      num_inserts += incremental.num_inserts;
-      num_erases += incremental.num_erases;
-    }
   };
   tree_stats_t& get_onode_tree_stats() {
     return onode_tree_stats;
