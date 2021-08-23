@@ -94,7 +94,7 @@ named ``site1`` and ``site2``::
   }
 
 Finally, inject the CRUSH map to make the rule available to the cluster::
-  
+
   $ crushtool -c crush.map.txt -o crush2.map.bin
   $ ceph osd setcrushmap -i crush2.map.bin
 
@@ -104,9 +104,13 @@ the instructions in `Changing Monitor Elections`_.
 .. _Changing Monitor elections: ../change-mon-elections
 
 And lastly, tell the cluster to enter stretch mode. Here, ``mon.e`` is the
-tiebreaker and we are splitting across data centers ::
+tiebreaker and we are splitting across data centers. ``mon.e`` should be also
+set a datacenter, that will differ from ``site1`` and ``site2``. For this
+purpose you can create another datacenter bucket named ```site3`` in your
+CRUSH and place ``mon.e`` there ::
 
-  $ ceph mon enable_stretch_mode e stretch_rule data center
+  $ ceph mon set_location e datacenter=site3
+  $ ceph mon enable_stretch_mode e stretch_rule datacenter
 
 When stretch mode is enabled, the OSDs wlll only take PGs active when
 they peer across data centers (or whatever other CRUSH bucket type
@@ -132,7 +136,6 @@ restores min_size to its starting value (2) and requires both sites to peer,
 and stops requiring the always-alive site when peering (so that you can fail
 over to the other site, if necessary).
 
-  
 Stretch Mode Limitations
 ========================
 As implied by the setup, stretch mode only handles 2 sites with OSDs.
@@ -172,7 +175,7 @@ when the PGs are healthy. If this doesn't happen, or you want to force the
 cross-data-center peering early and are willing to risk data downtime (or have
 verified separately that all the PGs can peer, even if they aren't fully
 recovered), you can invoke ::
-  
+
   $ ceph osd force_healthy_stretch_mode --yes-i-really-mean-it
 
 This command should not be necessary; it is included to deal with
