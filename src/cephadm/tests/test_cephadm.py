@@ -1538,7 +1538,7 @@ class TestCephVolume(object):
             '--', 'inventory', '--format', 'json'
         ]
 
-    def test_noop(self):
+    def test_noop(self, cephadm_fs):
         cmd = self._get_cmd()
         with with_cephadm_ctx(cmd) as ctx:
             cd.command_ceph_volume(ctx)
