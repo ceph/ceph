@@ -1,4 +1,5 @@
 import json
+from unittest.mock import AsyncMock
 from contextlib import contextmanager
 
 import pytest
@@ -14,7 +15,7 @@ try:
 except ImportError:
     pass
 
-from execnet.gateway_bootstrap import HostNotFound
+from asyncssh.misc import ConnectionLost
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
     NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec
@@ -1076,24 +1077,28 @@ spec:
             assert_rm_daemon(cephadm_module, spec.service_name(), 'host1')  # verifies ok-to-stop
             assert_rm_daemon(cephadm_module, spec.service_name(), 'host2')
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("remoto.process.check")
-    def test_offline(self, _check, _get_connection, cephadm_module):
-        _check.return_value = '{}', '', 0
-        _get_connection.return_value = mock.Mock(), mock.Mock()
-        with with_host(cephadm_module, 'test'):
-            _get_connection.side_effect = HostNotFound
-            code, out, err = cephadm_module.check_host('test')
-            assert out == ''
-            assert "Host 'test' not found" in err
+    @mock.patch("cephadm.ssh.SSHManager.execute_command")
+    @mock.patch("cephadm.ssh.SSHManager.check_execute_command")
+    def test_offline(self, check_execute_command, execute_command, cephadm_module):
+        check_execute_command.return_value = ''
+        execute_command.return_value = '', '', 0
 
-            out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-            assert out == HostSpec('test', '1.2.3.4', status='Offline').to_json()
+        mock_connect = AsyncMock(return_value='')
+        with mock.patch("asyncssh.connect", new=mock_connect) as asyncssh_connect:
+            with with_host(cephadm_module, 'test'):
+                asyncssh_connect.side_effect = ConnectionLost('reason')
+                code, out, err = cephadm_module.check_host('test')
+                assert out == ''
+                assert "Host 'test' not found" in err
 
-            _get_connection.side_effect = None
-            assert CephadmServe(cephadm_module)._check_host('test') is None
-            out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-            assert out == HostSpec('test', '1.2.3.4').to_json()
+                out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
+                assert out == HostSpec('test', '1.2.3.4', status='Offline').to_json()
+
+                asyncssh_connect.return_value = mock.MagicMock()
+                asyncssh_connect.side_effect = None
+                assert CephadmServe(cephadm_module)._check_host('test') is None
+                out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
+                assert out == HostSpec('test', '1.2.3.4').to_json()
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_dont_touch_offline_or_maintenance_host_daemons(self, cephadm_module):
@@ -1130,55 +1135,15 @@ spec:
                             assert len(cephadm_module.cache.get_daemons_by_type('mgr')) == 3
                             assert len(cephadm_module.cache.get_daemons_by_type('crash')) == 1
 
-    def test_stale_connections(self, cephadm_module):
-        class Connection(object):
-            """
-            A mocked connection class that only allows the use of the connection
-            once. If you attempt to use it again via a _check, it'll explode (go
-            boom!).
-
-            The old code triggers the boom. The new code checks the has_connection
-            and will recreate the connection.
-            """
-            fuse = False
-
-            @ staticmethod
-            def has_connection():
-                return False
-
-            def import_module(self, *args, **kargs):
-                return mock.Mock()
-
-            @ staticmethod
-            def exit():
-                pass
-
-        def _check(conn, *args, **kargs):
-            if conn.fuse:
-                raise Exception("boom: connection is dead")
-            else:
-                conn.fuse = True
-            return '{}', [], 0
-        with mock.patch("remoto.Connection", side_effect=[Connection(), Connection(), Connection()]):
-            with mock.patch("remoto.process.check", _check):
-                with with_host(cephadm_module, 'test', refresh_hosts=False):
-                    code, out, err = cephadm_module.check_host('test')
-                    # First should succeed.
-                    assert err == ''
-
-                    # On second it should attempt to reuse the connection, where the
-                    # connection is "down" so will recreate the connection. The old
-                    # code will blow up here triggering the BOOM!
-                    code, out, err = cephadm_module.check_host('test')
-                    assert err == ''
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
-    @mock.patch("remoto.process.check")
-    @mock.patch("cephadm.module.CephadmServe._write_remote_file")
-    def test_etc_ceph(self, _write_file, _check, _get_connection, cephadm_module):
-        _get_connection.return_value = mock.Mock(), mock.Mock()
-        _check.return_value = '{}', '', 0
+    @mock.patch("cephadm.ssh.SSHManager.remote_connection")
+    @mock.patch("cephadm.ssh.SSHManager.execute_command")
+    @mock.patch("cephadm.ssh.SSHManager.check_execute_command")
+    @mock.patch("cephadm.ssh.SSHManager.write_remote_file")
+    def test_etc_ceph(self, _write_file, check_execute_command, execute_command, remote_connection, cephadm_module):
         _write_file.return_value = None
+        check_execute_command.return_value = ''
+        execute_command.return_value = '{}', '', 0
+        remote_connection.return_value = mock.Mock()
 
         assert cephadm_module.manage_etc_ceph_ceph_conf is False
 
