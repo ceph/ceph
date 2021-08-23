@@ -90,6 +90,7 @@ def get_prune_set(candidates: Set[Tuple[cephfs.DirEntry, datetime]],
         if not period_count:
             continue
         last = None
+        kept_for_this_period = 0
         for snap in sorted(candidates, key=lambda x: x[0].d_name,
                            reverse=True):
             snap_ts = snap[1].strftime(date_pattern)
@@ -99,7 +100,8 @@ def get_prune_set(candidates: Set[Tuple[cephfs.DirEntry, datetime]],
                     log.debug((f'keeping {snap[0].d_name} due to '
                                f'{period_count}{period}'))
                     keep.append(snap)
-                    if len(keep) == period_count:
+                    kept_for_this_period += 1
+                    if kept_for_this_period == period_count:
                         log.debug(('found enough snapshots for '
                                    f'{period_count}{period}'))
                         break
