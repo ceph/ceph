@@ -146,8 +146,8 @@ auto call_with_interruption_impl(
   // 		});
   // 	})
   // In this case, as crimson::do_for_each would directly do futurize_invoke
-  // for "call_with_interruption", we have make sure this invocation would
-  // errorly release ::crimson::interruptible::interrupt_cond<InterruptCond>
+  // for "call_with_interruption", we have to make sure this invocation would
+  // not errorly release ::crimson::interruptible::interrupt_cond<InterruptCond>
 
   // If there exists an interrupt condition, which means "Func" may not be
   // permitted to run as a result of the interruption, test it. If it does
