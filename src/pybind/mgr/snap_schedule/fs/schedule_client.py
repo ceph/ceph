@@ -79,6 +79,7 @@ def get_prune_set(candidates, retention):
         if not period_count:
             continue
         last = None
+        kept_for_this_period = 0
         for snap in sorted(candidates, key=lambda x: x[0].d_name,
                            reverse=True):
             snap_ts = snap[1].strftime(date_pattern)
@@ -87,8 +88,10 @@ def get_prune_set(candidates, retention):
                 if snap not in keep:
                     log.debug(f'keeping {snap[0].d_name} due to {period_count}{period}')
                     keep.append(snap)
-                    if len(keep) == period_count:
-                        log.debug(f'found enough snapshots for {period_count}{period}')
+                    kept_for_this_period += 1
+                    if kept_for_this_period == period_count:
+                        log.debug(('found enough snapshots for '
+                                   f'{period_count}{period}'))
                         break
     if len(keep) > MAX_SNAPS_PER_PATH:
         log.info(f'Would keep more then {MAX_SNAPS_PER_PATH}, pruning keep set')
