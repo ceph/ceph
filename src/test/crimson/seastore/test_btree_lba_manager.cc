@@ -116,12 +116,14 @@ struct btree_lba_manager_test :
     test_lba_mapping_t mappings;
   };
 
-  auto create_transaction() {
+  auto create_transaction(bool create_fake_extent=true) {
     auto t = test_transaction_t{
       cache.create_transaction(Transaction::src_t::MUTATE),
       test_lba_mappings
     };
-    cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
+    if (create_fake_extent) {
+      cache.alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
+    };
     return t;
   }
 
@@ -460,6 +462,43 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
       check_mappings(t);
       submit_test_transaction(std::move(t));
     }
+    check_mappings();
+  });
+}
+
+TEST_F(btree_lba_manager_test, split_merge_multi)
+{
+  run_async([this] {
+    auto iterate = [&](auto f) {
+      for (uint64_t i = 0; i < (1<<12); ++i) {
+	auto t = create_transaction(false);
+	logger().debug("opened transaction");
+	for (unsigned j = 0; j < 5; ++j) {
+	  f(t, (i * 5) + j);
+	}
+	logger().debug("submitting transaction");
+	submit_test_transaction(std::move(t));
+      }
+    };
+    iterate([&](auto &t, auto idx) {
+      alloc_mapping(t, idx * block_size, block_size, get_paddr());
+    });
+    check_mappings();
+    iterate([&](auto &t, auto idx) {
+      if ((idx % 32) > 0) {
+	decref_mapping(t, idx * block_size);
+      }
+    });
+    check_mappings();
+    iterate([&](auto &t, auto idx) {
+      if ((idx % 32) > 0) {
+	alloc_mapping(t, idx * block_size, block_size, get_paddr());
+      }
+    });
+    check_mappings();
+    iterate([&](auto &t, auto idx) {
+      decref_mapping(t, idx * block_size);
+    });
     check_mappings();
   });
 }
