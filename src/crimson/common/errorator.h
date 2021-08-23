@@ -914,7 +914,7 @@ public:
   }
 
 private:
-  template <class T, class = std::void_t<T>>
+  template <class T>
   class futurize {
     using vanilla_futurize = seastar::futurize<T>;
 
@@ -960,10 +960,7 @@ private:
   };
   template <template <class...> class ErroratedFutureT,
             class ValueT>
-  class futurize<ErroratedFutureT<::crimson::errorated_future_marker<ValueT>>,
-                 std::void_t<
-                   typename ErroratedFutureT<
-                     ::crimson::errorated_future_marker<ValueT>>::errorator_type>> {
+  class futurize<ErroratedFutureT<::crimson::errorated_future_marker<ValueT>>> {
   public:
     using type = ::crimson::errorator<AllowedErrors...>::future<ValueT>;
 
