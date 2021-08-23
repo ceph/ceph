@@ -14,7 +14,8 @@
 #include <vector>
 
 rbd::mirror::Mirror *mirror = nullptr;
-PerfCounters *g_perf_counters = nullptr;
+PerfCounters *g_journal_perf_counters = nullptr;
+PerfCounters *g_snapshot_perf_counters = nullptr;
 
 void usage() {
   std::cout << "usage: rbd-mirror [options...]" << std::endl;
@@ -68,17 +69,33 @@ int main(int argc, const char **argv)
 
   auto prio =
       g_ceph_context->_conf.get_val<int64_t>("rbd_mirror_perf_stats_prio");
-  PerfCountersBuilder plb(g_ceph_context, "rbd_mirror",
-                          rbd::mirror::l_rbd_mirror_first,
-                          rbd::mirror::l_rbd_mirror_last);
-  plb.add_u64_counter(rbd::mirror::l_rbd_mirror_replay, "replay", "Replays",
-                      "r", prio);
-  plb.add_u64_counter(rbd::mirror::l_rbd_mirror_replay_bytes, "replay_bytes",
-                      "Replayed data", "rb", prio, unit_t(UNIT_BYTES));
-  plb.add_time_avg(rbd::mirror::l_rbd_mirror_replay_latency, "replay_latency",
-                   "Replay latency", "rl", prio);
-  g_perf_counters = plb.create_perf_counters();
-  g_ceph_context->get_perfcounters_collection()->add(g_perf_counters);
+  {
+    PerfCountersBuilder plb(g_ceph_context, "rbd_mirror",
+                            rbd::mirror::l_rbd_mirror_journal_first,
+                            rbd::mirror::l_rbd_mirror_journal_last);
+    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_replay, "replay", "Replays",
+                        "r", prio);
+    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_replay_bytes, "replay_bytes",
+                        "Replayed data", "rb", prio, unit_t(UNIT_BYTES));
+    plb.add_time_avg(rbd::mirror::l_rbd_mirror_replay_latency, "replay_latency",
+                     "Replay latency", "rl", prio);
+    g_journal_perf_counters = plb.create_perf_counters();
+  }
+  {
+    PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_snapshot",
+                            rbd::mirror::l_rbd_mirror_snapshot_first,
+                            rbd::mirror::l_rbd_mirror_snapshot_last);
+    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_snapshot_replay_snapshots,
+                        "snapshots", "Snapshots", "r", prio);
+    plb.add_time_avg(rbd::mirror::l_rbd_mirror_snapshot_replay_snapshots_time,
+                     "snapshots_time", "Snapshots time", "rl", prio);
+    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_snapshot_replay_bytes,
+                        "replay_bytes", "Replayed data", "rb", prio,
+                        unit_t(UNIT_BYTES));
+    g_snapshot_perf_counters = plb.create_perf_counters();
+  }
+  g_ceph_context->get_perfcounters_collection()->add(g_journal_perf_counters);
+  g_ceph_context->get_perfcounters_collection()->add(g_snapshot_perf_counters);
 
   mirror = new rbd::mirror::Mirror(g_ceph_context, cmd_args);
   int r = mirror->init();
@@ -95,10 +112,12 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGTERM, handle_signal);
   shutdown_async_signal_handler();
 
-  g_ceph_context->get_perfcounters_collection()->remove(g_perf_counters);
+  g_ceph_context->get_perfcounters_collection()->remove(g_journal_perf_counters);
+  g_ceph_context->get_perfcounters_collection()->remove(g_snapshot_perf_counters);
 
   delete mirror;
-  delete g_perf_counters;
+  delete g_journal_perf_counters;
+  delete g_snapshot_perf_counters;
 
   return r < 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
