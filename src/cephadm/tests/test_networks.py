@@ -1,7 +1,10 @@
+import json
 from textwrap import dedent
 from unittest import mock
 
 import pytest
+
+from tests.fixtures import with_cephadm_ctx, cephadm_fs
 
 with mock.patch('builtins.open', create=True):
     from importlib.machinery import SourceFileLoader
@@ -188,3 +191,11 @@ class TestCommandListNetworks:
     ])
     def test_parse_ipv6_route(self, test_routes, test_ips, expected):
         assert cd._parse_ipv6_route(test_routes, test_ips) == expected
+
+    @mock.patch.object(cd, 'call_throws', return_value=('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', ''))
+    def test_command_list_networks(self, cephadm_fs, capsys):
+        with with_cephadm_ctx([]) as ctx:
+            cd.command_list_networks(ctx)
+            assert json.loads(capsys.readouterr().out) == {
+                '10.4.0.1': {'tun0': ['10.4.0.2']}
+            }

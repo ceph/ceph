@@ -95,8 +95,6 @@ def with_cephadm_ctx(
     :param list_networks: mock 'list-networks' return
     :param hostname: mock 'socket.gethostname' return
     """
-    if not list_networks:
-        list_networks = {}
     if not hostname:
         hostname = 'host1'
 
@@ -106,8 +104,12 @@ def with_cephadm_ctx(
          mock.patch('cephadm.find_executable', return_value='foo'), \
          mock.patch('cephadm.is_available', return_value=True), \
          mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \
-         mock.patch('cephadm.list_networks', return_value=list_networks), \
          mock.patch('socket.gethostname', return_value=hostname):
-             ctx: cd.CephadmContext = cd.cephadm_init_ctx(cmd)
-             ctx.container_engine = container_engine
-             yield ctx
+        ctx: cd.CephadmContext = cd.cephadm_init_ctx(cmd)
+        ctx.container_engine = container_engine
+        if list_networks is not None:
+            with mock.patch('cephadm.list_networks', return_value=list_networks):
+                yield ctx
+        else:
+            yield ctx
+
