@@ -1,4 +1,6 @@
 import fnmatch
+import asyncio
+from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
@@ -33,6 +35,11 @@ def match_glob(val, pat):
         assert pat in val
 
 
+class MockEventLoopThread:
+    def get_result(self, coro):
+        asyncio.run(coro)
+
+
 @contextmanager
 def with_cephadm_module(module_options=None, store=None):
     """
@@ -61,6 +68,10 @@ def with_cephadm_module(module_options=None, store=None):
 
         m.__init__('cephadm', 0, 0)
         m._cluster_fsid = "fsid"
+
+        m.event_loop = MockEventLoopThread()
+        m.tkey = NamedTemporaryFile(prefix='test-cephadm-identity-')
+
         yield m
 
 

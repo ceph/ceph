@@ -7580,7 +7580,7 @@ WantedBy=ceph-{fsid}.target
             with open(os.open(os.path.join(self.daemon_path, filename), os.O_CREAT | os.O_WRONLY, mode=0o600), 'w') as f:
                 f.write(config[filename])
 
-        # When __file__ is <stdin> we're being invoked over remoto via the orchestrator, so
+        # When __file__ is <stdin> we're being invoked over asyncssh via the orchestrator, so
         # we pick up the file from where the orchestrator placed it - otherwise we'll
         # copy it to the binary location for this cluster
         if not __file__ == '<stdin>':
