@@ -31,7 +31,7 @@ int RGWHTTPSimpleRequest::handle_header(const string& name, const string& val)
     string err;
     long len = strict_strtol(val.c_str(), 10, &err);
     if (!err.empty()) {
-      ldout(cct, 0) << "ERROR: failed converting content length (" << val << ") to int " << dendl;
+      ldpp_dout(this, 0) << "ERROR: failed converting content length (" << val << ") to int " << dendl;
       return -EINVAL;
     }
 
@@ -49,7 +49,7 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
 
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
-  ldout(cct, 10) << "receive_http_header" << dendl;
+  ldpp_dout(this, 10) << "receive_http_header" << dendl;
 
   while (s != end) {
     if (*s == '\r') {
@@ -58,7 +58,7 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
     }
     if (*s == '\n') {
       *p = '\0';
-      ldout(cct, 10) << "received header:" << line << dendl;
+      ldpp_dout(this, 10) << "received header:" << line << dendl;
       // TODO: fill whatever data required here
       char *l = line;
       char *tok = strsep(&l, " \t:");
@@ -285,13 +285,14 @@ static string extract_region_name(string&& s)
 }
 
 
-static bool identify_scope(CephContext *cct,
+static bool identify_scope(const DoutPrefixProvider *dpp,
+                           CephContext *cct,
                            const string& host,
                            string *region,
                            string *service)
 {
   if (!boost::algorithm::ends_with(host, "amazonaws.com")) {
-    ldout(cct, 20) << "NOTICE: cannot identify region for connection to: " << host << dendl;
+    ldpp_dout(dpp, 20) << "NOTICE: cannot identify region for connection to: " << host << dendl;
     return false;
   }
 
@@ -310,7 +311,7 @@ static bool identify_scope(CephContext *cct,
       }
       ++iter;
       if (iter == vec.end()) {
-        ldout(cct, 0) << "WARNING: cannot identify region name from host name: " << host << dendl;
+        ldpp_dout(dpp, 0) << "WARNING: cannot identify region name from host name: " << host << dendl;
         return false;
       }
       auto& next = *iter;
@@ -329,7 +330,8 @@ static bool identify_scope(CephContext *cct,
   return false;
 }
 
-static void scope_from_api_name(CephContext *cct,
+static void scope_from_api_name(const DoutPrefixProvider *dpp,
+                                CephContext *cct,
                                 const string& host,
                                 std::optional<string> api_name,
                                 string *region,
@@ -341,7 +343,7 @@ static void scope_from_api_name(CephContext *cct,
     return;
   }
 
-  if (!identify_scope(cct, host, region, service)) {
+  if (!identify_scope(dpp, cct, host, region, service)) {
     *region = cct->_conf->rgw_zonegroup;
     *service = "s3";
     return;
@@ -381,7 +383,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, RGWAcce
   string region;
   string service;
 
-  scope_from_api_name(cct, host, api_name, &region, &service);
+  scope_from_api_name(dpp, cct, host, api_name, &region, &service);
 
   const char *maybe_payload_hash = info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
   if (maybe_payload_hash) {
@@ -557,7 +559,7 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
                                       const string& resource, const param_vec_t& params,
                                       std::optional<string> api_name)
 {
-  scope_from_api_name(cct, host, api_name, &region, &service);
+  scope_from_api_name(this, cct, host, api_name, &region, &service);
 
   string params_str;
   map<string, string>& args = new_info->args.get_params();
@@ -746,7 +748,7 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
   }
 }
 
-static int parse_rgwx_mtime(CephContext *cct, const string& s, ceph::real_time *rt)
+static int parse_rgwx_mtime(const DoutPrefixProvider *dpp, CephContext *cct, const string& s, ceph::real_time *rt)
 {
   string err;
   vector<string> vec;
@@ -760,14 +762,14 @@ static int parse_rgwx_mtime(CephContext *cct, const string& s, ceph::real_time *
   long secs = strict_strtol(vec[0].c_str(), 10, &err);
   long nsecs = 0;
   if (!err.empty()) {
-    ldout(cct, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
     return -EINVAL;
   }
 
   if (vec.size() > 1) {
     nsecs = strict_strtol(vec[1].c_str(), 10, &err);
     if (!err.empty()) {
-      ldout(cct, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
       return -EINVAL;
     }
   }
@@ -937,7 +939,7 @@ int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
       string mtime_str;
       set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
       if (!mtime_str.empty()) {
-        int ret = parse_rgwx_mtime(cct, mtime_str, mtime);
+        int ret = parse_rgwx_mtime(this, cct, mtime_str, mtime);
         if (ret < 0) {
           return ret;
         }
@@ -951,7 +953,7 @@ int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
       string err;
       *psize = strict_strtoll(size_str.c_str(), 10, &err);
       if (!err.empty()) {
-        ldout(cct, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
+        ldpp_dout(this, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
         return -EIO;
       }
     }
@@ -990,7 +992,7 @@ int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)
     string err;
     long len = strict_strtol(val.c_str(), 10, &err);
     if (!err.empty()) {
-      ldout(cct, 0) << "ERROR: failed converting embedded metadata len (" << val << ") to int " << dendl;
+      ldpp_dout(this, 0) << "ERROR: failed converting embedded metadata len (" << val << ") to int " << dendl;
       return -EINVAL;
     }
 
