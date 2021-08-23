@@ -154,30 +154,29 @@ auto call_with_interruption_impl(
   // need to be interrupted, return an interruption; otherwise, restore the
   // global "interrupt_cond" with the interruption condition, and go ahead
   // executing the Func.
-  if (interrupt_condition) {
-    auto [interrupt, fut] = interrupt_condition->template may_interrupt<
-      typename futurator_t::type>();
-    INTR_FUT_DEBUG(
-      "call_with_interruption_impl: may_interrupt: {}, "
-      "local interrupt_condintion: {}, "
-      "global interrupt_cond: {},{}",
-      interrupt,
-      (void*)interrupt_condition.get(),
-      (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
-      typeid(InterruptCond).name());
-    if (interrupt) {
-      return std::move(*fut);
-    }
-    interrupt_cond<InterruptCond>.set(interrupt_condition);
+  assert(interrupt_condition);
+  auto [interrupt, fut] = interrupt_condition->template may_interrupt<
+    typename futurator_t::type>();
+  INTR_FUT_DEBUG(
+    "call_with_interruption_impl: may_interrupt: {}, "
+    "local interrupt_condintion: {}, "
+    "global interrupt_cond: {},{}",
+    interrupt,
+    (void*)interrupt_condition.get(),
+    (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+    typeid(InterruptCond).name());
+  if (interrupt) {
+    return std::move(*fut);
   }
+  interrupt_cond<InterruptCond>.set(interrupt_condition);
 
-  auto fut = seastar::futurize_invoke(
+  auto fut2 = seastar::futurize_invoke(
       std::forward<Func>(func),
       std::forward<Args>(args)...);
   // Clear the global "interrupt_cond" to prevent it from interfering other
   // continuation chains.
   interrupt_cond<InterruptCond>.reset();
-  return fut;
+  return fut2;
 }
 
 }
@@ -256,20 +255,19 @@ Result non_futurized_call_with_interruption(
   InterruptCondRef<InterruptCond> interrupt_condition,
   Func&& func, T&&... args)
 {
-  if (interrupt_condition) {
-    auto [interrupt, fut] = interrupt_condition->template may_interrupt<seastar::future<>>();
-    INTR_FUT_DEBUG(
-      "non_futurized_call_with_interruption may_interrupt: {}, "
-      "interrupt_condition: {}, interrupt_cond: {},{}",
-      interrupt,
-      (void*)interrupt_condition.get(),
-      (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
-      typeid(InterruptCond).name());
-    if (interrupt) {
-      std::rethrow_exception(fut->get_exception());
-    }
-    interrupt_cond<InterruptCond>.set(interrupt_condition);
+  assert(interrupt_condition);
+  auto [interrupt, fut] = interrupt_condition->template may_interrupt<seastar::future<>>();
+  INTR_FUT_DEBUG(
+    "non_futurized_call_with_interruption may_interrupt: {}, "
+    "interrupt_condition: {}, interrupt_cond: {},{}",
+    interrupt,
+    (void*)interrupt_condition.get(),
+    (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+    typeid(InterruptCond).name());
+  if (interrupt) {
+    std::rethrow_exception(fut->get_exception());
   }
+  interrupt_cond<InterruptCond>.set(interrupt_condition);
   try {
     if constexpr (std::is_void_v<Result>) {
       std::invoke(std::forward<Func>(func), std::forward<T>(args)...);
