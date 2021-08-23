@@ -3913,6 +3913,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     wrlock_force(&in->xattrlock, mut);
   }
   
+  dout(20) << "rctime projections must stop at:" << follows << dendl;
   mut->auth_pin(in);
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in, follows);
