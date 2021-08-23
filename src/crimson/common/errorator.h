@@ -965,16 +965,6 @@ private:
     using type = ::crimson::errorator<AllowedErrors...>::future<ValueT>;
 
     template <class Func, class... Args>
-    static type apply(Func&& func, std::tuple<Args...>&& args) {
-      try {
-        return ::seastar::futurize_apply(std::forward<Func>(func),
-					 std::forward<std::tuple<Args...>>(args));
-      } catch (...) {
-        return make_exception_future(std::current_exception());
-      }
-    }
-
-    template <class Func, class... Args>
     static type invoke(Func&& func, Args&&... args) {
       try {
         return ::seastar::futurize_invoke(std::forward<Func>(func),
@@ -1006,19 +996,6 @@ private:
   public:
     using type = ::crimson::interruptible::interruptible_future_detail<
 	    InterruptCond, typename futurize<FutureType>::type>;
-
-    template <typename Func, typename... Args>
-    static type apply(Func&& func, std::tuple<Args...>&& args) {
-      try {
-	return ::seastar::futurize_apply(std::forward<Func>(func),
-					 std::forward<std::tuple<Args...>>(args));
-      } catch (...) {
-	return seastar::futurize<
-	  ::crimson::interruptible::interruptible_future_detail<
-	    InterruptCond, FutureType>>::make_exception_future(
-		std::current_exception());
-      }
-    }
 
     template <typename Func, typename... Args>
     static type invoke(Func&& func, Args&&... args) {

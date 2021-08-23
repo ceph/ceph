@@ -1004,12 +1004,6 @@ public:
       InterruptCond, typename seastar::futurize<T>::type>;
 
     template <typename Func, typename... Args>
-    static type apply(Func&& func, std::tuple<Args...>&& args) noexcept {
-      return seastar::futurize<T>::apply(std::forward<Func>(func),
-					 std::forward<std::tuple<Args...>>(args));
-    }
-
-    template <typename Func, typename... Args>
     static type invoke(Func&& func, Args&&... args) noexcept {
       return seastar::futurize<T>::invoke(
 	std::forward<Func>(func),
@@ -1022,13 +1016,6 @@ public:
     using type = interruptible_future_detail<InterruptCond, FutureType>;
 
     template <typename Func, typename... Args>
-    static type apply(Func&& func, std::tuple<Args...>&& args) noexcept {
-      return seastar::futurize<FutureType>::apply(
-	  std::forward<Func>(func),
-	  std::forward<std::tuple<Args...>>(args));
-    }
-
-    template <typename Func, typename... Args>
     static type invoke(Func&& func, Args&&... args) noexcept {
       return seastar::futurize<FutureType>::invoke(
 	  std::forward<Func>(func),
@@ -1038,12 +1025,6 @@ public:
 
   template <typename T>
   using futurize_t = typename futurize<T>::type;
-
-  template <typename Func, typename... Args>
-  static auto futurize_apply(Func&& func, std::tuple<Args...>&& args) noexcept {
-    using futurator = futurize<std::result_of_t<Func(Args&&...)>>;
-    return futurator::apply(std::forward<Func>(func), std::move(args));
-  }
 
   template <typename Container, typename AsyncAction>
   [[gnu::always_inline]]
