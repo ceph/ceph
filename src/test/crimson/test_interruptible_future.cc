@@ -41,7 +41,7 @@ private:
 
 namespace crimson::interruptible {
 template
-thread_local InterruptCondRef<TestInterruptCondition>
+thread_local interrupt_cond_t<TestInterruptCondition>
 interrupt_cond<TestInterruptCondition>;
 }
 
@@ -52,31 +52,31 @@ TEST_F(seastar_test_suite_t, basic)
   run_async([] {
     interruptor::with_interruption(
       [] {
-	ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	return interruptor::make_interruptible(seastar::now())
 	.then_interruptible([] {
-	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	}).then_interruptible([] {
-	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	  return errorator<ct_error::enoent>::make_ready_future<>();
 	}).safe_then_interruptible([] {
-	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	  return seastar::now();
 	}, errorator<ct_error::enoent>::all_same_way([] {
-	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	  })
 	);
       }, [](std::exception_ptr) {}, false).get0();
 
     interruptor::with_interruption(
       [] {
-	ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	return interruptor::make_interruptible(seastar::now())
 	.then_interruptible([] {
-	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	});
       }, [](std::exception_ptr) {
-	ceph_assert(!interruptible::interrupt_cond<TestInterruptCondition>);
+	ceph_assert(!interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	return seastar::now();
       }, true).get0();
 
@@ -94,14 +94,14 @@ TEST_F(seastar_test_suite_t, loops)
     interruptor::with_interruption(
       [] {
 	std::cout << "interruptiion enabled" << std::endl;
-	ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	return interruptor::make_interruptible(seastar::now())
 	.then_interruptible([] {
 	  std::cout << "test seastar future do_for_each" << std::endl;
 	  std::vector<int> vec = {1, 2};
 	  return seastar::do_with(std::move(vec), [](auto& vec) {
 	    return interruptor::do_for_each(std::begin(vec), std::end(vec), [](int) {
-	      ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	      ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	      return seastar::now();
 	    });
 	  });
@@ -110,14 +110,14 @@ TEST_F(seastar_test_suite_t, loops)
 	  std::vector<int> vec = {1, 2};
 	  return seastar::do_with(std::move(vec), [](auto& vec) {
 	    return interruptor::do_for_each(std::begin(vec), std::end(vec), [](int) {
-	      ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	      ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	      return interruptor::make_interruptible(seastar::now());
 	    });
 	  });
 	}).then_interruptible([] {
 	  std::cout << "test seastar future repeat" << std::endl;
 	  return interruptor::repeat([] {
-	    ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	    ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	    return interruptor::make_interruptible(
 		seastar::make_ready_future<
 		  seastar::stop_iteration>(
@@ -126,7 +126,7 @@ TEST_F(seastar_test_suite_t, loops)
 	}).then_interruptible([] {
 	  std::cout << "test interruptible seastar future repeat" << std::endl;
 	  return interruptor::repeat([] {
-	    ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	    ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	    return seastar::make_ready_future<
 		    seastar::stop_iteration>(
 		      seastar::stop_iteration::yes);
@@ -138,14 +138,14 @@ TEST_F(seastar_test_suite_t, loops)
 	    using namespace std::chrono_literals;
 	    return interruptor::make_interruptible(seastar::now()).then_interruptible([&vec] {
 	      return interruptor::do_for_each(std::begin(vec), std::end(vec), [](int) {
-		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 		return interruptor::make_interruptible(
 		  errorator<ct_error::enoent>::make_ready_future<>());
 	      }).safe_then_interruptible([] {
-		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 		return seastar::now();
 	      }, errorator<ct_error::enoent>::all_same_way([] {
-		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	      }));
 	    });
 	  });
@@ -156,18 +156,18 @@ TEST_F(seastar_test_suite_t, loops)
 	    using namespace std::chrono_literals;
 	    return interruptor::make_interruptible(seastar::now()).then_interruptible([&vec] {
 	      return interruptor::do_for_each(std::begin(vec), std::end(vec), [](int) {
-		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 		return errorator<ct_error::enoent>::make_ready_future<>();
 	      }).safe_then_interruptible([] {
-		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 		return seastar::now();
 	      }, errorator<ct_error::enoent>::all_same_way([] {
-		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	      }));
 	    });
 	  });
 	}).then_interruptible([] {
-	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>);
+	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	  return seastar::now();
 	});
       }, [](std::exception_ptr) {}, false).get0();
@@ -230,6 +230,30 @@ TEST_F(seastar_test_suite_t, expand_errorated_value)
 	});
       });
     ret.unsafe_get0();
+  });
+}
+
+TEST_F(seastar_test_suite_t, interruptible_async)
+{
+  using interruptor =
+    interruptible::interruptor<TestInterruptCondition>;
+
+  run_async([] {
+    interruptor::with_interruption([] {
+      auto fut = interruptor::async([] {
+	  interruptor::make_interruptible(
+	    seastar::sleep(std::chrono::milliseconds(10))).get();
+	ceph_assert(interruptible::interrupt_cond<
+	  TestInterruptCondition>.interrupt_cond);
+	ceph_assert(interruptible::interrupt_cond<
+	  TestInterruptCondition>.ref_count == 1);
+      });
+      ceph_assert(interruptible::interrupt_cond<
+	TestInterruptCondition>.interrupt_cond);
+      ceph_assert(interruptible::interrupt_cond<
+	TestInterruptCondition>.ref_count == 1);
+      return fut;
+    }, [](std::exception_ptr) {}, false).get0();
   });
 }
 
