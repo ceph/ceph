@@ -123,9 +123,8 @@ General Procedure for Gathering Log Files
 
 Use ``journalctl`` to gather the log files of all daemons.
 
-.. note:: Since Octopus, cephadm stores logs in journald by default. 
-          Since Octopus, daemon logs are not stored in 
-          ``/var/log/ceph/``.
+.. note:: Cephadm stores logs in journald by default. 
+          Daemon logs are not stored in ``/var/log/ceph/``.
 
 Reading the log file of a specific daemon
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
