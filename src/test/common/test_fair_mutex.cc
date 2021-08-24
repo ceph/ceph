@@ -3,7 +3,7 @@
 #include <array>
 #include <mutex>
 #include <numeric>
-#include <thread>
+#include <future>
 #include <gtest/gtest.h>
 #include "common/fair_mutex.h"
 
@@ -34,7 +34,7 @@ TEST(FairMutex, fair)
   ceph::fair_mutex mutex{"fair::fair"};
   const int NR_TEAMS = 2;
   std::array<unsigned, NR_TEAMS> scoreboard{0, 0};
-  const int NR_ROUNDS = 256;
+  const int NR_ROUNDS = 512;
   auto play = [&](int team) {
     for (int i = 0; i < NR_ROUNDS; i++) {
       std::unique_lock lock{mutex};
@@ -61,11 +61,8 @@ TEST(FairMutex, fair)
       };
     }
   };
-  std::array<std::thread, NR_TEAMS> teams;
+  std::array<std::future<void>, NR_TEAMS> completed;
   for (int team = 0; team < NR_TEAMS; team++) {
-    teams[team] = std::thread(play, team);
-  }
-  for (auto& team : teams) {
-    team.join();
+    completed[team] = std::async(std::launch::async, play, team);
   }
 }
