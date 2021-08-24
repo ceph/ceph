@@ -610,7 +610,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                           force_password=True)
 
         self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
-        self.assertEqual(str(ctx.exception), ERROR_MSG_EMPTY_INPUT_FILE)
+        self.assertIn(ERROR_MSG_EMPTY_INPUT_FILE, str(ctx.exception))
 
     def test_set_user_password_hash(self):
         user_orig = self.test_create_user()

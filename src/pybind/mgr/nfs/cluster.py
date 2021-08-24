@@ -214,8 +214,6 @@ class NFSCluster:
     @cluster_setter
     def set_nfs_cluster_config(self, cluster_id, nfs_config):
         try:
-            if not nfs_config:
-                raise NFSInvalidOperation("Empty Config!!")
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = NFSRados(self.mgr, self.pool_ns)
                 if rados_obj.check_user_config():
