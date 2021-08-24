@@ -183,7 +183,7 @@
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
     --image arg          image name
-    --io-size arg        IO size (in B/K/M/G/T) [default: 4K]
+    --io-size arg        IO size (in B/K/M/G) (< 4G) [default: 4K]
     --io-threads arg     ios in flight [default: 16]
     --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
     --io-pattern arg     IO pattern (rand, seq, or full-seq) [default: seq]
