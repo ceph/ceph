@@ -2249,6 +2249,8 @@ struct pg_stat_t {
   bool pin_stats_invalid:1;
   bool manifest_stats_invalid:1;
 
+  double scrub_duration;
+
   pg_stat_t()
     : reported_seq(0),
       reported_epoch(0),
@@ -2266,7 +2268,8 @@ struct pg_stat_t {
       hitset_stats_invalid(false),
       hitset_bytes_stats_invalid(false),
       pin_stats_invalid(false),
-      manifest_stats_invalid(false)
+      manifest_stats_invalid(false),
+      scrub_duration(0)
   { }
 
   epoch_t get_effective_last_epoch_clean() const {
