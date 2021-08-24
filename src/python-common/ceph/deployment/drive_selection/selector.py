@@ -1,16 +1,25 @@
 import logging
 
-try:
-    from typing import List, Optional, Dict
-except ImportError:
-    pass
+from typing import List, Optional, Dict, Callable
 
 from ..inventory import Device
-from ..drive_group import DriveGroupSpec, DeviceSelection
+from ..drive_group import DriveGroupSpec, DeviceSelection, DriveGroupValidationError
 
 from .filter import FilterGenerator
+from .matchers import _MatchInvalid
 
 logger = logging.getLogger(__name__)
+
+
+def to_dg_exception(f: Callable) -> Callable[['DriveSelection', str,
+                                              Optional['DeviceSelection']],
+                                             List['Device']]:
+    def wrapper(self: 'DriveSelection', name: str, ds: Optional['DeviceSelection']) -> List[Device]:
+        try:
+            return f(self, ds)
+        except _MatchInvalid as e:
+            raise DriveGroupValidationError(f'{self.spec.service_id}.{name}', e.args[0])
+    return wrapper
 
 
 class DriveSelection(object):
@@ -23,10 +32,10 @@ class DriveSelection(object):
         self.spec = spec
         self.existing_daemons = existing_daemons or 0
 
-        self._data = self.assign_devices(self.spec.data_devices)
-        self._wal = self.assign_devices(self.spec.wal_devices)
-        self._db = self.assign_devices(self.spec.db_devices)
-        self._journal = self.assign_devices(self.spec.journal_devices)
+        self._data = self.assign_devices('data_devices', self.spec.data_devices)
+        self._wal = self.assign_devices('wal_devices', self.spec.wal_devices)
+        self._db = self.assign_devices('db_devices', self.spec.db_devices)
+        self._journal = self.assign_devices('journal_devices', self.spec.journal_devices)
 
     def data_devices(self):
         # type: () -> List[Device]
@@ -79,6 +88,7 @@ class DriveSelection(object):
             raise Exception(
                 "Disk {} doesn't have a 'path' identifier".format(disk))
 
+    @to_dg_exception
     def assign_devices(self, device_filter):
         # type: (Optional[DeviceSelection]) -> List[Device]
         """ Assign drives based on used filters
