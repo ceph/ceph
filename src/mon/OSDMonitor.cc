@@ -7730,6 +7730,43 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
   return err;
 }
 
+int OSDMonitor::get_replicated_stretch_crush_rule()
+{
+  /* we don't write down the stretch rule anywhere, so
+   * we have to guess it. How? Look at all the pools
+   * and count up how many times a given rule is used
+   * on stretch pools and then return the one with
+   * the most users!
+   */
+  map<int,int> rule_counts;
+  for (const auto& pooli : osdmap.pools) {
+    const pg_pool_t& p = pooli.second;
+    if (p.is_replicated() && p.is_stretch_pool()) {
+      if (!rule_counts.count(p.crush_rule)) {
+	rule_counts[p.crush_rule] = 1;
+      } else {
+	++rule_counts[p.crush_rule];
+      }
+    }
+  }
+
+  if (rule_counts.empty()) {
+    return -ENOENT;
+  }
+
+  int most_used_count = 0;
+  int most_used_rule = -1;
+  for (auto i : rule_counts) {
+    if (i.second > most_used_count) {
+      most_used_rule = i.first;
+      most_used_count = i.second;
+    }
+  }
+  ceph_assert(most_used_count > 0);
+  ceph_assert(most_used_rule >= 0);
+  return most_used_rule;
+}
+
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 					const string &erasure_code_profile,
 					const string &rule_name,
@@ -7742,8 +7779,12 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
     case pg_pool_t::TYPE_REPLICATED:
       {
 	if (rule_name == "") {
-	  // Use default rule
-	  *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(cct);
+	  if (osdmap.stretch_mode_enabled) {
+	    *crush_rule = get_replicated_stretch_crush_rule();
+	  } else {
+	    // Use default rule
+	    *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(cct);
+	  }
 	  if (*crush_rule < 0) {
 	    // Errors may happen e.g. if no valid rule is available
 	    *ss << "No suitable CRUSH rule exists, check "
