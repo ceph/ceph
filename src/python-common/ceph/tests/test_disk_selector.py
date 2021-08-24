@@ -1,6 +1,7 @@
 # flake8: noqa
 import pytest
 
+from ceph.deployment.drive_selection.matchers import _MatchInvalid
 from ceph.deployment.inventory import Devices, Device
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
@@ -142,7 +143,7 @@ class TestSizeMatcher(object):
     def test_to_byte_PB(self):
         """ Expect to raise """
 
-        with pytest.raises(ValueError):
+        with pytest.raises(_MatchInvalid):
             drive_selection.SizeMatcher('size', '10P').to_byte(('10', 'PB'))
         assert 'Unit \'P\' is not supported'
 
@@ -269,7 +270,7 @@ class TestSizeMatcher(object):
 
     def test_normalize_suffix_raises(self):
 
-        with pytest.raises(ValueError):
+        with pytest.raises(_MatchInvalid):
             drive_selection.SizeMatcher('10P', 'size')._normalize_suffix("P")
             pytest.fail("Unit 'P' not supported")
 
@@ -559,3 +560,14 @@ class TestDriveSelection(object):
         sel = drive_selection.DriveSelection(spec, inventory)
         assert [d.path for d in sel.data_devices()] == expected_data
         assert [d.path for d in sel.db_devices()] == expected_db
+
+    def test_disk_selection_raise(self):
+        spec = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern='*'),
+                service_id='foobar',
+                data_devices=DeviceSelection(size='wrong'),
+            )
+        inventory = _mk_inventory(_mk_device(rotational=True)*2)
+        m = 'Failed to validate OSD spec "foobar.data_devices": No filters applied'
+        with pytest.raises(DriveGroupValidationError, match=m):
+            drive_selection.DriveSelection(spec, inventory)
