@@ -409,6 +409,11 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   std::string dump_awaited_maps() const final;
 
   std::ostream& gen_prefix(std::ostream& out) const final;
+  void set_scrub_begin_time() final;
+
+  void set_scrub_duration() final;
+
+  utime_t scrub_begin_stamp;
 
  protected:
   bool state_test(uint64_t m) const { return m_pg->state_test(m); }
