@@ -183,6 +183,20 @@ seastar::future<> fetch_config()
   });
 }
 
+static void override_seastar_opts(std::vector<const char*>& args)
+{
+  if (auto found = std::find_if(std::begin(args), std::end(args),
+                                [] (auto* arg) { return "--smp"sv == arg; });
+      found == std::end(args)) {
+    // TODO: we don't have a way to communicate the resource requirements
+    // with the deployment tools, like cephadm and rook, which don't set, for
+    // instance, aio-max-nr for us. but we should fix this, once crimson is able
+    // to run on a multi-core system, i.e., once m-to-n problem is resolved.
+    args.emplace_back("--smp");
+    args.emplace_back("1");
+  }
+}
+
 int main(int argc, char* argv[])
 {
   seastar::app_template::config app_cfg;
@@ -208,6 +222,7 @@ int main(int argc, char* argv[])
     usage(argv[0]);
     return EXIT_SUCCESS;
   }
+  override_seastar_opts(app_args);
   std::string cluster_name{"ceph"};
   std::string conf_file_list;
   // ceph_argparse_early_args() could _exit(), while local_conf() won't ready
