@@ -299,8 +299,6 @@ COMMAND_WITH_FLAG("mds tell "
 	"name=who,type=CephString "
 	"name=args,type=CephString,n=N",
 	"send command to particular mds", "mds", "rw", FLAG(OBSOLETE))
-COMMAND("mds compat show", "show mds compatibility settings",
-	"mds", "r")
 COMMAND_WITH_FLAG("mds stop name=role,type=CephString", "stop mds",
 	"mds", "rw", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds deactivate name=role,type=CephString",
@@ -341,12 +339,18 @@ COMMAND_WITH_FLAG("mds rmfailed name=role,type=CephString "
 	"remove failed rank", "mds", "rw", FLAG(HIDDEN))
 COMMAND_WITH_FLAG("mds cluster_down", "take MDS cluster down", "mds", "rw", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds cluster_up", "bring MDS cluster up", "mds", "rw", FLAG(OBSOLETE))
-COMMAND("mds compat rm_compat "
+COMMAND_WITH_FLAG("mds compat show", "show mds compatibility settings",
+	"mds", "r", FLAG(DEPRECATED))
+COMMAND("fs compat show "
+        "name=fs_name,type=CephString ",
+        "show fs compatibility settings",
+	"mds", "r")
+COMMAND_WITH_FLAG("mds compat rm_compat "
 	"name=feature,type=CephInt,range=0",
-	"remove compatible feature", "mds", "rw")
-COMMAND("mds compat rm_incompat "
+	"remove compatible feature", "mds", "rw", FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("mds compat rm_incompat "
 	"name=feature,type=CephInt,range=0",
-	"remove incompatible feature", "mds", "rw")
+	"remove incompatible feature", "mds", "rw", FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("mds add_data_pool "
 	"name=pool,type=CephString",
 	"add data pool <pool>", "mds", "rw", FLAG(OBSOLETE))
@@ -409,6 +413,13 @@ COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
 COMMAND("fs feature ls",
         "list available cephfs features to be set/unset",
 	"mds", "r")
+
+COMMAND("fs compat "
+        "name=fs_name,type=CephString "
+        "name=subop,type=CephChoices,strings=rm_compat|rm_incompat|add_compat|add_incompat "
+        "name=feature,type=CephInt "
+        "name=feature_str,type=CephString,req=false ",
+        "manipulate compat settings", "fs", "rw")
 
 COMMAND("fs required_client_features "
         "name=fs_name,type=CephString "

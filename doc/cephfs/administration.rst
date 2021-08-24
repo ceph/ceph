@@ -351,24 +351,6 @@ file system.
 
 ::
 
-    mds compat rm_compat
-
-Removes an compatibility feature flag.
-
-::
-
-    mds compat rm_incompat
-
-Removes an incompatibility feature flag.
-
-::
-
-    mds compat show
-
-Show MDS compatibility flags.
-
-::
-
     mds rmfailed
 
 This removes a rank from the failed set.

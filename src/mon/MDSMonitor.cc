@@ -392,14 +392,6 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
     goto ignore;
   }
 
-  // check compat
-  if (!m->get_compat().writeable(fsmap.compat)) {
-    dout(1) << " mds " << m->get_orig_source()
-	    << " " << m->get_orig_source_addrs()
-	    << " can't write to fsmap " << fsmap.compat << dendl;
-    goto ignore;
-  }
-
   // fw to leader?
   if (!is_leader())
     return false;
@@ -414,10 +406,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
        * know which FS it was part of. Nor does this matter. Sending an empty
        * MDSMap is sufficient for getting the MDS to respawn.
        */
-      MDSMap null_map;
-      null_map.epoch = fsmap.epoch;
-      null_map.compat = fsmap.compat;
-      auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
+      auto m = make_message<MMDSMap>(mon.monmap->fsid, MDSMap::create_null_mdsmap());
       mon.send_reply(op, m.detach());
       return true;
     } else {
@@ -642,7 +631,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   // Store health
   pending_daemon_health[gid] = m->get_health();
 
-  // boot?
+  const auto& cs = m->get_compat();
   if (state == MDSMap::STATE_BOOT) {
     // zap previous instance of this name?
     if (g_conf()->mds_enforce_unique_name) {
@@ -652,8 +641,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
           return false;
         }
-        const MDSMap::mds_info_t &existing_info =
-          pending.get_info_gid(existing);
+        const auto& existing_info = pending.get_info_gid(existing);
         mon.clog->info() << existing_info.human_name() << " restarted";
 	fail_mds_gid(pending, existing);
         failed_mds = true;
@@ -673,7 +661,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       new_info.mds_features = m->get_mds_features();
       new_info.state = MDSMap::STATE_STANDBY;
       new_info.state_seq = seq;
-      pending.insert(new_info);
+      new_info.compat = cs;
       if (m->get_fs().size()) {
 	fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
 	auto f = pending.get_filesystem(m->get_fs());
@@ -682,21 +670,13 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 	}
         new_info.join_fscid = fscid;
       }
+      pending.insert(new_info);
     }
 
     // initialize the beacon timer
     auto &beacon = last_beacon[gid];
     beacon.stamp = mono_clock::now();
     beacon.seq = seq;
-
-    // new incompat?
-    if (!pending.compat.writeable(m->get_compat())) {
-      dout(10) << " fsmap " << pending.compat
-               << " can't write to new mds' " << m->get_compat()
-	       << ", updating fsmap and killing old mds's"
-	       << dendl;
-      pending.update_compat(m->get_compat());
-    }
 
     update_metadata(m->get_global_id(), m->get_sys_info());
   } else {
@@ -713,11 +693,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
        */
       wait_for_finished_proposal(op, new LambdaContext([op, this](int r){
         if (r >= 0) {
-          const auto& fsmap = get_fsmap();
-          MDSMap null_map;
-          null_map.epoch = fsmap.epoch;
-          null_map.compat = fsmap.compat;
-          auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
+          auto m = make_message<MMDSMap>(mon.monmap->fsid, MDSMap::create_null_mdsmap());
           mon.send_reply(op, m.detach());
         } else {
           dispatch(op);        // try again
@@ -727,6 +703,19 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     }
 
     const auto& info = pending.get_info_gid(gid);
+
+    // did the reported compat change? That's illegal!
+    if (cs.compare(info.compat) != 0) {
+      if (!mon.osdmon()->is_writeable()) {
+        mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+        return false;
+      }
+      mon.clog->warn() << info.human_name() << " compat changed unexpectedly";
+      fail_mds_gid(pending, gid);
+      request_proposal(mon.osdmon());
+      return true;
+    }
+
     if (info.state == MDSMap::STATE_STOPPING &&
         state != MDSMap::STATE_STOPPING &&
         state != MDSMap::STATE_STOPPED) {
@@ -909,10 +898,7 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
-    MDSMap null_map;
-    null_map.epoch = fsmap.epoch;
-    null_map.compat = fsmap.compat;
-    auto m = make_message<MMDSMap>(mon.monmap->fsid, null_map);
+    auto m = make_message<MMDSMap>(mon.monmap->fsid, MDSMap::create_null_mdsmap());
     mon.send_reply(op, m.detach());
   } else {
     auto beacon = make_message<MMDSBeacon>(mon.monmap->fsid,
@@ -1125,14 +1111,33 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     count_metadata(field, f.get());
     f->flush(ds);
     r = 0;
+  } else if (prefix == "fs compat show") {
+    string fs_name;
+    cmd_getval(cmdmap, "fs_name", fs_name);
+    const auto &fs = fsmap.get_filesystem(fs_name);
+    if (fs == nullptr) {
+      ss << "filesystem '" << fs_name << "' not found";
+      r = -ENOENT;
+      goto out;
+    }
+
+    if (f) {
+      f->open_object_section("mds_compat");
+      fs->mds_map.compat.dump(f.get());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << fs->mds_map.compat;
+    }
+    r = 0;
   } else if (prefix == "mds compat show") {
       if (f) {
 	f->open_object_section("mds_compat");
-	fsmap.compat.dump(f.get());
+	fsmap.default_compat.dump(f.get());
 	f->close_section();
 	f->flush(ds);
       } else {
-	ds << fsmap.compat;
+	ds << fsmap.default_compat;
       }
       r = 0;
   } else if (prefix == "fs get") {
@@ -1554,6 +1559,7 @@ int MDSMonitor::filesystem_command(
 
     ss << "removed failed mds." << role;
     return 0;
+    /* TODO: convert to fs commands to update defaults */
   } else if (prefix == "mds compat rm_compat") {
     int64_t f;
     if (!cmd_getval(cmdmap, "feature", f)) {
@@ -1561,13 +1567,11 @@ int MDSMonitor::filesystem_command(
          << cmd_vartype_stringify(cmdmap.at("feature")) << "'";
       return -EINVAL;
     }
-    if (fsmap.compat.compat.contains(f)) {
+    if (fsmap.default_compat.compat.contains(f)) {
       ss << "removing compat feature " << f;
-      CompatSet modified = fsmap.compat;
-      modified.compat.remove(f);
-      fsmap.update_compat(modified);
+      fsmap.default_compat.compat.remove(f);
     } else {
-      ss << "compat feature " << f << " not present in " << fsmap.compat;
+      ss << "compat feature " << f << " not present in " << fsmap.default_compat;
     }
     r = 0;
   } else if (prefix == "mds compat rm_incompat") {
@@ -1577,13 +1581,11 @@ int MDSMonitor::filesystem_command(
          << cmd_vartype_stringify(cmdmap.at("feature")) << "'";
       return -EINVAL;
     }
-    if (fsmap.compat.incompat.contains(f)) {
+    if (fsmap.default_compat.incompat.contains(f)) {
       ss << "removing incompat feature " << f;
-      CompatSet modified = fsmap.compat;
-      modified.incompat.remove(f);
-      fsmap.update_compat(modified);
+      fsmap.default_compat.incompat.remove(f);
     } else {
-      ss << "incompat feature " << f << " not present in " << fsmap.compat;
+      ss << "incompat feature " << f << " not present in " << fsmap.default_compat;
     }
     r = 0;
   } else if (prefix == "mds repaired") {
@@ -1771,8 +1773,7 @@ void MDSMonitor::check_sub(Subscription *sub)
 
     // Work out the effective latest epoch
     const MDSMap *mds_map = nullptr;
-    MDSMap null_map;
-    null_map.compat = fsmap.compat;
+    MDSMap null_map = MDSMap::create_null_mdsmap();
     if (fscid == FS_CLUSTER_ID_NONE) {
       // For a client, we should have already dropped out
       ceph_assert(is_mds);
@@ -2184,7 +2185,7 @@ bool MDSMonitor::check_health(FSMap& fsmap, bool* propose_osdmap)
           const auto state = info.state;
           const mds_info_t* rep_info = nullptr;
           if (state == MDSMap::STATE_STANDBY_REPLAY) {
-            rep_info = fsmap.get_available_standby(fscid);
+            rep_info = fsmap.get_available_standby(*fs);
           } else if (state == MDSMap::STATE_ACTIVE) {
             rep_info = fsmap.find_replacement_for({fscid, rank});
           } else {
@@ -2253,7 +2254,7 @@ bool MDSMonitor::maybe_promote_standby(FSMap &fsmap, Filesystem& fs)
     // as standby-replay daemons. Don't do this when the cluster is degraded
     // as a standby-replay daemon may try to read a journal being migrated.
     for (;;) {
-      auto info = fsmap.get_available_standby(fs.fscid);
+      auto info = fsmap.get_available_standby(fs);
       if (!info) break;
       dout(20) << "standby available mds." << info->global_id << dendl;
       bool changed = false;
