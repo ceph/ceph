@@ -484,7 +484,6 @@ class DefaultRemover():
         mon_command: Callable, 
         patch: Callable, 
         rook_env: 'RookEnv',
-        pods: KubernetesResource, 
         inventory: Dict[str, List[Device]]
     ):
         self.batchV1_api = batchV1_api
@@ -500,17 +499,16 @@ class DefaultRemover():
         self.patch = patch
         self.rook_env = rook_env
 
-        self.pods = pods
         self.inventory = inventory
-
-        self.jobs: KubernetesResource = KubernetesResource(self.batchV1_api.list_namespaced_job, namespace='rook-ceph')
+        self.osd_pods: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_pod, namespace='rook-ceph', label_selector='app=rook-ceph-osd')
+        self.jobs: KubernetesResource = KubernetesResource(self.batchV1_api.list_namespaced_job, namespace='rook-ceph', label_selector='app=rook-ceph-osd-prepare')
         self.pvcs: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_persistent_volume_claim, namespace='rook-ceph')
 
 
     def remove_device_sets(self) -> str:
         self.to_remove: Dict[str, int] = {}
         self.pvc_to_remove: List[str] = []
-        for pod in self.pods.items:
+        for pod in self.osd_pods.items:
             if (
                 hasattr(pod, 'metadata') 
                 and hasattr(pod.metadata, 'labels') 
@@ -577,7 +575,7 @@ class DefaultRemover():
 
     def clean_up_prepare_jobs_and_pvc(self) -> None:
         for job in self.jobs.items:
-            if job.metadata.labels['app'] == 'rook-ceph-osd-prepare' and job.metadata.labels['ceph.rook.io/pvc'] in self.pvc_to_remove:
+            if job.metadata.labels['ceph.rook.io/pvc'] in self.pvc_to_remove:
                 self.batchV1_api.delete_namespaced_job(name=job.metadata.name, namespace='rook-ceph', propagation_policy='Foreground')
                 self.coreV1_api.delete_namespaced_persistent_volume_claim(name=job.metadata.labels['ceph.rook.io/pvc'], namespace='rook-ceph', propagation_policy='Foreground')
 
@@ -607,7 +605,10 @@ class DefaultRemover():
 
     def remove(self) -> str:
         self.check_force()
-        remove_result = self.remove_device_sets()
+        try:
+            remove_result = self.remove_device_sets()
+        except Exception as e:
+            raise RuntimeError("Failed to update CephCluster CR, removing OSDs failed: " + str(e))
         self.scale_deployments()
         self.set_osds_down()
         self.set_osds_out()
@@ -1025,7 +1026,6 @@ class RookCluster(object):
             mon_command, 
             self._patch, 
             self.rook_env,
-            self.rook_pods, 
             inventory
         )
         return self.remover.remove()
