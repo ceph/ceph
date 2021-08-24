@@ -55,20 +55,23 @@ diagram shows the Nomad/Ceph technology stack.
 Create a Pool
 =============
 
-By default, Ceph block devices use the ``rbd`` pool. Create a pool for
-Nopmad persistent storage. Ensure your Ceph cluster is running, then create
-the pool. ::
+By default, Ceph block devices use the ``rbd`` pool. Ensure that your Ceph
+cluster is running, then create a pool for Nomad persistent storage:
 
-        $ ceph osd pool create nomad
+.. prompt:: bash $
+
+  ceph osd pool create nomad
 
 See `Create a Pool`_ for details on specifying the number of placement groups
-for your pools, and `Placement Groups`_ for details on the number of placement
+for your pools. See `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
 A newly created pool must be initialized prior to use. Use the ``rbd`` tool
-to initialize the pool::
+to initialize the pool:
 
-        $ rbd pool init nomad
+.. prompt:: bash $
+
+  rbd pool init nomad
 
 Configure ceph-csi
 ==================
