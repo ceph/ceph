@@ -179,7 +179,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     } catch (std::out_of_range& e) {}
   }
   PyObject *obj = _get_python(what);
-  if(ttl_seconds) {
+  if(ttl_seconds && ttl_cache.is_allowed(what)) {
     ttl_cache.insert(what, obj);
     Py_INCREF(obj);
   }

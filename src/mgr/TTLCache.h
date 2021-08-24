@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -18,6 +19,7 @@ protected:
   unsigned int capacity;
   Cache(unsigned int size = UINT16_MAX) : hits{0}, misses{0}, capacity{size} {};
   std::map<Key, Value> content;
+  std::vector<string> allowed_keys = {"osd_map", "pg_dump", "pg_stats"};
 
   void mark_miss() { misses++; }
   void mark_hit() { hits++; }
@@ -49,7 +51,15 @@ public:
   std::pair<uint64_t, uint64_t> get_hit_miss_ratio() {
     return std::make_pair(hits.load(), misses.load());
   }
+  bool is_allowed(Key key) {
+    for(auto k : allowed_keys) {
+      if(key == k) return true;
+    }
+    return false;
+  }
   int size() { return content.size(); }
+
+
   ~Cache(){};
 };
 
