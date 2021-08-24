@@ -109,7 +109,7 @@ public:
   explicit ConfigProxy(bool is_daemon)
     : config{values, obs_mgr, is_daemon}
   {}
-  explicit ConfigProxy(const ConfigProxy &config_proxy)
+  ConfigProxy(const ConfigProxy &config_proxy)
     : values(config_proxy.get_config_values()),
       config{values, obs_mgr, config_proxy.config.is_daemon}
   {}
