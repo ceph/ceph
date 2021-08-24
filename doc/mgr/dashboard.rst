@@ -1458,3 +1458,44 @@ something like this::
     ...
     $ ceph config reset 11
 
+
+Reporting issues from Dashboard
+"""""""""""""""""""""""""""""""
+
+Ceph-Dashboard provides two ways to create an issue in the Ceph Issue Tracker, 
+either using the Ceph command line interface or by using the Ceph Dashboard
+user interface. 
+
+To create an issue in the Ceph Issue Tracker, a user needs to have an account
+on the issue tracker. Under the ``my account`` tab in the Ceph Issue Tracker,
+the user can see their API access key. This key is used for authentication
+when creating a new issue. To store the Ceph API access key, in the CLI run:
+
+``ceph dashboard set-issue-tracker-api-key -i <file-containing-key>``
+
+Then on successful update, you can create an issue using:
+
+``ceph dashboard create issue <project> <tracker_type> <subject> <description>``
+
+The available projects to create an issue on are:
+#. dashboard
+#. block
+#. object    
+#. file_system  
+#. ceph_manager
+#. orchestrator
+#. ceph_volume
+#. core_ceph
+
+The available tracker types are:
+#. bug
+#. feature
+
+The subject and description are then set by the user. 
+
+The user can also create an issue using the Dashboard user interface. The settings
+icon drop down menu on the top right of the navigation bar has the option to
+``Raise an issue``. On clicking it, a modal dialog opens that has the option to
+select the project and tracker from their respective drop down menus. The subject 
+and multiline description are added by the user. The user can then submit the issue.
+
