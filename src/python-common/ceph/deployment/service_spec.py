@@ -685,7 +685,8 @@ class ServiceSpec(object):
                 )
 
     def __repr__(self) -> str:
-        return "{}({!r})".format(self.__class__.__name__, self.__dict__)
+        y = yaml.dump(cast(dict, self), default_flow_style=False)
+        return f"{self.__class__.__name__}.from_json(yaml.safe_load('''{y}'''))"
 
     def __eq__(self, other: Any) -> bool:
         return (self.__class__ == other.__class__
