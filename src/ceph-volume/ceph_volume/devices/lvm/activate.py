@@ -245,7 +245,7 @@ class Activate(object):
             terminal.warning('Verify OSDs are present with "ceph-volume lvm list"')
             return
         for osd_fsid, osd_id in osds.items():
-            if systemctl.osd_is_active(osd_id):
+            if not args.no_systemd and systemctl.osd_is_active(osd_id):
                 terminal.warning(
                     'OSD ID %s FSID %s process is active. Skipping activation' % (osd_id, osd_fsid)
                 )
