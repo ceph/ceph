@@ -79,39 +79,58 @@ Configure ceph-csi
 Setup Ceph Client Authentication
 --------------------------------
 
-Create a new user for nomad and `ceph-csi`. Execute the following and
-record the generated key::
+Create a new user for nomad and `ceph-csi`. Execute the following command and
+record the generated key:
 
-    $ ceph auth get-or-create client.nomad mon 'profile rbd' osd 'profile rbd pool=nomad' mgr 'profile rbd pool=nomad'
-    [client.nomad]
-        key = AQAlh9Rgg2vrDxAARy25T7KHabs6iskSHpAEAQ==
+.. code-block:: console
+
+  $ ceph auth get-or-create client.nomad mon 'profile rbd' osd 'profile rbd pool=nomad' mgr 'profile rbd pool=nomad'
+  [client.nomad]
+          key = AQAlh9Rgg2vrDxAARy25T7KHabs6iskSHpAEAQ==
 
 
-Configure Nomad  
+Configure Nomad
 ---------------
 
-By default Nomad doesn't allow containers to use privileged mode.
-Edit the nomad configuration file by adding this configuration block to `/etc/nomad.d/nomad.hcl`::
+Configuring Nomad to Allow Containers to Use Privileged Mode
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, Nomad doesn't allow containers to use privileged mode. We must
+configure Nomad so that it allows containers to use privileged mode. Edit the
+Nomad configuration file by adding the following configuration block to
+`/etc/nomad.d/nomad.hcl`::
 
     plugin "docker" {
-        config {
+      config {
         allow_privileged = true
-        }
+      }
     }
 
+Loading the rbd module
+~~~~~~~~~~~~~~~~~~~~~~
 
-Nomad must have `rbd` module loaded, check if it's the case.::
+Nomad must have the `rbd` module loaded. Run the following command to confirm that the `rbd` module is loaded:
 
-        $ lsmod |grep rbd
-        rbd                    94208  2
-        libceph               364544  1 rbd
+.. code-block:: console
 
-If it's not the case, load it.::
+  $ lsmod | grep rbd
+  rbd                    94208  2
+  libceph               364544  1 rbd
 
-        $ sudo modprobe rbd
+If the `rbd` module is not loaded, load it:
 
-And restart Nomad.
+.. prompt:: bash $
 
+  sudo modprobe rbd
+
+Restarting Nomad
+~~~~~~~~~~~~~~~~
+
+Restart Nomad:
+
+.. prompt:: bash $
+
+  sudo systemctl restart nomad
 
 
 Create ceph-csi controller and plugin nodes
