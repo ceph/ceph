@@ -39,7 +39,8 @@ def test_DriveGroup(test_input):
         ''
     ),
     (
-        'Failed to validate Drive Group: DeviceSelection cannot be empty', """
+        "Failed to validate Drive Group: OSD spec needs a `placement` key.",
+        'Failed to validate OSD spec "mydg.data_devices": device selection cannot be empty', """
 service_type: osd
 service_id: mydg
 placement:
@@ -49,7 +50,7 @@ data_devices:
 """
     ),
     (
-        'Failed to validate Drive Group: filter_logic must be either <AND> or <OR>', """
+        'Failed to validate OSD spec "mydg": filter_logic must be either <AND> or <OR>', """
 service_type: osd
 service_id: mydg
 placement:
@@ -60,7 +61,7 @@ filter_logic: XOR
 """
     ),
     (
-        'Failed to validate Drive Group: `data_devices` element is required.', """
+        'Failed to validate OSD spec "mydg": `data_devices` element is required.', """
 service_type: osd
 service_id: mydg
 placement:
@@ -68,6 +69,29 @@ placement:
 spec:
   db_devices:
     model: model
+"""
+    ),
+    (
+        'Failed to validate OSD spec "mydg.db_devices": Filtering for `unknown_key` is not supported', """
+service_type: osd
+service_id: mydg
+placement:
+  host_pattern: '*'
+spec:
+  db_devices:
+    unknown_key: 1
+"""
+    ),
+    (
+        'Failed to validate OSD spec "mydg": Feature `unknown_key` is not supported', """
+service_type: osd
+service_id: mydg
+placement:
+  host_pattern: '*'
+spec:
+  db_devices:
+    all: true
+  unknown_key: 1
 """
     ),
 ])
@@ -95,7 +119,8 @@ def test_drive_selection():
     assert spec.data_devices.paths[0].path == '/dev/sda'
 
     with pytest.raises(DriveGroupValidationError, match='exclusive'):
-        DeviceSelection(paths=['/dev/sda'], rotational=False)
+        ds = DeviceSelection(paths=['/dev/sda'], rotational=False)
+        ds.validate('')
 
 
 def test_ceph_volume_command_0():
