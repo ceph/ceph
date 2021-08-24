@@ -6968,6 +6968,48 @@ class HostFacts():
 
         return k_param
 
+    @staticmethod
+    def _process_net_data(tcp_file: str, protocol: str = 'tcp') -> List[int]:
+        listening_ports = []
+        # Connections state documentation
+        # tcp - https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/net/tcp_states.h
+        # udp - uses 07 (TCP_CLOSE or UNCONN, since udp is stateless. test with netcat -ul <port>)
+        listening_state = {
+            'tcp': '0A',
+            'udp': '07'
+        }
+
+        if protocol not in listening_state.keys():
+            return []
+
+        if os.path.exists(tcp_file):
+            with open(tcp_file) as f:
+                tcp_data = f.readlines()[1:]
+
+            for con in tcp_data:
+                con_info = con.strip().split()
+                if con_info[3] == listening_state[protocol]:
+                    local_port = int(con_info[1].split(':')[1], 16)
+                    listening_ports.append(local_port)
+
+        return listening_ports
+
+    @property
+    def tcp_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/tcp')
+
+    @property
+    def tcp6_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/tcp6')
+
+    @property
+    def udp_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/udp', 'udp')
+
+    @property
+    def udp6_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/udp6', 'udp')
+
     def dump(self):
         # type: () -> str
         """Return the attributes of this HostFacts object as json"""
