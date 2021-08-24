@@ -1761,6 +1761,20 @@ PgScrubber::PgScrubber(PG* pg)
   m_fsm->initiate();
 }
 
+void PgScrubber::set_scrub_begin_time() {
+  scrub_begin_stamp = ceph_clock_now();
+}
+
+void PgScrubber::set_scrub_duration() {
+   utime_t stamp = ceph_clock_now();
+   utime_t duration = stamp - scrub_begin_stamp;
+   m_pg->recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+       stats.scrub_duration = double(duration);
+  return true;
+    });
+}
+
 void PgScrubber::reserve_replicas()
 {
   dout(10) << __func__ << dendl;

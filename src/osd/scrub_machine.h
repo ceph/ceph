@@ -128,12 +128,13 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
 struct NotActive : sc::state<NotActive, ScrubMachine> {
   explicit NotActive(my_context ctx);
 
-  using reactions = mpl::list<sc::transition<StartScrub, ReservingReplicas>,
+  using reactions = mpl::list<sc::custom_reaction<StartScrub>,
 			      // a scrubbing that was initiated at recovery completion,
 			      // and requires no resource reservations:
 			      sc::transition<AfterRepairScrub, ActiveScrubbing>,
 			      sc::transition<StartReplica, ReplicaWaitUpdates>,
 			      sc::transition<StartReplicaNoWait, ActiveReplica>>;
+  sc::result react(const StartScrub&);
 };
 
 struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine> {
@@ -279,8 +280,11 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing> {
 struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing> {
   explicit WaitDigestUpdate(my_context ctx);
 
-  using reactions = mpl::list<sc::custom_reaction<DigestUpdate>>;
+  using reactions = mpl::list<sc::custom_reaction<DigestUpdate>,
+                            sc::custom_reaction<ScrubFinished>,
+                            sc::transition<NextChunk, PendingTimer>>;
   sc::result react(const DigestUpdate&);
+  sc::result react(const ScrubFinished&);
 };
 
 // ----------------------------- the "replica active" states -----------------------
