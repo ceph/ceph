@@ -1441,7 +1441,7 @@ Then run the following:
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
-        self.ssh._reset_con(host)
+        self.ssh.reset_con(host)
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
         return "Removed {} host '{}'".format('offline' if offline else '', host)
@@ -1450,7 +1450,7 @@ Then run the following:
     def update_host_addr(self, host: str, addr: str) -> str:
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
-        self.ssh._reset_con(host)
+        self.ssh.reset_con(host)
         self.event.set()  # refresh stray health check
         self.log.info('Set host %s addr to %s' % (host, addr))
         return "Updated host '{}' addr to '{}'".format(host, addr)
