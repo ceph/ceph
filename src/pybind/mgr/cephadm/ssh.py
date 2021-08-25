@@ -136,7 +136,7 @@ class SSHManager:
         except (asyncssh.ChannelOpenError, Exception) as e:
             # SSH connection closed or broken, will create new connection next call
             logger.debug(f'Connection to {host} failed. {str(e)}')
-            self._reset_con(host)
+            await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
             raise OrchestratorError(f'Unable to reach remote host {host}. {str(e)}')
         out = r.stdout.rstrip('\n')
@@ -192,12 +192,15 @@ class SSHManager:
     def write_remote_file(self, *args: Any, **kwargs: Any) -> None:
         self.mgr.event_loop.get_result(self._write_remote_file(*args, **kwargs))
 
-    def _reset_con(self, host: str) -> None:
+    async def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
         if conn:
             logger.debug(f'_reset_con close {host}')
             conn.close()
             del self.cons[host]
+
+    def reset_con(self, host: str) -> None:
+        self.mgr.event_loop.get_result(self._reset_con(host))
 
     def _reset_cons(self) -> None:
         for host, conn in self.cons.items():
