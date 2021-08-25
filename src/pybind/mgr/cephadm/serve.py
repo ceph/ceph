@@ -1205,13 +1205,15 @@ class CephadmServe:
             cmd = [python, self.mgr.cephadm_binary_path] + final_args
 
             try:
-                out, err, code = self.mgr.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
+                out, err, code = self.mgr.ssh.execute_command(
+                    host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
                 if code == 2:
                     ls_cmd = ['ls', self.mgr.cephadm_binary_path]
                     out_ls, err_ls, code_ls = self.mgr.ssh.execute_command(host, ls_cmd, addr=addr)
                     if code_ls == 2:
                         self._deploy_cephadm_binary(host, addr)
-                        out, err, code = self.mgr.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
+                        out, err, code = self.mgr.ssh.execute_command(
+                            host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
 
             except Exception as e:
                 self.mgr.ssh._reset_con(host)
@@ -1222,7 +1224,8 @@ class CephadmServe:
         elif self.mgr.mode == 'cephadm-package':
             try:
                 cmd = ['/usr/bin/cephadm'] + final_args
-                out, err, code = self.mgr.ssh.execute_command(host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
+                out, err, code = self.mgr.ssh.execute_command(
+                    host, cmd, stdin=stdin.encode('utf-8') if stdin else None, addr=addr)
             except Exception as e:
                 self.mgr.ssh._reset_con(host)
                 if error_ok:
@@ -1282,4 +1285,5 @@ class CephadmServe:
     def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        self.mgr.ssh.write_remote_file(host, self.mgr.cephadm_binary_path, self.mgr._cephadm.encode('utf-8'), addr=addr)
+        self.mgr.ssh.write_remote_file(host, self.mgr.cephadm_binary_path,
+                                       self.mgr._cephadm.encode('utf-8'), addr=addr)
