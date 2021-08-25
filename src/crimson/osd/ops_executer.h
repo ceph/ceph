@@ -196,6 +196,9 @@ private:
     OSDOp& osd_op,
     ObjectState& os,
     ceph::os::Transaction& txn);
+  watch_ierrorator::future<> do_op_list_watchers(
+    OSDOp& osd_op,
+    const ObjectState& os);
   watch_ierrorator::future<> do_op_notify(
     OSDOp& osd_op,
     const ObjectState& os);
