@@ -33,6 +33,7 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
     root_leaf->pin.set_range(meta);
     croot->get_root().lba_root =
       lba_root_t{root_leaf->get_paddr(), 1u};
+    t.get_lba_tree_stats().depth = 1u;
     return mkfs_iertr::now();
   }).handle_error_interruptible(
     mkfs_iertr::pass_further{},
@@ -512,6 +513,7 @@ BtreeLBAManager::insert_mapping_ret BtreeLBAManager::insert_mapping(
   laddr_t laddr,
   lba_map_val_t val)
 {
+  ++(t.get_lba_tree_stats().num_inserts);
   auto split = insert_mapping_iertr::future<LBANodeRef>(
     interruptible::ready_future_marker{},
     root);
@@ -534,10 +536,12 @@ BtreeLBAManager::insert_mapping_ret BtreeLBAManager::insert_mapping(
 	  L_ADDR_MIN,
 	  root->get_paddr(),
 	  nullptr);
+	auto new_depth = root->get_node_meta().depth + 1;
 	croot->get_root().lba_root = lba_root_t{
 	  nroot->get_paddr(),
-	  root->get_node_meta().depth + 1
+	  new_depth
 	};
+	t.get_lba_tree_stats().depth = new_depth;
 	return nroot->split_entry(
 	  get_context(t),
 	  laddr, nroot->begin(), root);

@@ -204,6 +204,8 @@ public:
     fresh_block_list.clear();
     mutated_block_list.clear();
     retired_set.clear();
+    onode_tree_stats = {};
+    lba_tree_stats = {};
     to_release = NULL_SEG_ID;
     conflicted = false;
     if (!has_reset) {
@@ -213,6 +215,32 @@ public:
 
   bool did_reset() const {
     return has_reset;
+  }
+
+  struct tree_stats_t {
+    uint64_t depth = 0;
+    uint64_t num_inserts = 0;
+    uint64_t num_erases = 0;
+
+    bool is_clear() const {
+      return (depth == 0 &&
+              num_inserts == 0 &&
+              num_erases == 0);
+    }
+    void increment(const tree_stats_t& incremental) {
+      if (incremental.depth != 0) {
+        // depth is an absolute value
+        depth = incremental.depth;
+      }
+      num_inserts += incremental.num_inserts;
+      num_erases += incremental.num_erases;
+    }
+  };
+  tree_stats_t& get_onode_tree_stats() {
+    return onode_tree_stats;
+  }
+  tree_stats_t& get_lba_tree_stats() {
+    return lba_tree_stats;
   }
 
 private:
@@ -236,6 +264,9 @@ private:
   std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
 
   pextent_set_t retired_set; ///< list of extents mutated by this transaction
+
+  tree_stats_t onode_tree_stats;
+  tree_stats_t lba_tree_stats;
 
   ///< if != NULL_SEG_ID, release this segment after completion
   segment_id_t to_release = NULL_SEG_ID;

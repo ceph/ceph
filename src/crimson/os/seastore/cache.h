@@ -641,6 +641,10 @@ private:
     uint64_t read_transactions_successful;
     effort_t read_effort_successful;
     uint64_t dirty_bytes;
+    Transaction::tree_stats_t committed_onode_tree_stats;
+    Transaction::tree_stats_t committed_lba_tree_stats;
+    Transaction::tree_stats_t invalidated_onode_tree_stats;
+    Transaction::tree_stats_t invalidated_lba_tree_stats;
   } stats;
 
   template <typename CounterT>

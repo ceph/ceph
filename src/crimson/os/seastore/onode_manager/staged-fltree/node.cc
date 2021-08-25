@@ -439,6 +439,7 @@ void Node::make_root(context_t c, Super::URef&& _super)
 {
   _super->write_root_laddr(c, impl->laddr());
   as_root(std::move(_super));
+  c.t.get_onode_tree_stats().depth = static_cast<uint64_t>(level()) + 1;
 }
 
 void Node::as_root(Super::URef&& _super)
@@ -1813,6 +1814,7 @@ LeafNode::erase(context_t c, const search_position_t& pos, bool get_next)
   Ref<Node> this_ref = this;
   DEBUGT("erase {}'s pos({}), get_next={} ...",
          c.t, get_name(), pos, get_next);
+  ++(c.t.get_onode_tree_stats().num_erases);
 
   // get the next cursor
   return eagain_iertr::now().si_then([c, &pos, get_next, this] {
@@ -2043,6 +2045,7 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   DEBUGT("insert {} with insert_key={}, insert_value={}, insert_pos({}), "
          "history={}, mstat({}) ...",
          c.t, get_name(), key, vconf, pos, history, mstat);
+  ++(c.t.get_onode_tree_stats().num_inserts);
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
       key, vconf, history, mstat, insert_pos);
