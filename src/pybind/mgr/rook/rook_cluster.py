@@ -538,7 +538,6 @@ class DefaultRemover():
                         'ids': [str(x) for x in self.osd_ids]}
             ret, out, err = self.mon_command(safe_args)
             if ret != 0:
-                log.error(f"error when checking if osds are safe to destroy, {err}")
                 raise RuntimeError(err)
 
     def set_osds_down(self) -> None:
@@ -548,7 +547,6 @@ class DefaultRemover():
         }
         ret, out, err = self.mon_command(down_flag_args)
         if ret != 0:
-            log.error(f"error setting down flags on OSDs, {err}")
             raise RuntimeError(err)
 
     def scale_deployments(self) -> None:
@@ -566,7 +564,6 @@ class DefaultRemover():
         }
         ret, out, err = self.mon_command(out_flag_args)
         if ret != 0:
-            log.error(f"error setting down flags on OSDs, {err}")
             raise RuntimeError(err)
             
     def delete_deployments(self) -> None:
@@ -588,7 +585,6 @@ class DefaultRemover():
             }
             ret, out, err = self.mon_command(purge_args)
             if ret != 0:
-                log.error(f"error setting down flags on OSDs, {err}")
                 raise RuntimeError(err)
 
     def destroy_osds(self) -> None:
@@ -600,26 +596,40 @@ class DefaultRemover():
             }
             ret, out, err = self.mon_command(destroy_args)
             if ret != 0:
-                log.error(f"error setting down flags on OSDs, {err}")
                 raise RuntimeError(err)
 
     def remove(self) -> str:
-        self.check_force()
+        try:
+            self.check_force()
+        except Exception as e:
+            log.exception("Error checking if OSDs are safe to destroy")
+            return f"OSDs not safe to destroy or unable to check if they are safe to destroy: {e}"
         try:
             remove_result = self.remove_device_sets()
         except Exception as e:
-            raise RuntimeError("Failed to update CephCluster CR, removing OSDs failed: " + str(e))
-        self.scale_deployments()
-        self.set_osds_down()
-        self.set_osds_out()
-        self.delete_deployments()
-        self.clean_up_prepare_jobs_and_pvc()
-        if self.replace_flag:
-            self.destroy_osds()
-        else:
-            self.purge_osds()
-        
+            log.exception("Error patching ceph cluster CRD")
+            return f"Not possible to modify Ceph cluster CRD: {e}"
+        try:
+            self.scale_deployments()
+            self.delete_deployments()
+            self.clean_up_prepare_jobs_and_pvc()
+        except Exception as e:
+            log.exception("Ceph cluster CRD patched, but error cleaning environment")
+            return f"Error cleaning environment after removing OSDs from Ceph cluster CRD: {e}"
+        try:
+            self.set_osds_down()
+            self.set_osds_out()
+            if self.replace_flag:
+                self.destroy_osds()
+            else:
+                self.purge_osds()
+        except Exception as e:
+            log.exception("OSDs removed from environment, but not able to remove OSDs from Ceph cluster")
+            return f"Error removing OSDs from Ceph cluster: {e}"
+
         return remove_result
+
+
 
 class RookCluster(object):
     # import of client.CoreV1Api must be optional at import time.
