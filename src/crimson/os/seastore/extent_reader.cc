@@ -16,6 +16,7 @@ namespace crimson::os::seastore {
 ExtentReader::read_segment_header_ret
 ExtentReader::read_segment_header(segment_id_t segment)
 {
+  auto& segment_manager = *segment_managers[segment.device_id()];
   return segment_manager.read(
     paddr_t{segment, 0},
     segment_manager.get_block_size()
@@ -24,7 +25,7 @@ ExtentReader::read_segment_header(segment_id_t segment)
     crimson::ct_error::assert_all{
       "Invalid error in ExtentReader::read_segment_header"
     }
-  ).safe_then([=](bufferptr bptr) -> read_segment_header_ret {
+  ).safe_then([=, &segment_manager](bufferptr bptr) -> read_segment_header_ret {
     logger().debug("segment {} bptr size {}", segment, bptr.length());
 
     segment_header_t header;
@@ -112,6 +113,8 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
   size_t budget,
   found_record_handler_t &handler)
 {
+  auto& segment_manager =
+    *segment_managers[cursor.offset.segment.device_id()];
   if (cursor.offset.offset == 0) {
     cursor.offset.offset = segment_manager.get_block_size();
   }
@@ -220,6 +223,7 @@ ExtentReader::read_validate_record_metadata(
   paddr_t start,
   segment_nonce_t nonce)
 {
+  auto& segment_manager = *segment_managers[start.segment.device_id()];
   auto block_size = segment_manager.get_block_size();
   if (start.offset + block_size > (int64_t)segment_manager.get_segment_size()) {
     return read_validate_record_metadata_ret(
@@ -228,7 +232,7 @@ ExtentReader::read_validate_record_metadata(
   }
   return segment_manager.read(start, block_size
   ).safe_then(
-    [=](bufferptr bptr) mutable
+    [=, &segment_manager](bufferptr bptr) mutable
     -> read_validate_record_metadata_ret {
       logger().debug("read_validate_record_metadata: reading {}", start);
       auto block_size = segment_manager.get_block_size();
@@ -308,6 +312,7 @@ ExtentReader::read_validate_data(
   paddr_t record_base,
   const record_header_t &header)
 {
+  auto& segment_manager = *segment_managers[record_base.segment.device_id()];
   return segment_manager.read(
     record_base.add_offset(header.mdlength),
     header.dlength
