@@ -48,7 +48,7 @@ class Thread {
   virtual void *entry() = 0;
 
  private:
-  static void *_entry_func(void *arg) noexcept;
+  static void *_entry_func(void *arg);
 
  public:
   const pthread_t &get_thread_id() const;
