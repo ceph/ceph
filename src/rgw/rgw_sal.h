@@ -704,11 +704,6 @@ class Object {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) = 0;
-    virtual int get_max_chunk_size(const DoutPrefixProvider* dpp,
-                                   rgw_placement_rule placement_rule,
-				   uint64_t* max_chunk_size,
-				   uint64_t* alignment = nullptr) = 0;
-    virtual void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t* max_size) = 0;
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     virtual int get_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f, RGWObjectCtx* obj_ctx) = 0;
 
