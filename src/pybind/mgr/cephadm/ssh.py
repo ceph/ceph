@@ -126,7 +126,7 @@ class SSHManager:
     async def _execute_command(self,
                                host: str,
                                cmd: List[str],
-                               stdin: Optional[bytes] = b"",
+                               stdin: Optional[bytes] = None,
                                addr: Optional[str] = None,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
@@ -148,7 +148,7 @@ class SSHManager:
     def execute_command(self,
                         host: str,
                         cmd: List[str],
-                        stdin: Optional[bytes] = b"",
+                        stdin: Optional[bytes] = None,
                         addr: Optional[str] = None,
                         ) -> Tuple[str, str, int]:
         return self.mgr.event_loop.get_result(self._execute_command(host, cmd, stdin, addr))
@@ -156,7 +156,7 @@ class SSHManager:
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: List[str],
-                                     stdin: Optional[bytes] = b"",
+                                     stdin: Optional[bytes] = None,
                                      addr: Optional[str] = None,
                                      ) -> str:
         out, err, code = await self._execute_command(host, cmd, stdin, addr)
@@ -169,7 +169,7 @@ class SSHManager:
     def check_execute_command(self,
                               host: str,
                               cmd: List[str],
-                              stdin: Optional[bytes] = b"",
+                              stdin: Optional[bytes] = None,
                               addr: Optional[str] = None,
                               ) -> str:
         return self.mgr.event_loop.get_result(self._check_execute_command(host, cmd, stdin, addr))
