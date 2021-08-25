@@ -10,6 +10,7 @@
 namespace crimson::os::seastore {
 
 class SegmentCleaner;
+class TransactionManager;
 
 class ExtentReader {
 public:
@@ -76,8 +77,11 @@ public:
   }
 
 private:
-  SegmentManager& segment_manager;
+  std::vector<SegmentManager*> segment_managers;
 
+  std::vector<SegmentManager*>& get_segment_managers() {
+    return segment_managers;
+  }
   /// read record metadata for record starting at start
   using read_validate_record_metadata_ertr = read_ertr;
   using read_validate_record_metadata_ret =
@@ -105,6 +109,7 @@ private:
   /// validate embedded metadata checksum
   static bool validate_metadata(const bufferlist &bl);
 
+  friend class TransactionManager;
 };
 
 using ExtentReaderRef = std::unique_ptr<ExtentReader>;

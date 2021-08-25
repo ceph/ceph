@@ -134,7 +134,8 @@ void TMDriver::init()
     SegmentCleaner::config_t::get_default(),
     std::move(scanner),
     false /* detailed */);
-  segment_cleaner->mount(*segment_manager);
+  std::vector<SegmentManager*> sms;
+  segment_cleaner->mount(segment_manager->get_device_id(), sms);
   auto journal = std::make_unique<Journal>(*segment_manager, scanner_ref);
   auto cache = std::make_unique<Cache>(scanner_ref, segment_manager->get_block_size());
   auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
@@ -158,7 +159,8 @@ void TMDriver::init()
     std::move(journal),
     std::move(cache),
     std::move(lba_manager),
-    std::move(epm));
+    std::move(epm),
+    scanner_ref);
 }
 
 void TMDriver::clear()
@@ -181,7 +183,13 @@ seastar::future<> TMDriver::mkfs()
   seastore_meta_t meta;
   meta.seastore_id.generate_random();
   return segment_manager->mkfs(
-    std::move(meta)
+    segment_manager_config_t{
+      true,
+      (magic_t)std::rand(),
+      device_type_t::SEGMENTED,
+      0,
+      meta,
+      secondary_device_set_t()}
   ).safe_then([this] {
     logger().debug("");
     return segment_manager->mount();

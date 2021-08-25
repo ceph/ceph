@@ -683,7 +683,7 @@ public:
     ExtentReaderRef&& scanner,
     bool detailed = false);
 
-  void mount(SegmentManager &psm, std::vector<SegmentManager*>& sms) {
+  void mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms) {
     crimson::get_logger(ceph_subsys_seastore).debug(
       "SegmentCleaner::mount: {} segment managers", sms.size());
     init_complete = false;
@@ -691,7 +691,7 @@ public:
     journal_tail_target = journal_seq_t{};
     journal_tail_committed = journal_seq_t{};
     journal_head = journal_seq_t{};
-    journal_device_id = psm.get_device_id();
+    journal_device_id = pdevice_id;
 
     for (auto& sm : sms) {
       if (sm)
