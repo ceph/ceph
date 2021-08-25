@@ -180,11 +180,11 @@ class HostData:
 
 
 class AgentMessageThread(threading.Thread):
-    def __init__(self, host: str, port: int, counter: int, mgr: "CephadmOrchestrator") -> None:
+    def __init__(self, host: str, port: int, data: Dict[Any, Any], mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.host = host
         self.port = port
-        self.counter = counter
+        self.data: str = json.dumps(data)
         super(AgentMessageThread, self).__init__(target=self.run)
 
     def run(self) -> None:
@@ -192,9 +192,14 @@ class AgentMessageThread(threading.Thread):
             try:
                 agent_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 agent_socket.connect((self.mgr.inventory.get_addr(self.host), self.port))
-                agent_socket.send(str(self.counter).encode())
+                bytes_len: str = str(len(self.data.encode('utf-8')))
+                if len(bytes_len.encode('utf-8')) > 10:
+                    raise Exception(f'Message is too big to send to agent. Message size is {bytes_len} bytes!')
+                while len(bytes_len.encode('utf-8')) < 10:
+                    bytes_len = '0' + bytes_len
+                agent_socket.sendall((bytes_len + self.data).encode('utf-8'))
                 agent_response = agent_socket.recv(1024).decode()
-                self.mgr.log.debug(f'Received {agent_response} from agent on host {self.host}')
+                self.mgr.log.debug(f'Received "{agent_response}" from agent on host {self.host}')
                 return
             except ConnectionError as e:
                 # if it's a connection error, possibly try to connect again.
@@ -221,7 +226,7 @@ class CephadmAgentHelpers:
             else:
                 self.mgr.cache.agent_counter[host] = self.mgr.cache.agent_counter[host] + 1
             message_thread = AgentMessageThread(
-                host, self.mgr.cache.agent_ports[host], self.mgr.cache.agent_counter[host], self.mgr)
+                host, self.mgr.cache.agent_ports[host], {'counter': self.mgr.cache.agent_counter[host]}, self.mgr)
             message_thread.start()
 
     def _agent_down(self, host: str) -> bool:
