@@ -99,7 +99,8 @@ class SSHManager:
         except OSError as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}" + '\n' + f'Log: {log_content}'
+            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}" + \
+                '\n' + f'Log: {log_content}'
             logger.exception(msg)
             raise OrchestratorError(msg)
         except asyncssh.Error as e:
@@ -112,7 +113,8 @@ class SSHManager:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
             logger.exception(str(e))
-            raise OrchestratorError(f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}')
+            raise OrchestratorError(
+                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}')
         finally:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
@@ -208,7 +210,8 @@ class SSHManager:
                           gid: Optional[int] = None,
                           addr: Optional[str] = None,
                           ) -> None:
-        self.mgr.event_loop.get_result(self._write_remote_file(host, path, content, mode, uid, gid, addr))
+        self.mgr.event_loop.get_result(self._write_remote_file(
+            host, path, content, mode, uid, gid, addr))
 
     async def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
