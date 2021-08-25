@@ -576,7 +576,7 @@ int CyanStore::_omap_set_values(
 
   ObjectRef o = c->get_or_create_object(oid);
   for (auto &&i: aset) {
-    o->omap.insert(std::move(i));
+    o->omap[std::move(i.first)] = std::move(i.second);
   }
   return 0;
 }
