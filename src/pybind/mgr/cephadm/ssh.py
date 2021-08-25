@@ -117,15 +117,17 @@ class SSHManager:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
 
-    def remote_connection(self, *args: Any) -> "SSHClientConnection":
-        return self.mgr.event_loop.get_result(self._remote_connection(*args))
+    def remote_connection(self,
+                          host: str,
+                          addr: Optional[str] = None,
+                          ) -> "SSHClientConnection":
+        return self.mgr.event_loop.get_result(self._remote_connection(host, addr))
 
     async def _execute_command(self,
                                host: str,
                                cmd: List[str],
                                stdin: Optional[bytes] = b"",
                                addr: Optional[str] = None,
-                               **kwargs: Any,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
         cmd = "sudo " + " ".join(quote(x) for x in cmd)
@@ -143,15 +145,19 @@ class SSHManager:
         err = r.stderr.rstrip('\n')
         return out, err, r.returncode
 
-    def execute_command(self, *args: Any, **kwargs: Any) -> Tuple[str, str, int]:
-        return self.mgr.event_loop.get_result(self._execute_command(*args, **kwargs))
+    def execute_command(self,
+                        host: str,
+                        cmd: List[str],
+                        stdin: Optional[bytes] = b"",
+                        addr: Optional[str] = None,
+                        ) -> Tuple[str, str, int]:
+        return self.mgr.event_loop.get_result(self._execute_command(host, cmd, stdin, addr))
 
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: List[str],
                                      stdin: Optional[bytes] = b"",
                                      addr: Optional[str] = None,
-                                     **kwargs: Any,
                                      ) -> str:
         out, err, code = await self._execute_command(host, cmd, stdin, addr)
         if code != 0:
@@ -160,8 +166,13 @@ class SSHManager:
             raise OrchestratorError(msg)
         return out
 
-    def check_execute_command(self, *args: Any, **kwargs: Any) -> str:
-        return self.mgr.event_loop.get_result(self._check_execute_command(*args, **kwargs))
+    def check_execute_command(self,
+                              host: str,
+                              cmd: List[str],
+                              stdin: Optional[bytes] = b"",
+                              addr: Optional[str] = None,
+                              ) -> str:
+        return self.mgr.event_loop.get_result(self._check_execute_command(host, cmd, stdin, addr))
 
     async def _write_remote_file(self,
                                  host: str,
@@ -171,7 +182,6 @@ class SSHManager:
                                  uid: Optional[int] = None,
                                  gid: Optional[int] = None,
                                  addr: Optional[str] = None,
-                                 **kwargs: Any,
                                  ) -> None:
         try:
             dirname = os.path.dirname(path)
@@ -189,8 +199,16 @@ class SSHManager:
             logger.exception(msg)
             raise OrchestratorError(msg)
 
-    def write_remote_file(self, *args: Any, **kwargs: Any) -> None:
-        self.mgr.event_loop.get_result(self._write_remote_file(*args, **kwargs))
+    def write_remote_file(self,
+                          host: str,
+                          path: str,
+                          content: bytes,
+                          mode: Optional[int] = None,
+                          uid: Optional[int] = None,
+                          gid: Optional[int] = None,
+                          addr: Optional[str] = None,
+                          ) -> None:
+        self.mgr.event_loop.get_result(self._write_remote_file(host, path, content, mode, uid, gid, addr))
 
     async def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
