@@ -212,7 +212,8 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t chunk_size = 0;
   uint64_t alignment;
 
-  int r = head_obj->get_max_chunk_size(dpp, head_obj->get_bucket()->get_placement_rule(),
+  int r = dynamic_cast<rgw::sal::RadosObject*>(head_obj.get())->get_max_chunk_size(
+				       dpp, head_obj->get_bucket()->get_placement_rule(),
 				       &max_head_chunk_size, &alignment);
   if (r < 0) {
     return r;
@@ -222,7 +223,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   if (head_obj->get_bucket()->get_placement_rule() != tail_placement_rule) {
     if (!head_obj->placement_rules_match(head_obj->get_bucket()->get_placement_rule(), tail_placement_rule)) {
       same_pool = false;
-      r = head_obj->get_max_chunk_size(dpp, tail_placement_rule, &chunk_size);
+      r = dynamic_cast<rgw::sal::RadosObject*>(head_obj.get())->get_max_chunk_size(dpp, tail_placement_rule, &chunk_size);
       if (r < 0) {
         return r;
       }
@@ -238,7 +239,8 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t stripe_size;
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
 
-  head_obj->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+  dynamic_cast<rgw::sal::RadosObject*>(head_obj.get())->get_max_aligned_size(
+					default_stripe_size, alignment, &stripe_size);
 
   manifest.set_trivial_rule(head_max_size, stripe_size);
 
@@ -361,12 +363,14 @@ int MultipartObjectProcessor::prepare_head()
   uint64_t stripe_size;
   uint64_t alignment;
 
-  int r = target_obj->get_max_chunk_size(dpp, tail_placement_rule, &chunk_size, &alignment);
+  int r = dynamic_cast<rgw::sal::RadosObject*>(target_obj.get())->get_max_chunk_size(dpp,
+					  tail_placement_rule, &chunk_size, &alignment);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
     return r;
   }
-  target_obj->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+  dynamic_cast<rgw::sal::RadosObject*>(target_obj.get())->get_max_aligned_size(
+					default_stripe_size, alignment, &stripe_size);
 
   manifest.set_multipart_part_rule(stripe_size, part_num);
 
