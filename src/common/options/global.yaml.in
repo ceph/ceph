@@ -4014,6 +4014,19 @@ options:
     that this recommendation may change in the future however.
   default: true
   with_legacy: true
+- name: bluefs_force_direct_write
+  type: bool
+  level: advanced
+  desc: Forces to use direct asynchronous io on write path.
+  long_desc: When this option is enabled, bluefs will use bluefs_buffered_io setting
+    only for reads, and all writes will be serviced by direct asynchronous io.
+    Requires AIO and posix_fadvise.
+  default: false
+  with_legacy: false
+  flags:
+  - startup
+  see_also:
+  - bluefs_buffered_io
 - name: bluefs_sync_write
   type: bool
   level: advanced

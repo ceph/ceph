@@ -51,6 +51,8 @@ public:
 
   // from an fd
   int discard(int64_t offset, int64_t len) const;
+  /* signal page cache that region should not be cached anymore */
+  int dontneed(int64_t offset, int64_t len) const;
   int get_size(int64_t *psize) const;
   int get_devid(dev_t *id) const;
   int partition(char* partition, size_t max) const;

@@ -217,6 +217,12 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return ioctl(fd, BLKDISCARD, range);
 }
 
+int BlkDev::dontneed(int64_t offset, int64_t len) const
+{
+  int r = posix_fadvise(fd, offset, len, POSIX_FADV_DONTNEED);
+  return r;
+}
+
 bool BlkDev::is_rotational() const
 {
   return get_int_property("queue/rotational") > 0;
@@ -859,6 +865,11 @@ int BlkDev::discard(int64_t offset, int64_t len) const
   return -EOPNOTSUPP;
 }
 
+int BlkDev::dontneed(int64_t offset, int64_t len) const
+{
+  return -EOPNOTSUPP;
+}
+
 bool BlkDev::is_rotational() const
 {
   return false;
@@ -984,6 +995,11 @@ bool BlkDev::support_discard() const
 }
 
 int BlkDev::discard(int64_t offset, int64_t len) const
+{
+  return -EOPNOTSUPP;
+}
+
+int BlkDev::dontneed(int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
 }
@@ -1184,6 +1200,11 @@ bool BlkDev::support_discard() const
 }
 
 int BlkDev::discard(int fd, int64_t offset, int64_t len) const
+{
+  return -EOPNOTSUPP;
+}
+
+int BlkDev::dontneed(int fd, int64_t offset, int64_t len) const
 {
   return -EOPNOTSUPP;
 }

@@ -1033,6 +1033,12 @@ int KernelDevice::discard(uint64_t offset, uint64_t len)
   return r;
 }
 
+int KernelDevice::dontneed(uint64_t offset, uint64_t len)
+{
+  int r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.dontneed((int64_t)offset, (int64_t)len);
+  return r;
+}
+
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)

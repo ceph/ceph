@@ -269,6 +269,7 @@ public:
     int write_hint = WRITE_LIFE_NOT_SET) = 0;
   virtual int flush() = 0;
   virtual int discard(uint64_t offset, uint64_t len) { return 0; }
+  virtual int dontneed(uint64_t offset, uint64_t len) { return -1; }
   virtual int queue_discard(interval_set<uint64_t> &to_release) { return -1; }
   virtual void discard_drain() { return; }
 

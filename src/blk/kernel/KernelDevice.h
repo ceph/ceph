@@ -139,6 +139,7 @@ public:
 		int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
   int discard(uint64_t offset, uint64_t len) override;
+  int dontneed(uint64_t offset, uint64_t len) override;
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;

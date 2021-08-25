@@ -360,6 +360,7 @@ private:
   inline bool is_shared_alloc(unsigned id) const {
     return id == shared_alloc_id;
   }
+  bool forced_direct_writes = false;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;

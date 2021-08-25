@@ -815,6 +815,26 @@ int BlueFS::mount()
            << std::hex << log_writer->pos << std::dec
            << dendl;
 
+  if (cct->_conf.get_val<bool>("bluefs_force_direct_write") == true &&
+      cct->_conf->bluefs_buffered_io == true) {
+    /* reads buffered, writes direct */
+    bool dontneed_check = true;
+    for (unsigned dev = BDEV_WAL; dev <= BDEV_SLOW; dev++) {
+      if (bdev[dev]) {
+	int r = bdev[dev]->dontneed(0, super.block_size);
+	if (r != 0) {
+	  dout(1) << __func__ << " bluefs_force_direct_write selected, but "
+		  << get_device_name(dev) << " cant support it" << dendl;
+	  dontneed_check = false;
+	}
+      }
+    }
+    if (dontneed_check) {
+      dout(10) << __func__ << " writes switched to direct io" << dendl;
+      forced_direct_writes = true;
+    }
+  }
+
   return 0;
 
  out:
@@ -2582,6 +2602,11 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
     if (!to_release[i].empty()) {
       /* OK, now we have the guarantee alloc[i] won't be null. */
       int r = 0;
+      if (forced_direct_writes == true) {
+	for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
+	  bdev[i]->dontneed(p.get_start(), p.get_len());
+	}
+      }
       if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
 	r = bdev[i]->queue_discard(to_release[i]);
 	if (r == 0)
@@ -2685,7 +2710,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   ceph_assert(h->file->num_readers.load() == 0);
 
   bool buffered;
-  if (h->file->fnode.ino == 1)
+  if (h->file->fnode.ino == 1 || forced_direct_writes)
     buffered = false;
   else
     buffered = cct->_conf->bluefs_buffered_io;
