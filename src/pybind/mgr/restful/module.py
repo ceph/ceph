@@ -313,7 +313,7 @@ class Module(MgrModule):
         # Publish the URI that others may use to access the service we're
         # about to start serving
         addr = self.get_mgr_ip() if server_addr == "::" else server_addr
-        self.set_uri(build_url(scheme='https', host=addr, port=server_port))
+        self.set_uri(build_url(scheme='https', host=addr, port=server_port, path='/'))
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(

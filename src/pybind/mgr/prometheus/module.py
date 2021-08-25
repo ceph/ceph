@@ -1382,7 +1382,7 @@ class Module(MgrModule):
         # about to start serving
         if server_addr in ['::', '0.0.0.0']:
             server_addr = self.get_mgr_ip()
-        self.set_uri(build_url(scheme='http', host=server_addr, port=server_port))
+        self.set_uri(build_url(scheme='http', host=server_addr, port=server_port, path='/'))
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
