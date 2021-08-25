@@ -36,7 +36,7 @@ void F013_T::update_size_at(
     NodeExtentMutable& mut, const me_t& node, index_t index, int change)
 {
   assert(index <= node.num_keys);
-  extent_len_t node_size = mut.get_length();
+  [[maybe_unused]] extent_len_t node_size = mut.get_length();
 #ifndef NDEBUG
   // check underflow
   if (change < 0 && index != node.num_keys) {
