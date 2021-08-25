@@ -8624,8 +8624,16 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
   {
     cerr << "fscking/fixing" << std::endl;
     bstore->umount();
-    ASSERT_EQ(bstore->fsck(false), 3);
-    ASSERT_LE(bstore->repair(false), 3);
+    // depending on the allocation map's source we can
+    // either observe or don't observe an additional 
+    // extent leak detection. Hence adjusting the expected
+    // value
+    size_t expected_error_count =
+      g_ceph_context->_conf->bluestore_allocation_from_file ?
+      2 :
+      3;
+    ASSERT_EQ(bstore->fsck(false), expected_error_count);
+    ASSERT_LE(bstore->repair(false), expected_error_count);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
 
