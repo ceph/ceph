@@ -2561,6 +2561,7 @@ static int list_plain_entries_help(cls_method_context_t hctx,
 	      escape_str(e.key.name).c_str());
       // skip the rest of the entries
       more = false;
+      end_key_reached = true;
       return count;
     }
 
@@ -2585,8 +2586,17 @@ static int list_plain_entries_help(cls_method_context_t hctx,
   } // iter for loop
 
   return count;
-}
+} // list_plain_entries_help
 
+/*
+ * Lists plain entries in either or both regions, the region of those
+ * beginning with an ASCII character or a non-ASCII character, which
+ * surround the "ugly" namespace used by special entries for versioned
+ * buckets.
+ *
+ * The entries parameter is not cleared and additional entries are
+ * appended to it.
+ */
 static int list_plain_entries(cls_method_context_t hctx,
                               const std::string& name_filter,
                               const std::string& marker,
@@ -2595,9 +2605,9 @@ static int list_plain_entries(cls_method_context_t hctx,
                               bool* pmore,
 			      const PlainEntriesRegion region = PlainEntriesRegion::Both)
 {
-  int r;
-  bool end_key_reached;
-  bool more;
+  int r = 0;
+  bool end_key_reached = false;
+  bool more = false;
   const size_t start_size = entries->size();
 
   if (region <= PlainEntriesRegion::Both && marker < BI_PREFIX_BEGIN) {
@@ -2609,10 +2619,11 @@ static int list_plain_entries(cls_method_context_t hctx,
     }
 
     // see if we're done for this call (there may be more for a later call)
-    if (r >= int(max) || !end_key_reached || (!more && region != PlainEntriesRegion::Both)) {
+    if (r >= int(max) || !end_key_reached || (!more && region == PlainEntriesRegion::Low)) {
       if (pmore) {
 	*pmore = more;
       }
+
       return int(entries->size() - start_size);
     }
 
@@ -2623,8 +2634,8 @@ static int list_plain_entries(cls_method_context_t hctx,
     const std::string start_after_key = std::max(marker, BI_PREFIX_END);
 
     // listing non-ascii plain namespace
-    r = list_plain_entries_help(hctx, name_filter, start_after_key, {}, max, entries,
-				end_key_reached, more);
+    r = list_plain_entries_help(hctx, name_filter, start_after_key, {}, max,
+				entries, end_key_reached, more);
     if (r < 0) {
       return r;
     }
@@ -2854,10 +2865,12 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
+  constexpr uint32_t MAX_BI_LIST_ENTRIES = 1000;
+  const uint32_t max = std::min(op.max, MAX_BI_LIST_ENTRIES);
+
+
   int ret;
-  int count = 0;
-  constexpr int MAX_BI_LIST_ENTRIES = 1000;
-  const int32_t max = (op.max < MAX_BI_LIST_ENTRIES ? op.max : MAX_BI_LIST_ENTRIES);
+  uint32_t count = 0;
   bool more = false;
   rgw_cls_bi_list_ret op_ret;
 
@@ -2901,7 +2914,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
       return ret;
     }
 
-    count = ret;
+    count += ret;
     CLS_LOG(20, "found %d non-ascii (high) plain entries", count);
   }
 
@@ -2914,7 +2927,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   encode(op_ret, *out);
 
   return 0;
-}
+} // rgw_bi_list_op
 
 
 int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
