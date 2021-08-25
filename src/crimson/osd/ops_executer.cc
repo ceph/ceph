@@ -364,6 +364,25 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
   });
 }
 
+OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_list_watchers(
+  OSDOp& osd_op,
+  const ObjectState& os)
+{
+  logger().debug("{}", __func__);
+
+  obj_list_watch_response_t response;
+  for (const auto& [key, info] : os.oi.watchers) {
+    logger().debug("{}: key cookie={}, entity={}",
+                   __func__, key.first, key.second);
+    assert(key.first == info.cookie);
+    assert(key.second.is_client());
+    response.entries.emplace_back(watch_item_t{
+      key.second, info.cookie, info.timeout_seconds, info.addr});
+    response.encode(osd_op.outdata, get_message().get_features());
+  }
+  return watch_ierrorator::now();
+}
+
 OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify_ack(
   OSDOp& osd_op,
   const ObjectState& os)
@@ -576,6 +595,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return do_op_watch(osd_op, os, txn);
     }, false);
+  case CEPH_OSD_OP_LIST_WATCHERS:
+    return do_read_op([this, &osd_op] (auto&, const auto& os) {
+      return do_op_list_watchers(osd_op, os);
+    });
   case CEPH_OSD_OP_NOTIFY:
     return do_read_op([this, &osd_op] (auto&, const auto& os) {
       return do_op_notify(osd_op, os);
