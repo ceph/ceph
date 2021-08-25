@@ -7,7 +7,6 @@ import contextlib
 import logging
 import os
 import json
-import re
 import uuid
 import yaml
 
@@ -123,50 +122,18 @@ def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
 
     if config.get('cephadm_mode') != 'cephadm-package':
-        ref = config.get('cephadm_branch', ref)
-        git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
-        log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
-        if ctx.config.get('redhat'):
-            log.info("Install cephadm using RPM")
-            # cephadm already installed from redhat.install task
-            ctx.cluster.run(
-                args=[
-                    'cp',
-                    run.Raw('$(which cephadm)'),
-                    ctx.cephadm,
-                    run.Raw('&&'),
-                    'ls', '-l',
-                    ctx.cephadm,
-                ]
-            )
-        elif git_url.startswith('https://github.com/'):
-            # git archive doesn't like https:// URLs, which we use with github.
-            rest = git_url.split('https://github.com/', 1)[1]
-            rest = re.sub(r'\.git/?$', '', rest).strip() # no .git suffix
-            ctx.cluster.run(
-                args=[
-                    'curl', '--silent',
-                    'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
-                    run.Raw('>'),
-                    ctx.cephadm,
-                    run.Raw('&&'),
-                    'ls', '-l',
-                    ctx.cephadm,
-                ],
-            )
-        else:
-            ctx.cluster.run(
-                args=[
-                    'git', 'archive',
-                    '--remote=' + git_url,
-                    ref,
-                    'src/cephadm/cephadm',
-                    run.Raw('|'),
-                    'tar', '-xO', 'src/cephadm/cephadm',
-                    run.Raw('>'),
-                    ctx.cephadm,
-                ],
-            )
+        # cephadm already installed from install task
+        ctx.cluster.run(
+            args=[
+                'cp',
+                run.Raw('$(which cephadm)'),
+                ctx.cephadm,
+                run.Raw('&&'),
+                'ls', '-l',
+                ctx.cephadm,
+            ]
+        )
+
         # sanity-check the resulting file and set executable bit
         cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
         ctx.cluster.run(
