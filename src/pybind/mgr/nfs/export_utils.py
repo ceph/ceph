@@ -1,13 +1,14 @@
 from typing import cast, List, Dict, Any, Optional, TYPE_CHECKING
 from os.path import isabs
 
+from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
+
 from .exception import NFSInvalidOperation, FSNotFound
 from .utils import check_fs
 
 if TYPE_CHECKING:
     from nfs.module import Module
 
-NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
 
 class RawBlock():
     def __init__(self, block_name: str, blocks: List['RawBlock'] = [], values: Dict[str, Any] = {}):

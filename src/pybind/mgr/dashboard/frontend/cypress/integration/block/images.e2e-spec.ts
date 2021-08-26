@@ -13,7 +13,7 @@ describe('Images page', () => {
     // Need pool for image testing
     pools.navigateTo('create');
     pools.create(poolName, 8, 'rbd');
-    pools.exist(poolName, true);
+    pools.existTableCell(poolName);
   });
 
   after(() => {
@@ -21,7 +21,7 @@ describe('Images page', () => {
     pools.navigateTo();
     pools.delete(poolName);
     pools.navigateTo();
-    pools.exist(poolName, false);
+    pools.existTableCell(poolName, false);
   });
 
   beforeEach(() => {
