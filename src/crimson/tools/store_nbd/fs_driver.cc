@@ -47,6 +47,17 @@ seastar::future<> FSDriver::write(
     ptr.length(),
     bl,
     0);
+
+  if (config.oi_enabled() ) {
+    bufferlist attr;
+    attr.append(ceph::buffer::create(config.oi_size, '0'));
+    t.setattr(
+      mapping.chandle->get_cid(),
+      mapping.object,
+      "_",
+      attr);
+  }
+
   return fs->do_transaction(
     mapping.chandle,
     std::move(t));
