@@ -29,6 +29,16 @@
   in certain recovery scenarios, e.g., monitor database lost and rebuilt, and
   the restored file system is expected to have the same ID as before.
 
+>=16.2.6
+--------
+
+* MGR: The pg_autoscaler has a new default 'scale-down' profile which provides more
+  performance from the start for new pools (for newly created clusters).
+  Existing clusters will retain the old behavior, now called the 'scale-up' profile.
+  For more details, see:
+
+  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+
 >=16.0.0
 --------
 
