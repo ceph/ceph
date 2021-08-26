@@ -57,6 +57,13 @@
   The POST notification at the beginning of the upload, and PUT notifications that 
   were sent on each part are not sent anymore.
 
+* MGR: The pg_autoscaler has a new default 'scale-down' profile which provides more
+  performance from the start for new pools (for newly created clusters).
+  Existing clusters will retain the old behavior, now called the 'scale-up' profile.
+  For more details, see:
+
+  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+
 >=16.0.0
 --------
 * mgr/nfs: ``nfs`` module is moved out of volumes plugin. Prior using the
