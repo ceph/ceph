@@ -222,5 +222,6 @@ public:
     const std::string &message);
 
   bool inject_python_on() const;
+  void update_cache_metrics();
 };
 

@@ -168,6 +168,12 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
+void ActivePyModules::update_cache_metrics() {
+  std::pair<int, int> hit_miss_ratio = ttl_cache.get_hit_miss_ratio();
+  set_store("cache", "cache_hit_count", std::to_string(hit_miss_ratio.first));
+  set_store("cache", "cache_miss_count", std::to_string(hit_miss_ratio.second));
+}
+
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
   uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
@@ -175,6 +181,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     ttl_cache.set_ttl(ttl_seconds);
     try{
       PyObject* cached = ttl_cache.get(what);
+      update_cache_metrics();
       return cached;
     } catch (std::out_of_range& e) {}
   }
@@ -183,6 +190,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     ttl_cache.insert(what, obj);
     Py_INCREF(obj);
   }
+  update_cache_metrics();
   return obj;
 }
 
