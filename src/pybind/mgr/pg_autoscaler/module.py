@@ -137,6 +137,14 @@ class PgAutoscaler(MgrModule):
                        'means starts out with full pgs and scales down when '
                        'there is pressure '),
             runtime=True),
+        Option(
+            name='threshold',
+            type='float',
+            desc='scaling threshold',
+            long_desc=('The factor by which the `NEW PG_NUM` must vary from the current'
+                       '`PG_NUM` before being accepted. Cannot be less than 1.0'),
+            default=3.0,
+            min=1.0),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -151,6 +159,7 @@ class PgAutoscaler(MgrModule):
             self.autoscale_profile: 'ScaleModeT' = 'scale-up'
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
+            self.threshold = 3.0
 
     def config_notify(self) -> None:
         for opt in self.NATIVE_OPTIONS:
@@ -242,6 +251,17 @@ class PgAutoscaler(MgrModule):
                     profile
                 ])
             return 0, table.get_string(), ''
+
+    @CLIWriteCommand("osd pool set threshold")
+    def set_scaling_threshold(self, num: float) -> Tuple[int, str, str]:
+        """
+        set the autoscaler threshold 
+        A.K.A. the factor by which the new PG_NUM must vary from the existing PG_NUM
+        """
+        if num < 1.0:
+            return 22, "", "threshold cannot be set less than 1.0"
+        self.set_module_option("threshold", num)
+        return 0, "threshold updated", ""
 
     @CLIWriteCommand("osd pool set autoscale-profile scale-up")
     def set_profile_scale_up(self) -> Tuple[int, str, str]:
@@ -556,10 +576,10 @@ class PgAutoscaler(MgrModule):
             osdmap: OSDMap,
             pools: Dict[str, Dict[str, Any]],
             profile: 'ScaleModeT',
-            threshold: float = 3.0,
     ) -> Tuple[List[Dict[str, Any]],
                Dict[int, CrushSubtreeResourceStatus]]:
-        assert threshold >= 2.0
+        threshold = self.threshold
+        assert threshold >= 1.0
 
         crush_map = osdmap.get_crush()
         root_map, overlapped_roots = self.get_subtree_resource_status(osdmap, crush_map)
