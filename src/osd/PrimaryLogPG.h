@@ -1489,7 +1489,7 @@ public:
 	       const PGPool &_pool,
 	       const std::map<std::string,std::string>& ec_profile,
 	       spg_t p);
-  ~PrimaryLogPG() override {}
+  ~PrimaryLogPG() override;
 
   void do_command(
     const std::string_view& prefix,
