@@ -823,6 +823,20 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 
 seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
+  // mon_host_override?
+  if (auto mon_host_override = conf.get_val<std::string>("mon_host_override");
+      !mon_host_override.empty()) {
+    if (auto ret = init_with_ips(mon_host_override, for_mkfs, "noname-"); ret == 0) {
+      return make_ready_future<>();
+    }
+    // TODO: resolve_addrs() is a blocking call
+    if (auto ret = init_with_hosts(mon_host_override, for_mkfs, "noname-"); ret == 0) {
+      return make_ready_future<>();
+    } else {
+      throw std::runtime_error(cpp_strerror(ret));
+    }
+  }
+
   // file?
   if (const auto monmap = conf.get_val<std::string>("monmap");
       !monmap.empty()) {
