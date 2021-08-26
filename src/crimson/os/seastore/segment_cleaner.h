@@ -95,7 +95,7 @@ public:
     segment_id_t segment,
     segment_off_t offset,
     extent_len_t len) final {
-    return update_usage(segment, -len);
+    return update_usage(segment, -(int64_t)len);
   }
 
   int64_t get_usage(segment_id_t segment) const final {
