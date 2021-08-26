@@ -6913,7 +6913,7 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
   //       directory completeness.
   // (check this _before_ we unlink the inode, below!)
   bool clear_complete = false;
-  if (!(dnl->is_null() && dn->is_clean()))
+  if (dn->is_auth() && !(dnl->is_null() && dn->is_clean()))
     clear_complete = true;
 
   // unlink the dentry
@@ -6951,13 +6951,14 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
     }
   }
 
-  // remove dentry
-  if (dn->last == CEPH_NOSNAP && dir->is_auth())
-    dir->add_to_bloom(dn);
-  dir->remove_dentry(dn);
-
-  if (clear_complete)
+  if (clear_complete) {
+    if (dn->last == CEPH_NOSNAP)
+      dir->add_to_bloom(dn);
     dir->state_clear(CDir::STATE_COMPLETE);
+  }
+
+  // remove dentry
+  dir->remove_dentry(dn);
   
   if (mds->logger) mds->logger->inc(l_mds_inodes_expired);
   return false;
