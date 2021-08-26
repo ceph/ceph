@@ -60,13 +60,12 @@ To set a different scrape interval in the Prometheus module, set
     ceph config set mgr mgr/prometheus/scrape_interval 20
 
 On large clusters (>1000 OSDs), the time to fetch the metrics may become
-significant.  Without the cache, the Prometheus manager module could,
-especially in conjunction with multiple Prometheus instances, overload the
-manager and lead to unresponsive or crashing Ceph manager instances.  Hence,
-the cache is enabled by default and cannot be disabled.  This means that there
-is a possibility that the cache becomes stale.  The cache is considered stale
-when the time to fetch the metrics from Ceph exceeds the configured
-``scrape_interval``.
+significant.  Without the cache, the Prometheus manager module could, especially
+in conjunction with multiple Prometheus instances, overload the manager and lead
+to unresponsive or crashing Ceph manager instances.  Hence, the cache is enabled
+by default.  This means that there is a possibility that the cache becomes
+stale.  The cache is considered stale when the time to fetch the metrics from
+Ceph exceeds the configured :confval:``mgr/prometheus/scrape_interval``.
 
 If that is the case, **a warning will be logged** and the module will either
 
@@ -84,6 +83,10 @@ To tell the module to respond with possibly stale data, set it to ``return``::
 To tell the module to respond with "service unavailable", set it to ``fail``::
 
     ceph config set mgr mgr/prometheus/stale_cache_strategy fail
+
+If you are confident that you don't require the cache, you can disable it::
+
+    ceph config set mgr mgr/prometheus/cache false
 
 .. _prometheus-rbd-io-statistics:
 
