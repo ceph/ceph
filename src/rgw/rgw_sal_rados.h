@@ -171,11 +171,6 @@ class RadosObject : public Object {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override;
-    virtual int get_max_chunk_size(const DoutPrefixProvider* dpp,
-                                   rgw_placement_rule placement_rule,
-				   uint64_t* max_chunk_size,
-				   uint64_t* alignment = nullptr) override;
-    virtual void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t* max_size) override;
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
     virtual int get_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f, RGWObjectCtx* obj_ctx) override;
 
@@ -204,6 +199,11 @@ class RadosObject : public Object {
 				    bool must_exist, optional_yield y) override;
 
     /* Internal to RadosStore */
+    int get_max_chunk_size(const DoutPrefixProvider* dpp,
+			   rgw_placement_rule placement_rule,
+			   uint64_t* max_chunk_size,
+			   uint64_t* alignment = nullptr);
+    void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t* max_size);
     void raw_obj_to_obj(const rgw_raw_obj& raw_obj);
 
   private:
@@ -267,7 +267,6 @@ class RadosBucket : public Bucket {
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) override;
-    Object* create_object(const rgw_obj_key& key /* Attributes */) override;
     virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) override;
     virtual int remove_bucket_bypass_gc(int concurrent_max, bool
 					keep_index_consistent,
@@ -287,12 +286,12 @@ class RadosBucket : public Bucket {
     virtual int update_container_stats(const DoutPrefixProvider* dpp) override;
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
     virtual int chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) override;
-    virtual int put_instance_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) override;
+    virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) override;
     virtual int remove_metadata(const DoutPrefixProvider* dpp, RGWObjVersionTracker* objv, optional_yield y) override;
     virtual bool is_owner(User* user) override;
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
-    virtual int set_instance_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
+    virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
     virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) override;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,

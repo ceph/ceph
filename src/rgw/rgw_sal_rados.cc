@@ -223,12 +223,6 @@ int RadosUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 					  RGWUserCtl::RemoveParams().set_objv_tracker(&objv_tracker));
 }
 
-/* Placeholder */
-Object* RadosBucket::create_object(const rgw_obj_key &key)
-{
-  return nullptr;
-}
-
 RadosBucket::~RadosBucket() {}
 
 int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
@@ -594,7 +588,7 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, User* new_user, User* old_
 			   old_user->get_display_name(), *marker, y, dpp);
 }
 
-int RadosBucket::put_instance_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
+int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
 {
   mtime = _mtime;
   return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp);
@@ -631,10 +625,11 @@ int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_q
 					  user_quota, bucket_quota, obj_size, y, check_size_only);
 }
 
-int RadosBucket::set_instance_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y)
+int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
 {
-    return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
-				attrs, &get_info().objv_tracker, y, dpp);
+  Bucket::merge_and_store_attrs(dpp, new_attrs, y);
+  return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
+				new_attrs, &get_info().objv_tracker, y, dpp);
 }
 
 int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime)
@@ -723,7 +718,7 @@ int RadosBucket::set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy &
 
 std::unique_ptr<Object> RadosBucket::get_object(const rgw_obj_key& k)
 {
-  return std::unique_ptr<Object>(new RadosObject(this->store, k, this));
+  return std::make_unique<RadosObject>(this->store, k, this);
 }
 
 int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max, ListResults& results, optional_yield y)
@@ -852,7 +847,7 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider *dpp,
 
 std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)
 {
-  return std::unique_ptr<User>(new RadosUser(this, u));
+  return std::make_unique<RadosUser>(this, u);
 }
 
 int RadosStore::get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
@@ -917,7 +912,7 @@ int RadosStore::get_user_by_swift(const DoutPrefixProvider* dpp, const std::stri
 
 std::unique_ptr<Object> RadosStore::get_object(const rgw_obj_key& k)
 {
-  return std::unique_ptr<Object>(new RadosObject(this, k));
+  return std::make_unique<RadosObject>(this, k);
 }
 
 int RadosStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
@@ -1168,12 +1163,12 @@ int RadosStore::cluster_stat(RGWClusterStat& stats)
 
 std::unique_ptr<Lifecycle> RadosStore::get_lifecycle(void)
 {
-  return std::unique_ptr<Lifecycle>(new RadosLifecycle(this));
+  return std::make_unique<RadosLifecycle>(this);
 }
 
 std::unique_ptr<Completions> RadosStore::get_completions(void)
 {
-  return std::unique_ptr<Completions>(new RadosCompletions());
+  return std::make_unique<RadosCompletions>();
 }
 
 std::unique_ptr<Notification> RadosStore::get_notification(rgw::sal::Object* obj,
@@ -1181,7 +1176,7 @@ std::unique_ptr<Notification> RadosStore::get_notification(rgw::sal::Object* obj
 							    rgw::notify::EventType event_type,
                                                             const std::string* object_name)
 {
-  return std::unique_ptr<Notification>(new RadosNotification(s, this, obj, s, event_type, object_name));
+  return std::make_unique<RadosNotification>(s, this, obj, s, event_type, object_name);
 }
 
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
@@ -1316,7 +1311,7 @@ void RadosStore::finalize(void)
 
 std::unique_ptr<LuaScriptManager> RadosStore::get_lua_script_manager()
 {
-  return std::unique_ptr<LuaScriptManager>(new RadosLuaScriptManager(this));
+  return std::make_unique<RadosLuaScriptManager>(this);
 }
 
 std::unique_ptr<RGWRole> RadosStore::get_role(std::string name,
@@ -1325,12 +1320,12 @@ std::unique_ptr<RGWRole> RadosStore::get_role(std::string name,
 					      std::string trust_policy,
 					      std::string max_session_duration_str)
 {
-  return std::unique_ptr<RGWRole>(new RadosRole(this, name, tenant, path, trust_policy, max_session_duration_str));
+  return std::make_unique<RadosRole>(this, name, tenant, path, trust_policy, max_session_duration_str);
 }
 
 std::unique_ptr<RGWRole> RadosStore::get_role(std::string id)
 {
-  return std::unique_ptr<RGWRole>(new RadosRole(this, id));
+  return std::make_unique<RadosRole>(this, id);
 }
 
 int RadosStore::get_roles(const DoutPrefixProvider *dpp,
@@ -1395,7 +1390,7 @@ int RadosStore::get_roles(const DoutPrefixProvider *dpp,
 
 std::unique_ptr<RGWOIDCProvider> RadosStore::get_oidc_provider()
 {
-  return std::unique_ptr<RGWOIDCProvider>(new RadosOIDCProvider(this));
+  return std::make_unique<RadosOIDCProvider>(this);
 }
 
 int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
@@ -1446,7 +1441,7 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
 
 std::unique_ptr<MultipartUpload> RadosStore::get_multipart_upload(Bucket* bucket, const std::string& oid, std::optional<std::string> upload_id, ceph::real_time mtime)
 {
-  return std::unique_ptr<MultipartUpload>(new RadosMultipartUpload(this, bucket, oid, upload_id, mtime));
+  return std::make_unique<RadosMultipartUpload>(this, bucket, oid, upload_id, mtime);
 }
 
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
@@ -1459,12 +1454,12 @@ std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *
 				  uint64_t *cur_accounted_size)
 {
   auto aio = rgw::make_throttle(ctx()->_conf->rgw_put_obj_min_window_size, y);
-  return std::unique_ptr<Writer>(new RadosAppendWriter(dpp, y,
+  return std::make_unique<RadosAppendWriter>(dpp, y,
 				 std::move(_head_obj),
 				 this, std::move(aio), owner, obj_ctx,
 				 ptail_placement_rule,
 				 unique_tag, position,
-				 cur_accounted_size));
+				 cur_accounted_size);
 }
 
 std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *dpp,
@@ -1476,11 +1471,11 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				  const std::string& unique_tag)
 {
   auto aio = rgw::make_throttle(ctx()->_conf->rgw_put_obj_min_window_size, y);
-  return std::unique_ptr<Writer>(new RadosAtomicWriter(dpp, y,
+  return std::make_unique<RadosAtomicWriter>(dpp, y,
 				 std::move(_head_obj),
 				 this, std::move(aio), owner, obj_ctx,
 				 ptail_placement_rule,
-				 olh_epoch, unique_tag));
+				 olh_epoch, unique_tag);
 }
 
 int RadosStore::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx* ioctx)
@@ -1801,7 +1796,7 @@ int RadosObject::get_obj_layout(const DoutPrefixProvider *dpp, optional_yield y,
 
 std::unique_ptr<Object::ReadOp> RadosObject::get_read_op(RGWObjectCtx* ctx)
 {
-  return std::unique_ptr<Object::ReadOp>(new RadosObject::RadosReadOp(this, ctx));
+  return std::make_unique<RadosObject::RadosReadOp>(this, ctx);
 }
 
 RadosObject::RadosReadOp::RadosReadOp(RadosObject *_source, RGWObjectCtx *_rctx) :
@@ -1852,7 +1847,7 @@ int RadosObject::RadosReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 
 std::unique_ptr<Object::DeleteOp> RadosObject::get_delete_op(RGWObjectCtx* ctx)
 {
-  return std::unique_ptr<Object::DeleteOp>(new RadosObject::RadosDeleteOp(this, ctx));
+  return std::make_unique<RadosObject::RadosDeleteOp>(this, ctx);
 }
 
 RadosObject::RadosDeleteOp::RadosDeleteOp(RadosObject *_source, RGWObjectCtx *_rctx) :
@@ -2490,9 +2485,9 @@ std::unique_ptr<Writer> RadosMultipartUpload::get_writer(
 				  const std::string& part_num_str)
 {
   auto aio = rgw::make_throttle(store->ctx()->_conf->rgw_put_obj_min_window_size, y);
-  return std::unique_ptr<Writer>(new RadosMultipartWriter(dpp, y, this,
+  return std::make_unique<RadosMultipartWriter>(dpp, y, this,
 				 std::move(_head_obj), store, std::move(aio), owner,
-				 obj_ctx, ptail_placement_rule, part_num, part_num_str));
+				 obj_ctx, ptail_placement_rule, part_num, part_num_str);
 }
 
 MPRadosSerializer::MPRadosSerializer(const DoutPrefixProvider *dpp, RadosStore* store, RadosObject* obj, const std::string& lock_name) :

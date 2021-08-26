@@ -125,11 +125,6 @@ namespace rgw::sal {
     return ret;
   }
 
-  Object *DBBucket::create_object(const rgw_obj_key &key)
-  {
-    return nullptr;
-  }
-
   int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y)
   {
     int ret;
@@ -206,7 +201,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBBucket::put_instance_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time _mtime)
+  int DBBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time _mtime)
   {
     int ret;
 
@@ -245,13 +240,15 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::set_instance_attrs(const DoutPrefixProvider *dpp, Attrs& attrs, optional_yield y)
+  int DBBucket::merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& new_attrs, optional_yield y)
   {
     int ret = 0;
 
+    Bucket::merge_and_store_attrs(dpp, new_attrs, y);
+
     /* XXX: handle has_instance_obj like in set_bucket_instance_attrs() */
 
-    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, nullptr, &attrs, nullptr, &get_info().objv_tracker);
+    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, nullptr, &new_attrs, nullptr, &get_info().objv_tracker);
 
     return ret;
   }

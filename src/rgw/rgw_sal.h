@@ -419,7 +419,6 @@ class Bucket {
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) = 0;
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) = 0;
-    virtual Object* create_object(const rgw_obj_key& key /* Attributes */) = 0;
     virtual Attrs& get_attrs(void) { return attrs; }
     virtual int set_attrs(Attrs a) { attrs = a; return 0; }
     virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) = 0;
@@ -441,14 +440,21 @@ class Bucket {
     virtual int update_container_stats(const DoutPrefixProvider* dpp) = 0;
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp) = 0;
     virtual int chown(const DoutPrefixProvider* dpp, User* new_user, User* old_user, optional_yield y, const std::string* marker = nullptr) = 0;
-    virtual int put_instance_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) = 0;
+    virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) = 0;
     virtual int remove_metadata(const DoutPrefixProvider* dpp, RGWObjVersionTracker* objv, optional_yield y) = 0;
     virtual bool is_owner(User* user) = 0;
     virtual User* get_owner(void) { return owner; };
     virtual ACLOwner get_acl_owner(void) { return ACLOwner(info.owner); };
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
-    virtual int set_instance_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) = 0;
+    /** Set the attributes in attrs, leaving any other existing attrs set, and
+     * write them to the backing store; a merge operation */
+    virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) {
+      for(auto& it : new_attrs) {
+	attrs[it.first] = it.second;
+      }
+      return 0;
+    }
     virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) = 0;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
@@ -698,11 +704,6 @@ class Object {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) = 0;
-    virtual int get_max_chunk_size(const DoutPrefixProvider* dpp,
-                                   rgw_placement_rule placement_rule,
-				   uint64_t* max_chunk_size,
-				   uint64_t* alignment = nullptr) = 0;
-    virtual void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t* max_size) = 0;
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     virtual int get_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f, RGWObjectCtx* obj_ctx) = 0;
 
