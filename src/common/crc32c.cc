@@ -32,7 +32,7 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
     return ceph_crc32c_aarch64;
   }
 # endif
-#elif defined(__powerpc__) || defined(__ppc__)
+#elif defined(HAVE_POWER8)
   if (ceph_arch_ppc_crc32) {
     return ceph_crc32c_ppc;
   }
