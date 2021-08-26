@@ -3474,9 +3474,14 @@ class MgrListener(Thread):
         listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
         listenSocket.settimeout(60)
         listenSocket.listen(1)
+        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        ssl_ctx.load_cert_chain(self.agent.listener_cert_path, self.agent.listener_key_path)
+        ssl_ctx.load_verify_locations(self.agent.ca_path)
+        secureListenSocket = ssl_ctx.wrap_socket(listenSocket, server_side=True)
         while not self.stop:
             try:
-                conn, _ = listenSocket.accept()
+                conn, _ = secureListenSocket.accept()
             except socket.timeout:
                 continue
             try:
@@ -3484,6 +3489,7 @@ class MgrListener(Thread):
             except Exception as e:
                 err_str = f'Failed to extract length of payload from message: {e}'
                 conn.send(err_str.encode())
+                logger.error(err_str)
             while True:
                 payload = conn.recv(length).decode()
                 if not payload:
@@ -3528,6 +3534,8 @@ class CephadmAgent():
         self.config_path = os.path.join(self.daemon_dir, 'agent.json')
         self.keyring_path = os.path.join(self.daemon_dir, 'keyring')
         self.ca_path = os.path.join(self.daemon_dir, 'root_cert.pem')
+        self.listener_cert_path = os.path.join(self.daemon_dir, 'listener.crt')
+        self.listener_key_path = os.path.join(self.daemon_dir, 'listener.key')
         self.listener_port = ''
         self.ack = -1
         self.event = threading.Event()

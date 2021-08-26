@@ -816,6 +816,7 @@ class CephadmServe:
                         self._remove_daemon(d.name(), d.hostname)
                         daemons_to_remove.remove(d)
                         progress_done += 1
+                        hosts_altered.add(d.hostname)
                         break
 
                 # deploy new daemon
@@ -891,7 +892,7 @@ class CephadmServe:
             if self.mgr.use_agent:
                 # can only send ack to agents if we know for sure port they bound to
                 hosts_altered = set([h for h in hosts_altered if h in self.mgr.cache.agent_ports])
-                self.mgr.agent_helpers._request_agent_acks(hosts_altered)
+                self.mgr.agent_helpers._request_agent_acks(hosts_altered, increment=True)
 
         if r is None:
             r = False
