@@ -73,7 +73,7 @@ export class HostFormComponent extends CdForm implements OnInit {
         validators: [CdValidators.ip()]
       }),
       labels: new FormControl([]),
-      maintenance: new FormControl(false)
+      maintenance: new FormControl({ value: false, disabled: this.pageURL !== 'hosts' })
     });
   }
 

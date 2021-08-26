@@ -114,7 +114,7 @@ export class CreateClusterWizardHelper extends PageHelper {
       });
   }
 
-  create(deviceType: 'hdd' | 'ssd') {
+  createOSD(deviceType: 'hdd' | 'ssd') {
     // Click Primary devices Add button
     cy.get('cd-osd-devices-selection-groups[name="Primary"]').as('primaryGroups');
     cy.get('@primaryGroups').find('button').click();
@@ -123,11 +123,8 @@ export class CreateClusterWizardHelper extends PageHelper {
     cy.get('cd-osd-devices-selection-modal').within(() => {
       cy.get('.modal-footer .tc_submitButton').as('addButton').should('be.disabled');
       this.filterTable('Type', deviceType);
+      this.getTableCount('total').should('be.gte', 1);
       cy.get('@addButton').click();
-    });
-
-    cy.get('@primaryGroups').within(() => {
-      this.getTableCount('total').as('newOSDCount');
     });
   }
 }
