@@ -302,6 +302,166 @@ class Module(MgrModule):
             'active_changed': sorted(list(active)),
         }
 
+    def get_stat_sum_per_pool(self) -> List[dict]:
+        # Initialize 'result' list
+        result: List[dict] = []
+
+        # Create a list of tuples containing pool ids and their associated names
+        # that will later act as a queue, i.e.:
+        #   pool_queue = [('1', '.mgr'), ('2', 'cephfs.a.meta'), ('3', 'cephfs.a.data')]
+        osd_map = self.get('osd_map')
+        pool_queue: List[tuple] = []
+        for pool in osd_map['pools']:
+            pool_queue.append((str(pool['pool']), pool['pool_name']))
+
+        # Populate 'result', i.e.:
+        #   {
+        #       'pool_id': '1'
+        #       'pool_name': '.mgr'
+        #       'stats_sum': {
+        #           'num_bytes': 36,
+        #           'num_bytes_hit_set_archive': 0,
+        #           ...
+        #           'num_write_kb': 0
+        #           }
+        #       }
+        #   }
+        while pool_queue:
+            # Pop a pool out of pool_queue
+            curr_pool = pool_queue.pop(0)
+
+            # Get the current pool's id and name
+            curr_pool_id, curr_pool_name = curr_pool[0], curr_pool[1]
+
+            # Initialize a dict that will hold aggregated stats for the current pool
+            compiled_stats_dict: Dict[str, Any] = defaultdict(lambda: defaultdict(int))
+
+            # Find out which pgs belong to the current pool and add up
+            # their stats
+            pg_dump = self.get('pg_dump')
+            for pg in pg_dump['pg_stats']:
+                pool_id = pg['pgid'].split('.')[0]
+                if pool_id == curr_pool_id:
+                    compiled_stats_dict['pool_id'] = int(pool_id)
+                    compiled_stats_dict['pool_name'] = curr_pool_name
+                    for metric in pg['stat_sum']:
+                        compiled_stats_dict['stats_sum'][metric] += pg['stat_sum'][metric]
+                else:
+                    continue
+            # 'compiled_stats_dict' now holds all stats pertaining to
+            # the current pool. Adding it to the list of results.
+            result.append(compiled_stats_dict)
+
+        return result
+
+    def get_osd_histograms(self) -> List[Dict[str, dict]]:
+        # Initialize result dict
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(
+                                              lambda: defaultdict(int))))))
+
+        # Get list of osd ids from the metadata
+        osd_metadata = self.get('osd_metadata')
+        
+        # Grab output from the "osd.x perf histogram dump" command
+        for osd_id in osd_metadata:
+            cmd_dict = {
+                'prefix': 'perf histogram dump',
+                'id': str(osd_id),
+                'format': 'json'
+            }
+            r, outb, outs = self.osd_command(cmd_dict)
+            # Check for invalid calls
+            if r != 0:
+                self.log.debug("Invalid command dictionary.")
+                continue
+            else:
+                try:
+                    # This is where the histograms will land if there are any.
+                    dump = json.loads(outb)
+
+                    for histogram in dump['osd']:
+                        # Log axis information. There are two axes, each represented
+                        # as a dictionary. Both dictionaries are contained inside a
+                        # list called 'axes'.
+                        axes = []
+                        for axis in dump['osd'][histogram]['axes']:
+
+                            # This is the dict that contains information for an individual
+                            # axis. It will be appended to the 'axes' list at the end.
+                            axis_dict: Dict[str, Any] = defaultdict()
+
+                            # Collecting information for buckets, min, name, etc.
+                            axis_dict['buckets'] = axis['buckets']
+                            axis_dict['min'] = axis['min']
+                            axis_dict['name'] = axis['name']
+                            axis_dict['quant_size'] = axis['quant_size']
+                            axis_dict['scale_type'] = axis['scale_type']
+
+                            # Collecting ranges; placing them in lists to
+                            # improve readability later on.
+                            ranges = []
+                            for _range in axis['ranges']:
+                                _max, _min = None, None
+                                if 'max' in _range:
+                                    _max = _range['max']
+                                if 'min' in _range:
+                                    _min = _range['min']
+                                ranges.append([_min, _max])
+                            axis_dict['ranges'] = ranges
+
+                            # Now that 'axis_dict' contains all the appropriate
+                            # information for the current axis, append it to the 'axes' list.
+                            # There will end up being two axes in the 'axes' list, since the
+                            # histograms are 2D.
+                            axes.append(axis_dict)
+
+                        # Add the 'axes' list, containing both axes, to result.
+                        # At this point, you will see that the name of the key is the string
+                        # form of our axes list (str(axes)). This is there so that histograms
+                        # with different axis configs will not be combined.
+                        # The key names are modified into something more readable ('config_x')
+                        # down below.
+                        result[str(axes)][histogram]['axes'] = axes
+
+                        # Collect current values and make sure they are in
+                        # integer form.
+                        values = []
+                        for value_list in dump['osd'][histogram]['values']:
+                            values.append([int(v) for v in value_list])
+
+                        # Aggregate values. If 'values' have already been initialized,
+                        # we can safely add.
+                        if 'values' in result[str(axes)][histogram]:
+                            for i in range (0, len(values)):
+                                for j in range (0, len(values[i])):
+                                    values[i][j] += result[str(axes)][histogram]['values'][i][j]
+
+                        # Add the values to result.
+                        result[str(axes)][histogram]['values'] = values
+
+                        # Update num_combined_osds
+                        if 'num_combined_osds' not in result[str(axes)][histogram]:
+                            result[str(axes)][histogram]['num_combined_osds'] = 1
+                        else:
+                            result[str(axes)][histogram]['num_combined_osds'] += 1
+
+                # Sometimes, json errors occur if you give it an empty string.
+                # I am also putting in a catch for a KeyError since it could
+                # happen where the code is assuming that a key exists in the
+                # schema when it doesn't. In either case, we'll handle that
+                # by returning an empty dict.
+                except (json.decoder.JSONDecodeError, KeyError) as e:
+                    self.log.debug("Error caught: {}".format(e))
+                    return list()
+
+        return list(result.values())
+
+    def get_io_rate(self) -> dict:
+        return self.get('io_rate')
+
     def gather_crashinfo(self) -> List[Dict[str, str]]:
         crashlist: List[Dict[str, str]] = list()
         errno, crashids, err = self.remote('crash', 'ls')
@@ -731,6 +891,9 @@ class Module(MgrModule):
 
         if 'perf' in channels:
             report['perf_counters'] = self.gather_perf_counters()
+            report['stat_sum_per_pool'] = self.get_stat_sum_per_pool()
+            report['io_rate'] = self.get_io_rate()
+            report['osd_perf_histograms'] = self.get_osd_histograms()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
@@ -854,6 +1017,27 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         Show report of all channels
         '''
         report = self.get_report(channels=channels)
+
+        # Formatting the perf histograms so they are human-readable. This will change the
+        # ranges and values, which are currently in list form, into strings so that
+        # they are displayed horizontally instead of vertically.
+        try:
+            for config in report['osd_perf_histograms']:
+                for histogram in config:
+                    # Adjust ranges by converting lists into strings
+                    for axis in config[histogram]['axes']:
+                        for i in range(0, len(axis['ranges'])):
+                            axis['ranges'][i] = str(axis['ranges'][i])
+                    # Adjust values by converting lists into strings
+                    for i in range(0, len(config[histogram]['values'])):
+                        config[histogram]['values'][i] = str(config[histogram]['values'][i])
+        except KeyError:
+            # If the perf channel is not enabled, there should be a KeyError since
+            # 'osd_perf_histograms' would not be present in the report. In that case,
+            # the show function should pass as usual without trying to format the
+            # histograms.
+            pass
+
         report = json.dumps(report, indent=4, sort_keys=True)
         if self.channel_device:
             report += '''

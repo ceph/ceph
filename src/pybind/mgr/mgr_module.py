@@ -1500,6 +1500,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return r
 
+    def osd_command(self, cmd_dict: dict, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Helper for osd command execution.
+
+        See send_command for general case. Also, see osd/OSD.cc for available commands.
+
+        :param dict cmd_dict: expects a prefix and an osd id, i.e.:
+            cmd_dict = {
+                'prefix': 'perf histogram dump',
+                'id': '0'
+            }
+        :return: status int, out std, err str
+        """
+        t1 = time.time()
+        result = CommandResult()
+        self.send_command(result, "osd", cmd_dict['id'], json.dumps(cmd_dict), "", inbuf)
+        r = result.wait()
+        t2 = time.time()
+
+        self.log.debug("osd_command: '{0}' -> {1} in {2:.3f}s".format(
+            cmd_dict['prefix'], r[0], t2 - t1
+        ))
+
+        return r
+
     def send_command(
             self,
             result: CommandResult,
