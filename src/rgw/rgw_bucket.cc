@@ -422,7 +422,7 @@ int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvid
   bucket = op_state.get_bucket()->clone();
 
   bucket->get_info().quota = op_state.quota;
-  int r = bucket->put_instance_info(dpp, false, real_time());
+  int r = bucket->put_info(dpp, false, real_time());
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
     return r;
@@ -663,7 +663,7 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
     bucket->get_info().flags |= BUCKET_DATASYNC_DISABLED;
   }
 
-  int r = bucket->put_instance_info(dpp, false, real_time());
+  int r = bucket->put_info(dpp, false, real_time());
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed writing bucket instance info:" + cpp_strerror(-r));
     return r;
@@ -911,7 +911,7 @@ int RGWBucketAdminOp::link(rgw::sal::Store* store, RGWBucketAdminOpState& op_sta
     exclusive = true;
   }
 
-  r = loc_bucket->put_instance_info(dpp, exclusive, ceph::real_time());
+  r = loc_bucket->put_info(dpp, exclusive, ceph::real_time());
   if (r < 0) {
     set_err_msg(err, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
     return r;

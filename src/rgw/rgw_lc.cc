@@ -2009,7 +2009,7 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
   attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
   int ret =
-    bucket->set_instance_attrs(this, attrs, null_yield);
+    bucket->merge_and_store_attrs(this, attrs, null_yield);
   if (ret < 0)
     return ret;
 
@@ -2030,7 +2030,7 @@ int RGWLC::remove_bucket_config(rgw::sal::Bucket* bucket,
 {
   rgw::sal::Attrs attrs = bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
-  int ret = bucket->set_instance_attrs(this, attrs, null_yield);
+  int ret = bucket->merge_and_store_attrs(this, attrs, null_yield);
 
   rgw_bucket& b = bucket->get_key();
 
