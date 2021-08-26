@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 
 import { take } from 'rxjs/operators';
 
+import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -68,7 +69,7 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
 
   getDaemonList(context: CdTableFetchDataContext) {
     this.rgwDaemonService.daemons$.pipe(take(1)).subscribe(
-      (resp: object[]) => {
+      (resp: RgwDaemon[]) => {
         this.daemons = resp;
       },
       () => {

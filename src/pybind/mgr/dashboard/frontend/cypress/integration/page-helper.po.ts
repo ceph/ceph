@@ -74,7 +74,7 @@ export abstract class PageHelper {
   }
 
   getTab(tabName: string) {
-    return cy.contains('.nav.nav-tabs li', new RegExp(`^${tabName}$`));
+    return cy.contains('.nav.nav-tabs li', tabName);
   }
 
   getTabText(index: number) {
@@ -201,6 +201,11 @@ export abstract class PageHelper {
       `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
       new RegExp(`^${exactContent}$`)
     );
+  }
+
+  existTableCell(name: string, oughtToBePresent = true) {
+    const waitRule = oughtToBePresent ? 'be.visible' : 'not.exist';
+    this.getFirstTableCell(name).should(waitRule);
   }
 
   getExpandCollapseElement(content?: string) {

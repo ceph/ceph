@@ -149,21 +149,6 @@ class NFSCluster:
         except Exception as e:
             return exception_handler(e, "Failed to list NFS Cluster")
 
-    # FIXME: Remove this method. It was added for dashboard integration with mgr/nfs module.
-    def list_daemons(self):
-        completion = self.mgr.list_daemons(daemon_type='nfs')
-        # Here completion.result is a list DaemonDescription objects
-        daemons = orchestrator.raise_if_exception(completion)
-        return [
-            {
-                'cluster_id': instance.service_id(),
-                'daemon_id': instance.daemon_id,
-                'cluster_type': 'orchestrator',
-                'status': instance.status,
-                'status_desc': instance.status_desc
-            } for instance in daemons
-        ]
-
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
         completion = self.mgr.list_daemons(daemon_type='nfs')
         # Here completion.result is a list DaemonDescription objects
@@ -213,7 +198,6 @@ class NFSCluster:
 
     def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
         try:
-            cluster_ls = []
             info_res = {}
             if cluster_id:
                 cluster_ls = [cluster_id]
