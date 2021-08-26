@@ -1097,6 +1097,11 @@ class Module(MgrModule):
         bad_steps = 0
         next_ws = copy.deepcopy(best_ws)
         next_ow = copy.deepcopy(best_ow)
+        # osd may not in crush
+        osd_crush_weight = {}
+        for node in self.get('osd_map_tree')['nodes']:
+            if node['name'].startswith('osd'):
+                osd_crush_weight[node['id']] = node['crush_weight']
         while left > 0:
             # adjust
             self.log.debug('best_ws %s' % best_ws)
@@ -1126,7 +1131,11 @@ class Module(MgrModule):
                         if deviation == 0:
                             break
                         self.log.debug('osd.%d deviation %f', osd, deviation)
-                        weight = best_ws[osd]
+                        # osd may not in crush
+                        if osd not in best_ws:
+                            weight = osd_crush_weight[osd]
+                        else:
+                            weight = best_ws[osd]
                         ow = orig_osd_weight[osd]
                         if actual[osd] > 0:
                             calc_weight = target[osd] / actual[osd] * weight * ow
