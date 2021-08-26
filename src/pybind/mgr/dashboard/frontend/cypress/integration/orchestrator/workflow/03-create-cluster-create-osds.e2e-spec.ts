@@ -22,27 +22,17 @@ describe('Create cluster create osds page', () => {
 
   describe('when Orchestrator is available', () => {
     it('should create OSDs', () => {
-      createCluster.create('hdd');
-
-      cy.get('button[aria-label="Next"]').click();
-      cy.get('button[aria-label="Next"]').click();
-
-      cy.wait(3000);
-
       osds.navigateTo();
       osds.getTableCount('total').as('initOSDCount');
 
-      cy.get('@newOSDCount').then((newCount) => {
-        cy.get('@initOSDCount').then((oldCount) => {
-          const expectedCount = Number(oldCount) + Number(newCount);
+      createCluster.navigateTo();
+      createCluster.createCluster();
+      cy.get('button[aria-label="Next"]').click();
 
-          // check total rows
-          createCluster.expectTableCount('total', expectedCount);
+      createCluster.createOSD('hdd');
 
-          cy.wait(30000);
-          expect(Number(newCount)).to.be.gte(1);
-        });
-      });
+      cy.get('button[aria-label="Next"]').click();
+      cy.get('button[aria-label="Next"]').click();
     });
   });
 });
