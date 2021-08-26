@@ -836,11 +836,13 @@ class MDCache {
 
   void make_trace(std::vector<CDentry*>& trace, CInode *in);
 
-  void kick_open_ino_peers(mds_rank_t who);
   void open_ino(inodeno_t ino, int64_t pool, MDSContext *fin,
 		bool want_replica=true, bool want_xlocked=false,
 		std::vector<inode_backpointer_t> *ancestors_hint=nullptr,
 		mds_rank_t auth_hint=MDS_RANK_NONE);
+  void open_ino_batch_start();
+  void open_ino_batch_submit();
+  void kick_open_ino_peers(mds_rank_t who);
 
   void find_ino_peers(inodeno_t ino, MDSContext *c,
 		      mds_rank_t hint=MDS_RANK_NONE, bool path_locked=false);
@@ -1042,6 +1044,12 @@ class MDCache {
     MDSContext::vec waiters;
   };
 
+  ceph_tid_t open_ino_last_tid = 0;
+  std::map<inodeno_t,open_ino_info_t> opening_inodes;
+
+  bool open_ino_batch = false;
+  std::map<CDir*, std::pair<std::vector<std::string>, MDSContext::vec> > open_ino_batched_fetch;
+
   friend struct C_MDC_OpenInoTraverseDir;
   friend struct C_MDC_OpenInoParentOpened;
   friend struct C_MDC_RetryScanStray;
@@ -1213,9 +1221,6 @@ class MDCache {
 
   std::unique_ptr<MDSContext> rejoin_done;
   std::unique_ptr<MDSContext> resolve_done;
-
-  ceph_tid_t open_ino_last_tid = 0;
-  std::map<inodeno_t,open_ino_info_t> opening_inodes;
 
   StrayManager stray_manager;
 

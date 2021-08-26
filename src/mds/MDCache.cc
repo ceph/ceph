@@ -5398,6 +5398,8 @@ bool MDCache::process_imported_caps()
     return true;
   }
 
+  open_ino_batch_start();
+
   for (auto& p : cap_imports) {
     CInode *in = get_inode(p.first);
     if (in) {
@@ -5438,6 +5440,8 @@ bool MDCache::process_imported_caps()
     if (!(cap_imports_num_opening % 1000))
       mds->heartbeat_reset();
   }
+
+  open_ino_batch_submit();
 
   if (cap_imports_num_opening > 0)
     return true;
@@ -8904,7 +8908,16 @@ void MDCache::_open_ino_fetch_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m, b
 {
   if (dir->state_test(CDir::STATE_REJOINUNDEF))
     ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
-  dir->fetch(dname, CEPH_NOSNAP, new C_MDC_OpenInoTraverseDir(this, ino, m, parent));
+
+  auto fin = new C_MDC_OpenInoTraverseDir(this, ino, m, parent);
+  if (open_ino_batch && !dname.empty()) {
+    auto& p = open_ino_batched_fetch[dir];
+    p.first.emplace_back(dname);
+    p.second.emplace_back(fin);
+    return;
+  }
+
+  dir->fetch(dname, CEPH_NOSNAP, fin);
   if (mds->logger)
     mds->logger->inc(l_mds_openino_dir_fetch);
 }
@@ -9206,6 +9219,35 @@ void MDCache::kick_open_ino_peers(mds_rank_t who)
       do_open_ino_peer(p->first, info);
     }
   }
+}
+
+void MDCache::open_ino_batch_start()
+{
+  dout(10) << __func__ << dendl;
+  open_ino_batch = true;
+}
+
+void MDCache::open_ino_batch_submit()
+{
+  dout(10) << __func__ << dendl;
+  open_ino_batch = false;
+
+  for (auto& [dir, p] : open_ino_batched_fetch) {
+    CInode *in = dir->inode;
+    std::vector<dentry_key_t> keys;
+    for (auto& dname : p.first)
+      keys.emplace_back(CEPH_NOSNAP, dname, in->hash_dentry_name(dname));
+    dir->fetch_keys(keys,
+	  new MDSInternalContextWrapper(mds,
+	    new LambdaContext([this, waiters = std::move(p.second)](int r) mutable {
+	      mds->queue_waiters_front(waiters);
+	    })
+	  )
+	);
+    if (mds->logger)
+      mds->logger->inc(l_mds_openino_dir_fetch);
+  }
+  open_ino_batched_fetch.clear();
 }
 
 void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSContext* fin,
