@@ -61,6 +61,18 @@ TestIoCtxImpl *TestMemIoCtxImpl::clone() {
   return new TestMemIoCtxImpl(*this);
 }
 
+int TestMemIoCtxImpl::aio_append(const std::string& oid, AioCompletionImpl *c,
+                                 const bufferlist& bl, size_t len) {
+  bufferlist newbl;
+  newbl.substr_of(bl, 0, len);
+  m_client->add_aio_operation(oid, true,
+                              std::bind(&TestMemIoCtxImpl::append, this, oid,
+                                        newbl,
+					get_snap_context()),
+                              c);
+  return 0;
+}
+
 int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c, int flags) {
   m_client->add_aio_operation(oid, true,
                               std::bind(&TestMemIoCtxImpl::remove, this, oid,

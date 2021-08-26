@@ -20,6 +20,9 @@ public:
 
   TestIoCtxImpl *clone() override;
 
+  int aio_append(const std::string& oid, AioCompletionImpl *c,
+                 const bufferlist& bl, size_t len) override;
+
   int aio_remove(const std::string& oid, AioCompletionImpl *c, int flags = 0) override;
 
   int append(const std::string& oid, const bufferlist &bl,

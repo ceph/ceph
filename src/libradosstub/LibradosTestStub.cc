@@ -357,6 +357,19 @@ void AioCompletion::release() {
   delete this;
 }
 
+int AioCompletion::AioCompletion::get_return_value()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->get_return_value();
+}
+
+int AioCompletion::AioCompletion::wait_for_complete()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->wait_for_complete();
+}
+
+
 IoCtx::IoCtx() : io_ctx_impl(NULL) {
 }
 
@@ -441,6 +454,13 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectWriteOperation *op, int flags) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
+  return ctx->aio_operate(oid, *ops, c->pc, NULL, flags);
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
@@ -476,6 +496,13 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   return aio_operate(oid, c, op, seq, snaps, 0, trace_info);
 }
 
+int IoCtx::aio_append(const std::string& oid, librados::AioCompletion *c,
+                      const bufferlist& bl, size_t len)
+{
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_append(oid, c->pc, bl, len);
+}
+
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->aio_remove(oid, c->pc);
@@ -495,6 +522,14 @@ int IoCtx::aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
 int IoCtx::aio_unwatch(uint64_t handle, AioCompletion *c) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->aio_unwatch(handle, c->pc);
+}
+
+int IoCtx::aio_exec(const std::string& oid, AioCompletion *c,
+                    const char *cls, const char *method,
+                    bufferlist& inbl, bufferlist *outbl) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_exec(oid, c->pc, librados_stub::get_class_handler(), 
+                       cls, method, inbl, outbl);
 }
 
 config_t IoCtx::cct() {

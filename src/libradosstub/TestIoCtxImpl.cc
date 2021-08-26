@@ -158,6 +158,16 @@ int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
   return 0;
 }
 
+int TestIoCtxImpl::aio_exec(const std::string& oid, AioCompletionImpl *c,
+                            TestClassHandler *handler,
+                            const char *cls, const char *method,
+                            bufferlist& inbl, bufferlist *outbl) {
+  m_client->add_aio_operation(oid, true, std::bind(
+    &TestIoCtxImpl::exec, this, oid, handler, cls, method,
+    inbl, outbl, m_snap_seq, m_snapc), c);
+  return 0;
+}
+
 int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
