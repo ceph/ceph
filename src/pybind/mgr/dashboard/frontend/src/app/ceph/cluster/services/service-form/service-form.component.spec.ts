@@ -144,28 +144,14 @@ describe('ServiceFormComponent', () => {
     describe('should test service nfs', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'nfs');
-        formHelper.setValue('pool', 'foo');
       });
 
-      it('should submit nfs with namespace', () => {
-        formHelper.setValue('namespace', 'bar');
+      it('should submit nfs', () => {
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'nfs',
           placement: {},
-          unmanaged: false,
-          pool: 'foo',
-          namespace: 'bar'
-        });
-      });
-
-      it('should submit nfs w/o namespace', () => {
-        component.onSubmit();
-        expect(cephServiceService.create).toHaveBeenCalledWith({
-          service_type: 'nfs',
-          placement: {},
-          unmanaged: false,
-          pool: 'foo'
+          unmanaged: false
         });
       });
     });

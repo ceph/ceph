@@ -77,12 +77,14 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             {
                 'ceph_version': 'ceph version master (dev)',
                 'id': 'daemon1',
+                'realm_name': 'realm1',
                 'zonegroup_name': 'zg1',
                 'zone_name': 'zone1'
             },
             {
                 'ceph_version': 'ceph version master (dev)',
                 'id': 'daemon2',
+                'realm_name': 'realm2',
                 'zonegroup_name': 'zg2',
                 'zone_name': 'zone2'
             }]
@@ -93,6 +95,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'service_map_id': '4832',
             'version': 'ceph version master (dev)',
             'server_hostname': 'host1',
+            'realm_name': 'realm1',
             'zonegroup_name': 'zg1',
             'zone_name': 'zone1', 'default': True
         },
@@ -101,6 +104,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'service_map_id': '5356',
             'version': 'ceph version master (dev)',
             'server_hostname': 'host1',
+            'realm_name': 'realm2',
             'zonegroup_name': 'zg2',
             'zone_name': 'zone2',
             'default': False

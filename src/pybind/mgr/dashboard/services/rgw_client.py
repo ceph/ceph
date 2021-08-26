@@ -308,6 +308,9 @@ class RgwClient(RestClient):
     def _get_realms_info(self):  # type: () -> dict
         return json_str_to_object(self.proxy('GET', 'realm?list', None, None))
 
+    def _get_realm_info(self, realm_id: str) -> Dict[str, Any]:
+        return json_str_to_object(self.proxy('GET', f'realm?id={realm_id}', None, None))
+
     @staticmethod
     def _rgw_settings():
         return (Settings.RGW_API_ACCESS_KEY,
@@ -579,6 +582,16 @@ class RgwClient(RestClient):
             return realms_info['realms']
 
         return []
+
+    def get_default_realm(self) -> str:
+        realms_info = self._get_realms_info()
+        if 'default_info' in realms_info and realms_info['default_info']:
+            realm_info = self._get_realm_info(realms_info['default_info'])
+            if 'name' in realm_info and realm_info['name']:
+                return realm_info['name']
+        raise DashboardException(msg='Default realm not found.',
+                                 http_status_code=404,
+                                 component='rgw')
 
     @RestClient.api_get('/{bucket_name}?versioning')
     def get_bucket_versioning(self, bucket_name, request=None):

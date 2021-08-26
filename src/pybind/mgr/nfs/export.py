@@ -7,10 +7,9 @@ from os.path import normpath
 
 from rados import TimedOut, ObjectNotFound
 
-from mgr_module import NFS_POOL_NAME as POOL_NAME
+from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
-from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL, \
-    NFS_GANESHA_SUPPORTED_FSALS
+from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, \
     ClusterNotFound
 from .utils import available_clusters, check_fs, restart_nfs_service
@@ -379,7 +378,7 @@ class ExportMgr:
                 raise NFSException(f"Failed to delete exports: {err} and {ret}")
         log.info("All exports successfully deleted for cluster id: %s", cluster_id)
 
-    def list_all_exports(self):
+    def list_all_exports(self) -> List[Dict[str, Any]]:
         r = []
         for cluster_id, ls in self.exports.items():
             r.extend([e.to_dict() for e in ls])
@@ -408,6 +407,7 @@ class ExportMgr:
         if export:
             return export.to_dict()
         log.warning(f"No {pseudo_path} export to show for {cluster_id}")
+        return None
 
     @export_cluster_checker
     def get_export(
@@ -428,7 +428,7 @@ class ExportMgr:
             self,
             cluster_id: str,
             export_id: int
-    ) -> Dict[Any, Any]:
+    ) -> Optional[Dict[str, Any]]:
         export = self._fetch_export_id(cluster_id, export_id)
         return export.to_dict() if export else None
 
@@ -571,7 +571,7 @@ class ExportMgr:
                 raise NFSInvalidOperation(f"export FSAL user_id must be '{user_id}'")
         else:
             raise NFSInvalidOperation(f"NFS Ganesha supported FSALs are {NFS_GANESHA_SUPPORTED_FSALS}."
-                                       "Export must specify any one of it.")
+                                      "Export must specify any one of it.")
 
         ex_dict["fsal"] = fsal
         ex_dict["cluster_id"] = cluster_id

@@ -45,7 +45,6 @@ export class NfsDetailsComponent implements OnChanges {
 
       this.data = {};
       this.data[$localize`Cluster`] = this.selectedItem.cluster_id;
-      this.data[$localize`Daemons`] = this.selectedItem.daemons;
       this.data[$localize`NFS Protocol`] = this.selectedItem.protocols.map(
         (protocol: string) => 'NFSv' + protocol
       );
@@ -62,7 +61,7 @@ export class NfsDetailsComponent implements OnChanges {
         this.data[$localize`Security Label`] = this.selectedItem.fsal.sec_label_xattr;
       } else {
         this.data[$localize`Storage Backend`] = $localize`Object Gateway`;
-        this.data[$localize`Object Gateway User`] = this.selectedItem.fsal.rgw_user_id;
+        this.data[$localize`Object Gateway User`] = this.selectedItem.fsal.user_id;
       }
     }
   }
