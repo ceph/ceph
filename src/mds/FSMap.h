@@ -408,7 +408,8 @@ public:
    */
   Filesystem::ref create_filesystem(
       std::string_view name, int64_t metadata_pool,
-      int64_t data_pool, uint64_t features);
+      int64_t data_pool, uint64_t features,
+      fs_cluster_id_t fscid);
 
   /**
    * Remove the filesystem (it must exist).  Caller should already

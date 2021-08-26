@@ -25,6 +25,10 @@
   If you want to return back the old behavior add 'ssl_options=' (empty) to
   ``rgw frontends`` configuration.
 
+* fs: A file system can be created with a specific ID ("fscid"). This is useful
+  in certain recovery scenarios, e.g., monitor database lost and rebuilt, and
+  the restored file system is expected to have the same ID as before.
+
 >=16.0.0
 --------
 

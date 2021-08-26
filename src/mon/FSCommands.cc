@@ -238,6 +238,18 @@ class FsNewHandler : public FileSystemCommandHandler
       }
     }
 
+    int64_t fscid = FS_CLUSTER_ID_NONE;
+    if (cmd_getval(cmdmap, "fscid", fscid)) {
+      if (!force) {
+        ss << "Pass --force to create a file system with a specific ID";
+        return -EINVAL;
+      }
+      if (fsmap.filesystem_exists(fscid)) {
+        ss << "filesystem already exists with id '" << fscid << "'";
+        return -EINVAL;
+      }
+    }
+
     pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
     ceph_assert(data_pool != NULL);  // Checked it existed above
     pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
@@ -277,7 +289,7 @@ class FsNewHandler : public FileSystemCommandHandler
 
     // All checks passed, go ahead and create.
     auto&& fs = fsmap.create_filesystem(fs_name, metadata, data,
-        mon->get_quorum_con_features());
+        mon->get_quorum_con_features(), fscid);
 
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
 

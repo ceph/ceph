@@ -361,3 +361,14 @@ This removes a rank from the failed set.
 
 This command resets the file system state to defaults, except for the name and
 pools. Non-zero ranks are saved in the stopped set.
+
+
+::
+
+    fs new <file system name> <metadata pool name> <data pool name> --fscid <fscid> --force
+
+This command creates a file system with a specific **fscid** (file system cluster ID).
+You may want to do this when an application expects the file system's ID to be
+stable after it has been recovered, e.g., after monitor databases are lost and
+rebuilt. Consequently, file system IDs don't always keep increasing with newer
+file systems.
