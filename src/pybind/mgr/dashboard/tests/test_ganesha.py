@@ -5,8 +5,42 @@ from __future__ import absolute_import
 from unittest.mock import patch
 from urllib.parse import urlencode
 
-from ..controllers.nfsganesha import NFSGaneshaUi
+from ..controllers.nfsganesha import NFSGaneshaExports, NFSGaneshaUi
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
+
+
+class NFSGaneshaExportsTest(ControllerTestCase):
+
+    def test_get_schema_export(self):
+        export = {
+            "export_id": 2,
+            "path": "bk1",
+            "cluster_id": "myc",
+            "pseudo": "/bk-ps",
+            "access_type": "RO",
+            "squash": "root_id_squash",
+            "security_label": False,
+            "protocols": [
+                4
+            ],
+            "transports": [
+                "TCP",
+                "UDP"
+            ],
+            "fsal": {
+                "name": "RGW",
+                "user_id": "dashboard",
+                "access_key_id": "UUU5YVVOQ2P5QTOPYNAN",
+                "secret_access_key": "7z87tMUUsHr67ZWx12pCbWkp9UyOldxhDuPY8tVN"
+            },
+            "clients": []
+        }
+        expected_schema_export = export
+        del expected_schema_export['fsal']['access_key_id']
+        del expected_schema_export['fsal']['secret_access_key']
+        self.assertDictEqual(
+            expected_schema_export,
+            NFSGaneshaExports._get_schema_export(export))  # pylint: disable=protected-access
 
 
 class NFSGaneshaUiControllerTest(ControllerTestCase):

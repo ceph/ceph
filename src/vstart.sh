@@ -1204,10 +1204,6 @@ EOF
 
         echo "$test_user ganesha daemon $name started on port: $port"
     done
-
-    if $with_mgr_dashboard; then
-        ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace "$cluster_id:$pool_name/$cluster_id"
-    fi
 }
 
 if [ "$debug" -eq 0 ]; then
