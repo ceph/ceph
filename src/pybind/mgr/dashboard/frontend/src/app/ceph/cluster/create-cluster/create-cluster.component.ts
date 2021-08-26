@@ -34,7 +34,7 @@ export class CreateClusterComponent implements OnDestroy {
   currentStepSub: Subscription;
   permissions: Permissions;
   projectConstants: typeof AppConstants = AppConstants;
-  stepTitles = ['Add Hosts', 'Review'];
+  stepTitles = ['Add Hosts', 'Create OSDs', 'Review'];
   startClusterCreation = false;
   observables: any = [];
   modalRef: NgbModalRef;

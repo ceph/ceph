@@ -1,5 +1,6 @@
 import { CreateClusterWizardHelper } from 'cypress/integration/cluster/create-cluster.po';
 import { HostsPageHelper } from 'cypress/integration/cluster/hosts.po';
+import { OSDsPageHelper } from 'cypress/integration/cluster/osds.po';
 
 describe('when cluster creation is completed', () => {
   const createCluster = new CreateClusterWizardHelper();
@@ -13,6 +14,7 @@ describe('when cluster creation is completed', () => {
     createCluster.navigateTo();
     createCluster.createCluster();
 
+    cy.get('button[aria-label="Next"]').click();
     cy.get('button[aria-label="Next"]').click();
     cy.get('button[aria-label="Next"]').click();
 
@@ -44,6 +46,18 @@ describe('when cluster creation is completed', () => {
       cy.get('cd-host-details').within(() => {
         hosts.getTableCount('total').should('be.gte', 0);
       });
+    });
+  });
+
+  describe('OSDs page', () => {
+    const osds = new OSDsPageHelper();
+
+    beforeEach(() => {
+      osds.navigateTo();
+    });
+
+    it('should check if osds are created', { retries: 1 }, () => {
+      osds.expectTableCount('total', 2);
     });
   });
 });

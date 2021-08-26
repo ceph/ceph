@@ -10,13 +10,12 @@ describe('Create Cluster Review page', () => {
     createCluster.createCluster();
 
     cy.get('button[aria-label="Next"]').click();
+    cy.get('button[aria-label="Next"]').click();
   });
 
   describe('navigation link and title test', () => {
     it('should check if nav-link and title contains Review', () => {
       cy.get('.nav-link').should('contain.text', 'Review');
-
-      cy.get('.title').should('contain.text', 'Review');
     });
   });
 
