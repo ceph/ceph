@@ -64,11 +64,15 @@ public:
   virtual uint64_t get_last_version();
   virtual std::string get_pool_name();
 
+  inline void locator_set_key(const std::string& key) {
+    m_oloc.key = key;
+  }
+
   inline void set_namespace(const std::string& namespace_name) {
-    m_namespace_name = namespace_name;
+    m_oloc.nspace = namespace_name;
   }
   inline std::string get_namespace() const {
-    return m_namespace_name;
+    return m_oloc.nspace;
   }
 
   snap_t get_snap_read() const {
@@ -209,10 +213,15 @@ private:
     }
   };
 
+  struct Locator {
+    std::string key;
+    std::string nspace;
+  };
+
   TestRadosClient *m_client;
   int64_t m_pool_id = 0;
   std::string m_pool_name;
-  std::string m_namespace_name;
+  Locator m_oloc;
 
   snap_t m_snap_seq = 0;
   SnapContext m_snapc;

@@ -32,7 +32,7 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
   : m_client(rhs.m_client),
     m_pool_id(rhs.m_pool_id),
     m_pool_name(rhs.m_pool_name),
-    m_namespace_name(rhs.m_namespace_name),
+    m_oloc(rhs.m_oloc),
     m_snap_seq(rhs.m_snap_seq)
 {
   m_client->get();

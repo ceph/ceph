@@ -814,6 +814,12 @@ int IoCtx::application_metadata_list(const std::string& app_name,
   return -EOPNOTSUPP;
 }
 
+void IoCtx::locator_set_key(const std::string& key) {
+#warning locator missing implementation
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  ctx->locator_set_key(key);
+}
+
 void IoCtx::set_namespace(const std::string& nspace) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   ctx->set_namespace(nspace);
@@ -822,6 +828,50 @@ void IoCtx::set_namespace(const std::string& nspace) {
 std::string IoCtx::get_namespace() const {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->get_namespace();
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(
+    const bufferlist &filter)
+{
+  rados_list_ctx_t listh;
+  rados_nobjects_list_open(io_ctx_impl, &listh);
+  NObjectIterator iter((ObjListCtx*)listh);
+  if (filter.length() > 0) {
+    iter.set_filter(filter);
+  }
+  iter.get_next();
+  return iter;
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(
+  uint32_t pos, const bufferlist &filter)
+{
+  rados_list_ctx_t listh;
+  rados_nobjects_list_open(io_ctx_impl, &listh);
+  NObjectIterator iter((ObjListCtx*)listh);
+  if (filter.length() > 0) {
+    iter.set_filter(filter);
+  }
+  iter.seek(pos);
+  return iter;
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(
+  const ObjectCursor& cursor, const bufferlist &filter)
+{
+  rados_list_ctx_t listh;
+  rados_nobjects_list_open(io_ctx_impl, &listh);
+  NObjectIterator iter((ObjListCtx*)listh);
+  if (filter.length() > 0) {
+    iter.set_filter(filter);
+  }
+  iter.seek(cursor);
+  return iter;
+}
+
+const librados::NObjectIterator& librados::IoCtx::nobjects_end() const
+{
+  return NObjectIterator::__EndObjectIterator;
 }
 
 static int save_operation_result(int result, int *pval) {
