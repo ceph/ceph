@@ -28,9 +28,12 @@ public:
   struct config_t {
     std::string type;
     bool mkfs = false;
-    unsigned num_collections = 128;
+    unsigned num_pgs = 128;
+    unsigned log_size = 1000;
     unsigned object_size = 4<<20 /* 4MB, rbd default */;
     unsigned oi_size = 1<<9 /* 512b */;
+    unsigned log_entry_size = 1<<9 /* 512b */;
+    bool prepopulate_log = false;
     std::optional<std::string> path;
 
     bool is_futurized_store() const {
@@ -44,6 +47,14 @@ public:
 
     bool oi_enabled() const {
       return oi_size > 0;
+    }
+
+    bool log_enabled() const {
+      return log_entry_size > 0 && log_size > 0;
+    }
+
+    bool prepopulate_log_enabled() const {
+      return prepopulate_log;
     }
 
     void populate_options(
@@ -63,10 +74,28 @@ public:
 	 ->notifier([this](auto s) { path = s; }),
 	 "Path to device for backend"
 	)
-	("num-collections",
+	("num-pgs",
 	 po::value<unsigned>()
-	 ->notifier([this](auto s) { num_collections = s; }),
-	 "Number of collections to use for futurized_store backends"
+	 ->notifier([this](auto s) { num_pgs = s; }),
+	 "Number of pgs to use for futurized_store backends"
+	)
+	("log-size",
+	 po::value<unsigned>()
+	 ->notifier([this](auto s) { log_size = s; }),
+	 "Number of log entries per pg to use for futurized_store backends"
+	 ", 0 to disable"
+	)
+	("log-entry-size",
+	 po::value<unsigned>()
+	 ->notifier([this](auto s) { log_entry_size = s; }),
+	 "Size of each log entry per pg to use for futurized_store backends"
+	 ", 0 to disable"
+	)
+	("prepopulate-log",
+	 po::value<bool>()
+	 ->notifier([this](auto s) { prepopulate_log = s; }),
+	 "Prepopulate log on mount"
+	)
 	("object-info-size",
 	 po::value<unsigned>()
 	 ->notifier([this](auto s) { log_entry_size = s; }),
