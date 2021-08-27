@@ -59,6 +59,7 @@ The following python script takes various command line arguments to authenticate
 Token. This token can then be exchanged for temporary credentials with the RADOS gateway in order to AssumeRoleWithWebIdentity:
 
 .. code-block:: python
+
     #!/usr/bin/env python
     import json,requests,urllib,re,argparse,sys,os,boto3
     from requests_kerberos import HTTPKerberosAuth, OPTIONAL
