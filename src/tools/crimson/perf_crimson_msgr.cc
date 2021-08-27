@@ -535,7 +535,7 @@ static seastar::future<> run(
           if (client.is_active()) {
             client.do_dispatch_messages(client.active_conn.get());
           }
-        }).then([this, ramptime] {
+        }).then([ramptime] {
           logger().info("[all clients]: ramping up {} seconds...", ramptime);
           return seastar::sleep(std::chrono::seconds(ramptime));
         }).then([this] {

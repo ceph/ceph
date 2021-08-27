@@ -72,7 +72,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	    return tm->pin_to_extent<TestBlock>(
 	      t,
 	      std::move(pin)
-	    ).si_then([this, &ret](auto ref) mutable {
+	    ).si_then([&ret](auto ref) mutable {
 	      ret.push_back(std::make_pair(ref->get_laddr(), ref));
 	      logger().debug(
 		"read_extents: got extent {}",
@@ -181,6 +181,7 @@ seastar::future<> TMDriver::mkfs()
     return segment_manager->close();
   }).safe_then([this] {
     clear();
+    segment_manager.reset();
     logger().debug("mkfs complete");
     return TransactionManager::mkfs_ertr::now();
   }).handle_error(

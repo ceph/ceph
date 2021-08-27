@@ -31,10 +31,7 @@
 #include <iterator>
 
 using ceph::bufferlist;
-using std::cout;
-using std::vector;
-using std::cerr;
-using std::stringstream;
+using namespace std;
 
 bool index_data::is_timed_out(utime_t now, utime_t timeout) const {
   return prefix != "" && now - ts > timeout;
