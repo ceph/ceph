@@ -22,7 +22,7 @@ FSDriver::offset_mapping_t FSDriver::map_offset(off_t offset)
     ghobject_t(
       shard_id_t::NO_SHARD,
       0,
-      (objid << 16) | collid,
+      (collid << 16) | objid,
       "",
       "",
       0,
