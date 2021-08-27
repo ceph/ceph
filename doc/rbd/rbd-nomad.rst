@@ -166,74 +166,73 @@ Generate a ``ceph-csi-plugin-controller.nomad`` file similar to the example
 below. Substitute the `fsid` for "clusterID", and the monitor addresses for
 "monitors"::
 
-
-        job "ceph-csi-plugin-controller" {
-          datacenters = ["dc1"]
-        group "controller" {
-            network {
-              port "metrics" {}
-            }
-            task "ceph-controller" {
-        template {
-                data        = <<EOF
-        [{
-            "clusterID": "b9127830-b0cc-4e34-aa47-9d1a2e9949a8",
-            "monitors": [
-                "192.168.1.1",
-          "192.168.1.2",
-          "192.168.1.3"
+    job "ceph-csi-plugin-controller" {
+      datacenters = ["dc1"]
+      group "controller" {
+        network {
+          port "metrics" {}
+        }
+        task "ceph-controller" {
+          template {
+            data        = <<EOF
+    [{
+        "clusterID": "b9127830-b0cc-4e34-aa47-9d1a2e9949a8",
+        "monitors": [
+            "192.168.1.1",
+            "192.168.1.2",
+            "192.168.1.3"
+        ]
+    }]
+    EOF
+            destination = "local/config.json"
+            change_mode = "restart"
+          }
+          driver = "docker"
+          config {
+            image = "quay.io/cephcsi/cephcsi:v3.3.1"
+            volumes = [
+              "./local/config.json:/etc/ceph-csi-config/config.json"
             ]
-        }]
-        EOF
-                destination = "local/config.json"
-                change_mode = "restart"
+            mounts = [
+              {
+                type     = "tmpfs"
+                target   = "/tmp/csi/keys"
+                readonly = false
+                tmpfs_options = {
+                  size = 1000000 # size in bytes
+                }
               }
-              driver = "docker"
-              config {
-                image = "quay.io/cephcsi/cephcsi:v3.3.1"
-                volumes = [
-                  "./local/config.json:/etc/ceph-csi-config/config.json"
-                ]
-                mounts = [
-                  {
-                    type     = "tmpfs"
-                    target   = "/tmp/csi/keys"
-                    readonly = false
-                    tmpfs_options = {
-                      size = 1000000 # size in bytes
-                    }
-                  }
-                ]
-                args = [
-                  "--type=rbd",
-                  "--controllerserver=true",
-                  "--drivername=rbd.csi.ceph.com",
-                  "--endpoint=unix://csi/csi.sock",
-                  "--nodeid=${node.unique.name}",
-            "--instanceid=${node.unique.name}-controller",
-                  "--pidlimit=-1",
-            "--logtostderr=true",
-                  "--v=5",
-                  "--metricsport=$${NOMAD_PORT_metrics}"
-                ]
-              }
-           resources {
-                cpu    = 500
-                memory = 256
-              }
-              service {
-                name = "ceph-csi-controller"
-                port = "metrics"
-                tags = [ "prometheus" ]
-              }
-        csi_plugin {
-                id        = "ceph-csi"
-                type      = "controller"
-                mount_dir = "/csi"
-              }
-            }
+            ]
+            args = [
+              "--type=rbd",
+              "--controllerserver=true",
+              "--drivername=rbd.csi.ceph.com",
+              "--endpoint=unix://csi/csi.sock",
+              "--nodeid=${node.unique.name}",
+              "--instanceid=${node.unique.name}-controller",
+              "--pidlimit=-1",
+              "--logtostderr=true",
+              "--v=5",
+              "--metricsport=$${NOMAD_PORT_metrics}"
+            ]
+          }
+          resources {
+            cpu    = 500
+            memory = 256
+          }
+          service {
+            name = "ceph-csi-controller"
+            port = "metrics"
+            tags = [ "prometheus" ]
+          }
+          csi_plugin {
+            id        = "ceph-csi"
+            type      = "controller"
+            mount_dir = "/csi"
           }
         }
+      }
+    }
 
 Configure plugin node
 ---------------------
@@ -242,77 +241,75 @@ Generate a ``ceph-csi-plugin-nodes.nomad`` file similar to the example below.
 Substitute the `fsid` for "clusterID" and the monitor addresses for
 "monitors"::
 
-
-        job "ceph-csi-plugin-nodes" {
-          datacenters = ["dc1"]
-          type        = "system"
-          group "nodes" {
-            network {
-              port "metrics" {}
-            }
-        
-            task "ceph-node" {
-              driver = "docker"
-              template {
-                data        = <<EOF
-        [{
-            "clusterID": "b9127830-b0cc-4e34-aa47-9d1a2e9949a8",
-            "monitors": [
-                "192.168.1.1",
-          "192.168.1.2",
-          "192.168.1.3"
+    job "ceph-csi-plugin-nodes" {
+      datacenters = ["dc1"]
+      type        = "system"
+      group "nodes" {
+        network {
+          port "metrics" {}
+        }
+        task "ceph-node" {
+          driver = "docker"
+          template {
+            data        = <<EOF
+    [{
+        "clusterID": "b9127830-b0cc-4e34-aa47-9d1a2e9949a8",
+        "monitors": [
+            "192.168.1.1",
+            "192.168.1.2",
+            "192.168.1.3"
+        ]
+    }]
+    EOF
+            destination = "local/config.json"
+            change_mode = "restart"
+          }
+          config {
+            image = "quay.io/cephcsi/cephcsi:v3.3.1"
+            volumes = [
+              "./local/config.json:/etc/ceph-csi-config/config.json"
             ]
-        }]
-        EOF
-                destination = "local/config.json"
-                change_mode = "restart"
+            mounts = [
+              {
+                type     = "tmpfs"
+                target   = "/tmp/csi/keys"
+                readonly = false
+                tmpfs_options = {
+                  size = 1000000 # size in bytes
+                }
               }
-              config {
-                image = "quay.io/cephcsi/cephcsi:v3.3.1"
-                volumes = [
-                  "./local/config.json:/etc/ceph-csi-config/config.json"
-                ]
-                mounts = [
-                  {
-                    type     = "tmpfs"
-                    target   = "/tmp/csi/keys"
-                    readonly = false
-                    tmpfs_options = {
-                      size = 1000000 # size in bytes
-                    }
-                  }
-                ]
-                args = [
-                  "--type=rbd",
-                  "--drivername=rbd.csi.ceph.com",
-                  "--nodeserver=true",
-                  "--endpoint=unix://csi/csi.sock",
-                  "--nodeid=${node.unique.name}",
-                  "--instanceid=${node.unique.name}-nodes",
-                  "--pidlimit=-1",
-            "--logtostderr=true",
-                  "--v=5",
-                  "--metricsport=$${NOMAD_PORT_metrics}"
-                ]
-                privileged = true
-              }
-           resources {
-                cpu    = 500
-                memory = 256
-              }
-              service {
-                name = "ceph-csi-nodes"
-                port = "metrics"
-                tags = [ "prometheus" ]
-              }
-        csi_plugin {
-                id        = "ceph-csi"
-                type      = "node"
-                mount_dir = "/csi"
-              }
-            }
+            ]
+            args = [
+              "--type=rbd",
+              "--drivername=rbd.csi.ceph.com",
+              "--nodeserver=true",
+              "--endpoint=unix://csi/csi.sock",
+              "--nodeid=${node.unique.name}",
+              "--instanceid=${node.unique.name}-nodes",
+              "--pidlimit=-1",
+              "--logtostderr=true",
+              "--v=5",
+              "--metricsport=$${NOMAD_PORT_metrics}"
+            ]
+            privileged = true
+          }
+          resources {
+            cpu    = 500
+            memory = 256
+          }
+          service {
+            name = "ceph-csi-nodes"
+            port = "metrics"
+            tags = [ "prometheus" ]
+          }
+          csi_plugin {
+            id        = "ceph-csi"
+            type      = "node"
+            mount_dir = "/csi"
           }
         }
+      }
+    }
 
 Start plugin controller and node
 --------------------------------
@@ -354,28 +351,28 @@ Create rbd image
 cluster. Generate a ``ceph-volume.hcl`` file similar to the example below,
 using the newly created nomad user id and cephx key::
 
-        id = "ceph-mysql"
-        name = "ceph-mysql"
-        type = "csi"
-        plugin_id = "ceph-csi"
-        capacity_max = "200G"
-        capacity_min = "100G"
+    id = "ceph-mysql"
+    name = "ceph-mysql"
+    type = "csi"
+    plugin_id = "ceph-csi"
+    capacity_max = "200G"
+    capacity_min = "100G"
 
-        capability {
-          access_mode     = "single-node-writer"
-          attachment_mode = "file-system"
-        }
+    capability {
+      access_mode     = "single-node-writer"
+      attachment_mode = "file-system"
+    }
 
-        secrets {
-          userID  = "admin"
-          userKey = "AQAlh9Rgg2vrDxAARy25T7KHabs6iskSHpAEAQ=="
-        }
+    secrets {
+      userID  = "admin"
+      userKey = "AQAlh9Rgg2vrDxAARy25T7KHabs6iskSHpAEAQ=="
+    }
 
-        parameters {
-          clusterID = "b9127830-b0cc-4e34-aa47-9d1a2e9949a8"
-          pool = "nomad"
-          imageFeatures = "layering"
-        }
+    parameters {
+      clusterID = "b9127830-b0cc-4e34-aa47-9d1a2e9949a8"
+      pool = "nomad"
+      imageFeatures = "layering"
+    }
 
 After the ``ceph-volume.hcl`` file has been generated, create the volume:
 
@@ -391,60 +388,60 @@ As an exercise in using an rbd image with a container, modify the Hashicorp
 
 Generate a ``mysql.nomad`` file similar to the example below::
 
-        job "mysql-server" {
-          datacenters = ["dc1"]
-          type        = "service"
-          group "mysql-server" {
-            count = 1
-            volume "ceph-mysql" {
-              type      = "csi"
-                attachment_mode = "file-system"
-                access_mode     = "single-node-writer"
-              read_only = false
-              source    = "ceph-mysql"
-            }
-            network {
-              port "db" {
-                static = 3306
-              }
-            }
-            restart {
-              attempts = 10
-              interval = "5m"
-              delay    = "25s"
-              mode     = "delay"
-            }
-            task "mysql-server" {
-              driver = "docker"
-              volume_mount {
-                volume      = "ceph-mysql"
-                destination = "/srv"
-                read_only   = false
-              }
-              env {
-                MYSQL_ROOT_PASSWORD = "password"
-              }
-              config {
-                image = "hashicorp/mysql-portworx-demo:latest"
-                args  = ["--datadir", "/srv/mysql"]
-                ports = ["db"]
-              }
-              resources {
-                cpu    = 500
-                memory = 1024
-              }
-              service {
-                name = "mysql-server"
-                port = "db"
-                check {
-                  type     = "tcp"
-                  interval = "10s"
-                  timeout  = "2s"
-                }
-              }
+    job "mysql-server" {
+      datacenters = ["dc1"]
+      type        = "service"
+      group "mysql-server" {
+        count = 1
+        volume "ceph-mysql" {
+          type      = "csi"
+          attachment_mode = "file-system"
+          access_mode     = "single-node-writer"
+          read_only = false
+          source    = "ceph-mysql"
+        }
+        network {
+          port "db" {
+            static = 3306
+          }
+        }
+        restart {
+          attempts = 10
+          interval = "5m"
+          delay    = "25s"
+          mode     = "delay"
+        }
+        task "mysql-server" {
+          driver = "docker"
+          volume_mount {
+            volume      = "ceph-mysql"
+            destination = "/srv"
+            read_only   = false
+          }
+          env {
+            MYSQL_ROOT_PASSWORD = "password"
+          }
+          config {
+            image = "hashicorp/mysql-portworx-demo:latest"
+            args  = ["--datadir", "/srv/mysql"]
+            ports = ["db"]
+          }
+          resources {
+            cpu    = 500
+            memory = 1024
+          }
+          service {
+            name = "mysql-server"
+            port = "db"
+            check {
+              type     = "tcp"
+              interval = "10s"
+              timeout  = "2s"
             }
           }
         }
+      }
+    }
 
 Start the job:
 
