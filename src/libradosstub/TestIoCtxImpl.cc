@@ -112,7 +112,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
   m_client->add_aio_operation(oid, true, std::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(0), m_snap_seq,
-    snap_context != NULL ? *snap_context : m_snapc, nullptr), c);
+    snap_context != NULL ? *snap_context : m_snapc, flags, nullptr), c);
   return 0;
 }
 
@@ -126,7 +126,7 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
   m_pending_ops++;
   m_client->add_aio_operation(oid, true, std::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, snap_id,
-    m_snapc, objver), c);
+    m_snapc, flags, objver), c);
   return 0;
 }
 
@@ -215,14 +215,15 @@ void TestIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
 }
 
 int TestIoCtxImpl::operate(const std::string& oid,
-                           TestObjectOperationImpl &ops) {
+                           TestObjectOperationImpl &ops,
+                           int flags) {
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, false, std::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(0), m_snap_seq, m_snapc, nullptr), comp);
+    reinterpret_cast<bufferlist*>(0), m_snap_seq, m_snapc, flags, nullptr), comp);
 
   comp->wait_for_complete();
   int ret = comp->get_return_value();
@@ -232,14 +233,15 @@ int TestIoCtxImpl::operate(const std::string& oid,
 
 int TestIoCtxImpl::operate_read(const std::string& oid,
                                 TestObjectOperationImpl &ops,
-                                bufferlist *pbl) {
+                                bufferlist *pbl,
+                                int flags) {
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, false, std::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
-    m_snap_seq, m_snapc, nullptr), comp);
+    m_snap_seq, m_snapc, flags, nullptr), comp);
 
   comp->wait_for_complete();
   int ret = comp->get_return_value();
@@ -374,7 +376,9 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
                                           TestObjectOperationImpl *ops,
                                           bufferlist *pbl, uint64_t snap_id,
                                           const SnapContext &snapc,
+                                          int flags,
                                           uint64_t* objver) {
+#warning flags not used
   int ret = 0;
   if (m_client->is_blocklisted()) {
     ret = -EBLOCKLISTED;

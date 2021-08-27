@@ -137,13 +137,17 @@ public:
                             uint64_t max_return,
                             std::map<std::string, bufferlist> *out_vals,
                             bool *pmore) = 0;
+  virtual int omap_get_vals_by_keys(const std::string& oid,
+                                    const std::set<std::string>& keys,
+                                    std::map<std::string, bufferlist> *vals) = 0;
   virtual int omap_rm_keys(const std::string& oid,
                            const std::set<std::string>& keys) = 0;
+  virtual int omap_clear(const std::string& oid) = 0;
   virtual int omap_set(const std::string& oid,
                        const std::map<std::string, bufferlist> &map) = 0;
-  virtual int operate(const std::string& oid, TestObjectOperationImpl &ops);
+  virtual int operate(const std::string& oid, TestObjectOperationImpl &ops, int flags);
   virtual int operate_read(const std::string& oid, TestObjectOperationImpl &ops,
-                           bufferlist *pbl);
+                           bufferlist *pbl, int flags);
   virtual int read(const std::string& oid, size_t len, uint64_t off,
                    bufferlist *bl, uint64_t snap_id, uint64_t* objver) = 0;
   virtual int remove(const std::string& oid, const SnapContext &snapc) = 0;
@@ -199,6 +203,7 @@ protected:
                              TestObjectOperationImpl *ops,
                              bufferlist *pbl, uint64_t,
                              const SnapContext &snapc,
+                             int flags,
                              uint64_t* objver);
 
 private:

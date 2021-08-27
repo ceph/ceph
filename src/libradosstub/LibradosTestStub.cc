@@ -595,6 +595,20 @@ std::string IoCtx::get_pool_name() {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->get_pool_name();
 }
+bool IoCtx::pool_requires_alignment() {
+  return false;
+}
+int IoCtx::pool_requires_alignment2(bool * req) {
+  *req = pool_requires_alignment();
+  return 0;
+}
+uint64_t IoCtx::pool_required_alignment() {
+  return 0;
+}
+int IoCtx::pool_required_alignment2(uint64_t * alignment) {
+  *alignment = pool_required_alignment();
+  return 0;
+}
 
 int IoCtx::list_snaps(const std::string& o, snap_set_t *out_snaps) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
@@ -635,18 +649,56 @@ int IoCtx::omap_get_vals(const std::string& oid,
     oid, std::bind(&TestIoCtxImpl::omap_get_vals, _1, _2, start_after, "",
                      max_return, out_vals));
 }
+int IoCtx::omap_get_vals_by_keys(const std::string& oid,
+                                 const std::set<std::string>& keys,
+                                 std::map<std::string, bufferlist> *vals) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, std::bind(&TestIoCtxImpl::omap_get_vals_by_keys, _1, _2, keys, vals));
+}
+int IoCtx::omap_set(const std::string& oid,
+                    const std::map<std::string, bufferlist>& m) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, std::bind(&TestIoCtxImpl::omap_set, _1, _2, m));
+}
+
+int IoCtx::omap_rm_keys(const std::string& oid,
+                        const std::set<std::string>& keys) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, std::bind(&TestIoCtxImpl::omap_rm_keys, _1, _2, keys));
+}
+
+int IoCtx::omap_clear(const std::string& oid) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, std::bind(&TestIoCtxImpl::omap_clear, _1, _2));
+}
 
 int IoCtx::operate(const std::string& oid, ObjectWriteOperation *op) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
-  return ctx->operate(oid, *ops);
+  return ctx->operate(oid, *ops, 0);
+}
+
+int IoCtx::operate(const std::string& oid, ObjectWriteOperation *op, int flags) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
+  return ctx->operate(oid, *ops, flags);
 }
 
 int IoCtx::operate(const std::string& oid, ObjectReadOperation *op,
                    bufferlist *pbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
-  return ctx->operate_read(oid, *ops, pbl);
+  return ctx->operate_read(oid, *ops, pbl, 0);
+}
+int IoCtx::operate(const std::string& oid, ObjectReadOperation *op,
+                   bufferlist *pbl, int flags) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
+  return ctx->operate_read(oid, *ops, pbl, flags);
 }
 
 int IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,

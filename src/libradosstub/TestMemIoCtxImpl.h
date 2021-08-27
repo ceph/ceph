@@ -45,8 +45,12 @@ public:
                     uint64_t max_return,
                     std::map<std::string, bufferlist> *out_vals,
                     bool *pmore) override;
+  int omap_get_vals_by_keys(const std::string& oid,
+                            const std::set<std::string>& keys,
+                            std::map<std::string, bufferlist> *vals) override;
   int omap_rm_keys(const std::string& oid,
                    const std::set<std::string>& keys) override;
+  int omap_clear(const std::string& oid) override;
   int omap_set(const std::string& oid, const std::map<std::string,
                bufferlist> &map) override;
   int read(const std::string& oid, size_t len, uint64_t off,

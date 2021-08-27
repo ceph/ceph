@@ -313,6 +313,43 @@ int TestMemIoCtxImpl::omap_get_vals(const std::string& oid,
   return omap_get_vals2(oid, start_after, filter_prefix, max_return, out_vals, nullptr);
 }
 
+int TestMemIoCtxImpl::omap_get_vals_by_keys(const std::string& oid,
+                                            const std::set<std::string>& keys,
+                                            std::map<std::string, bufferlist> *vals) {
+  if (vals == NULL) {
+    return -EINVAL;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  TestMemCluster::SharedFile file;
+  {
+    std::shared_lock l{m_pool->file_lock};
+    file = get_file(oid, false, CEPH_NOSNAP, {});
+    if (file == NULL) {
+      return -ENOENT;
+    }
+  }
+
+  vals->clear();
+
+  std::shared_lock l{file->lock};
+  TestMemCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(
+    {get_namespace(), oid});
+  if (o_it == m_pool->file_omaps.end()) {
+    return 0;
+  }
+  TestMemCluster::OMap &omap = o_it->second;
+  for (const auto& key : keys) {
+    auto viter = omap.find(key);
+    if (viter != omap.end()) {
+      (*vals)[key] = viter->second;
+    }
+  }
+
+  return 0;
+}
+
 int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,
                                    const std::set<std::string>& keys) {
   if (get_snap_read() != CEPH_NOSNAP) {
@@ -335,6 +372,28 @@ int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,
        it != keys.end(); ++it) {
     m_pool->file_omaps[{get_namespace(), oid}].erase(*it);
   }
+  return 0;
+}
+
+int TestMemIoCtxImpl::omap_clear(const std::string& oid) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  TestMemCluster::SharedFile file;
+  {
+    std::unique_lock l{m_pool->file_lock};
+    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
+    if (file == NULL) {
+      return -ENOENT;
+    }
+  }
+
+  std::unique_lock l{file->lock};
+  m_pool->file_omaps[{get_namespace(), oid}].clear();
+
   return 0;
 }
 
