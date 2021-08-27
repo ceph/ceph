@@ -1149,11 +1149,28 @@ public:
       return !pinned;
     }
 
-    const std::string& get_omap_prefix();
-    void get_omap_header(std::string *out);
-    void get_omap_key(const std::string& key, std::string *out);
+    static const std::string& calc_omap_prefix(uint8_t flags);
+    static void calc_omap_header(uint8_t flags, const Onode* o,
+      std::string* out);
+    static void calc_omap_key(uint8_t flags, const Onode* o,
+      const std::string& key, std::string* out);
+    static void calc_omap_tail(uint8_t flags, const Onode* o,
+      std::string* out);
+
+    const std::string& get_omap_prefix() {
+      return calc_omap_prefix(onode.flags);
+    }
+    void get_omap_header(std::string* out) {
+      calc_omap_header(onode.flags, this, out);
+    }
+    void get_omap_key(const std::string& key, std::string* out) {
+      calc_omap_key(onode.flags, this, key, out);
+    }
+    void get_omap_tail(std::string* out) {
+      calc_omap_tail(onode.flags, this, out);
+    }
+
     void rewrite_omap_key(const std::string& old, std::string *out);
-    void get_omap_tail(std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
 
 #ifdef HAVE_LIBZBD
