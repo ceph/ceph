@@ -293,6 +293,7 @@ public:
     paddr_t offset,
     segment_off_t length) {
     CachedExtentRef ret;
+    LOG_PREFIX(Cache::get_extent);
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
       assert(result != Transaction::get_extent_ret::RETIRED);
@@ -302,19 +303,18 @@ public:
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
 	get_extent<T>(offset, length, &metric_key)
-      ).si_then(
-	[&t, this](auto ref) {
-	  if (!ref->is_valid()) {
-	    LOG_PREFIX(Cache::get_extent);
-	    DEBUGT("got invalid extent: {}", t, ref);
-	    this->invalidate(t, *ref.get());
-	    return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
-	  } else {
-	    t.add_to_read_set(ref);
-	    return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
-	      std::move(ref));
-	  }
-	});
+      ).si_then([this, FNAME, &t](auto ref) {
+	(void)this; // silence incorrect clang warning about capture
+	if (!ref->is_valid()) {
+	  DEBUGT("got invalid extent: {}", t, ref);
+	  invalidate(t, *ref);
+	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
+	} else {
+	  t.add_to_read_set(ref);
+	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
+	    std::move(ref));
+	}
+      });
     }
   }
 
@@ -520,6 +520,7 @@ public:
 	return t.root;
       } else {
 	t.add_to_read_set(extent);
+	t.root = extent->cast<RootBlock>();
 	return extent;
       }
     } else {
@@ -545,11 +546,17 @@ public:
     return out;
   }
 
-  /// returns extents with get_dirty_from() < seq
-  using get_next_dirty_extents_ertr = crimson::errorator<>;
-  using get_next_dirty_extents_ret = get_next_dirty_extents_ertr::future<
+  /**
+   * get_next_dirty_extents
+   *
+   * Returns extents with get_dirty_from() < seq and adds to read set of
+   * t.
+   */
+  using get_next_dirty_extents_iertr = base_iertr;
+  using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
     std::vector<CachedExtentRef>>;
   get_next_dirty_extents_ret get_next_dirty_extents(
+    Transaction &t,
     journal_seq_t seq,
     size_t max_bytes);
 

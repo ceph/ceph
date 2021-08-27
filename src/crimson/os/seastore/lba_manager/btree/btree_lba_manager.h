@@ -15,12 +15,14 @@
 #include "common/interval_map.h"
 #include "crimson/osd/exceptions.h"
 
+#include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager.h"
 
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba_manager/btree/lba_btree.h"
 
 namespace crimson::os::seastore::lba_manager::btree {
 
@@ -62,20 +64,11 @@ public:
     Transaction &t,
     laddr_t offset) final;
 
-  find_hole_ret find_hole(
-    Transaction &t,
-    laddr_t hint,
-    extent_len_t) final;
-
   alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
     paddr_t addr) final;
-
-  set_extent_ret set_extent(
-    Transaction &t,
-    laddr_t off, extent_len_t len, paddr_t addr) final;
 
   ref_ret decref_extent(
     Transaction &t,
@@ -136,29 +129,69 @@ private:
 
   static btree_range_pin_t &get_pin(CachedExtent &e);
 
+  template <typename F, typename... Args>
+  auto with_btree(
+    op_context_t c,
+    F &&f) {
+    return cache.get_root(
+      c.trans
+    ).si_then([this, c, f=std::forward<F>(f)](RootBlockRef croot) mutable {
+      return seastar::do_with(
+	LBABtree(croot->get_root().lba_root),
+	[this, c, croot, f=std::move(f)](auto &btree) mutable {
+	  return f(
+	    btree
+	  ).si_then([this, c, croot, &btree] {
+	    if (btree.is_root_dirty()) {
+	      auto mut_croot = cache.duplicate_for_write(
+		c.trans, croot
+	      )->cast<RootBlock>();
+	      mut_croot->get_root().lba_root = btree.get_root_undirty();
+	    }
+	    return base_iertr::now();
+	  });
+	});
+    });
+  }
 
-  /**
-   * get_root
-   *
-   * Get a reference to the root LBANode.
-   */
-  using get_root_iertr = base_iertr;
-  using get_root_ret = get_root_iertr::future<LBANodeRef>;
-  get_root_ret get_root(Transaction &);
+  template <typename State, typename F>
+  auto with_btree_state(
+    op_context_t c,
+    State &&init,
+    F &&f) {
+    return seastar::do_with(
+      std::forward<State>(init),
+      [this, c, f=std::forward<F>(f)](auto &state) mutable {
+	(void)this; // silence incorrect clang warning about capture
+	return with_btree(c, [&state, f=std::move(f)](auto &btree) mutable {
+	  return f(btree, state);
+	}).si_then([&state] {
+	  return seastar::make_ready_future<State>(std::move(state));
+	});
+      });
+  }
 
-  /**
-   * insert_mapping
-   *
-   * Insert a lba mapping into the tree
-   */
-  using insert_mapping_iertr = base_iertr;
-  using insert_mapping_ret = insert_mapping_iertr::future<LBAPinRef>;
-  insert_mapping_ret insert_mapping(
-    Transaction &t,   ///< [in,out] transaction
-    LBANodeRef root,  ///< [in] root node
-    laddr_t laddr,    ///< [in] logical addr to insert
-    lba_map_val_t val ///< [in] mapping to insert
-  );
+  template <typename State, typename F>
+  auto with_btree_state(
+    op_context_t c,
+    F &&f) {
+    return with_btree_state<State, F>(c, State{}, std::forward<F>(f));
+  }
+
+  template <typename Ret, typename F>
+  auto with_btree_ret(
+    op_context_t c,
+    F &&f) {
+    return with_btree_state<Ret>(
+      c,
+      [f=std::forward<F>(f)](auto &btree, auto &ret) mutable {
+	return f(
+	  btree
+	).si_then([&ret](auto &&_ret) {
+	  ret = std::move(_ret);
+	});
+      });
+  }
 
   /**
    * update_refcount
@@ -178,19 +211,13 @@ private:
    */
   using update_mapping_iertr = ref_iertr;
   using update_mapping_ret = ref_iertr::future<lba_map_val_t>;
-  using update_func_t = LBANode::mutate_func_t;
+  using update_func_t = std::function<
+    lba_map_val_t(const lba_map_val_t &v)
+    >;
   update_mapping_ret update_mapping(
     Transaction &t,
     laddr_t addr,
     update_func_t &&f);
-
-  using update_internal_mapping_iertr = LBANode::mutate_internal_address_iertr;
-  using update_internal_mapping_ret = LBANode::mutate_internal_address_ret;
-  update_internal_mapping_ret update_internal_mapping(
-    Transaction &t,
-    depth_t depth,
-    laddr_t laddr,
-    paddr_t paddr);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

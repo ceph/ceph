@@ -419,6 +419,8 @@ class TreeBuilder {
     auto ref_kv_iter = seastar::make_lw_shared<iterator_t>();
     auto cursors = seastar::make_lw_shared<std::map<ghobject_t, BtreeCursor>>();
     return eagain_iertr::now().si_then([&t, this, cursors, ref_kv_iter] {
+      (void)this; // silence clang warning for !TRACK
+      (void)t; // silence clang warning for !TRACK
       if constexpr (TRACK) {
         logger().info("Tracking cursors before erase ...");
         *ref_kv_iter = kvs.begin();

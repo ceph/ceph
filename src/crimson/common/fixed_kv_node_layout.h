@@ -59,14 +59,15 @@ public:
     using parent_t = typename maybe_const_t<FixedKVNodeLayout, is_const>::type;
 
     parent_t node;
-    uint16_t offset;
+    uint16_t offset = 0;
 
+    iter_t() = default;
     iter_t(
       parent_t parent,
       uint16_t offset) : node(parent), offset(offset) {}
 
-    iter_t(const iter_t &) = default;
-    iter_t(iter_t &&) = default;
+    iter_t(const iter_t &) noexcept = default;
+    iter_t(iter_t &&) noexcept = default;
     iter_t &operator=(const iter_t &) = default;
     iter_t &operator=(iter_t &&) = default;
 
@@ -88,6 +89,19 @@ public:
 
     iter_t &operator++() {
       ++offset;
+      return *this;
+    }
+
+    iter_t operator--(int) {
+      assert(offset > 0);
+      auto ret = *this;
+      --offset;
+      return ret;
+    }
+
+    iter_t &operator--() {
+      assert(offset > 0);
+      --offset;
       return *this;
     }
 
