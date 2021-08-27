@@ -448,8 +448,6 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
   Context *ctx = new LambdaContext([this, ops](int r) {
     assert(r == 0);
     ldout(m_image_ctx.cct, 20) << "Finished root update " << dendl;
-    this->m_async_update_superblock--;
-    this->m_async_op_tracker.finish_op();
 
     auto captured_ops = std::move(ops);
     this->complete_op_log_entries(std::move(captured_ops), r);
@@ -469,6 +467,8 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
     if (need_finisher) {
       this->enlist_op_appender();
     }
+    this->m_async_update_superblock--;
+    this->m_async_op_tracker.finish_op();
   });
   uint64_t *new_first_free_entry = new(uint64_t);
   Context *append_ctx = new LambdaContext(
@@ -481,8 +481,6 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
         for (auto &operation : ops) {
           operation->log_append_comp_time = now;
         }
-        this->m_async_append_ops--;
-        this->m_async_op_tracker.finish_op();
 
         std::lock_guard locker(this->m_log_append_lock);
         std::lock_guard locker1(m_lock);
@@ -494,6 +492,8 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
         delete new_first_free_entry;
         schedule_update_root(new_root, ctx);
       }
+      this->m_async_append_ops--;
+      this->m_async_op_tracker.finish_op();
     });
   // Append logs and update first_free_update
   append_ops(ops, append_ctx, new_first_free_entry);
@@ -756,12 +756,12 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
 
           this->m_alloc_failed_since_retire = false;
           this->wake_up();
-          m_async_update_superblock--;
-          this->m_async_op_tracker.finish_op();
         }
 
         this->dispatch_deferred_writes();
         this->process_writeback_dirty_entries();
+        m_async_update_superblock--;
+        this->m_async_op_tracker.finish_op();
       });
 
     std::lock_guard locker(m_lock);
