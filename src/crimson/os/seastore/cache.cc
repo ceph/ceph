@@ -38,6 +38,8 @@ Cache::~Cache()
 Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
+  assert(addr.is_real() && !addr.is_block_relative());
+
   LOG_PREFIX(Cache::retire_extent);
   CachedExtentRef ext;
   auto result = t.get_extent(addr, &ext);
@@ -49,6 +51,9 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     ERRORT("{} is already retired", t, addr);
     ceph_abort();
   }
+
+  // any relative addr must have been on the transaction
+  assert(!addr.is_relative());
 
   // absent from transaction
   // retiring is not included by the cache hit metrics
