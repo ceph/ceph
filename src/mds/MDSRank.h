@@ -22,7 +22,9 @@
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
+#include "common/fair_mutex.h"
 #include "common/TrackedOp.h"
+#include "common/ceph_mutex.h"
 
 #include "include/common_fwd.h"
 
@@ -164,9 +166,9 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
-        ceph::mutex &mds_lock_,
+        ceph::fair_mutex &mds_lock_,
         LogChannelRef &clog_,
-        SafeTimer &timer_,
+        CommonSafeTimer<ceph::fair_mutex> &timer_,
         Beacon &beacon_,
         std::unique_ptr<MDSMap> & mdsmap_,
         Messenger *msgr,
@@ -367,7 +369,7 @@ class MDSRank {
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
-    ceph::mutex &mds_lock;
+    ceph::fair_mutex &mds_lock;
 
     // Reference to global cluster log client, just to avoid initialising
     // a separate one here.
@@ -376,7 +378,7 @@ class MDSRank {
     // Reference to global timer utility, because MDSRank and MDSDaemon
     // currently both use the same mds_lock, so it makes sense for them
     // to share a timer.
-    SafeTimer &timer;
+    CommonSafeTimer<ceph::fair_mutex> &timer;
 
     std::unique_ptr<MDSMap> &mdsmap; /* MDSDaemon::mdsmap */
 
@@ -429,7 +431,7 @@ class MDSRank {
       void signal() {cond.notify_all();}
       private:
       MDSRank *mds;
-      ceph::condition_variable cond;
+      std::condition_variable_any cond;
     } progress_thread;
 
     class C_MDS_StandbyReplayRestart;
@@ -657,9 +659,9 @@ class MDSRankDispatcher : public MDSRank, public md_config_obs_t
 public:
   MDSRankDispatcher(
       mds_rank_t whoami_,
-      ceph::mutex &mds_lock_,
+      ceph::fair_mutex &mds_lock_,
       LogChannelRef &clog_,
-      SafeTimer &timer_,
+      CommonSafeTimer<ceph::fair_mutex> &timer_,
       Beacon &beacon_,
       std::unique_ptr<MDSMap> &mdsmap_,
       Messenger *msgr,

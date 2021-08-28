@@ -7,12 +7,12 @@
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include "librbd/internal.h"
 
 #include <string>
 #include <set>
 
-class SafeTimer;
 struct Context;
 
 namespace librbd {

@@ -11,13 +11,13 @@
 #include "journal/Future.h"
 #include "journal/JournalMetadataListener.h"
 #include "cls/journal/cls_journal_types.h"
+#include "common/Timer.h"
 #include <list>
 #include <map>
 #include <string>
 #include "include/ceph_assert.h"
 
 class ContextWQ;
-class SafeTimer;
 class ThreadPool;
 
 namespace journal {

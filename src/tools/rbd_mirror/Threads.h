@@ -7,9 +7,9 @@
 #include "include/common_fwd.h"
 #include "include/rados/librados_fwd.hpp"
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include <memory>
 
-class SafeTimer;
 class ThreadPool;
 
 namespace librbd {

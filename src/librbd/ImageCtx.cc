@@ -59,7 +59,7 @@ namespace librbd {
 
 namespace {
 
-class SafeTimerSingleton : public SafeTimer {
+class SafeTimerSingleton : public CommonSafeTimer<ceph::mutex> {
 public:
   ceph::mutex lock = ceph::make_mutex("librbd::SafeTimerSingleton::lock");
 

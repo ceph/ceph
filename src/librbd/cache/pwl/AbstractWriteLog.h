@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG
 #define CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG
 
+#include "common/Timer.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncOpTracker.h"
@@ -20,7 +21,6 @@
 #include <list>
 
 class Context;
-class SafeTimer;
 
 namespace librbd {
 

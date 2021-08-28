@@ -9,6 +9,7 @@
 #include "include/rados/librados.hpp"
 #include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
+#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
@@ -22,8 +23,6 @@
 #include <map>
 #include <string>
 #include "include/ceph_assert.h"
-
-class SafeTimer;
 
 namespace journal {
 
