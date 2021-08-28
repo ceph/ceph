@@ -147,6 +147,8 @@ if [ -e ./$VENV ]  && [ ! -e ./$VENV/lib/python*/no-global-site-packages.txt ]; 
     rm -rf ./$VENV
 fi
 
+export LC_ALL=en_US.UTF-8
+
 if [ -z "$NO_CLOBBER" ] || [ ! -e ./$VENV ]; then
     if ! virtualenv --version &>/dev/null; then
         pip install virtualenv
