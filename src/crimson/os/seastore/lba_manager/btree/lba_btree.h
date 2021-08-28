@@ -75,7 +75,9 @@ public:
     }
     lba_map_val_t get_val() const {
       assert(!is_end());
-      return leaf.node->iter_idx(leaf.pos).get_val();
+      auto ret = leaf.node->iter_idx(leaf.pos).get_val();
+      ret.paddr = ret.paddr.maybe_relative_to(leaf.node->get_paddr());
+      return ret;
     }
 
     bool is_end() const {
@@ -93,10 +95,12 @@ public:
 
     LBAPinRef get_pin() const {
       assert(!is_end());
+      auto val = get_val();
+      auto key = get_key();
       return std::make_unique<BtreeLBAPin>(
 	leaf.node,
-	get_val().paddr.maybe_relative_to(leaf.node->get_paddr()),
-	lba_node_meta_t{ get_key(), get_key() + get_val().len, 0 });
+	val.paddr,
+	lba_node_meta_t{ key, key + val.len, 0 });
     }
 
   private:
