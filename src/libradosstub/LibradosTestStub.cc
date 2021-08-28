@@ -1105,6 +1105,24 @@ void ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::omap_get_keys2(const std::string &start_after,
+                                         uint64_t max_return,
+                                         std::set<std::string> *out_keys,
+                                         bool *pmore,
+                                         int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::omap_get_keys2, _1, _2,
+                                         start_after, max_return,
+                                         out_keys, pmore);
+
+  if (prval != NULL) {
+    op = std::bind(save_operation_result,
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+  }
+  o->ops.push_back(op);
+}
+
 void ObjectReadOperation::omap_get_vals2(const std::string &start_after,
                                          const std::string &filter_prefix,
                                          uint64_t max_return,
@@ -1146,6 +1164,16 @@ void ObjectWriteOperation::create(bool exclusive) {
 void ObjectWriteOperation::omap_set(const std::map<std::string, bufferlist> &map) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&TestIoCtxImpl::omap_set, _1, _2, boost::ref(map)));
+}
+
+void ObjectWriteOperation::omap_rm_keys(const std::set<std::string>& keys) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::omap_rm_keys, _1, _2, keys));
+}
+
+void ObjectWriteOperation::omap_clear() {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::omap_clear, _1, _2));
 }
 
 void ObjectWriteOperation::remove() {
@@ -1510,20 +1538,8 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
                          uint64_t max_to_get, std::set<string> *keys, bool *more) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-
-  keys->clear();
-  std::map<string, bufferlist> vals;
-  int r = ctx->io_ctx_impl->omap_get_vals2(ctx->oid, start_obj, "", max_to_get,
-                                           &vals, more);
-  if (r < 0) {
-    return r;
-  }
-
-  for (std::map<string, bufferlist>::iterator it = vals.begin();
-       it != vals.end(); ++it) {
-    keys->insert(it->first);
-  }
-  return keys->size();
+  return ctx->io_ctx_impl->omap_get_keys2(ctx->oid, start_obj, max_to_get,
+                                          keys, more);
 }
 
 int cls_cxx_map_get_val(cls_method_context_t hctx, const string &key,

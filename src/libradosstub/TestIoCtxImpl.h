@@ -126,6 +126,11 @@ public:
                      uint64_t timeout_ms, bufferlist *pbl);
   virtual void notify_ack(const std::string& o, uint64_t notify_id,
                           uint64_t handle, bufferlist& bl);
+  virtual int omap_get_keys2(const std::string& oid,
+                             const std::string& start_after,
+                             uint64_t max_return,
+                             std::set<std::string> *out_keys,
+                             bool *pmore);
   virtual int omap_get_vals(const std::string& oid,
                             const std::string& start_after,
                             const std::string &filter_prefix,

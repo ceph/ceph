@@ -214,6 +214,26 @@ void TestIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
                                            m_client->get_instance_id(), bl);
 }
 
+int TestIoCtxImpl::omap_get_keys2(const std::string& oid,
+                                  const std::string& start_after,
+                                  uint64_t max_return,
+                                  std::set<std::string> *out_keys,
+                                  bool *pmore) {
+  out_keys->clear();
+  std::map<string, bufferlist> vals;
+  int r = omap_get_vals2(oid, start_after, "", max_return,
+                         &vals, pmore);
+  if (r < 0) {
+    return r;
+  }
+
+  for (std::map<string, bufferlist>::iterator it = vals.begin();
+       it != vals.end(); ++it) {
+    out_keys->insert(it->first);
+  }
+  return out_keys->size();
+}
+
 int TestIoCtxImpl::operate(const std::string& oid,
                            TestObjectOperationImpl &ops,
                            int flags) {
