@@ -61,7 +61,6 @@ set(common_srcs
   code_environment.cc
   common_init.cc
   compat.cc
-  condition_variable_debug.cc
   config.cc
   config_values.cc
   dout.cc
@@ -112,6 +111,7 @@ if(WITH_CEPH_DEBUG_MUTEX)
   list(APPEND common_srcs
     lockdep.cc
     mutex_debug.cc
+    condition_variable_debug.cc
     shared_mutex_debug.cc)
 endif()
 

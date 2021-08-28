@@ -4,7 +4,7 @@
 #ifndef CEPH_LIBRBD_IO_TYPE_TRAITS_H
 #define CEPH_LIBRBD_IO_TYPE_TRAITS_H
 
-class SafeTimer;
+#include "common/Timer.h"
 
 namespace librbd {
 namespace io {

@@ -10,7 +10,6 @@ set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/blkdev.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
-  ${PROJECT_SOURCE_DIR}/src/common/condition_variable_debug.cc
   ${PROJECT_SOURCE_DIR}/src/common/cmdparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/Finisher.cc
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
@@ -32,6 +31,7 @@ if(WITH_CEPH_DEBUG_MUTEX)
   list(APPEND crimson_alien_common_srcs
     ${PROJECT_SOURCE_DIR}/src/common/lockdep.cc
     ${PROJECT_SOURCE_DIR}/src/common/mutex_debug.cc
+    ${PROJECT_SOURCE_DIR}/src/common/condition_variable_debug.cc
     ${PROJECT_SOURCE_DIR}/src/common/shared_mutex_debug.cc)
 endif()
 add_library(crimson-alien-common STATIC

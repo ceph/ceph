@@ -482,9 +482,9 @@ private:
 
 MDSRank::MDSRank(
     mds_rank_t whoami_,
-    ceph::mutex &mds_lock_,
+    ceph::fair_mutex &mds_lock_,
     LogChannelRef &clog_,
-    SafeTimer &timer_,
+    CommonSafeTimer<ceph::fair_mutex> &timer_,
     Beacon &beacon_,
     std::unique_ptr<MDSMap>& mdsmap_,
     Messenger *msgr,
@@ -3622,9 +3622,9 @@ bool MDSRank::evict_client(int64_t session_id,
 
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
-    ceph::mutex &mds_lock_,
+    ceph::fair_mutex &mds_lock_,
     LogChannelRef &clog_,
-    SafeTimer &timer_,
+    CommonSafeTimer<ceph::fair_mutex> &timer_,
     Beacon &beacon_,
     std::unique_ptr<MDSMap> &mdsmap_,
     Messenger *msgr,
