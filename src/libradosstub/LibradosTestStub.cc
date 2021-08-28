@@ -1246,6 +1246,16 @@ void ObjectWriteOperation::mtime2(struct timespec *pts) {
   o->ops.push_back(std::bind(&TestIoCtxImpl::mtime2, _1, _2, *pts, _5));
 }
 
+void ObjectWriteOperation::setxattr(const char *name, const bufferlist& v) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::setxattr, _1, _2, name, v));
+}
+
+void ObjectWriteOperation::rmxattr(const char *name) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::rmxattr, _1, _2, name));
+}
+
 
 Rados::Rados() : client(NULL) {
 }
@@ -1615,7 +1625,7 @@ int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *inbl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->xattr_set(ctx->oid, name, *inbl);
+  return ctx->io_ctx_impl->setxattr(ctx->oid, name, *inbl);
 }
 
 int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime) {

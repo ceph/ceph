@@ -196,8 +196,9 @@ public:
   virtual int getxattr(const string& oid, const char *name, bufferlist *pbl);
   virtual int xattr_get(const std::string& oid,
                         std::map<std::string, bufferlist>* attrset) = 0;
-  virtual int xattr_set(const std::string& oid, const std::string &name,
-                        bufferlist& bl) = 0;
+  virtual int setxattr(const std::string& oid, const char *name,
+                       bufferlist& bl) = 0;
+  virtual int rmxattr(const std::string& oid, const char *name) = 0;
   virtual int zero(const std::string& oid, uint64_t off, uint64_t len,
                    const SnapContext &snapc) = 0;
 

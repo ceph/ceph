@@ -81,8 +81,9 @@ public:
              uint64_t snap_id) override;
   int xattr_get(const std::string& oid,
                 std::map<std::string, bufferlist>* attrset) override;
-  int xattr_set(const std::string& oid, const std::string &name,
-                bufferlist& bl) override;
+  int setxattr(const std::string& oid, const char *name,
+               bufferlist& bl) override;
+  int rmxattr(const string& oid, const char *name) override;
   int zero(const std::string& oid, uint64_t off, uint64_t len,
            const SnapContext &snapc) override;
 

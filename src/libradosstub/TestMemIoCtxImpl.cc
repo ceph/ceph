@@ -863,14 +863,24 @@ int TestMemIoCtxImpl::xattr_get(const std::string& oid,
   return 0;
 }
 
-int TestMemIoCtxImpl::xattr_set(const std::string& oid, const std::string &name,
-                                bufferlist& bl) {
+int TestMemIoCtxImpl::setxattr(const std::string& oid, const char *name,
+                               bufferlist& bl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
   std::unique_lock l{m_pool->file_lock};
   m_pool->file_xattrs[{get_namespace(), oid}][name] = bl;
+  return 0;
+}
+
+int TestMemIoCtxImpl::rmxattr(const string& oid, const char *name) {
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  std::unique_lock l{m_pool->file_lock};
+  m_pool->file_xattrs[{get_namespace(), oid}].erase(name);
   return 0;
 }
 
