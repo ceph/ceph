@@ -1066,6 +1066,73 @@ void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::stat2(uint64_t *psize, struct timespec *pts, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::stat2, _1, _2,
+                                           psize, pts);
+
+  if (prval != NULL) {
+    op = std::bind(save_operation_result,
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+  }
+  o->ops.push_back(op);
+}
+
+void ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::xattr_get, _1, _2,
+                                         pattrs);
+
+  if (prval != NULL) {
+    op = std::bind(save_operation_result,
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+  }
+  o->ops.push_back(op);
+}
+
+void ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::getxattr, _1, _2,
+                                         name, pbl);
+
+  if (prval != NULL) {
+    op = std::bind(save_operation_result,
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+  }
+  o->ops.push_back(op);
+}
+
+void ObjectReadOperation::omap_get_vals2(const std::string &start_after,
+                                         const std::string &filter_prefix,
+                                         uint64_t max_return,
+                                         std::map<std::string, bufferlist> *out_vals,
+                                         bool *pmore,
+                                         int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::omap_get_vals2, _1, _2,
+                                         start_after, filter_prefix, max_return,
+                                         out_vals, pmore);
+
+  if (prval != NULL) {
+    op = std::bind(save_operation_result,
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+  }
+  o->ops.push_back(op);
+}
+
+void ObjectReadOperation::omap_get_vals2(const std::string &start_after,
+                                         uint64_t max_return,
+                                         std::map<std::string, bufferlist> *out_vals,
+                                         bool *pmore,
+                                         int *prval) {
+  omap_get_vals2(start_after, string(), max_return,
+                 out_vals, pmore, prval);
+}
+
 void ObjectWriteOperation::append(const bufferlist &bl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&TestIoCtxImpl::append, _1, _2, bl, _5));
@@ -1428,18 +1495,9 @@ int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin) {
 
 int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *outbl) {
-  std::map<string, bufferlist> attrs;
-  int r = cls_cxx_getxattrs(hctx, &attrs);
-  if (r < 0) {
-    return r;
-  }
-
-  std::map<string, bufferlist>::iterator it = attrs.find(name);
-  if (it == attrs.end()) {
-    return -ENODATA;
-  }
-  *outbl = it->second;
-  return 0;
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->getxattr(ctx->oid, name, outbl);
 }
 
 int cls_cxx_getxattrs(cls_method_context_t hctx, std::map<string, bufferlist> *attrset) {

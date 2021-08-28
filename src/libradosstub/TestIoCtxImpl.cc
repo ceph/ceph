@@ -299,6 +299,21 @@ int TestIoCtxImpl::stat(const std::string& oid, uint64_t *psize, time_t *pmtime)
   return 0;
 }
 
+int TestIoCtxImpl::getxattr(const string& oid, const char *name, bufferlist *pbl) {
+  std::map<string, bufferlist> attrs;
+  int r = xattr_get(oid, &attrs);
+  if (r < 0) {
+    return r;
+  }
+
+  std::map<string, bufferlist>::iterator it = attrs.find(name);
+  if (it == attrs.end()) {
+    return -ENODATA;
+  }
+  *pbl = it->second;
+  return 0;
+}
+
 int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
