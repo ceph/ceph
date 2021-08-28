@@ -66,7 +66,7 @@ public:
   int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                   std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
                   uint64_t snap_id) override;
-  int stat(const std::string& oid, uint64_t *psize, time_t *pmtime) override;
+  int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) override;
   int truncate(const std::string& oid, uint64_t size,
                const SnapContext &snapc) override;
   int write(const std::string& oid, bufferlist& bl, size_t len,

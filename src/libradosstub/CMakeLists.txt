@@ -10,7 +10,9 @@ add_library(librados_stub_impl STATIC
 # add_library(rados_stub STATIC ${librados_stub_srcs})
 add_library(librados_stub ${CEPH_SHARED}
   LibradosTestStub.cc
-  NeoradosTestStub.cc)
+  NeoradosTestStub.cc
+  NObjects.cc)
+
 if(ENABLE_SHARED)
   set_target_properties(librados_stub PROPERTIES
     OUTPUT_NAME rados_stub

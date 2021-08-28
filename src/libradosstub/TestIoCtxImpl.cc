@@ -285,6 +285,20 @@ void TestIoCtxImpl::set_snap_read(snap_t seq) {
   m_snap_seq = seq;
 }
 
+
+int TestIoCtxImpl::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
+  struct timespec ts;
+  int r = stat2(oid, psize, (pmtime ? &ts : nullptr));
+  if (r < 0) {
+    return r;
+  }
+
+  if (pmtime) {
+    *pmtime = ts.tv_sec;
+  }
+  return 0;
+}
+
 int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;

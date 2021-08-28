@@ -766,6 +766,12 @@ int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
     oid, std::bind(&TestIoCtxImpl::stat, _1, _2, psize, pmtime));
 }
 
+int IoCtx::stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, std::bind(&TestIoCtxImpl::stat2, _1, _2, psize, pts));
+}
+
 int IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(

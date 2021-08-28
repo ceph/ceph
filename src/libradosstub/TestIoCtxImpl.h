@@ -170,7 +170,8 @@ public:
   virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                           std::map<uint64_t,uint64_t> *m,
                           bufferlist *data_bl, uint64_t snap_id) = 0;
-  virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime) = 0;
+  virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
+  virtual int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) = 0;
   virtual int truncate(const std::string& oid, uint64_t size,
                        const SnapContext &snapc) = 0;
   virtual int tmap_update(const std::string& oid, bufferlist& cmdbl);

@@ -631,8 +631,8 @@ int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
   return len > 0 ? 1 : 0;
 }
 
-int TestMemIoCtxImpl::stat(const std::string& oid, uint64_t *psize,
-                           time_t *pmtime) {
+int TestMemIoCtxImpl::stat2(const std::string& oid, uint64_t *psize,
+                            struct timespec *pts) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -650,8 +650,9 @@ int TestMemIoCtxImpl::stat(const std::string& oid, uint64_t *psize,
   if (psize != NULL) {
     *psize = file->data.length();
   }
-  if (pmtime != NULL) {
-    *pmtime = file->mtime;
+  if (pts != NULL) {
+    pts->tv_sec = file->mtime;
+    pts->tv_nsec = 0;
   }
   return 0;
 }
