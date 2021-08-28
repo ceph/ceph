@@ -172,7 +172,7 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
     }
   }
 
-  std::scoped_lock(m_lock);
+  std::scoped_lock locker(m_lock);
   if (!m_stopping) {
     m_monc->sub_got("fsmap", fsmap.get_epoch());
   } // else we have already done a sub_unwant()
