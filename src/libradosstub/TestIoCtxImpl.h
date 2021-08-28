@@ -172,6 +172,8 @@ public:
                           bufferlist *data_bl, uint64_t snap_id) = 0;
   virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
   virtual int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) = 0;
+  virtual int mtime2(const string& oid, const struct timespec& ts,
+                     const SnapContext &snapc) = 0;
   virtual int truncate(const std::string& oid, uint64_t size,
                        const SnapContext &snapc) = 0;
   virtual int tmap_update(const std::string& oid, bufferlist& cmdbl);

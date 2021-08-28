@@ -33,7 +33,7 @@ public:
     File(const File &rhs);
 
     bufferlist data;
-    time_t mtime;
+    struct timespec mtime;
     uint64_t objver;
 
     uint64_t snap_id;

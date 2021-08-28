@@ -1143,6 +1143,15 @@ void ObjectWriteOperation::zero(uint64_t off, uint64_t len) {
   o->ops.push_back(std::bind(&TestIoCtxImpl::zero, _1, _2, off, len, _5));
 }
 
+void ObjectWriteOperation::mtime2(struct timespec *pts) {
+  if (!pts) {
+    return;
+  }
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::mtime2, _1, _2, *pts, _5));
+}
+
+
 Rados::Rados() : client(NULL) {
 }
 

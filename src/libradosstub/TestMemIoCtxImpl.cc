@@ -651,9 +651,28 @@ int TestMemIoCtxImpl::stat2(const std::string& oid, uint64_t *psize,
     *psize = file->data.length();
   }
   if (pts != NULL) {
-    pts->tv_sec = file->mtime;
-    pts->tv_nsec = 0;
+    *pts = file->mtime;
   }
+  return 0;
+}
+
+int TestMemIoCtxImpl::mtime2(const string& oid, const struct timespec& ts,
+                             const SnapContext &snapc) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  TestMemCluster::SharedFile file;
+  {
+    std::unique_lock l{m_pool->file_lock};
+    file = get_file(oid, true, CEPH_NOSNAP, snapc);
+  }
+
+  std::unique_lock l{file->lock};
+  file->mtime = ts;
+
   return 0;
 }
 
@@ -963,7 +982,7 @@ TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
 
     if (new_version) {
       file->snap_id = snapc.seq;
-      file->mtime = ceph_clock_now().sec();
+      file->mtime = real_clock::to_timespec(real_clock::now());
       m_pool->files[{get_namespace(), oid}].push_back(file);
     }
 

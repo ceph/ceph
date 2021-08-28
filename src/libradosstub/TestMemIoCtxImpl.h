@@ -67,6 +67,8 @@ public:
                   std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
                   uint64_t snap_id) override;
   int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) override;
+  int mtime2(const string& oid, const struct timespec& ts,
+             const SnapContext &snapc) override;
   int truncate(const std::string& oid, uint64_t size,
                const SnapContext &snapc) override;
   int write(const std::string& oid, bufferlist& bl, size_t len,
