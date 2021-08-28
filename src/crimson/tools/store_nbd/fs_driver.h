@@ -44,10 +44,18 @@ private:
   const config_t config;
   seastar::alien::instance& alien;
   std::unique_ptr<crimson::os::FuturizedStore> fs;
-  std::map<unsigned, crimson::os::CollectionRef> collections;
+
+  struct pg_analogue_t {
+    crimson::os::CollectionRef collection;
+
+    ghobject_t log_object;
+    unsigned log_tail = 0;
+    unsigned log_head = 0;
+  };
+  std::map<unsigned, pg_analogue_t> collections;
 
   struct offset_mapping_t {
-    crimson::os::CollectionRef chandle;
+    pg_analogue_t &pg;
     ghobject_t object;
     off_t offset;
   };
@@ -55,4 +63,16 @@ private:
 
   seastar::future<> mkfs();
   void init();
+
+  friend void populate_log(
+    ceph::os::Transaction &,
+    pg_analogue_t &,
+    unsigned,
+    unsigned);
+
+  friend void update_log(
+    ceph::os::Transaction &,
+    FSDriver::pg_analogue_t &,
+    unsigned,
+    unsigned);
 };
