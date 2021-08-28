@@ -65,6 +65,7 @@ private:
   ServiceDaemon *m_service_daemon;
   Listener &m_listener;
 
+  bool m_stopping = false;
   std::map<Filesystem, Peers> m_filesystem_peers;
 
   void handle_fsmap(const cref_t<MFSMap> &m);
