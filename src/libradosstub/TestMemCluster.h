@@ -20,7 +20,10 @@ namespace librados {
 
 class TestMemCluster : public TestCluster {
 public:
-  typedef std::map<std::string, bufferlist> OMap;
+  typedef struct {
+    bufferlist header;
+    std::map<std::string, bufferlist> data;
+  } OMap;
   typedef std::map<ObjectLocator, OMap> FileOMaps;
   typedef std::map<ObjectLocator, bufferlist> FileTMaps;
   typedef std::map<std::string, bufferlist> XAttrs;

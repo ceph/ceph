@@ -285,8 +285,8 @@ int TestMemIoCtxImpl::omap_get_vals2(const std::string& oid,
     return 0;
   }
 
-  TestMemCluster::OMap &omap = o_it->second;
-  TestMemCluster::OMap::iterator it = omap.begin();
+  auto& omap = o_it->second.data;
+  auto it = omap.begin();
   if (!start_after.empty()) {
     it = omap.upper_bound(start_after);
   }
@@ -339,7 +339,7 @@ int TestMemIoCtxImpl::omap_get_vals_by_keys(const std::string& oid,
   if (o_it == m_pool->file_omaps.end()) {
     return 0;
   }
-  TestMemCluster::OMap &omap = o_it->second;
+  auto& omap = o_it->second.data;
   for (const auto& key : keys) {
     auto viter = omap.find(key);
     if (viter != omap.end()) {
@@ -370,7 +370,7 @@ int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,
   std::unique_lock l{file->lock};
   for (std::set<std::string>::iterator it = keys.begin();
        it != keys.end(); ++it) {
-    m_pool->file_omaps[{get_namespace(), oid}].erase(*it);
+    m_pool->file_omaps[{get_namespace(), oid}].data.erase(*it);
   }
   return 0;
 }
@@ -392,7 +392,7 @@ int TestMemIoCtxImpl::omap_clear(const std::string& oid) {
   }
 
   std::unique_lock l{file->lock};
-  m_pool->file_omaps[{get_namespace(), oid}].clear();
+  m_pool->file_omaps[{get_namespace(), oid}].data.clear();
 
   return 0;
 }
@@ -419,8 +419,31 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
       it != map.end(); ++it) {
     bufferlist bl;
     bl.append(it->second);
-    m_pool->file_omaps[{get_namespace(), oid}][it->first] = bl;
+    m_pool->file_omaps[{get_namespace(), oid}].data[it->first] = bl;
   }
+
+  return 0;
+}
+
+int TestMemIoCtxImpl::omap_set_header(const std::string& oid,
+                                      const bufferlist& bl) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  TestMemCluster::SharedFile file;
+  {
+    std::unique_lock l{m_pool->file_lock};
+    file = get_file(oid, true, CEPH_NOSNAP, get_snap_context());
+    if (file == NULL) {
+      return -ENOENT;
+    }
+  }
+
+  std::unique_lock l{file->lock};
+  m_pool->file_omaps[{get_namespace(), oid}].header = bl;
 
   return 0;
 }

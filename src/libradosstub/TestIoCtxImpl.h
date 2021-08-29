@@ -150,6 +150,8 @@ public:
   virtual int omap_clear(const std::string& oid) = 0;
   virtual int omap_set(const std::string& oid,
                        const std::map<std::string, bufferlist> &map) = 0;
+  virtual int omap_set_header(const std::string& oid,
+                              const bufferlist& bl) = 0;
   virtual int operate(const std::string& oid, TestObjectOperationImpl &ops, int flags);
   virtual int operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                            bufferlist *pbl, int flags);

@@ -1166,6 +1166,11 @@ void ObjectWriteOperation::omap_set(const std::map<std::string, bufferlist> &map
   o->ops.push_back(std::bind(&TestIoCtxImpl::omap_set, _1, _2, boost::ref(map)));
 }
 
+void ObjectWriteOperation::omap_set_header(const bufferlist& bl) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::omap_set_header, _1, _2, bl));
+}
+
 void ObjectWriteOperation::omap_rm_keys(const std::set<std::string>& keys) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&TestIoCtxImpl::omap_rm_keys, _1, _2, keys));
