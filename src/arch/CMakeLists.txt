@@ -5,7 +5,7 @@ if(HAVE_ARM)
   list(APPEND arch_srcs arm.c)
 elseif(HAVE_INTEL)
   list(APPEND arch_srcs intel.c)
-elseif(HAVE_POWER8)
+elseif(HAVE_PPC64LE OR HAVE_PPC64 OR HAVE_PPC)
   list(APPEND arch_srcs ppc.c)
 endif()
 
