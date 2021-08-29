@@ -116,7 +116,44 @@ librados::TestRadosClient *create_rados_client() {
 
 } // anonymous namespace
 
-extern "C" int rados_aio_create_completion2(void *cb_arg,
+#if defined(HAVE_ASM_SYMVER) || defined(HAVE_ATTR_SYMVER)
+// prefer __attribute__() over global asm(".symver"). because the latter
+// is not parsed by the compiler and is partitioned away by GCC if
+// lto-partitions is enabled, in other words, these asm() statements
+// are dropped by the -flto option by default. the way to address it is
+// to use __attribute__. so this information can be processed by the
+// C compiler, and be preserved after LTO partitions the code
+#ifdef HAVE_ATTR_SYMVER
+#define LIBRADOS_C_API_BASE(fn)               \
+  extern __typeof (_##fn##_base) _##fn##_base __attribute__((__symver__ (#fn "@")))
+#define LIBRADOS_C_API_BASE_DEFAULT(fn)       \
+  extern __typeof (_##fn) _##fn __attribute__((__symver__ (#fn "@@")))
+#define LIBRADOS_C_API_DEFAULT(fn, ver)       \
+  extern __typeof (_##fn) _##fn __attribute__((__symver__ (#fn "@@LIBRADOS_" #ver)))
+#else
+#define LIBRADOS_C_API_BASE(fn)               \
+  asm(".symver _" #fn "_base, " #fn "@")
+#define LIBRADOS_C_API_BASE_DEFAULT(fn)       \
+  asm(".symver _" #fn ", " #fn "@@")
+#define LIBRADOS_C_API_DEFAULT(fn, ver)       \
+  asm(".symver _" #fn ", " #fn "@@LIBRADOS_" #ver)
+#endif
+
+#define LIBRADOS_C_API_BASE_F(fn) _ ## fn ## _base
+#define LIBRADOS_C_API_DEFAULT_F(fn) _ ## fn
+
+#else
+#define LIBRADOS_C_API_BASE(fn)
+#define LIBRADOS_C_API_BASE_DEFAULT(fn)
+#define LIBRADOS_C_API_DEFAULT(fn, ver)
+
+#define LIBRADOS_C_API_BASE_F(fn) _ ## fn ## _base
+// There shouldn't be multiple default versions of the same
+// function.
+#define LIBRADOS_C_API_DEFAULT_F(fn) fn
+#endif
+
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_create_completion2)(void *cb_arg,
 					    rados_callback_t cb_complete,
 					    rados_completion_t *pc)
 {
@@ -127,27 +164,31 @@ extern "C" int rados_aio_create_completion2(void *cb_arg,
   *pc = c;
   return 0;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_aio_create_completion2);
 
-extern "C" int rados_aio_get_return_value(rados_completion_t c) {
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_get_return_value)(rados_completion_t c) {
   return reinterpret_cast<librados::AioCompletionImpl*>(c)->get_return_value();
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_aio_get_return_value);
 
-extern "C" rados_config_t rados_cct(rados_t cluster)
+extern "C" rados_config_t LIBRADOS_C_API_DEFAULT_F(rados_cct)(rados_t cluster)
 {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   return reinterpret_cast<rados_config_t>(client->cct());
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_cct);
 
-extern "C" int rados_conf_set(rados_t cluster, const char *option,
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_conf_set)(rados_t cluster, const char *option,
                               const char *value) {
   librados::TestRadosClient *impl =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   CephContext *cct = impl->cct();
   return cct->_conf.set_val(option, value);
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_conf_set);
 
-extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_conf_parse_env)(rados_t cluster, const char *var) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   auto& conf = client->cct()->_conf;
@@ -155,8 +196,9 @@ extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
   conf.apply_changes(NULL);
   return 0;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_conf_parse_env);
 
-extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_conf_read_file)(rados_t cluster, const char *path) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   auto& conf = client->cct()->_conf;
@@ -171,33 +213,38 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
   }
   return ret;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_conf_read_file);
 
-extern "C" int rados_connect(rados_t cluster) {
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_connect)(rados_t cluster) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   return client->connect();
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_connect);
 
-extern "C" int rados_create(rados_t *cluster, const char * const id) {
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_create)(rados_t *cluster, const char * const id) {
   *cluster = create_rados_client();
   return 0;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_create);
 
-extern "C" int rados_create_with_context(rados_t *cluster,
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_create_with_context)(rados_t *cluster,
                                          rados_config_t cct_) {
   auto cct = reinterpret_cast<CephContext*>(cct_);
   *cluster = librados_stub::get_cluster()->create_rados_client(cct);
   return 0;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_create_with_context);
 
-extern "C" rados_config_t rados_ioctx_cct(rados_ioctx_t ioctx)
+extern "C" rados_config_t LIBRADOS_C_API_DEFAULT_F(rados_ioctx_cct)(rados_ioctx_t ioctx)
 {
   librados::TestIoCtxImpl *ctx =
     reinterpret_cast<librados::TestIoCtxImpl*>(ioctx);
   return reinterpret_cast<rados_config_t>(ctx->get_rados_client()->cct());
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_cct);
 
-extern "C" int rados_ioctx_create(rados_t cluster, const char *pool_name,
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_create)(rados_t cluster, const char *pool_name,
                                   rados_ioctx_t *ioctx) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
@@ -211,8 +258,9 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *pool_name,
       client->create_ioctx(pool_id, pool_name));
   return 0;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_create);
 
-extern "C" int rados_ioctx_create2(rados_t cluster, int64_t pool_id,
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_create2)(rados_t cluster, int64_t pool_id,
                                    rados_ioctx_t *ioctx)
 {
   librados::TestRadosClient *client =
@@ -234,20 +282,23 @@ extern "C" int rados_ioctx_create2(rados_t cluster, int64_t pool_id,
   }
   return -ENOENT;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_create2);
 
-extern "C" void rados_ioctx_destroy(rados_ioctx_t io) {
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_ioctx_destroy)(rados_ioctx_t io) {
   librados::TestIoCtxImpl *ctx =
     reinterpret_cast<librados::TestIoCtxImpl*>(io);
   ctx->put();
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_destroy);
 
-extern "C" rados_t rados_ioctx_get_cluster(rados_ioctx_t io) {
+extern "C" rados_t LIBRADOS_C_API_DEFAULT_F(rados_ioctx_get_cluster)(rados_ioctx_t io) {
   librados::TestIoCtxImpl *ctx =
     reinterpret_cast<librados::TestIoCtxImpl*>(io);
   return reinterpret_cast<rados_t>(ctx->get_rados_client());
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_get_cluster);
 
-extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_mon_command)(rados_t cluster, const char **cmd,
                                  size_t cmdlen, const char *inbuf,
                                  size_t inbuflen, char **outbuf,
                                  size_t *outbuflen, char **outs,
@@ -271,8 +322,9 @@ extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
   do_out_buffer(outstring, outs, outslen);
   return ret;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_mon_command);
 
-extern "C" int rados_nobjects_list_open(rados_ioctx_t io,
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_open)(rados_ioctx_t io,
                                         rados_list_ctx_t *ctx) {
   librados::TestIoCtxImpl *io_ctx =
     reinterpret_cast<librados::TestIoCtxImpl*>(io);
@@ -286,8 +338,9 @@ extern "C" int rados_nobjects_list_open(rados_ioctx_t io,
   *ctx = reinterpret_cast<rados_list_ctx_t>(list);
   return 0;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_open);
 
-extern "C" int rados_nobjects_list_next(rados_list_ctx_t ctx,
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_next)(rados_list_ctx_t ctx,
                                         const char **entry,
                                         const char **key,
                                         const char **nspace) {
@@ -312,36 +365,42 @@ extern "C" int rados_nobjects_list_next(rados_list_ctx_t ctx,
   }
   return 0;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_next);
 
-extern "C" void rados_nobjects_list_close(rados_list_ctx_t ctx) {
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_nobjects_list_close)(rados_list_ctx_t ctx) {
   std::list<librados::TestRadosClient::Object> *list =
     reinterpret_cast<std::list<librados::TestRadosClient::Object> *>(ctx);
   delete list;
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_nobjects_list_close);
 
-extern "C" int rados_pool_create(rados_t cluster, const char *pool_name) {
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_pool_create)(rados_t cluster, const char *pool_name) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   return client->pool_create(pool_name);
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_pool_create);
 
-extern "C" int rados_pool_delete(rados_t cluster, const char *pool_name) {
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_pool_delete)(rados_t cluster, const char *pool_name) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   return client->pool_delete(pool_name);
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_pool_delete);
 
-extern "C" void rados_shutdown(rados_t cluster) {
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_shutdown)(rados_t cluster) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   client->put();
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_shutdown);
 
-extern "C" int rados_wait_for_latest_osdmap(rados_t cluster) {
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_wait_for_latest_osdmap)(rados_t cluster) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   return client->wait_for_latest_osdmap();
 }
+LIBRADOS_C_API_BASE_DEFAULT(rados_wait_for_latest_osdmap);
 
 using namespace std::placeholders;
 
