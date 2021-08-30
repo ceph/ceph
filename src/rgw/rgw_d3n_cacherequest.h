@@ -26,7 +26,7 @@ struct D3nGetObjData {
 
 struct D3nL1CacheRequest {
   ~D3nL1CacheRequest() {
-    lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): Read From Cache, comlete" << dendl;
+    lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): Read From Cache, complete" << dendl;
   }
 
   // unique_ptr with custom deleter for struct aiocb
