@@ -3540,6 +3540,7 @@ class CephadmAgent():
         self.ack = -1
         self.event = threading.Event()
         self.mgr_listener = MgrListener(self)
+        self.device_enhanced_scan = False
 
     def deploy_daemon_unit(self, config: Dict[str, str] = {}) -> None:
         if not config:
@@ -3611,6 +3612,7 @@ WantedBy=ceph-{fsid}.target
                 self.loop_interval = int(config['refresh_period'])
                 starting_port = int(config['listener_port'])
                 self.host = config['host']
+                use_lsm = config['device_enhanced_scan']
         except Exception as e:
             self.shutdown()
             raise Error(f'Failed to get agent target ip and port from config: {e}')
@@ -3623,6 +3625,10 @@ WantedBy=ceph-{fsid}.target
             raise Error(f'Failed to get agent keyring: {e}')
 
         assert self.target_ip and self.target_port
+
+        self.device_enhanced_scan = False
+        if use_lsm.lower() == 'true':
+            self.device_enhanced_scan = True
 
         try:
             for _ in range(1001):
@@ -3646,10 +3652,17 @@ WantedBy=ceph-{fsid}.target
         while not self.stop:
             ack = self.ack
 
+            try:
+                volume = self._ceph_volume(self.device_enhanced_scan)
+            except Exception as e:
+                logger.error(f'Failed to get ceph-volume metadata: {e}')
+                volume = ''
+
             data = json.dumps({'host': self.host,
                               'ls': list_daemons(self.ctx),
                                'networks': list_networks(self.ctx),
                                'facts': HostFacts(self.ctx).dump(),
+                               'volume': volume,
                                'ack': str(ack),
                                'keyring': self.keyring,
                                'port': self.listener_port})
@@ -3664,6 +3677,23 @@ WantedBy=ceph-{fsid}.target
 
             self.event.wait(self.loop_interval)
             self.event.clear()
+
+    def _ceph_volume(self, enhanced: bool = False) -> str:
+        self.ctx.command = 'inventory --format=json'.split()
+        if enhanced:
+            self.ctx.command.append('--with-lsm')
+        self.ctx.fsid = self.fsid
+
+        stream = io.StringIO()
+        with redirect_stdout(stream):
+            command_ceph_volume(self.ctx)
+
+        stdout = stream.getvalue()
+
+        if stdout:
+            return stdout
+        else:
+            raise Exception('ceph-volume returned empty value')
 
 
 def command_agent(ctx: CephadmContext) -> None:

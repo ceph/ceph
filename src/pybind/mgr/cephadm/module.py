@@ -2275,7 +2275,8 @@ Then run the following:
             root_cert = ''
             if self.cherrypy_thread and self.cherrypy_thread.ssl_certs.root_cert:
                 root_cert = self.cherrypy_thread.ssl_certs.get_root_cert()
-            deps = [self.get_mgr_ip(), str(self.endpoint_port), root_cert]
+            deps = sorted([self.get_mgr_ip(), str(self.endpoint_port), root_cert,
+                          str(self.get_module_option('device_enhanced_scan'))])
         else:
             need = {
                 'prometheus': ['mgr', 'alertmanager', 'node-exporter', 'ingress'],
