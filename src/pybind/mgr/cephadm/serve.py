@@ -3,7 +3,7 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Iterator, Set
+from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -269,7 +269,10 @@ class CephadmServe:
                 if host in self.mgr.offline_hosts:
                     return
                 self.mgr.offline_hosts.add(host)
-                self.mgr._reset_con(host)
+                # In case host is actually offline, it's best to reset the connection to avoid
+                # a long timeout trying to use an existing connection to an offline host
+                # REVISIT AFTER https://github.com/ceph/ceph/pull/42919
+                # self.mgr.ssh._reset_con(host)
                 agents_down.append(host)
                 # try to schedule redeploy of agent in case it is individually down
                 try:
@@ -280,7 +283,7 @@ class CephadmServe:
                     self.log.debug(
                         f'Failed to find entry for agent deployed on host {host}. Agent possibly never deployed: {e}')
                 return
-            else:
+            elif self.mgr.use_agent:
                 self.mgr.offline_hosts_remove(host)
 
             if self.mgr.cache.host_needs_check(host):
