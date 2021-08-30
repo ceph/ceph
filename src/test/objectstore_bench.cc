@@ -149,11 +149,8 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
 
 int main(int argc, const char *argv[])
 {
-  Config cfg;
-
   // command-line arguments
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
@@ -168,6 +165,7 @@ int main(int argc, const char *argv[])
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
+  Config cfg;
   std::string val;
   vector<const char*>::iterator i = args.begin();
   while (i != args.end()) {

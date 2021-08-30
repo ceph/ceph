@@ -100,8 +100,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
   Dencoder *den = NULL;
