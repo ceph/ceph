@@ -181,19 +181,13 @@ LBABtree::insert_ret LBABtree::insert(
 	      ret.leaf.node = mut->cast<LBALeafNode>();
 	    }
 	    auto iter = ret.leaf.node->lower_bound(laddr);
-	    if (iter != ret.leaf.node->end() && iter->get_key() == laddr) {
-	      return insert_ret(
-		interruptible::ready_future_marker{},
-		std::make_pair(ret, false));
-	    } else {
-	      ret.leaf.pos = iter->get_offset();
-	      assert(laddr >= ret.leaf.node->get_meta().begin &&
-		     laddr < ret.leaf.node->get_meta().end);
-	      ret.leaf.node->insert(iter, laddr, val);
-	      return insert_ret(
-		interruptible::ready_future_marker{},
-		std::make_pair(ret, true));
-	    }
+	    assert(iter == ret.leaf.node->end() || iter->get_key() > laddr);
+	    assert(laddr >= ret.leaf.node->get_meta().begin &&
+		   laddr < ret.leaf.node->get_meta().end);
+	    ret.leaf.node->insert(iter, laddr, val);
+	    return insert_ret(
+	      interruptible::ready_future_marker{},
+	      std::make_pair(ret, true));
 	  });
 	}
       });
