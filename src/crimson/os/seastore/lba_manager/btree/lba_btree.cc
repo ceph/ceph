@@ -78,10 +78,6 @@ LBABtree::iterator_fut LBABtree::iterator::prev(op_context_t c) const
 
   auto ret = *this;
 
-  if (is_end()) {
-    ret.leaf.pos = ret.leaf.node->get_size();
-  }
-
   if (ret.leaf.pos > 0) {
     ret.leaf.pos--;
     return iterator_fut(
@@ -184,20 +180,16 @@ LBABtree::insert_ret LBABtree::insert(
 	      );
 	      ret.leaf.node = mut->cast<LBALeafNode>();
 	    }
-	    auto iter = ret.leaf.node->lower_bound(laddr);
-	    if (iter != ret.leaf.node->end() && iter->get_key() == laddr) {
-	      return insert_ret(
-		interruptible::ready_future_marker{},
-		std::make_pair(ret, false));
-	    } else {
-	      ret.leaf.pos = iter->get_offset();
-	      assert(laddr >= ret.leaf.node->get_meta().begin &&
-		     laddr < ret.leaf.node->get_meta().end);
-	      ret.leaf.node->insert(iter, laddr, val);
-	      return insert_ret(
-		interruptible::ready_future_marker{},
-		std::make_pair(ret, true));
-	    }
+	    auto iter = LBALeafNode::const_iterator(
+		ret.leaf.node.get(), ret.leaf.pos);
+	    assert(iter == ret.leaf.node->lower_bound(laddr));
+	    assert(iter == ret.leaf.node->end() || iter->get_key() > laddr);
+	    assert(laddr >= ret.leaf.node->get_meta().begin &&
+		   laddr < ret.leaf.node->get_meta().end);
+	    ret.leaf.node->insert(iter, laddr, val);
+	    return insert_ret(
+	      interruptible::ready_future_marker{},
+	      std::make_pair(ret, true));
 	  });
 	}
       });
@@ -398,29 +390,31 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
     c.trans,
     offset,
     depth);
-    return c.cache.get_extent<LBAInternalNode>(
+  assert(depth > 1);
+  return c.cache.get_extent<LBAInternalNode>(
+    c.trans,
+    offset,
+    LBA_BLOCK_SIZE
+  ).si_then([FNAME, c, offset, depth](LBAInternalNodeRef ret) {
+    DEBUGT(
+      "read internal at offset {} {}",
       c.trans,
       offset,
-      LBA_BLOCK_SIZE
-    ).si_then([FNAME, c, offset](LBAInternalNodeRef ret) {
-      DEBUGT(
-	"read internal at offset {} {}",
-	c.trans,
-	offset,
-	*ret);
-      auto meta = ret->get_meta();
-      if (ret->get_size()) {
-	ceph_assert(meta.begin <= ret->begin()->get_key());
-	ceph_assert(meta.end > (ret->end() - 1)->get_key());
-      }
-      if (!ret->is_pending() && !ret->pin.is_linked()) {
-	ret->pin.set_range(meta);
-	c.pins.add_pin(ret->pin);
-      }
-      return get_internal_node_ret(
-	interruptible::ready_future_marker{},
-	ret);
-    });
+      *ret);
+    auto meta = ret->get_meta();
+    if (ret->get_size()) {
+      ceph_assert(meta.begin <= ret->begin()->get_key());
+      ceph_assert(meta.end > (ret->end() - 1)->get_key());
+    }
+    ceph_assert(depth == meta.depth);
+    if (!ret->is_pending() && !ret->pin.is_linked()) {
+      ret->pin.set_range(meta);
+      c.pins.add_pin(ret->pin);
+    }
+    return get_internal_node_ret(
+      interruptible::ready_future_marker{},
+      ret);
+  });
 }
 
 LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
@@ -447,6 +441,7 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
       ceph_assert(meta.begin <= ret->begin()->get_key());
       ceph_assert(meta.end > (ret->end() - 1)->get_key());
     }
+    ceph_assert(1 == meta.depth);
     if (!ret->is_pending() && !ret->pin.is_linked()) {
       ret->pin.set_range(meta);
       c.pins.add_pin(ret->pin);
@@ -466,11 +461,13 @@ LBABtree::find_insertion_ret LBABtree::find_insertion(
   if (!iter.is_end() && iter.get_key() == laddr) {
     return seastar::now();
   } else if (iter.leaf.node->get_node_meta().begin <= laddr) {
+#ifndef NDEBUG
     auto p = iter;
     if (p.leaf.pos > 0) {
       --p.leaf.pos;
       assert(p.get_key() < laddr);
     }
+#endif
     return seastar::now();
   } else {
     assert(iter.leaf.pos == 0);
@@ -483,6 +480,7 @@ LBABtree::find_insertion_ret LBABtree::find_insertion(
       // invariant that pos is a valid index for the node in the event
       // that the insertion point is at the end of a node.
       p.leaf.pos++;
+      assert(p.is_end());
       iter = p;
       return seastar::now();
     });
@@ -562,11 +560,11 @@ LBABtree::handle_split_ret LBABtree::handle_split(
 
     if (split_from > 1) {
       auto &pos = iter.get_internal(split_from);
-      DEBUGT("splitting parent {} depth {}", c.trans, split_from, *pos.node);
+      DEBUGT("splitting internal {} at depth {}", c.trans, *pos.node, split_from);
       split_level(parent_pos, pos);
     } else {
       auto &pos = iter.leaf;
-      DEBUGT("splitting child {}", c.trans, *pos.node);
+      DEBUGT("splitting leaf {}", c.trans, *pos.node);
       split_level(parent_pos, pos);
     }
   }
