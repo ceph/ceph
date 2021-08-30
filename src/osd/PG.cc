@@ -2022,6 +2022,9 @@ void PG::activate(ObjectStore::Transaction& t,
 	!pi.last_backfill.is_max() &&
 	!pi.last_backfill_bitwise;
 
+      // Save num_bytes for backfill reservation request, can't be negative
+      peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
+
       if (pi.last_update == info.last_update && !force_restart_backfill) {
         // empty log
 	if (!pi.last_backfill.is_max())
@@ -2072,8 +2075,6 @@ void PG::activate(ObjectStore::Transaction& t,
 	pi.last_interval_started = info.last_interval_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
-        // Save num_bytes for reservation request, can't be negative
-        peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
         pi.stats.stats.clear();
 
 	// initialize peer with our purged_snaps.
