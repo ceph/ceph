@@ -3,7 +3,10 @@ try:
     # AsyncMock was not added until python 3.8
     from unittest.mock import AsyncMock
 except ImportError:
-    pass
+    from asyncmock import AsyncMock
+except ImportError:
+    AsyncMock = None
+
 from contextlib import contextmanager
 
 import pytest
