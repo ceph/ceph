@@ -184,14 +184,14 @@ commands such as make check are not disturbed while development
 continues. Here is a sample use case including an interactive session
 and running a unit test:
 
-   $ lsb_release -d
-   Description:	Ubuntu Xenial Xerus (development branch)
+   $ grep PRETTY_NAME /etc/os-release
+   PRETTY_NAME="Ubuntu 16.04.7 LTS"
    $ test/docker-test.sh --os-type centos --os-version 7 --shell
    HEAD is now at 1caee81 autotools: add --enable-docker
    bash-4.2$ pwd
    /srv/ceph/ceph-centos-7
-   bash-4.2$ lsb_release -d
-   Description:	CentOS Linux release 7.0.1406 (Core) 
+   bash-4.2$ cat /etc/redhat-release 
+   CentOS Linux release 7.6.1810 (Core) 
    bash-4.2$ 
    $ time test/docker-test.sh --os-type centos --os-version 7 unittest_str_map
    HEAD is now at 1caee81 autotools: add --enable-docker
