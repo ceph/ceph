@@ -49,6 +49,7 @@ class MockEventLoopThread:
             loop.close()
             asyncio.set_event_loop(None)
 
+
 def receive_agent_metadata(m: CephadmOrchestrator, host: str, ops: List[str] = None) -> None:
     to_update: Dict[str, Callable[[str, Any], None]] = {
         'ls': m._process_ls_output,
@@ -68,6 +69,7 @@ def receive_agent_metadata(m: CephadmOrchestrator, host: str, ops: List[str] = N
 def receive_agent_metadata_all_hosts(m: CephadmOrchestrator) -> None:
     for host in m.cache.get_hosts():
         receive_agent_metadata(m, host)
+
 
 @contextmanager
 def with_cephadm_module(module_options=None, store=None):

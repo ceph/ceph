@@ -171,7 +171,6 @@ class HostData:
             if 'facts' in data and data['facts']:
                 self.mgr.cache.update_host_facts(host, json.loads(data['facts']))
             if 'volume' in data and data['volume']:
-                self.mgr.log.error(data['volume'])
                 ret = Devices.from_json(json.loads(data['volume']))
                 self.mgr.cache.update_host_devices(host, ret.devices)
 

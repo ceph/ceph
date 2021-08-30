@@ -40,7 +40,7 @@ from configparser import ConfigParser
 from functools import wraps
 from glob import glob
 from io import StringIO
-from threading import Thread, RLock
+from threading import Thread, RLock, Event
 from urllib.error import HTTPError
 from urllib.request import urlopen, Request
 from pathlib import Path
@@ -3538,7 +3538,7 @@ class CephadmAgent():
         self.listener_key_path = os.path.join(self.daemon_dir, 'listener.key')
         self.listener_port = ''
         self.ack = -1
-        self.event = threading.Event()
+        self.event = Event()
         self.mgr_listener = MgrListener(self)
         self.device_enhanced_scan = False
 
@@ -3651,16 +3651,23 @@ WantedBy=ceph-{fsid}.target
 
         while not self.stop:
             ack = self.ack
-
             try:
                 volume = self._ceph_volume(self.device_enhanced_scan)
             except Exception as e:
                 logger.error(f'Failed to get ceph-volume metadata: {e}')
                 volume = ''
 
+            # part of the networks info is returned as a set which is not JSON
+            # serializable. The set must be converted to a list
+            networks = list_networks(self.ctx)
+            networks_list = {}
+            for key in networks.keys():
+                for k, v in networks[key].items():
+                    networks_list[key] = {k: list(v)}
+
             data = json.dumps({'host': self.host,
                               'ls': list_daemons(self.ctx),
-                               'networks': list_networks(self.ctx),
+                               'networks': networks_list,
                                'facts': HostFacts(self.ctx).dump(),
                                'volume': volume,
                                'ack': str(ack),
