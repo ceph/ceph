@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <poll.h>
+#include <regex>
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -614,6 +615,13 @@ retry:
   return 0;
 }
 
+// wrap any of * ? [ between square brackets
+static std::string escape_glob(const std::string& s)
+{
+  std::regex glob_meta("([*?[])");
+  return std::regex_replace(s, glob_meta, "[$1]");
+}
+
 static int __enumerate_devices(struct udev *udev, const krbd_spec& spec,
                                bool match_nspace, udev_enumerate_uptr *penm)
 {
@@ -630,13 +638,13 @@ retry:
     return r;
 
   r = udev_enumerate_add_match_sysattr(enm.get(), "pool",
-                                       spec.pool_name.c_str());
+                                       escape_glob(spec.pool_name).c_str());
   if (r < 0)
     return r;
 
   if (match_nspace) {
     r = udev_enumerate_add_match_sysattr(enm.get(), "pool_ns",
-                                         spec.nspace_name.c_str());
+                                         escape_glob(spec.nspace_name).c_str());
   } else {
     /*
      * Match _only_ devices that don't have pool_ns attribute.
@@ -648,12 +656,12 @@ retry:
     return r;
 
   r = udev_enumerate_add_match_sysattr(enm.get(), "name",
-                                       spec.image_name.c_str());
+                                       escape_glob(spec.image_name).c_str());
   if (r < 0)
     return r;
 
   r = udev_enumerate_add_match_sysattr(enm.get(), "current_snap",
-                                       spec.snap_name.c_str());
+                                       escape_glob(spec.snap_name).c_str());
   if (r < 0)
     return r;
 
