@@ -469,11 +469,13 @@ LBABtree::find_insertion_ret LBABtree::find_insertion(
   if (!iter.is_end() && iter.get_key() == laddr) {
     return seastar::now();
   } else if (iter.leaf.node->get_node_meta().begin <= laddr) {
+#ifndef NDEBUG
     auto p = iter;
     if (p.leaf.pos > 0) {
       --p.leaf.pos;
       assert(p.get_key() < laddr);
     }
+#endif
     return seastar::now();
   } else {
     assert(iter.leaf.pos == 0);
@@ -486,6 +488,7 @@ LBABtree::find_insertion_ret LBABtree::find_insertion(
       // invariant that pos is a valid index for the node in the event
       // that the insertion point is at the end of a node.
       p.leaf.pos++;
+      assert(p.is_end());
       iter = p;
       return seastar::now();
     });
@@ -565,11 +568,11 @@ LBABtree::handle_split_ret LBABtree::handle_split(
 
     if (split_from > 1) {
       auto &pos = iter.get_internal(split_from);
-      DEBUGT("splitting parent {} depth {}", c.trans, split_from, *pos.node);
+      DEBUGT("splitting internal {} at depth {}", c.trans, *pos.node, split_from);
       split_level(parent_pos, pos);
     } else {
       auto &pos = iter.leaf;
-      DEBUGT("splitting child {}", c.trans, *pos.node);
+      DEBUGT("splitting leaf {}", c.trans, *pos.node);
       split_level(parent_pos, pos);
     }
   }
