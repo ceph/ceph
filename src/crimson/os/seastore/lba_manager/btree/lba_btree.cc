@@ -398,29 +398,31 @@ LBABtree::get_internal_node_ret LBABtree::get_internal_node(
     c.trans,
     offset,
     depth);
-    return c.cache.get_extent<LBAInternalNode>(
+  assert(depth > 1);
+  return c.cache.get_extent<LBAInternalNode>(
+    c.trans,
+    offset,
+    LBA_BLOCK_SIZE
+  ).si_then([FNAME, c, offset, depth](LBAInternalNodeRef ret) {
+    DEBUGT(
+      "read internal at offset {} {}",
       c.trans,
       offset,
-      LBA_BLOCK_SIZE
-    ).si_then([FNAME, c, offset](LBAInternalNodeRef ret) {
-      DEBUGT(
-	"read internal at offset {} {}",
-	c.trans,
-	offset,
-	*ret);
-      auto meta = ret->get_meta();
-      if (ret->get_size()) {
-	ceph_assert(meta.begin <= ret->begin()->get_key());
-	ceph_assert(meta.end > (ret->end() - 1)->get_key());
-      }
-      if (!ret->is_pending() && !ret->pin.is_linked()) {
-	ret->pin.set_range(meta);
-	c.pins.add_pin(ret->pin);
-      }
-      return get_internal_node_ret(
-	interruptible::ready_future_marker{},
-	ret);
-    });
+      *ret);
+    auto meta = ret->get_meta();
+    if (ret->get_size()) {
+      ceph_assert(meta.begin <= ret->begin()->get_key());
+      ceph_assert(meta.end > (ret->end() - 1)->get_key());
+    }
+    ceph_assert(depth == meta.depth);
+    if (!ret->is_pending() && !ret->pin.is_linked()) {
+      ret->pin.set_range(meta);
+      c.pins.add_pin(ret->pin);
+    }
+    return get_internal_node_ret(
+      interruptible::ready_future_marker{},
+      ret);
+  });
 }
 
 LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
@@ -447,6 +449,7 @@ LBABtree::get_leaf_node_ret LBABtree::get_leaf_node(
       ceph_assert(meta.begin <= ret->begin()->get_key());
       ceph_assert(meta.end > (ret->end() - 1)->get_key());
     }
+    ceph_assert(1 == meta.depth);
     if (!ret->is_pending() && !ret->pin.is_linked()) {
       ret->pin.set_range(meta);
       c.pins.add_pin(ret->pin);
