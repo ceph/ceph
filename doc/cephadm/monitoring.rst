@@ -83,61 +83,6 @@ steps below:
 
      ceph orch apply grafana
 
-Manually setting the Grafana URL
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Cephadm automatically configures Prometheus, Grafana, and Alertmanager in
-all cases except one.
-
-In a some setups, the Dashboard user's browser might not be able to access the
-Grafana URL that is configured in Ceph Dashboard. This can happen when the
-cluster and the accessing user are in different DNS zones.
-
-If this is the case, you can use a configuration option for Ceph Dashboard
-to set the URL that the user's browser will use to access Grafana. This
-value will never be altered by cephadm. To set this configuration option,
-issue the following command:
-
-   .. prompt:: bash $
-
-     ceph dashboard set-grafana-frontend-api-url <grafana-server-api>
-
-It might take a minute or two for services to be deployed. After the
-services have been deployed, you should see something like this when you issue the command ``ceph orch ls``:
-
-.. code-block:: console
-
-  $ ceph orch ls
-  NAME           RUNNING  REFRESHED  IMAGE NAME                                      IMAGE ID        SPEC
-  alertmanager       1/1  6s ago     docker.io/prom/alertmanager:latest              0881eb8f169f  present
-  crash              2/2  6s ago     docker.io/ceph/daemon-base:latest-master-devel  mix           present
-  grafana            1/1  0s ago     docker.io/pcuzner/ceph-grafana-el8:latest       f77afcf0bcf6   absent
-  node-exporter      2/2  6s ago     docker.io/prom/node-exporter:latest             e5a616e4b9cf  present
-  prometheus         1/1  6s ago     docker.io/prom/prometheus:latest                e935122ab143  present
-
-Configuring SSL/TLS for Grafana
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``cephadm`` deploys Grafana using the certificate defined in the ceph
-key/value store. If no certificate is specified, ``cephadm`` generates a
-self-signed certificate during the deployment of the Grafana service.
-
-A custom certificate can be configured using the following commands:
-
-.. prompt:: bash #
-
-  ceph config-key set mgr/cephadm/grafana_key -i $PWD/key.pem
-  ceph config-key set mgr/cephadm/grafana_crt -i $PWD/certificate.pem
-
-If you have already deployed Grafana, run ``reconfig`` on the service to
-update its configuration:
-
-.. prompt:: bash #
-
-  ceph orch reconfig grafana
-
-The ``reconfig`` command also sets the proper URL for Ceph Dashboard.
-
 Networks and Ports
 ~~~~~~~~~~~~~~~~~~
 
@@ -324,9 +269,67 @@ To disable monitoring and remove the software that supports it, run the followin
   $ ceph orch rm alertmanager
   $ ceph mgr module disable prometheus
 
-Enabling RBD-Image monitoring
----------------------------------
+Setting up RBD-Image monitoring
+-------------------------------
 
 Due to performance reasons, monitoring of RBD images is disabled by default. For more information please see
 :ref:`prometheus-rbd-io-statistics`. If disabled, the overview and details dashboards will stay empty in Grafana
 and the metrics will not be visible in Prometheus.
+
+Setting up Grafana
+------------------
+
+Manually setting the Grafana URL
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Cephadm automatically configures Prometheus, Grafana, and Alertmanager in
+all cases except one.
+
+In a some setups, the Dashboard user's browser might not be able to access the
+Grafana URL that is configured in Ceph Dashboard. This can happen when the
+cluster and the accessing user are in different DNS zones.
+
+If this is the case, you can use a configuration option for Ceph Dashboard
+to set the URL that the user's browser will use to access Grafana. This
+value will never be altered by cephadm. To set this configuration option,
+issue the following command:
+
+   .. prompt:: bash $
+
+     ceph dashboard set-grafana-frontend-api-url <grafana-server-api>
+
+It might take a minute or two for services to be deployed. After the
+services have been deployed, you should see something like this when you issue the command ``ceph orch ls``:
+
+.. code-block:: console
+
+  $ ceph orch ls
+  NAME           RUNNING  REFRESHED  IMAGE NAME                                      IMAGE ID        SPEC
+  alertmanager       1/1  6s ago     docker.io/prom/alertmanager:latest              0881eb8f169f  present
+  crash              2/2  6s ago     docker.io/ceph/daemon-base:latest-master-devel  mix           present
+  grafana            1/1  0s ago     docker.io/pcuzner/ceph-grafana-el8:latest       f77afcf0bcf6   absent
+  node-exporter      2/2  6s ago     docker.io/prom/node-exporter:latest             e5a616e4b9cf  present
+  prometheus         1/1  6s ago     docker.io/prom/prometheus:latest                e935122ab143  present
+
+Configuring SSL/TLS for Grafana
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``cephadm`` deploys Grafana using the certificate defined in the ceph
+key/value store. If no certificate is specified, ``cephadm`` generates a
+self-signed certificate during the deployment of the Grafana service.
+
+A custom certificate can be configured using the following commands:
+
+.. prompt:: bash #
+
+  ceph config-key set mgr/cephadm/grafana_key -i $PWD/key.pem
+  ceph config-key set mgr/cephadm/grafana_crt -i $PWD/certificate.pem
+
+If you have already deployed Grafana, run ``reconfig`` on the service to
+update its configuration:
+
+.. prompt:: bash #
+
+  ceph orch reconfig grafana
+
+The ``reconfig`` command also sets the proper URL for Ceph Dashboard.
