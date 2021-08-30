@@ -34,8 +34,6 @@ public:
     iterator &operator=(const iterator &) = default;
     iterator &operator=(iterator &&) = default;
 
-    iterator(depth_t depth) : internal(depth - 1) {}
-
     iterator_fut next(
       op_context_t c,
       mapped_space_visitor_t *visit=nullptr) const;
@@ -105,6 +103,7 @@ public:
 
   private:
     iterator() = default;
+    iterator(depth_t depth) : internal(depth - 1) {}
 
     friend class LBABtree;
     static constexpr uint16_t INVALID = std::numeric_limits<uint16_t>::max();
