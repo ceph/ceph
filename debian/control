@@ -146,6 +146,8 @@ Recommends: btrfs-tools,
             libradosstriper1 (= ${binary:Version}),
             librbd1 (= ${binary:Version}),
             ntp | time-daemon,
+            nvme-cli,
+            smartmontools,
 Replaces: ceph (<< 10),
           ceph-common (<< 0.78-500),
           ceph-test (<< 12.2.2-14),
@@ -378,8 +380,6 @@ Depends: ceph-base (= ${binary:Version}),
          ${shlibs:Depends},
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
-Recommends: nvme-cli,
-            smartmontools,
 Description: monitor server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -413,8 +413,6 @@ Depends: ceph-base (= ${binary:Version}),
          ${shlibs:Depends},
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
-Recommends: nvme-cli,
-            smartmontools,
 Description: OSD server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
