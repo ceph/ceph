@@ -1023,7 +1023,8 @@ class CephadmAgent(CephService):
                'target_port': self.mgr.endpoint_port,
                'refresh_period': self.mgr.agent_refresh_rate,
                'listener_port': self.mgr.agent_starting_port,
-               'host': daemon_spec.host}
+               'host': daemon_spec.host,
+               'device_enhanced_scan': str(self.mgr.get_module_option('device_enhanced_scan'))}
 
         assert self.mgr.cherrypy_thread
         assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
@@ -1038,4 +1039,4 @@ class CephadmAgent(CephService):
             'listener.key': listener_key,
         }
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.mgr.endpoint_port), self.mgr.cherrypy_thread.ssl_certs.get_root_cert()])
+        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.mgr.endpoint_port), self.mgr.cherrypy_thread.ssl_certs.get_root_cert(), str(self.mgr.get_module_option('device_enhanced_scan'))])

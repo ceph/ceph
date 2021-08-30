@@ -306,6 +306,12 @@ class CephadmServe:
                     r = self._refresh_host_networks(host)
                     if r:
                         failures.append(r)
+
+                if self.mgr.cache.host_needs_device_refresh(host):
+                    self.log.debug('refreshing %s devices' % host)
+                    r = self._refresh_host_devices(host)
+                    if r:
+                        failures.append(r)
                 self.mgr.cache.metadata_up_to_date[host] = True
 
             if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
@@ -314,12 +320,6 @@ class CephadmServe:
                                          self.mgr.registry_username, self.mgr.registry_password)
                 if r:
                     bad_hosts.append(r)
-
-            if self.mgr.cache.host_needs_device_refresh(host):
-                self.log.debug('refreshing %s devices' % host)
-                r = self._refresh_host_devices(host)
-                if r:
-                    failures.append(r)
 
             if self.mgr.cache.host_needs_osdspec_preview_refresh(host):
                 self.log.debug(f"refreshing OSDSpec previews for {host}")

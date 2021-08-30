@@ -8,6 +8,7 @@ import time
 
 from mgr_util import verify_tls_files
 from ceph.utils import datetime_now
+from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 
 from OpenSSL import crypto
@@ -133,7 +134,7 @@ class HostData:
         except Exception as e:
             raise Exception(
                 f'Counter value from agent on host {host} could not be converted to an integer: {e}')
-        metadata_types = ['ls', 'networks', 'facts']
+        metadata_types = ['ls', 'networks', 'facts', 'volume']
         metadata_types_str = '{' + ', '.join(metadata_types) + '}'
         if not all(item in data.keys() for item in metadata_types):
             self.mgr.log.warning(
@@ -163,13 +164,16 @@ class HostData:
                 self.mgr.log.debug(
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
 
-
-            if 'ls' in data:
+            if 'ls' in data and data['ls']:
                 self.mgr._process_ls_output(host, data['ls'])
-            if 'networks' in data:
+            if 'networks' in data and data['networks']:
                 self.mgr.cache.update_host_networks(host, data['networks'])
-            if 'facts' in data:
+            if 'facts' in data and data['facts']:
                 self.mgr.cache.update_host_facts(host, json.loads(data['facts']))
+            if 'volume' in data and data['volume']:
+                self.mgr.log.error(data['volume'])
+                ret = Devices.from_json(json.loads(data['volume']))
+                self.mgr.cache.update_host_devices(host, ret.devices)
 
             if up_to_date:
                 self.mgr.cache.metadata_up_to_date[host] = True
@@ -192,7 +196,7 @@ class AgentMessageThread(threading.Thread):
     def run(self) -> None:
         try:
             assert self.mgr.cherrypy_thread
-            root_cert= self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+            root_cert = self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
             root_cert_tmp = tempfile.NamedTemporaryFile()
             root_cert_tmp.write(root_cert.encode('utf-8'))
             root_cert_tmp.flush()
@@ -220,7 +224,8 @@ class AgentMessageThread(threading.Thread):
         try:
             bytes_len: str = str(len(self.data.encode('utf-8')))
             if len(bytes_len.encode('utf-8')) > 10:
-                raise Exception(f'Message is too big to send to agent. Message size is {bytes_len} bytes!')
+                raise Exception(
+                    f'Message is too big to send to agent. Message size is {bytes_len} bytes!')
             while len(bytes_len.encode('utf-8')) < 10:
                 bytes_len = '0' + bytes_len
         except Exception as e:
