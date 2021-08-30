@@ -78,10 +78,6 @@ LBABtree::iterator_fut LBABtree::iterator::prev(op_context_t c) const
 
   auto ret = *this;
 
-  if (is_end()) {
-    ret.leaf.pos = ret.leaf.node->get_size();
-  }
-
   if (ret.leaf.pos > 0) {
     ret.leaf.pos--;
     return iterator_fut(
