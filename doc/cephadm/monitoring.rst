@@ -56,32 +56,32 @@ steps below:
 
    .. prompt:: bash #
 
-     ceph orch apply node-exporter '*'
+     ceph orch apply node-exporter
 
 #. Deploy alertmanager:
 
    .. prompt:: bash #
 
-     ceph orch apply alertmanager 1
+     ceph orch apply alertmanager
 
 #. Deploy Prometheus. A single Prometheus instance is sufficient, but
    for high availablility (HA) you might want to deploy two:
 
    .. prompt:: bash #
 
-     ceph orch apply prometheus 1 
+     ceph orch apply prometheus
 
    or 
 
    .. prompt:: bash #
      
-     ceph orch apply prometheus 2    
+     ceph orch apply prometheus --placement 'count:2'
 
 #. Deploy grafana:
 
    .. prompt:: bash #
 
-     ceph orch apply grafana 1
+     ceph orch apply grafana
 
 Manually setting the Grafana URL
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
