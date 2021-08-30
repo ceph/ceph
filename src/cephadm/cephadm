@@ -8438,7 +8438,7 @@ def cephadm_init(args: List[str]) -> CephadmContext:
         for handler in logger.handlers:
             if handler.name == 'console':
                 handler.setLevel(logging.DEBUG)
-
+    logger.debug('%s\ncephadm %s' % ('-' * 80, args))
     return ctx
 
 
