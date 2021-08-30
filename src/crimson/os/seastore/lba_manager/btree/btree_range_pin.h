@@ -187,10 +187,6 @@ class btree_pin_set_t {
   using pins_t = btree_range_pin_t::index_t;
   pins_t pins;
 
-  pins_t::iterator get_iter(btree_range_pin_t &pin) {
-    return pins_t::s_iterator_to(pin);
-  }
-
   /// Removes pin from set optionally checking whether parent has other children
   void remove_pin(btree_range_pin_t &pin, bool check_parent);
 
