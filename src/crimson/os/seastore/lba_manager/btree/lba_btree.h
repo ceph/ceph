@@ -244,10 +244,10 @@ public:
     return upper_bound(c, L_ADDR_MAX);
   }
 
-  using iterate_repeat_ret = base_iertr::future<
+  using iterate_repeat_ret_inner = base_iertr::future<
     seastar::stop_iteration>;
   template <typename F>
-  static auto iterate_repeat(
+  static base_iertr::future<> iterate_repeat(
     op_context_t c,
     iterator_fut &&iter_fut,
     F &&f,
@@ -265,7 +265,7 @@ public:
 		pos
 	      ).si_then([c, visitor, &pos](auto done) {
 		if (done == seastar::stop_iteration::yes) {
-		  return iterate_repeat_ret(
+		  return iterate_repeat_ret_inner(
 		    interruptible::ready_future_marker{},
 		    seastar::stop_iteration::yes);
 		} else {
@@ -274,7 +274,7 @@ public:
 		    c, visitor
 		  ).si_then([&pos](auto next) {
 		    pos = next;
-		    return iterate_repeat_ret(
+		    return iterate_repeat_ret_inner(
 		      interruptible::ready_future_marker{},
 		      seastar::stop_iteration::no);
 		  });
