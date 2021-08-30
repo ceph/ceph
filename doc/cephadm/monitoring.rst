@@ -333,3 +333,30 @@ update its configuration:
   ceph orch reconfig grafana
 
 The ``reconfig`` command also sets the proper URL for Ceph Dashboard.
+
+Setting up Alertmanager
+-----------------------
+
+Adding Alertmanager webhooks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To add new webhooks to the Alertmanager configuration, add additional
+webhook urls like so:
+
+.. code-block:: yaml
+
+    service_type: alertmanager
+    spec:
+      user_data:
+        default_webhook_urls:
+        - "https://foo"
+        - "https://bar"
+
+Where ``default_webhook_urls`` is a list of additional URLs that are
+added to the default receivers' ``<webhook_configs>`` configuration.
+
+Run ``reconfig`` on the service to update its configuration:
+
+.. prompt:: bash #
+
+  ceph orch reconfig alertmanager
