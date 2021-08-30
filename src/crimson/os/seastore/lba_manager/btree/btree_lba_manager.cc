@@ -51,13 +51,13 @@ BtreeLBAManager::get_mappings(
 	btree.upper_bound_right(c, offset),
 	[&ret, offset, length](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= (offset + length)) {
-	    return LBABtree::iterate_repeat_ret(
+	    return LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  }
 	  ceph_assert((pos.get_key() + pos.get_val().len) > offset);
 	  ret.push_back(pos.get_pin());
-	  return LBABtree::iterate_repeat_ret(
+	  return LBABtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
 	});
@@ -145,12 +145,12 @@ BtreeLBAManager::alloc_extent(
 	[&state, len](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= (state.last_end + len)) {
 	    state.insert_iter = pos;
-	    return LBABtree::iterate_repeat_ret(
+	    return LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  } else {
 	    state.last_end = pos.get_key() + pos.get_val().len;
-	    return LBABtree::iterate_repeat_ret(
+	    return LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::no);
 	  }
@@ -284,13 +284,13 @@ BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
 	btree.upper_bound_right(c, begin),
 	[f=std::move(f), begin, end](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= end) {
-	    return LBABtree::iterate_repeat_ret(
+	    return LBABtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
 	  }
 	  ceph_assert((pos.get_key() + pos.get_val().len) > begin);
 	  f(pos.get_key(), pos.get_val().paddr, pos.get_val().len);
-	  return LBABtree::iterate_repeat_ret(
+	  return LBABtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
 	});
@@ -315,12 +315,12 @@ BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
 	    btree.lower_bound(c, 0, &visitor),
 	    [&visitor](auto &pos) {
 	      if (pos.is_end()) {
-		return LBABtree::iterate_repeat_ret(
+		return LBABtree::iterate_repeat_ret_inner(
 		  interruptible::ready_future_marker{},
 		  seastar::stop_iteration::yes);
 	      }
 	      visitor(pos.get_val().paddr, pos.get_val().len);
-	      return LBABtree::iterate_repeat_ret(
+	      return LBABtree::iterate_repeat_ret_inner(
 		interruptible::ready_future_marker{},
 		seastar::stop_iteration::no);
 	    },
