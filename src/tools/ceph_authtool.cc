@@ -58,9 +58,7 @@ void usage()
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-
+  auto args = argv_to_vec(argc, argv);
   std::string add_key;
   std::string caps_fn;
   std::string import_keyring;
