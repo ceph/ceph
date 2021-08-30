@@ -291,22 +291,8 @@ Example
   # reconfig the prometheus service
   ceph orch reconfig prometheus
 
-Disabling monitoring
---------------------
-
-To disable monitoring and remove the software that supports it, run the following commands:
-
-.. code-block:: console
-
-  $ ceph orch rm grafana
-  $ ceph orch rm prometheus --force   # this will delete metrics data collected so far
-  $ ceph orch rm node-exporter
-  $ ceph orch rm alertmanager
-  $ ceph mgr module disable prometheus
-
-
-Deploying monitoring manually
------------------------------
+Deploying monitoring without cephadm
+------------------------------------
 
 If you have an existing prometheus monitoring infrastructure, or would like
 to manage it yourself, you need to configure it to integrate with your Ceph
@@ -324,6 +310,19 @@ cluster.
 * To enable the dashboard's prometheus-based alerting, see :ref:`dashboard-alerting`.
 
 * To enable dashboard integration with Grafana, see :ref:`dashboard-grafana`.
+
+Disabling monitoring
+--------------------
+
+To disable monitoring and remove the software that supports it, run the following commands:
+
+.. code-block:: console
+
+  $ ceph orch rm grafana
+  $ ceph orch rm prometheus --force   # this will delete metrics data collected so far
+  $ ceph orch rm node-exporter
+  $ ceph orch rm alertmanager
+  $ ceph mgr module disable prometheus
 
 Enabling RBD-Image monitoring
 ---------------------------------
