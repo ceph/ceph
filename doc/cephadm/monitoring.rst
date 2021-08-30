@@ -360,3 +360,8 @@ Run ``reconfig`` on the service to update its configuration:
 .. prompt:: bash #
 
   ceph orch reconfig alertmanager
+
+Further Reading
+---------------
+
+* :ref:`mgr-prometheus`
