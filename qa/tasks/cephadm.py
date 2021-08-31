@@ -755,6 +755,24 @@ def ceph_osds(ctx, config):
                 started=True,
             )
             num_osds += 1
+
+            with contextutil.safe_while(sleep=1, tries=180) as proceed:
+                while proceed():
+                    log.info('Waiting for %d osds to come up...' % (num_osds))
+                    r = _shell(
+                        ctx=ctx,
+                        cluster_name=cluster_name,
+                        remote=remote,
+                        args=[
+                            'ceph', 'osd', 'dump', '-f', 'json',
+                        ],
+                        stdout=StringIO(),
+                    )
+                    j = json.loads(r.stdout.getvalue())
+                    up = sum(1 for o in j['osds'] if 'up' in o['state'])
+                    log.debug('%d of %d OSDs are up' % (up, num_osds))
+                    if up == num_osds:
+                        break
         yield
     finally:
         pass
@@ -1241,21 +1259,14 @@ def crush_setup(ctx, config):
 def create_rbd_pool(ctx, config):
     if config.get('create_rbd_pool', False):
       cluster_name = config['cluster']
-      log.info('Waiting for OSDs to come up')
-      teuthology.wait_until_osds_up(
-          ctx,
-          cluster=ctx.cluster,
-          remote=ctx.ceph[cluster_name].bootstrap_remote,
-          ceph_cluster=cluster_name,
-      )
       log.info('Creating RBD pool')
       _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
-          args=['sudo', 'ceph', '--cluster', cluster_name,
-                'osd', 'pool', 'create', 'rbd', '8'])
+             args=['sudo', 'ceph', '--cluster', cluster_name,
+                   'osd', 'pool', 'create', 'rbd', '8'])
       _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
-          args=['sudo', 'ceph', '--cluster', cluster_name,
-                'osd', 'pool', 'application', 'enable',
-                'rbd', 'rbd', '--yes-i-really-mean-it'
+             args=['sudo', 'ceph', '--cluster', cluster_name,
+                   'osd', 'pool', 'application', 'enable',
+                   'rbd', 'rbd', '--yes-i-really-mean-it'
           ])
     yield
 
