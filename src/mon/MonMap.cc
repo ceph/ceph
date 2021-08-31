@@ -787,21 +787,29 @@ seastar::future<> MonMap::init_with_dns_srv(bool for_mkfs, const std::string& na
   });
 }
 
+bool MonMap::maybe_init_with_mon_host(const std::string& mon_host,
+                                      const bool for_mkfs)
+{
+  if (!mon_host.empty()) {
+    if (auto ret = init_with_ips(mon_host, for_mkfs, "noname-"); ret == 0) {
+      return true;
+    }
+    // TODO: resolve_addrs() is a blocking call
+    if (auto ret = init_with_hosts(mon_host, for_mkfs, "noname-"); ret == 0) {
+      return true;
+    } else {
+      throw std::runtime_error(cpp_strerror(ret));
+    }
+  }
+  return false;
+}
+
 seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 				       bool for_mkfs)
 {
   // -m foo?
-  if (const auto mon_host = conf.get_val<std::string>("mon_host");
-      !mon_host.empty()) {
-    if (auto ret = init_with_ips(mon_host, for_mkfs, "noname-"); ret == 0) {
-      return make_ready_future<>();
-    }
-    // TODO: resolve_addrs() is a blocking call
-    if (auto ret = init_with_hosts(mon_host, for_mkfs, "noname-"); ret == 0) {
-      return make_ready_future<>();
-    } else {
-      throw std::runtime_error(cpp_strerror(ret));
-    }
+  if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host"), for_mkfs)) {
+    return make_ready_future<>();
   }
 
   // What monitors are in the config file?
@@ -824,17 +832,9 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
 seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
   // mon_host_override?
-  if (auto mon_host_override = conf.get_val<std::string>("mon_host_override");
-      !mon_host_override.empty()) {
-    if (auto ret = init_with_ips(mon_host_override, for_mkfs, "noname-"); ret == 0) {
-      return make_ready_future<>();
-    }
-    // TODO: resolve_addrs() is a blocking call
-    if (auto ret = init_with_hosts(mon_host_override, for_mkfs, "noname-"); ret == 0) {
-      return make_ready_future<>();
-    } else {
-      throw std::runtime_error(cpp_strerror(ret));
-    }
+  if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host_override"),
+                               for_mkfs)) {
+    return make_ready_future<>();
   }
 
   // file?
