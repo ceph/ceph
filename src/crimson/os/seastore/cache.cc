@@ -103,7 +103,6 @@ void Cache::register_metrics()
   std::map<src_t, sm::label_instance> labels_by_src {
     {src_t::MUTATE,  src_label("MUTATE")},
     {src_t::READ,    src_label("READ")},
-    {src_t::INIT,    src_label("INIT")},
     {src_t::CLEANER, src_label("CLEANER")},
   };
 

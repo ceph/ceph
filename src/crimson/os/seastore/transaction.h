@@ -142,11 +142,8 @@ public:
   }
 
   enum class src_t : uint8_t {
-    // normal IO operations at seastore boundary or within a test
     MUTATE = 0,
-    READ,
-    // transaction manager level operations
-    INIT,
+    READ, // including weak and non-weak read transactions
     CLEANER,
     MAX
   };
@@ -282,8 +279,6 @@ inline std::ostream& operator<<(std::ostream& os,
     return os << "MUTATE";
   case Transaction::src_t::READ:
     return os << "READ";
-  case Transaction::src_t::INIT:
-    return os << "INIT";
   case Transaction::src_t::CLEANER:
     return os << "CLEANER";
   default:
