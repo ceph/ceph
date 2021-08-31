@@ -354,6 +354,10 @@ private:
   friend class ExtentIndex;
   friend class Transaction;
 
+  bool is_linked() {
+    return extent_index_hook.is_linked();
+  }
+
   /// hook for intrusive ref list (mainly dirty or lru list)
   boost::intrusive::list_member_hook<> primary_ref_list_hook;
   using primary_ref_list_member_options = boost::intrusive::member_hook<
@@ -546,6 +550,12 @@ public:
     );
   }
 
+  template <typename Disposer>
+  void clear_and_dispose(Disposer disposer) {
+    extent_index.clear_and_dispose(disposer);
+    bytes = 0;
+  }
+
   void clear() {
     extent_index.clear();
     bytes = 0;
@@ -567,13 +577,13 @@ public:
 
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
+    assert(extent.is_linked());
     auto erased = extent_index.erase(
       extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
 
-    if (erased) {
-      bytes -= extent.get_length();
-    }
+    assert(erased);
+    bytes -= extent.get_length();
   }
 
   void replace(CachedExtent &to, CachedExtent &from) {

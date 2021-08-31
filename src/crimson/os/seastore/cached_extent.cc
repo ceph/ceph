@@ -61,6 +61,7 @@ std::ostream &operator<<(std::ostream &out, const CachedExtent &ext)
 CachedExtent::~CachedExtent()
 {
   if (parent_index) {
+    assert(is_linked());
     parent_index->erase(*this);
   }
 }
