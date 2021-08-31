@@ -6021,9 +6021,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
     BlueFSVolumeSelector::paths paths;
     bluefs->get_vselector_paths(fn, paths);
 
-    if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
-      // we have both block.db and block; tell rocksdb!
-      // note: the second (last) size value doesn't really matter
+    {
       ostringstream db_paths;
       bool first = true;
       for (auto& p : paths) {
