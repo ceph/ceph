@@ -196,7 +196,8 @@ BlueFS::BlueFS(CephContext* cct)
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
   asok_hook = SocketHook::create(this);
-
+  bluefs_min_log_runway = cct->_conf->bluefs_min_log_runway;
+  bluefs_max_log_runway = cct->_conf->bluefs_max_log_runway;
 }
 
 BlueFS::~BlueFS()
@@ -507,7 +508,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   log_file->vselector_hint = vselector->get_hint_for_log();
   int r = _allocate(
     vselector->select_prefer_bdev(log_file->vselector_hint),
-    cct->_conf->bluefs_max_log_runway,
+    bluefs_max_log_runway,
     &log_file->fnode);
   vselector->add_usage(log_file->vselector_hint, log_file->fnode);
   ceph_assert(r == 0);
@@ -2278,7 +2279,7 @@ void BlueFS::_rewrite_log_and_layout_sync_N_D(bool allocate_with_fallback,
   encode(t, bl);
   _pad_bl(bl);
 
-  uint64_t need = bl.length() + cct->_conf->bluefs_max_log_runway;
+  uint64_t need = bl.length() + bluefs_max_log_runway;
   dout(20) << __func__ << " need " << need << dendl;
 
   bluefs_fnode_t old_fnode;
@@ -2402,9 +2403,9 @@ void BlueFS::_compact_log_async_LD_NF_D() //also locks FW for new_writer
   old_log_jump_to = log_file->fnode.get_allocated();
   uint64_t runway = log_file->fnode.get_allocated() - log.writer->get_effective_write_pos();
   dout(10) << __func__ << " old_log_jump_to 0x" << std::hex << old_log_jump_to
-           << " need 0x" << (old_log_jump_to + cct->_conf->bluefs_max_log_runway) << std::dec << dendl;
+           << " need 0x" << (old_log_jump_to + bluefs_max_log_runway) << std::dec << dendl;
   int r = _allocate(vselector->select_prefer_bdev(log_file->vselector_hint),
-		    cct->_conf->bluefs_max_log_runway,
+		    bluefs_max_log_runway,
                     &log_file->fnode);
   ceph_assert(r == 0);
   //adjust usage as flush below will need it
@@ -2619,7 +2620,7 @@ int64_t BlueFS::_maybe_extend_log()
   // BTW: this triggers `flush()` in the `page_aligned_appender` of `log.writer`.
   int64_t runway = log.writer->file->fnode.get_allocated() -
     log.writer->get_effective_write_pos();
-  if (runway < (int64_t)cct->_conf->bluefs_min_log_runway) {
+  if (runway < (int64_t)bluefs_min_log_runway) {
     dout(10) << __func__ << " allocating more log runway (0x"
 	     << std::hex << runway << std::dec  << " remaining)" << dendl;
     /*
@@ -2643,7 +2644,7 @@ int64_t BlueFS::_maybe_extend_log()
     vselector->sub_usage(log.writer->file->vselector_hint, log.writer->file->fnode);
     int r = _allocate(
       vselector->select_prefer_bdev(log.writer->file->vselector_hint),
-      cct->_conf->bluefs_max_log_runway,
+      bluefs_max_log_runway,
       &log.writer->file->fnode);
     ceph_assert(r == 0);
     vselector->add_usage(log.writer->file->vselector_hint, log.writer->file->fnode);
@@ -2783,7 +2784,10 @@ int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
   } else {
     ceph_assert(r == -ENOSPC);
     _clear_dirty_set_stable_D(seq);
-    _compact_log_sync_LN_LD();
+    _compact_log_sync_N_D();
+    bluefs_min_log_runway = bluefs_min_log_runway * 2;
+    if (bluefs_min_log_runway * 2 > bluefs_max_log_runway)
+      bluefs_max_log_runway = bluefs_max_log_runway * 2;
   }
   //now log.lock is no longer needed
   log.lock.unlock();

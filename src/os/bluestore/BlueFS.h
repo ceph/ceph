@@ -330,6 +330,8 @@ private:
 
   bluefs_super_t super;        ///< latest superblock (as last written)
   uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
+  uint64_t bluefs_min_log_runway = 0; ///< copy from conf, so it can be modified
+  uint64_t bluefs_max_log_runway = 0;
 
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
