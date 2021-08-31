@@ -503,6 +503,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
   if (!s->bucket_name.empty()) {
     s->bucket_exists = true;
 
+    /* This is the only place that s->bucket is created.  It should never be
+     * overwritten. */
     ret = store->get_bucket(dpp, s->user.get(), rgw_bucket(rgw_bucket_key(s->bucket_tenant, s->bucket_name, s->bucket_instance_id)), &s->bucket, y);
     if (ret < 0) {
       if (ret != -ENOENT) {
@@ -3190,19 +3192,24 @@ void RGWCreateBucket::execute(optional_yield y)
 
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
-  op_ret = store->get_bucket(this, s->user.get(), s->bucket_tenant, s->bucket_name, &s->bucket, y);
-  if (op_ret < 0 && op_ret != -ENOENT)
-    return;
-  s->bucket_exists = (op_ret != -ENOENT);
-
-  if (s->bucket_exists) {
-    if (!s->system_request &&
-        store->get_zone()->get_zonegroup().get_id() != s->bucket->get_info().zonegroup) {
-      op_ret = -EEXIST;
+  {
+    std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
+    op_ret = store->get_bucket(this, s->user.get(), s->bucket_tenant,
+			       s->bucket_name, &tmp_bucket, y);
+    if (op_ret < 0 && op_ret != -ENOENT)
       return;
+    s->bucket_exists = (op_ret != -ENOENT);
+
+    if (s->bucket_exists) {
+      if (!s->system_request &&
+	  store->get_zone()->get_zonegroup().get_id() !=
+	  tmp_bucket->get_info().zonegroup) {
+	op_ret = -EEXIST;
+	return;
+      }
+      /* Initialize info from req_state */
+      info = tmp_bucket->get_info();
     }
-    /* Initialize info from req_state */
-    info = s->bucket->get_info();
   }
 
   s->bucket_owner.set_id(s->user->get_id()); /* XXX dang use s->bucket->owner */
