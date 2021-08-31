@@ -14,7 +14,7 @@ import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.utils import forall_hosts
 from ceph.utils import datetime_now
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription
 from mgr_module import MonCommandFailed
 
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
@@ -305,6 +305,13 @@ class OSDService(CephService):
 
     def get_osdspec_affinity(self, osd_id: str) -> str:
         return self.mgr.get('osd_metadata').get(osd_id, {}).get('osdspec_affinity', '')
+
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
+        # Do not remove the osd.N keyring, if we failed to deploy the OSD, because
+        # we cannot recover from it. The OSD keys are created by ceph-volume and not by
+        # us.
+        if not is_failed_deploy:
+            super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
 
 
 class OsdIdClaims(object):

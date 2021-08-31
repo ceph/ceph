@@ -1535,7 +1535,7 @@ Then run the following:
 
                 if d.daemon_type != 'osd':
                     self.cephadm_services[str(d.daemon_type)].pre_remove(d)
-                    self.cephadm_services[str(d.daemon_type)].post_remove(d)
+                    self.cephadm_services[str(d.daemon_type)].post_remove(d, is_failed_deploy=False)
                 else:
                     cmd_args = {
                         'prefix': 'osd purge-actual',
