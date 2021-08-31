@@ -2212,9 +2212,17 @@ void BlueFS::compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
 void BlueFS::_compact_log_sync_LN_LD()
 {
   dout(10) << __func__ << dendl;
+  std::lock_guard ll(log.lock);
+  _compact_log_sync_N_D();
+}
+
+void BlueFS::_compact_log_sync_N_D()
+{
+  dout(10) << __func__ << dendl;
+  ceph_assert(ceph_mutex_is_locked(log.lock));
   auto prefer_bdev =
     vselector->select_prefer_bdev(log.writer->file->vselector_hint);
-  _rewrite_log_and_layout_sync_LN_LD(true,
+  _rewrite_log_and_layout_sync_N_D(true,
     BDEV_DB,
     prefer_bdev,
     prefer_bdev,
@@ -2231,6 +2239,19 @@ void BlueFS::_rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
 					 std::optional<bluefs_layout_t> layout)
 {
   std::lock_guard ll(log.lock);
+  _rewrite_log_and_layout_sync_N_D(allocate_with_fallback,
+				     super_dev, log_dev, log_dev_new,
+				     flags, layout);
+}
+
+void BlueFS::_rewrite_log_and_layout_sync_N_D(bool allocate_with_fallback,
+					 int super_dev,
+					 int log_dev,
+					 int log_dev_new,
+					 int flags,
+					 std::optional<bluefs_layout_t> layout)
+{
+  ceph_assert(ceph_mutex_is_locked(log.lock));
 
   File *log_file = log.writer->file.get();
 
@@ -2631,7 +2652,7 @@ int64_t BlueFS::_maybe_extend_log()
   return runway;
 }
 
-void BlueFS::_flush_and_sync_log_core(int64_t runway)
+int BlueFS::_flush_and_sync_log_core(int64_t runway)
 {
   ceph_assert(ceph_mutex_is_locked(log.lock));
   dout(10) << __func__ << " " << log.t << dendl;
@@ -2644,21 +2665,21 @@ void BlueFS::_flush_and_sync_log_core(int64_t runway)
   if (realign && realign != super.block_size)
     bl.append_zero(realign);
 
-  logger->inc(l_bluefs_logged_bytes, bl.length());
-
-  if (true) {
-    ceph_assert(bl.length() <= runway); // if we write this, we will have an unrecoverable data loss
-                                        // transaction will not fit extents before growth -> data loss on _replay
-  }
-
-  log.writer->append(bl);
-
   // prepare log for new transactions
   log.t.clear();
   log.t.seq = log.seq_live;
 
+  if (bl.length() > runway) {
+    return -ENOSPC;
+  }
+
+  logger->inc(l_bluefs_logged_bytes, bl.length());
+
+  log.writer->append(bl);
+
   int r = _flush_special(log.writer);
   ceph_assert(r == 0);
+  return 0;
 }
 
 // Clears dirty.files up to (including) seq_stable.
@@ -2755,13 +2776,17 @@ int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
   vector<interval_set<uint64_t>> to_release(pending_release.size());
   to_release.swap(pending_release);
   dirty.lock.unlock();
-
-  _flush_and_sync_log_core(available_runway);
-  _flush_bdev(log.writer);
+  int r = _flush_and_sync_log_core(available_runway);
+  if (r == 0) {
+    _flush_bdev(log.writer);
+    _clear_dirty_set_stable_D(seq);
+  } else {
+    ceph_assert(r == -ENOSPC);
+    _clear_dirty_set_stable_D(seq);
+    _compact_log_sync_LN_LD();
+  }
   //now log.lock is no longer needed
   log.lock.unlock();
-
-  _clear_dirty_set_stable_D(seq);
   _release_pending_allocations(to_release);
 
   _update_logger_stats();
@@ -2783,7 +2808,8 @@ int BlueFS::_flush_and_sync_log_jump_D(uint64_t jump_to,
   vector<interval_set<uint64_t>> to_release(pending_release.size());
   to_release.swap(pending_release);
   dirty.lock.unlock();
-  _flush_and_sync_log_core(available_runway);
+  int r = _flush_and_sync_log_core(available_runway);
+  ceph_assert(r == 0);
 
   dout(10) << __func__ << " jumping log offset from 0x" << std::hex
 	   << log.writer->pos << " -> 0x" << jump_to << std::dec << dendl;

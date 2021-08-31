@@ -431,7 +431,7 @@ private:
   void _clear_dirty_set_stable_D(uint64_t seq_stable);
   void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
 
-  void _flush_and_sync_log_core(int64_t available_runway);
+  int _flush_and_sync_log_core(int64_t available_runway);
   int _flush_and_sync_log_jump_D(uint64_t jump_to,
 			       int64_t available_runway);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
@@ -450,10 +450,18 @@ private:
   void compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
 					  uint64_t capture_before_seq);
 
+  void _compact_log_sync_N_D();
   void _compact_log_sync_LN_LD();
   void _compact_log_async_LD_NF_D();
 
   void _rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
+				    int super_dev,
+				    int log_dev,
+				    int new_log_dev,
+				    int flags,
+				    std::optional<bluefs_layout_t> layout);
+
+  void _rewrite_log_and_layout_sync_N_D(bool allocate_with_fallback,
 				    int super_dev,
 				    int log_dev,
 				    int new_log_dev,
