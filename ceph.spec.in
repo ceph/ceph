@@ -1565,6 +1565,7 @@ exit 0
 %{_bindir}/cephfs-data-scan
 %{_bindir}/cephfs-journal-tool
 %{_bindir}/cephfs-table-tool
+%{_bindir}/crushdiff
 %{_bindir}/rados
 %{_bindir}/radosgw-admin
 %{_bindir}/rbd
@@ -1590,6 +1591,7 @@ exit 0
 %{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/ceph-post-file.8*
 %{_mandir}/man8/ceph.8*
+%{_mandir}/man8/crushdiff.8*
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/radosgw-admin.8*
