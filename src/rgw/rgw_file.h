@@ -2631,11 +2631,10 @@ public:
     state->op = OP_PUT;
 
     src_bucket_name = src_parent->bucket_name();
-    // need s->src_bucket_name?
+    state->src_bucket_name = src_bucket_name;
     dest_bucket_name = dst_parent->bucket_name();
-    // need s->bucket.name?
+    state->bucket_name = dest_bucket_name;
     dest_obj_name = dst_parent->format_child_name(dst_name, false);
-    // need s->object_name?
 
     int rc = valid_s3_object_name(dest_obj_name);
     if (rc != 0)
@@ -2667,7 +2666,7 @@ public:
     dest_policy = s3policy;
     /* src_object required before RGWCopyObj::verify_permissions() */
     rgw_obj_key k = rgw_obj_key(src_name);
-    src_object = rgwlib.get_store()->get_object(k);
+    src_object = s->bucket->get_object(k);
     s->object = src_object->clone(); // needed to avoid trap at rgw_op.cc:5150
     return ret;
   }

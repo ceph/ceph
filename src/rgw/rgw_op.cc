@@ -5368,11 +5368,6 @@ void RGWCopyObj::execute(optional_yield y)
   if (init_common() < 0)
     return;
 
-  if (! s->object->get_bucket()) {
-    s->bucket = src_object->get_bucket()->clone();
-    s->object->set_bucket(s->bucket.get());
-  }
-
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
 						s, rgw::notify::ObjectCreatedCopy);
