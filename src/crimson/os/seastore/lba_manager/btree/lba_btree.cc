@@ -171,6 +171,7 @@ LBABtree::insert_ret LBABtree::insert(
 	    interruptible::ready_future_marker{},
 	    std::make_pair(ret, false));
 	} else {
+	  ++(c.trans.get_lba_tree_stats().num_inserts);
 	  return handle_split(
 	    c, ret
 	  ).si_then([c, laddr, val, &ret] {
@@ -230,6 +231,7 @@ LBABtree::remove_ret LBABtree::remove(
     c.trans,
     iter.is_end() ? L_ADDR_MAX : iter.get_key());
   assert(!iter.is_end());
+  ++(c.trans.get_lba_tree_stats().num_erases);
   return seastar::do_with(
     iter,
     [this, c](auto &ret) {
