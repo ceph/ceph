@@ -762,6 +762,44 @@ TEST(BlueFS, test_replay_growth) {
   fs.umount();
 }
 
+TEST(BlueFS, test_51217_runway_exhausted) {
+  uint64_t size = 1048576LL * (2 * 1024 + 128);
+  TempBdev bdev{size};
+
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.SetVal("bluefs_shared_alloc_size", "4096");
+  conf.SetVal("bluefs_compact_log_sync", "false");
+  conf.SetVal("bluefs_min_log_runway", "8192");
+  conf.SetVal("bluefs_max_log_runway", "16384");
+  conf.SetVal("bluefs_allocator", "stupid");
+  conf.SetVal("bluefs_sync_write", "true");
+  conf.ApplyChanges();
+
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, 1048576));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mkdir("dir"));
+
+  char data[2000];
+  BlueFS::FileWriter *h;
+  ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+  for (size_t i = 0; i < 1000; i++) {
+    h->append(data, 2000);
+    fs.fsync(h);
+  }
+  fs.close_writer(h);
+  fs.umount(true); //do not compact on exit!
+
+  // remount and check log can replay safe?
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+  fs.umount();
+}
+
 TEST(BlueFS, test_tracker_50965) {
   uint64_t size_wal = 1048576 * 64;
   TempBdev bdev_wal{size_wal};
