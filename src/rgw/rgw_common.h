@@ -1538,6 +1538,8 @@ struct req_state : DoutPrefixProvider {
   std::string bucket_tenant;
   std::string bucket_name;
 
+  /* bucket is only created in rgw_build_bucket_policies() and should never be
+   * overwritten */
   std::unique_ptr<rgw::sal::Bucket> bucket;
   std::unique_ptr<rgw::sal::Object> object;
   std::string src_tenant_name;
