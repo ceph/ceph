@@ -253,7 +253,7 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
   CachedExtentRef e)
 {
   LOG_PREFIX(LBATree::init_cached_extent);
-  DEBUGT(": extent {}", c.trans, *e);
+  DEBUGT("extent {}", c.trans, *e);
   if (e->is_logical()) {
     auto logn = e->cast<LogicalCachedExtent>();
     return lower_bound(
@@ -267,10 +267,10 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
 	ceph_assert(iter.get_val().len == e->get_length());
 	c.pins.add_pin(
 	  static_cast<BtreeLBAPin&>(logn->get_pin()).pin);
-	DEBUGT(": logical extent {} live, initialized", c.trans, *logn);
+	DEBUGT("logical extent {} live, initialized", c.trans, *logn);
 	return e;
       } else {
-	DEBUGT(": logical extent {} not live, dropping", c.trans, *logn);
+	DEBUGT("logical extent {} not live, dropping", c.trans, *logn);
 	c.cache.drop_from_cache(logn);
 	return CachedExtentRef();
       }
@@ -284,10 +284,10 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
       depth_t cand_depth = eint->get_node_meta().depth;
       if (cand_depth <= iter.get_depth() &&
 	  &*iter.get_internal(cand_depth).node == &*eint) {
-	DEBUGT(": extent {} is live", c.trans, *eint);
+	DEBUGT("extent {} is live", c.trans, *eint);
 	return e;
       } else {
-	DEBUGT(": extent {} is not live", c.trans, *eint);
+	DEBUGT("extent {} is not live", c.trans, *eint);
 	c.cache.drop_from_cache(eint);
 	return CachedExtentRef();
       }
@@ -299,17 +299,17 @@ LBABtree::init_cached_extent_ret LBABtree::init_cached_extent(
     ).si_then([FNAME, c, e, eleaf](auto iter) {
       // Note, this check is valid even if iter.is_end()
       if (iter.leaf.node == &*eleaf) {
-	DEBUGT(": extent {} is live", c.trans, *eleaf);
+	DEBUGT("extent {} is live", c.trans, *eleaf);
 	return e;
       } else {
-	DEBUGT(": extent {} is not live", c.trans, *eleaf);
+	DEBUGT("extent {} is not live", c.trans, *eleaf);
 	c.cache.drop_from_cache(eleaf);
 	return CachedExtentRef();
       }
     });
   } else {
     DEBUGT(
-      ": found other extent {} type {}",
+      "found other extent {} type {}",
       c.trans,
       *e,
       e->get_type());
