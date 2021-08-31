@@ -299,8 +299,22 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
       next_log_pos = next_log_pos % this->m_log_pool_size + DATA_RING_BUFFER_OFFSET;
     }
   }
-  this->update_sync_points(missing_sync_points, sync_point_entries, later,
-                           MIN_WRITE_ALLOC_SSD_SIZE);
+  this->update_sync_points(missing_sync_points, sync_point_entries, later);
+  if (m_first_valid_entry > m_first_free_entry) {
+    m_bytes_allocated = this->m_log_pool_size - m_first_valid_entry +
+			  m_first_free_entry - DATA_RING_BUFFER_OFFSET;
+  } else {
+    m_bytes_allocated = m_first_free_entry - m_first_valid_entry;
+  }
+}
+
+// For SSD we don't calc m_bytes_allocated in this
+template <typename I>
+void WriteLog<I>::inc_allocated_cached_bytes(
+    std::shared_ptr<pwl::GenericLogEntry> log_entry) {
+  if (log_entry->is_write_entry()) {
+    this->m_bytes_cached += log_entry->write_bytes();
+  }
 }
 
 template <typename I>
