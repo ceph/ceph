@@ -233,6 +233,7 @@ options:
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
 	--crimson: use crimson-osd instead of ceph-osd
+    --crimson-foreground: use crimson-osd, but run it in the foreground
 	--osd-args: specify any extra osd specific options
 	--bluestore-devs: comma-separated list of blockdevs to use for bluestore
 	--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)
@@ -301,6 +302,11 @@ case $1 in
         ;;
     --crimson)
         ceph_osd=crimson-osd
+        nodaemon=1
+        ;;
+    --crimson-foreground)
+        ceph_osd=crimson-osd
+        nodaemon=0
         ;;
     --osd-args)
         extra_osd_args="$2"
