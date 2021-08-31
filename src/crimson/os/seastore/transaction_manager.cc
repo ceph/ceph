@@ -36,7 +36,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
     DEBUG("about to do_with");
     segment_cleaner->init_mkfs(addr);
     return with_transaction_intr(
-        Transaction::src_t::INIT, [this, FNAME](auto& t) {
+        Transaction::src_t::MUTATE, [this, FNAME](auto& t) {
       DEBUGT("about to cache->mkfs", t);
       cache->init();
       return cache->mkfs(t
@@ -70,7 +70,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this, FNAME](auto addr) {
     segment_cleaner->set_journal_head(addr);
     return seastar::do_with(
-      create_weak_transaction(Transaction::src_t::INIT),
+      create_weak_transaction(Transaction::src_t::READ),
       [this, FNAME](auto &tref) {
 	return with_trans_intr(
 	  *tref,

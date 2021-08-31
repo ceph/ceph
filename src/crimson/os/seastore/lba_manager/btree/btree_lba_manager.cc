@@ -95,7 +95,7 @@ BtreeLBAManager::get_mapping(
   laddr_t offset)
 {
   LOG_PREFIX(BtreeLBAManager::get_mapping);
-  DEBUGT(": {}", t, offset);
+  DEBUGT("{}", t, offset);
   auto c = get_context(t);
   return with_btree_ret<LBAPinRef>(
     c,
@@ -255,7 +255,7 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
   CachedExtentRef e)
 {
   LOG_PREFIX(BtreeLBAManager::init_cached_extent);
-  DEBUGT(": extent {}", t, *e);
+  DEBUGT("extent {}", t, *e);
   auto c = get_context(t);
   return with_btree(
     c,
