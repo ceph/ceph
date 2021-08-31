@@ -483,9 +483,7 @@ class CephService(CephadmService):
         daemon_id: str = daemon.daemon_id
         host: str = daemon.hostname
 
-        if daemon_id == 'mon':
-            # do not remove the mon keyring
-            return
+        assert daemon.daemon_type != 'mon'
 
         entity = self.get_auth_entity(daemon_id, host=host)
 
@@ -585,6 +583,11 @@ class MonService(CephService):
             'prefix': 'mon rm',
             'name': daemon_id,
         })
+
+    def post_remove(self, daemon: DaemonDescription) -> None:
+        # Do not remove the mon keyring.
+        # super().post_remove(daemon)
+        pass
 
 
 class MgrService(CephService):
