@@ -153,7 +153,7 @@ So, a typical command to start a single-crimson-node cluster is::
 
   $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
     --without-dashboard --cyanstore \
-    --crimson --nodaemon --redirect-output \
+    --crimson --redirect-output \
     --osd-args "--memory 4G"
 
 Where we assign 4 GiB memory, a single thread running on core-0 to crimson-osd.
