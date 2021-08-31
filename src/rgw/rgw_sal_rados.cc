@@ -283,6 +283,12 @@ int RadosUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   return store->ctl()->user->get_attrs_by_uid(dpp, get_id(), &attrs, y, &objv_tracker);
 }
 
+int RadosUser::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
+{
+  User::merge_and_store_attrs(dpp, new_attrs, y);
+  return store_user(dpp, y, false);
+}
+
 int RadosUser::read_stats(const DoutPrefixProvider *dpp,
                              optional_yield y, RGWStorageStats* stats,
 			     ceph::real_time* last_stats_sync,
