@@ -435,9 +435,9 @@ Prerequisites: you need to install `KCLI
 Configure KCLI plan requirements::
 
   $ sudo chown -R $(id -un) /var/lib/libvirt/images
-  $ mkdir -p /var/lib/libvirt/images/ceph-dashboard dashboard
-  $ kcli create pool -p /var/lib/libvirt/images/ceph-dashboard dashboard
-  $ kcli create network -c 192.168.100.0/24 dashboard
+  $ mkdir -p /var/lib/libvirt/images/ceph-dashboard
+  $ kcli create pool -p /var/lib/libvirt/images/ceph-dashboard ceph-dashboard
+  $ kcli create network -c 192.168.100.0/24 ceph-dashboard
 
 Note:
   This script is aimed to be run as jenkins job so the cleanup is triggered only in a jenkins
@@ -1760,7 +1760,7 @@ We generate the dashboard json files directly from this jsonnet file by running 
 command in the grafana/dashboards directory:
 ``jsonnet -m . jsonnet/grafana_dashboards.jsonnet``.
 (For the above command to succeed we need ``jsonnet`` package installed and ``grafonnet-lib``
-directory cloned in our machine. Please refer - 
+directory cloned in our machine. Please refer -
 ``https://grafana.github.io/grafonnet-lib/getting-started/`` in case you have some trouble.)
 
 To update an existing grafana dashboard or to create a new one, we need to update
@@ -1800,7 +1800,7 @@ and then use these functions inside the dashboard definition like -
     }
 
 The valid grafonnet-lib attributes can be found here - ``https://grafana.github.io/grafonnet-lib/api-docs/``.
-  
+
 
 How to listen for manager notifications in a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
