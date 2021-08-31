@@ -246,8 +246,8 @@ class NFSService(CephService):
             'entity': entity,
         })
 
-    def post_remove(self, daemon: DaemonDescription) -> None:
-        super().post_remove(daemon)
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
         self.remove_rgw_keyring(daemon)
 
     def ok_to_stop(self,
