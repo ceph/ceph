@@ -12,6 +12,7 @@ import logging
 from contextlib import contextmanager
 from time import sleep
 import re
+from orchestrator import OrchResult
 
 import jsonpatch
 from urllib.parse import urljoin
@@ -870,6 +871,29 @@ class RookCluster(object):
             cfs.CephFilesystem, 'cephfilesystems', spec.service_id,
             _update_fs, _create_fs)
 
+    def get_matching_node(self, host: str) -> Any:
+        matching_node = None
+        for node in self.nodes.items:
+            if node.metadata.labels['kubernetes.io/hostname'] == host:
+                matching_node = node
+        return matching_node
+
+    def add_host_label(self, host: str, label: str) -> OrchResult[str]:
+        matching_node = self.get_matching_node(host)
+        if matching_node == None:
+            return OrchResult(None, RuntimeError(f"Cannot add {label} label to {host}: host not found in cluster")) 
+        matching_node.metadata.labels['ceph-label/'+ label] = ""
+        self.coreV1_api.patch_node(host, matching_node)
+        return OrchResult(f'Added {label} label to {host}')
+
+    def remove_host_label(self, host: str, label: str) -> OrchResult[str]:
+        matching_node = self.get_matching_node(host)
+        if matching_node == None:
+            return OrchResult(None, RuntimeError(f"Cannot remove {label} label from {host}: host not found in cluster")) 
+        matching_node.metadata.labels.pop('ceph-label/' + label, None)
+        self.coreV1_api.patch_node(host, matching_node)
+        return OrchResult(f'Removed {label} label from {host}')
+
     def apply_objectstore(self, spec: RGWSpec) -> str:
         assert spec.service_id is not None
 
@@ -1039,6 +1063,17 @@ class RookCluster(object):
             inventory
         )
         return self.remover.remove()
+
+    def get_hosts(self) -> List[orchestrator.HostSpec]:
+        ret = []
+        for node in self.nodes.items:
+            spec = orchestrator.HostSpec(
+                node.metadata.name, 
+                addr='/'.join([addr.address for addr in node.status.addresses]), 
+                labels=[label.split('/')[1] for label in node.metadata.labels if label.startswith('ceph-label')],
+            )
+            ret.append(spec)
+        return ret
 
     def _patch(self, crd: Type, crd_name: str, cr_name: str, func: Callable[[CrdClassT, CrdClassT], CrdClassT]) -> str:
         current_json = self.rook_api_get(
