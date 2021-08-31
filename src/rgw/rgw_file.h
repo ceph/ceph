@@ -2666,8 +2666,8 @@ public:
     dest_policy = s3policy;
     /* src_object required before RGWCopyObj::verify_permissions() */
     rgw_obj_key k = rgw_obj_key(src_name);
-    src_object = s->bucket->get_object(k);
-    s->object = src_object->clone(); // needed to avoid trap at rgw_op.cc:5150
+    s->src_object = s->bucket->get_object(k);
+    s->object = s->src_object->clone(); // needed to avoid trap at rgw_op.cc:5150
     return ret;
   }
 

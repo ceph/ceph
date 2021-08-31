@@ -1382,7 +1382,6 @@ int RGWCopyObj_ObjStore_SWIFT::get_params(optional_yield y)
 
   src_tenant_name = s->src_tenant_name;
   src_bucket_name = s->src_bucket_name;
-  src_object = s->src_object->clone();
   dest_tenant_name = s->bucket_tenant;
   dest_bucket_name = s->bucket_name;
   dest_obj_name = s->object->get_name();
@@ -1429,7 +1428,7 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 {
   /* Dump X-Copied-From. */
   dump_header(s, "X-Copied-From", url_encode(src_bucket->get_name()) +
-              "/" + url_encode(src_object->get_name()));
+              "/" + url_encode(s->src_object->get_name()));
 
   /* Dump X-Copied-From-Account. */
   /* XXX tenant */

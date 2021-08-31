@@ -5111,17 +5111,17 @@ int RGWCopyObj::verify_permission(optional_yield y)
     return op_ret;
   }
 
-  src_object->set_bucket(src_bucket.get());
+  s->src_object->set_bucket(src_bucket.get());
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
-    src_object->set_atomic(s->obj_ctx);
-    src_object->set_prefetch_data(s->obj_ctx);
+    s->src_object->set_atomic(s->obj_ctx);
+    s->src_object->set_prefetch_data(s->obj_ctx);
 
     rgw_placement_rule src_placement;
 
     /* check source object permissions */
     op_ret = read_obj_policy(this, store, s, src_bucket->get_info(), src_bucket->get_attrs(), &src_acl, &src_placement.storage_class,
-			     src_policy, src_bucket.get(), src_object.get(), y);
+			     src_policy, src_bucket.get(), s->src_object.get(), y);
     if (op_ret < 0) {
       return op_ret;
     }
@@ -5141,14 +5141,14 @@ int RGWCopyObj::verify_permission(optional_yield y)
       if (src_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
         auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, src_policy, s->iam_user_policies, s->session_policies);
         if (has_s3_existing_tag || has_s3_resource_tag)
-          rgw_iam_add_objtags(this, s, src_object.get(), has_s3_existing_tag, has_s3_resource_tag);
+          rgw_iam_add_objtags(this, s, s->src_object.get(), has_s3_existing_tag, has_s3_resource_tag);
 
         auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                                   boost::none,
-                                                  src_object->get_instance().empty() ?
+                                                  s->src_object->get_instance().empty() ?
                                                   rgw::IAM::s3GetObject :
                                                   rgw::IAM::s3GetObjectVersion,
-                                                  ARN(src_object->get_obj()));
+                                                  ARN(s->src_object->get_obj()));
         if (identity_policy_res == Effect::Deny) {
           return -EACCES;
         }
@@ -5156,10 +5156,10 @@ int RGWCopyObj::verify_permission(optional_yield y)
         rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
         if (src_policy) {
 	        e = src_policy->eval(s->env, *s->auth.identity,
-            src_object->get_instance().empty() ?
+            s->src_object->get_instance().empty() ?
             rgw::IAM::s3GetObject :
             rgw::IAM::s3GetObjectVersion,
-            ARN(src_object->get_obj()),
+            ARN(s->src_object->get_obj()),
             princ_type);
         }
 	if (e == Effect::Deny) {
@@ -5168,10 +5168,10 @@ int RGWCopyObj::verify_permission(optional_yield y)
         if (!s->session_policies.empty()) {
         auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env,
                                                   boost::none,
-                                                  src_object->get_instance().empty() ?
+                                                  s->src_object->get_instance().empty() ?
                                                   rgw::IAM::s3GetObject :
                                                   rgw::IAM::s3GetObjectVersion,
-                                                  ARN(src_object->get_obj()));
+                                                  ARN(s->src_object->get_obj()));
         if (session_policy_res == Effect::Deny) {
             return -EACCES;
         }
@@ -5199,7 +5199,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
 	}
       //remove src object tags as it may interfere with policy evaluation of destination obj
       if (has_s3_existing_tag || has_s3_resource_tag)
-        rgw_iam_remove_objtags(this, s, src_object.get(), has_s3_existing_tag, has_s3_resource_tag);
+        rgw_iam_remove_objtags(this, s, s->src_object.get(), has_s3_existing_tag, has_s3_resource_tag);
 
       } else if (!src_acl.verify_permission(this, *s->auth.identity,
 					       s->perm_mask,
@@ -5389,7 +5389,7 @@ void RGWCopyObj::execute(optional_yield y)
     dest_object->gen_rand_obj_instance_name();
   }
 
-  src_object->set_atomic(s->obj_ctx);
+  s->src_object->set_atomic(s->obj_ctx);
   dest_object->set_atomic(s->obj_ctx);
 
   encode_delete_at_attr(delete_at, attrs);
@@ -5409,7 +5409,7 @@ void RGWCopyObj::execute(optional_yield y)
   {
     // get src object size (cached in obj_ctx from verify_permission())
     RGWObjState* astate = nullptr;
-    op_ret = src_object->get_obj_state(this, s->obj_ctx, &astate, s->yield, true);
+    op_ret = s->src_object->get_obj_state(this, s->obj_ctx, &astate, s->yield, true);
     if (op_ret < 0) {
       return;
     }
@@ -5435,7 +5435,7 @@ void RGWCopyObj::execute(optional_yield y)
   }
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  op_ret = src_object->copy_object(obj_ctx,
+  op_ret = s->src_object->copy_object(obj_ctx,
 	   s->user.get(),
 	   &s->info,
 	   source_zone,
