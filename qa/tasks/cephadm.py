@@ -726,11 +726,11 @@ def ceph_osds(ctx, config):
                 _, _, id_ = teuthology.split_role(osd)
                 id_to_remote[int(id_)] = (osd, remote)
 
-        cur = 0
+        num_osds = 0
         for osd_id in sorted(id_to_remote.keys()):
             osd, remote = id_to_remote[osd_id]
             _, _, id_ = teuthology.split_role(osd)
-            assert int(id_) == cur
+            assert int(id_) == num_osds
             devs = devs_by_remote[remote]
             assert devs   ## FIXME ##
             dev = devs.pop()
@@ -754,8 +754,7 @@ def ceph_osds(ctx, config):
                 wait=False,
                 started=True,
             )
-            cur += 1
-
+            num_osds += 1
         yield
     finally:
         pass
