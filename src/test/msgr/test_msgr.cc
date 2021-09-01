@@ -28,6 +28,8 @@
 #include <boost/random/uniform_int.hpp>
 #include <gtest/gtest.h>
 
+#define MSG_POLICY_UNIT_TESTING
+
 #include "common/ceph_argparse.h"
 #include "common/ceph_mutex.h"
 #include "global/global_init.h"
