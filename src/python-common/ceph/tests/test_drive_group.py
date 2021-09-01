@@ -39,7 +39,12 @@ def test_DriveGroup(test_input):
         ''
     ),
     (
-        "Failed to validate Drive Group: OSD spec needs a `placement` key.",
+        'Failed to validate OSD spec "": `placement` key required',
+        """data_devices:
+  all: True
+"""
+    ),
+    (
         'Failed to validate OSD spec "mydg.data_devices": device selection cannot be empty', """
 service_type: osd
 service_id: mydg

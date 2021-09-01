@@ -415,7 +415,7 @@ class ServiceSpec(object):
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ' \
                           'container ingress cephfs-mirror'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ingress '.split()
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -481,7 +481,7 @@ class ServiceSpec(object):
         #: ``container``, ``ingress``
         self.service_id = None
 
-        if self.service_type in self.REQUIRES_SERVICE_ID:
+        if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
             self.service_id = service_id
 
         #: If set to ``true``, the orchestrator will not deploy nor remove
@@ -641,15 +641,17 @@ class ServiceSpec(object):
         if not self.service_type:
             raise SpecValidationError('Cannot add Service: type required')
 
-        if self.service_type in self.REQUIRES_SERVICE_ID:
-            if not self.service_id:
+        if self.service_type != 'osd':
+            if self.service_type in self.REQUIRES_SERVICE_ID and not self.service_id:
                 raise SpecValidationError('Cannot add Service: id required')
+            if self.service_type not in self.REQUIRES_SERVICE_ID and self.service_id:
+                raise SpecValidationError(
+                        f'Service of type \'{self.service_type}\' should not contain a service id')
+
+        if self.service_id:
             if not re.match('^[a-zA-Z0-9_.-]+$', self.service_id):
                 raise SpecValidationError('Service id contains invalid characters, '
                                           'only [a-zA-Z0-9_.-] allowed')
-        elif self.service_id:
-            raise SpecValidationError(
-                    f'Service of type \'{self.service_type}\' should not contain a service id')
 
         if self.placement is not None:
             self.placement.validate()
