@@ -266,6 +266,8 @@ class CephadmServe:
                 return
 
             if self.mgr.use_agent and self.mgr.agent_helpers._agent_down(host):
+                agents_down.append(host)
+                self.mgr.cache.metadata_up_to_date[host] = False
                 if host in self.mgr.offline_hosts:
                     return
                 self.mgr.offline_hosts.add(host)
@@ -273,9 +275,9 @@ class CephadmServe:
                 # a long timeout trying to use an existing connection to an offline host
                 # REVISIT AFTER https://github.com/ceph/ceph/pull/42919
                 # self.mgr.ssh._reset_con(host)
-                agents_down.append(host)
-                # try to schedule redeploy of agent in case it is individually down
+
                 try:
+                    # try to schedule redeploy of agent in case it is individually down
                     agent = [a for a in self.mgr.cache.get_daemons_by_host(
                         host) if a.hostname == host][0]
                     self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
@@ -283,8 +285,6 @@ class CephadmServe:
                     self.log.debug(
                         f'Failed to find entry for agent deployed on host {host}. Agent possibly never deployed: {e}')
                 return
-            elif self.mgr.use_agent:
-                self.mgr.offline_hosts_remove(host)
 
             if self.mgr.cache.host_needs_check(host):
                 r = self._check_host(host)

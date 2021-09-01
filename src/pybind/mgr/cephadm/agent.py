@@ -106,6 +106,9 @@ class HostData:
         except Exception as e:
             self.mgr.log.warning(f'Received bad metadata from an agent: {e}')
         else:
+            # if we got here, we've already verified the keyring of the agent. If
+            # host agent is reporting on is marked offline, it shouldn't be any more
+            self.mgr.offline_hosts_remove(data['host'])
             self.handle_metadata(data)
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
@@ -271,9 +274,12 @@ class CephadmAgentHelpers:
 
     def _agent_down(self, host: str) -> bool:
         # if we don't have a timestamp, it's likely because of a mgr fail over.
-        # just set the timestamp to now
+        # just set the timestamp to now. However, if host was offline before, we
+        # should not allow creating a new timestamp to cause it to be marked online
         if host not in self.mgr.cache.agent_timestamp:
             self.mgr.cache.agent_timestamp[host] = datetime_now()
+            if host in self.mgr.offline_hosts:
+                return False
         # agent hasn't reported in 2.5 * it's refresh rate. Something is likely wrong with it.
         time_diff = datetime_now() - self.mgr.cache.agent_timestamp[host]
         if time_diff.total_seconds() > 2.5 * float(self.mgr.agent_refresh_rate):
