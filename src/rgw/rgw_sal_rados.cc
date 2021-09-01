@@ -1484,28 +1484,6 @@ int RadosStore::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucke
   return rados->get_obj_head_ioctx(dpp, bucket_info, obj, ioctx);
 }
 
-int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
-{
-  if (ofs < 0) {
-    ofs += obj_size;
-    if (ofs < 0)
-      ofs = 0;
-    end = obj_size - 1;
-  } else if (end < 0) {
-    end = obj_size - 1;
-  }
-
-  if (obj_size > 0) {
-    if (ofs >= (off_t)obj_size) {
-      return -ERANGE;
-    }
-    if (end >= (off_t)obj_size) {
-      end = obj_size - 1;
-    }
-  }
-  return 0;
-}
-
 RadosObject::~RadosObject() {}
 
 int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh)
