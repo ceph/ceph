@@ -45,6 +45,7 @@ class ReplicaReservations {
   std::vector<pg_shard_t> m_reserved_peers;
   bool m_had_rejections{false};
   int m_pending{-1};
+  const pg_info_t& m_pg_info;
 
   void release_replica(pg_shard_t peer, epoch_t epoch);
 
