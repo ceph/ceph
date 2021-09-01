@@ -131,6 +131,7 @@ struct connection_t {
   bool use_ssl;
   bool verify_ssl;
   boost::optional<const std::string&> ca_location;
+  utime_t timestamp = ceph_clock_now();
 
   // default ctor
   connection_t() :
@@ -583,6 +584,7 @@ public:
   const size_t max_connections;
   const size_t max_inflight;
   const size_t max_queue;
+  const size_t max_idle_time;
 private:
   std::atomic<size_t> connection_count;
   std::atomic<bool> stopped;
@@ -600,6 +602,8 @@ private:
   void publish_internal(message_wrapper_t* message) {
     const std::unique_ptr<message_wrapper_t> msg_owner(message);
     auto& conn = message->conn;
+
+    conn->timestamp = ceph_clock_now();
 
     if (!conn->is_ok()) {
       // connection had an issue while message was in the queue
@@ -696,6 +700,11 @@ private:
         
         auto& conn = conn_it->second;
         const auto& conn_key = conn_it->first;
+
+        if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
+          ldout(conn->cct, 20) << "Time for deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
+          ERASE_AND_CONTINUE(conn_it, connections);
+        }
 
         // try to reconnect the connection if it has an error
         if (!conn->is_ok()) {
@@ -850,6 +859,7 @@ public:
     max_connections(_max_connections),
     max_inflight(_max_inflight),
     max_queue(_max_queue),
+    max_idle_time(30),
     connection_count(0),
     stopped(false),
     read_timeout{0, _usec_timeout},
