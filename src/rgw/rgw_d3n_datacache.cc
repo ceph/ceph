@@ -160,9 +160,7 @@ void D3nDataCache::d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c)
 
   { // update cache_map entries for new chunk in cache
     const std::lock_guard l(d3n_cache_lock);
-    auto it = d3n_outstanding_write_list.find(c->oid);
-    if (it != d3n_outstanding_write_list.end())
-      d3n_outstanding_write_list.erase(it);
+    d3n_outstanding_write_list.erase(c->oid);
     chunk_info = new D3nChunkDataInfo;
     chunk_info->oid = c->oid;
     chunk_info->set_ctx(cct);
@@ -214,11 +212,6 @@ void D3nDataCache::put(bufferlist& bl, unsigned int len, std::string& oid)
   uint64_t freed_size = 0, _free_data_cache_size = 0, _outstanding_write_size = 0;
 
   ldout(cct, 10) << "D3nDataCache::" << __func__ << "(): oid=" << oid << ", len=" << len << dendl;
-  if (len > cct->_conf->rgw_d3n_l1_datacache_size) {
-    ldout(cct, 2) << "D3nDataCache: Warning: object oid=" << oid << ", length=" << len <<
-                     " is larger than the datacache size " << cct->_conf->rgw_d3n_l1_datacache_size << ", not writing to cache" << dendl;
-    return;
-  }
   {
     const std::lock_guard l(d3n_cache_lock);
     std::unordered_map<string, D3nChunkDataInfo*>::iterator iter = d3n_cache_map.find(oid);
@@ -251,9 +244,7 @@ void D3nDataCache::put(bufferlist& bl, unsigned int len, std::string& oid)
     }
     if (sr == 0) {
       ldout(cct, 2) << "D3nDataCache: Warning: eviction was not able to free disk space, not writing to cache" << dendl;
-      auto it = d3n_outstanding_write_list.find(oid);
-      if (it != d3n_outstanding_write_list.end())
-        d3n_outstanding_write_list.erase(it);
+      d3n_outstanding_write_list.erase(oid);
       return;
     }
     ldout(cct, 20) << "D3nDataCache: completed eviction of " << sr << " bytes" << dendl;
@@ -263,9 +254,7 @@ void D3nDataCache::put(bufferlist& bl, unsigned int len, std::string& oid)
   r = d3n_libaio_create_write_request(bl, len, oid);
   if (r < 0) {
     const std::lock_guard l(d3n_cache_lock);
-    auto it = d3n_outstanding_write_list.find(oid);
-    if (it != d3n_outstanding_write_list.end())
-      d3n_outstanding_write_list.erase(it);
+    d3n_outstanding_write_list.erase(oid);
     ldout(cct, 1) << "D3nDataCache: create_aio_write_request fail, r=" << r << dendl;
     return;
   }
@@ -365,9 +354,7 @@ size_t D3nDataCache::lru_eviction()
     }
     del_oid = del_entry->oid;
     ldout(cct, 20) << "D3nDataCache: lru_eviction: oid to remove: " << del_oid << dendl;
-    std::unordered_map<string, D3nChunkDataInfo*>::iterator iter = d3n_cache_map.find(del_oid);
-    if (iter != d3n_cache_map.end())
-      d3n_cache_map.erase(iter); // oid
+    d3n_cache_map.erase(del_oid); // oid
   }
   freed_size = del_entry->size;
   delete del_entry;
