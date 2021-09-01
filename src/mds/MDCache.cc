@@ -5327,7 +5327,7 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
   cap_imports_num_opening--;
 
   if (cap_imports_num_opening == 0) {
-    if (rejoin_gather.empty())
+    if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid()))
       rejoin_gather_finish();
     else if (rejoin_gather.count(mds->get_nodeid()))
       process_imported_caps();
@@ -5349,7 +5349,7 @@ void MDCache::rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >
   dout(10) << "rejoin_open_sessions_finish" << dendl;
   mds->server->finish_force_open_sessions(session_map);
   rejoin_session_map.swap(session_map);
-  if (rejoin_gather.empty())
+  if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid()))
     rejoin_gather_finish();
 }
 
@@ -5973,7 +5973,7 @@ bool MDCache::open_undef_inodes_dirfrags()
   MDSGatherBuilder gather(g_ceph_context,
       new MDSInternalContextWrapper(mds,
 	new LambdaContext([this](int r) {
-	    if (rejoin_gather.empty())
+	    if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid()))
 	      rejoin_gather_finish();
 	  })
 	)
