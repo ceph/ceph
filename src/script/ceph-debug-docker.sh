@@ -125,7 +125,8 @@ EOF
 FROM ${env}
 
 WORKDIR /root
-RUN sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
+RUN yum update -y && \
+    sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
     yum update -y && \
     yum install -y tmux epel-release wget psmisc ca-certificates gdb
 RUN wget -O /etc/yum.repos.d/ceph-dev.repo $repo_url && \
