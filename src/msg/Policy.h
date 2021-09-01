@@ -42,7 +42,12 @@ struct Policy {
   ThrottleType* throttler_messages;
   
   /// Specify features supported locally by the endpoint.
-  uint64_t features_supported;
+#ifdef MSG_POLICY_UNIT_TESTING
+  uint64_t features_supported{CEPH_FEATURES_SUPPORTED_DEFAULT};
+#else
+  static constexpr uint64_t features_supported{CEPH_FEATURES_SUPPORTED_DEFAULT};
+#endif
+
   /// Specify features any remotes must have to talk to this endpoint.
   uint64_t features_required;
   
@@ -50,7 +55,6 @@ struct Policy {
     : lossy(false), server(false), standby(false), resetcheck(true),
       throttler_bytes(NULL),
       throttler_messages(NULL),
-      features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
       features_required(0) {}
 private:
   Policy(bool l, bool s, bool st, bool r, bool rlc, uint64_t req)
@@ -58,7 +62,6 @@ private:
       register_lossy_clients(rlc),
       throttler_bytes(NULL),
       throttler_messages(NULL),
-      features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
       features_required(req) {}
   
 public:
