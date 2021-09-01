@@ -132,7 +132,8 @@ class DriveGroupValidationError(SpecValidationError):
     if it was raised in a different mgr module.
     """
 
-    def __init__(self, name: str, msg: str):
+    def __init__(self, name: Optional[str], msg: str):
+        name = name or "<unnamed>"
         super(DriveGroupValidationError, self).__init__(
             f'Failed to validate OSD spec "{name}": {msg}')
 
@@ -255,9 +256,7 @@ class DriveGroupSpec(ServiceSpec):
 
         args['service_type'] = json_drive_group.pop('service_type', 'osd')
 
-        # service_id was not required in early octopus.
-        args['service_id'] = json_drive_group.pop('service_id', '')
-        s_id = args['service_id']
+        s_id = args.get('service_id', '<unnamed>')
         try:
             args['placement'] = PlacementSpec.from_json(json_drive_group.pop('placement'))
         except KeyError:
@@ -301,9 +300,6 @@ class DriveGroupSpec(ServiceSpec):
     def validate(self):
         # type: () -> None
         super(DriveGroupSpec, self).validate()
-
-        if not self.service_id:
-            raise DriveGroupValidationError('', 'service_id is required')
 
         if not isinstance(self.placement.host_pattern, str) and \
                 self.placement.host_pattern is not None:
