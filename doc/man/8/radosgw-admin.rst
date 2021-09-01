@@ -789,6 +789,10 @@ Options
 	Option for 'user stats' command. When specified, it will update user stats with
 	the current stats reported by user's buckets indexes.
 
+.. option:: --show-config
+
+	Show configuration.
+
 .. option:: --show-log-entries=<flag>
 
 	Enable/disable dump of log entries on log show.
