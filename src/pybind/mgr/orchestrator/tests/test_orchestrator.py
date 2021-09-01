@@ -74,11 +74,11 @@ def test_daemon_description():
 def test_apply():
     to = _TestOrchestrator('', 0, 0)
     completion = to.apply([
-        ServiceSpec(service_type='nfs'),
-        ServiceSpec(service_type='nfs'),
-        ServiceSpec(service_type='nfs'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
+        ServiceSpec(service_type='nfs', service_id='foo'),
     ])
-    res = '<NFSServiceSpec for service_name=nfs>'
+    res = '<NFSServiceSpec for service_name=nfs.foo>'
     assert completion.result == [res, res, res]
 
 
