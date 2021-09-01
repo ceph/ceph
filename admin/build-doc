@@ -55,7 +55,7 @@ if test -f $md5 && md5sum --check $md5 > /dev/null; then
     # reusing existing venv
     :
 else
-    virtualenv --python=python3 $vdir
+    python3 -m venv $vdir
 
     $vdir/bin/pip install --quiet wheel
     $vdir/bin/pip install --quiet \
