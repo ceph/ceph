@@ -14,20 +14,28 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
 
 @pytest.mark.parametrize("test_input",
 [
+    (  # new style json
+        """service_type: osd
+service_id: testing_drivegroup
+placement:
+  host_pattern: hostname
+data_devices:
+  paths:
+  - /dev/sda 
+"""
+    ),
     (
-        [  # new style json
-            {
-                'service_type': 'osd',
-                'service_id': 'testing_drivegroup',
-                'placement': {'host_pattern': 'hostname'},
-                'data_devices': {'paths': ['/dev/sda']}
-            }
-        ]
+        """service_type: osd
+service_id: testing_drivegroup
+placement:
+  host_pattern: hostname
+data_devices:
+  paths:
+  - /dev/sda"""
     ),
 ])
 def test_DriveGroup(test_input):
-    dg = [DriveGroupSpec.from_json(inp) for inp in test_input][0]
-    assert dg.placement.filter_matching_hostspecs([HostSpec('hostname')]) == ['hostname']
+    dg = DriveGroupSpec.from_json(yaml.safe_load(test_input))
     assert dg.service_id == 'testing_drivegroup'
     assert all([isinstance(x, Device) for x in dg.data_devices.paths])
     assert dg.data_devices.paths[0].path == '/dev/sda'
@@ -39,7 +47,7 @@ def test_DriveGroup(test_input):
         ''
     ),
     (
-        'Failed to validate OSD spec "": `placement` key required',
+        'Failed to validate OSD spec "<unnamed>": `placement` required',
         """data_devices:
   all: True
 """
