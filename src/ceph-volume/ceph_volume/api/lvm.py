@@ -467,7 +467,7 @@ def get_pvs(fields=PV_FIELDS, filters='', tags=None):
     :returns: list of class PVolume object representing pvs on the system
     """
     filters = make_filters_lvmcmd_ready(filters, tags)
-    args = ['pvs', '--no-heading', '--readonly', '--separator=";"', '-S',
+    args = ['pvs', '--noheadings', '--readonly', '--separator=";"', '-S',
             filters, '-o', fields]
 
     stdout, stderr, returncode = process.call(args, verbose_on_failure=False)
