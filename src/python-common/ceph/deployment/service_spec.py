@@ -311,8 +311,12 @@ class PlacementSpec(object):
             raise SpecValidationError(
                 "count-per-host cannot be combined explicit placement with names or networks"
             )
-        if self.host_pattern and self.hosts:
-            raise SpecValidationError('cannot combine host patterns and hosts')
+        if self.host_pattern:
+            if not isinstance(self.host_pattern, str):
+                raise SpecValidationError('host_pattern must be of type string')
+            if self.hosts:
+                raise SpecValidationError('cannot combine host patterns and hosts')
+
         for h in self.hosts:
             h.validate()
 

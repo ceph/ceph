@@ -234,29 +234,21 @@ class DriveGroupSpec(ServiceSpec):
         :param json_drive_group: A valid json string with a Drive Group
                specification
         """
-        args: Dict[str, Any] = {}
+        args: Dict[str, Any] = json_drive_group.copy()
         # legacy json (pre Octopus)
-        if 'host_pattern' in json_drive_group and 'placement' not in json_drive_group:
-            json_drive_group['placement'] = {'host_pattern': json_drive_group['host_pattern']}
-            del json_drive_group['host_pattern']
-
-        args['service_type'] = json_drive_group.pop('service_type', 'osd')
+        if 'host_pattern' in args and 'placement' not in args:
+            args['placement'] = {'host_pattern': args['host_pattern']}
+            del args['host_pattern']
 
         s_id = args.get('service_id', '<unnamed>')
-        try:
-            args['placement'] = PlacementSpec.from_json(json_drive_group.pop('placement'))
-        except KeyError:
-            args['placement'] = PlacementSpec()
 
         # spec: was not mandatory in octopus
-        if 'spec' in json_drive_group:
-            args.update(cls._drive_group_spec_from_json(s_id, json_drive_group.pop('spec')))
+        if 'spec' in args:
+            args['spec'].update(cls._drive_group_spec_from_json(s_id, args['spec']))
         else:
-            args.update(cls._drive_group_spec_from_json(s_id, json_drive_group))
+            args.update(cls._drive_group_spec_from_json(s_id, args))
 
-        args['unmanaged'] = json_drive_group.pop('unmanaged', False)
-
-        return cls(**args)
+        return super(DriveGroupSpec, cls)._from_json_impl(args)
 
     @classmethod
     def _drive_group_spec_from_json(cls, name: str, json_drive_group: dict) -> dict:
@@ -287,9 +279,8 @@ class DriveGroupSpec(ServiceSpec):
         # type: () -> None
         super(DriveGroupSpec, self).validate()
 
-        if not isinstance(self.placement.host_pattern, str) and \
-                self.placement.host_pattern is not None:
-            raise DriveGroupValidationError(self.service_id, 'host_pattern must be of type string')
+        if self.placement.is_empty():
+            raise DriveGroupValidationError(self.service_id, '`placement` required')
 
         if self.data_devices is None:
             raise DriveGroupValidationError(self.service_id, "`data_devices` element is required.")
