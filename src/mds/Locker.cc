@@ -4635,11 +4635,17 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
     in = static_cast<CInode*>(lock->get_parent());
     in->get_caps_wanted(&wanted, NULL, lock->get_cap_shift());
   }
-  
+
+  if (lock->get_type() == CEPH_LOCK_IAUTH &&
+      lock->get_state() == LOCK_SYNC &&
+      in && in->is_dir() && in->has_subtree_or_exporting_dirfrag()) {
+    dout(7) << "simple_eval keep authlock of subtree root inode sync " << *lock
+	    << " on " << *lock->get_parent() << dendl;
+  }
   // -> excl?
-  if (lock->get_state() != LOCK_EXCL &&
-      in && in->get_target_loner() >= 0 &&
-      (wanted & CEPH_CAP_GEXCL)) {
+  else if (lock->get_state() != LOCK_EXCL &&
+	   in && in->get_target_loner() >= 0 &&
+	   (wanted & CEPH_CAP_GEXCL)) {
     dout(7) << "simple_eval stable, going to excl " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
     simple_excl(lock, need_issue);
