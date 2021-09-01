@@ -716,7 +716,7 @@ PG::do_osd_ops_execute(
             [rollbacker, failure_func_ptr]
             (const std::error_code& e) mutable {
             return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-              [&e, failure_func_ptr] {
+              [e, failure_func_ptr] {
               return (*failure_func_ptr)(e);
             });
           })
@@ -728,7 +728,7 @@ PG::do_osd_ops_execute(
     return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
         seastar::now(),
         rollbacker.rollback_obc_if_modified(e).then_interruptible(
-          [&e, failure_func_ptr] {
+          [e, failure_func_ptr] {
           return (*failure_func_ptr)(e);
         }));
   }));
