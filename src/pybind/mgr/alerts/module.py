@@ -18,6 +18,33 @@ class Alerts(MgrModule):
             default=60,
             desc='How frequently to reexamine health status',
             runtime=True),
+        # emojis
+        Option(
+            name='emojis',
+            type='bool',
+            default=False,
+            desc='Enables emojis to better reflect the status',
+            runtime=True),
+        Option(
+            name='emoji_ok',
+            default='^_^',
+            desc='Emoji for HEALTH_OK',
+            runtime=True),
+        Option(
+            name='emoji_warn',
+            default='-_-',
+            desc='Emoji for HEALTH_WARN',
+            runtime=True),
+        Option(
+            name='emoji_err',
+            default='>_<',
+            desc='Emoji for HEALTH_ERR',
+            runtime=True),
+        Option(
+            name='emoji_undef',
+            default='oO',
+            desc='Emoji for undefined HEALTH status',
+            runtime=True),
         # smtp
         Option(
             name='smtp_host',
@@ -200,15 +227,30 @@ class Alerts(MgrModule):
                          diff: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         # message
         self.log.debug('_send_alert_smtp')
+        if self.emojis:
+            if status['status']=='HEALTH_OK':
+                self.emote=' {}'.format(self.emoji_ok)
+            elif status['status']=='HEALTH_WARN':
+                self.emote=' {}'.format(self.emoji_warn)
+                self.emote='-_-'
+            elif status['status']=='HEALTH_ERR':
+                self.emote=' {}'.format(self.emoji_err)
+                self.emote='>_<'
+            else:
+                # If statement instead of dict mapping just for this
+                self.emote=' {}'.format(self.emoji_undef)
+        else:
+            self.emote=''
         message = ('From: {from_name} <{sender}>\n'
-                   'Subject: {status}\n'
+                   'Subject: {status}{emote}\n'
                    'To: {target}\n'
                    '\n'
                    '{status}\n'.format(
                        sender=self.smtp_sender,
                        from_name=self.smtp_from_name,
                        status=status['status'],
-                       target=self.smtp_destination))
+                       target=self.smtp_destination,
+                       emote=self.emote))
 
         if 'new' in diff:
             message += ('\n--- New ---\n')
