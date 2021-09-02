@@ -5408,33 +5408,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     throw -EPERM;
   }
 
-  bool is_non_s3_op = false;
-  if (s->op_type == RGW_STS_GET_SESSION_TOKEN ||
-      s->op_type == RGW_STS_ASSUME_ROLE ||
-      s->op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY ||
-      s->op_type == RGW_OP_CREATE_ROLE ||
-      s->op_type == RGW_OP_DELETE_ROLE ||
-      s->op_type == RGW_OP_GET_ROLE ||
-      s->op_type == RGW_OP_MODIFY_ROLE ||
-      s->op_type == RGW_OP_LIST_ROLES ||
-      s->op_type == RGW_OP_PUT_ROLE_POLICY ||
-      s->op_type == RGW_OP_GET_ROLE_POLICY ||
-      s->op_type == RGW_OP_LIST_ROLE_POLICIES ||
-      s->op_type == RGW_OP_DELETE_ROLE_POLICY ||
-      s->op_type == RGW_OP_PUT_USER_POLICY ||
-      s->op_type == RGW_OP_GET_USER_POLICY ||
-      s->op_type == RGW_OP_LIST_USER_POLICIES ||
-      s->op_type == RGW_OP_DELETE_USER_POLICY ||
-      s->op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_GET_OIDC_PROVIDER ||
-      s->op_type == RGW_OP_LIST_OIDC_PROVIDERS ||
-      s->op_type == RGW_OP_PUBSUB_TOPIC_CREATE ||
-      s->op_type == RGW_OP_PUBSUB_TOPICS_LIST ||
-      s->op_type == RGW_OP_PUBSUB_TOPIC_GET ||
-      s->op_type == RGW_OP_PUBSUB_TOPIC_DELETE) {
-    is_non_s3_op = true;
-  }
+  bool is_non_s3_op = rgw::auth::s3::is_non_s3_op(s->op_type);
 
   const char* exp_payload_hash = nullptr;
   string payload_hash;
@@ -6084,6 +6058,7 @@ rgw::auth::s3::STSEngine::authenticate(
   rgw_user user_id;
   string role_id;
   rgw::auth::RoleApplier::Role r;
+  rgw::auth::RoleApplier::TokenAttrs t_attrs;
   if (! token.roleId.empty()) {
     std::unique_ptr<rgw::sal::RGWRole> role = store->get_role(token.roleId);
     if (role->get_by_id(dpp, y) < 0) {
@@ -6100,8 +6075,6 @@ rgw::auth::s3::STSEngine::authenticate(
         r.role_policies.push_back(std::move(perm_policy));
       }
     }
-    // This is mostly needed to assign the owner of a bucket during its creation
-    user_id = token.user;
   }
 
   user = store->get_user(token.user);
@@ -6119,7 +6092,13 @@ rgw::auth::s3::STSEngine::authenticate(
                                             get_creds_info(token));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else if (token.acct_type == TYPE_ROLE) {
-    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session, token.token_claims, token.issued_at);
+    t_attrs.user_id = std::move(token.user); // This is mostly needed to assign the owner of a bucket during its creation
+    t_attrs.token_policy = std::move(token.policy);
+    t_attrs.role_session_name = std::move(token.role_session);
+    t_attrs.token_claims = std::move(token.token_claims);
+    t_attrs.token_issued_at = std::move(token.issued_at);
+    t_attrs.principal_tags = std::move(token.principal_tags);
+    auto apl = role_apl_factory->create_apl_role(cct, s, r, t_attrs);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;

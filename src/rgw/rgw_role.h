@@ -37,6 +37,7 @@ protected:
   std::map<std::string, std::string> perm_policy_map;
   std::string tenant;
   uint64_t max_session_duration;
+  std::multimap<std::string,std::string> tags;
 
 public:
   virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
@@ -52,11 +53,13 @@ public:
           std::string tenant,
           std::string path="",
           std::string trust_policy="",
-          std::string max_session_duration_str="")
+          std::string max_session_duration_str="",
+          std::multimap<std::string,std::string> tags={})
   : name(std::move(name)),
     path(std::move(path)),
     trust_policy(std::move(trust_policy)),
-    tenant(std::move(tenant)) {
+    tenant(std::move(tenant)),
+    tags(std::move(tags)) {
     if (this->path.empty())
       this->path = "/";
     extract_name_tenant(this->name);
@@ -86,7 +89,7 @@ public:
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(id, bl);
     decode(name, bl);
     decode(path, bl);
@@ -123,6 +126,9 @@ public:
   std::vector<std::string> get_role_policy_names();
   int get_role_policy(const DoutPrefixProvider* dpp, const std::string& policy_name, std::string& perm_policy);
   int delete_policy(const DoutPrefixProvider* dpp, const std::string& policy_name);
+  int set_tags(const DoutPrefixProvider* dpp, const std::multimap<std::string,std::string>& tags_map);
+  boost::optional<std::multimap<std::string,std::string>> get_tags();
+  void erase_tags(const std::vector<std::string>& tagKeys);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 

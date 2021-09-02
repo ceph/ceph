@@ -424,7 +424,8 @@ namespace rgw::sal {
       std::string tenant,
       std::string path,
       std::string trust_policy,
-      std::string max_session_duration_str)
+      std::string max_session_duration_str,
+      std::multimap<std::string,std::string> tags)
   {
     RGWRole* p = nullptr;
     return std::unique_ptr<RGWRole>(p);
