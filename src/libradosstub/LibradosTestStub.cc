@@ -11,6 +11,7 @@
 #include "common/debug.h"
 #include "common/snap_types.h"
 #include "librados/AioCompletionImpl.h"
+#include "librados/PoolAsyncCompletionImpl.h"
 #include "log/Log.h"
 #include "TestClassHandler.h"
 #include "TestIoCtxImpl.h"
@@ -405,6 +406,42 @@ LIBRADOS_C_API_BASE_DEFAULT(rados_wait_for_latest_osdmap);
 using namespace std::placeholders;
 
 namespace librados {
+
+librados::PoolAsyncCompletion::PoolAsyncCompletion::~PoolAsyncCompletion()
+{
+  auto c = reinterpret_cast<PoolAsyncCompletionImpl *>(pc);
+  c->release();
+}
+
+int librados::PoolAsyncCompletion::PoolAsyncCompletion::set_callback(void *cb_arg,
+                                                                     rados_callback_t cb)
+{
+  PoolAsyncCompletionImpl *c = (PoolAsyncCompletionImpl *)pc;
+  return c->set_callback(cb_arg, cb);
+}
+
+int librados::PoolAsyncCompletion::PoolAsyncCompletion::wait()
+{
+  PoolAsyncCompletionImpl *c = (PoolAsyncCompletionImpl *)pc;
+  return c->wait();
+}
+
+bool librados::PoolAsyncCompletion::PoolAsyncCompletion::is_complete()
+{
+  PoolAsyncCompletionImpl *c = (PoolAsyncCompletionImpl *)pc;
+  return c->is_complete();
+}
+
+int librados::PoolAsyncCompletion::PoolAsyncCompletion::get_return_value()
+{
+  PoolAsyncCompletionImpl *c = (PoolAsyncCompletionImpl *)pc;
+  return c->get_return_value();
+}
+
+void librados::PoolAsyncCompletion::PoolAsyncCompletion::release()
+{
+  delete this;
+}
 
 AioCompletion::~AioCompletion()
 {
@@ -1350,6 +1387,12 @@ void Rados::from_rados_t(rados_t p, Rados &rados) {
   }
 }
 
+PoolAsyncCompletion *Rados::pool_async_create_completion()
+{
+  PoolAsyncCompletionImpl *c = new PoolAsyncCompletionImpl;
+  return new PoolAsyncCompletion(c);
+}
+
 AioCompletion *Rados::aio_create_completion(void *cb_arg,
                                             callback_t cb_complete) {
   AioCompletionImpl *c;
@@ -1487,6 +1530,12 @@ int Rados::pool_create(const char *name) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return impl->pool_create(name);
 }
+
+int Rados::pool_create_async(const char *name, PoolAsyncCompletion *c) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->pool_create_async(name, c->pc);
+}
+
 
 int Rados::pool_delete(const char *name) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);

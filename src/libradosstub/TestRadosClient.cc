@@ -4,6 +4,7 @@
 #include "TestRadosClient.h"
 #include "TestIoCtxImpl.h"
 #include "librados/AioCompletionImpl.h"
+#include "librados/PoolAsyncCompletionImpl.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_json.h"
 #include "common/Finisher.h"
@@ -97,6 +98,50 @@ private:
   AioCompletionImpl *m_comp;
 };
 
+static void finish_pool_aio_completion(PoolAsyncCompletionImpl *c, int r) {
+  std::unique_lock l(c->lock);
+  c->rval = r;
+  c->done = true;
+  c->cond.notify_all();
+
+  if (c->callback) {
+    rados_callback_t cb = c->callback;
+    c->callback = nullptr;
+    void *cb_arg = c->callback_arg;
+    l.unlock();
+    cb(c, cb_arg);
+    l.lock();
+  }
+}
+
+class PoolAioFunctionContext : public Context {
+public:
+  PoolAioFunctionContext(const TestRadosClient::AioFunction &callback,
+                     Finisher *finisher, PoolAsyncCompletionImpl *c)
+    : m_callback(callback), m_finisher(finisher), m_comp(c)
+  {
+    if (m_comp != NULL) {
+      m_comp->get();
+    }
+  }
+
+  void finish(int r) override {
+    int ret = m_callback();
+    if (m_comp != NULL) {
+      if (m_finisher != NULL) {
+        m_finisher->queue(new LambdaContext(std::bind(
+          &finish_pool_aio_completion, m_comp, ret)));
+      } else {
+        finish_pool_aio_completion(m_comp, ret);
+      }
+    }
+  }
+private:
+  TestRadosClient::AioFunction m_callback;
+  Finisher *m_finisher;
+  PoolAsyncCompletionImpl *m_comp;
+};
+
 TestRadosClient::TestRadosClient(CephContext *cct,
                                  TestWatchNotify *watch_notify)
   : m_cct(cct->get()), m_watch_notify(watch_notify),
@@ -112,8 +157,12 @@ TestRadosClient::TestRadosClient(CephContext *cct,
     m_finishers.back()->start();
   }
 
-  // replicate AIO callback processing
+  // replicate AIO callback processingyy
   m_aio_finisher->start();
+
+  // finisher for pool aio ops
+  m_pool_finisher = new Finisher(cct);
+  m_pool_finisher->start();
 
   // replicate neorados callback processing
   m_cct->_conf.add_observer(this);
@@ -123,11 +172,16 @@ TestRadosClient::TestRadosClient(CephContext *cct,
 
 TestRadosClient::~TestRadosClient() {
   flush_aio_operations();
+  flush_pool_aio_operations();
 
   for (size_t i = 0; i < m_finishers.size(); ++i) {
     m_finishers[i]->stop();
     delete m_finishers[i];
   }
+
+  m_pool_finisher->stop();
+  delete m_pool_finisher;
+
   m_aio_finisher->stop();
   delete m_aio_finisher;
 
@@ -244,6 +298,12 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
   return -ENOSYS;
 }
 
+int TestRadosClient::pool_create_async(const char *name, PoolAsyncCompletionImpl *c) {
+  add_pool_aio_operation(true,
+                         std::bind(&TestRadosClient::pool_create, this, name), c);
+  return 0;
+}
+
 void TestRadosClient::add_aio_operation(const std::string& oid,
                                         bool queue_callback,
 				        const AioFunction &aio_function,
@@ -251,6 +311,14 @@ void TestRadosClient::add_aio_operation(const std::string& oid,
   AioFunctionContext *ctx = new AioFunctionContext(
     aio_function, queue_callback ? m_aio_finisher : NULL, c);
   get_finisher(oid)->queue(ctx);
+}
+
+void TestRadosClient::add_pool_aio_operation(bool queue_callback,
+                                             const AioFunction &aio_function,
+                                             PoolAsyncCompletionImpl *c) {
+  PoolAioFunctionContext *ctx = new PoolAioFunctionContext(
+    aio_function, queue_callback ? m_aio_finisher : NULL, c);
+  m_pool_finisher->queue(ctx);
 }
 
 struct WaitForFlush {
@@ -289,6 +357,37 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
       nullptr, nullptr);
     m_finishers[i]->queue(ctx);
   }
+}
+
+struct WaitForPoolFlush {
+  int flushed() {
+    aio_finisher->queue(new LambdaContext(std::bind( &finish_pool_aio_completion, c, 0)));
+    delete this;
+    return 0;
+  }
+
+  Finisher *aio_finisher;
+  PoolAsyncCompletionImpl *c;
+};
+
+void TestRadosClient::flush_pool_aio_operations() {
+  PoolAsyncCompletionImpl *comp = new PoolAsyncCompletionImpl();
+  flush_pool_aio_operations(comp);
+  comp->wait();
+  comp->put();
+}
+
+void TestRadosClient::flush_pool_aio_operations(PoolAsyncCompletionImpl *c) {
+  c->get();
+
+  auto *wait_for_flush = new WaitForPoolFlush();
+  wait_for_flush->aio_finisher = m_aio_finisher;
+  wait_for_flush->c = c;
+
+  PoolAioFunctionContext *ctx = new PoolAioFunctionContext(
+    std::bind(&WaitForPoolFlush::flushed, wait_for_flush),
+    nullptr, nullptr);
+  m_pool_finisher->queue(ctx);
 }
 
 int TestRadosClient::aio_watch_flush(AioCompletionImpl *c) {

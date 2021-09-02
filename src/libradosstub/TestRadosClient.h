@@ -94,6 +94,7 @@ public:
   virtual int service_daemon_update_status(std::map<std::string,std::string>&& status) = 0;
 
   virtual int pool_create(const std::string &pool_name) = 0;
+  virtual int pool_create_async(const char *name, PoolAsyncCompletionImpl *c);
   virtual int pool_delete(const std::string &pool_name) = 0;
   virtual int pool_get_base_tier(int64_t pool_id, int64_t* base_tier) = 0;
   virtual int pool_list(std::list<std::pair<int64_t, std::string> >& v) = 0;
@@ -120,10 +121,17 @@ public:
 
   void add_aio_operation(const std::string& oid, bool queue_callback,
 			 const AioFunction &aio_function, AioCompletionImpl *c);
+  void add_pool_aio_operation(bool queue_callback,
+                              const AioFunction &aio_function,
+                              PoolAsyncCompletionImpl *c);
+
   void flush_aio_operations();
   void flush_aio_operations(AioCompletionImpl *c);
 
   void finish_aio_completion(AioCompletionImpl *c, int r);
+
+  void flush_pool_aio_operations();
+  void flush_pool_aio_operations(PoolAsyncCompletionImpl *c);
 
   boost::asio::io_context& get_io_context();
 
@@ -152,6 +160,8 @@ private:
   Finisher *m_aio_finisher;
   std::vector<Finisher *> m_finishers;
   boost::hash<std::string> m_hash;
+
+  Finisher *m_pool_finisher;
 
   std::unique_ptr<ceph::async::io_context_pool> m_io_context_pool;
 };
