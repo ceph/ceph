@@ -355,30 +355,6 @@ def rook_cluster(ctx, config):
                 'count': num_hosts,
                 'allowMultiplePerNode': True,
             },
-            'storage': {
-                'storageClassDeviceSets': [
-                    {
-                        'name': 'scratch',
-                        'count': num_devs,
-                        'portable': False,
-                        'volumeClaimTemplates': [
-                            {
-                                'metadata': {'name': 'data'},
-                                'spec': {
-                                    'resources': {
-                                        'requests': {
-                                            'storage': '10Gi'  # <= (lte) the actual PV size
-                                        }
-                                    },
-                                    'storageClassName': 'scratch',
-                                    'volumeMode': 'Block',
-                                    'accessModes': ['ReadWriteOnce'],
-                                },
-                            },
-                        ],
-                    }
-                ],
-            },
         }
     }
     teuthology.deep_merge(cluster['spec'], config.get('spec', {}))
@@ -465,10 +441,28 @@ def rook_toolbox(ctx, config):
 
 
 @contextlib.contextmanager
+def wait_for_orch(ctx, config):
+    log.info('Waiting for mgr/rook orchestrator to be available')
+    with safe_while(sleep=10, tries=90, action="check orch status") as proceed:
+        while proceed():
+            p = _shell(ctx, config, ['ceph', 'orch', 'status', '-f', 'json'],
+                       stdout=BytesIO(),
+                       check_status=False)
+            if p.exitstatus == 0:
+                r = json.loads(p.stdout.getvalue().decode('utf-8'))
+                if r.get('available') and r.get('backend') == 'rook':
+                    log.info(' mgr/rook orchestrator is active')
+                    break
+
+    yield
+
+
+@contextlib.contextmanager
 def rook_post_config(ctx, config):
     try:
         _shell(ctx, config, ['ceph', 'config', 'set', 'mgr', 'mgr/rook/storage_class',
                              'scratch'])
+        _shell(ctx, config, ['ceph', 'orch', 'apply', 'osd', '--all-available-devices'])
         yield
 
     except Exception as e:
@@ -630,8 +624,9 @@ def task(ctx, config):
             lambda: ceph_log(ctx, config),
             lambda: rook_cluster(ctx, config),
             lambda: rook_toolbox(ctx, config),
-            lambda: wait_for_osds(ctx, config),
+            lambda: wait_for_orch(ctx, config),
             lambda: rook_post_config(ctx, config),
+            lambda: wait_for_osds(ctx, config),
             lambda: ceph_config_keyring(ctx, config),
             lambda: ceph_clients(ctx, config),
     ):
