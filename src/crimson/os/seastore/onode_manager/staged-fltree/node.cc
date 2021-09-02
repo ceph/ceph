@@ -605,7 +605,7 @@ Node::try_merge_adjacent(
         // so use rebuild_extent() as a workaround to rebuild the node from a
         // fresh extent, thus no need to generate delta.
         auto left_addr = left_for_merge->impl->laddr();
-        return left_for_merge->rebuild_extent(c, L_ADDR_MIN
+        return left_for_merge->rebuild_extent(c
         ).si_then([c, update_index_after_merge,
                      left_addr,
                      merge_stage = merge_stage,
@@ -744,7 +744,7 @@ eagain_ifuture<Ref<Node>> Node::load(
   });
 }
 
-eagain_ifuture<NodeExtentMutable> Node::rebuild_extent(context_t c, laddr_t hint)
+eagain_ifuture<NodeExtentMutable> Node::rebuild_extent(context_t c)
 {
   LOG_PREFIX(OTree::Node::rebuild_extent);
   DEBUGT("{} ...", c.t, get_name());
@@ -753,7 +753,7 @@ eagain_ifuture<NodeExtentMutable> Node::rebuild_extent(context_t c, laddr_t hint
 
   // note: laddr can be changed after rebuild, but we don't fix the parent
   // mapping as it is part of the merge process.
-  return impl->rebuild_extent(c, hint);
+  return impl->rebuild_extent(c);
 }
 
 eagain_ifuture<> Node::retire(context_t c, Ref<Node>&& this_ref)

@@ -306,7 +306,12 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   eagain_ifuture<NodeExtentMutable>
-  rebuild_extent(context_t c, laddr_t hint) override {
+  rebuild_extent(context_t c) override {
+    assert(!is_keys_empty());
+    full_key_t<KeyT::VIEW> first_index;
+    STAGE_T::template get_slot<true, false>(
+        extent.read(), position_t::begin(), &first_index, nullptr);
+    auto hint = first_index.get_hint();
     return extent.rebuild(c, hint).si_then([this] (auto mut) {
       // addr may change
       build_name();
