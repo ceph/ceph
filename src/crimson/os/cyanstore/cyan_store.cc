@@ -377,8 +377,17 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         ceph::bufferlist bl;
         i.decode_bl(bl);
         std::map<std::string, bufferlist> to_set;
-	to_set.emplace(name, std::move(bl));
-        r = _setattrs(cid, oid, to_set);
+        to_set.emplace(name, std::move(bl));
+        r = _setattrs(cid, oid, std::move(to_set));
+      }
+      break;
+      case Transaction::OP_SETATTRS:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        std::map<std::string, bufferlist> aset;
+        i.decode_attrset(aset);
+        r = _setattrs(cid, oid, std::move(aset));
       }
       break;
       case Transaction::OP_RMATTR:
@@ -389,10 +398,22 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         r = _rm_attr(cid, oid, name);	
       }
       break;
+      case Transaction::OP_RMATTRS:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        r = _rm_attrs(cid, oid);
+      }
+      break;
       case Transaction::OP_MKCOLL:
       {
         coll_t cid = i.get_cid(op->cid);
         r = _create_collection(cid, op->split_bits);
+      }
+      break;
+      case Transaction::OP_SETALLOCHINT:
+      {
+        r = 0;
       }
       break;
       case Transaction::OP_OMAP_CLEAR:
@@ -660,7 +681,7 @@ int CyanStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size
 }
 
 int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
-                         std::map<std::string,bufferlist>& aset)
+                         std::map<std::string,bufferlist>&& aset)
 {
   logger().debug("{} cid={} oid={}",
                 __func__, cid, oid);
@@ -671,8 +692,7 @@ int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  for (std::map<std::string, bufferlist>::const_iterator p = aset.begin();
-       p != aset.end(); ++p)
+  for (auto p = aset.begin(); p != aset.end(); ++p)
     o->xattr[p->first] = p->second;
   return 0;
 }
@@ -694,6 +714,21 @@ int CyanStore::_rm_attr(const coll_t& cid, const ghobject_t& oid,
     return -ENODATA;
   }
   o->xattr.erase(i);
+  return 0;
+}
+
+int CyanStore::_rm_attrs(const coll_t& cid, const ghobject_t& oid)
+{
+  logger().debug("{} cid={} oid={}", __func__, cid, oid);
+  auto c = _get_collection(cid);
+  if (!c) {
+    return -ENOENT;
+  }
+  ObjectRef o = c->get_object(oid);
+  if (!o) {
+    return -ENOENT;
+  }
+  o->xattr.clear();
   return 0;
 }
 
