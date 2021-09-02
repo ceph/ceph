@@ -682,10 +682,11 @@ class RGWRemoteBucketManager {
 
 public:
   RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
-                     RGWDataSyncEnv *_sync_env,
-                     const rgw_zone_id& _source_zone, RGWRESTConn *_conn,
-                     const RGWBucketInfo& source_bucket_info,
-                     const rgw_bucket& dest_bucket);
+			 RGWDataSyncEnv *_sync_env,
+			 const rgw_zone_id& _source_zone, RGWRESTConn *_conn,
+			 const RGWBucketInfo& source_bucket_info,
+			 const int num_shards,
+			 const rgw_bucket& dest_bucket);
 
   RGWCoroutine *read_sync_status_cr(int num, rgw_bucket_shard_sync_info *sync_status);
   RGWCoroutine *init_sync_status_cr(RGWObjVersionTracker& objv_tracker, rgw_bucket_index_marker_info& info);
