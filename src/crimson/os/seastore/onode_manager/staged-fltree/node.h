@@ -681,7 +681,7 @@ class LeafNode final : public Node {
       context_t, const key_hobj_t&, value_config_t,
       const search_position_t&, const MatchHistory&,
       match_stat_t mstat);
-  static eagain_ifuture<Ref<LeafNode>> allocate_root(context_t, laddr_t, RootNodeTracker&);
+  static eagain_ifuture<Ref<LeafNode>> allocate_root(context_t, RootNodeTracker&);
   friend class Node;
 
  private:
