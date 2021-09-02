@@ -336,11 +336,12 @@ namespace rgw { namespace sal {
       virtual std::string get_host_id() { return ""; }
 
       virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
-      virtual std::unique_ptr<RGWRole> get_role(string name,
-          string tenant,
-          string path="",
-          string trust_policy="",
-          string max_session_duration_str="") override;
+      virtual std::unique_ptr<RGWRole> get_role(std::string name,
+          std::string tenant,
+          std::string path="",
+          std::string trust_policy="",
+          std::string max_session_duration_str="",
+          std::multimap<std::string,std::string> tags={}) override;
       virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
       virtual int get_roles(const DoutPrefixProvider *dpp,
           optional_yield y,

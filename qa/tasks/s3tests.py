@@ -251,6 +251,9 @@ def create_users(ctx, config):
         s3tests_conf.setdefault('webidentity', {})
         s3tests_conf['webidentity'].setdefault('token',os.environ['TOKEN'])
         s3tests_conf['webidentity'].setdefault('aud',os.environ['AUD'])
+        s3tests_conf['webidentity'].setdefault('sub',os.environ['SUB'])
+        s3tests_conf['webidentity'].setdefault('azp',os.environ['AZP'])
+        s3tests_conf['webidentity'].setdefault('user_token',os.environ['USER_TOKEN'])
         s3tests_conf['webidentity'].setdefault('thumbprint',os.environ['THUMBPRINT'])
         s3tests_conf['webidentity'].setdefault('KC_REALM',os.environ['KC_REALM'])
 

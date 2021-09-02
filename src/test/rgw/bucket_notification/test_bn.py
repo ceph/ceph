@@ -1816,7 +1816,7 @@ def test_ps_s3_tags_on_master():
         'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
         'Filter': {
             'Tags': {
-                'FilterRules': [{'Name': 'hello', 'Value': 'world'}]
+                'FilterRules': [{'Name': 'hello', 'Value': 'world'}, {'Name': 'ka', 'Value': 'boom'}]
             }
         }
     }]
@@ -1825,35 +1825,71 @@ def test_ps_s3_tags_on_master():
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
+    expected_keys = []
     # create objects in the bucket with tags
-    tags = 'hello=world&ka=boom'
+    # key 1 has all the tags in the filter
+    tags = 'hello=world&ka=boom&hello=helloworld'
     key_name1 = 'key1'
     put_object_tagging(conn, bucket_name, key_name1, tags)
-    tags = 'foo=bar&ka=boom'
-    key_name2 = 'key2'
-    put_object_tagging(conn, bucket_name, key_name2, tags)
+    expected_keys.append(key_name1)
+    # key 2 has an additional tag not in the filter
+    tags = 'hello=world&foo=bar&ka=boom&hello=helloworld'
+    key_name = 'key2'
+    put_object_tagging(conn, bucket_name, key_name, tags)
+    expected_keys.append(key_name)
+    # key 3 has no tags
     key_name3 = 'key3'
     key = bucket.new_key(key_name3)
     key.set_contents_from_string('bar')
+    # key 4 has the wrong of the multi value tags
+    tags = 'hello=helloworld&ka=boom'
+    key_name = 'key4'
+    put_object_tagging(conn, bucket_name, key_name, tags)
+    # key 5 has the right of the multi value tags
+    tags = 'hello=world&ka=boom'
+    key_name = 'key5'
+    put_object_tagging(conn, bucket_name, key_name, tags)
+    expected_keys.append(key_name)
+    # key 6 is missing a tag
+    tags = 'hello=world'
+    key_name = 'key6'
+    put_object_tagging(conn, bucket_name, key_name, tags)
     # create objects in the bucket using COPY
-    bucket.copy_key('copy_of_'+key_name1, bucket.name, key_name1)
+    key_name = 'copy_of_'+key_name1
+    bucket.copy_key(key_name, bucket.name, key_name1)
+    expected_keys.append(key_name)
+
     print('wait for 5sec for the messages...')
     time.sleep(5)
-    expected_tags = [{'val': 'world', 'key': 'hello'}, {'val': 'boom', 'key': 'ka'}]
-    # check amqp receiver
+    event_count = 0
+    expected_tags1 = [{'key': 'hello', 'val': 'world'}, {'key': 'hello', 'val': 'helloworld'}, {'key': 'ka', 'val': 'boom'}]
+    expected_tags1 = sorted(expected_tags1, key=lambda k: k['key']+k['val'])
     for event in receiver.get_and_reset_events():
-        obj_tags =  event['Records'][0]['s3']['object']['tags']
-        assert_equal(obj_tags[0], expected_tags[0])
+        key = event['Records'][0]['s3']['object']['key']
+        if (key == key_name1):
+            obj_tags =  sorted(event['Records'][0]['s3']['object']['tags'], key=lambda k: k['key']+k['val'])
+            assert_equal(obj_tags, expected_tags1)
+        event_count += 1
+        assert(key in expected_keys)
+
+    assert_equal(event_count, len(expected_keys))
 
     # delete the objects
     for key in bucket.list():
         key.delete()
     print('wait for 5sec for the messages...')
     time.sleep(5)
+    event_count = 0
     # check amqp receiver
     for event in receiver.get_and_reset_events():
-        obj_tags =  event['Records'][0]['s3']['object']['tags']
-        assert_equal(obj_tags[0], expected_tags[0])
+        key = event['Records'][0]['s3']['object']['key']
+        if (key == key_name1):
+            obj_tags =  sorted(event['Records'][0]['s3']['object']['tags'], key=lambda k: k['key']+k['val'])
+            assert_equal(obj_tags, expected_tags1)
+        event_count += 1
+        assert(key in expected_keys)
+
+    assert(event_count == len(expected_keys))
 
     # cleanup
     stop_amqp_receiver(receiver, task)
@@ -1861,7 +1897,6 @@ def test_ps_s3_tags_on_master():
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
-
 
 @attr('amqp_test')
 def test_ps_s3_versioning_on_master():

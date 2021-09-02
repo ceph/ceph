@@ -1650,6 +1650,9 @@ struct req_state : DoutPrefixProvider {
 
   jspan trace;
 
+  //Principal tags that come in as part of AssumeRoleWithWebIdentity
+  std::vector<std::pair<std::string, std::string>> principal_tags;
+
   req_state(CephContext* _cct, RGWEnv* e, uint64_t id);
   ~req_state();
 

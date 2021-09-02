@@ -119,6 +119,18 @@ void RGWRole::dump(Formatter *f) const
   encode_json("CreateDate", creation_date, f);
   encode_json("MaxSessionDuration", max_session_duration, f);
   encode_json("AssumeRolePolicyDocument", trust_policy, f);
+  if (!tags.empty()) {
+    f->open_array_section("Tags");
+    for (const auto& it : tags) {
+      f->open_object_section("Key");
+      encode_json("Key", it.first, f);
+      f->close_section();
+      f->open_object_section("Value");
+      encode_json("Value", it.second, f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 void RGWRole::decode_json(JSONObj *obj)
@@ -176,6 +188,33 @@ void RGWRole::extract_name_tenant(const std::string& str)
 void RGWRole::update_trust_policy(string& trust_policy)
 {
   this->trust_policy = trust_policy;
+}
+
+int RGWRole::set_tags(const DoutPrefixProvider* dpp, const multimap<string,string>& tags_map)
+{
+  for (auto& it : tags_map) {
+    this->tags.emplace(it.first, it.second);
+  }
+  if (this->tags.size() > 50) {
+    ldpp_dout(dpp, 0) << "No. of tags is greater than 50" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+boost::optional<multimap<string,string>> RGWRole::get_tags()
+{
+  if(this->tags.empty()) {
+    return boost::none;
+  }
+  return this->tags;
+}
+
+void RGWRole::erase_tags(const vector<string>& tagKeys)
+{
+  for (auto& it : tagKeys) {
+    this->tags.erase(it);
+  }
 }
 
 const string& RGWRole::get_names_oid_prefix()
