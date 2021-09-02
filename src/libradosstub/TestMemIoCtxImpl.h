@@ -81,6 +81,10 @@ public:
                 uint64_t off, const SnapContext &snapc) override;
   int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl,
              uint64_t snap_id) override;
+  int cmpxattr_str(const std::string& oid, const char *name,
+                   uint8_t op, const bufferlist& bl) override;
+  int cmpxattr(const std::string& oid, const char *name,
+               uint8_t op, uint64_t v) override;
   int xattr_get(const std::string& oid,
                 std::map<std::string, bufferlist>* attrset) override;
   int setxattr(const std::string& oid, const char *name,

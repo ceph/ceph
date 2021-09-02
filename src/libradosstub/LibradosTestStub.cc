@@ -1165,6 +1165,18 @@ void ObjectOperation::cmpext(uint64_t off, const bufferlist& cmp_bl,
   o->ops.push_back(op);
 }
 
+void ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
+{
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::cmpxattr_str, _1, _2, name, op, v));
+}
+
+void ObjectOperation::cmpxattr(const char *name, uint8_t op, uint64_t v)
+{
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(std::bind(&TestIoCtxImpl::cmpxattr, _1, _2, name, op, v));
+}
+
 void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
 

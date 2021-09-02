@@ -195,6 +195,10 @@ public:
                         uint64_t off, const SnapContext &snapc) = 0;
   virtual int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl,
                      uint64_t snap_id) = 0;
+  virtual int cmpxattr_str(const std::string& oid, const char *name,
+                           uint8_t op, const bufferlist& bl) = 0;
+  virtual int cmpxattr(const std::string& oid, const char *name,
+                       uint8_t op, uint64_t v) = 0;
   virtual int getxattr(const string& oid, const char *name, bufferlist *pbl);
   virtual int xattr_get(const std::string& oid,
                         std::map<std::string, bufferlist>* attrset) = 0;

@@ -869,6 +869,106 @@ int TestMemIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
   return cmpext_compare(cmp_bl, read_bl);
 }
 
+int TestMemIoCtxImpl::cmpxattr_str(const string& oid,
+                                   const char *name, uint8_t op, const bufferlist& bl)
+{
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  TestMemCluster::SharedFile file;
+  std::shared_lock l{m_pool->file_lock};
+  TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
+    {get_namespace(), oid});
+  if (it == m_pool->file_xattrs.end()) {
+    return -ENODATA;
+  }
+  auto& attrset = it->second;
+
+  auto iter = attrset.find(name);
+  if (iter == attrset.end()) {
+    return -ENODATA;
+  }
+
+  auto& attr_bl = iter->second;
+
+  bool cmp;
+
+  switch (op) {
+    case CEPH_OSD_CMPXATTR_OP_EQ:
+      cmp = (attr_bl == bl);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_LT:
+      cmp = (attr_bl < bl);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_GT:
+      cmp = (attr_bl > bl);
+      break;
+    default:
+      return -EINVAL;
+  }
+
+  if (!cmp) {
+    return -ECANCELED;
+  }
+
+  return 0;
+}
+
+int TestMemIoCtxImpl::cmpxattr(const string& oid,
+                               const char *name, uint8_t op, uint64_t v)
+{
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  TestMemCluster::SharedFile file;
+  std::shared_lock l{m_pool->file_lock};
+  TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
+    {get_namespace(), oid});
+  if (it == m_pool->file_xattrs.end()) {
+    return -ENODATA;
+  }
+  auto& attrset = it->second;
+
+  auto iter = attrset.find(name);
+  if (iter == attrset.end()) {
+    return -ENODATA;
+  }
+
+  auto& bl = iter->second;
+  string s = bl.to_str();
+  string err;
+
+  uint64_t attr_val = static_cast<int64_t>(strict_strtoll(s, 10, &err));
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+
+  bool cmp;
+
+  switch (op) {
+    case CEPH_OSD_CMPXATTR_OP_EQ:
+      cmp = (attr_val == v);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_LT:
+      cmp = (attr_val < v);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_GT:
+      cmp = (attr_val > v);
+      break;
+    default:
+      return -EINVAL;
+  }
+
+  if (!cmp) {
+    return -ECANCELED;
+  }
+
+  return 0;
+}
+
+
 int TestMemIoCtxImpl::xattr_get(const std::string& oid,
                                 std::map<std::string, bufferlist>* attrset) {
   if (m_client->is_blocklisted()) {
