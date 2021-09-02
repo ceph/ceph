@@ -2798,6 +2798,7 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
                                                const rgw_zone_id& _source_zone,
                                                RGWRESTConn *_conn,
                                                const RGWBucketInfo& source_bucket_info,
+					       const int num_shards,
                                                const rgw_bucket& dest_bucket)
   : dpp(_dpp), sync_env(_sync_env), conn(_conn), source_zone(_source_zone),
     full_status_obj(sync_env->svc->zone->get_zone_params().log_pool,
@@ -2806,23 +2807,15 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
                                                                     dest_bucket)),
     source_bucket_info(source_bucket_info)
 {
-  rgw_bucket_index_marker_info remote_info;
-  BucketIndexShardsManager remote_markers;
-  rgw_read_remote_bilog_info(dpp, conn, source_bucket_info.bucket,
-                             remote_info, remote_markers, null_yield);
-  int num_shards = remote_markers.get().size();
-
   sync_pairs.resize(num_shards);
 
-  int cur_shard = std::min<int>(source_bucket_info.layout.current_index.layout.normal.num_shards, 0);
-
-  for (int i = 0; i < num_shards; ++i, ++cur_shard) {
-    auto& sync_pair = sync_pairs[i];
+  for (int cur_shard = 0; cur_shard < num_shards; ++cur_shard) {
+    auto& sync_pair = sync_pairs[cur_shard];
 
     sync_pair.source_bs.bucket = source_bucket_info.bucket;
     sync_pair.dest_bucket = dest_bucket;
 
-    sync_pair.source_bs.shard_id = (source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? cur_shard : -1);
+    sync_pair.source_bs.shard_id = cur_shard;
   }
 
   sc.init(sync_env, conn, source_zone);
@@ -5500,10 +5493,24 @@ int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
       last_zone = szone;
     }
 
+    rgw_bucket_index_marker_info remote_info;
+    BucketIndexShardsManager remote_markers;
+    auto r = rgw_read_remote_bilog_info(dpp, conn, pipe.source.get_bucket_info().bucket,
+					remote_info, remote_markers,
+					null_yield);
+
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			<< " rgw_read_remote_bilog_info: r="
+			<< r << dendl;
+      return r;
+    }
+    const int num_shards = remote_markers.get().size();
     source_mgrs.push_back(new RGWRemoteBucketManager(this, &sync_env,
-                                                     szone, conn,
-                                                     pipe.source.get_bucket_info(),
-                                                     pipe.target.get_bucket()));
+						     szone, conn,
+						     pipe.source.get_bucket_info(),
+						     num_shards,
+						     pipe.target.get_bucket()));
   }
 
   return 0;
