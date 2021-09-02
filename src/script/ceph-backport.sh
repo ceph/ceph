@@ -184,6 +184,18 @@ function check_tracker_status {
     echo "$tslc_is_ok"
 }
 
+function pr_commits_count {
+    local remote_api_output="$1"
+    local number_of_commits=$(echo "${remote_api_output}" | jq '.commits')
+    if [ "$number_of_commits" != "null" ] ; then
+	echo -n "$number_of_commits"
+    else
+	local merge_base=$(echo "${remote_api_output}" | jq --raw-output '.merge_base')
+	local original_pr=$(echo "${remote_api_output}" | jq '.number')
+	git log --oneline "${merge_base}..pr-${original_pr}" | wc -l
+    fi
+}
+
 function cherry_pick_phase {
     local base_branch
     local default_val
@@ -273,7 +285,7 @@ function cherry_pick_phase {
 
     git fetch "$upstream_remote" "pull/$original_pr/head:pr-$original_pr"
 
-    number_of_commits=$(echo "${remote_api_output}" | jq '.commits')
+    number_of_commits=$(pr_commits_count ${remote_api_output})
     if [ "$number_of_commits" -eq "$number_of_commits" ] 2>/dev/null ; then
         # \$number_of_commits is set, and is an integer
         if [ "$number_of_commits" -eq "1" ] ; then
