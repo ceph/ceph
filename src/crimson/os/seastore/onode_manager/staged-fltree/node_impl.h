@@ -90,7 +90,7 @@ class NodeImpl {
   virtual std::tuple<match_stage_t, search_position_t> erase(const search_position_t&) = 0;
   virtual std::tuple<match_stage_t, std::size_t> evaluate_merge(NodeImpl&) = 0;
   virtual search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, extent_len_t) = 0;
-  virtual eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t, laddr_t) = 0;
+  virtual eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t) = 0;
   virtual eagain_ifuture<> retire_extent(context_t) = 0;
   virtual search_position_t make_tail() = 0;
 
