@@ -939,10 +939,11 @@ function populate_original_issue {
 }
 
 function populate_original_pr {
+    local redmine_pull_request_id_custom_field="${redmine_pull_request_id_custom_field:-21}"
     if [ "$original_issue" ] ; then
         if [ -z "$original_pr" ] ; then
             original_pr=$(curl --silent "${original_issue_url}.json" |
-                          jq -r '.issue.custom_fields[] | select(.id | contains(21)) | .value')
+                          jq -r '.issue.custom_fields[] | select(.id == '$redmine_pull_request_id_custom_field') | .value')
             original_pr_url="$(number_to_url "github" "${original_pr}")"
         fi
     fi
