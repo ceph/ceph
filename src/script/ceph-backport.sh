@@ -235,19 +235,6 @@ function cherry_pick_phase {
         info "Cowardly refusing to perform automated cherry-pick"
         false
     fi
-    number_of_commits=$(echo "${remote_api_output}" | jq '.commits')
-    if [ "$number_of_commits" -eq "$number_of_commits" ] 2>/dev/null ; then
-        # \$number_of_commits is set, and is an integer
-        if [ "$number_of_commits" -eq "1" ] ; then
-            singular_or_plural_commit="commit"
-        else
-            singular_or_plural_commit="commits"
-        fi
-    else
-        error "Could not determine the number of commits in ${original_pr_url}"
-        bail_out_github_api "$remote_api_output"
-    fi
-    info "Found $number_of_commits $singular_or_plural_commit in $original_pr_url"
 
     set -x
     git fetch "$upstream_remote"
@@ -285,6 +272,20 @@ function cherry_pick_phase {
     fi
 
     git fetch "$upstream_remote" "pull/$original_pr/head:pr-$original_pr"
+
+    number_of_commits=$(echo "${remote_api_output}" | jq '.commits')
+    if [ "$number_of_commits" -eq "$number_of_commits" ] 2>/dev/null ; then
+        # \$number_of_commits is set, and is an integer
+        if [ "$number_of_commits" -eq "1" ] ; then
+            singular_or_plural_commit="commit"
+        else
+            singular_or_plural_commit="commits"
+        fi
+    else
+        error "Could not determine the number of commits in ${original_pr_url}"
+        bail_out_github_api "$remote_api_output"
+    fi
+    info "Found $number_of_commits $singular_or_plural_commit in $original_pr_url"
 
     set +x
     maybe_restore_set_x
