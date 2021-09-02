@@ -84,7 +84,7 @@ namespace PriorityCache
               PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
 
     b.add_u64(MallocStats::M_UNMAPPED_BYTES, "unmapped_bytes",
-              "unmapped bytes that the kernel has yet to reclaimed", "u",
+              "unmapped bytes that the kernel has yet to reclaim", "u",
               PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
 
     b.add_u64(MallocStats::M_HEAP_BYTES, "heap_bytes",
