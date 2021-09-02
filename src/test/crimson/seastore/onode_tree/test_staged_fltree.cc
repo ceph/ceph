@@ -908,7 +908,7 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     search_position_t merge(NodeExtentMutable&, NodeImpl&, match_stage_t, extent_len_t) override {
       ceph_abort("impossible path"); }
-    eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t, laddr_t) override {
+    eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t) override {
       ceph_abort("impossible path"); }
     node_stats_t get_stats() const override {
       ceph_abort("impossible path"); }
