@@ -213,15 +213,16 @@ function cherry_pick_phase {
     verbose "Examining ${original_pr_url}"
     remote_api_output=$(curl -u ${github_user}:${github_token} --silent "${github_api_endpoint}/repos/ceph/ceph/pulls/${original_pr}")
     base_branch=$(echo "${remote_api_output}" | jq -r '.base.label')
-    if [ "$base_branch" = "ceph:master" ] ; then
+    local expected_base_branch="${expected_base_branch:-ceph:master}"
+    if [ "$base_branch" = "${expected_base_branch}" ] ; then
         true
     else
         if [ "$FORCE" ] ; then
-            warning "base_branch ->$base_branch<- is something other than \"ceph:master\""
+            warning "base_branch ->$base_branch<- is something other than \"${expected_base_branch}\""
             info "--force was given, so continuing anyway"
         else
             error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
-            info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
+            info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"${expected_base_branch}\"."
             info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
             false
         fi
