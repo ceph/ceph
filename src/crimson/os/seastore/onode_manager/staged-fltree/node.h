@@ -428,7 +428,7 @@ class Node
   eagain_ifuture<> erase_node(context_t, Ref<Node>&&);
   template <bool FORCE_MERGE = false>
   eagain_ifuture<> fix_parent_index(context_t, Ref<Node>&&, bool);
-  eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t, laddr_t);
+  eagain_ifuture<NodeExtentMutable> rebuild_extent(context_t);
   eagain_ifuture<> retire(context_t, Ref<Node>&&);
   void make_tail(context_t);
 
@@ -681,7 +681,7 @@ class LeafNode final : public Node {
       context_t, const key_hobj_t&, value_config_t,
       const search_position_t&, const MatchHistory&,
       match_stat_t mstat);
-  static eagain_ifuture<Ref<LeafNode>> allocate_root(context_t, laddr_t, RootNodeTracker&);
+  static eagain_ifuture<Ref<LeafNode>> allocate_root(context_t, RootNodeTracker&);
   friend class Node;
 
  private:
