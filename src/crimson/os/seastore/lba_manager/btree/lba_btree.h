@@ -29,8 +29,11 @@ public:
 
   class iterator {
   public:
-    iterator(const iterator &) noexcept = default;
-    iterator(iterator &&) noexcept = default;
+    iterator(const iterator &rhs) noexcept :
+      internal(rhs.internal), leaf(rhs.leaf) {}
+    iterator(iterator &&rhs) noexcept :
+      internal(std::move(rhs.internal)), leaf(std::move(rhs.leaf)) {}
+
     iterator &operator=(const iterator &) = default;
     iterator &operator=(iterator &&) = default;
 
@@ -102,8 +105,8 @@ public:
     }
 
   private:
-    iterator() = default;
-    iterator(depth_t depth) : internal(depth - 1) {}
+    iterator() noexcept {}
+    iterator(depth_t depth) noexcept : internal(depth - 1) {}
 
     friend class LBABtree;
     static constexpr uint16_t INVALID = std::numeric_limits<uint16_t>::max();
