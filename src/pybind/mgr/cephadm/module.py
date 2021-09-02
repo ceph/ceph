@@ -508,26 +508,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.config_checker = CephadmConfigChecks(self)
 
-        self.cherrypy_thread = None
+        self.cherrypy_thread = CherryPyThread(self)
+        self.cherrypy_thread.start()
         self.agent_helpers = CephadmAgentHelpers(self)
-
         if self.use_agent:
-            try:
-                if not self.cherrypy_thread:
-                    self.cherrypy_thread = CherryPyThread(self)
-                    self.cherrypy_thread.start()
-                if 'agent' not in self.spec_store:
-                    self.agent_helpers._apply_agent()
-            except Exception as e:
-                self.log.error(f'Failed to initialize agent spec and cherrypy server: {e}')
+            self.agent_helpers._apply_agent()
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
         self._worker_pool.close()
         self._worker_pool.join()
-        if self.cherrypy_thread:
-            self.cherrypy_thread.shutdown()
-            self.cherrypy_thread = None
+        self.cherrypy_thread.shutdown()
         self.run = False
         self.event.set()
 

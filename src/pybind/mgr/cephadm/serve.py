@@ -15,7 +15,6 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
     DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
-from cephadm.agent import CherryPyThread
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
@@ -93,17 +92,24 @@ class CephadmServe:
                     self._purge_deleted_services()
 
                     if self.mgr.use_agent:
-                        if not self.mgr.cherrypy_thread:
-                            self.mgr.cherrypy_thread = CherryPyThread(self.mgr)
-                            self.mgr.cherrypy_thread.start()
+                        # on the off chance there are still agents hanging around from
+                        # when we turned the config option off, we need to redeploy them
+                        # we can tell they're in that state if we don't have a keyring for
+                        # them in the host cache
+                        for agent in self.mgr.cache.get_daemons_by_service('agent'):
+                            if agent.hostname not in self.mgr.cache.agent_keys:
+                                self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
                         if 'agent' not in self.mgr.spec_store:
                             self.mgr.agent_helpers._apply_agent()
+                        for host in self.mgr.cache.get_hosts():
+                            self.mgr.cache.metadata_up_to_date[host] = False
                     else:
-                        if self.mgr.cherrypy_thread:
-                            self.mgr.cherrypy_thread.shutdown()
-                            self.mgr.cherrypy_thread = None
                         if 'agent' in self.mgr.spec_store:
                             self.mgr.spec_store.rm('agent')
+                        self.mgr.cache.agent_counter = {}
+                        self.mgr.cache.agent_timestamp = {}
+                        self.mgr.cache.agent_keys = {}
+                        self.mgr.cache.agent_ports = {}
 
                     if self.mgr.upgrade.continue_upgrade():
                         continue
@@ -911,7 +917,7 @@ class CephadmServe:
             assert dd.hostname is not None
             assert dd.daemon_type is not None
             assert dd.daemon_id is not None
-            if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd', 'agent']:
+            if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())

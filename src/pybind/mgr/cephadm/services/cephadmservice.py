@@ -1026,8 +1026,12 @@ class CephadmAgent(CephService):
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.get_module_option('device_enhanced_scan'))}
 
-        assert self.mgr.cherrypy_thread
-        assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+        try:
+            assert self.mgr.cherrypy_thread
+            assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+        except Exception:
+            raise OrchestratorError(
+                'Cannot deploy agent daemons until cephadm endpoint has finished generating certs')
         listener_cert, listener_key = self.mgr.cherrypy_thread.ssl_certs.generate_cert(
             daemon_spec.host)
         config = {
