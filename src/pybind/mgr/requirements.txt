@@ -8,3 +8,4 @@ pyOpenSSL
 Jinja2
 pyfakefs
 asyncssh
+asyncmock
