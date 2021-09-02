@@ -1041,12 +1041,28 @@ ObjectOperation::ObjectOperation() {
   impl = reinterpret_cast<ObjectOperationImpl*>(o);
 }
 
+librados::ObjectOperation::ObjectOperation(ObjectOperation&& rhs)
+  : impl(rhs.impl) {
+  rhs.impl = nullptr;
+}
+
 ObjectOperation::~ObjectOperation() {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   if (o) {
     o->put();
     o = NULL;
   }
+}
+
+librados::ObjectOperation&
+librados::ObjectOperation::operator =(ObjectOperation&& rhs) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  if (o) {
+    o->put();
+  }
+  impl = rhs.impl;
+  rhs.impl = nullptr;
+  return *this;
 }
 
 void ObjectOperation::assert_exists() {
@@ -1065,6 +1081,68 @@ void ObjectOperation::exec(const char *cls, const char *method,
   o->ops.push_back(std::bind(&TestIoCtxImpl::exec, _1, _2,
 			       librados_stub::get_class_handler(), cls,
 			       method, inbl, _3, _4, _5));
+}
+
+void ObjectOperation::exec(const char *cls, const char *method,
+                           bufferlist& inbl,
+                           bufferlist *outbl,
+                           int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::exec, _1, _2,
+                                          librados_stub::get_class_handler(), cls,
+                                          method, inbl, outbl, _4, _5);
+  if (prval != NULL) {
+    op = std::bind(save_operation_result,
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+  }
+  o->ops.push_back(op);
+}
+
+class ObjectOpCompletionCtx {
+  librados::ObjectOperationCompletion *completion;
+  bufferlist bl;
+public:
+  ObjectOpCompletionCtx(librados::ObjectOperationCompletion *c) : completion(c) {}
+  ~ObjectOpCompletionCtx() {
+    delete completion;
+  }
+  void finish(int r) {
+    completion->handle_completion(r, bl);
+    delete completion;
+    completion = nullptr;
+  }
+
+  bufferlist *outbl() {
+    return &bl;
+  }
+};
+
+static int handle_operation_completion(int result, ObjectOpCompletionCtx *ctx) {
+  ctx->finish(result);
+  delete ctx;
+  return result;
+}
+
+void ObjectOperation::exec(const char *cls, const char *method,
+                           bufferlist& inbl, ObjectOperationCompletion *completion) {
+  ObjectOpCompletionCtx *ctx{nullptr};
+  bufferlist *outbl{nullptr};
+
+  if (completion) {
+    ctx = new ObjectOpCompletionCtx(completion);
+    outbl = ctx->outbl();
+  }
+
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::exec, _1, _2,
+                                          librados_stub::get_class_handler(), cls,
+                                          method, inbl, outbl, _4, _5);
+  if (ctx) {
+    auto ctx = new ObjectOpCompletionCtx(completion);
+    op = std::bind(handle_operation_completion,
+                   std::bind(op, _1, _2, _3, _4, _5, _6), ctx);
+  }
+  o->ops.push_back(op);
 }
 
 void ObjectOperation::set_op_flags2(int flags) {
