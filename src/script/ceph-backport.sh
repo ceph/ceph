@@ -972,7 +972,7 @@ function set_github_user_from_github_token {
     curl_opts="--silent -u :${github_token} ${github_api_endpoint}/user"
     [ "$quiet" ] || set -x
     remote_api_output="$(curl $curl_opts)"
-    set +x
+    [ "$quiet" ] || set +x
     github_user=$(echo "${remote_api_output}" | jq -r .login 2>/dev/null | grep -v null || true)
     api_error=$(echo "${remote_api_output}" | jq -r .message 2>/dev/null | grep -v null || true)
     if [ "$api_error" ] ; then
