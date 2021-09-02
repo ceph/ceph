@@ -140,7 +140,7 @@ function bail_out_github_api {
 function blindly_set_pr_metadata {
     local pr_number="$1"
     local json_blob="$2"
-    curl -u ${github_user}:${github_token} --silent --data-binary "$json_blob" "https://api.github.com/repos/ceph/ceph/issues/${pr_number}" >/dev/null 2>&1 || true
+    curl -u ${github_user}:${github_token} --silent --data-binary "$json_blob" "${github_api_endpoint}/repos/ceph/ceph/issues/${pr_number}" >/dev/null 2>&1 || true
 }
 
 function check_milestones {
@@ -211,7 +211,7 @@ function cherry_pick_phase {
     info "Parent issue ostensibly fixed by: ${original_pr_url}"
 
     verbose "Examining ${original_pr_url}"
-    remote_api_output=$(curl -u ${github_user}:${github_token} --silent "https://api.github.com/repos/ceph/ceph/pulls/${original_pr}")
+    remote_api_output=$(curl -u ${github_user}:${github_token} --silent "${github_api_endpoint}/repos/ceph/ceph/pulls/${original_pr}")
     base_branch=$(echo "${remote_api_output}" | jq -r '.base.label')
     if [ "$base_branch" = "ceph:master" ] ; then
         true
@@ -389,7 +389,7 @@ function existing_pr_routine {
     local pr_json_tempfile
     local remote_api_output
     local update_pr_body
-    remote_api_output="$(curl -u ${github_user}:${github_token} --silent "https://api.github.com/repos/ceph/ceph/pulls/${backport_pr_number}")"
+    remote_api_output="$(curl -u ${github_user}:${github_token} --silent "${github_api_endpoint}/repos/ceph/ceph/pulls/${backport_pr_number}")"
     backport_pr_title="$(echo "$remote_api_output" | jq -r '.title')"
     if [ "$backport_pr_title" = "null" ] ; then
         error "could not get PR title of existing PR ${backport_pr_number}"
@@ -534,6 +534,7 @@ function init_endpoints {
     verbose "Initializing remote API endpoints"
     redmine_endpoint="${redmine_endpoint:-"https://tracker.ceph.com"}"
     github_endpoint="${github_endpoint:-"https://github.com/ceph/ceph"}"
+    github_api_endpoint="${github_api_endpoint:-"https://api.github.com"}"
 }
 
 function init_fork_remote {
@@ -896,14 +897,14 @@ function milestone_number_from_remote_api {
     local mtt="$1"  # milestone to try
     local mn=""     # milestone number
     local milestones
-    remote_api_output=$(curl -u ${github_user}:${github_token} --silent -X GET "https://api.github.com/repos/ceph/ceph/milestones")
+    remote_api_output=$(curl -u ${github_user}:${github_token} --silent -X GET "${github_api_endpoint}/repos/ceph/ceph/milestones")
     mn=$(echo "$remote_api_output" | jq --arg milestone "$mtt" '.[] | select(.title==$milestone) | .number')
     if [ "$mn" -gt "0" ] >/dev/null 2>&1 ; then
         echo "$mn"
     else
         error "Could not determine milestone number of ->$milestone<-"
         verbose_en "GitHub API said:\n${remote_api_output}\n"
-        remote_api_output=$(curl -u ${github_user}:${github_token} --silent -X GET "https://api.github.com/repos/ceph/ceph/milestones")
+        remote_api_output=$(curl -u ${github_user}:${github_token} --silent -X GET "${github_api_endpoint}/repos/ceph/ceph/milestones")
         milestones=$(echo "$remote_api_output" | jq '.[].title')
         info "Valid values are ${milestones}"
         info "(This probably means the Release field of ${redmine_url} is populated with"
@@ -968,7 +969,7 @@ function set_github_user_from_github_token {
     local curl_opts
     setup_ok=""
     [ "$github_token" ] || assert_fail "set_github_user_from_github_token: git_token not set"
-    curl_opts="--silent -u :${github_token} https://api.github.com/user"
+    curl_opts="--silent -u :${github_token} ${github_api_endpoint}/user"
     [ "$quiet" ] || set -x
     remote_api_output="$(curl $curl_opts)"
     set +x
@@ -1246,7 +1247,7 @@ function vet_prs_for_milestone {
     local pr_title=
     local pr_url=
     # determine last page (i.e., total number of pages)
-    remote_api_output="$(curl -u ${github_user}:${github_token} --silent --head "https://api.github.com/repos/ceph/ceph/pulls?base=${milestone_title}" | grep -E '^Link' || true)"
+    remote_api_output="$(curl -u ${github_user}:${github_token} --silent --head "${github_api_endpoint}/repos/ceph/ceph/pulls?base=${milestone_title}" | grep -E '^Link' || true)"
     if [ "$remote_api_output" ] ; then
          # Link: <https://api.github.com/repositories/2310495/pulls?base=luminous&page=2>; rel="next", <https://api.github.com/repositories/2310495/pulls?base=luminous&page=2>; rel="last"
          # shellcheck disable=SC2001
@@ -1257,7 +1258,7 @@ function vet_prs_for_milestone {
     verbose "GitHub has $pages_of_output pages of pull request data for \"base:${milestone_title}\""
     for ((page=1; page<=pages_of_output; page++)) ; do
         verbose "Fetching PRs (page $page of ${pages_of_output})"
-        remote_api_output="$(curl -u ${github_user}:${github_token} --silent -X GET "https://api.github.com/repos/ceph/ceph/pulls?base=${milestone_title}&page=${page}")"
+        remote_api_output="$(curl -u ${github_user}:${github_token} --silent -X GET "${github_api_endpoint}/repos/ceph/ceph/pulls?base=${milestone_title}&page=${page}")"
         prs_in_page="$(echo "$remote_api_output" | jq -r '. | length')"
         verbose "Page $page of remote API output contains information on $prs_in_page PRs"
         for ((i=0; i<prs_in_page; i++)) ; do
@@ -1556,7 +1557,7 @@ vet_remotes
 #
 
 verbose "Querying GitHub API for active milestones"
-remote_api_output="$(curl -u ${github_user}:${github_token} --silent -X GET "https://api.github.com/repos/ceph/ceph/milestones")"
+remote_api_output="$(curl -u ${github_user}:${github_token} --silent -X GET "${github_api_endpoint}/repos/ceph/ceph/milestones")"
 active_milestones="$(echo "$remote_api_output" | jq -r '.[] | .title')"
 if [ "$active_milestones" = "null" ] ; then
     error "Could not determine the active milestones"
@@ -1708,7 +1709,7 @@ if [ "$PR_PHASE" ] ; then
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then
-        backport_pr_title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
+        backport_pr_title="${milestone}: $(curl --silent ${github_api_endpoint}/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
     else
         if [[ $tracker_title =~ ^${milestone}: ]] ; then
             backport_pr_title="${tracker_title}"
@@ -1726,7 +1727,7 @@ if [ "$PR_PHASE" ] ; then
     else
         source_repo="$github_user"
     fi
-    remote_api_output=$(curl -u ${github_user}:${github_token} --silent --data-binary "{\"title\":\"${backport_pr_title}\",\"head\":\"${source_repo}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "https://api.github.com/repos/ceph/ceph/pulls")
+    remote_api_output=$(curl -u ${github_user}:${github_token} --silent --data-binary "{\"title\":\"${backport_pr_title}\",\"head\":\"${source_repo}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "${github_api_endpoint}/repos/ceph/ceph/pulls")
     backport_pr_number=$(echo "$remote_api_output" | jq -r .number)
     if [ -z "$backport_pr_number" ] || [ "$backport_pr_number" = "null" ] ; then
         error "failed to open backport PR"
