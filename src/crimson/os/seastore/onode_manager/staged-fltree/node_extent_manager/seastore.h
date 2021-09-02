@@ -122,7 +122,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
 
   alloc_iertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, laddr_t hint, extent_len_t len) override {
-    TRACET("allocating {}B ...", t, len);
+    TRACET("allocating {}B with hint {:#x} ...", t, len, hint);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
         DEBUGT("allocating {}B: trigger eagain", t, len);
