@@ -88,9 +88,20 @@ export class TelemetryComponent extends CdForm implements OnInit {
     this.configForm = this.formBuilder.group(controlsConfig);
   }
 
+  private replacer(key: string, value: any) {
+    if (key === 'ranges' || key === 'values') {
+      const x = [];
+      for (let i = 0; i < value.length; i++) {
+        x.push(JSON.stringify(value[i]));
+      }
+      return x;
+    }
+    return value;
+  }
+
   private createPreviewForm() {
     const controls = {
-      report: JSON.stringify(this.report, null, 2),
+      report: JSON.stringify(this.report, this.replacer, 2),
       reportId: this.reportId,
       licenseAgrmt: [this.licenseAgrmt, Validators.requiredTrue]
     };
