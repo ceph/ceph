@@ -1739,7 +1739,7 @@ if [ "$PR_PHASE" ] ; then
     else
         source_repo="$github_user"
     fi
-    remote_api_output=$(curl -u ${github_user}:${github_token} --silent --data-binary "{\"title\":\"${backport_pr_title}\",\"head\":\"${source_repo}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "${github_api_endpoint}/repos/ceph/ceph/pulls")
+    remote_api_output=$(curl -u ${github_user}:${github_token} -H "Content-Type: application/json" --silent --data-binary "{\"title\":\"${backport_pr_title}\",\"head\":\"${source_repo}:${local_branch}\",\"base\":\"${target_branch}\",\"body\":\"${desc}\"}" "${github_api_endpoint}/repos/ceph/ceph/pulls")
     backport_pr_number=$(echo "$remote_api_output" | jq -r .number)
     if [ -z "$backport_pr_number" ] || [ "$backport_pr_number" = "null" ] ; then
         error "failed to open backport PR"
