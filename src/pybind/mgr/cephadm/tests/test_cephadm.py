@@ -1,5 +1,12 @@
 import json
-from unittest.mock import AsyncMock
+try:
+    # AsyncMock was not added until python 3.8
+    from unittest.mock import AsyncMock
+except ImportError:
+    from asyncmock import AsyncMock
+except ImportError:
+    AsyncMock = None
+
 from contextlib import contextmanager
 
 import pytest
@@ -1083,6 +1090,9 @@ spec:
         check_execute_command.return_value = ''
         execute_command.return_value = '', '', 0
 
+        if not AsyncMock:
+            # can't run this test if we could not import AsyncMock
+            return
         mock_connect = AsyncMock(return_value='')
         with mock.patch("asyncssh.connect", new=mock_connect) as asyncssh_connect:
             with with_host(cephadm_module, 'test'):

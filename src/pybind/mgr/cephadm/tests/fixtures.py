@@ -1,5 +1,6 @@
 import fnmatch
 import asyncio
+import sys
 from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
 
@@ -37,7 +38,16 @@ def match_glob(val, pat):
 
 class MockEventLoopThread:
     def get_result(self, coro):
-        asyncio.run(coro)
+        if sys.version_info >= (3, 7):
+            return asyncio.run(coro)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
 
 
 @contextmanager
