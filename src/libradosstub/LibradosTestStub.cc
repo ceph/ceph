@@ -1702,6 +1702,53 @@ WatchCtx::~WatchCtx() {
 WatchCtx2::~WatchCtx2() {
 }
 
+#warning ListObjec impl
+
+const std::string& librados::ListObject::get_nspace() const
+{
+  return impl->get_nspace();
+}
+
+const std::string& librados::ListObject::get_oid() const
+{
+  return impl->get_oid();
+}
+
+const std::string& librados::ListObject::get_locator() const
+{
+  return impl->get_locator();
+}
+
+#warning ObjectCursor impl
+
+librados::ObjectCursor::ObjectCursor()
+{
+  c_cursor = (rados_object_list_cursor)new hobject_t();
+}
+
+librados::ObjectCursor::~ObjectCursor()
+{
+  hobject_t *h = (hobject_t *)c_cursor;
+  delete h;
+}
+
+string librados::ObjectCursor::to_str() const
+{
+  stringstream ss;
+  ss << *(hobject_t *)c_cursor;
+  return ss.str();
+}
+
+bool librados::ObjectCursor::from_str(const string& s)
+{
+  if (s.empty()) {
+    *(hobject_t *)c_cursor = hobject_t();
+    return true;
+  }
+  return ((hobject_t *)c_cursor)->parse(s);
+}
+
+
 } // namespace librados
 
 int cls_cxx_create(cls_method_context_t hctx, bool exclusive) {
@@ -1999,3 +2046,10 @@ uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
 uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx) {
   return 0;
 }
+
+int cls_gen_random_bytes(char *buf, int size)
+{
+  g_ceph_context->random()->get_bytes(buf, size);
+  return 0;
+}
+
