@@ -22,7 +22,7 @@ set -e
 
 full_path="$0"
 
-SCRIPT_VERSION="16.0.0.6848"
+SCRIPT_VERSION="17.0.0.7424"
 active_milestones=""
 backport_pr_labels=""
 backport_pr_number=""
