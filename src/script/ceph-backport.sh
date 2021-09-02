@@ -990,7 +990,7 @@ function set_github_user_from_github_token {
 function set_redmine_user_from_redmine_key {
     [ "$redmine_key" ] || assert_fail "set_redmine_user_from_redmine_key was called, but redmine_key not set"
     local api_key_from_api
-    remote_api_output="$(curl --silent "https://tracker.ceph.com/users/current.json?key=$redmine_key")"
+    remote_api_output="$(curl --silent "${redmine_endpoint}/users/current.json?key=$redmine_key")"
     redmine_login="$(echo "$remote_api_output" | jq -r '.user.login')"
     redmine_user_id="$(echo "$remote_api_output" | jq -r '.user.id')"
     api_key_from_api="$(echo "$remote_api_output" | jq -r '.user.api_key')"
