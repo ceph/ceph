@@ -260,6 +260,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   cap_acquisition_throttle = g_conf().get_val<uint64_t>("mds_session_cap_acquisition_throttle");
   max_caps_throttle_ratio = g_conf().get_val<double>("mds_session_max_caps_throttle_ratio");
   caps_throttle_retry_request_timeout = g_conf().get_val<double>("mds_cap_acquisition_throttle_retry_request_timeout");
+  dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -1254,6 +1255,11 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   }
   if (changed.count("mds_alternate_name_max")) {
     alternate_name_max  = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
+  }
+  if (changed.count("mds_dir_max_entries")) {
+    dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
+    dout(20) << __func__ << " max entries per directory changed to "
+            << dir_max_entries << dendl;
   }
 }
 
@@ -3206,6 +3212,23 @@ bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
   return true;
 }
 
+/**
+ * check whether entries in a dir reached maximum size
+ *
+ */
+bool Server::check_dir_max_entries(MDRequestRef &mdr, CDir *in)
+{
+  const uint64_t size = in->inode->get_projected_inode()->dirstat.nfiles +
+                   in->inode->get_projected_inode()->dirstat.nsubdirs;
+  if (dir_max_entries && size >= dir_max_entries) {
+    dout(10) << "entries per dir " << *in << " size exceeds " << dir_max_entries << " (ENOSPC)" << dendl;
+    respond_to_request(mdr, -ENOSPC);
+    return false;
+  }
+  return true;
+}
+
+
 CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
 {
   string straydname;
@@ -4419,6 +4442,8 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (!check_access(mdr, diri, access))
     return;
   if (!check_fragment_space(mdr, dir))
+    return;
+  if (!check_dir_max_entries(mdr, dir))
     return;
 
   if (mdr->dn[0].size() == 1)
@@ -6322,7 +6347,9 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   CInode *diri = dir->get_inode();
   if (!check_access(mdr, diri, MAY_WRITE))
     return;
-  if (!check_fragment_space(mdr, dn->get_dir()))
+  if (!check_fragment_space(mdr, dir))
+    return;
+  if (!check_dir_max_entries(mdr, dir))
     return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
@@ -6423,6 +6450,8 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 
   if (!check_fragment_space(mdr, dir))
     return;
+  if (!check_dir_max_entries(mdr, dir))
+    return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
   if (req->get_alternate_name().size() > alternate_name_max) {
@@ -6513,6 +6542,8 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   if (!check_access(mdr, diri, MAY_WRITE))
     return;
   if (!check_fragment_space(mdr, dir))
+    return;
+  if (!check_dir_max_entries(mdr, dir))
     return;
 
   ceph_assert(dn->get_projected_linkage()->is_null());
@@ -6652,6 +6683,9 @@ void Server::handle_client_link(MDRequestRef& mdr)
       return;
 
     if (!check_fragment_space(mdr, dir))
+      return;
+
+    if (!check_dir_max_entries(mdr, dir))
       return;
   }
 
@@ -8190,6 +8224,9 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       return;
 
     if (!check_fragment_space(mdr, destdn->get_dir()))
+      return;
+
+    if (!check_dir_max_entries(mdr, destdn->get_dir()))
       return;
 
     if (!check_access(mdr, srci, MAY_WRITE))
