@@ -544,6 +544,7 @@ function init_endpoints {
     verbose "Initializing remote API endpoints"
     redmine_endpoint="${redmine_endpoint:-"https://tracker.ceph.com"}"
     github_endpoint="${github_endpoint:-"https://github.com/ceph/ceph"}"
+    github_pull_path="${github_pull_path:-pull}"
     github_api_endpoint="${github_api_endpoint:-"https://api.github.com"}"
 }
 
@@ -931,7 +932,7 @@ function number_to_url {
     local number_type="$1"
     local number="$2"
     if [ "$number_type" = "github" ] ; then
-        echo "${github_endpoint}/pull/${number}"
+        echo "${github_endpoint}/${github_pull_path}/${number}"
     elif [ "$number_type" = "redmine" ] ; then
         echo "${redmine_endpoint}/issues/${number}"
     else
