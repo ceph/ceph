@@ -350,7 +350,13 @@ class SSLCerts:
         return (cert_str, key_str)
 
     def get_root_cert(self) -> str:
-        return crypto.dump_certificate(crypto.FILETYPE_PEM, self.root_cert).decode('utf-8')
+        try:
+            return crypto.dump_certificate(crypto.FILETYPE_PEM, self.root_cert).decode('utf-8')
+        except AttributeError:
+            return ''
 
     def get_root_key(self) -> str:
-        return crypto.dump_privatekey(crypto.FILETYPE_PEM, self.root_key).decode('utf-8')
+        try:
+            return crypto.dump_certificate(crypto.FILETYPE_PEM, self.root_key).decode('utf-8')
+        except AttributeError:
+            return ''
