@@ -674,9 +674,11 @@ class RGWRemoteBucketManager {
 
   RGWDataSyncCtx sc;
   rgw_bucket_sync_status full_status;
+  const RGWBucketInfo source_bucket_info;
   rgw_bucket_shard_sync_info shard_status;
 
   RGWBucketSyncCR *sync_cr{nullptr};
+
 
 public:
   RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
