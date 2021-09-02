@@ -400,7 +400,7 @@ void Node::test_make_destructable(
 eagain_ifuture<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::Node::mkfs);
-  return LeafNode::allocate_root(c, L_ADDR_MIN, root_tracker
+  return LeafNode::allocate_root(c, root_tracker
   ).si_then([c, FNAME](auto ret) {
     INFOT("allocated root {}", c.t, ret->get_name());
   });
@@ -1490,11 +1490,19 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
 
   // proceed to split with insert
   // assume I'm already ref-counted by caller
-  auto hint = insert_key.get_hint();
-  return (is_root() ? upgrade_root(c, hint) : eagain_iertr::now()
-  ).si_then([this, c, hint] {
+  laddr_t left_hint, right_hint;
+  {
+    key_view_t left_key;
+    impl->get_slot(search_position_t::begin(), &left_key, nullptr);
+    left_hint = left_key.get_hint();
+    key_view_t right_key;
+    impl->get_largest_slot(nullptr, &right_key, nullptr);
+    right_hint = right_key.get_hint();
+  }
+  return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
+  ).si_then([this, c, right_hint] {
     return InternalNode::allocate(
-        c, hint, impl->field_type(), impl->is_level_tail(), impl->level());
+        c, right_hint, impl->field_type(), impl->is_level_tail(), impl->level());
   }).si_then([this, insert_key, insert_child, insert_pos,
                 insert_stage=insert_stage, insert_size=insert_size,
                 outdated_child, c, FNAME](auto fresh_right) mutable {
@@ -2064,10 +2072,18 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   }
   // split and insert
   Ref<Node> this_ref = this;
-  auto hint = key.get_hint();
-  return (is_root() ? upgrade_root(c, hint) : eagain_iertr::now()
-  ).si_then([this, c, hint] {
-    return LeafNode::allocate(c, hint, impl->field_type(), impl->is_level_tail());
+  laddr_t left_hint, right_hint;
+  {
+    key_view_t left_key;
+    impl->get_slot(search_position_t::begin(), &left_key, nullptr);
+    left_hint = left_key.get_hint();
+    key_view_t right_key;
+    impl->get_largest_slot(nullptr, &right_key, nullptr);
+    right_hint = right_key.get_hint();
+  }
+  return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
+  ).si_then([this, c, right_hint] {
+    return LeafNode::allocate(c, right_hint, impl->field_type(), impl->is_level_tail());
   }).si_then([this_ref = std::move(this_ref), this, c, &key, vconf, FNAME,
                 insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
@@ -2101,10 +2117,10 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
 }
 
 eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
-    context_t c, laddr_t hint, RootNodeTracker& root_tracker)
+    context_t c, RootNodeTracker& root_tracker)
 {
   LOG_PREFIX(OTree::LeafNode::allocate_root);
-  return LeafNode::allocate(c, hint, field_type_t::N0, true
+  return LeafNode::allocate(c, L_ADDR_MIN, field_type_t::N0, true
   ).si_then([c, &root_tracker, FNAME](auto fresh_node) {
     auto root = fresh_node.node;
     return c.nm.get_super(c.t, root_tracker
