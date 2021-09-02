@@ -64,6 +64,11 @@ public:
   bool is_blocklisted() const override;
   int blocklist_add(const std::string& client_address,
                     uint32_t expire_seconds) override;
+
+  int cluster_stat(cluster_stat_t& result) override {
+    return -ENOTSUP;
+  }
+
 protected:
   TestMemCluster *get_mem_cluster() {
     return m_mem_cluster;

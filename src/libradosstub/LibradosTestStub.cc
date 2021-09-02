@@ -1669,6 +1669,11 @@ int Rados::pool_reverse_lookup(int64_t id, std::string *name) {
   return impl->pool_reverse_lookup(id, name);
 }
 
+int Rados::cluster_stat(cluster_stat_t& result) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->cluster_stat(result);
+};
+
 void Rados::shutdown() {
   if (client == NULL) {
     return;

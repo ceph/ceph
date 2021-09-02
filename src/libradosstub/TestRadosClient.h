@@ -133,6 +133,8 @@ public:
   void flush_pool_aio_operations();
   void flush_pool_aio_operations(PoolAsyncCompletionImpl *c);
 
+  virtual int cluster_stat(cluster_stat_t& result) = 0;
+
   boost::asio::io_context& get_io_context();
 
 protected:
