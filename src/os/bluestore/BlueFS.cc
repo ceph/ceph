@@ -1163,18 +1163,27 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       bl.claim_append(t);
       read_pos += r;
     }
-    seen_recs = true;
     bluefs_transaction_t t;
     try {
       auto p = bl.cbegin();
       decode(t, p);
+      seen_recs = true;
     }
     catch (ceph::buffer::error& e) {
-      derr << __func__ << " 0x" << std::hex << pos << std::dec
-           << ": stop: failed to decode: " << e.what()
-           << dendl;
-      delete log_reader;
-      return -EIO;
+      // Multi-block transactions might be incomplete due to unexpected
+      // power off. Hence let's treat that as a regular stop condition.
+      if (seen_recs && more) {
+        dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+                 << ": stop: failed to decode: " << e.what()
+                 << dendl;
+      } else {
+        derr << __func__ << " 0x" << std::hex << pos << std::dec
+             << ": stop: failed to decode: " << e.what()
+             << dendl;
+        delete log_reader;
+        return -EIO;
+      }
+      break;
     }
     ceph_assert(seq == t.seq);
     dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
