@@ -89,9 +89,9 @@ int64_t ZonedAllocator::allocate(
 
   uint64_t offset = get_offset(zone_num);
 
-  ldout(cct, 10) << " incrementing zone 0x" << std::hex
+  ldout(cct, 10) << " moving zone 0x" << std::hex
 		 << zone_num << " write pointer from 0x" << offset
-		 << " to 0x" << offset + want_size
+		 << " -> 0x" << offset + want_size
 		 << std::dec << dendl;
 
   increment_write_pointer(zone_num, want_size);
