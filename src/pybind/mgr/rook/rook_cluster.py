@@ -907,7 +907,7 @@ class RookCluster(object):
             # translate . to - (fingers crossed!) instead.
             name = spec.service_id.replace('.', '-')
 
-
+        all_hosts = self.get_hosts()
         def _create_zone() -> cos.CephObjectStore:
             port = None
             secure_port = None
@@ -926,7 +926,16 @@ class RookCluster(object):
                             port=port,
                             securePort=secure_port,
                             instances=spec.placement.count or 1,
-                        )
+                            placement=ccl.NodeAffinity(
+                                requiredDuringSchedulingIgnoredDuringExecution=ccl.RequiredDuringSchedulingIgnoredDuringExecution(
+                                    nodeSelectorTerms=ccl.NodeSelectorTermsList(
+                                        [
+                                            placement_spec_to_node_selector(spec.placement, all_hosts)
+                                        ]
+                                    )
+                                )
+                            )
+                        ),
                     )
                 )
             if spec.rgw_zone:
