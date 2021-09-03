@@ -6649,6 +6649,7 @@ int BlueStore::mkfs()
     freelist_type = "zoned";
     zone_size = bdev->get_zone_size();
     first_sequential_zone = bdev->get_conventional_region_size() / zone_size;
+    bdev->reset_all_zones();
   } else
 #endif
   {
