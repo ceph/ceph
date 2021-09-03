@@ -33,7 +33,8 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
       first_seq_zone_num(_first_sequential_zone),
       starting_zone_num(first_seq_zone_num),
       num_zones(size / zone_size),
-      num_zones_to_clean(0) {
+      num_zones_to_clean(0)
+{
   ldout(cct, 10) << __func__ << " size 0x" << std::hex << size
 		 << " zone size 0x" << zone_size << std::dec
 		 << " number of zones " << num_zones
@@ -42,14 +43,17 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
   ceph_assert(size % zone_size == 0);
 }
 
-ZonedAllocator::~ZonedAllocator() {}
+ZonedAllocator::~ZonedAllocator()
+{
+}
 
 int64_t ZonedAllocator::allocate(
   uint64_t want_size,
   uint64_t alloc_unit,
   uint64_t max_alloc_size,
   int64_t hint,
-  PExtentVector *extents) {
+  PExtentVector *extents)
+{
   std::lock_guard l(lock);
 
   ceph_assert(want_size % 4096 == 0);
@@ -107,7 +111,8 @@ int64_t ZonedAllocator::allocate(
   return want_size;
 }
 
-void ZonedAllocator::release(const interval_set<uint64_t>& release_set) {
+void ZonedAllocator::release(const interval_set<uint64_t>& release_set)
+{
   std::lock_guard l(lock);
   for (auto p = cbegin(release_set); p != cend(release_set); ++p) {
     auto offset = p.get_start();
@@ -123,29 +128,34 @@ void ZonedAllocator::release(const interval_set<uint64_t>& release_set) {
   }
 }
 
-uint64_t ZonedAllocator::get_free() {
+uint64_t ZonedAllocator::get_free()
+{
   return num_free;
 }
 
-void ZonedAllocator::dump() {
+void ZonedAllocator::dump()
+{
   std::lock_guard l(lock);
 }
 
 void ZonedAllocator::dump(std::function<void(uint64_t offset,
-					     uint64_t length)> notify) {
+					     uint64_t length)> notify)
+{
   std::lock_guard l(lock);
 }
 
 // This just increments |num_free|.  The actual free space is added by
 // init_alloc, as it updates the write pointer for each zone.
-void ZonedAllocator::init_add_free(uint64_t offset, uint64_t length) {
+void ZonedAllocator::init_add_free(uint64_t offset, uint64_t length)
+{
   ldout(cct, 40) << __func__ << " " << std::hex
 		 << offset << "~" << length << dendl;
 
   num_free += length;
 }
 
-void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length) {
+void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length)
+{
   std::lock_guard l(lock);
   ldout(cct, 40) << __func__ << " 0x" << std::hex
 		 << offset << "~" << length << dendl;
@@ -174,12 +184,14 @@ void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length) {
   }
 }
 
-const std::set<uint64_t> *ZonedAllocator::get_zones_to_clean(void) {
+const std::set<uint64_t> *ZonedAllocator::get_zones_to_clean(void)
+{
   ldout(cct, 10) << __func__ << dendl;
   return num_zones_to_clean ? &zones_to_clean : nullptr;
 }
 
-bool ZonedAllocator::low_on_space(void) {
+bool ZonedAllocator::low_on_space(void)
+{
   ceph_assert(zones_to_clean.empty());
 
   uint64_t conventional_size = first_seq_zone_num * zone_size;
@@ -195,7 +207,8 @@ bool ZonedAllocator::low_on_space(void) {
   return free_ratio <= 0.25;
 }
 
-void ZonedAllocator::find_zones_to_clean(void) {
+void ZonedAllocator::find_zones_to_clean(void)
+{
   ldout(cct, 40) << __func__ << dendl;
 
   if (num_zones_to_clean || !low_on_space())
@@ -239,7 +252,8 @@ void ZonedAllocator::find_zones_to_clean(void) {
  
 void ZonedAllocator::init_alloc(std::vector<zone_state_t> &&_zone_states,
 				ceph::mutex *_cleaner_lock,
-				ceph::condition_variable *_cleaner_cond) {
+				ceph::condition_variable *_cleaner_cond)
+{
   std::lock_guard l(lock);
   cleaner_lock = _cleaner_lock;
   cleaner_cond = _cleaner_cond;
@@ -247,7 +261,8 @@ void ZonedAllocator::init_alloc(std::vector<zone_state_t> &&_zone_states,
   zone_states = std::move(_zone_states);
 }
 
-void ZonedAllocator::mark_zones_to_clean_free(void) {
+void ZonedAllocator::mark_zones_to_clean_free(void)
+{
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << dendl;
   for (auto zone_num : zones_to_clean) {
@@ -260,6 +275,7 @@ void ZonedAllocator::mark_zones_to_clean_free(void) {
   num_zones_to_clean = 0;
 }
 
-void ZonedAllocator::shutdown() {
+void ZonedAllocator::shutdown()
+{
   ldout(cct, 1) << __func__ << dendl;
 }
