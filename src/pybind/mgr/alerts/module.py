@@ -52,12 +52,6 @@ class Alerts(MgrModule):
             'desc': 'Emoji for HEALTH_ERR',
             'runtime': True,
         },
-        {
-            'name': 'emoji_undef',
-            'default': 'oO',
-            'desc': 'Emoji for undefined HEALTH status',
-            'runtime': True,
-        },
         # smtp
         {
             'name': 'smtp_host',
@@ -239,20 +233,14 @@ class Alerts(MgrModule):
     def _send_alert_smtp(self, status, diff):
         # message
         self.log.debug('_send_alert_smtp')
+        # additional whitespace used to don't mess up formatting when disabled
+        emojis = {'HEALTH_OK': ' {}'.format(self.emoji_ok),
+                  'HEALTH_WARN': ' {}'.format(self.emoji_warn),
+                  'HEALTH_ERR': ' {}'.format(self.emoji_err)
+                 }
+        emote=''
         if self.emojis:
-            if status['status']=='HEALTH_OK':
-                self.emote=' {}'.format(self.emoji_ok)
-            elif status['status']=='HEALTH_WARN':
-                self.emote=' {}'.format(self.emoji_warn)
-                self.emote='-_-'
-            elif status['status']=='HEALTH_ERR':
-                self.emote=' {}'.format(self.emoji_err)
-                self.emote='>_<'
-            else:
-                # If statement instead of dict mapping just for this
-                self.emote=' {}'.format(self.emoji_undef)
-        else:
-            self.emote=''
+            emote=emojis[status['status']]
 
         message = ('From: {from_name} <{sender}>\n'
                    'Subject: {status}{emote}\n'
@@ -263,7 +251,7 @@ class Alerts(MgrModule):
                        from_name=self.smtp_from_name,
                        status=status['status'],
                        target=self.smtp_destination,
-                       emote=self.emote))
+                       emote=emote))
 
         if 'new' in diff:
             message += ('\n--- New ---\n')
