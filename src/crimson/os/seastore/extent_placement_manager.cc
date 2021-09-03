@@ -56,10 +56,9 @@ SegmentedAllocator::Writer::finish_write(
       lextent->get_paddr(),
       ool_extent.get_ool_paddr()
     ).si_then([&ool_extent, &t, &lextent, this] {
-      ool_extent.persist_paddr();
       lextent->backend_type = device_type_t::NONE;
       lextent->hint = {};
-      cache.mark_delayed_extent_ool(t, lextent);
+      cache.mark_delayed_extent_ool(t, lextent, ool_extent.get_ool_paddr());
       return finish_record_iertr::now();
     });
   }).si_then([&record] {

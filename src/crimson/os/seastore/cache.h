@@ -393,8 +393,9 @@ public:
 
   void mark_delayed_extent_ool(
     Transaction& t,
-    LogicalCachedExtentRef& ref) {
-    t.mark_delayed_extent_ool(ref);
+    LogicalCachedExtentRef& ref,
+    paddr_t final_addr) {
+    t.mark_delayed_extent_ool(ref, final_addr);
   }
 
   /**
