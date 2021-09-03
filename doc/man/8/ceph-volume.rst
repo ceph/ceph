@@ -252,6 +252,7 @@ Usage::
 Optional arguments:
 
 * [-h, --help]          show the help message and exit
+* [--no-systemd]        skip checking OSD systemd unit
 
 Required arguments:
 
@@ -271,6 +272,7 @@ Usage::
 Optional arguments:
 
 * [-h, --help]          show the help message and exit
+* [--no-systemd]        skip checking OSD systemd unit
 
 Required arguments:
 
@@ -298,6 +300,7 @@ Usage::
 Optional arguments:
 
 * [-h, --help]          show the help message and exit
+* [--no-systemd]        skip checking OSD systemd unit
 
 Required arguments:
 
