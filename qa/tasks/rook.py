@@ -318,18 +318,18 @@ def rook_cluster(ctx, config):
     ctx.rook[cluster_name].num_osds = num_devs
 
     # config
-    config = build_initial_config(ctx, config)
-    config_fp = BytesIO()
-    config.write(config_fp)
-    log.info(f'Config:\n{config_fp.getvalue()}')
-    _kubectl(ctx, config, ['create', '-f', '-'], stdin=yaml.dump({
+    ceph_conf = build_initial_config(ctx, config)
+    ceph_conf_fp = BytesIO()
+    ceph_conf.write(ceph_conf_fp)
+    log.info(f'Config:\n{ceph_conf_fp.getvalue()}')
+    _kubectl(ctx, ceph_conf, ['create', '-f', '-'], stdin=yaml.dump({
         'apiVersion': 'v1',
         'kind': 'ConfigMap',
         'metadata': {
             'name': 'rook-config-override',
             'namespace': 'rook-ceph'},
         'data': {
-            'config': config_fp.getvalue()
+            'config': ceph_conf_fp.getvalue()
         }
     }))
 
