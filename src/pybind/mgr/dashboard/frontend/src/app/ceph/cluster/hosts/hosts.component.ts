@@ -72,9 +72,9 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
-    add: [OrchestratorFeature.HOST_CREATE],
+    add: [OrchestratorFeature.HOST_ADD],
     edit: [OrchestratorFeature.HOST_LABEL_ADD, OrchestratorFeature.HOST_LABEL_REMOVE],
-    delete: [OrchestratorFeature.HOST_DELETE],
+    remove: [OrchestratorFeature.HOST_REMOVE],
     maintenance: [
       OrchestratorFeature.HOST_MAINTENANCE_ENTER,
       OrchestratorFeature.HOST_MAINTENANCE_EXIT
@@ -103,11 +103,11 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         disable: (selection: CdTableSelection) => this.getDisable('edit', selection)
       },
       {
-        name: this.actionLabels.DELETE,
+        name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteAction(),
-        disable: (selection: CdTableSelection) => this.getDisable('delete', selection)
+        disable: (selection: CdTableSelection) => this.getDisable('remove', selection)
       },
       {
         name: this.actionLabels.ENTER_MAINTENANCE,
@@ -124,7 +124,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         icon: Icons.exit,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
-          this.getDisable('maintenance', selection) || this.isExecuting || this.enableButton,
+          this.getDisable('maintenance', selection) || this.isExecuting || !this.enableButton,
         visible: () => !this.clusterCreation
       }
     ];
@@ -305,10 +305,10 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   }
 
   getDisable(
-    action: 'add' | 'edit' | 'delete' | 'maintenance',
+    action: 'add' | 'edit' | 'remove' | 'maintenance',
     selection: CdTableSelection
   ): boolean | string {
-    if (action === 'delete' || action === 'edit' || action === 'maintenance') {
+    if (action === 'remove' || action === 'edit' || action === 'maintenance') {
       if (!selection?.hasSingleSelection) {
         return true;
       }
@@ -327,10 +327,10 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'Host',
       itemNames: [hostname],
-      actionDescription: 'delete',
+      actionDescription: 'remove',
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('host/delete', { hostname: hostname }),
+          task: new FinishedTask('host/remove', { hostname: hostname }),
           call: this.hostService.delete(hostname)
         })
     });

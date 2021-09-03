@@ -185,7 +185,7 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: { disabled: false, disableDesc: '' },
             Edit: { disabled: true, disableDesc: '' },
-            Delete: { disabled: true, disableDesc: '' }
+            Remove: { disabled: true, disableDesc: '' }
           }
         },
         {
@@ -193,7 +193,7 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: { disabled: false, disableDesc: '' },
             Edit: { disabled: true, disableDesc: component.messages.nonOrchHost },
-            Delete: { disabled: true, disableDesc: component.messages.nonOrchHost }
+            Remove: { disabled: true, disableDesc: component.messages.nonOrchHost }
           }
         },
         {
@@ -201,15 +201,15 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: { disabled: false, disableDesc: '' },
             Edit: { disabled: false, disableDesc: '' },
-            Delete: { disabled: false, disableDesc: '' }
+            Remove: { disabled: false, disableDesc: '' }
           }
         }
       ];
 
       const features = [
-        OrchestratorFeature.HOST_CREATE,
+        OrchestratorFeature.HOST_ADD,
         OrchestratorFeature.HOST_LABEL_ADD,
-        OrchestratorFeature.HOST_DELETE,
+        OrchestratorFeature.HOST_REMOVE,
         OrchestratorFeature.HOST_LABEL_REMOVE
       ];
       await testTableActions(true, features, tests);
@@ -225,7 +225,7 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: resultNoOrchestrator,
             Edit: { disabled: true, disableDesc: '' },
-            Delete: { disabled: true, disableDesc: '' }
+            Remove: { disabled: true, disableDesc: '' }
           }
         },
         {
@@ -233,7 +233,7 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: resultNoOrchestrator,
             Edit: { disabled: true, disableDesc: component.messages.nonOrchHost },
-            Delete: { disabled: true, disableDesc: component.messages.nonOrchHost }
+            Remove: { disabled: true, disableDesc: component.messages.nonOrchHost }
           }
         },
         {
@@ -241,7 +241,7 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: resultNoOrchestrator,
             Edit: resultNoOrchestrator,
-            Delete: resultNoOrchestrator
+            Remove: resultNoOrchestrator
           }
         }
       ];
@@ -258,7 +258,7 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: resultMissingFeatures,
             Edit: { disabled: true, disableDesc: '' },
-            Delete: { disabled: true, disableDesc: '' }
+            Remove: { disabled: true, disableDesc: '' }
           }
         },
         {
@@ -266,7 +266,7 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: resultMissingFeatures,
             Edit: { disabled: true, disableDesc: component.messages.nonOrchHost },
-            Delete: { disabled: true, disableDesc: component.messages.nonOrchHost }
+            Remove: { disabled: true, disableDesc: component.messages.nonOrchHost }
           }
         },
         {
@@ -274,7 +274,7 @@ describe('HostsComponent', () => {
           expectResults: {
             Add: resultMissingFeatures,
             Edit: resultMissingFeatures,
-            Delete: resultMissingFeatures
+            Remove: resultMissingFeatures
           }
         }
       ];
