@@ -109,19 +109,21 @@ export class CreateClusterComponent implements OnDestroy {
         error: (error) => error.preventDefault()
       });
 
-    this.taskWrapper
-      .wrapTaskAroundCall({
-        task: new FinishedTask('osd/' + URLVerbs.CREATE, {
-          tracking_id: _.join(_.map(this.driveGroups, 'service_id'), ', ')
-        }),
-        call: this.osdService.create(this.driveGroups)
-      })
-      .subscribe({
-        error: (error) => error.preventDefault(),
-        complete: () => {
-          this.submitAction.emit();
-        }
-      });
+    if (this.wizardStepService.osdDevices['totalDevices'] > 0) {
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('osd/' + URLVerbs.CREATE, {
+            tracking_id: _.join(_.map(this.driveGroups, 'service_id'), ', ')
+          }),
+          call: this.osdService.create(this.driveGroups)
+        })
+        .subscribe({
+          error: (error) => error.preventDefault(),
+          complete: () => {
+            this.submitAction.emit();
+          }
+        });
+    }
   }
 
   onNextStep() {

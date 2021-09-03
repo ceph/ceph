@@ -6,6 +6,7 @@ import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 import { ModalService } from '~/app/shared/services/modal.service';
+import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { OsdDevicesSelectionModalComponent } from '../osd-devices-selection-modal/osd-devices-selection-modal.component';
 import { DevicesSelectionChangeEvent } from './devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from './devices-selection-clear-event.interface';
@@ -28,6 +29,8 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
 
   @Input() canSelect: boolean;
 
+  @Input() clusterCreation = false;
+
   @Output()
   selected = new EventEmitter<DevicesSelectionChangeEvent>();
 
@@ -37,7 +40,8 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
   icons = Icons;
   devices: InventoryDevice[] = [];
   capacity = 0;
-  appliedFilters: any[] = [];
+  appliedFilters = new Array();
+  expansionCanSelect = false;
 
   addButtonTooltip: String;
   tooltips = {
@@ -46,9 +50,18 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
     addByFilters: $localize`Add devices by using filters`
   };
 
-  constructor(private modalService: ModalService) {}
+  constructor(private modalService: ModalService, public wizardStepService: WizardStepsService) {}
 
   ngOnInit() {
+    if (this.clusterCreation) {
+      this.wizardStepService?.osdDevices[this.type]
+        ? (this.devices = this.wizardStepService.osdDevices[this.type])
+        : (this.devices = []);
+      this.capacity = _.sumBy(this.devices, 'sys_api.size');
+      this.wizardStepService?.osdDevices
+        ? (this.expansionCanSelect = this.wizardStepService?.osdDevices['disableSelect'])
+        : (this.expansionCanSelect = false);
+    }
     this.updateAddButtonTooltip();
   }
 
@@ -75,6 +88,12 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
       this.capacity = _.sumBy(this.devices, 'sys_api.size');
       this.appliedFilters = result.filters;
       const event = _.assign({ type: this.type }, result);
+      if (this.clusterCreation) {
+        this.wizardStepService.osdDevices[this.type] = this.devices;
+        this.wizardStepService.osdDevices['disableSelect'] =
+          this.canSelect || this.devices.length === this.availDevices.length;
+        this.wizardStepService.osdDevices[this.type]['capacity'] = this.capacity;
+      }
       this.selected.emit(event);
     });
   }
@@ -95,6 +114,13 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
   }
 
   clearDevices() {
+    if (this.clusterCreation) {
+      this.expansionCanSelect = false;
+      this.wizardStepService.osdDevices['disableSelect'] = true;
+      this.wizardStepService.osdDevices[this.type] = [];
+      this.wizardStepService.osdDevices[this.type]['capacity'] = 0;
+      this.wizardStepService.sharedData.clearDeviceSelection(this.type);
+    }
     const event = {
       type: this.type,
       clearedDevices: [...this.devices]
