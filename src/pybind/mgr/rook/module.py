@@ -416,7 +416,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return result
 
-    def _get_pool_params(self) -> Tuple[str, str]:
+    def _get_pool_params(self) -> Tuple[int, str]:
         num_replicas = self.get_ceph_option('osd_pool_default_size')
         assert type(num_replicas) is int
 
@@ -453,7 +453,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def apply_mds(self, spec):
         # type: (ServiceSpec) -> str
-        return self.rook_cluster.apply_filesystem(spec)
+        num_replicas, leaf_type = self._get_pool_params()
+        return self.rook_cluster.apply_filesystem(spec, num_replicas, leaf_type)
 
     @handle_orch_error
     def apply_rgw(self, spec):
