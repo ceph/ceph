@@ -236,13 +236,15 @@ TransactionManager::submit_transaction_direct(
   Transaction &tref)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
-  DEBUGT("about to prepare", tref);
+  DEBUGT("about to alloc delayed extents", tref);
 
   return epm->delayed_alloc_or_ool_write(tref)
   .handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all("invalid error")
   ).si_then([&tref, this] {
+    LOG_PREFIX(TransactionManager::submit_transaction_direct);
+    DEBUGT("about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
   }).si_then([this, FNAME, &tref]() mutable
 	      -> submit_transaction_iertr::future<> {
