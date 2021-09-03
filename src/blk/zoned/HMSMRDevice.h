@@ -37,9 +37,6 @@ class HMSMRDevice final : public BlockDevice {
   std::string path;
   bool aio, dio;
 
-  int vdo_fd = -1;      ///< fd for vdo sysfs directory
-  std::string vdo_name;
-
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
   int zbd_fd = -1;	///< fd for the zoned block device
 
@@ -110,7 +107,6 @@ class HMSMRDevice final : public BlockDevice {
   void debug_aio_link(aio_t& aio);
   void debug_aio_unlink(aio_t& aio);
 
-  void _detect_vdo();
   int choose_fd(bool buffered, int write_hint) const;
 
   bool set_smr_params(const std::string& path);

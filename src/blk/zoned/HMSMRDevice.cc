@@ -249,7 +249,6 @@ int HMSMRDevice::open(const string& p)
       rotational = blkdev_buffered.is_rotational();
       support_discard = blkdev_buffered.support_discard();
       this->devname = devname;
-      _detect_vdo();
     }
   }
 
@@ -306,11 +305,6 @@ void HMSMRDevice::close()
   _aio_stop();
   _discard_stop();
 
-  if (vdo_fd >= 0) {
-    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
-    vdo_fd = -1;
-  }
-
   for (int i = 0; i < WRITE_LIFE_MAX; i++) {
     assert(fd_directs[i] >= 0);
     VOID_TEMP_FAILURE_RETRY(::close(fd_directs[i]));
@@ -334,12 +328,6 @@ int HMSMRDevice::collect_metadata(const string& prefix, map<string,string> *pm) 
     (*pm)[prefix + "type"] = "hdd";
   } else {
     (*pm)[prefix + "type"] = "ssd";
-  }
-  if (vdo_fd >= 0) {
-    (*pm)[prefix + "vdo"] = "true";
-    uint64_t total, avail;
-    get_vdo_utilization(vdo_fd, &total, &avail);
-    (*pm)[prefix + "vdo_physical_size"] = stringify(total);
   }
 
   {
@@ -407,18 +395,6 @@ int HMSMRDevice::collect_metadata(const string& prefix, map<string,string> *pm) 
   return 0;
 }
 
-void HMSMRDevice::_detect_vdo()
-{
-  vdo_fd = get_vdo_stats_handle(devname.c_str(), &vdo_name);
-  if (vdo_fd >= 0) {
-    dout(1) << __func__ << " VDO volume " << vdo_name
-	    << " maps to " << devname << dendl;
-  } else {
-    dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
-  }
-  return;
-}
-
 void HMSMRDevice::reset_all_zones()
 {
   zbd_reset_zones(zbd_fd, conventional_region_size, 0);
@@ -434,10 +410,7 @@ void HMSMRDevice::reset_zones(const std::set<uint64_t>& zones) {
 
 bool HMSMRDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
 {
-  if (vdo_fd < 0) {
-    return false;
-  }
-  return get_vdo_utilization(vdo_fd, total, avail);
+  return false;
 }
 
 int HMSMRDevice::choose_fd(bool buffered, int write_hint) const
