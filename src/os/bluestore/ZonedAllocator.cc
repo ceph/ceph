@@ -16,7 +16,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
-#define dout_prefix *_dout << "ZonedAllocator " << this << " "
+#define dout_prefix *_dout << "ZonedAllocator(" << this << ") " << __func__ << " "
 
 ZonedAllocator::ZonedAllocator(CephContext* cct,
 			       int64_t size,
@@ -35,7 +35,7 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
       num_zones(size / zone_size),
       num_zones_to_clean(0)
 {
-  ldout(cct, 10) << __func__ << " size 0x" << std::hex << size
+  ldout(cct, 10) << " size 0x" << std::hex << size
 		 << " zone size 0x" << zone_size << std::dec
 		 << " number of zones " << num_zones
 		 << " first sequential zone " << starting_zone_num
@@ -59,14 +59,14 @@ int64_t ZonedAllocator::allocate(
 
   ceph_assert(want_size % 4096 == 0);
 
-  ldout(cct, 10) << __func__ << " trying to allocate 0x"
+  ldout(cct, 10) << " trying to allocate 0x"
 		 << std::hex << want_size << std::dec << dendl;
 
   uint64_t zone_num = starting_zone_num;
   auto p = zones_to_clean.lower_bound(zone_num);
   for ( ; zone_num < num_zones; ++zone_num) {
     if (p != zones_to_clean.cend() && *p == zone_num) {
-      ldout(cct, 10) << __func__ << " skipping zone 0x" << std::hex << zone_num
+      ldout(cct, 10) << " skipping zone 0x" << std::hex << zone_num
 		     << " because it is being cleaned" << std::dec << dendl;
       ++p;
       continue;
@@ -74,7 +74,7 @@ int64_t ZonedAllocator::allocate(
     if (fits(want_size, zone_num)) {
       break;
     }
-    ldout(cct, 10) << __func__ << " skipping zone 0x" << std::hex << zone_num
+    ldout(cct, 10) << " skipping zone 0x" << std::hex << zone_num
 		   << " because there is not enough space: "
 		   << " want_size = 0x" << want_size
 		   << " available = 0x" << get_remaining_space(zone_num)
@@ -83,13 +83,13 @@ int64_t ZonedAllocator::allocate(
   }
 
   if (zone_num == num_zones) {
-    ldout(cct, 10) << __func__ << " failed to allocate" << dendl;
+    ldout(cct, 10) << " failed to allocate" << dendl;
     return -ENOSPC;
   }
 
   uint64_t offset = get_offset(zone_num);
 
-  ldout(cct, 10) << __func__ << " incrementing zone 0x" << std::hex
+  ldout(cct, 10) << " incrementing zone 0x" << std::hex
 		 << zone_num << " write pointer from 0x" << offset
 		 << " to 0x" << offset + want_size
 		 << std::dec << dendl;
@@ -117,9 +117,9 @@ void ZonedAllocator::release(const interval_set<uint64_t>& release_set)
   for (auto p = cbegin(release_set); p != cend(release_set); ++p) {
     auto offset = p.get_start();
     auto length = p.get_len();
-    ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
-		   << std::dec << dendl;
     uint64_t zone_num = offset / zone_size;
+    ldout(cct, 10) << " 0x" << std::hex << offset << "~" << length
+		   << " from zone 0x" << zone_num << std::dec << dendl;
     uint64_t num_dead = std::min(zone_size - offset % zone_size, length);
     for ( ; length; ++zone_num) {
       increment_num_dead_bytes(zone_num, num_dead);
@@ -149,7 +149,7 @@ void ZonedAllocator::dump(std::function<void(uint64_t offset,
 // init_alloc, as it updates the write pointer for each zone.
 void ZonedAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
-  ldout(cct, 40) << __func__ << " " << std::hex
+  ldout(cct, 40) << " " << std::hex
 		 << offset << "~" << length << std::dec << dendl;
 
   num_free += length;
@@ -158,7 +158,7 @@ void ZonedAllocator::init_add_free(uint64_t offset, uint64_t length)
 void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
-  ldout(cct, 40) << __func__ << " 0x" << std::hex
+  ldout(cct, 40) << " 0x" << std::hex
 		 << offset << "~" << length << std::dec << dendl;
 
   num_free -= length;
@@ -172,7 +172,7 @@ void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length)
   ceph_assert(remaining_space <= length);
   increment_write_pointer(zone_num, remaining_space);
 
-  ldout(cct, 40) << __func__ << " set zone 0x" << std::hex
+  ldout(cct, 40) << " set zone 0x" << std::hex
 		 << zone_num << " write pointer to 0x" << zone_size << std::dec << dendl;
 
   length -= remaining_space;
@@ -180,14 +180,14 @@ void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length)
 
   for ( ; length; length -= zone_size) {
     increment_write_pointer(++zone_num, zone_size);
-    ldout(cct, 40) << __func__ << " set zone 0x" << std::hex
+    ldout(cct, 40) << " set zone 0x" << std::hex
 		   << zone_num << " write pointer to 0x" << zone_size << std::dec << dendl;
   }
 }
 
 const std::set<uint64_t> *ZonedAllocator::get_zones_to_clean(void)
 {
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
   return num_zones_to_clean ? &zones_to_clean : nullptr;
 }
 
@@ -200,7 +200,7 @@ bool ZonedAllocator::low_on_space(void)
   uint64_t sequential_num_free = num_free - conventional_size;
   double free_ratio = static_cast<double>(sequential_num_free) / sequential_size;
 
-  ldout(cct, 10) << __func__ << " free size 0x" << std::hex << sequential_num_free
+  ldout(cct, 10) << " free size 0x" << std::hex << sequential_num_free
 		 << " total size 0x" << sequential_size << std::dec
 		 << ", free ratio is " << free_ratio << dendl;
 
@@ -210,7 +210,7 @@ bool ZonedAllocator::low_on_space(void)
 
 void ZonedAllocator::find_zones_to_clean(void)
 {
-  ldout(cct, 40) << __func__ << dendl;
+  ldout(cct, 40) << dendl;
 
   if (num_zones_to_clean || !low_on_space())
     return;
@@ -226,7 +226,7 @@ void ZonedAllocator::find_zones_to_clean(void)
   
   if (cct->_conf->subsys.should_gather<ceph_subsys_bluestore, 40>()) {
     for (size_t i = 0; i < zone_states.size(); ++i) {
-      dout(40) << __func__ << " zone 0x" << std::hex << i << std::dec << " "
+      dout(40) << " zone 0x" << std::hex << i << std::dec << " "
 	       << zone_states[i] << dendl;
     }
   }
@@ -236,7 +236,7 @@ void ZonedAllocator::find_zones_to_clean(void)
 		      return zone_states[i1].num_dead_bytes > zone_states[i2].num_dead_bytes;
 		    });
 
-  ldout(cct, 10) << __func__ << " the zone that needs cleaning is 0x"
+  ldout(cct, 10) << " the zone that needs cleaning is 0x"
 		 << std::hex << *idx.begin() << " num_dead_bytes = 0x"
 		 << zone_states[*idx.begin()].num_dead_bytes
 		 << std::dec
@@ -258,19 +258,20 @@ void ZonedAllocator::init_alloc(std::vector<zone_state_t> &&_zone_states,
 				ceph::mutex *_cleaner_lock,
 				ceph::condition_variable *_cleaner_cond)
 {
+  lderr(cct) << dendl;
   std::lock_guard l(lock);
   cleaner_lock = _cleaner_lock;
   cleaner_cond = _cleaner_cond;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
   zone_states = std::move(_zone_states);
 }
 
 void ZonedAllocator::mark_zones_to_clean_free(void)
 {
   std::lock_guard l(lock);
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
   for (auto zone_num : zones_to_clean) {
-    ldout(cct, 10) << __func__ << " zone 0x" << std::hex << zone_num
+    ldout(cct, 10) << " zone 0x" << std::hex << zone_num
 		   << " is now clean" << std::dec << dendl;
     num_free += zone_states[zone_num].write_pointer;
     zone_states[zone_num].num_dead_bytes = 0;
@@ -282,5 +283,5 @@ void ZonedAllocator::mark_zones_to_clean_free(void)
 
 void ZonedAllocator::shutdown()
 {
-  ldout(cct, 1) << __func__ << dendl;
+  ldout(cct, 1) << dendl;
 }
