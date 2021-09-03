@@ -292,10 +292,12 @@ public:
       hint,
       len,
       ext->get_paddr()
-    ).si_then([ext=std::move(ext), len, this](auto &&ref) mutable {
+    ).si_then([ext=std::move(ext), len, hint, &t, this](auto &&ref) mutable {
+      LOG_PREFIX(TransactionManager::alloc_extent);
       ext->set_pin(std::move(ref));
       stats.extents_allocated_total++;
       stats.extents_allocated_bytes += len;
+      DEBUGT("new extent: {}, hint: {}", t, *ext, hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });

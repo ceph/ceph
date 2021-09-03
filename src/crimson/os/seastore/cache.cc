@@ -662,6 +662,7 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
       if (!i->is_valid()) {
         continue;
       }
+      DEBUGT("was mutating extent: {}", t, *i);
       efforts.mutate.increment(i->get_length());
       efforts.mutate_delta_bytes += i->get_delta().length();
     }
@@ -804,7 +805,10 @@ record_t Cache::prepare_record(Transaction &t)
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
-    assert(i.ref->is_valid());
+    if (!i.ref->is_valid()) {
+      DEBUGT("read_set invalid extent: {}, aborting", t, *i.ref);
+      ceph_abort("no invalid extent allowed in transactions' read_set");
+    }
     get_by_ext(efforts.read_by_ext,
                i.ref->get_type()).increment(i.ref->get_length());
   }
