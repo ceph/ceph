@@ -169,7 +169,7 @@ perform mirroring. A new local Ceph user should be created for the remote
 daemon to use. To `create a Ceph user`_, with ``ceph`` specify the
 ``auth get-or-create`` command, user name, monitor caps, and OSD caps::
 
-        ceph auth get-or-create client.rbd-mirror-peer mon 'profile rbd' osd 'profile rbd'
+        $ ceph auth get-or-create client.rbd-mirror-peer mon 'profile rbd-mirror-peer' osd 'profile rbd'
 
 The resulting keyring should be copied to the other cluster's ``rbd-mirror``
 daemon hosts if not using the Ceph monitor ``config-key`` store described below.
