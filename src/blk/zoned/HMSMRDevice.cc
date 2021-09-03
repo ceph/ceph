@@ -101,17 +101,22 @@ bool HMSMRDevice::set_smr_params(const std::string& path) {
 
   int dev = zbd_open(path.c_str(), O_RDWR | O_DIRECT | O_LARGEFILE, nullptr);
   if (dev < 0) {
+    derr << __func__ << " zbd_open failed on " << path << ": "
+	 << cpp_strerror(errno) << dendl;
     return false;
   }
   auto close_dev = make_scope_guard([dev] { zbd_close(dev); });
 
   unsigned int nr_zones = 0;
   if (zbd_report_nr_zones(dev, 0, 0, ZBD_RO_NOT_WP, &nr_zones) != 0) {
+    derr << __func__ << " zbd_report_nr_zones failed on " << path << ": "
+	 << cpp_strerror(errno) << dendl;
     return false;
   }
 
   std::vector<zbd_zone> zones(nr_zones);
   if (zbd_report_zones(dev, 0, 0, ZBD_RO_NOT_WP, zones.data(), &nr_zones) != 0) {
+    derr << __func__ << " zbd_report_zones failed on " << path << dendl;
     return false;
   }
 
