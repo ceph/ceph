@@ -28,7 +28,8 @@ UMOUNT_TIMEOUT = 300
 class CephFSMount(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
+                 client_config={}):
         """
         :param test_dir: Global teuthology test dir
         :param client_id: Client ID, the 'foo' in client.foo
@@ -70,6 +71,7 @@ class CephFSMount(object):
             self.ceph_brx_net = '192.168.0.0/16'
         else:
             self.ceph_brx_net = brxnet
+        self.client_config = client_config if client_config else {}
 
         self.test_files = ['a', 'b', 'c']
 
