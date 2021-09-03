@@ -5266,10 +5266,15 @@ void BlueStore::_set_alloc_sizes(void)
 {
   max_alloc_size = cct->_conf->bluestore_max_alloc_size;
 
+#ifdef HAVE_LIBZBD
+  ceph_assert(bdev);
+  if (bdev->is_smr()) {
+    prefer_deferred_size = 0;
+  } else
+#endif
   if (cct->_conf->bluestore_prefer_deferred_size) {
     prefer_deferred_size = cct->_conf->bluestore_prefer_deferred_size;
   } else {
-    ceph_assert(bdev);
     if (_use_rotational_settings()) {
       prefer_deferred_size = cct->_conf->bluestore_prefer_deferred_size_hdd;
     } else {
@@ -5280,7 +5285,6 @@ void BlueStore::_set_alloc_sizes(void)
   if (cct->_conf->bluestore_deferred_batch_ops) {
     deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops;
   } else {
-    ceph_assert(bdev);
     if (_use_rotational_settings()) {
       deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops_hdd;
     } else {
@@ -5531,15 +5535,6 @@ int BlueStore::_create_alloc()
 #ifdef HAVE_LIBZBD
   if (freelist_type == "zoned") {
     allocator_type = "zoned";
-
-    // We don't want to defer writes with HM-SMR because it violates sequential
-    // write requirement.
-    if (prefer_deferred_size) {
-      dout(1) << __func__ << " The drive is HM-SMR but prefer_deferred_size is "
-	      << prefer_deferred_size << ". "
-	      << "Please set to 0." << dendl;
-      return -EINVAL;
-    }
   }
 #endif
   
