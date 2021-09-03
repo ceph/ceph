@@ -40,6 +40,11 @@ class Alerts(MgrModule):
             default='>_<',
             desc='Emoji for HEALTH_ERR',
             runtime=True),
+        Option(
+            name='emoji_undef',
+            default='o_O',
+            desc='Emoji for HEALTH_ERR',
+            runtime=True),
         # smtp
         Option(
             name='smtp_host',
@@ -229,7 +234,7 @@ class Alerts(MgrModule):
                  }
         emote = ''
         if self.emojis:
-            emote = emojis[status['status']]
+            emote = emojis.get(status['status'], ' {}'.format(self.emoji_undef))
 
         message = ('From: {from_name} <{sender}>\n'
                    'Subject: {status}{emote}\n'
