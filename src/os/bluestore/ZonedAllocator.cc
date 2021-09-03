@@ -42,6 +42,9 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
 		 << std::dec
 		 << dendl;
   ceph_assert(size % zone_size == 0);
+
+  zone_states.resize(num_zones);
+  num_free = num_zones * zone_size;
 }
 
 ZonedAllocator::~ZonedAllocator()
