@@ -54,10 +54,19 @@ public:
     ~Transaction() {
       rados_client->transaction_finish(nspace, oid);
     }
+
+    int get_cur_op() const {
+      return cur_op;
+    }
+
+    void start_next_op() {
+      ++cur_op;
+    }
   private:
     TestRadosClient *rados_client;
     std::string nspace;
     std::string oid;
+    int cur_op{0};
   };
 
   TestRadosClient(CephContext *cct, TestWatchNotify *watch_notify);

@@ -164,14 +164,15 @@ int TestIoCtxImpl::aio_exec(const std::string& oid, AioCompletionImpl *c,
                             bufferlist& inbl, bufferlist *outbl) {
   m_client->add_aio_operation(oid, true, std::bind(
     &TestIoCtxImpl::exec, this, oid, handler, cls, method,
-    inbl, outbl, m_snap_seq, m_snapc), c);
+    inbl, outbl, m_snap_seq, m_snapc, 0), c);
   return 0;
 }
 
 int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
-                        uint64_t snap_id, const SnapContext &snapc) {
+                        uint64_t snap_id, const SnapContext &snapc,
+                        int subop_id) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -182,7 +183,7 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
   }
 
   return (*call)(reinterpret_cast<cls_method_context_t>(
-    handler->get_method_context(this, oid, snap_id, snapc).get()), &inbl,
+    handler->get_method_context(this, oid, snap_id, snapc, subop_id).get()), &inbl,
     outbl);
 }
 
@@ -435,10 +436,11 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
     TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
     for (ObjectOperations::iterator it = ops->ops.begin();
          it != ops->ops.end(); ++it) {
-      ret = (*it)(this, oid, pbl, snap_id, snapc, objver);
+      ret = (*it)(this, oid, pbl, snap_id, snapc, objver, transaction.get_cur_op());
       if (ret < 0) {
         break;
       }
+      transaction.start_next_op();
     }
   }
   m_pending_ops--;

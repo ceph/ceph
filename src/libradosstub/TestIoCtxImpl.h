@@ -24,7 +24,8 @@ typedef boost::function<int(TestIoCtxImpl*,
 			    bufferlist *,
           uint64_t,
           const SnapContext &,
-          uint64_t*)> ObjectOperationTestImpl;
+          uint64_t*,
+          int)> ObjectOperationTestImpl;
 typedef std::list<ObjectOperationTestImpl> ObjectOperations;
 
 struct TestObjectOperationImpl {
@@ -118,7 +119,8 @@ public:
   virtual int exec(const std::string& oid, TestClassHandler *handler,
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
-                   uint64_t snap_id, const SnapContext &snapc);
+                   uint64_t snap_id, const SnapContext &snapc,
+                   int subop_id);
   virtual int list_snaps(const std::string& o, snap_set_t *out_snaps) = 0;
   virtual int list_watchers(const std::string& o,
                             std::list<obj_watch_t> *out_watchers);

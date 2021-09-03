@@ -662,7 +662,7 @@ int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
     oid, std::bind(&TestIoCtxImpl::exec, _1, _2,
                      librados_stub::get_class_handler(), cls,
                      method, inbl, &outbl, ctx->get_snap_read(),
-                     ctx->get_snap_context()));
+                     ctx->get_snap_context(), 0));
 }
 
 void IoCtx::from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io) {
@@ -1081,7 +1081,7 @@ void ObjectOperation::exec(const char *cls, const char *method,
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&TestIoCtxImpl::exec, _1, _2,
 			       librados_stub::get_class_handler(), cls,
-			       method, inbl, _3, _4, _5));
+			       method, inbl, _3, _4, _5, _7));
 }
 
 void ObjectOperation::exec(const char *cls, const char *method,
@@ -1091,10 +1091,10 @@ void ObjectOperation::exec(const char *cls, const char *method,
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::exec, _1, _2,
                                           librados_stub::get_class_handler(), cls,
-                                          method, inbl, outbl, _4, _5);
+                                          method, inbl, outbl, _4, _5, _7);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1137,11 +1137,11 @@ void ObjectOperation::exec(const char *cls, const char *method,
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::exec, _1, _2,
                                           librados_stub::get_class_handler(), cls,
-                                          method, inbl, outbl, _4, _5);
+                                          method, inbl, outbl, _4, _5, _7);
   if (ctx) {
     auto ctx = new ObjectOpCompletionCtx(completion);
     op = std::bind(handle_operation_completion,
-                   std::bind(op, _1, _2, _3, _4, _5, _6), ctx);
+                   std::bind(op, _1, _2, _3, _4, _5, _6, _7), ctx);
   }
   o->ops.push_back(op);
 }
@@ -1161,7 +1161,7 @@ void ObjectOperation::cmpext(uint64_t off, const bufferlist& cmp_bl,
                                            cmp_bl, _4);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1185,7 +1185,7 @@ void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
                                            out_snaps);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1198,7 +1198,7 @@ void ObjectReadOperation::list_watchers(std::list<obj_watch_t> *out_watchers,
                                            _2, out_watchers);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1216,7 +1216,7 @@ void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1235,7 +1235,7 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1248,7 +1248,7 @@ void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1261,7 +1261,7 @@ void ObjectReadOperation::stat2(uint64_t *psize, struct timespec *pts, int *prva
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1274,7 +1274,7 @@ void ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval)
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1287,7 +1287,7 @@ void ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1305,7 +1305,7 @@ void ObjectReadOperation::omap_get_keys2(const std::string &start_after,
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -1324,7 +1324,7 @@ void ObjectReadOperation::omap_get_vals2(const std::string &start_after,
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6, _7), prval);
   }
   o->ops.push_back(op);
 }
@@ -2112,6 +2112,12 @@ uint64_t cls_current_version(cls_method_context_t hctx) {
   }
 
   return ver;
+}
+
+int cls_current_subop_num(cls_method_context_t hctx) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->subop_id;
 }
 
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
