@@ -4,6 +4,7 @@
 #include "PrimaryLogScrub.h"
 
 #include "common/scrub_types.h"
+#include "osd/osd_types_fmt.h"
 
 #include "PeeringState.h"
 #include "PrimaryLogPG.h"
@@ -576,12 +577,13 @@ void PrimaryLogScrub::stats_of_handled_objects(const object_stat_sum_t& delta_st
   // included when the scrubber gets to that object.
   if (is_primary() && is_scrub_active()) {
     if (soid < m_start) {
-      dout(20) << __func__ << " " << soid << " < [" << m_start << "," << m_end << ")"
-	       << dendl;
+
+      dout(20) << fmt::format("{} {} < [{},{})", __func__, soid, m_start, m_end) << dendl;
       m_scrub_cstat.add(delta_stats);
+
     } else {
-      dout(25) << __func__ << " " << soid << " >= [" << m_start << "," << m_end << ")"
-	       << dendl;
+
+      dout(25) << fmt::format("{} {} >= [{},{})", __func__, soid, m_start, m_end) << dendl;
     }
   }
 }
