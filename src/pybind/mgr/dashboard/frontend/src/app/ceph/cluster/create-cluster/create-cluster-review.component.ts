@@ -7,7 +7,6 @@ import { HostService } from '~/app/shared/api/host.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
-import { InventoryDevice } from '../inventory/inventory-devices/inventory-device.model';
 
 @Component({
   selector: 'cd-create-cluster-review',
@@ -23,8 +22,8 @@ export class CreateClusterReviewComponent implements OnInit {
   serviceOccurrences = {};
   hostsCountPerService: object[] = [];
   uniqueServices: Set<string> = new Set();
-  filteredDevices: InventoryDevice[] = [];
-  capacity = 0;
+  totalDevices: number;
+  totalCapacity = 0;
   services: Array<CephServiceSpec> = [];
 
   constructor(
@@ -34,6 +33,12 @@ export class CreateClusterReviewComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    let dataDevices = 0;
+    let dataDeviceCapacity = 0;
+    let walDevices = 0;
+    let walDeviceCapacity = 0;
+    let dbDevices = 0;
+    let dbDeviceCapacity = 0;
     this.hostsDetails = {
       columns: [
         {
@@ -98,7 +103,23 @@ export class CreateClusterReviewComponent implements OnInit {
       this.hostsDetails['data'] = [...this.hosts];
     });
 
-    this.filteredDevices = this.wizardStepsService.osdDevices;
-    this.capacity = this.wizardStepsService.osdCapacity;
+    if (this.wizardStepsService.osdDevices['data']) {
+      dataDevices = this.wizardStepsService.osdDevices['data']?.length;
+      dataDeviceCapacity = this.wizardStepsService.osdDevices['data']['capacity'];
+    }
+
+    if (this.wizardStepsService.osdDevices['wal']) {
+      walDevices = this.wizardStepsService.osdDevices['wal']?.length;
+      walDeviceCapacity = this.wizardStepsService.osdDevices['wal']['capacity'];
+    }
+
+    if (this.wizardStepsService.osdDevices['db']) {
+      dbDevices = this.wizardStepsService.osdDevices['db']?.length;
+      dbDeviceCapacity = this.wizardStepsService.osdDevices['db']['capacity'];
+    }
+
+    this.totalDevices = dataDevices + walDevices + dbDevices;
+    this.wizardStepsService.osdDevices['totalDevices'] = this.totalDevices;
+    this.totalCapacity = dataDeviceCapacity + walDeviceCapacity + dbDeviceCapacity;
   }
 }

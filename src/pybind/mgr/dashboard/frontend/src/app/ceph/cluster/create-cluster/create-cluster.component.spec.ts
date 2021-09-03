@@ -8,6 +8,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
+import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { AppConstants } from '~/app/shared/constants/app.constants';
@@ -22,6 +23,7 @@ describe('CreateClusterComponent', () => {
   let fixture: ComponentFixture<CreateClusterComponent>;
   let wizardStepService: WizardStepsService;
   let hostService: HostService;
+  let osdService: OsdService;
   let modalServiceShowSpy: jasmine.Spy;
   const projectConstants: typeof AppConstants = AppConstants;
 
@@ -44,6 +46,7 @@ describe('CreateClusterComponent', () => {
     component = fixture.componentInstance;
     wizardStepService = TestBed.inject(WizardStepsService);
     hostService = TestBed.inject(HostService);
+    osdService = TestBed.inject(OsdService);
     modalServiceShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.returnValue({
       // mock the close function, it might be called if there are async tests.
       close: jest.fn()
@@ -127,5 +130,20 @@ describe('CreateClusterComponent', () => {
     expect(submitBtnLabel).toEqual('Expand Cluster');
     cancelBtnLabel = component.showCancelButtonLabel();
     expect(cancelBtnLabel).toEqual('Back');
+  });
+
+  it('should ensure osd creation did not happen when no devices are selected', () => {
+    const osdServiceSpy = spyOn(osdService, 'create').and.callThrough();
+    component.onSubmit();
+    fixture.detectChanges();
+    expect(osdServiceSpy).toBeCalledTimes(0);
+  });
+
+  it('should ensure osd creation did happen when devices are selected', () => {
+    const osdServiceSpy = spyOn(osdService, 'create').and.callThrough();
+    wizardStepService.osdDevices['totalDevices'] = 1;
+    component.onSubmit();
+    fixture.detectChanges();
+    expect(osdServiceSpy).toBeCalledTimes(1);
   });
 });
