@@ -136,6 +136,7 @@ public:
 
   bool is_smr() const final { return true; }
 
+  void reset_all_zones() override;
   void reset_zones(const std::set<uint64_t>& zones) override;
 
   bool get_thin_utilization(uint64_t *total, uint64_t *avail) const final;
