@@ -7266,21 +7266,16 @@ int BlueStore::_mount()
     }
   });
 
-#ifdef HAVE_LIBZBD
-  using scope_guard_t = scope_guard<std::function<void()>>;
-  std::optional<scope_guard_t> stop_zoned_cleaner;
-  if (bdev->is_smr()) {
-    _zoned_cleaner_start();
-    stop_zoned_cleaner = scope_guard_t([this] {
-      _zoned_cleaner_stop();
-    });
-  }
-#endif
-
   r = _deferred_replay();
   if (r < 0) {
     return r;
   }
+
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    _zoned_cleaner_start();
+  }
+#endif
 
   mempool_thread.init();
 
