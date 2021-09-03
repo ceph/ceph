@@ -205,6 +205,7 @@ public:
     ceph_assert(is_smr());
     return conventional_region_size;
   }
+  virtual void reset_all_zones() {}
   virtual void reset_zones(const std::set<uint64_t>& zones) {
     ceph_assert(is_smr());
   }
