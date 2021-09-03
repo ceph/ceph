@@ -5532,16 +5532,6 @@ int BlueStore::_create_alloc()
   if (freelist_type == "zoned") {
     allocator_type = "zoned";
 
-    // At least for now we want to use large min_alloc_size with HM-SMR drives.
-    // Populating used_blocks bitset on a debug build of ceph-osd takes about 5
-    // minutes with a 14 TB HM-SMR drive and 4 KiB min_alloc_size.
-    if (min_alloc_size < 64 * 1024) {
-      dout(1) << __func__ << " The drive is HM-SMR but min_alloc_size is "
-	      << min_alloc_size << ". "
-	      << "Please set to at least 64 KiB." << dendl;
-      return -EINVAL;
-    }
-
     // We don't want to defer writes with HM-SMR because it violates sequential
     // write requirement.
     if (prefer_deferred_size) {
