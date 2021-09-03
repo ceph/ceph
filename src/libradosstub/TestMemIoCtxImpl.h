@@ -50,9 +50,14 @@ public:
                             std::map<std::string, bufferlist> *vals) override;
   int omap_rm_keys(const std::string& oid,
                    const std::set<std::string>& keys) override;
+  int omap_rm_range(const std::string& oid,
+                    const string& key_begin,
+                    const string& key_end);
   int omap_clear(const std::string& oid) override;
   int omap_set(const std::string& oid, const std::map<std::string,
                bufferlist> &map) override;
+  int omap_get_header(const std::string& oid,
+                      bufferlist *bl) override;
   int omap_set_header(const std::string& oid,
                       const bufferlist& bl) override;
   int read(const std::string& oid, size_t len, uint64_t off,
@@ -92,6 +97,7 @@ public:
   int rmxattr(const string& oid, const char *name) override;
   int zero(const std::string& oid, uint64_t off, uint64_t len,
            const SnapContext &snapc) override;
+  int get_current_ver(const std::string& oid, uint64_t *ver);
 
 protected:
   TestMemCluster::Pool *get_pool() {

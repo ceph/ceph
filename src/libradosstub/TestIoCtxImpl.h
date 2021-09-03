@@ -147,9 +147,14 @@ public:
                                     std::map<std::string, bufferlist> *vals) = 0;
   virtual int omap_rm_keys(const std::string& oid,
                            const std::set<std::string>& keys) = 0;
+  virtual int omap_rm_range(const std::string& oid,
+                            const string& key_begin,
+                            const string& key_end) = 0;
   virtual int omap_clear(const std::string& oid) = 0;
   virtual int omap_set(const std::string& oid,
                        const std::map<std::string, bufferlist> &map) = 0;
+  virtual int omap_get_header(const std::string& oid,
+                              bufferlist *bl) = 0;
   virtual int omap_set_header(const std::string& oid,
                               const bufferlist& bl) = 0;
   virtual int operate(const std::string& oid, TestObjectOperationImpl &ops, int flags);
@@ -207,6 +212,8 @@ public:
   virtual int rmxattr(const std::string& oid, const char *name) = 0;
   virtual int zero(const std::string& oid, uint64_t off, uint64_t len,
                    const SnapContext &snapc) = 0;
+
+  virtual int get_current_ver(const std::string& oid, uint64_t *ver) = 0;
 
   int execute_operation(const std::string& oid,
                         const Operation &operation);

@@ -43,6 +43,8 @@ public:
     std::vector<uint64_t> snaps;
     interval_set<uint64_t> snap_overlap;
 
+    uint64_t epoch = 0;
+
     bool exists;
     ceph::shared_mutex lock =
       ceph::make_shared_mutex("TestMemCluster::File::lock");
@@ -60,6 +62,8 @@ public:
 
     SnapSeqs snap_seqs;
     uint64_t snap_id = 1;
+
+    uint64_t epoch = 1;
 
     ceph::shared_mutex file_lock =
       ceph::make_shared_mutex("TestMemCluster::Pool::file_lock");

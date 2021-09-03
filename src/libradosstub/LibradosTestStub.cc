@@ -10,6 +10,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/snap_types.h"
+#include "common/armor.h"
 #include "librados/AioCompletionImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "log/Log.h"
@@ -1763,6 +1764,22 @@ int cls_cxx_remove(cls_method_context_t hctx) {
   return ctx->io_ctx_impl->remove(ctx->oid, ctx->io_ctx_impl->get_snap_context());
 }
 
+int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mtime) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  struct timespec ts;
+  int r = ctx->io_ctx_impl->stat2(ctx->oid, size, &ts);
+  if (r < 0) {
+    return r;
+  }
+
+  if (mtime) {
+    *mtime = ceph::real_clock::from_timespec(ts);
+  }
+
+  return 0;
+}
+
 int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
@@ -1849,6 +1866,15 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key) {
   return ctx->io_ctx_impl->omap_rm_keys(ctx->oid, keys);
 }
 
+int cls_cxx_map_remove_range(cls_method_context_t hctx,
+                             const std::string& key_begin,
+                             const std::string& key_end) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->omap_rm_range(ctx->oid, key_begin, key_end);
+}
+
+
 int cls_cxx_map_set_val(cls_method_context_t hctx, const string &key,
                         bufferlist *inbl) {
   std::map<std::string, bufferlist> m;
@@ -1861,6 +1887,12 @@ int cls_cxx_map_set_vals(cls_method_context_t hctx,
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->omap_set(ctx->oid, *map);
+}
+
+int cls_cxx_map_clear(cls_method_context_t hctx) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->omap_clear(ctx->oid);
 }
 
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len,
@@ -2025,8 +2057,29 @@ ceph_release_t cls_get_min_compatible_client(cls_handle_t hclass) {
 PGLSFilter::~PGLSFilter()
 {}
 
-int cls_gen_rand_base64(char *, int) {
-  return -ENOTSUP;
+int cls_gen_rand_base64(char *dest, int size) /* size should be the required string size + 1 */
+{
+  char buf[size];
+  char tmp_dest[size + 4]; /* so that there's space for the extra '=' characters, and some */
+  int ret;
+
+  ret = cls_gen_random_bytes(buf, sizeof(buf));
+  if (ret < 0) {
+    derr << "cannot get random bytes: " << ret << dendl;
+    return -1;
+  }
+
+  ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
+                   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
+  if (ret < 0) {
+    derr << "ceph_armor failed" << dendl;
+    return -1;
+  }
+  tmp_dest[ret] = '\0';
+  memcpy(dest, tmp_dest, size);
+  dest[size-1] = '\0';
+
+  return 0;
 }
 
 int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
@@ -2035,8 +2088,30 @@ int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
   return -ENOTSUP;
 }
 
-int cls_cxx_map_read_header(cls_method_handle_t, bufferlist *) {
-  return -ENOTSUP;
+int cls_cxx_map_read_header(cls_method_handle_t hctx, bufferlist *bl) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->omap_get_header(ctx->oid, bl);
+}
+
+int cls_cxx_map_write_header(cls_method_context_t hctx, ceph::buffer::list *inbl) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  bufferlist _bl;
+  bufferlist& bl = (inbl ? *inbl : _bl);
+  return ctx->io_ctx_impl->omap_set_header(ctx->oid, bl);
+}
+
+uint64_t cls_current_version(cls_method_context_t hctx) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  uint64_t ver;
+  int r = ctx->io_ctx_impl->get_current_ver(ctx->oid, &ver);
+  if (r < 0) {
+    return (uint64_t)r;
+  }
+
+  return ver;
 }
 
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
