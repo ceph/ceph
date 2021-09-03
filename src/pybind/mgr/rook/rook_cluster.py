@@ -23,7 +23,7 @@ from urllib3.exceptions import ProtocolError
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec, HostPlacementSpec
 from ceph.utils import datetime_now
 from ceph.deployment.drive_selection.matchers import SizeMatcher
 from mgr_module import NFS_POOL_NAME
@@ -1264,3 +1264,45 @@ class RookCluster(object):
     def blink_light(self, ident_fault, on, locs):
         # type: (str, bool, List[orchestrator.DeviceLightLoc]) -> List[str]
         return [self._execute_blight_job(ident_fault, on, loc) for loc in locs]
+
+def placement_spec_to_node_selector(spec: PlacementSpec, all_hosts: List) -> ccl.NodeSelectorTermsItem:
+    all_hostnames = [hs.hostname for hs in all_hosts]
+    res = ccl.NodeSelectorTermsItem(matchExpressions=ccl.MatchExpressionsList())
+    if spec.host_pattern and spec.host_pattern != "*":
+        raise RuntimeError("The Rook orchestrator only supports a host_pattern of * for placements")
+    if spec.label:
+        res.matchExpressions.append(
+            ccl.MatchExpressionsItem(
+                key="ceph-label/" + spec.label,
+                operator="Exists"
+            )
+        )
+    if spec.hosts:
+        host_list = [h.hostname for h in spec.hosts if h.hostname in all_hostnames]
+        res.matchExpressions.append(
+            ccl.MatchExpressionsItem(
+                key="kubernetes.io/hostname",
+                operator="In",
+                values=ccl.CrdObjectList(host_list)
+            )
+        ) 
+    if spec.host_pattern == "*":
+        res.matchExpressions.append(
+            ccl.MatchExpressionsItem(
+                key="kubernetes.io/hostname",
+                operator="Exists",
+            )
+        )
+    return res
+    
+def node_selector_to_placement_spec(node_selector: ccl.NodeSelectorTermsItem) -> PlacementSpec:
+    res = PlacementSpec()
+    for expression in node_selector.matchExpressions:
+        if expression.key.startswith("ceph-label/"):
+            res.label = expression.key.split('/')[1]
+        elif expression.key == "kubernetes.io/hostname":
+            if expression.operator == "Exists":
+                res.host_pattern = "*"
+            elif expression.operator == "In": 
+                res.hosts = [HostPlacementSpec(hostname=value, network='', name='')for value in expression.values]
+    return res
