@@ -46,11 +46,6 @@ public:
       if (out)
 	*out = CachedExtentRef(&*iter);
       return get_extent_ret::PRESENT;
-    } else if (auto iter = delayed_set.find_offset(addr);
-	iter != delayed_set.end()) {
-      if (out)
-	*out = CachedExtentRef(&*iter);
-      return get_extent_ret::PRESENT;
     } else if (
       auto iter = read_set.find(addr);
       iter != read_set.end()) {
@@ -68,16 +63,7 @@ public:
   void add_to_retired_set(CachedExtentRef ref) {
     ceph_assert(!is_weak());
     if (ref->is_initial_pending()) {
-      // We decide not to remove it from fresh_block_list because touching this
-      // will affect relative paddrs, and it should be rare to retire a fresh
-      // extent.
       ref->state = CachedExtent::extent_state_t::INVALID;
-      if (ref->is_inline()) {
-	write_set.erase(*ref);
-      } else {
-	// if ref is not relative, it must be in the delayed set
-	delayed_set.erase(*ref);
-      }
     } else if (ref->is_mutation_pending()) {
       ref->state = CachedExtent::extent_state_t::INVALID;
       write_set.erase(*ref);
@@ -109,27 +95,27 @@ public:
       ref->set_paddr(delayed_temp_paddr(delayed_temp_offset));
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
-      delayed_set.insert(*ref);
     } else {
       ref->set_paddr(make_record_relative_paddr(offset));
       offset += ref->get_length();
       fresh_block_list.push_back(ref);
-      write_set.insert(*ref);
     }
+    write_set.insert(*ref);
   }
 
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
+    write_set.erase(*ref);
     ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
-    delayed_set.erase(*ref);
     fresh_block_list.push_back(ref);
     write_set.insert(*ref);
   }
 
-  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref) {
+  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref, paddr_t final_addr) {
+    write_set.erase(*ref);
+    ref->set_paddr(final_addr);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
-    delayed_set.erase(*ref);
     fresh_block_list.push_back(ref);
     write_set.insert(*ref);
   }
@@ -231,7 +217,6 @@ public:
   ~Transaction() {
     on_destruct(*this);
     write_set.clear_and_dispose(cached_extent_disposer());
-    delayed_set.clear_and_dispose(cached_extent_disposer());
   }
 
   friend class crimson::os::seastore::SeaStore;
@@ -243,7 +228,6 @@ public:
     delayed_temp_offset = 0;
     read_set.clear();
     write_set.clear_and_dispose(cached_extent_disposer());
-    delayed_set.clear_and_dispose(cached_extent_disposer());
     fresh_block_list.clear();
     mutated_block_list.clear();
     delayed_alloc_list.clear();
@@ -296,8 +280,6 @@ private:
 
   read_set_t<Transaction> read_set; ///< set of extents read by paddr
   ExtentIndex write_set;            ///< set of extents written by paddr
-  ExtentIndex delayed_set;	    ///< set of extents whose paddr
-				    ///	 allocation are delayed
 
   std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
   std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks

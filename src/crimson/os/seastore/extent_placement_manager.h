@@ -34,10 +34,6 @@ class ool_record_t {
     paddr_t get_ool_paddr() const {
       return ool_offset;
     }
-    void persist_paddr() {
-      lextent->set_paddr(ool_offset);
-      ool_offset = P_ADDR_NULL;
-    }
     bufferptr& get_bptr() {
       return lextent->get_bptr();
     }
