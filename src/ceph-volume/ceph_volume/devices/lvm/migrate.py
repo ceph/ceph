@@ -400,7 +400,7 @@ class Migrate(object):
 
     @decorators.needs_root
     def migrate_osd(self):
-        if self.args.osd_id:
+        if self.args.osd_id and not self.args.no_systemd:
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
                 mlogger.error('OSD is running, stop it with: '
@@ -509,6 +509,12 @@ class Migrate(object):
             choices=['data', 'db', 'wal'],
             help='Copy BlueFS data from DB device',
         )
+        parser.add_argument(
+            '--no-systemd',
+            dest='no_systemd',
+            action='store_true',
+            help='Skip checking OSD systemd unit',
+        )
 
         if len(self.argv) == 0:
             print(sub_command_help)
@@ -546,6 +552,12 @@ class NewVolume(object):
             '--target',
             required=True,
             help='Specify target Logical Volume (LV) to attach',
+        )
+        parser.add_argument(
+            '--no-systemd',
+            dest='no_systemd',
+            action='store_true',
+            help='Skip checking OSD systemd unit',
         )
         return parser
 
@@ -587,7 +599,7 @@ class NewVolume(object):
 
     @decorators.needs_root
     def new_volume(self):
-        if self.args.osd_id:
+        if self.args.osd_id and not self.args.no_systemd:
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
                 mlogger.error('OSD ID is running, stop it with:'
