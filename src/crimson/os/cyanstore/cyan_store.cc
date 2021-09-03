@@ -692,8 +692,9 @@ int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  for (auto p = aset.begin(); p != aset.end(); ++p)
-    o->xattr[p->first] = p->second;
+  for (auto&& [key, val]: aset) {
+    o->xattr.insert_or_assign(std::move(key), std::move(val));
+  }
   return 0;
 }
 
