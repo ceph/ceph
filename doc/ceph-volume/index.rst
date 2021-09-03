@@ -76,6 +76,9 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
    lvm/systemd
    lvm/list
    lvm/zap
+   lvm/migrate
+   lvm/newdb
+   lvm/newwal
    simple/index
    simple/activate
    simple/scan
