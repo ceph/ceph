@@ -658,11 +658,12 @@ void IoCtx::dup(const IoCtx& rhs) {
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  auto trans = make_op_transaction();
   return ctx->execute_operation(
     oid, std::bind(&TestIoCtxImpl::exec, _1, _2,
                      librados_stub::get_class_handler(), cls,
                      method, inbl, &outbl, ctx->get_snap_read(),
-                     ctx->get_snap_context(), 0));
+                     ctx->get_snap_context(), trans));
 }
 
 void IoCtx::from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io) {
@@ -2117,7 +2118,7 @@ uint64_t cls_current_version(cls_method_context_t hctx) {
 int cls_current_subop_num(cls_method_context_t hctx) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->subop_id;
+  return ctx->trans->op_id;
 }
 
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {

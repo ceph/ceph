@@ -13,6 +13,8 @@
 #include "include/Context.h"
 #include "common/snap_types.h"
 
+#include "TestTransaction.h"
+
 namespace librados {
 
 class TestClassHandler;
@@ -25,7 +27,7 @@ typedef boost::function<int(TestIoCtxImpl*,
           uint64_t,
           const SnapContext &,
           uint64_t*,
-          int)> ObjectOperationTestImpl;
+          TestTransactionStateRef &)> ObjectOperationTestImpl;
 typedef std::list<ObjectOperationTestImpl> ObjectOperations;
 
 struct TestObjectOperationImpl {
@@ -120,7 +122,7 @@ public:
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
                    uint64_t snap_id, const SnapContext &snapc,
-                   int subop_id);
+                   TestTransactionStateRef& trans);
   virtual int list_snaps(const std::string& o, snap_set_t *out_snaps) = 0;
   virtual int list_watchers(const std::string& o,
                             std::list<obj_watch_t> *out_watchers);

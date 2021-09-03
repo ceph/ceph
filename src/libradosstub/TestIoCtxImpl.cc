@@ -13,6 +13,9 @@
 #include <functional>
 #include <errno.h>
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_rados
+
 namespace librados {
 
 TestIoCtxImpl::TestIoCtxImpl() : m_client(NULL) {
@@ -162,9 +165,10 @@ int TestIoCtxImpl::aio_exec(const std::string& oid, AioCompletionImpl *c,
                             TestClassHandler *handler,
                             const char *cls, const char *method,
                             bufferlist& inbl, bufferlist *outbl) {
+  auto trans = make_op_transaction();
   m_client->add_aio_operation(oid, true, std::bind(
     &TestIoCtxImpl::exec, this, oid, handler, cls, method,
-    inbl, outbl, m_snap_seq, m_snapc, 0), c);
+    inbl, outbl, m_snap_seq, m_snapc, trans), c);
   return 0;
 }
 
@@ -172,7 +176,7 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
                         uint64_t snap_id, const SnapContext &snapc,
-                        int subop_id) {
+                        TestTransactionStateRef& trans) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -182,9 +186,12 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
     return -ENOSYS;
   }
 
-  return (*call)(reinterpret_cast<cls_method_context_t>(
-    handler->get_method_context(this, oid, snap_id, snapc, subop_id).get()), &inbl,
+  int r = (*call)(reinterpret_cast<cls_method_context_t>(
+    handler->get_method_context(this, oid, snap_id, snapc, trans).get()), &inbl,
     outbl);
+
+  dout(0) << __FILE__ << ":" << __LINE__ << "objclass exec: " << oid << " -> " << cls << ":" << method << "=" << r  << dendl;
+  return r;
 }
 
 int TestIoCtxImpl::list_watchers(const std::string& o,
@@ -436,11 +443,12 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
     TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
     for (ObjectOperations::iterator it = ops->ops.begin();
          it != ops->ops.end(); ++it) {
-      ret = (*it)(this, oid, pbl, snap_id, snapc, objver, transaction.get_cur_op());
+      auto& state = transaction.get_state_ref();
+      ret = (*it)(this, oid, pbl, snap_id, snapc, objver, state);
       if (ret < 0) {
         break;
       }
-      transaction.start_next_op();
+      ++state->op_id;
     }
   }
   m_pending_ops--;

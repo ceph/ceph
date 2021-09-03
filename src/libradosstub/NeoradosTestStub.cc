@@ -14,6 +14,7 @@
 #include "TestClassHandler.h"
 #include "TestIoCtxImpl.h"
 #include "TestRadosClient.h"
+#include "TestTransaction.h"
 #include <map>
 #include <memory>
 #include <optional>
@@ -316,11 +317,11 @@ void Op::exec(std::string_view cls, std::string_view method,
   librados::ObjectOperationTestImpl op =
     [cls_handler, cls, method, inbl = const_cast<bufferlist&>(inbl), out]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc, uint64_t*, int subop_id) mutable -> int {
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::TestTransactionStateRef& trans) mutable -> int {
       return io_ctx->exec(
         oid, cls_handler, std::string(cls).c_str(),
         std::string(method).c_str(), inbl,
-        (out != nullptr ? out : outbl), snap_id, snapc, subop_id);
+        (out != nullptr ? out : outbl), snap_id, snapc, trans);
     };
   if (ec != nullptr) {
     op = std::bind(
@@ -338,10 +339,10 @@ void Op::exec(std::string_view cls, std::string_view method,
   librados::ObjectOperationTestImpl op =
     [cls_handler, cls, method, inbl = const_cast<bufferlist&>(inbl)]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc, uint64_t*, int subop_id) mutable -> int {
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::TestTransactionStateRef& trans) mutable -> int {
       return io_ctx->exec(
         oid, cls_handler, std::string(cls).c_str(),
-        std::string(method).c_str(), inbl, outbl, snap_id, snapc, subop_id);
+        std::string(method).c_str(), inbl, outbl, snap_id, snapc, trans);
     };
   if (ec != NULL) {
     op = std::bind(
@@ -378,7 +379,7 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
   librados::ObjectOperationTestImpl op =
     [off, len, out, extents]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc, uint64_t*, int subop_id) mutable -> int {
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::TestTransactionStateRef& trans) mutable -> int {
       std::map<uint64_t,uint64_t> m;
       int r = io_ctx->sparse_read(
         oid, off, len, &m, (out != nullptr ? out : outbl), snap_id);
@@ -400,7 +401,7 @@ void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
   librados::ObjectOperationTestImpl op =
     [snaps]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist*,
-     uint64_t, const SnapContext&, uint64_t*, int) mutable -> int {
+     uint64_t, const SnapContext&, uint64_t*, librados::TestTransactionStateRef&) mutable -> int {
       librados::snap_set_t snap_set;
       int r = io_ctx->list_snaps(oid, &snap_set);
       if (r >= 0 && snaps != nullptr) {

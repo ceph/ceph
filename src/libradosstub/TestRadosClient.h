@@ -18,6 +18,7 @@
 #include "common/config_obs.h"
 #include "include/buffer_fwd.h"
 #include "TestWatchNotify.h"
+#include "TestTransaction.h"
 
 class Finisher;
 
@@ -49,24 +50,26 @@ public:
     Transaction(TestRadosClient *rados_client, const std::string& nspace,
                 const std::string &oid)
       : rados_client(rados_client), nspace(nspace), oid(oid) {
+      state = std::move(make_op_transaction());
       rados_client->transaction_start(nspace, oid);
     }
     ~Transaction() {
       rados_client->transaction_finish(nspace, oid);
     }
 
-    int get_cur_op() const {
-      return cur_op;
+    TestTransactionState& get_state() {
+      return *state;
     }
 
-    void start_next_op() {
-      ++cur_op;
+    TestTransactionStateRef& get_state_ref() {
+      return state;
     }
+
   private:
     TestRadosClient *rados_client;
     std::string nspace;
     std::string oid;
-    int cur_op{0};
+    TestTransactionStateRef state;
   };
 
   TestRadosClient(CephContext *cct, TestWatchNotify *watch_notify);

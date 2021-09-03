@@ -11,6 +11,8 @@
 #include <map>
 #include <string>
 
+#include "TestTransaction.h"
+
 namespace librados
 {
 
@@ -29,7 +31,7 @@ public:
     std::string oid;
     uint64_t snap_id;
     SnapContext snapc;
-    int subop_id;
+    TestTransactionStateRef trans;
   };
   typedef boost::shared_ptr<MethodContext> SharedMethodContext;
 
@@ -58,7 +60,7 @@ public:
                                          const std::string &oid,
                                          uint64_t snap_id,
                                          const SnapContext &snapc,
-                                         int subop_id);
+                                         TestTransactionStateRef& trans);
 
   int create_filter(cls_handle_t hclass, const std::string& filter_name,
 		    cls_cxx_filter_factory_t fn);
