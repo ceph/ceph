@@ -190,7 +190,7 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
     handler->get_method_context(this, oid, snap_id, snapc, trans).get()), &inbl,
     outbl);
 
-  dout(0) << __FILE__ << ":" << __LINE__ << "objclass exec: " << oid << " -> " << cls << ":" << method << "=" << r  << dendl;
+  dout(20) << "objclass exec: " << oid << " -> " << cls << ":" << method << "=" << r <<  "(" << (outbl ? outbl->length() : 0) << ") outbl=" << (void *)outbl << dendl;
   return r;
 }
 
@@ -445,7 +445,9 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
          it != ops->ops.end(); ++it) {
       auto& state = transaction.get_state_ref();
       ret = (*it)(this, oid, pbl, snap_id, snapc, objver, state);
-      if (ret < 0) {
+      dout(0) << "execute_aio_operations op=" << "(): -> " << ret << dendl;
+      if (ret < 0 &&
+          !(state->flags & LIBRADOS_OP_FLAG_FAILOK)) {
         break;
       }
       ++state->op_id;
@@ -460,6 +462,11 @@ void TestIoCtxImpl::handle_aio_notify_complete(AioCompletionImpl *c, int r) {
   m_pending_ops--;
 
   m_client->finish_aio_completion(c, r);
+}
+
+int TestIoCtxImpl::set_op_flags(TestTransactionStateRef& trans, int flags) {
+  trans->flags = flags;
+  return 0;
 }
 
 } // namespace librados

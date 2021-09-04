@@ -311,8 +311,9 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
   cls_user_list_buckets_ret ret;
 
   int rc = cls_cxx_map_get_vals(hctx, from_index, match_prefix, max_entries, &keys, &ret.truncated);
-  if (rc < 0)
+  if (rc < 0) {
     return rc;
+  }
 
   CLS_LOG(20, "from_index=%s to_index=%s match_prefix=%s",
           from_index.c_str(),

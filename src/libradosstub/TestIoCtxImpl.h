@@ -218,6 +218,7 @@ public:
                    const SnapContext &snapc) = 0;
 
   virtual int get_current_ver(const std::string& oid, uint64_t *ver) = 0;
+  virtual int set_op_flags(TestTransactionStateRef& trans, int flags);
 
   int execute_operation(const std::string& oid,
                         const Operation &operation);

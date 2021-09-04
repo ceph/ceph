@@ -1091,7 +1091,8 @@ int TestMemIoCtxImpl::xattr_get(const std::string& oid,
   TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
     {get_namespace(), oid});
   if (it == m_pool->file_xattrs.end()) {
-    return -ENODATA;
+    attrset->clear();
+    return 0;
   }
   *attrset = it->second;
   return 0;

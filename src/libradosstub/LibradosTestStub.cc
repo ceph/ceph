@@ -1140,7 +1140,6 @@ void ObjectOperation::exec(const char *cls, const char *method,
                                           librados_stub::get_class_handler(), cls,
                                           method, inbl, outbl, _4, _5, _7);
   if (ctx) {
-    auto ctx = new ObjectOpCompletionCtx(completion);
     op = std::bind(handle_operation_completion,
                    std::bind(op, _1, _2, _3, _4, _5, _6, _7), ctx);
   }
@@ -1148,6 +1147,15 @@ void ObjectOperation::exec(const char *cls, const char *method,
 }
 
 void ObjectOperation::set_op_flags2(int flags) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  if (o->ops.empty()) {
+    return;
+  }
+
+  /* insert op before the last operation so that it affects it */
+  auto it = o->ops.end();
+  --it;
+  o->ops.insert(it, std::bind(&TestIoCtxImpl::set_op_flags, _1, _7, flags));
 }
 
 size_t ObjectOperation::size() {
@@ -1853,6 +1861,9 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   int r = ctx->io_ctx_impl->omap_get_vals2(ctx->oid, start_obj, filter_prefix,
 					  max_to_get, vals, more);
   if (r < 0) {
+    if (r == -ENOENT) {
+      return 0;
+    }
     return r;
   }
   return vals->size();
@@ -2092,7 +2103,12 @@ int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
 int cls_cxx_map_read_header(cls_method_handle_t hctx, bufferlist *bl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->omap_get_header(ctx->oid, bl);
+  int r = ctx->io_ctx_impl->omap_get_header(ctx->oid, bl);
+  if (r == -ENOENT) {
+    bl->clear();
+    r = 0;
+  }
+  return r;
 }
 
 int cls_cxx_map_write_header(cls_method_context_t hctx, ceph::buffer::list *inbl) {
