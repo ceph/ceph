@@ -31,10 +31,9 @@ using util::create_async_context_callback;
 
 template <typename I>
 ValidatePoolRequest<I>::ValidatePoolRequest(librados::IoCtx& io_ctx,
-                                            asio::ContextWQ *op_work_queue,
                                             Context *on_finish)
     : m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
-      m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
+      m_on_finish(on_finish) {
     // validatation should occur in default namespace
     m_io_ctx.dup(io_ctx);
     m_io_ctx.set_namespace("");
