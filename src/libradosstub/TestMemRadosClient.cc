@@ -105,14 +105,12 @@ int TestMemRadosClient::blocklist_add(const std::string& client_address,
   return 0;
 }
 
-void TestMemRadosClient::transaction_start(const std::string& nspace,
-                                           const std::string &oid) {
-  m_mem_cluster->transaction_start({nspace, oid});
+void TestMemRadosClient::transaction_start(TestTransactionStateRef& state) {
+  m_mem_cluster->transaction_start(state);
 }
 
-void TestMemRadosClient::transaction_finish(const std::string& nspace,
-                                            const std::string &oid) {
-  m_mem_cluster->transaction_finish({nspace, oid});
+void TestMemRadosClient::transaction_finish(TestTransactionStateRef& state) {
+  m_mem_cluster->transaction_finish(state);
 }
 
 } // namespace librados

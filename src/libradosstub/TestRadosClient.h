@@ -49,12 +49,12 @@ public:
   public:
     Transaction(TestRadosClient *rados_client, const std::string& nspace,
                 const std::string &oid)
-      : rados_client(rados_client), nspace(nspace), oid(oid) {
-      state = std::move(make_op_transaction());
-      rados_client->transaction_start(nspace, oid);
+      : rados_client(rados_client) {
+      state = std::move(make_op_transaction({nspace, oid}));
+      rados_client->transaction_start(state);
     }
     ~Transaction() {
-      rados_client->transaction_finish(nspace, oid);
+      rados_client->transaction_finish(state);
     }
 
     TestTransactionState& get_state() {
@@ -67,8 +67,6 @@ public:
 
   private:
     TestRadosClient *rados_client;
-    std::string nspace;
-    std::string oid;
     TestTransactionStateRef state;
   };
 
@@ -152,10 +150,8 @@ public:
 protected:
   virtual ~TestRadosClient();
 
-  virtual void transaction_start(const std::string& nspace,
-                                 const std::string &oid) = 0;
-  virtual void transaction_finish(const std::string& nspace,
-                                  const std::string &oid) = 0;
+  virtual void transaction_start(TestTransactionStateRef& state) = 0;
+  virtual void transaction_finish(TestTransactionStateRef& state) = 0;
 
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,

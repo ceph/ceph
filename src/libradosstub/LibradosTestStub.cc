@@ -658,7 +658,7 @@ void IoCtx::dup(const IoCtx& rhs) {
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  auto trans = make_op_transaction();
+  auto trans = make_op_transaction({ctx->get_namespace(), oid});
   return ctx->execute_operation(
     oid, std::bind(&TestIoCtxImpl::exec, _1, _2,
                      librados_stub::get_class_handler(), cls,

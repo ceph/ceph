@@ -180,7 +180,8 @@ void TestMemCluster::blocklist(uint32_t nonce) {
   m_blocklist.insert(nonce);
 }
 
-void TestMemCluster::transaction_start(const ObjectLocator& locator) {
+void TestMemCluster::transaction_start(TestTransactionStateRef& ref) {
+  const auto& locator = ref->locator;
   std::unique_lock locker{m_lock};
   m_transaction_cond.wait(locker, [&locator, this] {
     return m_transactions.count(locator) == 0;
@@ -189,7 +190,8 @@ void TestMemCluster::transaction_start(const ObjectLocator& locator) {
   ceph_assert(result.second);
 }
 
-void TestMemCluster::transaction_finish(const ObjectLocator& locator) {
+void TestMemCluster::transaction_finish(TestTransactionStateRef& ref) {
+  const auto& locator = ref->locator;
   std::lock_guard locker{m_lock};
   size_t count = m_transactions.erase(locator);
   ceph_assert(count == 1);

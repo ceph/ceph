@@ -165,7 +165,7 @@ int TestIoCtxImpl::aio_exec(const std::string& oid, AioCompletionImpl *c,
                             TestClassHandler *handler,
                             const char *cls, const char *method,
                             bufferlist& inbl, bufferlist *outbl) {
-  auto trans = make_op_transaction();
+  auto trans = make_op_transaction({ get_namespace(), oid });
   m_client->add_aio_operation(oid, true, std::bind(
     &TestIoCtxImpl::exec, this, oid, handler, cls, method,
     inbl, outbl, m_snap_seq, m_snapc, trans), c);

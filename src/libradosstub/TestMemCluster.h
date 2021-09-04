@@ -5,6 +5,7 @@
 #pragma once
 
 #include "TestCluster.h"
+#include "TestTransaction.h"
 #include "include/buffer.h"
 #include "include/interval_set.h"
 #include "include/int_types.h"
@@ -100,8 +101,8 @@ public:
   bool is_blocklisted(uint32_t nonce) const;
   void blocklist(uint32_t nonce);
 
-  void transaction_start(const ObjectLocator& locator);
-  void transaction_finish(const ObjectLocator& locator);
+  void transaction_start(TestTransactionStateRef& state);
+  void transaction_finish(TestTransactionStateRef& state);
 
 private:
 
