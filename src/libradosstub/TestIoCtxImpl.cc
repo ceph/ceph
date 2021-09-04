@@ -165,7 +165,7 @@ int TestIoCtxImpl::aio_exec(const std::string& oid, AioCompletionImpl *c,
                             TestClassHandler *handler,
                             const char *cls, const char *method,
                             bufferlist& inbl, bufferlist *outbl) {
-  auto trans = make_op_transaction({ get_namespace(), oid });
+  auto trans = init_transaction(oid);
   m_client->add_aio_operation(oid, true, std::bind(
     &TestIoCtxImpl::exec, this, oid, handler, cls, method,
     inbl, outbl, m_snap_seq, m_snapc, trans), c);
@@ -181,10 +181,12 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
     return -EBLOCKLISTED;
   }
 
-  cls_method_cxx_call_t call = handler->get_method(cls, method);
+  bool write;
+  cls_method_cxx_call_t call = handler->get_method(cls, method, &write);
   if (call == NULL) {
     return -ENOSYS;
   }
+  trans->set_write(write);
 
   int r = (*call)(reinterpret_cast<cls_method_context_t>(
     handler->get_method_context(this, oid, snap_id, snapc, trans).get()), &inbl,
@@ -425,7 +427,8 @@ int TestIoCtxImpl::execute_operation(const std::string& oid,
     return -EBLOCKLISTED;
   }
 
-  TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
+  auto transaction_state = init_transaction(oid);
+  TestRadosClient::Transaction transaction(m_client, transaction_state);
   return operation(this, oid);
 }
 
@@ -440,7 +443,8 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
   if (m_client->is_blocklisted()) {
     ret = -EBLOCKLISTED;
   } else {
-    TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
+    auto transaction_state = init_transaction(oid);
+    TestRadosClient::Transaction transaction(m_client, transaction_state);
     for (ObjectOperations::iterator it = ops->ops.begin();
          it != ops->ops.end(); ++it) {
       auto& state = transaction.get_state_ref();

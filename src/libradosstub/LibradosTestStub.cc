@@ -658,7 +658,7 @@ void IoCtx::dup(const IoCtx& rhs) {
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  auto trans = make_op_transaction({ctx->get_namespace(), oid});
+  auto trans = ctx->init_transaction(oid);
   return ctx->execute_operation(
     oid, std::bind(&TestIoCtxImpl::exec, _1, _2,
                      librados_stub::get_class_handler(), cls,
@@ -1861,9 +1861,6 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   int r = ctx->io_ctx_impl->omap_get_vals2(ctx->oid, start_obj, filter_prefix,
 					  max_to_get, vals, more);
   if (r < 0) {
-    if (r == -ENOENT) {
-      return 0;
-    }
     return r;
   }
   return vals->size();
@@ -2045,7 +2042,7 @@ int cls_register_cxx_method(cls_handle_t hclass, const char *method,
     cls_method_cxx_call_t class_call,
     cls_method_handle_t *handle) {
   librados::TestClassHandler *cls = librados_stub::get_class_handler();
-  return cls->create_method(hclass, method, class_call, handle);
+  return cls->create_method(hclass, method, flags, class_call, handle);
 }
 
 int cls_register_cxx_filter(cls_handle_t hclass,
@@ -2103,12 +2100,7 @@ int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
 int cls_cxx_map_read_header(cls_method_handle_t hctx, bufferlist *bl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  int r = ctx->io_ctx_impl->omap_get_header(ctx->oid, bl);
-  if (r == -ENOENT) {
-    bl->clear();
-    r = 0;
-  }
-  return r;
+  return ctx->io_ctx_impl->omap_get_header(ctx->trans, bl);
 }
 
 int cls_cxx_map_write_header(cls_method_context_t hctx, ceph::buffer::list *inbl) {

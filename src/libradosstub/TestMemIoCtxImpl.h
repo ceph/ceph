@@ -56,7 +56,7 @@ public:
   int omap_clear(const std::string& oid) override;
   int omap_set(const std::string& oid, const std::map<std::string,
                bufferlist> &map) override;
-  int omap_get_header(const std::string& oid,
+  int omap_get_header(TestTransactionStateRef& trs,
                       bufferlist *bl) override;
   int omap_set_header(const std::string& oid,
                       const bufferlist& bl) override;
@@ -99,6 +99,8 @@ public:
            const SnapContext &snapc) override;
   int get_current_ver(const std::string& oid, uint64_t *ver);
 
+  TestTransactionStateRef init_transaction(const std::string& oid) override;
+
 protected:
   TestMemCluster::Pool *get_pool() {
     return m_pool;
@@ -117,6 +119,9 @@ private:
   TestMemCluster::SharedFile get_file(const std::string &oid, bool write,
                                       uint64_t snap_id,
                                       const SnapContext &snapc);
+  TestMemCluster::SharedFile get_file_safe(TestTransactionStateRef& trans,
+                                           bool write, uint64_t snap_id,
+                                           const SnapContext &snapc);
 
 };
 

@@ -157,7 +157,7 @@ public:
   virtual int omap_clear(const std::string& oid) = 0;
   virtual int omap_set(const std::string& oid,
                        const std::map<std::string, bufferlist> &map) = 0;
-  virtual int omap_get_header(const std::string& oid,
+  virtual int omap_get_header(TestTransactionStateRef& trs,
                               bufferlist *bl) = 0;
   virtual int omap_set_header(const std::string& oid,
                               const bufferlist& bl) = 0;
@@ -222,6 +222,8 @@ public:
 
   int execute_operation(const std::string& oid,
                         const Operation &operation);
+
+  virtual TestTransactionStateRef init_transaction(const std::string& oid) = 0;
 
 protected:
   TestIoCtxImpl(const TestIoCtxImpl& rhs);

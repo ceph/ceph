@@ -36,6 +36,7 @@ public:
   typedef boost::shared_ptr<MethodContext> SharedMethodContext;
 
   struct Method {
+    int flags;
     cls_method_cxx_call_t class_call;
   };
   typedef boost::shared_ptr<Method> SharedMethod;
@@ -52,10 +53,12 @@ public:
 
   int create(const std::string &name, cls_handle_t *handle);
   int create_method(cls_handle_t hclass, const char *method,
+                    int flags,
                     cls_method_cxx_call_t class_call,
                     cls_method_handle_t *handle);
   cls_method_cxx_call_t get_method(const std::string &cls,
-                                   const std::string &method);
+                                   const std::string &method,
+                                   bool *write);
   SharedMethodContext get_method_context(TestIoCtxImpl *io_ctx_impl,
                                          const std::string &oid,
                                          uint64_t snap_id,

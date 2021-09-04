@@ -47,10 +47,8 @@ public:
 
   class Transaction {
   public:
-    Transaction(TestRadosClient *rados_client, const std::string& nspace,
-                const std::string &oid)
-      : rados_client(rados_client) {
-      state = std::move(make_op_transaction({nspace, oid}));
+    Transaction(TestRadosClient *rados_client, TestTransactionStateRef& state)
+      : rados_client(rados_client), state(state) {
       rados_client->transaction_start(state);
     }
     ~Transaction() {

@@ -94,6 +94,7 @@ int TestClassHandler::create(const std::string &name, cls_handle_t *handle) {
 
 int TestClassHandler::create_method(cls_handle_t hclass,
                                     const char *name,
+                                    int flags,
                                     cls_method_cxx_call_t class_call,
                                     cls_method_handle_t *handle) {
   Class *cls = reinterpret_cast<Class*>(hclass);
@@ -104,13 +105,15 @@ int TestClassHandler::create_method(cls_handle_t hclass,
   }
 
   SharedMethod method(new Method());
+  method->flags = flags;
   method->class_call = class_call;
   cls->methods[name] = method;
   return 0;
 }
 
 cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
-                                                   const std::string &method) {
+                                                   const std::string &method,
+                                                   bool *write) {
   Classes::iterator c_it = m_classes.find(cls);
   if (c_it == m_classes.end()) {
     std::cerr << "Failed to located class " << cls << std::endl;
@@ -124,6 +127,7 @@ cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
               << std::endl;
     return NULL;
   }
+  *write = !!(m_it->second->flags & CLS_METHOD_RD);
   return m_it->second->class_call;
 }
 

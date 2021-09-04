@@ -11,8 +11,14 @@ struct TestTransactionState {
   TestCluster::ObjectLocator locator;
   int op_id = 0;
   int flags = 0;
+  bool write = false;
 
   TestTransactionState(const TestCluster::ObjectLocator& loc) : locator(loc) {}
+
+  void set_write(bool w) {
+    /* can set but not reset */
+    write |= w;
+  }
 };
 
 using TestTransactionStateRef = std::shared_ptr<TestTransactionState>;

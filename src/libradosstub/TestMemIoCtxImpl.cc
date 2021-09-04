@@ -480,21 +480,19 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
   return 0;
 }
 
-int TestMemIoCtxImpl::omap_get_header(const std::string& oid,
+int TestMemIoCtxImpl::omap_get_header(TestTransactionStateRef& trans,
                                       bufferlist *bl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
-  {
-    std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
-    if (file == NULL) {
-      return -ENOENT;
-    }
+  file = get_file_safe(trans, false, CEPH_NOSNAP, {});
+  if (file == NULL) {
+    return -ENOENT;
   }
 
+  auto& oid = trans->locator.name;
   std::shared_lock l{file->lock};
   auto iter = m_pool->file_omaps.find({get_namespace(), oid});
   if (iter == m_pool->file_omaps.end()) {
@@ -1277,6 +1275,23 @@ TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
     }
   }
   return TestMemCluster::SharedFile();
+}
+
+TestMemCluster::SharedFile TestMemIoCtxImpl::get_file_safe(
+    TestTransactionStateRef& trans, bool write, uint64_t snap_id,
+    const SnapContext &snapc) {
+  write |= trans->write;
+  if (write) {
+    std::unique_lock l{m_pool->file_lock};
+    return get_file(trans->locator.name, write, snap_id, snapc);
+  }
+
+  std::shared_lock l{m_pool->file_lock};
+  return get_file(trans->locator.name, write, snap_id, snapc);
+}
+
+TestTransactionStateRef TestMemIoCtxImpl::init_transaction(const std::string& oid) {
+  return make_op_transaction({get_namespace(), oid});
 }
 
 } // namespace librados
