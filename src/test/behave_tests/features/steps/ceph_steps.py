@@ -58,8 +58,7 @@ def execute_and_store_output(context, shell, op_keyword):
     if return_code != 0:
         raise Exception(f"Failed to execute ssh\n Message:{output}")
     context.output = str_to_list(output)
-    # TODO: remove the logs genrated
-    context.op_stored_dict[op_keyword] = context.output
+    context.op_stored_dict[op_keyword] = context.output[-1][0] # Considering the last line output
     print(f"Executed output : {context.output}")
 
 

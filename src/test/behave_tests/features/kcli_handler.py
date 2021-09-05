@@ -33,8 +33,8 @@ def replace_config_in_cmd(config_details ,command):
         return command
     for keyword in detect_keywords:
         key, config = keyword
-        if key == "exec_ouput":
-            command = command.replace(f"<{key}:{config}>", config_details[key])
+        if key == "exec_output":
+            command = command.replace(f"<{key}:{config}>", config_details[config])
             print(f"Replacing the executed output : {key}\nCommand: {command}")
         else:
             if key not in config_details.keys():

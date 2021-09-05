@@ -97,9 +97,9 @@ Feature: Tests related to OSD creation
         """
         sudo modprobe rbd
         """
-    Then I execute in cephadm_shell and save output as rbd_map_op
+    Then Execute in cephadm_shell and save output as rbd_map_op
         """
-        rbd map test_pool/test_image --id admin -k /etc/ceph/ceph.keyring
+        rbd map test_pool/test_image -- specialtid admin -k /etc/ceph/ceph.keyring
         """
     Then Using output I execute in host
         """
