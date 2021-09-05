@@ -1,4 +1,3 @@
-
 def str_to_list(string):
     """
     Converts the string into list removing whitespaces

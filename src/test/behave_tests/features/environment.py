@@ -4,6 +4,7 @@ import re
 
 from jinja2 import Template
 from kcli_handler import is_bootstrap_script_complete, execute_kcli_cmd
+from validation_util import str_to_list
 
 KCLI_PLANS_DIR = "generated_plans"
 KCLI_PLAN_NAME = "behave_test_plan"
@@ -69,8 +70,25 @@ def _parse_value(value):
 
 
 def _parse_vm_details_to_dict():
-    #TODO: Execute kcli command and parse details from the output
-    pass
+    parsed = {}
+    op, code = execute_kcli_cmd('list vms')
+    if code:
+        raise Exception("Failed to parsed kcli vm configuration")
+    vm_details = [
+        [
+            word for word in line if word !="|"
+        ]
+        for line in str_to_list(op) if len(line) > 1
+    ]
+    keyword = vm_details[0]
+    for vm in vm_details[1:]:
+        if KCLI_PLAN_NAME in vm:
+            parsed[vm[0]] = {
+                keyword[vm.index(config)].lower():config
+                for config in vm
+            }
+    return parsed
+
 
 def _parse_vm_description(specs):
     """
@@ -173,33 +191,39 @@ def before_feature(context, feature):
         [line for line in vm_description if line.startswith("-")]
     )
     vm_config = _parse_vm_description("".join(vm_feature_specs))
-    kcli_plan_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
-    print(f"Kcli vm configureaton \n {vm_config}")
-    _write_file(
-        kcli_plan_path,
-        loaded_kcli.render(vm_config)
-    )
 
-    # Checks for ceph description if None set the default configurations
-    ceph_config = _parse_ceph_description(
-        "".join(ceph_description)
-    ) if ceph_description else Bootstrap_Config
+    try:
+        kcli_plan_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
+        print(f"Kcli vm configureaton \n {vm_config}")
+        _write_file(
+            kcli_plan_path,
+            loaded_kcli.render(vm_config)
+        )
+        # Checks for ceph description if None set the default configurations
+        ceph_config = _parse_ceph_description(
+            "".join(ceph_description)
+        ) if ceph_description else Bootstrap_Config
 
-    print(f"Bootstrap configuraton \n {ceph_config}\n")
-    _write_file(
-        os.path.join(kcli_plans_dir_path, "bootstrap_cluster_dev.sh"),
-        loaded_script.render(ceph_config),
-    )
+        print(f"Bootstrap configuraton \n {ceph_config}\n")
+        _write_file(
+            os.path.join(kcli_plans_dir_path, "bootstrap_cluster_dev.sh"),
+            loaded_script.render(ceph_config),
+        )
 
-    _handle_kcli_plan("create", os.path.relpath(kcli_plan_path))
+        _handle_kcli_plan("create", os.path.relpath(kcli_plan_path))
 
-    if not is_bootstrap_script_complete():
-        print("Failed to complete bootstrap..")
+        if not is_bootstrap_script_complete():
+            raise Exception("Failed to complete bootstrap..")
+
+        context.vm_details = _parse_vm_details_to_dict()
+        context.last_executed = {}
+        context.op_stored_dict = {}
+
+    except Exception as ex:
+        print(ex)
         _handle_kcli_plan("delete")
         exit(1)
-    context.last_executed = {}
-    context.op_stored_dict = {}
-    context.vm_details = _parse_vm_details_to_dict()
+
 
 def after_feature(context, feature):
     if os.path.exists(KCLI_PLANS_DIR):

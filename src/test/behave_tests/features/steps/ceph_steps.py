@@ -1,7 +1,7 @@
 import time
 
 from behave import given, when, then
-from kcli_handler import execute_ssh_cmd
+from kcli_handler import execute_ssh_cmd, replace_kcli_config_in_cmd
 from validation_util import str_to_list
 
 
@@ -14,7 +14,7 @@ def login_to_node(context, node):
 def init_step_execute(context, shell):
     commands = context.text.split("\n")
     for command in commands:
-        op, code = execute_ssh_cmd(context.node, shell, command)
+        op, code = execute_ssh_cmd(context.vm_details, context.node, shell, command)
         if code:
             raise Exception("Failed to execute")
         context.last_executed["cmd"] = command
@@ -27,7 +27,12 @@ def execute_step(context, shell):
     if context.node is None:
         raise Exception("Failed not logged into virtual machine")
     for command in context.text.split("\n"):
-        output, return_code = execute_ssh_cmd(context.node, shell, command)
+        output, return_code = execute_ssh_cmd(
+            context.vm_details,
+            context.node,
+            shell,
+            command
+        )
         context.last_executed["cmd"] = command
         context.last_executed["shell"] = shell
         if return_code != 0:
@@ -36,20 +41,45 @@ def execute_step(context, shell):
     print(f"Executed output : {context.output}")
 
 
-
-@when("I execute in {shell} and store output as {op_keyword}")
-@then("I execute in {shell} and store output as {op_keyword}")
+@when("Execute in {shell} and save output as {op_keyword}")
+@then("Execute in {shell} and save output as {op_keyword}")
 def execute_and_store_output(context, shell, op_keyword):
     
     if context.node is None:
         raise Exception("Failed not logged into virtual machine")
+    command = [ cmd for cmd in context.text.split("\n")]
+    output, return_code = execute_ssh_cmd(
+        context.vm_details,
+        context.node,
+        shell,
+        command[0],
+    )
+    context.last_executed_cmd = command
+    if return_code != 0:
+        raise Exception(f"Failed to execute ssh\n Message:{output}")
+    context.output = str_to_list(output)
+    # TODO: remove the logs genrated
+    context.op_stored_dict[op_keyword] = context.output
+    print(f"Executed output : {context.output}")
+
+
+@when("Using output I execute in {shell}")
+@then("Using output I execute in {shell}")
+def using_output_execute_step(context, shell):
+    if context.node is None:
+        raise Exception("Failed not logged into virtual machine")
     for command in context.text.split("\n"):
-        output, return_code = execute_ssh_cmd(context.node, shell, command)
-        context.last_executed_cmd = command
+        output, return_code = execute_ssh_cmd(
+            context.op_stored_dict,
+            context.node,
+            shell,
+            command,
+        )
+        context.last_executed["cmd"] = command
+        context.last_executed["shell"] = shell
         if return_code != 0:
             raise Exception(f"Failed to execute ssh\n Message:{output}")
         context.output = str_to_list(output)
-    context.op_stored_dict[op_keyword] = context.output
     print(f"Executed output : {context.output}")
 
 
@@ -61,7 +91,12 @@ def execute_only_one_step(context, shell, command):
     """
     if context.node is None:
         raise Exception("Failed not logged into virtual machine")
-    output, return_code = execute_ssh_cmd(context.node, shell, command)
+    output, return_code = execute_ssh_cmd(
+        context.vm_details,
+        context.node,
+        shell,
+        command,
+    )
     context.last_executed["cmd"] = command
     context.last_executed["shell"] = shell
     if return_code != 0:

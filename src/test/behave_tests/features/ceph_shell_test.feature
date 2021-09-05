@@ -38,7 +38,7 @@ Feature: Testing basic ceph shell commands
     Given I log as root into ceph-node-00
     When I execute in cephadm_shell
         """
-        ceph orch device lss
+        ceph orch device ls
         """
     Then I get results which contain
         """

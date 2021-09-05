@@ -68,9 +68,9 @@ Feature: Tests related to OSD creation
         """
     Then I get results which contain
         """
-            Total Images: 0
-            Total Snapshots: 0
-            Provisioned Size: 0 B
+        Total Images: 0
+        Total Snapshots: 0
+        Provisioned Size: 0 B
         """
     Then I execute in cephadm_shell
         """
@@ -97,10 +97,13 @@ Feature: Tests related to OSD creation
         """
         sudo modprobe rbd
         """
-    Then I execute in cephadm_shell and store output as rbd_map_op
+    Then I execute in cephadm_shell and save output as rbd_map_op
         """
-        in cephadm : rbd map test_pool/test_image --id admin -k /etc/ceph/ceph.keyring
-        in cephadm : sudo mkfs.ext4 -m0 <exec_output:rbd_map_op>
+        rbd map test_pool/test_image --id admin -k /etc/ceph/ceph.keyring
+        """
+    Then Using output I execute in host
+        """
+        sudo mkfs.ext4 -m0 <exec_output:rbd_map_op>
         """
     Then I get results which contain
         """
@@ -113,10 +116,17 @@ Feature: Tests related to OSD creation
     Then I execute in host
         """
         sudo mkdir -p /mnt/ceph-block-device
+        """
+    Then Using output I execute in host
+        """
         sudo mount <exec_output:rbd_map_op> /mnt/ceph-block-device
----------------------REQUIRED command to create files wth large sizes---------------------------{copy files command}
+        """
+    Then I execute in host
+        # ---------------------REQUIRED command to create files wth large sizes---------------------------{copy files command}
+        """
         df -h
         """
+
     Then I get results which contain
         """
         Filesystem      Size  Used Avail Use% Mounted on

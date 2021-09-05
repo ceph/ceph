@@ -1,6 +1,7 @@
 import subprocess
 import time
 import os
+import re
 
 
 kcli_exec = r"""
@@ -17,6 +18,28 @@ def _create_kcli_cmd(command):
     cmd = cmd.replace("$PWD", os.getenv("PWD"))
     kcli = cmd.replace("\n", "").split(" ")
     return kcli + command.split(" ")
+
+
+def replace_config_in_cmd(config_details ,command):
+    """
+    Checks for kcli vm configuration keywords in specified in the command
+    and replaces it with configuration value.
+    keyword specified following format are replaced
+    example:
+        <ceph-node-00:ip>
+    """
+    detect_keywords = re.findall(r"<(?P<node>[\w\.-]+):(?P<config>[\w\.-]+)>", command)
+    if not detect_keywords:
+        return command
+    for keyword in detect_keywords:
+        node, config = keyword
+        if node not in config_details.keys():
+            raise Exception(f"Node specified not found : {node}")
+        if config not in config_details[node].keys():
+            raise Exception(f"Config {config} of {node} not found")
+        print(f"Replacing the kcli configuration {keyword[1]}")
+        command = command.replace(f"<{keyword[0]}:{keyword[1]}>", config_details[keyword[0]][keyword[1]])
+    return command
 
 
 def is_bootstrap_script_complete():
@@ -69,10 +92,11 @@ def execute_kcli_cmd(command):
     return (op, proc.returncode)
 
 
-def execute_ssh_cmd(vm_name, shell, command):
+def execute_ssh_cmd(config, vm_name, shell, command):
     """
     Executes the provided ssh command on the provided vm machine
     """
+    command = replace_config_in_cmd(config, command)
     if shell == "cephadm_shell":
         command = f"cephadm shell {command}"
     sudo_cmd = f"sudo -i {command}".split(" ")
