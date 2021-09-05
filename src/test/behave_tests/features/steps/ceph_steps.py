@@ -1,7 +1,7 @@
 import time
 
 from behave import given, when, then
-from kcli_handler import execute_ssh_cmd, replace_kcli_config_in_cmd
+from kcli_handler import execute_ssh_cmd
 from validation_util import str_to_list
 
 

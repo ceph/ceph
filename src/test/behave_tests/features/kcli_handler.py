@@ -28,17 +28,20 @@ def replace_config_in_cmd(config_details ,command):
     example:
         <ceph-node-00:ip>
     """
-    detect_keywords = re.findall(r"<(?P<node>[\w\.-]+):(?P<config>[\w\.-]+)>", command)
+    detect_keywords = re.findall(r"<(?P<key>[\w\.-]+):(?P<config>[\w\.-]+)>", command)
     if not detect_keywords:
         return command
     for keyword in detect_keywords:
-        node, config = keyword
-        if node not in config_details.keys():
-            raise Exception(f"Node specified not found : {node}")
-        if config not in config_details[node].keys():
-            raise Exception(f"Config {config} of {node} not found")
-        print(f"Replacing the kcli configuration {keyword[1]}")
-        command = command.replace(f"<{keyword[0]}:{keyword[1]}>", config_details[keyword[0]][keyword[1]])
+        key, config = keyword
+        if key == "exec_ouput":
+            command = command.replace(f"<{key}:{config}>", config_details[key])
+            print(f"Replacing the executed output : {key}\nCommand: {command}")
+        else:
+            if key not in config_details.keys():
+                raise Exception(f"Node specified not found : {key}")
+            if config not in config_details[key].keys():
+                raise Exception(f"Config {config} of {key} not found")
+            command = command.replace(f"<{key}:{config}>", config_details[key][config])
     return command
 
 

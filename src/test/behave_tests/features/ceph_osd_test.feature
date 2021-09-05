@@ -74,7 +74,7 @@ Feature: Tests related to OSD creation
         """
     Then I execute in cephadm_shell
         """
-        rbd create test_image --size 4096 --image-feature layering -m <host1:ip> -k /etc/ceph/ceph.keyring -p test_pool
+        rbd create test_image --size 4096 --image-feature layering -m <ceph-node-00:ips> -k /etc/ceph/ceph.keyring -p test_pool
         rbd ls test_pool
         """
     Then I get results which contain
@@ -107,7 +107,7 @@ Feature: Tests related to OSD creation
         """
     Then I get results which contain
         """
-        Discarding device blocks: don
+        Discarding device blocks: done
         Allocating group tables: done
         Writing inode tables: done
         Creating journal : done
