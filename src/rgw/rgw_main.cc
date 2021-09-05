@@ -346,9 +346,18 @@ int radosgw_Main(int argc, const char **argv)
   }
   lsubdout(cct, rgw, 1) << "D3N datacache enabled: " << rgw_d3n_datacache_enabled << dendl;
 
+  std::string rgw_store = (!rgw_d3n_datacache_enabled) ? "rados" : "d3n";
+
+  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_DBSTORE
+  if (config_store == "dbstore") {
+    rgw_store = "dbstore";
+  }
+#endif
+
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
-				 (!rgw_d3n_datacache_enabled) ? "rados" : "d3n",
+				 rgw_store,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,

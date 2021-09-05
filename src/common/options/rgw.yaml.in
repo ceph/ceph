@@ -3220,6 +3220,17 @@ options:
   see_also:
   - rgw_thread_pool_size
   with_legacy: true
+- name: rgw_backend_store
+  type: str
+  level: advanced
+  desc: experimental Option to set backend store type
+  long_desc: defaults to rados. Other valid values are dbstore(experimental).
+  default: rados
+  services:
+  - rgw
+  enum_values:
+  - rados
+  - dbstore
 - name: rgw_luarocks_location
   type: str
   level: advanced
