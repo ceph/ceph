@@ -574,15 +574,13 @@ void PrimaryLogScrub::stats_of_handled_objects(const object_stat_sum_t& delta_st
   // scrubbed and their stats have already been added to the scrubber. Objects after that
   // point haven't been included in the scrubber's stats accounting yet, so they will be
   // included when the scrubber gets to that object.
-  dout(15) << __func__ << " soid: " << soid << " scrub is active? " << is_scrub_active()
-	   << dendl;
   if (is_primary() && is_scrub_active()) {
     if (soid < m_start) {
       dout(20) << __func__ << " " << soid << " < [" << m_start << "," << m_end << ")"
 	       << dendl;
       m_scrub_cstat.add(delta_stats);
     } else {
-      dout(20) << __func__ << " " << soid << " >= [" << m_start << "," << m_end << ")"
+      dout(25) << __func__ << " " << soid << " >= [" << m_start << "," << m_end << ")"
 	       << dendl;
     }
   }
