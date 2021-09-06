@@ -5412,7 +5412,8 @@ void RGWCopyObj::execute(optional_yield y)
       return;
     }
     obj_size = astate->size;
-  
+    src_object->set_instance(astate->obj.key.instance);
+
     if (!s->system_request) { // no quota enforcement for system requests
       // enforce quota against the destination bucket owner
       op_ret = dest_bucket->check_quota(this, user_quota, bucket_quota,
