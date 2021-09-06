@@ -6084,7 +6084,11 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  if (!read_only && !to_repair && cct->_conf->bluestore_allocation_from_file) {
+  if (!read_only && !to_repair && cct->_conf->bluestore_allocation_from_file
+#ifdef HAVE_LIBZBD
+      && !bdev->is_smr()
+#endif
+    ) {
     dout(5) << __func__ << "::NCB::Commit to Null-Manager" << dendl;
     commit_to_null_manager();
   }
