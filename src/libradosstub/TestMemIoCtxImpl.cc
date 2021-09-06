@@ -1010,13 +1010,22 @@ int TestMemIoCtxImpl::cmpxattr_str(const string& oid,
 
   switch (op) {
     case CEPH_OSD_CMPXATTR_OP_EQ:
-      cmp = (attr_bl == bl);
+      cmp = (bl == attr_bl);
       break;
-    case CEPH_OSD_CMPXATTR_OP_LT:
-      cmp = (attr_bl < bl);
+    case CEPH_OSD_CMPXATTR_OP_NE:
+      cmp = (bl != attr_bl);
       break;
     case CEPH_OSD_CMPXATTR_OP_GT:
-      cmp = (attr_bl > bl);
+      cmp = (bl > attr_bl);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_GTE:
+      cmp = (bl >= attr_bl);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_LT:
+      cmp = (bl < attr_bl);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_LTE:
+      cmp = (bl <= attr_bl);
       break;
     default:
       return -EINVAL;
@@ -1054,7 +1063,10 @@ int TestMemIoCtxImpl::cmpxattr(const string& oid,
   string s = bl.to_str();
   string err;
 
-  uint64_t attr_val = static_cast<int64_t>(strict_strtoll(s, 10, &err));
+  auto cct = m_client->cct();
+  ldout(cct, 20) << "cmpxattr name=" << name << " s=" << s << " v=" << v << dendl;
+
+  uint64_t attr_val = (s.empty() ? 0 : static_cast<int64_t>(strict_strtoll(s, 10, &err)));
   if (!err.empty()) {
     return -EINVAL;
   }
@@ -1063,13 +1075,22 @@ int TestMemIoCtxImpl::cmpxattr(const string& oid,
 
   switch (op) {
     case CEPH_OSD_CMPXATTR_OP_EQ:
-      cmp = (attr_val == v);
+      cmp = (v == attr_val);
       break;
-    case CEPH_OSD_CMPXATTR_OP_LT:
-      cmp = (attr_val < v);
+    case CEPH_OSD_CMPXATTR_OP_NE:
+      cmp = (v != attr_val);
       break;
     case CEPH_OSD_CMPXATTR_OP_GT:
-      cmp = (attr_val > v);
+      cmp = (v > attr_val);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_GTE:
+      cmp = (v >= attr_val);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_LT:
+      cmp = (v < attr_val);
+      break;
+    case CEPH_OSD_CMPXATTR_OP_LTE:
+      cmp = (v <= attr_val);
       break;
     default:
       return -EINVAL;
