@@ -28,6 +28,8 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
       cct(cct),
       num_free(0),
       size(size),
+      conventional_size(_first_sequential_zone * _zone_size),
+      sequential_size(size - conventional_size),
       block_size(blk_size),
       zone_size(_zone_size),
       first_seq_zone_num(_first_sequential_zone),
@@ -148,44 +150,26 @@ void ZonedAllocator::dump(std::function<void(uint64_t offset,
   std::lock_guard l(lock);
 }
 
-// This just increments |num_free|.  The actual free space is added by
-// init_alloc, as it updates the write pointer for each zone.
-void ZonedAllocator::init_add_free(uint64_t offset, uint64_t length)
+void ZonedAllocator::init_from_zone_pointers(
+  std::vector<zone_state_t> &&_zone_states,
+  ceph::mutex *_cleaner_lock,
+  ceph::condition_variable *_cleaner_cond)
 {
-  ldout(cct, 40) << " " << std::hex
-		 << offset << "~" << length << std::dec << dendl;
-
-  num_free += length;
-}
-
-void ZonedAllocator::init_rm_free(uint64_t offset, uint64_t length)
-{
+  // this is called once, based on the device's zone pointers
   std::lock_guard l(lock);
-  ldout(cct, 40) << " 0x" << std::hex
-		 << offset << "~" << length << std::dec << dendl;
-
-  num_free -= length;
-  ceph_assert(num_free >= 0);
-
-  uint64_t zone_num = offset / zone_size;
-  uint64_t write_pointer = offset % zone_size;
-  uint64_t remaining_space = get_remaining_space(zone_num);
-
-  ceph_assert(get_write_pointer(zone_num) == write_pointer);
-  ceph_assert(remaining_space <= length);
-  increment_write_pointer(zone_num, remaining_space);
-
-  ldout(cct, 40) << " set zone 0x" << std::hex
-		 << zone_num << " write pointer to 0x" << zone_size << std::dec << dendl;
-
-  length -= remaining_space;
-  ceph_assert(length % zone_size == 0);
-
-  for ( ; length; length -= zone_size) {
-    increment_write_pointer(++zone_num, zone_size);
-    ldout(cct, 40) << " set zone 0x" << std::hex
-		   << zone_num << " write pointer to 0x" << zone_size << std::dec << dendl;
+  ldout(cct, 10) << dendl;
+  cleaner_lock = _cleaner_lock;
+  cleaner_cond = _cleaner_cond;
+  zone_states = std::move(_zone_states);
+  num_free = 0;
+  for (size_t i = first_seq_zone_num; i < num_zones; ++i) {
+    num_free += zone_size - (zone_states[i].write_pointer % zone_size);
   }
+  uint64_t conventional_size = first_seq_zone_num * zone_size;
+  uint64_t sequential_size = size - conventional_size;
+  ldout(cct, 10) << "free 0x" << std::hex << num_free
+		 << " / 0x" << sequential_size << std::dec
+		 << dendl;
 }
 
 const std::set<uint64_t> *ZonedAllocator::get_zones_to_clean(void)
@@ -198,16 +182,15 @@ bool ZonedAllocator::low_on_space(void)
 {
   ceph_assert(zones_to_clean.empty());
 
-  uint64_t conventional_size = first_seq_zone_num * zone_size;
-  uint64_t sequential_size = size - conventional_size;
   uint64_t sequential_num_free = num_free - conventional_size;
   double free_ratio = static_cast<double>(sequential_num_free) / sequential_size;
 
-  ldout(cct, 10) << " free size 0x" << std::hex << sequential_num_free
-		 << " total size 0x" << sequential_size << std::dec
+  ldout(cct, 10) << " free 0x" << std::hex << sequential_num_free
+		 << "/ 0x" << sequential_size << std::dec
 		 << ", free ratio is " << free_ratio << dendl;
+  ceph_assert(sequential_num_free <= sequential_size);
 
-   // TODO: make 0.25 tunable
+  // TODO: make 0.25 tunable
   return free_ratio <= 0.25;
 }
 
@@ -257,18 +240,6 @@ void ZonedAllocator::find_zones_to_clean(void)
   cleaner_lock->unlock();
 }
  
-void ZonedAllocator::init_alloc(std::vector<zone_state_t> &&_zone_states,
-				ceph::mutex *_cleaner_lock,
-				ceph::condition_variable *_cleaner_cond)
-{
-  lderr(cct) << dendl;
-  std::lock_guard l(lock);
-  cleaner_lock = _cleaner_lock;
-  cleaner_cond = _cleaner_cond;
-  ldout(cct, 10) << dendl;
-  zone_states = std::move(_zone_states);
-}
-
 void ZonedAllocator::mark_zones_to_clean_free(void)
 {
   std::lock_guard l(lock);

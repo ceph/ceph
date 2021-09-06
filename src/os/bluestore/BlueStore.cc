@@ -5570,12 +5570,22 @@ int BlueStore::_init_alloc()
     ceph_assert(a);
     auto f = dynamic_cast<ZonedFreelistManager*>(fm);
     ceph_assert(f);
-    a->init_alloc(f->get_zone_states(db),
-		  &zoned_cleaner_lock,
-		  &zoned_cleaner_cond);
+    a->init_from_zone_pointers(f->get_zone_states(db),
+			       &zoned_cleaner_lock,
+			       &zoned_cleaner_cond);
+    dout(1) << __func__
+	    << " loaded zone pointers: "
+	    << std::hex
+	    << ", allocator type " << shared_alloc.a->get_type()
+	    << ", capacity 0x" << shared_alloc.a->get_capacity()
+	    << ", block size 0x" << shared_alloc.a->get_block_size()
+	    << ", free 0x" << shared_alloc.a->get_free()
+	    << ", fragmentation " << shared_alloc.a->get_fragmentation()
+	    << std::dec << dendl;
+    return 0;
   }
 #endif
-  
+
   uint64_t num = 0, bytes = 0;
   utime_t start_time = ceph_clock_now();
   if (!fm->is_null_manager()) {
