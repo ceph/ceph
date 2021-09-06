@@ -8546,11 +8546,11 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  PExtentVector pext_to_release;
 	  pext_to_release.reserve(pextents.size());
 	  // rewriting all valid pextents
-	  for (auto e = pextents.begin(); e != pextents.end();
-	         e++) {
-	    auto b_off_cur = b_off;
-	    b_off += e->length;
+	  PExtentVector old_extents;
+	  old_extents.swap(pextents);
+	  for (auto e = old_extents.begin(); e != old_extents.end(); b_off += e->length, e++) {
 	    if (!e->is_valid()) {
+	      pextents.emplace_back(bluestore_pextent_t::INVALID_OFFSET, e->length);
 	      continue;
 	    }
 	    PExtentVector exts;
@@ -8570,6 +8570,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	      bypass_rest = true;
 	      break;
 	    }
+	    ceph_assert(alloc_len == (int64_t)e->length);
             expected_statfs->allocated += e->length;
 	    if (compressed) {
 	      expected_statfs->data_compressed_allocated += e->length;
@@ -8584,15 +8585,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	      ceph_abort_msg("read failed, wtf");
 	    }
 	    pext_to_release.push_back(*e);
-	    e = pextents.erase(e);
-    	    e = pextents.insert(e, exts.begin(), exts.end());
+	    pextents.insert(pextents.end(), exts.begin(), exts.end());
 	    b->get_blob().map_bl(
-	      b_off_cur, bl,
+	      b_off, bl,
 	      [&](uint64_t offset, bufferlist& t) {
 		int r = bdev->write(offset, t, false);
 		ceph_assert(r == 0);
 	      });
-	    e += exts.size() - 1;
             for (auto& p : exts) {
 	      fm->allocate(p.offset, p.length, txn);
 	    }
