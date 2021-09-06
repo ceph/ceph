@@ -867,15 +867,6 @@ record_t Cache::prepare_record(Transaction &t)
                i->get_type()) += delta_length;
   }
 
-  // Transaction is now a go, set up in-memory cache state
-  // invalidate now invalid blocks
-  for (auto &i: t.retired_set) {
-    DEBUGT("retiring {}", t, *i);
-    get_by_ext(efforts.retire_by_ext,
-               i->get_type()).increment(i->get_length());
-    retire_extent(i);
-  }
-
   record.extents.reserve(t.fresh_block_list.size());
   for (auto &i: t.fresh_block_list) {
     DEBUGT("fresh block {}", t, *i);
@@ -909,6 +900,17 @@ void Cache::complete_commit(
 {
   LOG_PREFIX(Cache::complete_commit);
   DEBUGT("enter", t);
+  auto& efforts = get_by_src(stats.committed_efforts_by_src,
+                             t.get_src());
+
+  // Transaction is now a go, set up in-memory cache state
+  // invalidate now invalid blocks
+  for (auto &i: t.retired_set) {
+    DEBUGT("retiring {}", t, *i);
+    get_by_ext(efforts.retire_by_ext,
+               i->get_type()).increment(i->get_length());
+    retire_extent(i);
+  }
 
   for (auto &i: t.fresh_block_list) {
     i->set_paddr(final_block_start.add_relative(i->get_paddr()));
