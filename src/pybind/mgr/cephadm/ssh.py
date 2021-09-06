@@ -99,7 +99,8 @@ class SSHManager:
         except OSError as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}" + '\n' + f'Log: {log_content}'
+            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}" + \
+                '\n' + f'Log: {log_content}'
             logger.exception(msg)
             raise OrchestratorError(msg)
         except asyncssh.Error as e:
@@ -112,20 +113,23 @@ class SSHManager:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
             logger.exception(str(e))
-            raise OrchestratorError(f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}')
+            raise OrchestratorError(
+                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}')
         finally:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
 
-    def remote_connection(self, *args: Any) -> "SSHClientConnection":
-        return self.mgr.event_loop.get_result(self._remote_connection(*args))
+    def remote_connection(self,
+                          host: str,
+                          addr: Optional[str] = None,
+                          ) -> "SSHClientConnection":
+        return self.mgr.event_loop.get_result(self._remote_connection(host, addr))
 
     async def _execute_command(self,
                                host: str,
                                cmd: List[str],
-                               stdin: Optional[bytes] = b"",
+                               stdin: Optional[bytes] = None,
                                addr: Optional[str] = None,
-                               **kwargs: Any,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
         cmd = "sudo " + " ".join(quote(x) for x in cmd)
@@ -136,22 +140,26 @@ class SSHManager:
         except (asyncssh.ChannelOpenError, Exception) as e:
             # SSH connection closed or broken, will create new connection next call
             logger.debug(f'Connection to {host} failed. {str(e)}')
-            self._reset_con(host)
+            await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
             raise OrchestratorError(f'Unable to reach remote host {host}. {str(e)}')
         out = r.stdout.rstrip('\n')
         err = r.stderr.rstrip('\n')
         return out, err, r.returncode
 
-    def execute_command(self, *args: Any, **kwargs: Any) -> Tuple[str, str, int]:
-        return self.mgr.event_loop.get_result(self._execute_command(*args, **kwargs))
+    def execute_command(self,
+                        host: str,
+                        cmd: List[str],
+                        stdin: Optional[bytes] = None,
+                        addr: Optional[str] = None,
+                        ) -> Tuple[str, str, int]:
+        return self.mgr.event_loop.get_result(self._execute_command(host, cmd, stdin, addr))
 
     async def _check_execute_command(self,
                                      host: str,
                                      cmd: List[str],
-                                     stdin: Optional[bytes] = b"",
+                                     stdin: Optional[bytes] = None,
                                      addr: Optional[str] = None,
-                                     **kwargs: Any,
                                      ) -> str:
         out, err, code = await self._execute_command(host, cmd, stdin, addr)
         if code != 0:
@@ -160,8 +168,13 @@ class SSHManager:
             raise OrchestratorError(msg)
         return out
 
-    def check_execute_command(self, *args: Any, **kwargs: Any) -> str:
-        return self.mgr.event_loop.get_result(self._check_execute_command(*args, **kwargs))
+    def check_execute_command(self,
+                              host: str,
+                              cmd: List[str],
+                              stdin: Optional[bytes] = None,
+                              addr: Optional[str] = None,
+                              ) -> str:
+        return self.mgr.event_loop.get_result(self._check_execute_command(host, cmd, stdin, addr))
 
     async def _write_remote_file(self,
                                  host: str,
@@ -171,7 +184,6 @@ class SSHManager:
                                  uid: Optional[int] = None,
                                  gid: Optional[int] = None,
                                  addr: Optional[str] = None,
-                                 **kwargs: Any,
                                  ) -> None:
         try:
             dirname = os.path.dirname(path)
@@ -189,15 +201,27 @@ class SSHManager:
             logger.exception(msg)
             raise OrchestratorError(msg)
 
-    def write_remote_file(self, *args: Any, **kwargs: Any) -> None:
-        self.mgr.event_loop.get_result(self._write_remote_file(*args, **kwargs))
+    def write_remote_file(self,
+                          host: str,
+                          path: str,
+                          content: bytes,
+                          mode: Optional[int] = None,
+                          uid: Optional[int] = None,
+                          gid: Optional[int] = None,
+                          addr: Optional[str] = None,
+                          ) -> None:
+        self.mgr.event_loop.get_result(self._write_remote_file(
+            host, path, content, mode, uid, gid, addr))
 
-    def _reset_con(self, host: str) -> None:
+    async def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
         if conn:
             logger.debug(f'_reset_con close {host}')
             conn.close()
             del self.cons[host]
+
+    def reset_con(self, host: str) -> None:
+        self.mgr.event_loop.get_result(self._reset_con(host))
 
     def _reset_cons(self) -> None:
         for host, conn in self.cons.items():
