@@ -238,6 +238,11 @@ int KernelDevice::open(const string& p)
     }
   }
 
+  r = _post_open();
+  if (r < 0) {
+    goto out_fail;
+  }
+
   r = _aio_start();
   if (r < 0) {
     goto out_fail;
@@ -290,6 +295,7 @@ void KernelDevice::close()
   dout(1) << __func__ << dendl;
   _aio_stop();
   _discard_stop();
+  _pre_close();
 
   if (vdo_fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
