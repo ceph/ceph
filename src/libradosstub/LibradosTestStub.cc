@@ -597,7 +597,8 @@ int IoCtx::aio_append(const std::string& oid, librados::AioCompletion *c,
                       const bufferlist& bl, size_t len)
 {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->aio_append(oid, c->pc, bl, len);
+  auto trans = ctx->init_transaction(oid);
+  return ctx->aio_append(trans, c->pc, bl, len);
 }
 
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
@@ -625,6 +626,7 @@ int IoCtx::aio_exec(const std::string& oid, AioCompletion *c,
                     const char *cls, const char *method,
                     bufferlist& inbl, bufferlist *outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  dout(20) << __func__ << "()" << dendl;
   return ctx->aio_exec(oid, c->pc, librados_stub::get_class_handler(), 
                        cls, method, inbl, outbl);
 }
@@ -659,6 +661,7 @@ int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   auto trans = ctx->init_transaction(oid);
+  dout(20) << __func__ << "()" << dendl;
   return ctx->execute_operation(
     oid, std::bind(&TestIoCtxImpl::exec, _1, _2,
                      librados_stub::get_class_handler(), cls,
@@ -860,20 +863,23 @@ int IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
 
 int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  auto trans = ctx->init_transaction(oid);
   return ctx->execute_operation(
-    oid, std::bind(&TestIoCtxImpl::stat, _1, _2, psize, pmtime));
+    oid, std::bind(&TestIoCtxImpl::stat, _1, trans, psize, pmtime));
 }
 
 int IoCtx::stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  auto trans = ctx->init_transaction(oid);
   return ctx->execute_operation(
-    oid, std::bind(&TestIoCtxImpl::stat2, _1, _2, psize, pts));
+    oid, std::bind(&TestIoCtxImpl::stat2, _1, trans, psize, pts));
 }
 
 int IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  auto trans = ctx->init_transaction(oid);
   return ctx->execute_operation(
-    oid, std::bind(&TestIoCtxImpl::tmap_update, _1, _2, cmdbl));
+    oid, std::bind(&TestIoCtxImpl::tmap_update, _1, trans, cmdbl));
 }
 
 int IoCtx::trunc(const std::string& oid, uint64_t off) {
@@ -1079,6 +1085,7 @@ void ObjectOperation::assert_version(uint64_t ver) {
 
 void ObjectOperation::exec(const char *cls, const char *method,
                            bufferlist& inbl) {
+  dout(20) << __func__ << "()" << dendl;
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&TestIoCtxImpl::exec, _1, _2,
 			       librados_stub::get_class_handler(), cls,
@@ -1089,6 +1096,7 @@ void ObjectOperation::exec(const char *cls, const char *method,
                            bufferlist& inbl,
                            bufferlist *outbl,
                            int *prval) {
+  dout(20) << __func__ << "()" << dendl;
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::exec, _1, _2,
                                           librados_stub::get_class_handler(), cls,
@@ -1127,6 +1135,7 @@ static int handle_operation_completion(int result, ObjectOpCompletionCtx *ctx) {
 
 void ObjectOperation::exec(const char *cls, const char *method,
                            bufferlist& inbl, ObjectOperationCompletion *completion) {
+  dout(20) << __func__ << "(): " << cls << ":" << method << dendl;
   ObjectOpCompletionCtx *ctx{nullptr};
   bufferlist *outbl{nullptr};
 
@@ -1252,7 +1261,7 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
 
-  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::stat, _1, _2,
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::stat, _1, _7,
                                            psize, pmtime);
 
   if (prval != NULL) {
@@ -1265,7 +1274,7 @@ void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
 void ObjectReadOperation::stat2(uint64_t *psize, struct timespec *pts, int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
 
-  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::stat2, _1, _2,
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::stat2, _1, _7,
                                            psize, pts);
 
   if (prval != NULL) {
@@ -1276,9 +1285,10 @@ void ObjectReadOperation::stat2(uint64_t *psize, struct timespec *pts, int *prva
 }
 
 void ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval) {
+  dout(20) << __func__ << "()" << dendl;
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
 
-  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::xattr_get, _1, _2,
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::xattr_get, _1, _7,
                                          pattrs);
 
   if (prval != NULL) {
@@ -1289,9 +1299,10 @@ void ObjectReadOperation::getxattrs(map<string, bufferlist> *pattrs, int *prval)
 }
 
 void ObjectReadOperation::getxattr(const char *name, bufferlist *pbl, int *prval) {
+  dout(20) << __func__ << "()" << dendl;
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
 
-  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::getxattr, _1, _2,
+  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::getxattr, _1, _7,
                                          name, pbl);
 
   if (prval != NULL) {
@@ -1349,7 +1360,7 @@ void ObjectReadOperation::omap_get_vals2(const std::string &start_after,
 
 void ObjectWriteOperation::append(const bufferlist &bl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&TestIoCtxImpl::append, _1, _2, bl, _5));
+  o->ops.push_back(std::bind(&TestIoCtxImpl::append, _1, _7, bl, _5));
 }
 
 void ObjectWriteOperation::create(bool exclusive) {
@@ -1407,7 +1418,7 @@ void ObjectWriteOperation::set_alloc_hint2(uint64_t expected_object_size,
 
 void ObjectWriteOperation::tmap_update(const bufferlist& cmdbl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&TestIoCtxImpl::tmap_update, _1, _2,
+  o->ops.push_back(std::bind(&TestIoCtxImpl::tmap_update, _1, _7,
                                cmdbl));
 }
 
@@ -1449,12 +1460,12 @@ void ObjectWriteOperation::mtime2(struct timespec *pts) {
 
 void ObjectWriteOperation::setxattr(const char *name, const bufferlist& v) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&TestIoCtxImpl::setxattr, _1, _2, name, v));
+  o->ops.push_back(std::bind(&TestIoCtxImpl::setxattr, _1, _7, name, v));
 }
 
 void ObjectWriteOperation::rmxattr(const char *name) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(std::bind(&TestIoCtxImpl::rmxattr, _1, _2, name));
+  o->ops.push_back(std::bind(&TestIoCtxImpl::rmxattr, _1, _7, name));
 }
 
 
@@ -1777,7 +1788,7 @@ int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mt
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   struct timespec ts;
-  int r = ctx->io_ctx_impl->stat2(ctx->oid, size, &ts);
+  int r = ctx->io_ctx_impl->stat2(ctx->trans, size, &ts);
   if (r < 0) {
     return r;
   }
@@ -1816,13 +1827,15 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *outbl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->getxattr(ctx->oid, name, outbl);
+  dout(20) << __func__ << "()" << dendl;
+  return ctx->io_ctx_impl->getxattr(ctx->trans, name, outbl);
 }
 
 int cls_cxx_getxattrs(cls_method_context_t hctx, std::map<string, bufferlist> *attrset) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->xattr_get(ctx->oid, attrset);
+  dout(20) << __func__ << "()" << dendl;
+  return ctx->io_ctx_impl->xattr_get(ctx->trans, attrset);
 }
 
 int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
@@ -1921,13 +1934,13 @@ int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *inbl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->setxattr(ctx->oid, name, *inbl);
+  return ctx->io_ctx_impl->setxattr(ctx->trans, name, *inbl);
 }
 
 int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->stat(ctx->oid, size, mtime);
+  return ctx->io_ctx_impl->stat(ctx->trans, size, mtime);
 }
 
 int cls_cxx_write(cls_method_context_t hctx, int ofs, int len,

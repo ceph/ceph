@@ -19,6 +19,14 @@ struct TestTransactionState {
     /* can set but not reset */
     write |= w;
   }
+
+  std::string& oid() {
+    return locator.name;
+  }
+
+  std::string& nspace() {
+    return locator.nspace;
+  }
 };
 
 using TestTransactionStateRef = std::shared_ptr<TestTransactionState>;

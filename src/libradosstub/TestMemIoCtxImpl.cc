@@ -61,12 +61,12 @@ TestIoCtxImpl *TestMemIoCtxImpl::clone() {
   return new TestMemIoCtxImpl(*this);
 }
 
-int TestMemIoCtxImpl::aio_append(const std::string& oid, AioCompletionImpl *c,
+int TestMemIoCtxImpl::aio_append(TestTransactionStateRef& trans, AioCompletionImpl *c,
                                  const bufferlist& bl, size_t len) {
   bufferlist newbl;
   newbl.substr_of(bl, 0, len);
-  m_client->add_aio_operation(oid, true,
-                              std::bind(&TestMemIoCtxImpl::append, this, oid,
+  m_client->add_aio_operation(trans->oid(), true,
+                              std::bind(&TestMemIoCtxImpl::append, this, trans,
                                         newbl,
 					get_snap_context()),
                               c);
@@ -81,7 +81,7 @@ int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c, i
   return 0;
 }
 
-int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
+int TestMemIoCtxImpl::append(TestTransactionStateRef& trans, const bufferlist &bl,
                              const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
@@ -90,16 +90,14 @@ int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
   }
 
   auto cct = m_client->cct();
+  auto& oid = trans->oid();
   ldout(cct, 20) << "length=" << bl.length() << ", snapc=" << snapc << dendl;
 
   uint64_t epoch;
 
   TestMemCluster::SharedFile file;
-  {
-    std::unique_lock l{m_pool->file_lock};
-    file = get_file(oid, true, CEPH_NOSNAP, snapc);
-    epoch = ++m_pool->epoch;
-  }
+  file = get_file_safe(trans, true, CEPH_NOSNAP, snapc, &epoch);
+  epoch = ++m_pool->epoch;
 
   std::unique_lock l{file->lock};
   auto off = file->data.length();
@@ -486,13 +484,16 @@ int TestMemIoCtxImpl::omap_get_header(TestTransactionStateRef& trans,
     return -EBLOCKLISTED;
   }
 
+  auto cct = m_client->cct();
+  auto& oid = trans->oid();
+  ldout(cct, 20) << ": <noargs>" << dendl;
+
   TestMemCluster::SharedFile file;
   file = get_file_safe(trans, false, CEPH_NOSNAP, {});
   if (file == NULL) {
     return -ENOENT;
   }
 
-  auto& oid = trans->locator.name;
   std::shared_lock l{file->lock};
   auto iter = m_pool->file_omaps.find({get_namespace(), oid});
   if (iter == m_pool->file_omaps.end()) {
@@ -743,16 +744,20 @@ int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
   return len > 0 ? 1 : 0;
 }
 
-int TestMemIoCtxImpl::stat2(const std::string& oid, uint64_t *psize,
+int TestMemIoCtxImpl::stat2(TestTransactionStateRef& trans, uint64_t *psize,
                             struct timespec *pts) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
+  auto cct = m_client->cct();
+  auto& oid = trans->oid();
+  ldout(cct, 20) << ": <noargs>" << dendl;
+
   TestMemCluster::SharedFile file;
   {
     std::shared_lock l{m_pool->file_lock};
-    file = get_file(oid, false, CEPH_NOSNAP, {});
+    file = get_file(trans->oid(), false, CEPH_NOSNAP, {});
     if (file == NULL) {
       return -ENOENT;
     }
@@ -1078,45 +1083,65 @@ int TestMemIoCtxImpl::cmpxattr(const string& oid,
 }
 
 
-int TestMemIoCtxImpl::xattr_get(const std::string& oid,
+int TestMemIoCtxImpl::xattr_get(TestTransactionStateRef& trans,
                                 std::map<std::string, bufferlist>* attrset) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
-  TestMemCluster::SharedFile file;
-  std::shared_lock l{m_pool->file_lock};
-  TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
-    {get_namespace(), oid});
-  if (it == m_pool->file_xattrs.end()) {
-    attrset->clear();
+  int r = pool_op(trans, false, [&](TestMemCluster::Pool *pool, bool write) {
+    TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(trans->locator);
+    if (it == pool->file_xattrs.end()) {
+      attrset->clear();
+      return 0;
+    }
+    *attrset = it->second;
+
     return 0;
+  });
+
+  if (r < 0) {
+    return r;
   }
-  *attrset = it->second;
+
+  auto cct = m_client->cct();
+  auto& oid = trans->oid();
+  ldout(cct, 20) << ": -> attrset=" << *attrset << dendl;
+
   return 0;
 }
 
-int TestMemIoCtxImpl::setxattr(const std::string& oid, const char *name,
+int TestMemIoCtxImpl::setxattr(TestTransactionStateRef& trans, const char *name,
                                bufferlist& bl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
-  std::unique_lock l{m_pool->file_lock};
-  m_pool->file_xattrs[{get_namespace(), oid}][name] = bl;
-  ++m_pool->epoch;
-  return 0;
+  auto cct = m_client->cct();
+  auto& oid = trans->oid();
+
+  ldout(cct, 20) << ": -> name=" << name << " bl=" << bl << dendl;
+
+  return pool_op(trans, true, [&](TestMemCluster::Pool *pool, bool write) {
+    pool->file_xattrs[trans->locator][name] = bl;
+    return 0;
+  });
 }
 
-int TestMemIoCtxImpl::rmxattr(const string& oid, const char *name) {
+int TestMemIoCtxImpl::rmxattr(TestTransactionStateRef& trans, const char *name) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
-  std::unique_lock l{m_pool->file_lock};
-  m_pool->file_xattrs[{get_namespace(), oid}].erase(name);
-  ++m_pool->epoch;
-  return 0;
+  auto cct = m_client->cct();
+  auto& oid = trans->oid();
+
+  ldout(cct, 20) << ": -> name=" << name << dendl;
+
+  return pool_op(trans, true, [&](TestMemCluster::Pool *pool, bool write) {
+    pool->file_xattrs[trans->locator].erase(name);
+    return 0;
+  });
 }
 
 int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
@@ -1279,15 +1304,38 @@ TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
 
 TestMemCluster::SharedFile TestMemIoCtxImpl::get_file_safe(
     TestTransactionStateRef& trans, bool write, uint64_t snap_id,
-    const SnapContext &snapc) {
+    const SnapContext &snapc,
+    uint64_t *pepoch) {
   write |= trans->write;
   if (write) {
     std::unique_lock l{m_pool->file_lock};
-    return get_file(trans->locator.name, write, snap_id, snapc);
+    uint64_t epoch = ++m_pool->epoch;
+    if (pepoch) {
+      *pepoch = epoch;
+    }
+    return get_file(trans->oid(), true, snap_id, snapc);
   }
 
   std::shared_lock l{m_pool->file_lock};
-  return get_file(trans->locator.name, write, snap_id, snapc);
+  return get_file(trans->oid(), false, snap_id, snapc);
+}
+
+int TestMemIoCtxImpl::pool_op(TestTransactionStateRef& trans,
+                              bool write,
+                              PoolOperation op) {
+  auto cct = m_client->cct();
+  auto& oid = trans->oid();
+  bool _write = (write | trans->write);
+  ldout(cct, 20) << "pool_op() trans->write=" << trans->write << " write=" << write << " -> " << _write << dendl;
+
+  if (_write) {
+    std::unique_lock l{m_pool->file_lock};
+    ++m_pool->epoch;
+    return op(m_pool, true);
+  }
+
+  std::shared_lock l{m_pool->file_lock};
+  return op(m_pool, false);
 }
 
 TestTransactionStateRef TestMemIoCtxImpl::init_transaction(const std::string& oid) {

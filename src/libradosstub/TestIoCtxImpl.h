@@ -100,7 +100,7 @@ public:
                                AioCompletionImpl *c, int flags,
                                bufferlist *pbl, uint64_t snap_id,
                                uint64_t* objver);
-  virtual int aio_append(const std::string& oid, AioCompletionImpl *c,
+  virtual int aio_append(TestTransactionStateRef& trans, AioCompletionImpl *c,
                          const bufferlist& bl, size_t len)  = 0;
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c,
                          int flags = 0) = 0;
@@ -111,7 +111,7 @@ public:
                        TestClassHandler *handler,
                        const char *cls, const char *method,
                        bufferlist& inbl, bufferlist *outbl);
-  virtual int append(const std::string& oid, const bufferlist &bl,
+  virtual int append(TestTransactionStateRef& trans, const bufferlist &bl,
                      const SnapContext &snapc) = 0;
   virtual int assert_exists(const std::string &oid, uint64_t snap_id) = 0;
   virtual int assert_version(const std::string &oid, uint64_t ver) = 0;
@@ -186,13 +186,13 @@ public:
   virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                           std::map<uint64_t,uint64_t> *m,
                           bufferlist *data_bl, uint64_t snap_id) = 0;
-  virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
-  virtual int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) = 0;
+  virtual int stat(TestTransactionStateRef& trans, uint64_t *psize, time_t *pmtime);
+  virtual int stat2(TestTransactionStateRef& trans, uint64_t *psize, struct timespec *pts) = 0;
   virtual int mtime2(const string& oid, const struct timespec& ts,
                      const SnapContext &snapc) = 0;
   virtual int truncate(const std::string& oid, uint64_t size,
                        const SnapContext &snapc) = 0;
-  virtual int tmap_update(const std::string& oid, bufferlist& cmdbl);
+  virtual int tmap_update(TestTransactionStateRef& trans, bufferlist& cmdbl);
   virtual int unwatch(uint64_t handle);
   virtual int watch(const std::string& o, uint64_t *handle,
                     librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
@@ -208,12 +208,12 @@ public:
                            uint8_t op, const bufferlist& bl) = 0;
   virtual int cmpxattr(const std::string& oid, const char *name,
                        uint8_t op, uint64_t v) = 0;
-  virtual int getxattr(const string& oid, const char *name, bufferlist *pbl);
-  virtual int xattr_get(const std::string& oid,
+  virtual int getxattr(TestTransactionStateRef& trans, const char *name, bufferlist *pbl);
+  virtual int xattr_get(TestTransactionStateRef& trans,
                         std::map<std::string, bufferlist>* attrset) = 0;
-  virtual int setxattr(const std::string& oid, const char *name,
+  virtual int setxattr(TestTransactionStateRef& trans, const char *name,
                        bufferlist& bl) = 0;
-  virtual int rmxattr(const std::string& oid, const char *name) = 0;
+  virtual int rmxattr(TestTransactionStateRef& trans, const char *name) = 0;
   virtual int zero(const std::string& oid, uint64_t off, uint64_t len,
                    const SnapContext &snapc) = 0;
 

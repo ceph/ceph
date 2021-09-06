@@ -316,9 +316,9 @@ void TestIoCtxImpl::set_snap_read(snap_t seq) {
 }
 
 
-int TestIoCtxImpl::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
+int TestIoCtxImpl::stat(TestTransactionStateRef& trans, uint64_t *psize, time_t *pmtime) {
   struct timespec ts;
-  int r = stat2(oid, psize, (pmtime ? &ts : nullptr));
+  int r = stat2(trans, psize, (pmtime ? &ts : nullptr));
   if (r < 0) {
     return r;
   }
@@ -329,9 +329,9 @@ int TestIoCtxImpl::stat(const std::string& oid, uint64_t *psize, time_t *pmtime)
   return 0;
 }
 
-int TestIoCtxImpl::getxattr(const string& oid, const char *name, bufferlist *pbl) {
+int TestIoCtxImpl::getxattr(TestTransactionStateRef& trans, const char *name, bufferlist *pbl) {
   std::map<string, bufferlist> attrs;
-  int r = xattr_get(oid, &attrs);
+  int r = xattr_get(trans, &attrs);
   if (r < 0) {
     return r;
   }
@@ -344,7 +344,7 @@ int TestIoCtxImpl::getxattr(const string& oid, const char *name, bufferlist *pbl
   return 0;
 }
 
-int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
+int TestIoCtxImpl::tmap_update(TestTransactionStateRef& trans, bufferlist& cmdbl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -353,7 +353,8 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   bufferlist tmap_header;
   std::map<string,bufferlist> tmap;
   uint64_t size = 0;
-  int r = stat(oid, &size, NULL);
+  auto& oid = trans->oid();
+  int r = stat(trans, &size, NULL);
   if (r == -ENOENT) {
     r = create(oid, false, m_snapc);
   }

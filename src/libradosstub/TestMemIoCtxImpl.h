@@ -20,12 +20,12 @@ public:
 
   TestIoCtxImpl *clone() override;
 
-  int aio_append(const std::string& oid, AioCompletionImpl *c,
+  int aio_append(TestTransactionStateRef& trans, AioCompletionImpl *c,
                  const bufferlist& bl, size_t len) override;
 
   int aio_remove(const std::string& oid, AioCompletionImpl *c, int flags = 0) override;
 
-  int append(const std::string& oid, const bufferlist &bl,
+  int append(TestTransactionStateRef& trans, const bufferlist &bl,
              const SnapContext &snapc) override;
 
   int assert_exists(const std::string &oid, uint64_t snap_id) override;
@@ -73,7 +73,7 @@ public:
   int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                   std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
                   uint64_t snap_id) override;
-  int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts) override;
+  int stat2(TestTransactionStateRef& trans, uint64_t *psize, struct timespec *pts) override;
   int mtime2(const string& oid, const struct timespec& ts,
              const SnapContext &snapc) override;
   int truncate(const std::string& oid, uint64_t size,
@@ -90,11 +90,11 @@ public:
                    uint8_t op, const bufferlist& bl) override;
   int cmpxattr(const std::string& oid, const char *name,
                uint8_t op, uint64_t v) override;
-  int xattr_get(const std::string& oid,
+  int xattr_get(TestTransactionStateRef& trans,
                 std::map<std::string, bufferlist>* attrset) override;
-  int setxattr(const std::string& oid, const char *name,
+  int setxattr(TestTransactionStateRef& trans, const char *name,
                bufferlist& bl) override;
-  int rmxattr(const string& oid, const char *name) override;
+  int rmxattr(TestTransactionStateRef& trans, const char *name) override;
   int zero(const std::string& oid, uint64_t off, uint64_t len,
            const SnapContext &snapc) override;
   int get_current_ver(const std::string& oid, uint64_t *ver);
@@ -121,8 +121,13 @@ private:
                                       const SnapContext &snapc);
   TestMemCluster::SharedFile get_file_safe(TestTransactionStateRef& trans,
                                            bool write, uint64_t snap_id,
-                                           const SnapContext &snapc);
+                                           const SnapContext &snapc,
+                                           uint64_t *opt_epoch = nullptr);
 
+  typedef boost::function<int(TestMemCluster::Pool *, bool)> PoolOperation;
+  int pool_op(TestTransactionStateRef& trans,
+              bool write,
+              PoolOperation op);
 };
 
 } // namespace librados

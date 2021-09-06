@@ -127,7 +127,9 @@ cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
               << std::endl;
     return NULL;
   }
-  *write = !!(m_it->second->flags & CLS_METHOD_RD);
+  *write = !!(m_it->second->flags & CLS_METHOD_WR);
+
+  dout(20) << "get_method(): " << cls << ":" << method << ": flags=" << m_it->second->flags << ", write=" << *write << dendl;
   return m_it->second->class_call;
 }
 
