@@ -99,6 +99,7 @@ void TestIoCtxImpl::aio_flush_async(AioCompletionImpl *c) {
 void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
                                bufferlist& bl, uint64_t timeout_ms,
                                bufferlist *pbl) {
+  get();
   m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
@@ -110,6 +111,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
                                AioCompletionImpl *c, SnapContext *snap_context,
                                int flags) {
   // TODO flags for now
+  get();
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, true, std::bind(
@@ -125,6 +127,7 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
                                     bufferlist *pbl, uint64_t snap_id,
                                     uint64_t* objver) {
   // TODO ignoring flags for now
+  get();
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, true, std::bind(
@@ -135,6 +138,7 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
 
 int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
                              uint64_t *handle, librados::WatchCtx2 *watch_ctx) {
+  get();
   m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
@@ -150,6 +154,7 @@ int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
 }
 
 int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
+  get();
   m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
@@ -249,6 +254,7 @@ int TestIoCtxImpl::operate(const std::string& oid,
                            int flags) {
   AioCompletionImpl *comp = new AioCompletionImpl();
 
+  get();
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, false, std::bind(
@@ -267,6 +273,7 @@ int TestIoCtxImpl::operate_read(const std::string& oid,
                                 int flags) {
   AioCompletionImpl *comp = new AioCompletionImpl();
 
+  get();
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, false, std::bind(
@@ -460,6 +467,7 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
   }
   m_pending_ops--;
   ops->put();
+  put();
   return ret;
 }
 
@@ -467,6 +475,7 @@ void TestIoCtxImpl::handle_aio_notify_complete(AioCompletionImpl *c, int r) {
   m_pending_ops--;
 
   m_client->finish_aio_completion(c, r);
+  put();
 }
 
 int TestIoCtxImpl::set_op_flags(TestTransactionStateRef& trans, int flags) {
