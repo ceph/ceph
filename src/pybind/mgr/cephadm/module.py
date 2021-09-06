@@ -2089,6 +2089,23 @@ Then run the following:
     @handle_orch_error
     def zap_device(self, host: str, path: str) -> str:
         self.log.info('Zap device %s:%s' % (host, path))
+
+        out, err, code = CephadmServe(self)._run_cephadm(
+            host, 'osd.', 'ceph-volume',
+            ['--', 'lvm', 'list', path, '--format', 'json'],
+            error_ok=True)
+        if code:
+            raise OrchestratorError('Zap failed: ceph-volume lvm list %s' % '\n'.join(path))
+        osd_info = json.loads('\n'.join(out))
+
+        for osd_id in osd_info.keys():
+            out, err, code = CephadmServe(self)._run_cephadm(
+                host, 'osd.', 'unit',
+                ['is-active', '--name', 'osd.%s' % osd_id],
+                error_ok=True)
+            if code == 0:
+                raise OrchestratorError('The systemctl unit of osd is active. Rm osd first')
+
         out, err, code = CephadmServe(self)._run_cephadm(
             host, 'osd', 'ceph-volume',
             ['--', 'lvm', 'zap', '--destroy', path],
