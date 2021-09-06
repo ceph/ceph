@@ -9,3 +9,9 @@ Jinja2
 pyfakefs
 asyncssh
 asyncmock
+
+jsonpatch
+pecan
+scipy
+cherrypy
+werkzeug
