@@ -1486,6 +1486,8 @@ protected:
   std::string_view copy_source;
   // Not actually required
   std::optional<std::string_view> md_directive;
+  std::optional<std::string_view> tagging_directive;
+  std::optional<RGWObjTags> obj_tags;
 
   off_t ofs;
   off_t len;
@@ -1504,6 +1506,7 @@ protected:
   ceph::real_time src_mtime;
   ceph::real_time mtime;
   rgw::sal::AttrsMod attrs_mod;
+  rgw::sal::AttrsMod tagging_mod;
   std::string source_zone;
   std::string etag;
 
@@ -1535,6 +1538,7 @@ public:
     mod_ptr = NULL;
     unmod_ptr = NULL;
     attrs_mod = rgw::sal::ATTRSMOD_NONE;
+    tagging_mod = rgw::sal::ATTRSMOD_NONE;
     last_ofs = 0;
     olh_epoch = 0;
     copy_if_newer = false;
@@ -2200,9 +2204,9 @@ inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 } /* encode_delete_at_attr */
 
-inline void encode_obj_tags_attr(RGWObjTags* obj_tags, std::map<std::string, bufferlist>& attrs)
+inline void encode_obj_tags_attr(const std::optional<RGWObjTags>& obj_tags, std::map<std::string, bufferlist>& attrs)
 {
-  if (obj_tags == nullptr){
+   if (!obj_tags) {
     // we assume the user submitted a tag format which we couldn't parse since
     // this wouldn't be parsed later by get/put obj tags, lets delete if the
     // attr was populated

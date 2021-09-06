@@ -2881,6 +2881,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* const char *if_match */
                NULL, /* const char *if_nomatch */
                RGWRados::ATTRSMOD_NONE,
+               RGWRados::ATTRSMOD_NONE,
                true, /* bool copy_if_newer */
                state->attrset,
                RGWObjCategory::Main,
@@ -2975,6 +2976,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        false,         /* bool high_precision_time */
                        nullptr,       /* const char *if_match */
                        nullptr,       /* const char *if_nomatch */
+                       RGWRados::ATTRSMOD_NONE,
                        RGWRados::ATTRSMOD_NONE,
                        true,          /* bool copy_if_newer */
                        no_attrs,
@@ -4207,6 +4209,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
+               AttrsMod tagging_mod,
                bool copy_if_newer,
                rgw::sal::Attrs& attrs,
                RGWObjCategory category,
@@ -4292,7 +4295,19 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (lh != attrs.end())
     src_attrs[RGW_ATTR_OBJECT_LEGAL_HOLD] = lh->second;
 
+  // save the original tags
+  bufferlist tags_bl;
+  if (attrs.find(RGW_ATTR_TAGS) != attrs.end()) {
+    tags_bl = attrs[RGW_ATTR_TAGS];
+  }
+
   set_copy_attrs(src_attrs, attrs, attrs_mod);
+
+  if (tagging_mod == RGWRados::ATTRSMOD_REPLACE) {
+      ldpp_dout(dpp, 20) << __func__ << "(): the object tag-set are replaced with tag-set provided in the request." << dendl;
+      attrs[RGW_ATTR_TAGS] = tags_bl;
+  }
+
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
   attrs.erase(RGW_ATTR_SOURCE_ZONE);

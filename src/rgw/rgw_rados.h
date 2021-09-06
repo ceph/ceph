@@ -1183,6 +1183,7 @@ public:
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
+               AttrsMod tagging_mod,
                bool copy_if_newer,
                std::map<std::string, bufferlist>& attrs,
                RGWObjCategory category,

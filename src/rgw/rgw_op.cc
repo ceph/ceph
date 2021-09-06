@@ -4143,7 +4143,7 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
   encode_delete_at_attr(delete_at, attrs);
-  encode_obj_tags_attr(obj_tags.get(), attrs);
+  encode_obj_tags_attr(*obj_tags, attrs);
   rgw_cond_decode_objtags(s, attrs);
 
   /* Add a custom metadata to expose the information whether an object
@@ -5243,6 +5243,10 @@ int RGWCopyObj::verify_permission(optional_yield y)
 	rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
 				   *md_directive);
 
+      if (tagging_directive) {
+        rgw_add_to_iam_environment(s->env, "s3:x-amz-tagging-directive", *tagging_directive);
+      }
+
       auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies,
                                                                   s->env, boost::none,
                                                                   rgw::IAM::s3PutObject,
@@ -5391,6 +5395,7 @@ void RGWCopyObj::execute(optional_yield y)
   dest_object->set_atomic(s->obj_ctx);
 
   encode_delete_at_attr(delete_at, attrs);
+  encode_obj_tags_attr(obj_tags, attrs);
 
   if (obj_retention) {
     bufferlist obj_retention_bl;
@@ -5449,6 +5454,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   if_match,
 	   if_nomatch,
 	   attrs_mod,
+	   tagging_mod,
 	   copy_if_newer,
 	   attrs,
 	   RGWObjCategory::Main,

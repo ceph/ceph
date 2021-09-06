@@ -3266,12 +3266,41 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
     md_directive = tmp_md_d;
   }
 
+  /* handle object tagging */
+  if (auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING"); tag_str) {
+    obj_tags = RGWObjTags{};
+    if (int ret = obj_tags->set_from_string(tag_str); ret < 0) {
+      ldpp_dout(this, 0) << "setting obj tags failed with " << ret << dendl;
+      if (ret == -ERR_INVALID_TAG){
+        ret = -EINVAL;
+      }
+      return ret;
+    }
+  }
+
+  if (auto tmp_tagging_d = s->info.env->get("HTTP_X_AMZ_TAGGING_DIRECTIVE");
+      tmp_tagging_d) {
+    if (strcasecmp(tmp_tagging_d, "COPY") == 0) {
+      tagging_mod = rgw::sal::ATTRSMOD_NONE;
+    } else if (strcasecmp(tmp_tagging_d, "REPLACE") == 0) {
+      tagging_mod = rgw::sal::ATTRSMOD_REPLACE;
+    } else if (!source_zone.empty()) {
+      tagging_mod = rgw::sal::ATTRSMOD_NONE; // default for intra-zone_group copy
+    } else {
+      s->err.message = "Unknown tagging directive.";
+      ldpp_dout(this, 0) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    tagging_directive = tmp_tagging_d;
+  }
+
   if (source_zone.empty() &&
       (dest_tenant_name.compare(src_tenant_name) == 0) &&
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_obj_name.compare(src_object->get_name()) == 0) &&
       src_object->get_instance().empty() &&
-      (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
+      (attrs_mod != rgw::sal::ATTRSMOD_REPLACE) &&
+      (tagging_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
   }
 
