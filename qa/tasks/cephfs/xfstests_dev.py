@@ -3,8 +3,7 @@ from logging import getLogger
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
-
-logger = getLogger(__name__)
+log = getLogger(__name__)
 
 
 # TODO: add code to run non-ACL tests too.
@@ -140,15 +139,21 @@ class XFSTestsDev(CephFSTestCase):
         self.test_dev = mon_sock + ':/' + self.test_dirname
         self.scratch_dev = mon_sock + ':/' + self.scratch_dirname
 
+        mntopts_list = self.mount_a.client_config.get('mntopts', [])
+        mntopts = ""
+        if mntopts_list != None:
+            mntopts = ",".join(mntopts_list)
+            log.info("extra mount options:" + mntopts.replace(',', ' '))
+
         xfstests_config_contents = dedent('''\
             export FSTYP=ceph
             export TEST_DEV={}
             export TEST_DIR={}
             #export SCRATCH_DEV={}
             #export SCRATCH_MNT={}
-            export TEST_FS_MOUNT_OPTS="-o name=admin,secret={}"
+            export TEST_FS_MOUNT_OPTS="-o name=admin,secret={}{}"
             ''').format(self.test_dev, self.test_dirs_mount_path, self.scratch_dev,
-                        self.scratch_dirs_mount_path, self.get_admin_key())
+                        self.scratch_dirs_mount_path, self.get_admin_key(), mntopts)
 
         self.mount_a.client_remote.write_file(join(self.repo_path, 'local.config'),
                                               xfstests_config_contents, sudo=True)
@@ -168,3 +173,23 @@ class XFSTestsDev(CephFSTestCase):
                                        omit_sudo=False, check_status=False)
 
         super(XFSTestsDev, self).tearDown()
+
+    def runFstest(self, test_id, timeout):
+        from tasks.cephfs.fuse_mount import FuseMount
+        from tasks.cephfs.kernel_mount import KernelMount
+
+        # TODO: make xfstests-dev compatible with ceph-fuse. xfstests-dev
+        # remounts CephFS before running tests using kernel, so ceph-fuse
+        # mounts are never actually testsed.
+        if isinstance(self.mount_a, FuseMount):
+            log.info('client is fuse mounted')
+            self.skipTest('Requires kernel client; xfstests-dev not '\
+                          'compatible with ceph-fuse ATM.')
+        elif isinstance(self.mount_a, KernelMount):
+            log.info('client is kernel mounted')
+
+        label = f'running fstest: {test_id}'
+        self.mount_a.client_remote.run(args=['sudo', './check',
+            test_id], cwd=self.repo_path, stdout=BytesIO(),
+            stderr=BytesIO(), timeout=timeout, check_status=True,
+            label=label)
