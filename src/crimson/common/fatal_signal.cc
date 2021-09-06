@@ -36,13 +36,13 @@ template <int SigNum>
 void FatalSignal::install_oneshot_signal_handler()
 {
   struct sigaction sa;
-  sa.sa_sigaction = [](int sig, siginfo_t *info, void *p) {
+  sa.sa_sigaction = [](int signum, siginfo_t *info, void *p) {
     if (static std::atomic_bool handled{false}; handled.exchange(true)) {
       return;
     }
     assert(info);
-    FatalSignal::signaled(sig, *info);
-    ::signal(sig, SIG_DFL);
+    FatalSignal::signaled(signum, *info);
+    ::signal(signum, SIG_DFL);
   };
   sigfillset(&sa.sa_mask);
   sa.sa_flags = SA_SIGINFO | SA_RESTART;
