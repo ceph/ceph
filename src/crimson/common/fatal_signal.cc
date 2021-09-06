@@ -32,6 +32,23 @@ void FatalSignal::install_oneshot_signals_handler()
   (install_oneshot_signal_handler<SigNums>() , ...);
 }
 
+static void reraise_fatal(const int signum)
+{
+  // use default handler to dump core
+  ::signal(signum, SIG_DFL);
+
+  // normally, we won't get here. if we do, something is very weird.
+  if (::raise(signum)) {
+    std::cerr << "reraise_fatal: failed to re-raise signal " << signum
+              << std::endl;
+  } else {
+    std::cerr << "reraise_fatal: default handler for signal " << signum
+              << " didn't terminate the process?" << std::endl;
+  }
+  std::cerr << std::flush;
+  ::_exit(1);
+}
+
 template <int SigNum>
 void FatalSignal::install_oneshot_signal_handler()
 {
@@ -42,10 +59,10 @@ void FatalSignal::install_oneshot_signal_handler()
     }
     assert(info);
     FatalSignal::signaled(signum, *info);
-    ::signal(signum, SIG_DFL);
+    reraise_fatal(signum);
   };
-  sigfillset(&sa.sa_mask);
-  sa.sa_flags = SA_SIGINFO | SA_RESTART;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_SIGINFO | SA_RESTART | SA_NODEFER;
   if constexpr (SigNum == SIGSEGV) {
     sa.sa_flags |= SA_ONSTACK;
   }
