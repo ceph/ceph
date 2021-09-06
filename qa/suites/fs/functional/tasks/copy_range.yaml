@@ -1,0 +1,7 @@
+overrides:
+  kclient:
+    mntopts: ["copyfrom"]
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_copy_range
