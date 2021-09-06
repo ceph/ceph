@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_TEST_IO_CTX_IMPL_H
-#define CEPH_TEST_IO_CTX_IMPL_H
+#ifndef CEPH_LREM_IO_CTX_IMPL_H
+#define CEPH_LREM_IO_CTX_IMPL_H
 
 #include <list>
 #include <atomic>
@@ -13,24 +13,24 @@
 #include "include/Context.h"
 #include "common/snap_types.h"
 
-#include "TestTransaction.h"
+#include "LRemTransaction.h"
 
 namespace librados {
 
-class TestClassHandler;
-class TestIoCtxImpl;
-class TestRadosClient;
+class LRemClassHandler;
+class LRemIoCtxImpl;
+class LRemRadosClient;
 
-typedef boost::function<int(TestIoCtxImpl*,
+typedef boost::function<int(LRemIoCtxImpl*,
 			    const std::string&,
 			    bufferlist *,
           uint64_t,
           const SnapContext &,
           uint64_t*,
-          TestTransactionStateRef &)> ObjectOperationTestImpl;
-typedef std::list<ObjectOperationTestImpl> ObjectOperations;
+          LRemTransactionStateRef &)> ObjectOperationLRemImpl;
+typedef std::list<ObjectOperationLRemImpl> ObjectOperations;
 
-struct TestObjectOperationImpl {
+struct LRemObjectOperationImpl {
 public:
   void get();
   void put();
@@ -40,16 +40,16 @@ private:
   std::atomic<uint64_t> m_refcount = { 0 };
 };
 
-class TestIoCtxImpl {
+class LRemIoCtxImpl {
 public:
-  typedef boost::function<int(TestIoCtxImpl *, const std::string &)> Operation;
+  typedef boost::function<int(LRemIoCtxImpl *, const std::string &)> Operation;
 
 
-  TestIoCtxImpl();
-  explicit TestIoCtxImpl(TestRadosClient *client, int64_t m_pool_id,
+  LRemIoCtxImpl();
+  explicit LRemIoCtxImpl(LRemRadosClient *client, int64_t m_pool_id,
                          const std::string& pool_name);
 
-  TestRadosClient *get_rados_client() {
+  LRemRadosClient *get_rados_client() {
     return m_client;
   }
 
@@ -60,7 +60,7 @@ public:
     return m_pool_id;
   }
 
-  virtual TestIoCtxImpl *clone() = 0;
+  virtual LRemIoCtxImpl *clone() = 0;
 
   virtual uint64_t get_instance_id() const;
   virtual int64_t get_id();
@@ -93,14 +93,14 @@ public:
   virtual void aio_flush_async(AioCompletionImpl *c);
   virtual void aio_notify(const std::string& oid, AioCompletionImpl *c,
                           bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl);
-  virtual int aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
+  virtual int aio_operate(const std::string& oid, LRemObjectOperationImpl &ops,
                           AioCompletionImpl *c, SnapContext *snap_context,
                           int flags);
-  virtual int aio_operate_read(const std::string& oid, TestObjectOperationImpl &ops,
+  virtual int aio_operate_read(const std::string& oid, LRemObjectOperationImpl &ops,
                                AioCompletionImpl *c, int flags,
                                bufferlist *pbl, uint64_t snap_id,
                                uint64_t* objver);
-  virtual int aio_append(TestTransactionStateRef& trans, AioCompletionImpl *c,
+  virtual int aio_append(LRemTransactionStateRef& trans, AioCompletionImpl *c,
                          const bufferlist& bl, size_t len)  = 0;
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c,
                          int flags = 0) = 0;
@@ -108,21 +108,21 @@ public:
                         uint64_t *handle, librados::WatchCtx2 *ctx);
   virtual int aio_unwatch(uint64_t handle, AioCompletionImpl *c);
   virtual int aio_exec(const std::string& oid, AioCompletionImpl *c,
-                       TestClassHandler *handler,
+                       LRemClassHandler *handler,
                        const char *cls, const char *method,
                        bufferlist& inbl, bufferlist *outbl);
-  virtual int append(TestTransactionStateRef& trans, const bufferlist &bl,
+  virtual int append(LRemTransactionStateRef& trans, const bufferlist &bl,
                      const SnapContext &snapc) = 0;
   virtual int assert_exists(const std::string &oid, uint64_t snap_id) = 0;
   virtual int assert_version(const std::string &oid, uint64_t ver) = 0;
 
   virtual int create(const std::string& oid, bool exclusive,
                      const SnapContext &snapc) = 0;
-  virtual int exec(const std::string& oid, TestClassHandler *handler,
+  virtual int exec(const std::string& oid, LRemClassHandler *handler,
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
                    uint64_t snap_id, const SnapContext &snapc,
-                   TestTransactionStateRef& trans);
+                   LRemTransactionStateRef& trans);
   virtual int list_snaps(const std::string& o, snap_set_t *out_snaps) = 0;
   virtual int list_watchers(const std::string& o,
                             std::list<obj_watch_t> *out_watchers);
@@ -157,12 +157,12 @@ public:
   virtual int omap_clear(const std::string& oid) = 0;
   virtual int omap_set(const std::string& oid,
                        const std::map<std::string, bufferlist> &map) = 0;
-  virtual int omap_get_header(TestTransactionStateRef& trs,
+  virtual int omap_get_header(LRemTransactionStateRef& trs,
                               bufferlist *bl) = 0;
   virtual int omap_set_header(const std::string& oid,
                               const bufferlist& bl) = 0;
-  virtual int operate(const std::string& oid, TestObjectOperationImpl &ops, int flags);
-  virtual int operate_read(const std::string& oid, TestObjectOperationImpl &ops,
+  virtual int operate(const std::string& oid, LRemObjectOperationImpl &ops, int flags);
+  virtual int operate_read(const std::string& oid, LRemObjectOperationImpl &ops,
                            bufferlist *pbl, int flags);
   virtual int read(const std::string& oid, size_t len, uint64_t off,
                    bufferlist *bl, uint64_t snap_id, uint64_t* objver) = 0;
@@ -186,13 +186,13 @@ public:
   virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                           std::map<uint64_t,uint64_t> *m,
                           bufferlist *data_bl, uint64_t snap_id) = 0;
-  virtual int stat(TestTransactionStateRef& trans, uint64_t *psize, time_t *pmtime);
-  virtual int stat2(TestTransactionStateRef& trans, uint64_t *psize, struct timespec *pts) = 0;
+  virtual int stat(LRemTransactionStateRef& trans, uint64_t *psize, time_t *pmtime);
+  virtual int stat2(LRemTransactionStateRef& trans, uint64_t *psize, struct timespec *pts) = 0;
   virtual int mtime2(const string& oid, const struct timespec& ts,
                      const SnapContext &snapc) = 0;
   virtual int truncate(const std::string& oid, uint64_t size,
                        const SnapContext &snapc) = 0;
-  virtual int tmap_update(TestTransactionStateRef& trans, bufferlist& cmdbl);
+  virtual int tmap_update(LRemTransactionStateRef& trans, bufferlist& cmdbl);
   virtual int unwatch(uint64_t handle);
   virtual int watch(const std::string& o, uint64_t *handle,
                     librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
@@ -208,29 +208,29 @@ public:
                            uint8_t op, const bufferlist& bl) = 0;
   virtual int cmpxattr(const std::string& oid, const char *name,
                        uint8_t op, uint64_t v) = 0;
-  virtual int getxattr(TestTransactionStateRef& trans, const char *name, bufferlist *pbl);
-  virtual int xattr_get(TestTransactionStateRef& trans,
+  virtual int getxattr(LRemTransactionStateRef& trans, const char *name, bufferlist *pbl);
+  virtual int xattr_get(LRemTransactionStateRef& trans,
                         std::map<std::string, bufferlist>* attrset) = 0;
-  virtual int setxattr(TestTransactionStateRef& trans, const char *name,
+  virtual int setxattr(LRemTransactionStateRef& trans, const char *name,
                        bufferlist& bl) = 0;
-  virtual int rmxattr(TestTransactionStateRef& trans, const char *name) = 0;
+  virtual int rmxattr(LRemTransactionStateRef& trans, const char *name) = 0;
   virtual int zero(const std::string& oid, uint64_t off, uint64_t len,
                    const SnapContext &snapc) = 0;
 
   virtual int get_current_ver(const std::string& oid, uint64_t *ver) = 0;
-  virtual int set_op_flags(TestTransactionStateRef& trans, int flags);
+  virtual int set_op_flags(LRemTransactionStateRef& trans, int flags);
 
   int execute_operation(const std::string& oid,
                         const Operation &operation);
 
-  virtual TestTransactionStateRef init_transaction(const std::string& oid) = 0;
+  virtual LRemTransactionStateRef init_transaction(const std::string& oid) = 0;
 
 protected:
-  TestIoCtxImpl(const TestIoCtxImpl& rhs);
-  virtual ~TestIoCtxImpl();
+  LRemIoCtxImpl(const LRemIoCtxImpl& rhs);
+  virtual ~LRemIoCtxImpl();
 
   int execute_aio_operations(const std::string& oid,
-                             TestObjectOperationImpl *ops,
+                             LRemObjectOperationImpl *ops,
                              bufferlist *pbl, uint64_t,
                              const SnapContext &snapc,
                              int flags,
@@ -238,9 +238,9 @@ protected:
 
 private:
   struct C_AioNotify : public Context {
-    TestIoCtxImpl *io_ctx;
+    LRemIoCtxImpl *io_ctx;
     AioCompletionImpl *aio_comp;
-    C_AioNotify(TestIoCtxImpl *_io_ctx, AioCompletionImpl *_aio_comp)
+    C_AioNotify(LRemIoCtxImpl *_io_ctx, AioCompletionImpl *_aio_comp)
       : io_ctx(_io_ctx), aio_comp(_aio_comp) {
     }
     void finish(int r) override {
@@ -253,7 +253,7 @@ private:
     std::string nspace;
   };
 
-  TestRadosClient *m_client;
+  LRemRadosClient *m_client;
   int64_t m_pool_id = 0;
   std::string m_pool_name;
   Locator m_oloc;
@@ -268,4 +268,4 @@ private:
 
 } // namespace librados
 
-#endif // CEPH_TEST_IO_CTX_IMPL_H
+#endif // CEPH_LREM_IO_CTX_IMPL_H

@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "TestClassHandler.h"
-#include "TestIoCtxImpl.h"
+#include "LRemClassHandler.h"
+#include "LRemIoCtxImpl.h"
 #include <boost/algorithm/string/predicate.hpp>
 #include <errno.h>
 #include <stdlib.h>
@@ -16,17 +16,17 @@
 
 namespace librados {
 
-TestClassHandler::TestClassHandler() {
+LRemClassHandler::LRemClassHandler() {
 }
 
-TestClassHandler::~TestClassHandler() {
+LRemClassHandler::~LRemClassHandler() {
   for (ClassHandles::iterator it = m_class_handles.begin();
       it != m_class_handles.end(); ++it) {
     dlclose(*it);
   }
 }
 
-void TestClassHandler::open_class(const std::string& name,
+void LRemClassHandler::open_class(const std::string& name,
                                   const std::string& path) {
   void *handle = dlopen(path.c_str(), RTLD_NOW);
   if (handle == NULL) {
@@ -52,7 +52,7 @@ void TestClassHandler::open_class(const std::string& name,
   dlclose(handle);
 }
 
-void TestClassHandler::open_all_classes() {
+void LRemClassHandler::open_all_classes() {
   ceph_assert(m_class_handles.empty());
 
   const char* env = getenv("CEPH_LIB");
@@ -80,7 +80,7 @@ void TestClassHandler::open_all_classes() {
   closedir(dir);
 }
 
-int TestClassHandler::create(const std::string &name, cls_handle_t *handle) {
+int LRemClassHandler::create(const std::string &name, cls_handle_t *handle) {
   if (m_classes.find(name) != m_classes.end()) {
     std::cerr << "Class " << name << " already exists" << std::endl;
     return -EEXIST;
@@ -92,7 +92,7 @@ int TestClassHandler::create(const std::string &name, cls_handle_t *handle) {
   return 0;
 }
 
-int TestClassHandler::create_method(cls_handle_t hclass,
+int LRemClassHandler::create_method(cls_handle_t hclass,
                                     const char *name,
                                     int flags,
                                     cls_method_cxx_call_t class_call,
@@ -111,7 +111,7 @@ int TestClassHandler::create_method(cls_handle_t hclass,
   return 0;
 }
 
-cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
+cls_method_cxx_call_t LRemClassHandler::get_method(const std::string &cls,
                                                    const std::string &method,
                                                    bool *write) {
   Classes::iterator c_it = m_classes.find(cls);
@@ -133,9 +133,9 @@ cls_method_cxx_call_t TestClassHandler::get_method(const std::string &cls,
   return m_it->second->class_call;
 }
 
-TestClassHandler::SharedMethodContext TestClassHandler::get_method_context(
-    TestIoCtxImpl *io_ctx_impl, const std::string &oid, uint64_t snap_id,
-    const SnapContext &snapc, TestTransactionStateRef& trans) {
+LRemClassHandler::SharedMethodContext LRemClassHandler::get_method_context(
+    LRemIoCtxImpl *io_ctx_impl, const std::string &oid, uint64_t snap_id,
+    const SnapContext &snapc, LRemTransactionStateRef& trans) {
   SharedMethodContext ctx(new MethodContext());
 
   // clone to ioctx to provide a firewall for gmock expectations
@@ -147,7 +147,7 @@ TestClassHandler::SharedMethodContext TestClassHandler::get_method_context(
   return ctx;
 }
 
-int TestClassHandler::create_filter(cls_handle_t hclass,
+int LRemClassHandler::create_filter(cls_handle_t hclass,
 				    const std::string& name,
 				    cls_cxx_filter_factory_t fn)
 {
@@ -159,7 +159,7 @@ int TestClassHandler::create_filter(cls_handle_t hclass,
   return 0;
 }
 
-TestClassHandler::MethodContext::~MethodContext() {
+LRemClassHandler::MethodContext::~MethodContext() {
   io_ctx_impl->put();
 }
 

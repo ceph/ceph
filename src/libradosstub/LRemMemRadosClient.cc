@@ -1,33 +1,33 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "TestMemRadosClient.h"
-#include "TestMemCluster.h"
-#include "TestMemIoCtxImpl.h"
+#include "LRemMemRadosClient.h"
+#include "LRemMemCluster.h"
+#include "LRemMemIoCtxImpl.h"
 #include <errno.h>
 #include <sstream>
 
 namespace librados {
 
-TestMemRadosClient::TestMemRadosClient(CephContext *cct,
-                                       TestMemCluster *test_mem_cluster)
-  : TestRadosClient(cct, test_mem_cluster->get_watch_notify()),
-    m_mem_cluster(test_mem_cluster) {
+LRemMemRadosClient::LRemMemRadosClient(CephContext *cct,
+                                       LRemMemCluster *lrem_mem_cluster)
+  : LRemRadosClient(cct, lrem_mem_cluster->get_watch_notify()),
+    m_mem_cluster(lrem_mem_cluster) {
   m_mem_cluster->allocate_client(&m_nonce, &m_global_id);
 }
 
-TestMemRadosClient::~TestMemRadosClient() {
+LRemMemRadosClient::~LRemMemRadosClient() {
   m_mem_cluster->deallocate_client(m_nonce);
 }
 
-TestIoCtxImpl *TestMemRadosClient::create_ioctx(int64_t pool_id,
+LRemIoCtxImpl *LRemMemRadosClient::create_ioctx(int64_t pool_id,
 						const std::string &pool_name) {
-  return new TestMemIoCtxImpl(this, pool_id, pool_name,
+  return new LRemMemIoCtxImpl(this, pool_id, pool_name,
                               m_mem_cluster->get_pool(pool_name));
 }
 
-void TestMemRadosClient::object_list(int64_t pool_id,
- 				     std::list<librados::TestRadosClient::Object> *list) {
+void LRemMemRadosClient::object_list(int64_t pool_id,
+ 				     std::list<librados::LRemRadosClient::Object> *list) {
   list->clear();
 
   auto pool = m_mem_cluster->get_pool(pool_id);
@@ -41,48 +41,48 @@ void TestMemRadosClient::object_list(int64_t pool_id,
   }
 }
 
-int TestMemRadosClient::pool_create(const std::string &pool_name) {
+int LRemMemRadosClient::pool_create(const std::string &pool_name) {
   if (is_blocklisted()) {
     return -EBLOCKLISTED;
   }
   return m_mem_cluster->pool_create(pool_name);
 }
 
-int TestMemRadosClient::pool_delete(const std::string &pool_name) {
+int LRemMemRadosClient::pool_delete(const std::string &pool_name) {
   if (is_blocklisted()) {
     return -EBLOCKLISTED;
   }
   return m_mem_cluster->pool_delete(pool_name);
 }
 
-int TestMemRadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) {
+int LRemMemRadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) {
   // TODO
   *base_tier = pool_id;
   return 0;
 }
 
-int TestMemRadosClient::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
+int LRemMemRadosClient::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
   return m_mem_cluster->pool_list(v);
 }
 
-int64_t TestMemRadosClient::pool_lookup(const std::string &pool_name) {
+int64_t LRemMemRadosClient::pool_lookup(const std::string &pool_name) {
   return m_mem_cluster->pool_lookup(pool_name);
 }
 
-int TestMemRadosClient::pool_reverse_lookup(int64_t id, std::string *name) {
+int LRemMemRadosClient::pool_reverse_lookup(int64_t id, std::string *name) {
   return m_mem_cluster->pool_reverse_lookup(id, name);
 }
 
-int TestMemRadosClient::watch_flush() {
+int LRemMemRadosClient::watch_flush() {
   get_watch_notify()->flush(this);
   return 0;
 }
 
-bool TestMemRadosClient::is_blocklisted() const {
+bool LRemMemRadosClient::is_blocklisted() const {
   return m_mem_cluster->is_blocklisted(m_nonce);
 }
 
-int TestMemRadosClient::blocklist_add(const std::string& client_address,
+int LRemMemRadosClient::blocklist_add(const std::string& client_address,
 				      uint32_t expire_seconds) {
   if (is_blocklisted()) {
     return -EBLOCKLISTED;
@@ -105,11 +105,11 @@ int TestMemRadosClient::blocklist_add(const std::string& client_address,
   return 0;
 }
 
-void TestMemRadosClient::transaction_start(TestTransactionStateRef& state) {
+void LRemMemRadosClient::transaction_start(LRemTransactionStateRef& state) {
   m_mem_cluster->transaction_start(state);
 }
 
-void TestMemRadosClient::transaction_finish(TestTransactionStateRef& state) {
+void LRemMemRadosClient::transaction_finish(LRemTransactionStateRef& state) {
   m_mem_cluster->transaction_finish(state);
 }
 

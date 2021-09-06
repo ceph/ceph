@@ -10,11 +10,11 @@
 #include "osd/error_code.h"
 #include "osd/osd_types.h"
 #include "osdc/error_code.h"
-#include "LibradosTestStub.h"
-#include "TestClassHandler.h"
-#include "TestIoCtxImpl.h"
-#include "TestRadosClient.h"
-#include "TestTransaction.h"
+#include "LibradosLRemStub.h"
+#include "LRemClassHandler.h"
+#include "LRemIoCtxImpl.h"
+#include "LRemRadosClient.h"
+#include "LRemTransaction.h"
 #include <map>
 #include <memory>
 #include <optional>
@@ -29,16 +29,16 @@ namespace neorados {
 namespace detail {
 
 struct Client {
-  ceph::mutex mutex = ceph::make_mutex("NeoradosTestStub::Client");
+  ceph::mutex mutex = ceph::make_mutex("NeoradosLRemStub::Client");
 
-  librados::TestRadosClient* test_rados_client;
+  librados::LRemRadosClient* lrem_rados_client;
   boost::asio::io_context& io_context;
 
-  std::map<std::pair<int64_t, std::string>, librados::TestIoCtxImpl*> io_ctxs;
+  std::map<std::pair<int64_t, std::string>, librados::LRemIoCtxImpl*> io_ctxs;
 
-  Client(librados::TestRadosClient* test_rados_client)
-    : test_rados_client(test_rados_client),
-      io_context(test_rados_client->get_io_context()) {
+  Client(librados::LRemRadosClient* lrem_rados_client)
+    : lrem_rados_client(lrem_rados_client),
+      io_context(lrem_rados_client->get_io_context()) {
   }
 
   ~Client() {
@@ -47,7 +47,7 @@ struct Client {
     }
   }
 
-  librados::TestIoCtxImpl* get_io_ctx(const IOContext& ioc) {
+  librados::LRemIoCtxImpl* get_io_ctx(const IOContext& ioc) {
     int64_t pool_id = ioc.pool();
     std::string ns = std::string{ioc.ns()};
 
@@ -59,14 +59,14 @@ struct Client {
     }
 
     std::list<std::pair<int64_t, std::string>> pools;
-    int r = test_rados_client->pool_list(pools);
+    int r = lrem_rados_client->pool_list(pools);
     if (r < 0) {
       return nullptr;
     }
 
     for (auto& pool : pools) {
       if (pool.first == pool_id) {
-        auto io_ctx = test_rados_client->create_ioctx(pool_id, pool.second);
+        auto io_ctx = lrem_rados_client->create_ioctx(pool_id, pool.second);
         io_ctx->set_namespace(ns);
         io_ctxs[key] = io_ctx;
         return io_ctx;
@@ -237,14 +237,14 @@ bool operator !=(const IOContext& lhs, const IOContext& rhs) {
 }
 
 Op::Op() {
-  static_assert(Op::impl_size >= sizeof(librados::TestObjectOperationImpl*));
-  auto& o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
-  o = new librados::TestObjectOperationImpl();
+  static_assert(Op::impl_size >= sizeof(librados::LRemObjectOperationImpl*));
+  auto& o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
+  o = new librados::LRemObjectOperationImpl();
   o->get();
 }
 
 Op::~Op() {
-  auto& o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto& o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   if (o != nullptr) {
     o->put();
     o = nullptr;
@@ -252,21 +252,21 @@ Op::~Op() {
 }
 
 void Op::assert_exists() {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::TestIoCtxImpl::assert_exists, _1, _2, _4));
+    &librados::LRemIoCtxImpl::assert_exists, _1, _2, _4));
 }
 
 void Op::assert_version(uint64_t ver) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-          &librados::TestIoCtxImpl::assert_version, _1, _2, ver));
+          &librados::LRemIoCtxImpl::assert_version, _1, _2, ver));
 }
 
 void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
-  librados::ObjectOperationTestImpl op = std::bind(
-    &librados::TestIoCtxImpl::cmpext, _1, _2, off, cmp_bl, _4);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
+  librados::ObjectOperationLRemImpl op = std::bind(
+    &librados::LRemIoCtxImpl::cmpext, _1, _2, off, cmp_bl, _4);
   if (s != nullptr) {
     op = std::bind(
       save_operation_size, std::bind(op, _1, _2, _3, _4, _5, _6, _7), s);
@@ -275,7 +275,7 @@ void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
 }
 
 std::size_t Op::size() const {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl* const *>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl* const *>(&impl);
   return o->ops.size();
 }
 
@@ -311,13 +311,13 @@ void Op::exec(std::string_view cls, std::string_view method,
               const ceph::buffer::list& inbl,
               ceph::buffer::list* out,
               boost::system::error_code* ec) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
 
   auto cls_handler = librados_stub::get_class_handler();
-  librados::ObjectOperationTestImpl op =
+  librados::ObjectOperationLRemImpl op =
     [cls_handler, cls, method, inbl = const_cast<bufferlist&>(inbl), out]
-    (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::TestTransactionStateRef& trans) mutable -> int {
+    (librados::LRemIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::LRemTransactionStateRef& trans) mutable -> int {
       return io_ctx->exec(
         oid, cls_handler, std::string(cls).c_str(),
         std::string(method).c_str(), inbl,
@@ -333,13 +333,13 @@ void Op::exec(std::string_view cls, std::string_view method,
 void Op::exec(std::string_view cls, std::string_view method,
               const ceph::buffer::list& inbl,
               boost::system::error_code* ec) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
 
   auto cls_handler = librados_stub::get_class_handler();
-  librados::ObjectOperationTestImpl op =
+  librados::ObjectOperationLRemImpl op =
     [cls_handler, cls, method, inbl = const_cast<bufferlist&>(inbl)]
-    (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::TestTransactionStateRef& trans) mutable -> int {
+    (librados::LRemIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::LRemTransactionStateRef& trans) mutable -> int {
       return io_ctx->exec(
         oid, cls_handler, std::string(cls).c_str(),
         std::string(method).c_str(), inbl, outbl, snap_id, snapc, trans);
@@ -353,14 +353,14 @@ void Op::exec(std::string_view cls, std::string_view method,
 
 void ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
 	          boost::system::error_code* ec) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
-  librados::ObjectOperationTestImpl op;
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
+  librados::ObjectOperationLRemImpl op;
   if (out != nullptr) {
     op = std::bind(
-            &librados::TestIoCtxImpl::read, _1, _2, len, off, out, _4, _6);
+            &librados::LRemIoCtxImpl::read, _1, _2, len, off, out, _4, _6);
   } else {
     op = std::bind(
-            &librados::TestIoCtxImpl::read, _1, _2, len, off, _3, _4, _6);
+            &librados::LRemIoCtxImpl::read, _1, _2, len, off, _3, _4, _6);
   }
 
   if (ec != NULL) {
@@ -375,11 +375,11 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
 		         std::vector<std::pair<std::uint64_t,
                                                std::uint64_t>>* extents,
 		         boost::system::error_code* ec) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
-  librados::ObjectOperationTestImpl op =
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
+  librados::ObjectOperationLRemImpl op =
     [off, len, out, extents]
-    (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
-     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::TestTransactionStateRef& trans) mutable -> int {
+    (librados::LRemIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
+     uint64_t snap_id, const SnapContext& snapc, uint64_t*, librados::LRemTransactionStateRef& trans) mutable -> int {
       std::map<uint64_t,uint64_t> m;
       int r = io_ctx->sparse_read(
         oid, off, len, &m, (out != nullptr ? out : outbl), snap_id);
@@ -397,11 +397,11 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
 }
 
 void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
-  librados::ObjectOperationTestImpl op =
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
+  librados::ObjectOperationLRemImpl op =
     [snaps]
-    (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist*,
-     uint64_t, const SnapContext&, uint64_t*, librados::TestTransactionStateRef&) mutable -> int {
+    (librados::LRemIoCtxImpl* io_ctx, const std::string& oid, bufferlist*,
+     uint64_t, const SnapContext&, uint64_t*, librados::LRemTransactionStateRef&) mutable -> int {
       librados::snap_set_t snap_set;
       int r = io_ctx->list_snaps(oid, &snap_set);
       if (r >= 0 && snaps != nullptr) {
@@ -427,46 +427,46 @@ void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
 }
 
 void WriteOp::create(bool exclusive) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::TestIoCtxImpl::create, _1, _2, exclusive, _5));
+    &librados::LRemIoCtxImpl::create, _1, _2, exclusive, _5));
 }
 
 void WriteOp::write(uint64_t off, ceph::buffer::list&& bl) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::TestIoCtxImpl::write, _1, _2, bl, bl.length(), off, _5));
+    &librados::LRemIoCtxImpl::write, _1, _2, bl, bl.length(), off, _5));
 }
 
 void WriteOp::write_full(ceph::buffer::list&& bl) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::TestIoCtxImpl::write_full, _1, _2, bl, _5));
+    &librados::LRemIoCtxImpl::write_full, _1, _2, bl, _5));
 }
 
 void WriteOp::remove() {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::TestIoCtxImpl::remove, _1, _2, _5));
+    &librados::LRemIoCtxImpl::remove, _1, _2, _5));
 }
 
 void WriteOp::truncate(uint64_t off) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::TestIoCtxImpl::truncate, _1, _2, off, _5));
+    &librados::LRemIoCtxImpl::truncate, _1, _2, off, _5));
 }
 
 void WriteOp::zero(uint64_t off, uint64_t len) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::TestIoCtxImpl::zero, _1, _2, off, len, _5));
+    &librados::LRemIoCtxImpl::zero, _1, _2, off, len, _5));
 }
 
 void WriteOp::writesame(std::uint64_t off, std::uint64_t write_len,
                         ceph::buffer::list&& bl) {
-  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto o = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
-    &librados::TestIoCtxImpl::writesame, _1, _2, bl, write_len, off, _5));
+    &librados::LRemIoCtxImpl::writesame, _1, _2, bl, write_len, off, _5));
 }
 
 void WriteOp::set_alloc_hint(uint64_t expected_object_size,
@@ -486,13 +486,13 @@ RADOS::RADOS(std::unique_ptr<detail::Client> impl)
 RADOS::~RADOS() = default;
 
 RADOS RADOS::make_with_librados(librados::Rados& rados) {
-  auto test_rados_client = reinterpret_cast<librados::TestRadosClient*>(
+  auto lrem_rados_client = reinterpret_cast<librados::LRemRadosClient*>(
     rados.client);
-  return RADOS{std::make_unique<detail::Client>(test_rados_client)};
+  return RADOS{std::make_unique<detail::Client>(lrem_rados_client)};
 }
 
 CephContext* neorados::RADOS::cct() {
-  return impl->test_rados_client->cct();
+  return impl->lrem_rados_client->cct();
 }
 
 boost::asio::io_context& neorados::RADOS::get_io_context() {
@@ -512,7 +512,7 @@ void RADOS::execute(const Object& o, const IOContext& ioc, ReadOp&& op,
     return;
   }
 
-  auto ops = *reinterpret_cast<librados::TestObjectOperationImpl**>(&op.impl);
+  auto ops = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&op.impl);
 
   auto snap_id = CEPH_NOSNAP;
   auto opt_snap_id = ioc.read_snap();
@@ -535,7 +535,7 @@ void RADOS::execute(const Object& o, const IOContext& ioc, WriteOp&& op,
     return;
   }
 
-  auto ops = *reinterpret_cast<librados::TestObjectOperationImpl**>(&op.impl);
+  auto ops = *reinterpret_cast<librados::LRemObjectOperationImpl**>(&op.impl);
 
   SnapContext snapc;
   auto opt_snapc = ioc.write_snap_context();
@@ -553,7 +553,7 @@ void RADOS::mon_command(std::vector<std::string> command,
                         const bufferlist& bl,
                         std::string* outs, bufferlist* outbl,
                         std::unique_ptr<Op::Completion> c) {
-  auto r = impl->test_rados_client->mon_command(command, bl, outbl, outs);
+  auto r = impl->lrem_rados_client->mon_command(command, bl, outbl, outs);
   c->post(std::move(c),
           (r < 0 ? bs::error_code(-r, osd_category()) : bs::error_code()));
 }
@@ -561,14 +561,14 @@ void RADOS::mon_command(std::vector<std::string> command,
 void RADOS::blocklist_add(std::string_view client_address,
                           std::optional<std::chrono::seconds> expire,
                           std::unique_ptr<SimpleOpComp> c) {
-  auto r = impl->test_rados_client->blocklist_add(
+  auto r = impl->lrem_rados_client->blocklist_add(
     std::string(client_address), expire.value_or(0s).count());
   c->post(std::move(c),
           (r < 0 ? bs::error_code(-r, mon_category()) : bs::error_code()));
 }
 
 void RADOS::wait_for_latest_osd_map(std::unique_ptr<Op::Completion> c) {
-  auto r = impl->test_rados_client->wait_for_latest_osd_map();
+  auto r = impl->lrem_rados_client->wait_for_latest_osd_map();
   c->dispatch(std::move(c),
               (r < 0 ? bs::error_code(-r, osd_category()) :
                        bs::error_code()));
@@ -578,19 +578,19 @@ void RADOS::wait_for_latest_osd_map(std::unique_ptr<Op::Completion> c) {
 
 namespace librados {
 
-MockTestMemIoCtxImpl& get_mock_io_ctx(neorados::RADOS& rados,
+MockLRemMemIoCtxImpl& get_mock_io_ctx(neorados::RADOS& rados,
                                       neorados::IOContext& io_context) {
   auto& impl = *reinterpret_cast<std::unique_ptr<neorados::detail::Client>*>(
     &rados);
   auto io_ctx = impl->get_io_ctx(io_context);
   ceph_assert(io_ctx != nullptr);
-  return *reinterpret_cast<MockTestMemIoCtxImpl*>(io_ctx);
+  return *reinterpret_cast<MockLRemMemIoCtxImpl*>(io_ctx);
 }
 
-MockTestMemRadosClient& get_mock_rados_client(neorados::RADOS& rados) {
+MockLRemMemRadosClient& get_mock_rados_client(neorados::RADOS& rados) {
   auto& impl = *reinterpret_cast<std::unique_ptr<neorados::detail::Client>*>(
     &rados);
-  return *reinterpret_cast<MockTestMemRadosClient*>(impl->test_rados_client);
+  return *reinterpret_cast<MockLRemMemRadosClient*>(impl->lrem_rados_client);
 }
 
 } // namespace librados

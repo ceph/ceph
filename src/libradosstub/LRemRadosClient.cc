@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "TestRadosClient.h"
-#include "TestIoCtxImpl.h"
+#include "LRemRadosClient.h"
+#include "LRemIoCtxImpl.h"
 #include "librados/AioCompletionImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "include/ceph_assert.h"
@@ -72,7 +72,7 @@ static void finish_aio_completion(AioCompletionImpl *c, int r) {
 
 class AioFunctionContext : public Context {
 public:
-  AioFunctionContext(const TestRadosClient::AioFunction &callback,
+  AioFunctionContext(const LRemRadosClient::AioFunction &callback,
                      Finisher *finisher, AioCompletionImpl *c)
     : m_callback(callback), m_finisher(finisher), m_comp(c)
   {
@@ -93,7 +93,7 @@ public:
     }
   }
 private:
-  TestRadosClient::AioFunction m_callback;
+  LRemRadosClient::AioFunction m_callback;
   Finisher *m_finisher;
   AioCompletionImpl *m_comp;
 };
@@ -116,7 +116,7 @@ static void finish_pool_aio_completion(PoolAsyncCompletionImpl *c, int r) {
 
 class PoolAioFunctionContext : public Context {
 public:
-  PoolAioFunctionContext(const TestRadosClient::AioFunction &callback,
+  PoolAioFunctionContext(const LRemRadosClient::AioFunction &callback,
                      Finisher *finisher, PoolAsyncCompletionImpl *c)
     : m_callback(callback), m_finisher(finisher), m_comp(c)
   {
@@ -137,13 +137,13 @@ public:
     }
   }
 private:
-  TestRadosClient::AioFunction m_callback;
+  LRemRadosClient::AioFunction m_callback;
   Finisher *m_finisher;
   PoolAsyncCompletionImpl *m_comp;
 };
 
-TestRadosClient::TestRadosClient(CephContext *cct,
-                                 TestWatchNotify *watch_notify)
+LRemRadosClient::LRemRadosClient(CephContext *cct,
+                                 LRemWatchNotify *watch_notify)
   : m_cct(cct->get()), m_watch_notify(watch_notify),
     m_aio_finisher(new Finisher(m_cct)),
     m_io_context_pool(std::make_unique<ceph::async::io_context_pool>())
@@ -170,7 +170,7 @@ TestRadosClient::TestRadosClient(CephContext *cct,
     "librados_thread_count"));
 }
 
-TestRadosClient::~TestRadosClient() {
+LRemRadosClient::~LRemRadosClient() {
   flush_aio_operations();
   flush_pool_aio_operations();
 
@@ -192,15 +192,15 @@ TestRadosClient::~TestRadosClient() {
   m_cct = NULL;
 }
 
-boost::asio::io_context& TestRadosClient::get_io_context() {
+boost::asio::io_context& LRemRadosClient::get_io_context() {
   return m_io_context_pool->get_io_context();
 }
 
-const char** TestRadosClient::get_tracked_conf_keys() const {
+const char** LRemRadosClient::get_tracked_conf_keys() const {
   return config_keys;
 }
 
-void TestRadosClient::handle_conf_change(
+void LRemRadosClient::handle_conf_change(
     const ConfigProxy& conf, const std::set<std::string> &changed) {
   if (changed.count("librados_thread_count")) {
     m_io_context_pool->stop();
@@ -209,33 +209,33 @@ void TestRadosClient::handle_conf_change(
   }
 }
 
-void TestRadosClient::get() {
+void LRemRadosClient::get() {
   m_refcount++;
 }
 
-void TestRadosClient::put() {
+void LRemRadosClient::put() {
   if (--m_refcount == 0) {
     shutdown();
     delete this;
   }
 }
 
-CephContext *TestRadosClient::cct() {
+CephContext *LRemRadosClient::cct() {
   return m_cct;
 }
 
-int TestRadosClient::connect() {
+int LRemRadosClient::connect() {
   return 0;
 }
 
-void TestRadosClient::shutdown() {
+void LRemRadosClient::shutdown() {
 }
 
-int TestRadosClient::wait_for_latest_osdmap() {
+int LRemRadosClient::wait_for_latest_osdmap() {
   return 0;
 }
 
-int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
+int LRemRadosClient::mon_command(const std::vector<std::string>& cmd,
                                  const bufferlist &inbl,
                                  bufferlist *outbl, std::string *outs) {
   for (std::vector<std::string>::const_iterator it = cmd.begin();
@@ -298,13 +298,13 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
   return -ENOSYS;
 }
 
-int TestRadosClient::pool_create_async(const char *name, PoolAsyncCompletionImpl *c) {
+int LRemRadosClient::pool_create_async(const char *name, PoolAsyncCompletionImpl *c) {
   add_pool_aio_operation(true,
-                         std::bind(&TestRadosClient::pool_create, this, name), c);
+                         std::bind(&LRemRadosClient::pool_create, this, name), c);
   return 0;
 }
 
-void TestRadosClient::add_aio_operation(const std::string& oid,
+void LRemRadosClient::add_aio_operation(const std::string& oid,
                                         bool queue_callback,
 				        const AioFunction &aio_function,
                                         AioCompletionImpl *c) {
@@ -313,7 +313,7 @@ void TestRadosClient::add_aio_operation(const std::string& oid,
   get_finisher(oid)->queue(ctx);
 }
 
-void TestRadosClient::add_pool_aio_operation(bool queue_callback,
+void LRemRadosClient::add_pool_aio_operation(bool queue_callback,
                                              const AioFunction &aio_function,
                                              PoolAsyncCompletionImpl *c) {
   PoolAioFunctionContext *ctx = new PoolAioFunctionContext(
@@ -336,14 +336,14 @@ struct WaitForFlush {
   AioCompletionImpl *c;
 };
 
-void TestRadosClient::flush_aio_operations() {
+void LRemRadosClient::flush_aio_operations() {
   AioCompletionImpl *comp = new AioCompletionImpl();
   flush_aio_operations(comp);
   comp->wait_for_complete();
   comp->put();
 }
 
-void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
+void LRemRadosClient::flush_aio_operations(AioCompletionImpl *c) {
   c->get();
 
   WaitForFlush *wait_for_flush = new WaitForFlush();
@@ -370,14 +370,14 @@ struct WaitForPoolFlush {
   PoolAsyncCompletionImpl *c;
 };
 
-void TestRadosClient::flush_pool_aio_operations() {
+void LRemRadosClient::flush_pool_aio_operations() {
   PoolAsyncCompletionImpl *comp = new PoolAsyncCompletionImpl();
   flush_pool_aio_operations(comp);
   comp->wait();
   comp->put();
 }
 
-void TestRadosClient::flush_pool_aio_operations(PoolAsyncCompletionImpl *c) {
+void LRemRadosClient::flush_pool_aio_operations(PoolAsyncCompletionImpl *c) {
   c->get();
 
   auto *wait_for_flush = new WaitForPoolFlush();
@@ -390,19 +390,19 @@ void TestRadosClient::flush_pool_aio_operations(PoolAsyncCompletionImpl *c) {
   m_pool_finisher->queue(ctx);
 }
 
-int TestRadosClient::aio_watch_flush(AioCompletionImpl *c) {
+int LRemRadosClient::aio_watch_flush(AioCompletionImpl *c) {
   c->get();
   Context *ctx = new LambdaContext(std::bind(
-    &TestRadosClient::finish_aio_completion, this, c, std::placeholders::_1));
+    &LRemRadosClient::finish_aio_completion, this, c, std::placeholders::_1));
   get_watch_notify()->aio_flush(this, ctx);
   return 0;
 }
 
-void TestRadosClient::finish_aio_completion(AioCompletionImpl *c, int r) {
+void LRemRadosClient::finish_aio_completion(AioCompletionImpl *c, int r) {
   librados::finish_aio_completion(c, r);
 }
 
-Finisher *TestRadosClient::get_finisher(const std::string &oid) {
+Finisher *LRemRadosClient::get_finisher(const std::string &oid) {
   std::size_t h = m_hash(oid);
   return m_finishers[h % m_finishers.size()];
 }

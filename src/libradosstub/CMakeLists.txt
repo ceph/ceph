@@ -1,16 +1,16 @@
 add_library(librados_stub_impl STATIC
-  TestClassHandler.cc
-  TestIoCtxImpl.cc
-  TestMemCluster.cc
-  TestMemIoCtxImpl.cc
-  TestMemRadosClient.cc
-  TestRadosClient.cc
-  TestWatchNotify.cc)
+  LRemClassHandler.cc
+  LRemIoCtxImpl.cc
+  LRemMemCluster.cc
+  LRemMemIoCtxImpl.cc
+  LRemMemRadosClient.cc
+  LRemRadosClient.cc
+  LRemWatchNotify.cc)
 
 # add_library(rados_stub STATIC ${librados_stub_srcs})
 add_library(librados_stub ${CEPH_SHARED}
-  LibradosTestStub.cc
-  NeoradosTestStub.cc
+  LibradosLRemStub.cc
+  NeoradosLRemStub.cc
   NObjects.cc)
 
 if(ENABLE_SHARED)

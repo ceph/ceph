@@ -1,10 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "TestIoCtxImpl.h"
-#include "TestClassHandler.h"
-#include "TestRadosClient.h"
-#include "TestWatchNotify.h"
+#include "LRemIoCtxImpl.h"
+#include "LRemClassHandler.h"
+#include "LRemRadosClient.h"
+#include "LRemWatchNotify.h"
 #include "librados/AioCompletionImpl.h"
 #include "include/ceph_assert.h"
 #include "common/Finisher.h"
@@ -18,11 +18,11 @@
 
 namespace librados {
 
-TestIoCtxImpl::TestIoCtxImpl() : m_client(NULL) {
+LRemIoCtxImpl::LRemIoCtxImpl() : m_client(NULL) {
   get();
 }
 
-TestIoCtxImpl::TestIoCtxImpl(TestRadosClient *client, int64_t pool_id,
+LRemIoCtxImpl::LRemIoCtxImpl(LRemRadosClient *client, int64_t pool_id,
                              const std::string& pool_name)
   : m_client(client), m_pool_id(pool_id), m_pool_name(pool_name),
     m_snap_seq(CEPH_NOSNAP)
@@ -31,7 +31,7 @@ TestIoCtxImpl::TestIoCtxImpl(TestRadosClient *client, int64_t pool_id,
   get();
 }
 
-TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
+LRemIoCtxImpl::LRemIoCtxImpl(const LRemIoCtxImpl& rhs)
   : m_client(rhs.m_client),
     m_pool_id(rhs.m_pool_id),
     m_pool_name(rhs.m_pool_name),
@@ -42,15 +42,15 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
   get();
 }
 
-TestIoCtxImpl::~TestIoCtxImpl() {
+LRemIoCtxImpl::~LRemIoCtxImpl() {
   ceph_assert(m_pending_ops == 0);
 }
 
-void TestObjectOperationImpl::get() {
+void LRemObjectOperationImpl::get() {
   m_refcount++;
 }
 
-void TestObjectOperationImpl::put() {
+void LRemObjectOperationImpl::put() {
   if (--m_refcount == 0) {
     ANNOTATE_HAPPENS_AFTER(&m_refcount);
     ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&m_refcount);
@@ -60,43 +60,43 @@ void TestObjectOperationImpl::put() {
   }
 }
 
-void TestIoCtxImpl::get() {
+void LRemIoCtxImpl::get() {
   m_refcount++;
 }
 
-void TestIoCtxImpl::put() {
+void LRemIoCtxImpl::put() {
   if (--m_refcount == 0) {
     m_client->put();
     delete this;
   }
 }
 
-uint64_t TestIoCtxImpl::get_instance_id() const {
+uint64_t LRemIoCtxImpl::get_instance_id() const {
   return m_client->get_instance_id();
 }
 
-int64_t TestIoCtxImpl::get_id() {
+int64_t LRemIoCtxImpl::get_id() {
   return m_pool_id;
 }
 
-uint64_t TestIoCtxImpl::get_last_version() {
+uint64_t LRemIoCtxImpl::get_last_version() {
   return 0;
 }
 
-std::string TestIoCtxImpl::get_pool_name() {
+std::string LRemIoCtxImpl::get_pool_name() {
   return m_pool_name;
 }
 
-int TestIoCtxImpl::aio_flush() {
+int LRemIoCtxImpl::aio_flush() {
   m_client->flush_aio_operations();
   return 0;
 }
 
-void TestIoCtxImpl::aio_flush_async(AioCompletionImpl *c) {
+void LRemIoCtxImpl::aio_flush_async(AioCompletionImpl *c) {
   m_client->flush_aio_operations(c);
 }
 
-void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
+void LRemIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
                                bufferlist& bl, uint64_t timeout_ms,
                                bufferlist *pbl) {
   get();
@@ -107,7 +107,7 @@ void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
                                            oid, bl, timeout_ms, pbl, ctx);
 }
 
-int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
+int LRemIoCtxImpl::aio_operate(const std::string& oid, LRemObjectOperationImpl &ops,
                                AioCompletionImpl *c, SnapContext *snap_context,
                                int flags) {
   // TODO flags for now
@@ -115,14 +115,14 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, true, std::bind(
-    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
+    &LRemIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(0), m_snap_seq,
     snap_context != NULL ? *snap_context : m_snapc, flags, nullptr), c);
   return 0;
 }
 
-int TestIoCtxImpl::aio_operate_read(const std::string& oid,
-                                    TestObjectOperationImpl &ops,
+int LRemIoCtxImpl::aio_operate_read(const std::string& oid,
+                                    LRemObjectOperationImpl &ops,
                                     AioCompletionImpl *c, int flags,
                                     bufferlist *pbl, uint64_t snap_id,
                                     uint64_t* objver) {
@@ -131,12 +131,12 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, true, std::bind(
-    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, snap_id,
+    &LRemIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, snap_id,
     m_snapc, flags, objver), c);
   return 0;
 }
 
-int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
+int LRemIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
                              uint64_t *handle, librados::WatchCtx2 *watch_ctx) {
   get();
   m_pending_ops++;
@@ -153,7 +153,7 @@ int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
   return 0;
 }
 
-int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
+int LRemIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
   get();
   m_pending_ops++;
   c->get();
@@ -166,22 +166,22 @@ int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
   return 0;
 }
 
-int TestIoCtxImpl::aio_exec(const std::string& oid, AioCompletionImpl *c,
-                            TestClassHandler *handler,
+int LRemIoCtxImpl::aio_exec(const std::string& oid, AioCompletionImpl *c,
+                            LRemClassHandler *handler,
                             const char *cls, const char *method,
                             bufferlist& inbl, bufferlist *outbl) {
   auto trans = init_transaction(oid);
   m_client->add_aio_operation(oid, true, std::bind(
-    &TestIoCtxImpl::exec, this, oid, handler, cls, method,
+    &LRemIoCtxImpl::exec, this, oid, handler, cls, method,
     inbl, outbl, m_snap_seq, m_snapc, trans), c);
   return 0;
 }
 
-int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
+int LRemIoCtxImpl::exec(const std::string& oid, LRemClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
                         uint64_t snap_id, const SnapContext &snapc,
-                        TestTransactionStateRef& trans) {
+                        LRemTransactionStateRef& trans) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -201,7 +201,7 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
   return r;
 }
 
-int TestIoCtxImpl::list_watchers(const std::string& o,
+int LRemIoCtxImpl::list_watchers(const std::string& o,
                                  std::list<obj_watch_t> *out_watchers) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
@@ -211,7 +211,7 @@ int TestIoCtxImpl::list_watchers(const std::string& o,
                                                      o, out_watchers);
 }
 
-int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
+int LRemIoCtxImpl::notify(const std::string& o, bufferlist& bl,
                           uint64_t timeout_ms, bufferlist *pbl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
@@ -222,14 +222,14 @@ int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
                                               timeout_ms, pbl);
 }
 
-void TestIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
+void LRemIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
                                uint64_t handle, bufferlist& bl) {
   m_client->get_watch_notify()->notify_ack(m_client, m_pool_id, get_namespace(),
                                            o, notify_id, handle,
                                            m_client->get_instance_id(), bl);
 }
 
-int TestIoCtxImpl::omap_get_keys2(const std::string& oid,
+int LRemIoCtxImpl::omap_get_keys2(const std::string& oid,
                                   const std::string& start_after,
                                   uint64_t max_return,
                                   std::set<std::string> *out_keys,
@@ -249,8 +249,8 @@ int TestIoCtxImpl::omap_get_keys2(const std::string& oid,
   return out_keys->size();
 }
 
-int TestIoCtxImpl::operate(const std::string& oid,
-                           TestObjectOperationImpl &ops,
+int LRemIoCtxImpl::operate(const std::string& oid,
+                           LRemObjectOperationImpl &ops,
                            int flags) {
   AioCompletionImpl *comp = new AioCompletionImpl();
 
@@ -258,7 +258,7 @@ int TestIoCtxImpl::operate(const std::string& oid,
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, false, std::bind(
-    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
+    &LRemIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(0), m_snap_seq, m_snapc, flags, nullptr), comp);
 
   comp->wait_for_complete();
@@ -267,8 +267,8 @@ int TestIoCtxImpl::operate(const std::string& oid,
   return ret;
 }
 
-int TestIoCtxImpl::operate_read(const std::string& oid,
-                                TestObjectOperationImpl &ops,
+int LRemIoCtxImpl::operate_read(const std::string& oid,
+                                LRemObjectOperationImpl &ops,
                                 bufferlist *pbl,
                                 int flags) {
   AioCompletionImpl *comp = new AioCompletionImpl();
@@ -277,7 +277,7 @@ int TestIoCtxImpl::operate_read(const std::string& oid,
   ops.get();
   m_pending_ops++;
   m_client->add_aio_operation(oid, false, std::bind(
-    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
+    &LRemIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
     m_snap_seq, m_snapc, flags, nullptr), comp);
 
   comp->wait_for_complete();
@@ -286,28 +286,28 @@ int TestIoCtxImpl::operate_read(const std::string& oid,
   return ret;
 }
 
-void TestIoCtxImpl::aio_selfmanaged_snap_create(uint64_t *snapid,
+void LRemIoCtxImpl::aio_selfmanaged_snap_create(uint64_t *snapid,
                                                 AioCompletionImpl *c) {
   m_client->add_aio_operation(
     "", true,
-    std::bind(&TestIoCtxImpl::selfmanaged_snap_create, this, snapid), c);
+    std::bind(&LRemIoCtxImpl::selfmanaged_snap_create, this, snapid), c);
 }
 
-void TestIoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
+void LRemIoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
                                                 AioCompletionImpl *c) {
   m_client->add_aio_operation(
     "", true,
-    std::bind(&TestIoCtxImpl::selfmanaged_snap_remove, this, snapid), c);
+    std::bind(&LRemIoCtxImpl::selfmanaged_snap_remove, this, snapid), c);
 }
 
-int TestIoCtxImpl::selfmanaged_snap_set_write_ctx(snap_t seq,
+int LRemIoCtxImpl::selfmanaged_snap_set_write_ctx(snap_t seq,
                                                   std::vector<snap_t>& snaps) {
   std::vector<snapid_t> snap_ids(snaps.begin(), snaps.end());
   m_snapc = SnapContext(seq, snap_ids);
   return 0;
 }
 
-int TestIoCtxImpl::set_alloc_hint(const std::string& oid,
+int LRemIoCtxImpl::set_alloc_hint(const std::string& oid,
                                   uint64_t expected_object_size,
                                   uint64_t expected_write_size,
                                   uint32_t flags,
@@ -315,7 +315,7 @@ int TestIoCtxImpl::set_alloc_hint(const std::string& oid,
   return 0;
 }
 
-void TestIoCtxImpl::set_snap_read(snap_t seq) {
+void LRemIoCtxImpl::set_snap_read(snap_t seq) {
   if (seq == 0) {
     seq = CEPH_NOSNAP;
   }
@@ -323,7 +323,7 @@ void TestIoCtxImpl::set_snap_read(snap_t seq) {
 }
 
 
-int TestIoCtxImpl::stat(TestTransactionStateRef& trans, uint64_t *psize, time_t *pmtime) {
+int LRemIoCtxImpl::stat(LRemTransactionStateRef& trans, uint64_t *psize, time_t *pmtime) {
   struct timespec ts;
   int r = stat2(trans, psize, (pmtime ? &ts : nullptr));
   if (r < 0) {
@@ -336,7 +336,7 @@ int TestIoCtxImpl::stat(TestTransactionStateRef& trans, uint64_t *psize, time_t 
   return 0;
 }
 
-int TestIoCtxImpl::getxattr(TestTransactionStateRef& trans, const char *name, bufferlist *pbl) {
+int LRemIoCtxImpl::getxattr(LRemTransactionStateRef& trans, const char *name, bufferlist *pbl) {
   std::map<string, bufferlist> attrs;
   int r = xattr_get(trans, &attrs);
   if (r < 0) {
@@ -351,7 +351,7 @@ int TestIoCtxImpl::getxattr(TestTransactionStateRef& trans, const char *name, bu
   return 0;
 }
 
-int TestIoCtxImpl::tmap_update(TestTransactionStateRef& trans, bufferlist& cmdbl) {
+int LRemIoCtxImpl::tmap_update(LRemTransactionStateRef& trans, bufferlist& cmdbl) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -409,7 +409,7 @@ int TestIoCtxImpl::tmap_update(TestTransactionStateRef& trans, bufferlist& cmdbl
   return r;
 }
 
-int TestIoCtxImpl::unwatch(uint64_t handle) {
+int LRemIoCtxImpl::unwatch(uint64_t handle) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -417,7 +417,7 @@ int TestIoCtxImpl::unwatch(uint64_t handle) {
   return m_client->get_watch_notify()->unwatch(m_client, handle);
 }
 
-int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
+int LRemIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                          librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
@@ -429,19 +429,19 @@ int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                                              ctx2);
 }
 
-int TestIoCtxImpl::execute_operation(const std::string& oid,
+int LRemIoCtxImpl::execute_operation(const std::string& oid,
                                      const Operation &operation) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
   auto transaction_state = init_transaction(oid);
-  TestRadosClient::Transaction transaction(m_client, transaction_state);
+  LRemRadosClient::Transaction transaction(m_client, transaction_state);
   return operation(this, oid);
 }
 
-int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
-                                          TestObjectOperationImpl *ops,
+int LRemIoCtxImpl::execute_aio_operations(const std::string& oid,
+                                          LRemObjectOperationImpl *ops,
                                           bufferlist *pbl, uint64_t snap_id,
                                           const SnapContext &snapc,
                                           int flags,
@@ -452,7 +452,7 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
     ret = -EBLOCKLISTED;
   } else {
     auto transaction_state = init_transaction(oid);
-    TestRadosClient::Transaction transaction(m_client, transaction_state);
+    LRemRadosClient::Transaction transaction(m_client, transaction_state);
     for (ObjectOperations::iterator it = ops->ops.begin();
          it != ops->ops.end(); ++it) {
       auto& state = transaction.get_state_ref();
@@ -471,14 +471,14 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
   return ret;
 }
 
-void TestIoCtxImpl::handle_aio_notify_complete(AioCompletionImpl *c, int r) {
+void LRemIoCtxImpl::handle_aio_notify_complete(AioCompletionImpl *c, int r) {
   m_pending_ops--;
 
   m_client->finish_aio_completion(c, r);
   put();
 }
 
-int TestIoCtxImpl::set_op_flags(TestTransactionStateRef& trans, int flags) {
+int LRemIoCtxImpl::set_op_flags(LRemTransactionStateRef& trans, int flags) {
   trans->flags = flags;
   return 0;
 }

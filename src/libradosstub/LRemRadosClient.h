@@ -17,8 +17,8 @@
 #include "common/config.h"
 #include "common/config_obs.h"
 #include "include/buffer_fwd.h"
-#include "TestWatchNotify.h"
-#include "TestTransaction.h"
+#include "LRemWatchNotify.h"
+#include "LRemTransaction.h"
 
 class Finisher;
 
@@ -27,12 +27,12 @@ namespace ceph { namespace async { struct io_context_pool; }}
 
 namespace librados {
 
-class TestIoCtxImpl;
+class LRemIoCtxImpl;
 
-class TestRadosClient : public md_config_obs_t {
+class LRemRadosClient : public md_config_obs_t {
 public:
 
-  static void Deallocate(librados::TestRadosClient* client)
+  static void Deallocate(librados::LRemRadosClient* client)
   {
     client->put();
   }
@@ -47,7 +47,7 @@ public:
 
   class Transaction {
   public:
-    Transaction(TestRadosClient *rados_client, TestTransactionStateRef& state)
+    Transaction(LRemRadosClient *rados_client, LRemTransactionStateRef& state)
       : rados_client(rados_client), state(state) {
       rados_client->transaction_start(state);
     }
@@ -55,20 +55,20 @@ public:
       rados_client->transaction_finish(state);
     }
 
-    TestTransactionState& get_state() {
+    LRemTransactionState& get_state() {
       return *state;
     }
 
-    TestTransactionStateRef& get_state_ref() {
+    LRemTransactionStateRef& get_state_ref() {
       return state;
     }
 
   private:
-    TestRadosClient *rados_client;
-    TestTransactionStateRef state;
+    LRemRadosClient *rados_client;
+    LRemTransactionStateRef state;
   };
 
-  TestRadosClient(CephContext *cct, TestWatchNotify *watch_notify);
+  LRemRadosClient(CephContext *cct, LRemWatchNotify *watch_notify);
 
   void get();
   void put();
@@ -86,7 +86,7 @@ public:
   virtual void shutdown();
   virtual int wait_for_latest_osdmap();
 
-  virtual TestIoCtxImpl *create_ioctx(int64_t pool_id,
+  virtual LRemIoCtxImpl *create_ioctx(int64_t pool_id,
                                       const std::string &pool_name) = 0;
 
   virtual int mon_command(const std::vector<std::string>& cmd,
@@ -94,7 +94,7 @@ public:
                           bufferlist *outbl, std::string *outs);
 
   virtual void object_list(int64_t pool_id,
-			   std::list<librados::TestRadosClient::Object> *list) = 0;
+			   std::list<librados::LRemRadosClient::Object> *list) = 0;
 
   virtual int service_daemon_register(const std::string& service,
                                       const std::string& name,
@@ -123,7 +123,7 @@ public:
   Finisher *get_aio_finisher() {
     return m_aio_finisher;
   }
-  TestWatchNotify *get_watch_notify() {
+  LRemWatchNotify *get_watch_notify() {
     return m_watch_notify;
   }
 
@@ -146,10 +146,10 @@ public:
   boost::asio::io_context& get_io_context();
 
 protected:
-  virtual ~TestRadosClient();
+  virtual ~LRemRadosClient();
 
-  virtual void transaction_start(TestTransactionStateRef& state) = 0;
-  virtual void transaction_finish(TestTransactionStateRef& state) = 0;
+  virtual void transaction_start(LRemTransactionStateRef& state) = 0;
+  virtual void transaction_finish(LRemTransactionStateRef& state) = 0;
 
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,
@@ -161,7 +161,7 @@ private:
   CephContext *m_cct;
   std::atomic<uint64_t> m_refcount = { 0 };
 
-  TestWatchNotify *m_watch_notify;
+  LRemWatchNotify *m_watch_notify;
 
   Finisher *get_finisher(const std::string& oid);
 

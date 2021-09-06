@@ -1,59 +1,59 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "TestWatchNotify.h"
+#include "LRemWatchNotify.h"
 #include "include/Context.h"
 #include "common/Cond.h"
 #include "include/stringify.h"
 #include "common/Finisher.h"
-#include "TestCluster.h"
-#include "TestRadosClient.h"
+#include "LRemCluster.h"
+#include "LRemRadosClient.h"
 #include <boost/bind/bind.hpp>
 #include <boost/function.hpp>
 #include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
-#define dout_prefix *_dout << "TestWatchNotify::" << __func__ << ": "
+#define dout_prefix *_dout << "LRemWatchNotify::" << __func__ << ": "
 
 namespace librados {
 
 std::ostream& operator<<(std::ostream& out,
-			 const TestWatchNotify::WatcherID &watcher_id) {
+			 const LRemWatchNotify::WatcherID &watcher_id) {
   out << "(" << watcher_id.first << "," << watcher_id.second << ")";
   return out;
 }
 
-struct TestWatchNotify::ObjectHandler : public TestCluster::ObjectHandler {
-  TestWatchNotify* test_watch_notify;
+struct LRemWatchNotify::ObjectHandler : public LRemCluster::ObjectHandler {
+  LRemWatchNotify* lrem_watch_notify;
   int64_t pool_id;
   std::string nspace;
   std::string oid;
 
-  ObjectHandler(TestWatchNotify* test_watch_notify, int64_t pool_id,
+  ObjectHandler(LRemWatchNotify* lrem_watch_notify, int64_t pool_id,
                 const std::string& nspace, const std::string& oid)
-    : test_watch_notify(test_watch_notify), pool_id(pool_id),
+    : lrem_watch_notify(lrem_watch_notify), pool_id(pool_id),
       nspace(nspace), oid(oid) {
   }
 
-  void handle_removed(TestRadosClient* test_rados_client) override {
+  void handle_removed(LRemRadosClient* lrem_rados_client) override {
     // copy member variables since this object might be deleted
-    auto _test_watch_notify = test_watch_notify;
+    auto _lrem_watch_notify = lrem_watch_notify;
     auto _pool_id = pool_id;
     auto _nspace = nspace;
     auto _oid = oid;
-    auto ctx = new LambdaContext([_test_watch_notify, _pool_id, _nspace, _oid](int r) {
-        _test_watch_notify->handle_object_removed(_pool_id, _nspace, _oid);
+    auto ctx = new LambdaContext([_lrem_watch_notify, _pool_id, _nspace, _oid](int r) {
+        _lrem_watch_notify->handle_object_removed(_pool_id, _nspace, _oid);
       });
-    test_rados_client->get_aio_finisher()->queue(ctx);
+    lrem_rados_client->get_aio_finisher()->queue(ctx);
   }
 };
 
-TestWatchNotify::TestWatchNotify(TestCluster* test_cluster)
-  : m_test_cluster(test_cluster) {
+LRemWatchNotify::LRemWatchNotify(LRemCluster* lrem_cluster)
+  : m_lrem_cluster(lrem_cluster) {
 }
 
-void TestWatchNotify::flush(TestRadosClient *rados_client) {
+void LRemWatchNotify::flush(LRemRadosClient *rados_client) {
   CephContext *cct = rados_client->cct();
 
   ldout(cct, 20) << "enter" << dendl;
@@ -63,7 +63,7 @@ void TestWatchNotify::flush(TestRadosClient *rados_client) {
   ctx.wait();
 }
 
-int TestWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
+int LRemWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
                                    const std::string& o,
                                    std::list<obj_watch_t> *out_watchers) {
   std::lock_guard lock{m_lock};
@@ -73,7 +73,7 @@ int TestWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
   }
 
   out_watchers->clear();
-  for (TestWatchNotify::WatchHandles::iterator it =
+  for (LRemWatchNotify::WatchHandles::iterator it =
          watcher->watch_handles.begin();
        it != watcher->watch_handles.end(); ++it) {
     obj_watch_t obj;
@@ -87,12 +87,12 @@ int TestWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
   return 0;
 }
 
-void TestWatchNotify::aio_flush(TestRadosClient *rados_client,
+void LRemWatchNotify::aio_flush(LRemRadosClient *rados_client,
                                 Context *on_finish) {
   rados_client->get_aio_finisher()->queue(on_finish);
 }
 
-int TestWatchNotify::watch(TestRadosClient *rados_client, int64_t pool_id,
+int LRemWatchNotify::watch(LRemRadosClient *rados_client, int64_t pool_id,
                            const std::string& nspace, const std::string& o,
                            uint64_t gid, uint64_t *handle,
                            librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
@@ -101,7 +101,7 @@ int TestWatchNotify::watch(TestRadosClient *rados_client, int64_t pool_id,
   return cond.wait();
 }
 
-void TestWatchNotify::aio_watch(TestRadosClient *rados_client, int64_t pool_id,
+void LRemWatchNotify::aio_watch(LRemRadosClient *rados_client, int64_t pool_id,
                                 const std::string& nspace, const std::string& o,
                                 uint64_t gid, uint64_t *handle,
                                 librados::WatchCtx *watch_ctx,
@@ -114,14 +114,14 @@ void TestWatchNotify::aio_watch(TestRadosClient *rados_client, int64_t pool_id,
   rados_client->get_aio_finisher()->queue(ctx);
 }
 
-int TestWatchNotify::unwatch(TestRadosClient *rados_client,
+int LRemWatchNotify::unwatch(LRemRadosClient *rados_client,
                              uint64_t handle) {
   C_SaferCond ctx;
   aio_unwatch(rados_client, handle, &ctx);
   return ctx.wait();
 }
 
-void TestWatchNotify::aio_unwatch(TestRadosClient *rados_client,
+void LRemWatchNotify::aio_unwatch(LRemRadosClient *rados_client,
                                   uint64_t handle, Context *on_finish) {
   auto ctx = new LambdaContext([this, rados_client, handle, on_finish](int) {
       execute_unwatch(rados_client, handle, on_finish);
@@ -129,7 +129,7 @@ void TestWatchNotify::aio_unwatch(TestRadosClient *rados_client,
   rados_client->get_aio_finisher()->queue(ctx);
 }
 
-void TestWatchNotify::aio_notify(TestRadosClient *rados_client, int64_t pool_id,
+void LRemWatchNotify::aio_notify(LRemRadosClient *rados_client, int64_t pool_id,
                                  const std::string& nspace,
                                  const std::string& oid, const bufferlist& bl,
                                  uint64_t timeout_ms, bufferlist *pbl,
@@ -140,7 +140,7 @@ void TestWatchNotify::aio_notify(TestRadosClient *rados_client, int64_t pool_id,
   rados_client->get_aio_finisher()->queue(ctx);
 }
 
-int TestWatchNotify::notify(TestRadosClient *rados_client, int64_t pool_id,
+int LRemWatchNotify::notify(LRemRadosClient *rados_client, int64_t pool_id,
                             const std::string& nspace, const std::string& oid,
                             bufferlist& bl, uint64_t timeout_ms,
                             bufferlist *pbl) {
@@ -149,7 +149,7 @@ int TestWatchNotify::notify(TestRadosClient *rados_client, int64_t pool_id,
   return cond.wait();
 }
 
-void TestWatchNotify::notify_ack(TestRadosClient *rados_client, int64_t pool_id,
+void LRemWatchNotify::notify_ack(LRemRadosClient *rados_client, int64_t pool_id,
                                  const std::string& nspace,
                                  const std::string& o, uint64_t notify_id,
                                  uint64_t handle, uint64_t gid,
@@ -163,7 +163,7 @@ void TestWatchNotify::notify_ack(TestRadosClient *rados_client, int64_t pool_id,
   finish_notify(rados_client, pool_id, nspace, o, notify_id);
 }
 
-void TestWatchNotify::execute_watch(TestRadosClient *rados_client,
+void LRemWatchNotify::execute_watch(LRemRadosClient *rados_client,
                                     int64_t pool_id, const std::string& nspace,
                                     const std::string& o, uint64_t gid,
                                     uint64_t *handle, librados::WatchCtx *ctx,
@@ -198,7 +198,7 @@ void TestWatchNotify::execute_watch(TestRadosClient *rados_client,
   on_finish->complete(0);
 }
 
-void TestWatchNotify::execute_unwatch(TestRadosClient *rados_client,
+void LRemWatchNotify::execute_unwatch(LRemRadosClient *rados_client,
                                       uint64_t handle, Context* on_finish) {
   CephContext *cct = rados_client->cct();
 
@@ -220,7 +220,7 @@ void TestWatchNotify::execute_unwatch(TestRadosClient *rados_client,
   on_finish->complete(0);
 }
 
-TestWatchNotify::SharedWatcher TestWatchNotify::get_watcher(
+LRemWatchNotify::SharedWatcher LRemWatchNotify::get_watcher(
     int64_t pool_id, const std::string& nspace, const std::string& oid) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
@@ -229,7 +229,7 @@ TestWatchNotify::SharedWatcher TestWatchNotify::get_watcher(
     SharedWatcher watcher(new Watcher(pool_id, nspace, oid));
     watcher->object_handler.reset(new ObjectHandler(
       this, pool_id, nspace, oid));
-    int r = m_test_cluster->register_object_handler(
+    int r = m_lrem_cluster->register_object_handler(
       pool_id, {nspace, oid}, watcher->object_handler.get());
     if (r < 0) {
       // object doesn't exist
@@ -242,7 +242,7 @@ TestWatchNotify::SharedWatcher TestWatchNotify::get_watcher(
   return it->second;
 }
 
-void TestWatchNotify::maybe_remove_watcher(SharedWatcher watcher) {
+void LRemWatchNotify::maybe_remove_watcher(SharedWatcher watcher) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   // TODO
@@ -251,7 +251,7 @@ void TestWatchNotify::maybe_remove_watcher(SharedWatcher watcher) {
     auto& nspace = watcher->nspace;
     auto& oid = watcher->oid;
     if (watcher->object_handler) {
-      m_test_cluster->unregister_object_handler(pool_id, {nspace, oid},
+      m_lrem_cluster->unregister_object_handler(pool_id, {nspace, oid},
                                                 watcher->object_handler.get());
       watcher->object_handler.reset();
     }
@@ -260,7 +260,7 @@ void TestWatchNotify::maybe_remove_watcher(SharedWatcher watcher) {
   }
 }
 
-void TestWatchNotify::execute_notify(TestRadosClient *rados_client,
+void LRemWatchNotify::execute_notify(LRemRadosClient *rados_client,
                                      int64_t pool_id, const std::string& nspace,
                                      const std::string &oid,
                                      const bufferlist &bl, bufferlist *pbl,
@@ -319,7 +319,7 @@ void TestWatchNotify::execute_notify(TestRadosClient *rados_client,
   m_lock.unlock();
 }
 
-void TestWatchNotify::ack_notify(TestRadosClient *rados_client, int64_t pool_id,
+void LRemWatchNotify::ack_notify(LRemRadosClient *rados_client, int64_t pool_id,
                                  const std::string& nspace,
                                  const std::string &oid, uint64_t notify_id,
                                  const WatcherID &watcher_id,
@@ -351,7 +351,7 @@ void TestWatchNotify::ack_notify(TestRadosClient *rados_client, int64_t pool_id,
   notify_handle->pending_watcher_ids.erase(watcher_id);
 }
 
-void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
+void LRemWatchNotify::finish_notify(LRemRadosClient *rados_client,
                                     int64_t pool_id, const std::string& nspace,
                                     const std::string &oid,
                                     uint64_t notify_id) {
@@ -394,7 +394,7 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
   maybe_remove_watcher(watcher);
 }
 
-void TestWatchNotify::blocklist(uint32_t nonce) {
+void LRemWatchNotify::blocklist(uint32_t nonce) {
   std::lock_guard locker{m_lock};
 
   for (auto file_it = m_file_watchers.begin();
@@ -414,7 +414,7 @@ void TestWatchNotify::blocklist(uint32_t nonce) {
   }
 }
 
-void TestWatchNotify::handle_object_removed(int64_t pool_id,
+void LRemWatchNotify::handle_object_removed(int64_t pool_id,
                                             const std::string& nspace,
                                             const std::string& oid) {
   std::lock_guard locker{m_lock};

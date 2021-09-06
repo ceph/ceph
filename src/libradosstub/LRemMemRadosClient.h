@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "TestRadosClient.h"
+#include "LRemRadosClient.h"
 #include "include/ceph_assert.h"
 #include <list>
 #include <string>
@@ -11,14 +11,14 @@
 namespace librados {
 
 class AioCompletionImpl;
-class TestMemCluster;
+class LRemMemCluster;
 
-class TestMemRadosClient : public TestRadosClient {
+class LRemMemRadosClient : public LRemRadosClient {
 public:
-  TestMemRadosClient(CephContext *cct, TestMemCluster *test_mem_cluster);
-  ~TestMemRadosClient() override;
+  LRemMemRadosClient(CephContext *cct, LRemMemCluster *lrem_mem_cluster);
+  ~LRemMemRadosClient() override;
 
-  TestIoCtxImpl *create_ioctx(int64_t pool_id,
+  LRemIoCtxImpl *create_ioctx(int64_t pool_id,
                                       const std::string &pool_name) override;
 
   uint32_t get_nonce() override {
@@ -41,7 +41,7 @@ public:
   }
 
   void object_list(int64_t pool_id,
-                   std::list<librados::TestRadosClient::Object> *list) override;
+                   std::list<librados::LRemRadosClient::Object> *list) override;
 
   int service_daemon_register(const std::string& service,
                               const std::string& name,
@@ -70,16 +70,16 @@ public:
   }
 
 protected:
-  TestMemCluster *get_mem_cluster() {
+  LRemMemCluster *get_mem_cluster() {
     return m_mem_cluster;
   }
 
 protected:
-  void transaction_start(TestTransactionStateRef& state) override;
-  void transaction_finish(TestTransactionStateRef& state) override;
+  void transaction_start(LRemTransactionStateRef& state) override;
+  void transaction_finish(LRemTransactionStateRef& state) override;
 
 private:
-  TestMemCluster *m_mem_cluster;
+  LRemMemCluster *m_mem_cluster;
   uint32_t m_nonce;
   uint64_t m_global_id;
 

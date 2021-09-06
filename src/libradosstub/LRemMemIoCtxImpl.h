@@ -3,29 +3,29 @@
 
 #pragma once
 
-#include "TestIoCtxImpl.h"
-#include "TestMemCluster.h"
+#include "LRemIoCtxImpl.h"
+#include "LRemMemCluster.h"
 
 namespace librados {
 
-class TestMemRadosClient;
+class LRemMemRadosClient;
 
-class TestMemIoCtxImpl : public TestIoCtxImpl {
+class LRemMemIoCtxImpl : public LRemIoCtxImpl {
 public:
-  TestMemIoCtxImpl();
-  TestMemIoCtxImpl(TestMemRadosClient *client, int64_t m_pool_id,
+  LRemMemIoCtxImpl();
+  LRemMemIoCtxImpl(LRemMemRadosClient *client, int64_t m_pool_id,
                    const std::string& pool_name,
-                   TestMemCluster::Pool *pool);
-  ~TestMemIoCtxImpl() override;
+                   LRemMemCluster::Pool *pool);
+  ~LRemMemIoCtxImpl() override;
 
-  TestIoCtxImpl *clone() override;
+  LRemIoCtxImpl *clone() override;
 
-  int aio_append(TestTransactionStateRef& trans, AioCompletionImpl *c,
+  int aio_append(LRemTransactionStateRef& trans, AioCompletionImpl *c,
                  const bufferlist& bl, size_t len) override;
 
   int aio_remove(const std::string& oid, AioCompletionImpl *c, int flags = 0) override;
 
-  int append(TestTransactionStateRef& trans, const bufferlist &bl,
+  int append(LRemTransactionStateRef& trans, const bufferlist &bl,
              const SnapContext &snapc) override;
 
   int assert_exists(const std::string &oid, uint64_t snap_id) override;
@@ -56,7 +56,7 @@ public:
   int omap_clear(const std::string& oid) override;
   int omap_set(const std::string& oid, const std::map<std::string,
                bufferlist> &map) override;
-  int omap_get_header(TestTransactionStateRef& trs,
+  int omap_get_header(LRemTransactionStateRef& trs,
                       bufferlist *bl) override;
   int omap_set_header(const std::string& oid,
                       const bufferlist& bl) override;
@@ -73,7 +73,7 @@ public:
   int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                   std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
                   uint64_t snap_id) override;
-  int stat2(TestTransactionStateRef& trans, uint64_t *psize, struct timespec *pts) override;
+  int stat2(LRemTransactionStateRef& trans, uint64_t *psize, struct timespec *pts) override;
   int mtime2(const string& oid, const struct timespec& ts,
              const SnapContext &snapc) override;
   int truncate(const std::string& oid, uint64_t size,
@@ -90,42 +90,42 @@ public:
                    uint8_t op, const bufferlist& bl) override;
   int cmpxattr(const std::string& oid, const char *name,
                uint8_t op, uint64_t v) override;
-  int xattr_get(TestTransactionStateRef& trans,
+  int xattr_get(LRemTransactionStateRef& trans,
                 std::map<std::string, bufferlist>* attrset) override;
-  int setxattr(TestTransactionStateRef& trans, const char *name,
+  int setxattr(LRemTransactionStateRef& trans, const char *name,
                bufferlist& bl) override;
-  int rmxattr(TestTransactionStateRef& trans, const char *name) override;
+  int rmxattr(LRemTransactionStateRef& trans, const char *name) override;
   int zero(const std::string& oid, uint64_t off, uint64_t len,
            const SnapContext &snapc) override;
   int get_current_ver(const std::string& oid, uint64_t *ver);
 
-  TestTransactionStateRef init_transaction(const std::string& oid) override;
+  LRemTransactionStateRef init_transaction(const std::string& oid) override;
 
 protected:
-  TestMemCluster::Pool *get_pool() {
+  LRemMemCluster::Pool *get_pool() {
     return m_pool;
   }
 
 private:
-  TestMemIoCtxImpl(const TestMemIoCtxImpl&);
+  LRemMemIoCtxImpl(const LRemMemIoCtxImpl&);
 
-  TestMemRadosClient *m_client = nullptr;
-  TestMemCluster::Pool *m_pool = nullptr;
+  LRemMemRadosClient *m_client = nullptr;
+  LRemMemCluster::Pool *m_pool = nullptr;
 
   void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);
   void ensure_minimum_length(size_t len, bufferlist *bl);
 
-  TestMemCluster::SharedFile get_file(const std::string &oid, bool write,
+  LRemMemCluster::SharedFile get_file(const std::string &oid, bool write,
                                       uint64_t snap_id,
                                       const SnapContext &snapc);
-  TestMemCluster::SharedFile get_file_safe(TestTransactionStateRef& trans,
+  LRemMemCluster::SharedFile get_file_safe(LRemTransactionStateRef& trans,
                                            bool write, uint64_t snap_id,
                                            const SnapContext &snapc,
                                            uint64_t *opt_epoch = nullptr);
 
-  typedef boost::function<int(TestMemCluster::Pool *, bool)> PoolOperation;
-  int pool_op(TestTransactionStateRef& trans,
+  typedef boost::function<int(LRemMemCluster::Pool *, bool)> PoolOperation;
+  int pool_op(LRemTransactionStateRef& trans,
               bool write,
               PoolOperation op);
 };

@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "TestCluster.h"
-#include "TestTransaction.h"
+#include "LRemCluster.h"
+#include "LRemTransaction.h"
 #include "include/buffer.h"
 #include "include/interval_set.h"
 #include "include/int_types.h"
@@ -19,7 +19,7 @@
 
 namespace librados {
 
-class TestMemCluster : public TestCluster {
+class LRemMemCluster : public LRemCluster {
 public:
   typedef struct {
     bufferlist header;
@@ -48,7 +48,7 @@ public:
 
     bool exists;
     ceph::shared_mutex lock =
-      ceph::make_shared_mutex("TestMemCluster::File::lock");
+      ceph::make_shared_mutex("LRemMemCluster::File::lock");
   };
   typedef boost::shared_ptr<File> SharedFile;
 
@@ -67,7 +67,7 @@ public:
     uint64_t epoch = 1;
 
     ceph::shared_mutex file_lock =
-      ceph::make_shared_mutex("TestMemCluster::Pool::file_lock");
+      ceph::make_shared_mutex("LRemMemCluster::Pool::file_lock");
     Files files;
     FileOMaps file_omaps;
     FileTMaps file_tmaps;
@@ -75,10 +75,10 @@ public:
     FileHandlers file_handlers;
   };
 
-  TestMemCluster();
-  ~TestMemCluster() override;
+  LRemMemCluster();
+  ~LRemMemCluster() override;
 
-  TestRadosClient *create_rados_client(CephContext *cct) override;
+  LRemRadosClient *create_rados_client(CephContext *cct) override;
 
   int register_object_handler(int64_t pool_id, const ObjectLocator& locator,
                               ObjectHandler* object_handler) override;
@@ -101,8 +101,8 @@ public:
   bool is_blocklisted(uint32_t nonce) const;
   void blocklist(uint32_t nonce);
 
-  void transaction_start(TestTransactionStateRef& state);
-  void transaction_finish(TestTransactionStateRef& state);
+  void transaction_start(LRemTransactionStateRef& state);
+  void transaction_finish(LRemTransactionStateRef& state);
 
 private:
 
@@ -110,7 +110,7 @@ private:
   typedef std::set<uint32_t> Blocklist;
 
   mutable ceph::mutex m_lock =
-    ceph::make_mutex("TestMemCluster::m_lock");
+    ceph::make_mutex("LRemMemCluster::m_lock");
 
   Pools	m_pools;
   int64_t m_pool_id = 0;

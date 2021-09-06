@@ -3,15 +3,15 @@
 
 #pragma once
 
-#include "TestWatchNotify.h"
+#include "LRemWatchNotify.h"
 #include "include/common_fwd.h"
 
 namespace librados {
 
-class TestRadosClient;
-class TestWatchNotify;
+class LRemRadosClient;
+class LRemWatchNotify;
 
-class TestCluster {
+class LRemCluster {
 public:
   struct ObjectLocator {
     std::string nspace;
@@ -32,15 +32,15 @@ public:
   struct ObjectHandler {
     virtual ~ObjectHandler() {}
 
-    virtual void handle_removed(TestRadosClient* test_rados_client) = 0;
+    virtual void handle_removed(LRemRadosClient* lrem_rados_client) = 0;
   };
 
-  TestCluster() : m_watch_notify(this) {
+  LRemCluster() : m_watch_notify(this) {
   }
-  virtual ~TestCluster() {
+  virtual ~LRemCluster() {
   }
 
-  virtual TestRadosClient *create_rados_client(CephContext *cct) = 0;
+  virtual LRemRadosClient *create_rados_client(CephContext *cct) = 0;
 
   virtual int register_object_handler(int64_t pool_id,
                                       const ObjectLocator& locator,
@@ -49,12 +49,12 @@ public:
                                          const ObjectLocator& locator,
                                          ObjectHandler* object_handler) = 0;
 
-  TestWatchNotify *get_watch_notify() {
+  LRemWatchNotify *get_watch_notify() {
     return &m_watch_notify;
   }
 
 protected:
-  TestWatchNotify m_watch_notify;
+  LRemWatchNotify m_watch_notify;
 
 };
 

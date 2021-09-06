@@ -1,16 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "TestMemCluster.h"
-#include "TestMemRadosClient.h"
+#include "LRemMemCluster.h"
+#include "LRemMemRadosClient.h"
 
 namespace librados {
 
-TestMemCluster::File::File()
+LRemMemCluster::File::File()
   : objver(0), snap_id(), exists(true) {
 }
 
-TestMemCluster::File::File(const File &rhs)
+LRemMemCluster::File::File(const File &rhs)
   : data(rhs.data),
     mtime(rhs.mtime),
     objver(rhs.objver),
@@ -18,23 +18,23 @@ TestMemCluster::File::File(const File &rhs)
     exists(rhs.exists) {
 }
 
-TestMemCluster::Pool::Pool() = default;
+LRemMemCluster::Pool::Pool() = default;
 
-TestMemCluster::TestMemCluster()
+LRemMemCluster::LRemMemCluster()
   : m_next_nonce(static_cast<uint32_t>(reinterpret_cast<uint64_t>(this))) {
 }
 
-TestMemCluster::~TestMemCluster() {
+LRemMemCluster::~LRemMemCluster() {
   for (auto pool_pair : m_pools) {
     pool_pair.second->put();
   }
 }
 
-TestRadosClient *TestMemCluster::create_rados_client(CephContext *cct) {
-  return new TestMemRadosClient(cct, this);
+LRemRadosClient *LRemMemCluster::create_rados_client(CephContext *cct) {
+  return new LRemMemRadosClient(cct, this);
 }
 
-int TestMemCluster::register_object_handler(int64_t pool_id,
+int LRemMemCluster::register_object_handler(int64_t pool_id,
                                             const ObjectLocator& locator,
                                             ObjectHandler* object_handler) {
   std::lock_guard locker{m_lock};
@@ -57,7 +57,7 @@ int TestMemCluster::register_object_handler(int64_t pool_id,
   return 0;
 }
 
-void TestMemCluster::unregister_object_handler(int64_t pool_id,
+void LRemMemCluster::unregister_object_handler(int64_t pool_id,
                                                const ObjectLocator& locator,
                                                ObjectHandler* object_handler) {
   std::lock_guard locker{m_lock};
@@ -76,7 +76,7 @@ void TestMemCluster::unregister_object_handler(int64_t pool_id,
   object_handlers.erase(object_handler);
 }
 
-int TestMemCluster::pool_create(const std::string &pool_name) {
+int LRemMemCluster::pool_create(const std::string &pool_name) {
   std::lock_guard locker{m_lock};
   if (m_pools.find(pool_name) != m_pools.end()) {
     return -EEXIST;
@@ -87,7 +87,7 @@ int TestMemCluster::pool_create(const std::string &pool_name) {
   return 0;
 }
 
-int TestMemCluster::pool_delete(const std::string &pool_name) {
+int LRemMemCluster::pool_delete(const std::string &pool_name) {
   std::lock_guard locker{m_lock};
   Pools::iterator iter = m_pools.find(pool_name);
   if (iter == m_pools.end()) {
@@ -98,13 +98,13 @@ int TestMemCluster::pool_delete(const std::string &pool_name) {
   return 0;
 }
 
-int TestMemCluster::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) {
+int LRemMemCluster::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) {
   // TODO
   *base_tier = pool_id;
   return 0;
 }
 
-int TestMemCluster::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
+int LRemMemCluster::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
   std::lock_guard locker{m_lock};
   v.clear();
   for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
@@ -113,7 +113,7 @@ int TestMemCluster::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
   return 0;
 }
 
-int64_t TestMemCluster::pool_lookup(const std::string &pool_name) {
+int64_t LRemMemCluster::pool_lookup(const std::string &pool_name) {
   std::lock_guard locker{m_lock};
   Pools::iterator iter = m_pools.find(pool_name);
   if (iter == m_pools.end()) {
@@ -122,7 +122,7 @@ int64_t TestMemCluster::pool_lookup(const std::string &pool_name) {
   return iter->second->pool_id;
 }
 
-int TestMemCluster::pool_reverse_lookup(int64_t id, std::string *name) {
+int LRemMemCluster::pool_reverse_lookup(int64_t id, std::string *name) {
   std::lock_guard locker{m_lock};
   for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
     if (iter->second->pool_id == id) {
@@ -133,12 +133,12 @@ int TestMemCluster::pool_reverse_lookup(int64_t id, std::string *name) {
   return -ENOENT;
 }
 
-TestMemCluster::Pool *TestMemCluster::get_pool(int64_t pool_id) {
+LRemMemCluster::Pool *LRemMemCluster::get_pool(int64_t pool_id) {
   std::lock_guard locker{m_lock};
   return get_pool(m_lock, pool_id);
 }
 
-TestMemCluster::Pool *TestMemCluster::get_pool(const ceph::mutex& lock,
+LRemMemCluster::Pool *LRemMemCluster::get_pool(const ceph::mutex& lock,
                                                int64_t pool_id) {
   for (auto &pool_pair : m_pools) {
     if (pool_pair.second->pool_id == pool_id) {
@@ -148,7 +148,7 @@ TestMemCluster::Pool *TestMemCluster::get_pool(const ceph::mutex& lock,
   return nullptr;
 }
 
-TestMemCluster::Pool *TestMemCluster::get_pool(const std::string &pool_name) {
+LRemMemCluster::Pool *LRemMemCluster::get_pool(const std::string &pool_name) {
   std::lock_guard locker{m_lock};
   Pools::iterator iter = m_pools.find(pool_name);
   if (iter != m_pools.end()) {
@@ -157,30 +157,30 @@ TestMemCluster::Pool *TestMemCluster::get_pool(const std::string &pool_name) {
   return nullptr;
 }
 
-void TestMemCluster::allocate_client(uint32_t *nonce, uint64_t *global_id) {
+void LRemMemCluster::allocate_client(uint32_t *nonce, uint64_t *global_id) {
   std::lock_guard locker{m_lock};
   *nonce = m_next_nonce++;
   *global_id = m_next_global_id++;
 }
 
-void TestMemCluster::deallocate_client(uint32_t nonce) {
+void LRemMemCluster::deallocate_client(uint32_t nonce) {
   std::lock_guard locker{m_lock};
   m_blocklist.erase(nonce);
 }
 
-bool TestMemCluster::is_blocklisted(uint32_t nonce) const {
+bool LRemMemCluster::is_blocklisted(uint32_t nonce) const {
   std::lock_guard locker{m_lock};
   return (m_blocklist.find(nonce) != m_blocklist.end());
 }
 
-void TestMemCluster::blocklist(uint32_t nonce) {
+void LRemMemCluster::blocklist(uint32_t nonce) {
   m_watch_notify.blocklist(nonce);
 
   std::lock_guard locker{m_lock};
   m_blocklist.insert(nonce);
 }
 
-void TestMemCluster::transaction_start(TestTransactionStateRef& ref) {
+void LRemMemCluster::transaction_start(LRemTransactionStateRef& ref) {
   const auto& locator = ref->locator;
   std::unique_lock locker{m_lock};
   m_transaction_cond.wait(locker, [&locator, this] {
@@ -190,7 +190,7 @@ void TestMemCluster::transaction_start(TestTransactionStateRef& ref) {
   ceph_assert(result.second);
 }
 
-void TestMemCluster::transaction_finish(TestTransactionStateRef& ref) {
+void LRemMemCluster::transaction_finish(LRemTransactionStateRef& ref) {
   const auto& locator = ref->locator;
   std::lock_guard locker{m_lock};
   size_t count = m_transactions.erase(locator);

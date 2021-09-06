@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_TEST_CLASS_HANDLER_H
-#define CEPH_TEST_CLASS_HANDLER_H
+#ifndef CEPH_LREM_CLASS_HANDLER_H
+#define CEPH_LREM_CLASS_HANDLER_H
 
 #include "objclass/objclass.h"
 #include "common/snap_types.h"
@@ -11,27 +11,27 @@
 #include <map>
 #include <string>
 
-#include "TestTransaction.h"
+#include "LRemTransaction.h"
 
 namespace librados
 {
 
-class TestIoCtxImpl;
+class LRemIoCtxImpl;
 
-class TestClassHandler {
+class LRemClassHandler {
 public:
 
-  TestClassHandler();
-  ~TestClassHandler();
+  LRemClassHandler();
+  ~LRemClassHandler();
 
   struct MethodContext {
     ~MethodContext();
 
-    TestIoCtxImpl *io_ctx_impl;
+    LRemIoCtxImpl *io_ctx_impl;
     std::string oid;
     uint64_t snap_id;
     SnapContext snapc;
-    TestTransactionStateRef trans;
+    LRemTransactionStateRef trans;
   };
   typedef boost::shared_ptr<MethodContext> SharedMethodContext;
 
@@ -59,11 +59,11 @@ public:
   cls_method_cxx_call_t get_method(const std::string &cls,
                                    const std::string &method,
                                    bool *write);
-  SharedMethodContext get_method_context(TestIoCtxImpl *io_ctx_impl,
+  SharedMethodContext get_method_context(LRemIoCtxImpl *io_ctx_impl,
                                          const std::string &oid,
                                          uint64_t snap_id,
                                          const SnapContext &snapc,
-                                         TestTransactionStateRef& trans);
+                                         LRemTransactionStateRef& trans);
 
   int create_filter(cls_handle_t hclass, const std::string& filter_name,
 		    cls_cxx_filter_factory_t fn);
@@ -83,4 +83,4 @@ private:
 
 } // namespace librados
 
-#endif // CEPH_TEST_CLASS_HANDLER_H
+#endif // CEPH_LREM_CLASS_HANDLER_H
