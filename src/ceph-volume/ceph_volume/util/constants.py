@@ -44,3 +44,6 @@ ceph_disk_guids = {
     '7f4a666a-16f3-47a2-8445-152ef4d03f6c': {'type': 'lockbox', 'encrypted': False, 'encryption_type': None},
     'cafecafe-8ae0-4982-bf9d-5a8d867af560': {'type': 'block', 'encrypted': False, 'encryption_type': None},
 }
+
+DEVID_PROPS = ['ID_VENDOR', 'ID_MODEL', 'ID_MODEL_ENC', 'ID_SERIAL_SHORT', 'ID_SERIAL',
+               'ID_SCSI_SERIAL']

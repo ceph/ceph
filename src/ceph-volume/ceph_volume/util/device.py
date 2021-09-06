@@ -7,10 +7,13 @@ from ceph_volume import sys_info
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
-from ceph_volume.util.constants import ceph_disk_guids
+from ceph_volume.util.constants import ceph_disk_guids, DEVID_PROPS
+from ceph_volume.util.metadata import MetadataCache
 
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
+
 
 
 report_template = """
@@ -32,11 +35,18 @@ class Devices(object):
     A container for Device instances with reporting
     """
 
-    def __init__(self, filter_for_batch=False, with_lsm=False):
-        if not sys_info.devices:
-            sys_info.devices = disk.get_devices()
-        self.devices = [Device(k, with_lsm) for k in
-                            sys_info.devices.keys()]
+    def __init__(self, filter_for_batch=False, with_lsm=False, with_preload=False):
+        self.cache: Dict[str, Any] = {}
+
+        sys_info.devices = disk.get_devices()
+
+        if with_preload:
+            self.cache = MetadataCache(with_lsm)
+            self.devices = [Device(k, with_lsm, self.cache.metadata[k]) for k in
+                                self.cache.metadata.keys()]
+        else:
+            self.devices = [Device(k, with_lsm) for k in
+                                sys_info.devices.keys()]
         if filter_for_batch:
             self.devices = [d for d in self.devices if d.available_lvm_batch]
 
@@ -88,22 +98,31 @@ class Device(object):
     # unittests
     lvs = []
 
-    def __init__(self, path, with_lsm=False):
+    def __init__(self, path, with_lsm=False, metadata={}):
         self.path = path
+        self.metadata = metadata
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
+
+        self.sys_api = {}
+        self.disk_api = metadata.get("disk_api", {})
+        self.blkid_api = metadata.get("blkid_api", {})
+        self.lvs = metadata.get("lvs", [])
+        self.vgs = metadata.get("vgs", [])
+        self.pvs = metadata.get("pvs", [])
+
+        if metadata:
+            self.lsm_data = metadata.get("lsm", {})
+        else:
+            self.lsm_data = self.fetch_lsm(with_lsm)
+
         self.lv_api = None
-        self.lvs = []
-        self.vgs = []
         self.vg_name = None
         self.lv_name = None
-        self.disk_api = {}
-        self.blkid_api = {}
-        self.sys_api = {}
-        self._exists = None
         self._is_lvm_member = None
+        self._exists = None
+
         self._parse()
-        self.lsm_data = self.fetch_lsm(with_lsm)
 
         self.available_lvm, self.rejected_reasons_lvm = self._check_lvm_reject_reasons()
         self.available_raw, self.rejected_reasons_raw = self._check_raw_reject_reasons()
@@ -147,8 +166,9 @@ class Device(object):
         return hash(self.path)
 
     def _parse(self):
-        if not sys_info.devices:
-            sys_info.devices = disk.get_devices()
+        # if not self.sys_api:
+        #     if not sys_info.devices:
+        #         sys_info.devices = disk.get_devices()
         self.sys_api = sys_info.devices.get(self.abspath, {})
         if not self.sys_api:
             # if no device was found check if we are a partition
@@ -159,14 +179,21 @@ class Device(object):
                     self.sys_api = part
                     break
 
-        # if the path is not absolute, we have 'vg/lv', let's use LV name
-        # to get the LV.
-        if self.path[0] == '/':
-            lv = lvm.get_single_lv(filters={'lv_path': self.path})
+        lv = None
+        if self.lvs:
+            # we have lv information for this device from metadata
+            pass
         else:
-            vgname, lvname = self.path.split('/')
-            lv = lvm.get_single_lv(filters={'lv_name': lvname,
-                                            'vg_name': vgname})
+            # if the path points to /dev, check to see if it's an lv_path
+            if self.path.startswith('/dev/'):
+                # lv_path should be /dev/<vg_name>/<lv_name> otherwise skip
+                if len(self.path.split('/')) > 3:
+                    lv = lvm.get_single_lv(filters={'lv_path': self.path})
+            else:
+                # assume the path is in VG/LV format
+                vgname, lvname = self.path.split('/')
+                lv = lvm.get_single_lv(filters={'lv_name': lvname,
+                                                'vg_name': vgname})
         if lv:
             self.lv_api = lv
             self.lvs = [lv]
@@ -174,10 +201,16 @@ class Device(object):
             self.vg_name = lv.vg_name
             self.lv_name = lv.name
         else:
-            dev = disk.lsblk(self.path)
-            self.blkid_api = disk.blkid(self.path)
-            self.disk_api = dev
-            device_type = dev.get('TYPE', '')
+            # set up the blkid_api if we need to
+            if not self.blkid_api:
+                self.blkid_api = disk.blkid(self.path)
+            # if we already have sys_api and disk_api, we're using the cache
+            if self.sys_api and self.disk_api:
+                device_type = self.sys_api.get('type')
+            else:
+                # preloaded metadata is unavailable, fallback to issuing cmds
+                self.disk_api = disk.lsblk(self.path)
+                device_type = self.disk_api.get('TYPE', '')
             # always check is this is an lvm member
             if device_type in ['part', 'disk']:
                 self._set_lvm_membership()
@@ -242,9 +275,14 @@ class Device(object):
         Please keep this implementation in sync with get_device_id() in
         src/common/blkdev.cc
         """
-        props = ['ID_VENDOR', 'ID_MODEL', 'ID_MODEL_ENC', 'ID_SERIAL_SHORT', 'ID_SERIAL',
-                 'ID_SCSI_SERIAL']
-        p = disk.udevadm_property(self.abspath, props)
+        # props = ['ID_VENDOR', 'ID_MODEL', 'ID_MODEL_ENC', 'ID_SERIAL_SHORT', 'ID_SERIAL',
+        #          'ID_SCSI_SERIAL']
+
+        if self.metadata:
+            p = self.metadata["udev"]
+        else:
+            p = disk.udevadm_property(self.abspath, DEVID_PROPS)
+
         if p.get('ID_MODEL','').startswith('LVM PV '):
             p['ID_MODEL'] = p.get('ID_MODEL_ENC', '').replace('\\x20', ' ').strip()
         if 'ID_VENDOR' in p and 'ID_MODEL' in p and 'ID_SCSI_SERIAL' in p:
@@ -273,17 +311,23 @@ class Device(object):
             # VGs, should we consider it as part of LVM? We choose not to
             # here, because most likely, we need to use VGs from this PV.
             self._is_lvm_member = False
-            for path in self._get_pv_paths():
-                vgs = lvm.get_device_vgs(path)
-                if vgs:
-                    self.vgs.extend(vgs)
-                    # a pv can only be in one vg, so this should be safe
-                    # FIXME: While the above assumption holds, sda1 and sda2
-                    # can each host a PV and VG. I think the vg_name property is
-                    # actually unused (not 100% sure) and can simply be removed
-                    self.vg_name = vgs[0]
+            if self.metadata:
+                if self.pvs:
                     self._is_lvm_member = True
-                    self.lvs.extend(lvm.get_device_lvs(path))
+                    self.vg_name = self.pvs[0].vg_name
+            else:
+                # fallback to scan the device
+                for path in self._get_pv_paths():
+                    vgs = lvm.get_device_vgs(path)
+                    if vgs:
+                        self.vgs.extend(vgs)
+                        # a pv can only be in one vg, so this should be safe
+                        # FIXME: While the above assumption holds, sda1 and sda2
+                        # can each host a PV and VG. I think the vg_name property is
+                        # actually unused (not 100% sure) and can simply be removed
+                        self.vg_name = vgs[0]
+                        self._is_lvm_member = True
+                        self.lvs.extend(lvm.get_device_lvs(path))
         return self._is_lvm_member
 
     def _get_pv_paths(self):
@@ -353,7 +397,7 @@ class Device(object):
         is_member = self.ceph_disk.is_member
         if self.sys_api.get("partitions"):
             for part in self.sys_api.get("partitions").keys():
-                part = Device("/dev/%s" % part)
+                part = Device("/dev/%s" % part, metadata=self.metadata)
                 if part.is_ceph_disk_member:
                     is_member = True
                     break
