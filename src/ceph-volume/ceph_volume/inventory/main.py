@@ -45,12 +45,20 @@ class Inventory(object):
                   'libstoragemgmt'),
             default=False,
         )
+        parser.add_argument(
+            '--with-preload',
+            action='store_true',
+            help=('Preload metadata for all devices instead of fetching serially'),
+            default=False,
+        )
+
         self.args = parser.parse_args(self.argv)
+
         if self.args.path:
             self.format_report(Device(self.args.path, with_lsm=self.args.with_lsm))
         else:
             self.format_report(Devices(filter_for_batch=self.args.filter_for_batch,
-                                       with_lsm=self.args.with_lsm))
+                                       with_lsm=self.args.with_lsm, with_preload=self.args.with_preload))
 
     def get_report(self):
         if self.args.path:
