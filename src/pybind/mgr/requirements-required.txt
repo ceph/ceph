@@ -1,0 +1,14 @@
+-e../../python-common
+asyncmock
+cherrypy
+jsonpatch
+Jinja2
+pecan
+prettytable
+pyfakefs
+pyOpenSSL
+pytest-cov==2.7.1
+pyyaml
+requests-mock
+scipy
+werkzeug
