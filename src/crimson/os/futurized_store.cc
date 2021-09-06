@@ -8,8 +8,7 @@ namespace crimson::os {
 std::unique_ptr<FuturizedStore>
 FuturizedStore::create(const std::string& type,
                        const std::string& data,
-                       const ConfigValues& values,
-                       seastar::alien::instance& alien)
+                       const ConfigValues& values)
 {
   if (type == "cyanstore") {
     return std::make_unique<crimson::os::CyanStore>(data);
@@ -18,7 +17,7 @@ FuturizedStore::create(const std::string& type,
   } else {
     // use AlienStore as a fallback. It adapts e.g. BlueStore.
     return std::make_unique<crimson::os::AlienStore>(
-      type, data, values, alien);
+      type, data, values);
   }
 }
 

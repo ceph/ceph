@@ -14,10 +14,6 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
-namespace seastar::alien {
-class instance;
-}
-
 namespace ceph::os {
 class Transaction;
 }
@@ -45,8 +41,7 @@ public:
   };
   AlienStore(const std::string& type,
              const std::string& path,
-             const ConfigValues& values,
-             seastar::alien::instance& alien);
+             const ConfigValues& values);
   ~AlienStore() final;
 
   seastar::future<> start() final;
@@ -131,7 +126,6 @@ private:
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string type;
   const std::string path;
-  seastar::alien::instance& alien;
   uint64_t used_bytes = 0;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
