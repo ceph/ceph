@@ -32,6 +32,7 @@ class ZonedAllocator : public Allocator {
 
   std::atomic<int64_t> num_free;     ///< total bytes in freelist
   uint64_t size;
+  uint64_t conventional_size, sequential_size;
   uint64_t block_size;
   uint64_t zone_size;
   uint64_t first_seq_zone_num;
@@ -91,15 +92,15 @@ public:
   void dump(std::function<void(uint64_t offset,
                                uint64_t length)> notify) override;
 
-  void init_alloc(std::vector<zone_state_t> &&_zone_states,
-		  ceph::mutex *_cleaner_lock,
-		  ceph::condition_variable *_cleaner_cond);
-
   const std::set<uint64_t> *get_zones_to_clean(void);
   void mark_zones_to_clean_free(void);
 
-  void init_add_free(uint64_t offset, uint64_t length) override;
-  void init_rm_free(uint64_t offset, uint64_t length) override;
+  void init_from_zone_pointers(
+    std::vector<zone_state_t> &&_zone_states,
+    ceph::mutex *_cleaner_lock,
+    ceph::condition_variable *_cleaner_cond);
+  void init_add_free(uint64_t offset, uint64_t length) override {}
+  void init_rm_free(uint64_t offset, uint64_t length) override {}
 
   void shutdown() override;
 
