@@ -276,7 +276,7 @@ class CephadmServe:
                 self.mgr.cache.metadata_up_to_date[host] = False
                 if host in self.mgr.offline_hosts:
                     return
-                self.mgr.offline_hosts.add(host)
+
                 # In case host is actually offline, it's best to reset the connection to avoid
                 # a long timeout trying to use an existing connection to an offline host
                 # REVISIT AFTER https://github.com/ceph/ceph/pull/42919
@@ -375,11 +375,11 @@ class CephadmServe:
             for agent in agents_down:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
                               f'{2.5 * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
-                               'down and host has been marked offline.'))
+                               'down and host may be offline.'))
             self.mgr.health_checks['CEPHADM_AGENT_DOWN'] = {
                 'severity': 'warning',
                 'summary': '%d Cephadm Agent(s) are not reporting. '
-                'Hosts marked offline' % (len(agents_down)),
+                'Hosts may be offline' % (len(agents_down)),
                 'count': len(agents_down),
                 'detail': detail,
             }

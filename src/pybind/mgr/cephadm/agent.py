@@ -146,6 +146,7 @@ class HostData:
     def handle_metadata(self, data: Dict[str, Any]) -> None:
         try:
             host = data['host']
+            self.mgr.cache.agent_ports[host] = int(data['port'])
             if host not in self.mgr.cache.agent_counter:
                 self.mgr.log.debug(
                     f'Got metadata from agent on host {host} with no known counter entry. Starting counter at 1 and requesting new metadata')
@@ -153,7 +154,6 @@ class HostData:
                 self.mgr.agent_helpers._request_agent_acks({host})
                 return
 
-            self.mgr.cache.agent_ports[host] = int(data['port'])
             # update timestamp of most recent agent update
             self.mgr.cache.agent_timestamp[host] = datetime_now()
             up_to_date = False

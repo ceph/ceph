@@ -322,9 +322,7 @@ class HostAssignment(object):
         existing = existing_active + existing_standby
 
         # build to_add
-        if self.service_name == 'agent':
-            to_add = [dd for dd in others]
-        elif not count:
+        if not count:
             to_add = [dd for dd in others if dd.hostname not in [
                 h.hostname for h in self.unreachable_hosts]]
         else:
