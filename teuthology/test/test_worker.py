@@ -179,8 +179,10 @@ class TestWorker(object):
 
     @patch("os.path.isdir")
     @patch("teuthology.worker.fetch_teuthology")
+    @patch("teuthology.worker.teuth_config")
     @patch("teuthology.worker.fetch_qa_suite")
     def test_prep_job(self, m_fetch_qa_suite,
+                      m_teuth_config,
                       m_fetch_teuthology, m_isdir):
         config = dict(
             name="the_name",
@@ -191,6 +193,7 @@ class TestWorker(object):
         m_fetch_teuthology.return_value = '/teuth/path'
         m_fetch_qa_suite.return_value = '/suite/path'
         m_isdir.return_value = True
+        m_teuth_config.teuthology_path = None
         got_config, teuth_bin_path = worker.prep_job(
             config,
             log_file_path,
