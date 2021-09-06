@@ -511,11 +511,11 @@ class Command(dict):
     handler callable.
 
     Usage:
+    >>> def handler(): return 0, "", ""
     >>> Command(prefix="example",
-    ...         args="name=arg,type=CephInt",
-    ...         perm='w',
-    ...         desc="Blah")
-    {'poll': False, 'cmd': 'example name=arg,type=CephInt', 'perm': 'w', 'desc': 'Blah'}
+    ...         handler=handler,
+    ...         perm='w')
+    {'perm': 'w', 'poll': False}
     """
 
     def __init__(
