@@ -1,5 +1,5 @@
-""" 
-This module handles the interaction with libstoragemgmt for local disk 
+"""
+This module handles the interaction with libstoragemgmt for local disk
 devices. Interaction may fail with LSM for a number of issues, but the
 intent here is to make this a soft fail, since LSM related data is not
 a critical component of ceph-volume.
@@ -67,7 +67,7 @@ class LSMDisk:
         # if disk is None, lsm is unavailable so all calls should return None
         if self.disk is None:
             return None
-        
+
         method = getattr(self.disk, func)
         try:
             output = method(path)
@@ -98,7 +98,7 @@ class LSMDisk:
             return "Off"
         elif self.led_status & lsm_Disk.LED_STATUS_IDENT_UNKNOWN == lsm_Disk.LED_STATUS_IDENT_UNKNOWN:
             return "Unknown"
-        
+
         return "Unsupported"
 
     @property
@@ -112,7 +112,7 @@ class LSMDisk:
             return "Off"
         elif self.led_status & lsm_Disk.LED_STATUS_FAULT_UNKNOWN == lsm_Disk.LED_STATUS_FAULT_UNKNOWN:
             return "Unknown"
-        
+
         return "Unsupported"
 
     @property
@@ -122,14 +122,14 @@ class LSMDisk:
             return "Unknown"
 
         ident_states = (
-            lsm_Disk.LED_STATUS_IDENT_ON + 
-            lsm_Disk.LED_STATUS_IDENT_OFF + 
+            lsm_Disk.LED_STATUS_IDENT_ON +
+            lsm_Disk.LED_STATUS_IDENT_OFF +
             lsm_Disk.LED_STATUS_IDENT_UNKNOWN
         )
 
         if (self.led_status & ident_states) == 0:
             return "Unsupported"
-        
+
         return "Supported"
 
     @property
@@ -139,8 +139,8 @@ class LSMDisk:
             return "Unknown"
 
         fail_states = (
-            lsm_Disk.LED_STATUS_FAULT_ON + 
-            lsm_Disk.LED_STATUS_FAULT_OFF + 
+            lsm_Disk.LED_STATUS_FAULT_ON +
+            lsm_Disk.LED_STATUS_FAULT_OFF +
             lsm_Disk.LED_STATUS_FAULT_UNKNOWN
         )
 
