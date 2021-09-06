@@ -1,11 +1,4 @@
 import json
-try:
-    # AsyncMock was not added until python 3.8
-    from unittest.mock import AsyncMock
-except ImportError:
-    from asyncmock import AsyncMock
-except ImportError:
-    AsyncMock = None
 
 from contextlib import contextmanager
 
@@ -21,8 +14,6 @@ try:
     from typing import List
 except ImportError:
     pass
-
-from asyncssh.misc import ConnectionLost
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
     NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec
@@ -1083,32 +1074,6 @@ spec:
 
             assert_rm_daemon(cephadm_module, spec.service_name(), 'host1')  # verifies ok-to-stop
             assert_rm_daemon(cephadm_module, spec.service_name(), 'host2')
-
-    @mock.patch("cephadm.ssh.SSHManager.execute_command")
-    @mock.patch("cephadm.ssh.SSHManager.check_execute_command")
-    def test_offline(self, check_execute_command, execute_command, cephadm_module):
-        check_execute_command.return_value = ''
-        execute_command.return_value = '', '', 0
-
-        if not AsyncMock:
-            # can't run this test if we could not import AsyncMock
-            return
-        mock_connect = AsyncMock(return_value='')
-        with mock.patch("asyncssh.connect", new=mock_connect) as asyncssh_connect:
-            with with_host(cephadm_module, 'test'):
-                asyncssh_connect.side_effect = ConnectionLost('reason')
-                code, out, err = cephadm_module.check_host('test')
-                assert out == ''
-                assert "Host 'test' not found" in err
-
-                out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-                assert out == HostSpec('test', '1.2.3.4', status='Offline').to_json()
-
-                asyncssh_connect.return_value = mock.MagicMock()
-                asyncssh_connect.side_effect = None
-                assert CephadmServe(cephadm_module)._check_host('test') is None
-                out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-                assert out == HostSpec('test', '1.2.3.4').to_json()
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_dont_touch_offline_or_maintenance_host_daemons(self, cephadm_module):
