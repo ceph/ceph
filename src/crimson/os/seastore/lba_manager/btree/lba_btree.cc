@@ -536,20 +536,7 @@ LBABtree::handle_split_ret LBABtree::handle_split(
 
     c.cache.retire_extent(c.trans, pos.node);
 
-    /* right->get_node_meta().begin == pivot == right->begin()->get_key()
-     * Thus, if pos.pos == left->get_size(), we want iter to point to
-     * left with pos.pos at the end rather than right with pos.pos = 0
-     * since the insertion would be to the left of the first element
-     * of right and thus necessarily less than right->get_node_meta().begin.
-     */
-    if (pos.pos <= left->get_size()) {
-      pos.node = left;
-    } else {
-      pos.node = right;
-      pos.pos -= left->get_size();
-
-      parent_pos.pos += 1;
-    }
+    return std::make_pair(left, right);
   };
 
   for (; split_from > 0; --split_from) {
@@ -564,10 +551,36 @@ LBABtree::handle_split_ret LBABtree::handle_split(
       auto &pos = iter.get_internal(split_from);
       DEBUGT("splitting internal {} at depth {}", c.trans, *pos.node, split_from);
       split_level(parent_pos, pos);
+
+      auto [left, right] = split_level(parent_pos, pos);
+
+      if (pos.pos < left->get_size()) {
+	pos.node = left;
+      } else {
+	pos.node = right;
+	pos.pos -= left->get_size();
+
+	parent_pos.pos += 1;
+      }
     } else {
       auto &pos = iter.leaf;
       DEBUGT("splitting leaf {}", c.trans, *pos.node);
-      split_level(parent_pos, pos);
+      auto [left, right] = split_level(parent_pos, pos);
+
+      /* right->get_node_meta().begin == pivot == right->begin()->get_key()
+       * Thus, if pos.pos == left->get_size(), we want iter to point to
+       * left with pos.pos at the end rather than right with pos.pos = 0
+       * since the insertion would be to the left of the first element
+       * of right and thus necessarily less than right->get_node_meta().begin.
+       */
+      if (pos.pos <= left->get_size()) {
+	pos.node = left;
+      } else {
+	pos.node = right;
+	pos.pos -= left->get_size();
+
+	parent_pos.pos += 1;
+      }
     }
   }
 
