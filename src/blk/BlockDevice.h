@@ -209,6 +209,9 @@ public:
   virtual void reset_zones(const std::set<uint64_t>& zones) {
     ceph_assert(is_smr());
   }
+  virtual std::vector<uint64_t> get_zones() {
+    return std::vector<uint64_t>();
+  }
 
   virtual void aio_submit(IOContext *ioc) = 0;
 

@@ -110,3 +110,23 @@ void HMSMRDevice::reset_zones(const std::set<uint64_t>& zones)
     }
   }
 }
+
+std::vector<uint64_t> HMSMRDevice::get_zones()
+{
+  std::vector<zbd_zone> zones;
+  unsigned int num_zones = size / zone_size;
+  zones.resize(num_zones);
+
+  int r = zbd_report_zones(zbd_fd, 0, 0, ZBD_RO_ALL, zones.data(), &num_zones);
+  if (r != 0) {
+    derr << __func__ << " zbd_report_zones failed on " << path << ": "
+	 << cpp_strerror(errno) << dendl;
+    ceph_abort("zbd_report_zones failed");
+  }
+
+  std::vector<uint64_t> wp(num_zones);
+  for (unsigned i = 0; i < num_zones; ++i) {
+    wp[i] = zones[i].wp;
+  }
+  return wp;
+}

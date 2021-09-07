@@ -45,6 +45,7 @@ public:
   bool is_smr() const final { return true; }
   void reset_all_zones() override;
   void reset_zones(const std::set<uint64_t>& zones) override;
+  std::vector<uint64_t> get_zones() override;
 };
 
 #endif //CEPH_BLK_HMSMRDEVICE_H
