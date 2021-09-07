@@ -138,7 +138,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def get_controllers(self):
-        from ..controllers import ApiController, ControllerDoc, EndpointDoc, RESTController
+        from ..controllers import APIDoc, APIRouter, EndpointDoc, RESTController
 
         FEATURES_SCHEMA = {
             "rbd": (bool, ''),
@@ -149,8 +149,8 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "nfs": (bool, '')
         }
 
-        @ApiController('/feature_toggles')
-        @ControllerDoc("Manage Features API", "FeatureTogglesEndpoint")
+        @APIRouter('/feature_toggles')
+        @APIDoc("Manage Features API", "FeatureTogglesEndpoint")
         class FeatureTogglesEndpoint(RESTController):
             @EndpointDoc("Get List Of Features",
                          responses={200: FEATURES_SCHEMA})
