@@ -14,8 +14,8 @@
 // We use the same struct for an on-disk and in-memory representation of the
 // state.
 struct zone_state_t {
-  uint64_t num_dead_bytes = 0;
-  uint64_t write_pointer = 0;
+  uint64_t num_dead_bytes = 0;  ///< dead bytes deallocated (behind the write pointer)
+  uint64_t write_pointer = 0;   ///< relative offset within the zone
 
   void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
