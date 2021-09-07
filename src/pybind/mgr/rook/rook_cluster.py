@@ -894,7 +894,7 @@ class RookCluster(object):
         self.coreV1_api.patch_node(host, matching_node)
         return OrchResult(f'Removed {label} label from {host}')
 
-    def apply_objectstore(self, spec: RGWSpec) -> str:
+    def apply_objectstore(self, spec: RGWSpec, num_replicas: int) -> str:
         assert spec.service_id is not None
 
         name = spec.service_id
@@ -926,16 +926,28 @@ class RookCluster(object):
                             port=port,
                             securePort=secure_port,
                             instances=spec.placement.count or 1,
-                            placement=ccl.NodeAffinity(
-                                requiredDuringSchedulingIgnoredDuringExecution=ccl.RequiredDuringSchedulingIgnoredDuringExecution(
-                                    nodeSelectorTerms=ccl.NodeSelectorTermsList(
-                                        [
-                                            placement_spec_to_node_selector(spec.placement, all_hosts)
-                                        ]
+                            placement=cos.Placement(
+                                cos.NodeAffinity(
+                                    requiredDuringSchedulingIgnoredDuringExecution=cos.RequiredDuringSchedulingIgnoredDuringExecution(
+                                        nodeSelectorTerms=cos.NodeSelectorTermsList(
+                                            [
+                                                placement_spec_to_node_selector(spec.placement, all_hosts)
+                                            ]
+                                        )
                                     )
                                 )
                             )
                         ),
+                        dataPool=cos.DataPool(
+                            replicated=cos.Replicated(
+                                size=num_replicas
+                            )
+                        ),
+                        metadataPool=cos.MetadataPool(
+                            replicated=cos.Replicated(
+                                size=num_replicas
+                            )
+                        )
                     )
                 )
             if spec.rgw_zone:
