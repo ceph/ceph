@@ -47,7 +47,7 @@ their initial connection to the cluster as they may need to try more
 addresses before they reach an operating monitor.
 
 The down monitor daemon should generally be restarted as soon as
-possible to reduce the risk of a subsequen monitor failure leading to
+possible to reduce the risk of a subsequent monitor failure leading to
 a service outage.
 
 MON_CLOCK_SKEW
@@ -759,7 +759,7 @@ Detailed information about which PGs are affected is available from::
   ceph health detail
 
 In most cases the root cause is that one or more OSDs is currently
-down; see the dicussion for ``OSD_DOWN`` above.
+down; see the discussion for ``OSD_DOWN`` above.
 
 The state of specific problematic PGs can be queried with::
 

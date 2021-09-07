@@ -86,5 +86,5 @@ stray expiration notices, the exporter unfreezes the subtree, cleans
 up its migration-related state, and sends a final MExportFinish to the
 importer. Upon receipt, the importer logs an EImportFinish(true)
 (noting locally that the export was indeed a success), unfreezes its
-subtree, processes any queued cache expierations, and cleans up its
+subtree, processes any queued cache expirations, and cleans up its
 state.
