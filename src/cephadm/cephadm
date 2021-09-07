@@ -31,7 +31,7 @@ from contextlib import redirect_stdout
 import ssl
 from enum import Enum
 
-from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set
 
 import re
 import uuid
@@ -1425,7 +1425,8 @@ def call(ctx: CephadmContext,
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE)
+            stderr=asyncio.subprocess.PIPE,
+            env=os.environ.copy())
         assert process.stdout
         assert process.stderr
         try:
@@ -1474,7 +1475,7 @@ def call_timeout(ctx, command, timeout):
         raise TimeoutExpired(msg)
 
     try:
-        return subprocess.call(command, timeout=timeout)
+        return subprocess.call(command, timeout=timeout, env=os.environ.copy())
     except subprocess.TimeoutExpired:
         raise_timeout(command, timeout)
 
@@ -2462,11 +2463,11 @@ def get_container(ctx: CephadmContext,
     entrypoint: str = ''
     name: str = ''
     ceph_args: List[str] = []
-    envs: List[str] = [
-        'TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728',
-    ]
+    envs: List[str] = []
     host_network: bool = True
 
+    if daemon_type in Ceph.daemons:
+        envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
     if container_args is None:
         container_args = []
     if daemon_type in ['mon', 'osd']:
@@ -3586,7 +3587,8 @@ def prepare_mon_addresses(
             ctx.mon_ip = wrap_ipv6(ctx.mon_ip)
         hasport = r.findall(ctx.mon_ip)
         if hasport:
-            port = int(hasport[0])
+            port_str = hasport[0]
+            port = int(port_str)
             if port == 6789:
                 addr_arg = '[v1:%s]' % ctx.mon_ip
             elif port == 3300:
@@ -3595,7 +3597,7 @@ def prepare_mon_addresses(
                 logger.warning('Using msgr2 protocol for unrecognized port %d' %
                                port)
                 addr_arg = '[v2:%s]' % ctx.mon_ip
-            base_ip = ctx.mon_ip[0:-(len(str(port))) - 1]
+            base_ip = ctx.mon_ip[0:-(len(port_str)) - 1]
             check_ip_port(ctx, base_ip, port)
         else:
             base_ip = ctx.mon_ip
@@ -3613,10 +3615,11 @@ def prepare_mon_addresses(
             if not hasport:
                 raise Error('--mon-addrv value %s must include port number' %
                             addr_arg)
-            port = int(hasport[0])
+            port_str = hasport[0]
+            port = int(port_str)
             # strip off v1: or v2: prefix
             addr = re.sub(r'^v\d+:', '', addr)
-            base_ip = addr[0:-(len(str(port))) - 1]
+            base_ip = addr[0:-(len(port_str)) - 1]
             check_ip_port(ctx, base_ip, port)
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
@@ -3921,7 +3924,7 @@ def prepare_ssh(
     try:
         args = ['orch', 'host', 'add', host]
         if ctx.mon_ip:
-            args.append(ctx.mon_ip)
+            args.append(unwrap_ipv6(ctx.mon_ip))
         cli(args)
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
@@ -3939,8 +3942,6 @@ def prepare_ssh(
         cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
-        logger.info('Enabling mgr prometheus module...')
-        cli(['mgr', 'module', 'enable', 'prometheus'])
         for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
             logger.info('Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
@@ -4791,13 +4792,13 @@ def command_logs(ctx):
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
     logger.debug('Running command: %s' % ' '.join(cmd))
-    subprocess.call(cmd)  # type: ignore
+    subprocess.call(cmd, env=os.environ.copy())  # type: ignore
 
 ##################################
 
 
 def list_networks(ctx):
-    # type: (CephadmContext) -> Dict[str,Dict[str,List[str]]]
+    # type: (CephadmContext) -> Dict[str,Dict[str, Set[str]]]
 
     # sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
     # so we'll need to use a regex to parse 'ip' command output.
@@ -4805,13 +4806,12 @@ def list_networks(ctx):
     # out, _, _ = call_throws(['ip', '-j', 'route', 'ls'])
     # j = json.loads(out)
     # for x in j:
-
     res = _list_ipv4_networks(ctx)
     res.update(_list_ipv6_networks(ctx))
     return res
 
 
-def _list_ipv4_networks(ctx: CephadmContext) -> Dict[str, Dict[str, List[str]]]:
+def _list_ipv4_networks(ctx: CephadmContext) -> Dict[str, Dict[str, Set[str]]]:
     execstr: Optional[str] = find_executable('ip')
     if not execstr:
         raise FileNotFoundError("unable to find 'ip' command")
@@ -4819,8 +4819,8 @@ def _list_ipv4_networks(ctx: CephadmContext) -> Dict[str, Dict[str, List[str]]]:
     return _parse_ipv4_route(out)
 
 
-def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, List[str]]]:
-    r = {}  # type: Dict[str,Dict[str,List[str]]]
+def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
+    r = {}  # type: Dict[str, Dict[str, Set[str]]]
     p = re.compile(r'^(\S+) dev (\S+) (.*)scope link (.*)src (\S+)')
     for line in out.splitlines():
         m = p.findall(line)
@@ -4832,12 +4832,12 @@ def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, List[str]]]:
         if net not in r:
             r[net] = {}
         if iface not in r[net]:
-            r[net][iface] = []
-        r[net][iface].append(ip)
+            r[net][iface] = set()
+        r[net][iface].add(ip)
     return r
 
 
-def _list_ipv6_networks(ctx: CephadmContext) -> Dict[str, Dict[str, List[str]]]:
+def _list_ipv6_networks(ctx: CephadmContext) -> Dict[str, Dict[str, Set[str]]]:
     execstr: Optional[str] = find_executable('ip')
     if not execstr:
         raise FileNotFoundError("unable to find 'ip' command")
@@ -4846,8 +4846,8 @@ def _list_ipv6_networks(ctx: CephadmContext) -> Dict[str, Dict[str, List[str]]]:
     return _parse_ipv6_route(routes, ips)
 
 
-def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, List[str]]]:
-    r = {}  # type: Dict[str,Dict[str,List[str]]]
+def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, Set[str]]]:
+    r = {}  # type: Dict[str, Dict[str, Set[str]]]
     route_p = re.compile(r'^(\S+) dev (\S+) proto (\S+) metric (\S+) .*pref (\S+)$')
     ip_p = re.compile(r'^\s+inet6 (\S+)/(.*)scope (.*)$')
     iface_p = re.compile(r'^(\d+): (\S+): (.*)$')
@@ -4862,7 +4862,7 @@ def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, List[str]]]:
         if net not in r:
             r[net] = {}
         if iface not in r[net]:
-            r[net][iface] = []
+            r[net][iface] = set()
 
     iface = None
     for line in ips.splitlines():
@@ -4879,7 +4879,7 @@ def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, List[str]]]:
                if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
         if net:
             assert(iface)
-            r[net[0]][iface].append(ip)
+            r[net[0]][iface].add(ip)
 
     return r
 
@@ -4887,7 +4887,11 @@ def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, List[str]]]:
 def command_list_networks(ctx):
     # type: (CephadmContext) -> None
     r = list_networks(ctx)
-    print(json.dumps(r, indent=4))
+
+    def serialize_sets(obj: Any) -> Any:
+        return list(obj) if isinstance(obj, set) else obj
+
+    print(json.dumps(r, indent=4, default=serialize_sets))
 
 ##################################
 
@@ -5757,6 +5761,7 @@ def check_time_sync(ctx, enabler=None):
         'ntpd.service',  # el7 (at least)
         'ntp.service',  # 18.04 (at least)
         'ntpsec.service',  # 20.04 (at least) / buster
+        'openntpd.service',  # ubuntu / debian
     ]
     if not check_units(ctx, units, enabler):
         logger.warning('No time sync service is running; checked for %s' % units)
@@ -6937,6 +6942,48 @@ class HostFacts():
                 k_param['net.ipv4.ip_nonlocal_bind'] = param_dict['net.ipv4.ip_nonlocal_bind']
 
         return k_param
+
+    @staticmethod
+    def _process_net_data(tcp_file: str, protocol: str = 'tcp') -> List[int]:
+        listening_ports = []
+        # Connections state documentation
+        # tcp - https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/net/tcp_states.h
+        # udp - uses 07 (TCP_CLOSE or UNCONN, since udp is stateless. test with netcat -ul <port>)
+        listening_state = {
+            'tcp': '0A',
+            'udp': '07'
+        }
+
+        if protocol not in listening_state.keys():
+            return []
+
+        if os.path.exists(tcp_file):
+            with open(tcp_file) as f:
+                tcp_data = f.readlines()[1:]
+
+            for con in tcp_data:
+                con_info = con.strip().split()
+                if con_info[3] == listening_state[protocol]:
+                    local_port = int(con_info[1].split(':')[1], 16)
+                    listening_ports.append(local_port)
+
+        return listening_ports
+
+    @property
+    def tcp_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/tcp')
+
+    @property
+    def tcp6_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/tcp6')
+
+    @property
+    def udp_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/udp', 'udp')
+
+    @property
+    def udp6_ports_used(self) -> List[int]:
+        return HostFacts._process_net_data('/proc/net/udp6', 'udp')
 
     def dump(self):
         # type: () -> str

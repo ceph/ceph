@@ -14,6 +14,7 @@ import logging
 import errno
 import functools
 import json
+import subprocess
 import threading
 from collections import defaultdict
 from enum import IntEnum
@@ -1838,3 +1839,33 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param arguments: dict of key/value arguments to test
         """
         return self._ceph_is_authorized(arguments)
+
+    def send_rgwadmin_command(self, args: List[str],
+                              stdout_as_json: bool = True) -> Tuple[int, Union[str, dict], str]:
+        try:
+            cmd = [
+                    'radosgw-admin',
+                    '-c', str(self.get_ceph_conf_path()),
+                    '-k', str(self.get_ceph_option('keyring')),
+                    '-n', f'mgr.{self.get_mgr_id()}',
+                ] + args
+            self.log.debug('Executing %s', str(cmd))
+            result = subprocess.run(  # pylint: disable=subprocess-run-check
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+            )
+            stdout = result.stdout.decode('utf-8')
+            stderr = result.stderr.decode('utf-8')
+            if stdout and stdout_as_json:
+                stdout = json.loads(stdout)
+            if result.returncode:
+                self.log.debug('Error %s executing %s: %s', result.returncode, str(cmd), stderr)
+            return result.returncode, stdout, stderr
+        except subprocess.CalledProcessError as ex:
+            self.log.exception('Error executing radosgw-admin %s: %s', str(ex.cmd), str(ex.output))
+            raise
+        except subprocess.TimeoutExpired as ex:
+            self.log.error('Timeout (10s) executing radosgw-admin %s', str(ex.cmd))
+            raise
