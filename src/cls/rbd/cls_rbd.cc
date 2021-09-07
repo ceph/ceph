@@ -4138,7 +4138,7 @@ int children_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "child_detach snap_id=%" PRIu64, snap_id);
+  CLS_LOG(20, "children_list snap_id=%" PRIu64, snap_id);
 
   cls_rbd_snap snap;
   std::string snapshot_key;
