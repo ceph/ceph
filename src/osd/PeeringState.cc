@@ -4277,6 +4277,11 @@ void PeeringState::force_object_missing(
     }
   }
 
+  if (!info.last_backfill.is_max()) {
+    // backfilling
+    return;
+  }
+
   missing_loc.rebuild(
     soid,
     pg_whoami,

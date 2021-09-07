@@ -146,6 +146,9 @@
 #define MSG_OSD_PG_LEASE        133
 #define MSG_OSD_PG_LEASE_ACK    134
 
+#define MSG_OSD_PG_FORCE_OBJECT_MISSING  136
+#define MSG_OSD_PG_FORCE_OBJECT_MISSING_REPLY  137
+
 // *** MDS ***
 
 #define MSG_MDS_BEACON             100  // to monitor

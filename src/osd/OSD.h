@@ -1981,6 +1981,8 @@ private:
     case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     case MSG_OSD_PG_LEASE:
     case MSG_OSD_PG_LEASE_ACK:
+    case MSG_OSD_PG_FORCE_OBJECT_MISSING:
+    case MSG_OSD_PG_FORCE_OBJECT_MISSING_REPLY:
       return true;
     default:
       return false;

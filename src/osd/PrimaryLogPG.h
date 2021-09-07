@@ -1075,6 +1075,9 @@ protected:
   std::set<hobject_t> backfills_in_flight;
   std::map<hobject_t, pg_stat_t> pending_backfill_updates;
 
+  typedef std::pair<int8_t, int32_t> ShardOsdPair;
+  std::map<hobject_t, std::set<ShardOsdPair>> force_object_missing_in_flight;
+
   void dump_recovery_info(ceph::Formatter *f) const override {
     f->open_array_section("waiting_on_backfill");
     for (std::set<pg_shard_t>::const_iterator p = waiting_on_backfill.begin();
@@ -1830,6 +1833,10 @@ private:
   int _rollback_to(OpContext *ctx, OSDOp& op);
   void _do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
 				    OSDOp& op);
+
+  void _force_object_missing(const pg_shard_t &peer, const hobject_t &oid,
+                             eversion_t version);
+
 public:
   bool is_missing_object(const hobject_t& oid) const;
   bool is_unreadable_object(const hobject_t &oid) const {
@@ -1887,6 +1894,9 @@ public:
 
   void do_update_log_missing_reply(
     OpRequestRef &op);
+
+  void do_force_object_missing(OpRequestRef &op);
+  void do_force_object_missing_reply(OpRequestRef &op);
 
   void plpg_on_role_change() override;
   void plpg_on_pool_change() override;

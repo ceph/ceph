@@ -43,6 +43,8 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
+#include "messages/MOSDPGForceObjectMissing.h"
+#include "messages/MOSDPGForceObjectMissingReply.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGTrim.h"
@@ -1960,6 +1962,14 @@ void PrimaryLogPG::do_request(
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     do_update_log_missing_reply(op);
+    break;
+
+  case MSG_OSD_PG_FORCE_OBJECT_MISSING:
+    do_force_object_missing(op);
+    break;
+
+  case MSG_OSD_PG_FORCE_OBJECT_MISSING_REPLY:
+    do_force_object_missing_reply(op);
     break;
 
   default:
@@ -12455,6 +12465,29 @@ void PrimaryLogPG::_applied_recovered_object_replica()
   }
 }
 
+void PrimaryLogPG::_force_object_missing(const pg_shard_t &from,
+                                         const hobject_t &oid,
+                                         eversion_t version) {
+  dout(20) << __func__ << " " << from << " " << oid << " " << version << dendl;
+
+  recovery_state.force_object_missing(from, oid, version);
+
+  for (auto &peer : get_acting_recovery_backfill()) {
+    if (peer == pg_whoami) {
+      continue;
+    }
+    dout(20) << __func__ << " notifying " << peer << dendl;
+
+    force_object_missing_in_flight[oid].insert({from.shard, peer.osd});
+    auto m = new MOSDPGForceObjectMissing(spg_t(info.pgid.pgid, peer.shard),
+                                          get_osdmap_epoch(),
+                                          get_last_peering_reset(),
+                                          from, oid, version);
+    m->set_priority(CEPH_MSG_PRIO_HIGH);
+    osd->send_message_osd_cluster(peer.osd, m, get_osdmap_epoch());
+  }
+}
+
 void PrimaryLogPG::on_failed_pull(
   const set<pg_shard_t> &from,
   const hobject_t &soid,
@@ -12469,9 +12502,12 @@ void PrimaryLogPG::on_failed_pull(
     requeue_ops(blocked_ops);
   }
   recovering.erase(soid);
+
+  ceph_assert(force_object_missing_in_flight.count(soid) == 0);
+
   for (auto&& i : from) {
     if (i != pg_whoami) { // we'll get it below in primary_error
-      recovery_state.force_object_missing(i, soid, v);
+      _force_object_missing(i, soid, v);
     }
   }
 
@@ -12485,6 +12521,9 @@ void PrimaryLogPG::on_failed_pull(
   if (from.count(pg_whoami)) {
     dout(0) << " primary missing oid " << soid << " version " << v << dendl;
     primary_error(soid, v);
+  }
+
+  if (force_object_missing_in_flight.count(soid) == 0) {
     backfills_in_flight.erase(soid);
   }
 }
@@ -12608,6 +12647,59 @@ void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
     osd->clog->error()
       << info.pgid << " got reply "
       << *m << " on unknown tid " << m->get_tid();
+  }
+}
+
+void PrimaryLogPG::do_force_object_missing(OpRequestRef &op) {
+  auto m = static_cast<const MOSDPGForceObjectMissing*>(op->get_req());
+  ceph_assert(m->get_type() == MSG_OSD_PG_FORCE_OBJECT_MISSING);
+
+  dout(20) << __func__ << " " << *m << dendl;
+
+  ObjectStore::Transaction t;
+  recovery_state.force_object_missing(m->from, m->oid, m->oid_version);
+  recovery_state.write_if_dirty(t);
+  eversion_t new_lcod = info.last_complete;
+
+  t.register_on_commit(new LambdaContext([=](int) {
+      auto msg = static_cast<const MOSDPGForceObjectMissing*>(op->get_req());
+      std::scoped_lock locker{*this};
+      if (!pg_has_reset_since(msg->get_map_epoch())) {
+	update_last_complete_ondisk(new_lcod);
+        auto reply = new MOSDPGForceObjectMissingReply(
+          spg_t(info.pgid.pgid, primary_shard().shard), msg->get_map_epoch(),
+          msg->get_min_epoch(), msg->from.shard, msg->oid, msg->oid_version);
+        reply->set_priority(CEPH_MSG_PRIO_HIGH);
+        msg->get_connection()->send_message(reply);
+      }
+  }));
+
+  int r = osd->store->queue_transaction(ch, std::move(t), nullptr);
+  ceph_assert(r == 0);
+  op_applied(info.last_update);
+}
+
+void PrimaryLogPG::do_force_object_missing_reply(OpRequestRef &op) {
+  auto m = static_cast<const MOSDPGForceObjectMissingReply*>(op->get_req());
+  ceph_assert(m->get_type() == MSG_OSD_PG_FORCE_OBJECT_MISSING_REPLY);
+
+  dout(20) << __func__ << " " << *m << dendl;
+
+  if (force_object_missing_in_flight.count(m->oid) == 0) {
+    dout(20) << __func__ << " got reply from shard we are not waiting for"
+             << dendl;
+    return;
+  }
+
+  ceph_assert(backfills_in_flight.count(m->oid));
+
+  force_object_missing_in_flight[m->oid].erase(
+      {m->from, m->get_source().num()});
+
+  if (force_object_missing_in_flight[m->oid].empty()) {
+    dout(20) << __func__ << " got all replies" << dendl;
+    force_object_missing_in_flight.erase(m->oid);
+    backfills_in_flight.erase(m->oid);
   }
 }
 
@@ -13112,6 +13204,7 @@ void PrimaryLogPG::_clear_recovery_state()
   while (i != backfills_in_flight.end()) {
     backfills_in_flight.erase(i++);
   }
+  force_object_missing_in_flight.clear();
 
   list<OpRequestRef> blocked_ops;
   for (map<hobject_t, ObjectContextRef>::iterator i = recovering.begin();
@@ -13488,7 +13581,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 bool PrimaryLogPG::primary_error(
   const hobject_t& soid, eversion_t v)
 {
-  recovery_state.force_object_missing(pg_whoami, soid, v);
+  _force_object_missing(pg_whoami, soid, v);
   bool uhoh = recovery_state.get_missing_loc().is_unfound(soid);
   if (uhoh)
     osd->clog->error() << info.pgid << " missing primary copy of "
@@ -13787,6 +13880,7 @@ uint64_t PrimaryLogPG::recover_backfill(
     backfill_info.reset(last_backfill_started);
 
     backfills_in_flight.clear();
+    force_object_missing_in_flight.clear();
     pending_backfill_updates.clear();
   }
 

@@ -217,6 +217,9 @@
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
+#include "messages/MOSDPGForceObjectMissing.h"
+#include "messages/MOSDPGForceObjectMissingReply.h"
+
 #ifdef WITH_BLKIN
 #include "Messenger.h"
 #endif
@@ -530,6 +533,12 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     m = make_message<MOSDPGUpdateLogMissingReply>();
+    break;
+  case MSG_OSD_PG_FORCE_OBJECT_MISSING:
+    m = make_message<MOSDPGForceObjectMissing>();
+    break;
+  case MSG_OSD_PG_FORCE_OBJECT_MISSING_REPLY:
+    m = make_message<MOSDPGForceObjectMissingReply>();
     break;
   case CEPH_MSG_OSD_BACKOFF:
     m = make_message<MOSDBackoff>();

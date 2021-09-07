@@ -50,6 +50,8 @@
 #include "messages/MOSDRepScrubMap.h"
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
+#include "messages/MOSDPGForceObjectMissing.h"
+#include "messages/MOSDPGForceObjectMissingReply.h"
 
 #include "common/BackTrace.h"
 #include "common/EventTrace.h"
@@ -2435,6 +2437,13 @@ bool PG::can_discard_request(OpRequestRef& op)
   case MSG_OSD_PG_BACKFILL_REMOVE:
     return can_discard_replica_op<MOSDPGBackfillRemove,
 				  MSG_OSD_PG_BACKFILL_REMOVE>(op);
+
+  case MSG_OSD_PG_FORCE_OBJECT_MISSING:
+    return can_discard_replica_op<
+      MOSDPGForceObjectMissing, MSG_OSD_PG_FORCE_OBJECT_MISSING>(op);
+  case MSG_OSD_PG_FORCE_OBJECT_MISSING_REPLY:
+    return can_discard_replica_op<
+      MOSDPGForceObjectMissingReply, MSG_OSD_PG_FORCE_OBJECT_MISSING_REPLY>(op);
   }
   return true;
 }
