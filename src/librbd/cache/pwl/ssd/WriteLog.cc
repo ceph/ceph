@@ -32,9 +32,6 @@ namespace ssd {
 
 using namespace librbd::cache::pwl;
 
-// SSD: this number can be updated later
-const unsigned long int ops_appended_together = MAX_WRITES_PER_SYNC_POINT;
-
 static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
   return root.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
          root.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
