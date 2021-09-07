@@ -15781,6 +15781,38 @@ int BlueStore::_do_clone_range(
   _dump_onode<30>(cct, *newo);
 
   oldo->extent_map.dup(this, txc, c, oldo, newo, srcoff, length, dstoff);
+
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    // duplicate the refs for the shared region.
+    Extent dummy(dstoff);
+    for (auto e = newo->extent_map.extent_map.lower_bound(dummy);
+	 e != newo->extent_map.extent_map.end();
+	 ++e) {
+      if (e->logical_offset >= dstoff + length) {
+	break;
+      }
+      for (auto& ex : e->blob->get_blob().get_extents()) {
+	// note that we may introduce a new extent reference that is
+	// earlier than the first zone ref.  we allow this since it is
+	// a lot of work to avoid and has marginal impact on cleaning
+	// performance.
+	if (!ex.is_valid()) {
+	  continue;
+	}
+	uint32_t zone = ex.offset / zone_size;
+	if (!newo->onode.zone_offset_refs.count(zone)) {
+	  uint64_t zoff = ex.offset % zone_size;
+	  dout(20) << __func__ << " add ref zone 0x" << std::hex << zone
+		   << " offset 0x" << zoff << std::dec
+		   << " -> " << newo->oid << dendl;
+	  txc->note_write_zone_offset(newo, zone, zoff);
+	}
+      }
+    }
+  }
+#endif
+
   _dump_onode<30>(cct, *oldo);
   _dump_onode<30>(cct, *newo);
   return 0;
