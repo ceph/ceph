@@ -34,7 +34,7 @@ export class CreateClusterComponent implements OnDestroy {
   currentStepSub: Subscription;
   permissions: Permissions;
   projectConstants: typeof AppConstants = AppConstants;
-  stepTitles = ['Add Hosts', 'Create OSDs', 'Review'];
+  stepTitles = ['Add Hosts', 'Create OSDs', 'Create Services', 'Review'];
   startClusterCreation = false;
   observables: any = [];
   modalRef: NgbModalRef;
@@ -46,7 +46,7 @@ export class CreateClusterComponent implements OnDestroy {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private stepsService: WizardStepsService,
+    private wizardStepsService: WizardStepsService,
     private router: Router,
     private hostService: HostService,
     private notificationService: NotificationService,
@@ -54,13 +54,14 @@ export class CreateClusterComponent implements OnDestroy {
     private clusterService: ClusterService,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
-    private osdService: OsdService,
-    private wizardStepService: WizardStepsService
+    private osdService: OsdService
   ) {
     this.permissions = this.authStorageService.getPermissions();
-    this.currentStepSub = this.stepsService.getCurrentStep().subscribe((step: WizardStepModel) => {
-      this.currentStep = step;
-    });
+    this.currentStepSub = this.wizardStepsService
+      .getCurrentStep()
+      .subscribe((step: WizardStepModel) => {
+        this.currentStep = step;
+      });
     this.currentStep.stepIndex = 1;
   }
 
@@ -93,77 +94,87 @@ export class CreateClusterComponent implements OnDestroy {
   }
 
   onSubmit() {
-    forkJoin(this.observables)
-      .pipe(
-        finalize(() =>
-          this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
-            this.notificationService.show(
-              NotificationType.success,
-              $localize`Cluster expansion was successful`
-            );
-            this.router.navigate(['/dashboard']);
-          })
-        )
-      )
-      .subscribe({
-        error: (error) => error.preventDefault()
-      });
-
-    this.taskWrapper
-      .wrapTaskAroundCall({
-        task: new FinishedTask('osd/' + URLVerbs.CREATE, {
-          tracking_id: _.join(_.map(this.driveGroups, 'service_id'), ', ')
-        }),
-        call: this.osdService.create(this.driveGroups)
-      })
-      .subscribe({
-        error: (error) => error.preventDefault(),
-        complete: () => {
-          this.submitAction.emit();
+    this.hostService.list().subscribe((hosts) => {
+      hosts.forEach((host) => {
+        const index = host['labels'].indexOf('_no_schedule', 0);
+        if (index > -1) {
+          host['labels'].splice(index, 1);
+          this.observables.push(this.hostService.update(host['hostname'], true, host['labels']));
         }
       });
+      forkJoin(this.observables)
+        .pipe(
+          finalize(() =>
+            this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
+              this.notificationService.show(
+                NotificationType.success,
+                $localize`Cluster expansion was successful`
+              );
+              this.router.navigate(['/dashboard']);
+            })
+          )
+        )
+        .subscribe({
+          error: (error) => error.preventDefault()
+        });
+    });
+    if (this.driveGroup) {
+      const user = this.authStorageService.getUsername();
+      this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
+      this.driveGroups.push(this.driveGroup.spec);
+    }
+
+    if (this.osdService.osdDevices['totalDevices'] > 0) {
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('osd/' + URLVerbs.CREATE, {
+            tracking_id: _.join(_.map(this.driveGroups, 'service_id'), ', ')
+          }),
+          call: this.osdService.create(this.driveGroups)
+        })
+        .subscribe({
+          error: (error) => error.preventDefault(),
+          complete: () => {
+            this.submitAction.emit();
+            this.osdService.osdDevices = [];
+          }
+        });
+    }
+  }
+
+  getDriveGroup(driveGroup: DriveGroup) {
+    this.driveGroup = driveGroup;
   }
 
   onNextStep() {
-    if (!this.stepsService.isLastStep()) {
-      this.hostService.list().subscribe((hosts) => {
-        hosts.forEach((host) => {
-          const index = host['labels'].indexOf('_no_schedule', 0);
-          if (index > -1) {
-            host['labels'].splice(index, 1);
-            this.observables.push(this.hostService.update(host['hostname'], true, host['labels']));
-          }
-        });
-      });
-      this.driveGroup = this.wizardStepService.sharedData;
-      this.stepsService.getCurrentStep().subscribe((step: WizardStepModel) => {
+    if (!this.wizardStepsService.isLastStep()) {
+      this.wizardStepsService.getCurrentStep().subscribe((step: WizardStepModel) => {
         this.currentStep = step;
       });
-      if (this.currentStep.stepIndex === 2 && this.driveGroup) {
-        const user = this.authStorageService.getUsername();
-        this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
-        this.driveGroups.push(this.driveGroup.spec);
-      }
-      this.stepsService.moveToNextStep();
+      this.wizardStepsService.moveToNextStep();
     } else {
       this.onSubmit();
     }
   }
 
   onPreviousStep() {
-    if (!this.stepsService.isFirstStep()) {
-      this.stepsService.moveToPreviousStep();
+    if (!this.wizardStepsService.isFirstStep()) {
+      this.wizardStepsService.moveToPreviousStep();
     } else {
       this.router.navigate(['/dashboard']);
     }
   }
 
   showSubmitButtonLabel() {
-    return !this.stepsService.isLastStep() ? this.actionLabels.NEXT : $localize`Expand Cluster`;
+    return !this.wizardStepsService.isLastStep()
+      ? this.actionLabels.NEXT
+      : $localize`Expand Cluster`;
   }
 
   showCancelButtonLabel() {
-    return !this.stepsService.isFirstStep() ? this.actionLabels.BACK : this.actionLabels.CANCEL;
+    return !this.wizardStepsService.isFirstStep()
+      ? this.actionLabels.BACK
+      : this.actionLabels.CANCEL;
   }
 
   ngOnDestroy(): void {

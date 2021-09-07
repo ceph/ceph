@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, ViewChild } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -41,6 +41,14 @@ export class OsdFormComponent extends CdForm implements OnInit {
   @ViewChild('previewButtonPanel')
   previewButtonPanel: FormButtonPanelComponent;
 
+  @Input()
+  hideTitle = false;
+
+  @Input()
+  hideSubmitBtn = false;
+
+  @Output() emitDriveGroup: EventEmitter<DriveGroup> = new EventEmitter();
+
   icons = Icons;
 
   form: CdFormGroup;
@@ -62,8 +70,6 @@ export class OsdFormComponent extends CdForm implements OnInit {
   featureList: OsdFeature[] = [];
 
   hasOrchestrator = true;
-  @Input()
-  clusterCreation = false;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -186,9 +192,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
       this.enableFeatures();
     }
     this.driveGroup.setDeviceSelection(event.type, event.filters);
-    if (this.clusterCreation) {
-      this.wizardStepService.sharedData = this.driveGroup;
-    }
+
+    this.emitDriveGroup.emit(this.driveGroup);
   }
 
   onDevicesCleared(event: DevicesSelectionClearEvent) {

@@ -1,8 +1,8 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { merge, Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
@@ -31,6 +31,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
+  @Input() public hiddenServices: string[] = [];
+
   serviceForm: CdFormGroup;
   action: string;
   resource: string;
@@ -41,6 +43,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   labelFocus = new Subject<string>();
   pools: Array<object>;
   services: Array<CephServiceSpec> = [];
+  pageURL: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -49,7 +52,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     private hostService: HostService,
     private poolService: PoolService,
     private router: Router,
-    private taskWrapperService: TaskWrapperService
+    private taskWrapperService: TaskWrapperService,
+    public activeModal: NgbActiveModal
   ) {
     super();
     this.resource = $localize`service`;
@@ -215,12 +219,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit(): void {
+    if (this.router.url.includes('services')) {
+      this.pageURL = 'services';
+    }
     this.action = this.actionLabels.CREATE;
     this.cephServiceService.getKnownTypes().subscribe((resp: Array<string>) => {
       // Remove service types:
       // osd       - This is deployed a different way.
       // container - This should only be used in the CLI.
-      this.serviceTypes = _.difference(resp, ['container', 'osd']).sort();
+      this.hiddenServices.push('osd', 'container');
+
+      this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
     this.hostService.list().subscribe((resp: object[]) => {
       const options: SelectOption[] = [];
@@ -241,10 +250,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.cephServiceService.list().subscribe((services: CephServiceSpec[]) => {
       this.services = services.filter((service: any) => service.service_type === 'rgw');
     });
-  }
-
-  goToListView() {
-    this.router.navigate(['/services']);
   }
 
   searchLabels = (text$: Observable<string>) => {
@@ -385,8 +390,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         error() {
           self.serviceForm.setErrors({ cdSubmitButton: true });
         },
-        complete() {
-          self.goToListView();
+        complete: () => {
+          this.pageURL === 'services'
+            ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
+            : this.activeModal.close();
         }
       });
   }

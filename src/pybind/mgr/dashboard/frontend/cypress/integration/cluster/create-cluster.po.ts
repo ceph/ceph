@@ -13,6 +13,11 @@ export class CreateClusterWizardHelper extends PageHelper {
     status: 3
   };
 
+  serviceColumnIndex = {
+    service_name: 1,
+    placement: 2
+  };
+
   createCluster() {
     cy.get('cd-create-cluster').should('contain.text', 'Please expand your cluster first');
     cy.get('[name=expand-cluster]').click();
@@ -41,7 +46,6 @@ export class CreateClusterWizardHelper extends PageHelper {
 
   add(hostname: string, exist?: boolean, maintenance?: boolean) {
     cy.get('.btn.btn-accent').first().click({ force: true });
-
     cy.get('cd-modal').should('exist');
     cy.get('cd-modal').within(() => {
       cy.get('#hostname').type(hostname);
@@ -70,7 +74,7 @@ export class CreateClusterWizardHelper extends PageHelper {
   }
 
   delete(hostname: string) {
-    super.delete(hostname, this.columnIndex.hostname);
+    super.delete(hostname, this.columnIndex.hostname, 'hosts');
   }
 
   // Add or remove labels on a host, then verify labels in the table
@@ -126,5 +130,60 @@ export class CreateClusterWizardHelper extends PageHelper {
       this.getTableCount('total').should('be.gte', 1);
       cy.get('@addButton').click();
     });
+  }
+
+  private selectServiceType(serviceType: string) {
+    return this.selectOption('service_type', serviceType);
+  }
+
+  addService(serviceType: string) {
+    cy.get('.btn.btn-accent').first().click({ force: true });
+    cy.get('cd-modal').should('exist');
+    cy.get('cd-modal').within(() => {
+      this.selectServiceType(serviceType);
+      if (serviceType === 'rgw') {
+        cy.get('#service_id').type('rgw');
+        cy.get('#count').type('1');
+      } else if (serviceType === 'ingress') {
+        this.selectOption('backend_service', 'rgw.rgw');
+        cy.get('#service_id').should('have.value', 'rgw.rgw');
+        cy.get('#virtual_ip').type('192.168.20.1/24');
+        cy.get('#frontend_port').type('8081');
+        cy.get('#monitor_port').type('8082');
+      }
+
+      cy.get('cd-submit-button').click();
+    });
+  }
+
+  checkServiceExist(serviceName: string, exist: boolean) {
+    this.getTableCell(this.serviceColumnIndex.service_name, serviceName).should(($elements) => {
+      const services = $elements.map((_, el) => el.textContent).get();
+      if (exist) {
+        expect(services).to.include(serviceName);
+      } else {
+        expect(services).to.not.include(serviceName);
+      }
+    });
+  }
+
+  deleteService(serviceName: string, wait: number) {
+    const getRow = this.getTableCell.bind(this, this.serviceColumnIndex.service_name);
+    getRow(serviceName).click();
+
+    // Clicks on table Delete button
+    this.clickActionButton('delete');
+
+    // Confirms deletion
+    cy.get('cd-modal .custom-control-label').click();
+    cy.contains('cd-modal button', 'Delete').click();
+
+    // Wait for modal to close
+    cy.get('cd-modal').should('not.exist');
+
+    // wait for delete operation to complete: tearing down the service daemons
+    cy.wait(wait);
+
+    this.checkServiceExist(serviceName, false);
   }
 }

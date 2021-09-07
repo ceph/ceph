@@ -82,8 +82,6 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
       this.filteredDevices = event.data;
       this.capacity = _.sumBy(this.filteredDevices, 'sys_api.size');
       this.event = event;
-      this.wizardStepService.osdDevices = this.filteredDevices;
-      this.wizardStepService.osdCapacity = this.capacity;
     }
   }
 

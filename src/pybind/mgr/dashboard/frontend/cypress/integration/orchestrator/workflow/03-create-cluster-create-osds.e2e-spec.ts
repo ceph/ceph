@@ -33,6 +33,7 @@ describe('Create cluster create osds page', () => {
 
       cy.get('button[aria-label="Next"]').click();
       cy.get('button[aria-label="Next"]').click();
+      cy.get('button[aria-label="Next"]').click();
     });
   });
 });

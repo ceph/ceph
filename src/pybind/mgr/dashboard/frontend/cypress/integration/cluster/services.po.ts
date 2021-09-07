@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/services', id: 'cd-services' },
-  create: { url: '#/services/create', id: 'cd-service-form' }
+  create: { url: '#/services/(modal:create)', id: 'cd-service-form' }
 };
 
 export class ServicesPageHelper extends PageHelper {

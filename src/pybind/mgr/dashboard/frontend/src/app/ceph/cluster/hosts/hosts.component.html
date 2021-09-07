@@ -11,7 +11,7 @@
                 columnMode="flex"
                 (fetchData)="getHosts($event)"
                 selectionType="single"
-                [hasDetails]="!clusterCreation"
+                [hasDetails]="hasTableDetails"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)">
         <div class="table-actions btn-toolbar">
@@ -30,7 +30,7 @@
     </ng-template>
   </li>
   <li ngbNavItem
-      *ngIf="permissions.grafana.read && !clusterCreation">
+      *ngIf="permissions.grafana.read">
     <a ngbNavLink
        i18n>Overall Performance</a>
     <ng-template ngbNavContent>

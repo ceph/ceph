@@ -11,6 +11,7 @@ describe('Create Cluster Review page', () => {
 
     cy.get('button[aria-label="Next"]').click();
     cy.get('button[aria-label="Next"]').click();
+    cy.get('button[aria-label="Next"]').click();
   });
 
   describe('navigation link and title test', () => {
@@ -29,18 +30,18 @@ describe('Create Cluster Review page', () => {
       createCluster.getStatusTables().should('contain.text', 'Storage Capacity');
     });
 
-    it('should check Hosts by Label and Host Details tables are present', () => {
+    it('should check Hosts by Services and Host Details tables are present', () => {
       // check for there to be two tables
       createCluster.getDataTables().should('have.length', 2);
 
-      // check for table header 'Hosts by Label'
-      createCluster.getLegends().its(1).should('have.text', 'Hosts by Label');
+      // check for table header 'Hosts by Services'
+      createCluster.getLegends().its(1).should('have.text', 'Hosts by Services');
 
       // check for table header 'Host Details'
       createCluster.getLegends().its(2).should('have.text', 'Host Details');
 
-      // verify correct columns on Hosts by Label table
-      createCluster.getDataTableHeaders(0).contains('Label');
+      // verify correct columns on Hosts by Services table
+      createCluster.getDataTableHeaders(0).contains('Services');
 
       createCluster.getDataTableHeaders(0).contains('Number of Hosts');
 
