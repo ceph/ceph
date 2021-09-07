@@ -24,6 +24,7 @@
 
 #include "mgr/MgrContext.h"
 #include "mgr/TTLCache.h"
+#include "mgr/mgr_perf_counters.h"
 
 // For ::mgr_store_prefix
 #include "PyModule.h"
@@ -169,9 +170,9 @@ PyObject *ActivePyModules::get_daemon_status_python(
 }
 
 void ActivePyModules::update_cache_metrics() {
-  std::pair<int, int> hit_miss_ratio = ttl_cache.get_hit_miss_ratio();
-  set_store("cache", "cache_hit_count", std::to_string(hit_miss_ratio.first));
-  set_store("cache", "cache_miss_count", std::to_string(hit_miss_ratio.second));
+    auto hit_miss_ratio = ttl_cache.get_hit_miss_ratio();
+    perfcounter->set(l_mgr_cache_hit, hit_miss_ratio.first);
+    perfcounter->set(l_mgr_cache_miss, hit_miss_ratio.second);
 }
 
 PyObject *ActivePyModules::get_python(const std::string &what)
@@ -185,6 +186,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       return cached;
     } catch (std::out_of_range& e) {}
   }
+
   PyObject *obj = _get_python(what);
   if(ttl_seconds && ttl_cache.is_allowed(what)) {
     ttl_cache.insert(what, obj);

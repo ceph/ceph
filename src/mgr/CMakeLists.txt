@@ -18,6 +18,7 @@ if(WITH_MGR)
     Gil.cc
     Injector.cc
     Mgr.cc
+    mgr_perf_counters.cc
     MgrStandby.cc
     MetricCollector.cc
     OSDPerfMetricTypes.cc

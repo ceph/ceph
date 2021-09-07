@@ -14,10 +14,11 @@ class TestCache(MgrTestCase):
         self.disable_cache()
 
     def get_hit_miss_ratio(self):
-        get_hit_count = "config-key get mgr/cache/cache_hit_count"
-        get_miss_count = "config-key get mgr/cache/cache_miss_count"
-        h = self.mgr_cluster.mon_manager.raw_cluster_cmd(*(get_hit_count.split(" ")))
-        m = self.mgr_cluster.mon_manager.raw_cluster_cmd(*(get_miss_count.split(" ")))
+        perf_dump_command = f"daemon mgr.{self.mgr_cluster.get_active_id()} perf dump"
+        perf_dump_res = self.mgr_cluster.mon_manager.raw_cluster_cmd(*(perf_dump_command.split(" ")))
+        perf_dump = json.loads(perf_dump_res)
+        h = perf_dump["mgr"]["cache_hit"]
+        m = perf_dump["mgr"]["cache_miss"]
         return int(h), int(m)
 
     def enable_cache(self, ttl):
