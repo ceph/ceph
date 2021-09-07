@@ -5578,7 +5578,7 @@ int BlueStore::_create_alloc()
   return 0;
 }
 
-int BlueStore::_init_alloc()
+int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
 {
   int r = _create_alloc();
   if (r < 0) {
@@ -5616,6 +5616,7 @@ int BlueStore::_init_alloc()
 		 << " device write pointer 0x" << p
 		 << " > bluestore pointer 0x" << zones[i].write_pointer
 		 << ", advancing 0x" << delta << std::dec << dendl;
+	(*zone_adjustments)[zones[i].write_pointer] = delta;
 	zones[i].num_dead_bytes += delta;
 	zones[i].write_pointer = p;
       }
@@ -5633,6 +5634,7 @@ int BlueStore::_init_alloc()
 	    << ", free 0x" << shared_alloc.a->get_free()
 	    << ", fragmentation " << shared_alloc.a->get_fragmentation()
 	    << std::dec << dendl;
+
     return 0;
   }
 #endif
@@ -5690,6 +5692,25 @@ int BlueStore::_init_alloc()
           << std::dec << dendl;
 
   return 0;
+}
+
+void BlueStore::_post_init_alloc(const std::map<uint64_t, uint64_t>& zone_adjustments)
+{
+#ifdef HAVE_LIBZBD
+  assert(bdev->is_smr());
+  dout(1) << __func__ << " adjusting freelist based on device write pointers" << dendl;
+  auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+  ceph_assert(f);
+  KeyValueDB::Transaction t = db->get_transaction();
+  for (auto& i : zone_adjustments) {
+    // allocate AND release since this gap is now dead space
+    // note that the offset is imprecise, but only need to select the zone
+    f->allocate(i.first, i.second, t);
+    f->release(i.first, i.second, t);
+  }
+  int r = db->submit_transaction_sync(t);
+  ceph_assert(r == 0);
+#endif
 }
 
 void BlueStore::_close_alloc()
@@ -6077,6 +6098,10 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
     }
   }
 
+  // SMR devices may require a freelist adjustment, but that can only happen after
+  // the db is read-write. we'll stash pending changes here.
+  std::map<uint64_t, uint64_t> zone_adjustments;
+
   int r = _open_path();
   if (r < 0)
     return r;
@@ -6114,7 +6139,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_db;
 
-  r = _init_alloc();
+  r = _init_alloc(&zone_adjustments);
   if (r < 0)
     goto out_fm;
 
@@ -6128,6 +6153,11 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   r = _open_db(false, to_repair, read_only);
   if (r < 0) {
     goto out_alloc;
+  }
+
+  if (!read_only && !zone_adjustments.empty()) {
+    // for SMR devices that have freelist mismatch with device write pointers
+    _post_init_alloc(zone_adjustments);
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
