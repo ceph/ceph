@@ -295,7 +295,6 @@ BuildRequires:	libbz2-devel
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:  libopenssl-devel
-BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 #BuildRequires:  krb5
 #BuildRequires:  krb5-devel
@@ -320,7 +319,6 @@ BuildRequires:  openldap-devel
 #BuildRequires:  krb5-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
-BuildRequires:  redhat-lsb-core
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-setuptools
 BuildRequires:	python%{python3_pkgversion}-Cython
