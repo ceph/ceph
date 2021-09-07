@@ -151,7 +151,7 @@ void ZonedAllocator::dump(std::function<void(uint64_t offset,
 }
 
 void ZonedAllocator::init_from_zone_pointers(
-  std::vector<zone_state_t> &&_zone_states,
+  std::vector<zone_state_t> _zone_states,
   ceph::mutex *_cleaner_lock,
   ceph::condition_variable *_cleaner_cond)
 {

@@ -5592,7 +5592,36 @@ int BlueStore::_init_alloc()
     ceph_assert(a);
     auto f = dynamic_cast<ZonedFreelistManager*>(fm);
     ceph_assert(f);
-    a->init_from_zone_pointers(f->get_zone_states(db),
+    vector<uint64_t> wp = bdev->get_zones();
+    vector<zone_state_t> zones = f->get_zone_states(db);
+    ceph_assert(wp.size() == zones.size());
+
+    // reconcile zone state
+    auto num_zones = bdev->get_size() / zone_size;
+    for (unsigned i = first_sequential_zone; i < num_zones; ++i) {
+      ceph_assert(wp[i] >= i * zone_size);
+      ceph_assert(wp[i] <= (i + 1) * zone_size); // pos might be at start of next zone
+      uint64_t p = wp[i] - i * zone_size;
+      if (zones[i].write_pointer > p) {
+	derr << __func__ << " zone 0x" << std::hex << i
+	     << " bluestore write pointer 0x" << zones[i].write_pointer
+	     << " > device write pointer 0x" << p
+	     << std::dec << dendl;
+	ceph_abort("bad write pointer");
+      } else if (zones[i].write_pointer < p) {
+	// this is "normal" in that it can happen after any crash (if we have a
+	// write in flight but did not manage to commit the transaction)
+	auto delta = p - zones[i].write_pointer;
+	dout(1) << __func__ << " zone 0x" << std::hex << i
+		 << " device write pointer 0x" << p
+		 << " > bluestore pointer 0x" << zones[i].write_pointer
+		 << ", advancing 0x" << delta << std::dec << dendl;
+	zones[i].num_dead_bytes += delta;
+	zones[i].write_pointer = p;
+      }
+    }
+
+    a->init_from_zone_pointers(zones,
 			       &zoned_cleaner_lock,
 			       &zoned_cleaner_cond);
     dout(1) << __func__

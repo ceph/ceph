@@ -96,7 +96,7 @@ public:
   void mark_zones_to_clean_free(void);
 
   void init_from_zone_pointers(
-    std::vector<zone_state_t> &&_zone_states,
+    std::vector<zone_state_t> _zone_states,
     ceph::mutex *_cleaner_lock,
     ceph::condition_variable *_cleaner_cond);
   void init_add_free(uint64_t offset, uint64_t length) override {}
