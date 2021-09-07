@@ -544,7 +544,10 @@ function init_fork_remote {
 
 function init_github_token {
     github_token="$(from_file github_token)"
-    if [ "$github_token" ] ; then
+    if [ "$GITHUB_TOKEN" ] ; then
+       github_token="$GITHUB_TOKEN"
+	true
+    elif [ "$github_token" ] ; then
         true
     else
         warning "$github_token_file not populated: initiating interactive setup routine"
@@ -554,7 +557,10 @@ function init_github_token {
 
 function init_redmine_key {
     redmine_key="$(from_file redmine_key)"
-    if [ "$redmine_key" ] ; then
+    if [ "$REDMINE_KEY" ] ; then
+      redmine_key="$REDMINE_KEY"
+	true
+    elif [ "$redmine_key" ] ; then
         true
     else
         warning "$redmine_key_file not populated: initiating interactive setup routine"
@@ -1122,7 +1128,10 @@ Options (not needed in normal operation):
                           (explicitly set the component label; if omitted, the
                            script will try to guess the component)
     --debug               (turns on "set -x")
-    --existing-pr BACKPORT_PR_ID
+    --github-user         (github username of the fork)
+    --github-token        (github token of the fork)
+    --redmine-key         (redmine key)
+    --existing-pr         (BACKPORT_PR_ID)
                           (use this when the backport PR is already open)
     --force               (exercise caution!)
     --fork EXPLICIT_FORK  (use EXPLICIT_FORK instead of personal GitHub fork)
@@ -1306,7 +1315,11 @@ function vet_setup {
     local github_token_display
     debug "Entering vet_setup with argument $argument"
     if [ "$argument" = "--report" ] || [ "$argument" = "--normal-operation" ] ; then
-        [ "$github_token" ] && [ "$setup_ok" ] && set_github_user_from_github_token quiet
+        if [[ -n "$GITHUB_USER" ]] ; then
+	  github_user="$GITHUB_USER"
+	else
+          [ "$github_token" ] && [ "$setup_ok" ] && set_github_user_from_github_token quiet
+	fi
         init_upstream_remote
         [ "$github_token" ] && [ "$setup_ok" ] && init_fork_remote
         vet_remotes
@@ -1427,7 +1440,7 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhsv --long "cherry-pick-only,component:,debug,existing-pr:,force,fork:,help,milestones,prepare,setup,setup-report,troubleshooting,update-version,usage,verbose,version" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhsv --long "cherry-pick-only,component:,debug,existing-pr:,force,fork:,github-token:,github-user:,help,milestones,prepare,redmine-key:,setup,setup-report,troubleshooting,update-version,usage,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
@@ -1439,11 +1452,14 @@ EXISTING_PR=""
 EXPLICIT_COMPONENT=""
 EXPLICIT_FORK=""
 FORCE=""
+GITHUB_USER=""
+GITHUB_TOKEN=""
 HELP=""
 INTERACTIVE_SETUP_ROUTINE=""
 ISSUE=""
 PR_PHASE="yes"
 SETUP_OPTION=""
+REDMINE_KEY=""
 TRACKER_PHASE="yes"
 TROUBLESHOOTING_ADVICE=""
 USAGE_ADVICE=""
@@ -1456,9 +1472,12 @@ while true ; do
         --existing-pr) shift ; EXISTING_PR="$1" ; CHERRY_PICK_PHASE="" ; PR_PHASE="" ; shift ;;
         --force) FORCE="$1" ; shift ;;
         --fork) shift ; EXPLICIT_FORK="$1" ; shift ;;
+        --github-user) shift ; GITHUB_USER="$1" ; shift ;;
+        --github-token) shift ; GITHUB_TOKEN="$1" ; shift ;;
         --help|-h) ADVICE="1" ; HELP="$1" ; shift ;;
         --milestones) CHECK_MILESTONES="$1" ; shift ;;
         --prepare) CHERRY_PICK_PHASE="yes" ; PR_PHASE="" ; TRACKER_PHASE="" ; shift ;;
+	--redmine-key) shift ; REDMINE_KEY="$1" ; shift ;;
         --setup*|-s) SETUP_OPTION="$1" ; shift ;;
         --troubleshooting) ADVICE="$1" ; TROUBLESHOOTING_ADVICE="$1" ; shift ;;
         --update-version) update_version_number_and_exit ;;
