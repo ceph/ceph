@@ -42,16 +42,6 @@ static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
          root.first_free_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0;
 }
 
-static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
-  return root.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
-         root.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
-         root.first_valid_entry < root.pool_size &&
-         root.first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
-         root.first_free_entry >= DATA_RING_BUFFER_OFFSET &&
-         root.first_free_entry < root.pool_size &&
-         root.first_free_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0;
-}
-
 template <typename I>
 Builder<AbstractWriteLog<I>>* WriteLog<I>::create_builder() {
   m_builderobj = new Builder<This>();
