@@ -8,14 +8,15 @@ import cherrypy
 
 from .. import DEFAULT_VERSION, mgr
 from ..api.doc import Schema, SchemaInput, SchemaType
-from . import ENDPOINT_MAP, BaseController, Controller, Endpoint
+from . import ENDPOINT_MAP, BaseController, Endpoint, Router
+from ._version import APIVersion
 
 NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
 logger = logging.getLogger('controllers.docs')
 
 
-@Controller('/docs', secure=False)
+@Router('/docs', secure=False)
 class Docs(BaseController):
 
     @classmethod
@@ -465,8 +466,6 @@ if __name__ == "__main__":
 
     import yaml
 
-    from . import generate_routes
-
     def fix_null_descr(obj):
         """
         A hot fix for errors caused by null description values when generating
@@ -476,7 +475,7 @@ if __name__ == "__main__":
         return {k: fix_null_descr(v) for k, v in obj.items() if v is not None} \
             if isinstance(obj, dict) else obj
 
-    generate_routes("/api")
+    Router.generate_routes("/api")
     try:
         with open(sys.argv[1], 'w') as f:
             # pylint: disable=protected-access

@@ -9,8 +9,7 @@ from ..exceptions import DashboardException, RoleAlreadyExists, \
 from ..security import Permission
 from ..security import Scope as SecurityScope
 from ..services.access_control import SYSTEM_ROLES
-from . import ApiController, ControllerDoc, CreatePermission, EndpointDoc, \
-    RESTController, UiApiController
+from . import APIDoc, APIRouter, CreatePermission, EndpointDoc, RESTController, UIRouter
 
 ROLE_SCHEMA = [{
     "name": (str, "Role Name"),
@@ -22,8 +21,8 @@ ROLE_SCHEMA = [{
 }]
 
 
-@ApiController('/role', SecurityScope.USER)
-@ControllerDoc("Role Management API", "Role")
+@APIRouter('/role', SecurityScope.USER)
+@APIDoc("Role Management API", "Role")
 class Role(RESTController):
     @staticmethod
     def _role_to_dict(role):
@@ -139,7 +138,7 @@ class Role(RESTController):
                             role.get('scopes_permissions'))
 
 
-@UiApiController('/scope', SecurityScope.USER)
+@UIRouter('/scope', SecurityScope.USER)
 class Scope(RESTController):
     def list(self):
         return SecurityScope.all_scopes()

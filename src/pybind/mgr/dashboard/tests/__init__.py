@@ -14,8 +14,9 @@ from cherrypy.test import helper
 from mgr_module import HandleCommandResult
 from pyfakefs import fake_filesystem
 
-from .. import DEFAULT_VERSION, mgr
+from .. import mgr
 from ..controllers import generate_controller_routes, json_error_page
+from ..controllers._version import APIVersion
 from ..module import Module
 from ..plugins import PLUGIN_MANAGER, debug, feature_toggles  # noqa
 from ..services.auth import AuthManagerTool

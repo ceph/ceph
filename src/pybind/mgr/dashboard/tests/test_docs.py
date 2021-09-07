@@ -2,14 +2,15 @@
 from __future__ import absolute_import
 
 from ..api.doc import SchemaType
-from ..controllers import ApiController, ControllerDoc, Endpoint, EndpointDoc, RESTController
+from ..controllers import APIDoc, APIRouter, Endpoint, EndpointDoc, RESTController
+from ..controllers._version import APIVersion
 from ..controllers.docs import Docs
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 # Dummy controller and endpoint that can be assigned with @EndpointDoc and @GroupDoc
-@ControllerDoc("Group description", group="FooGroup")
-@ApiController("/doctest/", secure=False)
+@APIDoc("Group description", group="FooGroup")
+@APIRouter("/doctest/", secure=False)
 class DecoratedController(RESTController):
     RESOURCE_ID = 'doctest'
 

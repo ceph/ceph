@@ -15,7 +15,7 @@ import cherrypy
 from cherrypy.lib.static import serve_file
 
 from .. import mgr
-from . import BaseController, Controller, Endpoint, Proxy, UiApiController
+from . import BaseController, Endpoint, Proxy, Router, UIRouter
 
 logger = logging.getLogger("controllers.home")
 
@@ -52,10 +52,10 @@ class LanguageMixin(object):
         self.DEFAULT_LANGUAGE = config['config']['locale']
         self.DEFAULT_LANGUAGE_PATH = os.path.join(mgr.get_frontend_path(),
                                                   self.DEFAULT_LANGUAGE)
-        super(LanguageMixin, self).__init__()
+        super().__init__()
 
 
-@Controller("/", secure=False)
+@Router("/", secure=False)
 class HomeController(BaseController, LanguageMixin):
     LANG_TAG_SEQ_RE = re.compile(r'\s*([^,]+)\s*,?\s*')
     LANG_TAG_RE = re.compile(
@@ -135,7 +135,7 @@ class HomeController(BaseController, LanguageMixin):
         return serve_file(full_path)
 
 
-@UiApiController("/langs", secure=False)
+@UIRouter("/langs", secure=False)
 class LangsController(BaseController, LanguageMixin):
     @Endpoint('GET')
     def __call__(self):

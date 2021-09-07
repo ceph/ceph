@@ -13,8 +13,8 @@ from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, allow_empty_body
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, allow_empty_body
 
 try:
     from typing import Any, List, Optional
@@ -41,8 +41,8 @@ RGW_USER_SCHEMA = {
 }
 
 
-@ApiController('/rgw', Scope.RGW)
-@ControllerDoc("RGW Management API", "Rgw")
+@APIRouter('/rgw', Scope.RGW)
+@APIDoc("RGW Management API", "Rgw")
 class Rgw(BaseController):
     @Endpoint()
     @ReadPermission
@@ -79,8 +79,8 @@ class Rgw(BaseController):
         return status
 
 
-@ApiController('/rgw/daemon', Scope.RGW)
-@ControllerDoc("RGW Daemon Management API", "RgwDaemon")
+@APIRouter('/rgw/daemon', Scope.RGW)
+@APIDoc("RGW Daemon Management API", "RgwDaemon")
 class RgwDaemon(RESTController):
     @EndpointDoc("Display RGW Daemons",
                  responses={200: [RGW_DAEMON_SCHEMA]})
@@ -150,8 +150,8 @@ class RgwRESTController(RESTController):
             raise DashboardException(e, http_status_code=http_status_code, component='rgw')
 
 
-@ApiController('/rgw/site', Scope.RGW)
-@ControllerDoc("RGW Site Management API", "RgwSite")
+@APIRouter('/rgw/site', Scope.RGW)
+@APIDoc("RGW Site Management API", "RgwSite")
 class RgwSite(RgwRESTController):
     def list(self, query=None, daemon_name=None):
         if query == 'placement-targets':
@@ -163,8 +163,8 @@ class RgwSite(RgwRESTController):
         raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
 
 
-@ApiController('/rgw/bucket', Scope.RGW)
-@ControllerDoc("RGW Bucket Management API", "RgwBucket")
+@APIRouter('/rgw/bucket', Scope.RGW)
+@APIDoc("RGW Bucket Management API", "RgwBucket")
 class RgwBucket(RgwRESTController):
     def _append_bid(self, bucket):
         """
@@ -325,8 +325,8 @@ class RgwBucket(RgwRESTController):
         }, json_response=False)
 
 
-@ApiController('/rgw/user', Scope.RGW)
-@ControllerDoc("RGW User Management API", "RgwUser")
+@APIRouter('/rgw/user', Scope.RGW)
+@APIDoc("RGW User Management API", "RgwUser")
 class RgwUser(RgwRESTController):
     def _append_uid(self, user):
         """
