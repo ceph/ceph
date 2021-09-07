@@ -545,8 +545,8 @@ function init_fork_remote {
 function init_github_token {
     github_token="$(from_file github_token)"
     if [ "$GITHUB_TOKEN" ] ; then
-       github_token="$GITHUB_TOKEN"
-	true
+        github_token="$GITHUB_TOKEN"
+        true
     elif [ "$github_token" ] ; then
         true
     else
@@ -558,8 +558,8 @@ function init_github_token {
 function init_redmine_key {
     redmine_key="$(from_file redmine_key)"
     if [ "$REDMINE_KEY" ] ; then
-      redmine_key="$REDMINE_KEY"
-	true
+        redmine_key="$REDMINE_KEY"
+        true
     elif [ "$redmine_key" ] ; then
         true
     else
@@ -1316,10 +1316,10 @@ function vet_setup {
     debug "Entering vet_setup with argument $argument"
     if [ "$argument" = "--report" ] || [ "$argument" = "--normal-operation" ] ; then
         if [[ -n "$GITHUB_USER" ]] ; then
-	  github_user="$GITHUB_USER"
-	else
-          [ "$github_token" ] && [ "$setup_ok" ] && set_github_user_from_github_token quiet
-	fi
+            github_user="$GITHUB_USER"
+        else
+            [ "$github_token" ] && [ "$setup_ok" ] && set_github_user_from_github_token quiet
+        fi
         init_upstream_remote
         [ "$github_token" ] && [ "$setup_ok" ] && init_fork_remote
         vet_remotes
