@@ -12,9 +12,8 @@
         <tr>
           <td i18n
               class="bold">Storage Capacity</td>
-          <td><span i18n
-                    *ngIf="filteredDevices && capacity">Number of devices: {{ filteredDevices.length }}. Raw capacity:
-            {{ capacity | dimlessBinary }}.</span></td>
+          <td><span i18n>Number of devices: {{ totalDevices }}. Raw capacity:
+            {{ totalCapacity | dimlessBinary }}.</span></td>
         </tr>
       </table>
     </fieldset>
@@ -22,9 +21,9 @@
 
   <div class="col-lg-8">
     <legend i18n
-            class="cd-header">Hosts by Label</legend>
-    <cd-table [data]="hostsByLabel['data']"
-              [columns]="hostsByLabel['columns']"
+            class="cd-header">Hosts by Services</legend>
+    <cd-table [data]="hostsByService['data']"
+              [columns]="hostsByService['columns']"
               [toolHeader]="false">
     </cd-table>
 

@@ -256,19 +256,22 @@ export abstract class PageHelper {
    * @param name The string to search in table cells.
    * @param columnIndex If provided, search string in columnIndex column.
    */
-  delete(name: string, columnIndex?: number) {
+  delete(name: string, columnIndex?: number, section?: string) {
     // Selects row
     const getRow = columnIndex
       ? this.getTableCell.bind(this, columnIndex)
       : this.getFirstTableCell.bind(this);
     getRow(name).click();
+    let action: string;
+    section === 'hosts' ? (action = 'remove') : (action = 'delete');
 
-    // Clicks on table Delete button
-    this.clickActionButton('delete');
+    // Clicks on table Delete/Remove button
+    this.clickActionButton(action);
 
-    // Confirms deletion
+    // Convert action to SentenceCase and Confirms deletion
+    const actionUpperCase = action.charAt(0).toUpperCase() + action.slice(1);
     cy.get('cd-modal .custom-control-label').click();
-    cy.contains('cd-modal button', 'Delete').click();
+    cy.contains('cd-modal button', actionUpperCase).click();
 
     // Wait for modal to close
     cy.get('cd-modal').should('not.exist');

@@ -193,8 +193,8 @@ class OrchClient(object):
 
 class OrchFeature(object):
     HOST_LIST = 'get_hosts'
-    HOST_CREATE = 'add_host'
-    HOST_DELETE = 'remove_host'
+    HOST_ADD = 'add_host'
+    HOST_REMOVE = 'remove_host'
     HOST_LABEL_ADD = 'add_host_label'
     HOST_LABEL_REMOVE = 'remove_host_label'
     HOST_MAINTENANCE_ENTER = 'enter_host_maintenance'

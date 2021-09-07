@@ -79,7 +79,7 @@ export class HostsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   delete(hostname: string) {
-    super.delete(hostname, this.columnIndex.hostname);
+    super.delete(hostname, this.columnIndex.hostname, 'hosts');
   }
 
   // Add or remove labels on a host, then verify labels in the table
