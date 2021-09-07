@@ -21,7 +21,6 @@ void WriteLogEntry::init_cache_bl(
 }
 
 buffer::list& WriteLogEntry::get_cache_bl() {
-  std::lock_guard locker(m_entry_bl_lock);
   return cache_bl;
 }
 
