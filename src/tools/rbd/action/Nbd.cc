@@ -74,6 +74,17 @@ int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
     return r;
   }
 
+  if (pool_name.empty()) {
+    // connect to the cluster to get the default pool
+    librados::Rados rados;
+    r = utils::init_rados(&rados);
+    if (r < 0) {
+      return r;
+    }
+
+    utils::normalize_pool_name(&pool_name);
+  }
+
   spec->append(pool_name);
   spec->append("/");
   if (!nspace_name.empty()) {
