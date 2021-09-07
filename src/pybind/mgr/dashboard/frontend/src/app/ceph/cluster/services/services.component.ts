@@ -1,5 +1,7 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { delay } from 'rxjs/operators';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -24,6 +26,7 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { PlacementPipe } from './placement.pipe';
+import { ServiceFormComponent } from './service-form/service-form.component';
 
 const BASE_URL = 'services';
 
@@ -42,9 +45,16 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   // Do not display these columns
   @Input() hiddenColumns: string[] = [];
 
+  @Input() hiddenServices: string[] = [];
+
+  @Input() hasDetails = true;
+
+  @Input() modal = true;
+
   permissions: Permissions;
   tableActions: CdTableAction[];
   showDocPanel = false;
+  bsModalRef: NgbModalRef;
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
@@ -65,7 +75,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     private cephServiceService: CephServiceService,
     private relativeDatePipe: RelativeDatePipe,
     private taskWrapperService: TaskWrapperService,
-    private urlBuilder: URLBuilderService
+    private router: Router
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -73,7 +83,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       {
         permission: 'create',
         icon: Icons.add,
-        routerLink: () => this.urlBuilder.getCreate(),
+        click: () => this.openModal(),
         name: this.actionLabels.CREATE,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
         disable: (selection: CdTableSelection) => this.getDisable('create', selection)
@@ -86,6 +96,15 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         disable: (selection: CdTableSelection) => this.getDisable('delete', selection)
       }
     ];
+  }
+
+  openModal() {
+    if (this.modal) {
+      this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.CREATE] } }]);
+    } else {
+      this.bsModalRef = this.modalService.show(ServiceFormComponent);
+      this.bsModalRef.componentInstance.hiddenServices = this.hiddenServices;
+    }
   }
 
   ngOnInit() {
@@ -156,6 +175,9 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     this.cephServiceService.list().subscribe(
       (services: CephServiceSpec[]) => {
         this.services = services;
+        this.services = this.services.filter((col: any) => {
+          return !this.hiddenServices.includes(col.service_name);
+        });
         this.isLoadingServices = false;
       },
       () => {
