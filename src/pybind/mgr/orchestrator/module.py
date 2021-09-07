@@ -862,7 +862,7 @@ Usage:
             table.right_padding_width = 2
             for osd in sorted(report, key=lambda o: o.osd_id):
                 table.add_row([osd.osd_id, osd.hostname, osd.drain_status_human(),
-                               osd.get_pg_count(), osd.replace, osd.replace, osd.drain_started_at])
+                               osd.get_pg_count(), osd.replace, osd.force, osd.drain_started_at])
             out = table.get_string()
 
         return HandleCommandResult(stdout=out)
