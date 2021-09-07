@@ -283,7 +283,7 @@ class Host(RESTController):
         from_orchestrator = 'orchestrator' in _sources
         return get_hosts(from_ceph, from_orchestrator)
 
-    @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_CREATE])
+    @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_ADD])
     @handle_orchestrator_error('host')
     @host_task('add', {'hostname': '{hostname}'})
     @EndpointDoc('',
@@ -301,9 +301,9 @@ class Host(RESTController):
                status: Optional[str] = None):  # pragma: no cover - requires realtime env
         add_host(hostname, addr, labels, status)
 
-    @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_DELETE])
+    @raise_if_no_orchestrator([OrchFeature.HOST_LIST, OrchFeature.HOST_REMOVE])
     @handle_orchestrator_error('host')
-    @host_task('delete', {'hostname': '{hostname}'})
+    @host_task('remove', {'hostname': '{hostname}'})
     @allow_empty_body
     def delete(self, hostname):  # pragma: no cover - requires realtime env
         orch_client = OrchClient.instance()
