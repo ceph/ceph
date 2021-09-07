@@ -318,8 +318,8 @@ int Image<I>::list_descendants(
       return 0;
     }
     lderr(cct) << "failed to open descendant " << image_id
-                     << " from pool " << io_ctx.get_pool_name() << ":"
-                     << cpp_strerror(r) << dendl;
+               << " from pool " << io_ctx.get_pool_name() << ":"
+               << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -328,8 +328,8 @@ int Image<I>::list_descendants(
   int r1 = ictx->state->close();
   if (r1 < 0) {
     lderr(cct) << "error when closing descendant " << image_id
-                     << " from pool " << io_ctx.get_pool_name() << ":"
-                     << cpp_strerror(r) << dendl;
+               << " from pool " << io_ctx.get_pool_name() << ":"
+               << cpp_strerror(r1) << dendl;
   }
 
   return r;
