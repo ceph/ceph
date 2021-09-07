@@ -18,9 +18,8 @@ from ..services.rbd import RbdConfiguration, RbdService, RbdSnapshotService, \
     format_bitmask, format_features, parse_image_spec, rbd_call, \
     rbd_image_call
 from ..tools import ViewCache, str_to_bool
-from . import ApiController, ControllerDoc, CreatePermission, \
-    DeletePermission, EndpointDoc, RESTController, Task, UpdatePermission, \
-    allow_empty_body
+from . import APIDoc, APIRouter, CreatePermission, DeletePermission, \
+    EndpointDoc, RESTController, Task, UpdatePermission, allow_empty_body
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +65,8 @@ def _sort_features(features, enable=True):
     features.sort(key=key_func, reverse=not enable)
 
 
-@ApiController('/block/image', Scope.RBD_IMAGE)
-@ControllerDoc("RBD Management API", "Rbd")
+@APIRouter('/block/image', Scope.RBD_IMAGE)
+@APIDoc("RBD Management API", "Rbd")
 class Rbd(RESTController):
 
     # set of image features that can be enable on existing images
@@ -264,8 +263,8 @@ class Rbd(RESTController):
         return rbd_call(pool_name, namespace, rbd_inst.trash_move, image_name, delay)
 
 
-@ApiController('/block/image/{image_spec}/snap', Scope.RBD_IMAGE)
-@ControllerDoc("RBD Snapshot Management API", "RbdSnapshot")
+@APIRouter('/block/image/{image_spec}/snap', Scope.RBD_IMAGE)
+@APIDoc("RBD Snapshot Management API", "RbdSnapshot")
 class RbdSnapshot(RESTController):
 
     RESOURCE_ID = "snapshot_name"
@@ -355,8 +354,8 @@ class RbdSnapshot(RESTController):
         rbd_call(pool_name, namespace, _parent_clone)
 
 
-@ApiController('/block/image/trash', Scope.RBD_IMAGE)
-@ControllerDoc("RBD Trash Management API", "RbdTrash")
+@APIRouter('/block/image/trash', Scope.RBD_IMAGE)
+@APIDoc("RBD Trash Management API", "RbdTrash")
 class RbdTrash(RESTController):
     RESOURCE_ID = "image_id_spec"
 
@@ -447,8 +446,8 @@ class RbdTrash(RESTController):
                         int(str_to_bool(force)))
 
 
-@ApiController('/block/pool/{pool_name}/namespace', Scope.RBD_IMAGE)
-@ControllerDoc("RBD Namespace Management API", "RbdNamespace")
+@APIRouter('/block/pool/{pool_name}/namespace', Scope.RBD_IMAGE)
+@APIDoc("RBD Namespace Management API", "RbdNamespace")
 class RbdNamespace(RESTController):
 
     def __init__(self):

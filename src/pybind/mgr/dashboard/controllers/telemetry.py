@@ -3,7 +3,7 @@
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController
+from . import APIDoc, APIRouter, EndpointDoc, RESTController
 
 REPORT_SCHEMA = {
     "report": ({
@@ -200,8 +200,8 @@ REPORT_SCHEMA = {
 }
 
 
-@ApiController('/telemetry', Scope.CONFIG_OPT)
-@ControllerDoc("Display Telemetry Report", "Telemetry")
+@APIRouter('/telemetry', Scope.CONFIG_OPT)
+@APIDoc("Display Telemetry Report", "Telemetry")
 class Telemetry(RESTController):
 
     @RESTController.Collection('GET')
