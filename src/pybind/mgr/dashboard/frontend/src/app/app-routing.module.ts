@@ -122,7 +122,8 @@ const routes: Routes = [
       },
       {
         path: 'services',
-        canActivateChild: [ModuleStatusGuardService],
+        component: ServicesComponent,
+        canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'orchestrator',
@@ -134,11 +135,10 @@ const routes: Routes = [
           breadcrumbs: 'Cluster/Services'
         },
         children: [
-          { path: '', component: ServicesComponent },
           {
             path: URLVerbs.CREATE,
             component: ServiceFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
+            outlet: 'modal'
           }
         ]
       },
