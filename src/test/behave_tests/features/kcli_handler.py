@@ -92,7 +92,7 @@ def execute_kcli_cmd(command):
         print(f"Error executing kcli command\n{ex}")
 
     op = proc.stderr if proc.stderr else proc.stdout
-    return (op, proc.returncode)
+    return (op.replace('\b', ''), proc.returncode)
 
 
 def execute_ssh_cmd(config, vm_name, shell, command):
@@ -112,4 +112,4 @@ def execute_ssh_cmd(config, vm_name, shell, command):
         print(f"Error executing ssh command: {ex}")
 
     op = proc.stderr if proc.stderr else proc.stdout
-    return (op, proc.returncode)
+    return (op.replace('\b', ''), proc.returncode)

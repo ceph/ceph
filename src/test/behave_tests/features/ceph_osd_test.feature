@@ -99,7 +99,7 @@ Feature: Tests related to OSD creation
         """
     Then Execute in cephadm_shell and save output as rbd_map_op
         """
-        rbd map test_pool/test_image -- specialtid admin -k /etc/ceph/ceph.keyring
+        rbd map test_pool/test_image --id admin -k /etc/ceph/ceph.keyring
         """
     Then Using output I execute in host
         """
@@ -110,7 +110,7 @@ Feature: Tests related to OSD creation
         Discarding device blocks: done
         Allocating group tables: done
         Writing inode tables: done
-        Creating journal : done
+        Creating journal done
         Writing superblocks and filesystem accounting information: done
         """
     Then I execute in host
@@ -122,11 +122,9 @@ Feature: Tests related to OSD creation
         sudo mount <exec_output:rbd_map_op> /mnt/ceph-block-device
         """
     Then I execute in host
-        # ---------------------REQUIRED command to create files wth large sizes---------------------------{copy files command}
         """
         df -h
         """
-
     Then I get results which contain
         """
         Filesystem      Size  Used Avail Use% Mounted on
