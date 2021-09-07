@@ -5544,7 +5544,7 @@ int BlueStore::_create_alloc()
   return 0;
 }
 
-int BlueStore::_init_alloc()
+int BlueStore::_init_alloc(bool read_only)
 {
   int r = _create_alloc();
   if (r < 0) {
@@ -5564,6 +5564,7 @@ int BlueStore::_init_alloc()
 
     // reconcile zone state
     auto num_zones = bdev->get_size() / zone_size;
+    map<uint32_t, uint64_t> zone_adjustments;
     for (unsigned i = first_sequential_zone; i < num_zones; ++i) {
       ceph_assert(wp[i] >= i * zone_size);
       ceph_assert(wp[i] <= (i + 1) * zone_size); // pos might be at start of next zone
@@ -5582,6 +5583,7 @@ int BlueStore::_init_alloc()
 		 << " device write pointer 0x" << p
 		 << " > bluestore pointer 0x" << zones[i].write_pointer
 		 << ", advancing 0x" << delta << std::dec << dendl;
+	zone_adjustments[i] = delta;
 	zones[i].num_dead_bytes += delta;
 	zones[i].write_pointer = p;
       }
@@ -5599,6 +5601,17 @@ int BlueStore::_init_alloc()
 	    << ", free 0x" << shared_alloc.a->get_free()
 	    << ", fragmentation " << shared_alloc.a->get_fragmentation()
 	    << std::dec << dendl;
+
+    if (!read_only && !zone_adjustments.empty()) {
+      dout(1) << __func__ << " adjusting freelist based on device write pointers" << dendl;
+      KeyValueDB::Transaction t = db->get_transaction();
+      for (auto& i : zone_adjustments) {
+	// note that the offset is imprecise, but only need to select the zone
+	f->allocate(i.first * zone_size, i.second, t);
+      }
+      db->submit_transaction_sync(t);
+    }
+
     return 0;
   }
 #endif
@@ -6080,7 +6093,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_db;
 
-  r = _init_alloc();
+  r = _init_alloc(read_only);
   if (r < 0)
     goto out_fm;
 
