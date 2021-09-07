@@ -307,8 +307,7 @@ int main(int argc, char* argv[])
           auto store = crimson::os::FuturizedStore::create(
             local_conf().get_val<std::string>("osd_objectstore"),
             local_conf().get_val<std::string>("osd_data"),
-            local_conf().get_config_values(),
-            app.alien());
+            local_conf().get_config_values());
 
           osd.start_single(whoami, nonce,
                            std::ref(*store),
