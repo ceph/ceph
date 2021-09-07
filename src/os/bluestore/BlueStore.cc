@@ -563,6 +563,24 @@ static int get_key_pool_stat(const string& key, uint64_t* pool_id)
   return 0;
 }
 
+#ifdef HAVE_LIBZBD
+static void get_zone_offset_key(uint32_t zone, uint64_t offset, std::string *key)
+{
+  key->clear();
+  _key_encode_u32(zone, key);
+  _key_encode_u64(offset, key);
+}
+
+static int get_key_zone_offset(const string& key, uint32_t *zone, uint64_t *offset)
+{
+  const char *p = key.c_str();
+  if (key.length() < sizeof(uint64_t) + sizeof(uint32_t) + ENCODED_KEY_PREFIX_LEN + 1)
+    return -1;
+  _key_decode_u32(p, zone);
+  _key_decode_u64(p, offset);
+  return 0;
+}
+#endif
 
 template <int LogLevelV>
 void _dump_extent_map(CephContext *cct, const BlueStore::ExtentMap &em)
@@ -611,6 +629,10 @@ void _dump_onode(CephContext *cct, const BlueStore::Onode& o)
 		  << ", " << o.extent_map.spanning_blob_map.size()
 		  << " spanning blobs"
 		  << dendl;
+  for (auto& [zone, offset] : o.onode.zone_offset_refs) {
+    dout(LogLevelV) << __func__ << " zone ref 0x" << std::hex << zone
+		    << " offset 0x" << offset << std::dec << dendl;
+  }
   for (auto p = o.onode.attrs.begin();
        p != o.onode.attrs.end();
        ++p) {
@@ -11885,45 +11907,6 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
       l_bluestore_commit_lat));
 }
 
-#ifdef HAVE_LIBZBD
-// For every object we maintain <zone_num+oid, offset> tuple in the
-// PREFIX_ZONED_CL_INFO namespace.  When a new object written to a zone, we
-// insert the corresponding tuple to the database.  When an object is truncated,
-// we remove the corresponding tuple.  When an object is overwritten, we remove
-// the old tuple and insert a new tuple corresponding to the new location of the
-// object.  The cleaner can now identify live objects within the zone <zone_num>
-// by enumerating all the keys starting with <zone_num> prefix.
-void BlueStore::_zoned_update_cleaning_metadata(TransContext *txc) {
-  for (const auto &[o, offsets] : txc->zoned_onode_to_offset_map) {
-    for (auto offset : offsets) {
-      if (offset > 0) {
-	bufferlist offset_bl;
-	encode(offset, offset_bl);
-        txc->t->set(PREFIX_ZONED_CL_INFO, _zoned_key(offset, &o->oid), offset_bl);
-      } else {
-        txc->t->rmkey(PREFIX_ZONED_CL_INFO, _zoned_key(-offset, &o->oid));
-      }
-    }
-  }
-}
-
-// Given an offset and possibly an oid, returns a key of the form zone_num+oid.
-std::string BlueStore::_zoned_key(uint64_t offset, const ghobject_t *oid) {
-  uint64_t zone_num = offset / bdev->get_zone_size();
-  std::string zone_key;
-  _key_encode_u64(zone_num, &zone_key);
-
-  if (!oid)
-    return zone_key;
-
-  std::string object_key;
-  get_object_key(cct, *oid, &object_key);
-
-  return zone_key + object_key;
-}
-
-#endif
-
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 {
   dout(20) << __func__ << " txc " << txc << std::hex
@@ -11974,7 +11957,28 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 
 #ifdef HAVE_LIBZBD
   if (bdev->is_smr()) {
-    _zoned_update_cleaning_metadata(txc);
+    for (auto& i : txc->old_zone_offset_refs) {
+      for (auto& j : i.second) {
+	dout(20) << __func__ << " rm ref zone 0x" << std::hex << j.first
+		 << " offset 0x" << j.second << std::dec << dendl;
+	string key;
+	get_zone_offset_key(j.first, j.second, &key);
+	txc->t->rmkey(PREFIX_ZONED_CL_INFO, key);
+      }
+    }
+    for (auto& i : txc->new_zone_offset_refs) {
+      for (auto& j : i.second) {
+	// (zone, offset) -> oid
+	dout(20) << __func__ << " add ref zone 0x" << std::hex << j.first
+		 << " offset 0x" << j.second << std::dec
+		 << " -> " << i.first->oid << dendl;
+	string key;
+	get_zone_offset_key(j.first, j.second, &key);
+	bufferlist v;
+	encode(i.first->oid, v);
+	txc->t->set(PREFIX_ZONED_CL_INFO, key, v);
+      }
+    }
   }
 #endif
 
@@ -14650,6 +14654,26 @@ void BlueStore::_wctx_finish(
   WriteContext *wctx,
   set<SharedBlob*> *maybe_unshared_blobs)
 {
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    for (auto& w : wctx->writes) {
+      for (auto& e : w.b->get_blob().get_extents()) {
+	if (!e.is_valid()) {
+	  continue;
+	}
+	uint32_t zone = e.offset / zone_size;
+	if (!o->onode.zone_offset_refs.count(zone)) {
+	  uint64_t zoff = e.offset % zone_size;
+	  dout(20) << __func__ << " add ref zone 0x" << std::hex << zone
+		   << " offset 0x" << zoff << std::dec << dendl;
+	  txc->note_write_zone_offset(o, zone, zoff);
+	}
+      }
+    }
+  }
+  set<uint32_t> zones_with_releases;
+#endif
+
   auto oep = wctx->old_extents.begin();
   while (oep != wctx->old_extents.end()) {
     auto &lo = *oep;
@@ -14677,6 +14701,12 @@ void BlueStore::_wctx_finish(
 	  b->shared_blob->put_ref(
 	    e.offset, e.length, &final,
 	    unshare_ptr);
+#ifdef HAVE_LIBZBD
+	  // we also drop zone ref for shared blob extents
+	  if (bdev->is_smr() && e.is_valid()) {
+	    zones_with_releases.insert(e.offset / zone_size);
+	  }
+#endif
 	}
 	if (unshare) {
 	  ceph_assert(maybe_unshared_blobs);
@@ -14703,6 +14733,11 @@ void BlueStore::_wctx_finish(
       if (blob.is_compressed()) {
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
+#ifdef HAVE_LIBZBD
+      if (bdev->is_smr() && e.is_valid()) {
+	zones_with_releases.insert(e.offset / zone_size);
+      }
+#endif
     }
 
     if (b->is_spanning() && !b->is_referenced() && lo.blob_empty) {
@@ -14712,6 +14747,29 @@ void BlueStore::_wctx_finish(
     }
     delete &lo;
   }
+
+#ifdef HAVE_LIBZBD
+  if (!zones_with_releases.empty()) {
+    // we need to fault the entire extent range in here to determinte if we've dropped
+    // all refs to a zone.
+    o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+    for (auto& b : o->extent_map.extent_map) {
+      for (auto& e : b.blob->get_blob().get_extents()) {
+	if (e.is_valid()) {
+	  zones_with_releases.erase(e.offset / zone_size);
+	}
+      }
+    }
+    for (auto zone : zones_with_releases) {
+      auto p = o->onode.zone_offset_refs.find(zone);
+      if (p != o->onode.zone_offset_refs.end()) {
+	dout(20) << __func__ << " rm ref zone 0x" << std::hex << zone
+		 << " offset 0x" << p->second << std::dec << dendl;
+	txc->note_release_zone_offset(o, zone, p->second);
+      }
+    }
+  }
+#endif
 }
 
 void BlueStore::_do_write_data(
@@ -14973,17 +15031,6 @@ int BlueStore::_do_write(
 			  min_alloc_size);
   }
 
-#ifdef HAVE_LIBZBD
-  if (bdev->is_smr()) {
-    if (wctx.old_extents.empty()) {
-      txc->zoned_note_new_object(o);
-    } else {
-      int64_t old_ondisk_offset = wctx.old_extents.begin()->r.begin()->offset;
-      txc->zoned_note_updated_object(o, old_ondisk_offset);
-    }
-  }
-#endif
-  
   // NB: _wctx_finish() will empty old_extents
   // so we must do gc estimation before that
   _wctx_finish(txc, c, o, &wctx);
@@ -15117,16 +15164,6 @@ void BlueStore::_do_truncate(
     o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
     o->extent_map.dirty_range(offset, length);
 
-#ifdef HAVE_LIBZBD
-    if (bdev->is_smr()) {
-      // On zoned devices, we currently support only removing an object or
-      // truncating it to zero size, both of which fall through this code path.
-      ceph_assert(offset == 0 && !wctx.old_extents.empty());
-      int64_t ondisk_offset = wctx.old_extents.begin()->r.begin()->offset;
-      txc->zoned_note_truncated_object(o, ondisk_offset);
-    }
-#endif
-    
     _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
 
     // if we have shards past EOF, ask for a reshard

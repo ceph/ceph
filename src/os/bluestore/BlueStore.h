@@ -1603,16 +1603,13 @@ public:
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
 #ifdef HAVE_LIBZBD
-    // A map from onode to a vector of object offset.  For new objects created
-    // in the transaction we append the new offset to the vector, for
-    // overwritten objects we append the negative of the previous ondisk offset
-    // followed by the new offset, and for truncated objects we append the
-    // negative of the previous ondisk offset.  We need to maintain a vector of
-    // offsets because *within the same transaction* an object may be truncated
-    // and then written again, or an object may be overwritten multiple times to
-    // different zones.  See _zoned_update_cleaning_metadata function for how
-    // this map is used.
-    std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
+    // zone refs to add/remove.  each zone ref is a (zone, offset) tuple.  The offset
+    // is the first offset in the zone that the onode touched; subsequent writes
+    // to that zone do not generate additional refs.  This is a bit imprecise but
+    // is sufficient to generate reasonably sequential reads when doing zone
+    // cleaning with less metadata than a ref for every extent.
+    std::map<OnodeRef, std::map<uint32_t, uint64_t>> new_zone_offset_refs;
+    std::map<OnodeRef, std::map<uint32_t, uint64_t>> old_zone_offset_refs;
 #endif
     
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
@@ -1688,28 +1685,13 @@ public:
     }
 
 #ifdef HAVE_LIBZBD
-    void zoned_note_new_object(OnodeRef &o) {
-      auto [_, ok] = zoned_onode_to_offset_map.emplace(
-	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->zoned_get_ondisk_starting_offset()}));
-      ceph_assert(ok);
+    void note_write_zone_offset(OnodeRef& o, uint32_t zone, uint64_t offset) {
+      o->onode.zone_offset_refs[zone] = offset;
+      new_zone_offset_refs[o][zone] = offset;
     }
-
-    void zoned_note_updated_object(OnodeRef &o, int64_t prev_offset) {
-      int64_t new_offset = o->zoned_get_ondisk_starting_offset();
-      auto [it, ok] = zoned_onode_to_offset_map.emplace(
-	  std::pair<OnodeRef, std::vector<int64_t>>(o, {-prev_offset, new_offset}));
-      if (!ok) {
-	it->second.push_back(-prev_offset);
-	it->second.push_back(new_offset);
-      }
-    }
-
-    void zoned_note_truncated_object(OnodeRef &o, int64_t offset) {
-      auto [it, ok] = zoned_onode_to_offset_map.emplace(
-	    std::pair<OnodeRef, std::vector<int64_t>>(o, {-offset}));
-      if (!ok) {
-	it->second.push_back(-offset);
-      }
+    void note_release_zone_offset(OnodeRef& o, uint32_t zone, uint64_t offset) {
+      old_zone_offset_refs[o][zone] = offset;
+      o->onode.zone_offset_refs.erase(zone);
     }
 #endif
 
@@ -2420,12 +2402,6 @@ private:
 
   int _setup_block_symlink_or_file(std::string name, std::string path, uint64_t size,
 				   bool create);
-
-#ifdef HAVE_LIBZBD
-  // Functions related to zoned storage.
-  void _zoned_update_cleaning_metadata(TransContext *txc);
-  std::string _zoned_key(uint64_t offset, const ghobject_t *oid);
-#endif
 
 public:
   utime_t get_deferred_last_submitted() {
