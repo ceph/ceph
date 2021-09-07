@@ -8,7 +8,7 @@
             selectionType="single"
             [autoReload]="5000"
             (fetchData)="getServices($event)"
-            [hasDetails]="true"
+            [hasDetails]="hasDetails"
             (setExpandedRow)="setExpandedRow($event)"
             (updateSelection)="updateSelection($event)">
     <cd-table-actions class="table-actions"
@@ -22,3 +22,4 @@
     </cd-service-details>
   </cd-table>
 </ng-container>
+<router-outlet name="modal"></router-outlet>

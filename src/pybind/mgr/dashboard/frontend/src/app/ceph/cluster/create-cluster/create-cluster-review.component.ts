@@ -2,8 +2,10 @@ import { Component, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { InventoryDevice } from '../inventory/inventory-devices/inventory-device.model';
 
@@ -15,15 +17,21 @@ import { InventoryDevice } from '../inventory/inventory-devices/inventory-device
 export class CreateClusterReviewComponent implements OnInit {
   hosts: object[] = [];
   hostsDetails: object;
-  hostsByLabel: object;
+  hostsByService: object;
   hostsCount: number;
-  labelOccurrences = {};
-  hostsCountPerLabel: object[] = [];
-  uniqueLabels: Set<string> = new Set();
+  serviceCount: number;
+  serviceOccurrences = {};
+  hostsCountPerService: object[] = [];
+  uniqueServices: Set<string> = new Set();
   filteredDevices: InventoryDevice[] = [];
   capacity = 0;
+  services: Array<CephServiceSpec> = [];
 
-  constructor(private hostService: HostService, public wizardStepService: WizardStepsService) {}
+  constructor(
+    public wizardStepsService: WizardStepsService,
+    public cephServiceService: CephServiceService,
+    public hostService: HostService
+  ) {}
 
   ngOnInit() {
     this.hostsDetails = {
@@ -45,11 +53,11 @@ export class CreateClusterReviewComponent implements OnInit {
       ]
     };
 
-    this.hostsByLabel = {
+    this.hostsByService = {
       columns: [
         {
-          prop: 'label',
-          name: $localize`Labels`,
+          prop: 'service_type',
+          name: $localize`Services`,
           flexGrow: 1,
           cellTransformation: CellTemplate.badge,
           customTemplateConfig: {
@@ -58,36 +66,39 @@ export class CreateClusterReviewComponent implements OnInit {
         },
         {
           name: $localize`Number of Hosts`,
-          prop: 'hosts_per_label',
+          prop: 'hosts_per_service',
           flexGrow: 1
         }
       ]
     };
 
+    this.cephServiceService.list().subscribe((resp: Array<CephServiceSpec>) => {
+      this.services = resp;
+      this.serviceCount = this.services.length;
+
+      _.forEach(this.services, (serviceKey) => {
+        this.serviceOccurrences[serviceKey['service_type']] =
+          (this.serviceOccurrences[serviceKey['service_type']] || 0) + 1;
+        this.uniqueServices.add(serviceKey['service_type']);
+      });
+
+      this.uniqueServices.forEach((serviceType) => {
+        this.hostsCountPerService.push({
+          service_type: serviceType,
+          hosts_per_service: this.serviceOccurrences[serviceType]
+        });
+      });
+
+      this.hostsByService['data'] = [...this.hostsCountPerService];
+    });
+
     this.hostService.list().subscribe((resp: object[]) => {
       this.hosts = resp;
       this.hostsCount = this.hosts.length;
-
-      _.forEach(this.hosts, (hostKey) => {
-        const labels = hostKey['labels'];
-        _.forEach(labels, (label) => {
-          this.labelOccurrences[label] = (this.labelOccurrences[label] || 0) + 1;
-          this.uniqueLabels.add(label);
-        });
-      });
-
-      this.uniqueLabels.forEach((label) => {
-        this.hostsCountPerLabel.push({
-          label: label,
-          hosts_per_label: this.labelOccurrences[label]
-        });
-      });
-
-      this.hostsByLabel['data'] = [...this.hostsCountPerLabel];
       this.hostsDetails['data'] = [...this.hosts];
     });
 
-    this.filteredDevices = this.wizardStepService.osdDevices;
-    this.capacity = this.wizardStepService.osdCapacity;
+    this.filteredDevices = this.wizardStepsService.osdDevices;
+    this.capacity = this.wizardStepsService.osdCapacity;
   }
 }
