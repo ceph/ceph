@@ -24,7 +24,7 @@ Kcli_Config = {
 }
 
 Bootstrap_Config = {
-    "configure_osd": False
+    "configure_osd": True
 }
 
 
