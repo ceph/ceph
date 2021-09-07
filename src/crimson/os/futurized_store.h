@@ -15,10 +15,6 @@
 #include "include/uuid.h"
 #include "osd/osd_types.h"
 
-namespace seastar::alien {
-class instance;
-}
-
 namespace ceph::os {
 class Transaction;
 }
@@ -57,8 +53,7 @@ public:
 
   static std::unique_ptr<FuturizedStore> create(const std::string& type,
                                                 const std::string& data,
-                                                const ConfigValues& values,
-                                                seastar::alien::instance& alien);
+                                                const ConfigValues& values);
   FuturizedStore() = default;
   virtual ~FuturizedStore() = default;
 
