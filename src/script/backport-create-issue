@@ -40,6 +40,7 @@ project_name = "Ceph"
 release_id = 16
 delay_seconds = 5
 redmine_key_file="~/.redmine_key"
+redmine_key = None
 #
 # NOTE: release_id is hard-coded because
 # http://www.redmine.org/projects/redmine/wiki/Rest_CustomFields
@@ -59,7 +60,7 @@ resolve_parent = None
 
 def usage():
     logging.error("Redmine credentials are required to perform this operation. "
-                  "Please provide either a Redmine key (via %s) "
+                  "Please provide either a Redmine key (via %s) or as --redmine-key "
                   "or a Redmine username and password (via --user and --password). "
                   "Optionally, one or more issue numbers can be given via positional "
                   "argument(s). In the absence of positional arguments, the script "
@@ -68,7 +69,8 @@ def usage():
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("issue_numbers", nargs='*', help="Issue number")
+    parser.add_argument("issue_numbers", nargs='*', help="Issue number in format issue_id or issue_id:original_pr")
+    parser.add_argument("--redmine-key", help="Redmine API key")
     parser.add_argument("--user", help="Redmine user")
     parser.add_argument("--password", help="Redmine password")
     parser.add_argument("--resolve-parent", help="Resolve parent issue if all backports resolved/rejected",
@@ -109,8 +111,10 @@ def connect_to_redmine(a):
             redmine_key = f.read().strip()
     except FileNotFoundError:
         pass
-
-    if a.user and a.password:
+    if a.redmine_key:
+        logging.info("Using Redmine key from arguments")
+        return Redmine(redmine_endpoint, key=a.redmine_key)
+    elif a.user and a.password:
         logging.info("Redmine username and password were provided; using them")
         return Redmine(redmine_endpoint, username=a.user, password=a.password)
     elif redmine_key:
@@ -178,7 +182,8 @@ def update_relations(r, issue, dry_run):
     global resolve_parent
     relations = r.issue_relation.filter(issue_id=issue['id'])
     existing_backports = set()
-    existing_backports_dict = {}
+    existing_backports_list = {}
+    backports_list = set()
     for relation in relations:
         other = r.issue.get(relation['issue_to_id'])
         if other['tracker']['name'] != 'Backport':
@@ -196,13 +201,13 @@ def update_relations(r, issue, dry_run):
                           " backport issue detected")
             continue
         existing_backports.add(release)
-        existing_backports_dict[release] = relation['issue_to_id']
+        existing_backports_list[release] = relation['issue_to_id']
         logging.debug(url(issue) + " backport to " + release + " is " +
             redmine_endpoint + "/issues/" + str(relation['issue_to_id']))
     if existing_backports == issue['backports']:
         logging.debug(url(issue) + " has all the required backport issues")
         if resolve_parent:
-            maybe_resolve(issue, existing_backports_dict, dry_run)
+            maybe_resolve(issue, existing_backports_list, dry_run)
         return None
     if existing_backports.issuperset(issue['backports']):
         logging.error(url(issue) + " has more backport issues (" +
@@ -233,8 +238,10 @@ def update_relations(r, issue, dry_run):
         r.issue_relation.create(issue_id=issue['id'],
                                 issue_to_id=other['id'],
                                 relation_type='copied_to')
+        backports_list.add(str(other['id']))
         logging.info(url(issue) + " added backport to " +
                      release + " " + url(other))
+    logging.info("backport_tracker_ids: %s", ",".join(backports_list))
     return None
 
 def maybe_resolve(issue, backports, dry_run):
@@ -284,7 +291,7 @@ def iterate_over_backports(r, issues, dry_run=False):
         counter += 1
         logging.debug("{} ({}) {}".format(issue.id, issue.project,
             issue.subject))
-        print('Examining issue#{} ({}/{})\r'.format(issue.id, counter, len(issues)), end='', flush=True)
+        logging.info('Examining issue#%s (%d/%d)\r', issue.id, counter, len(issues))
         if not has_tracker(r, issue['project']['id'], 'Backport'):
             logging.info("{} skipped because the project {} does not "
                 "have a Backport tracker".format(url(issue),
@@ -317,6 +324,16 @@ if __name__ == '__main__':
     populate_tracker_dict(redmine)
     force_create = False
     if args.issue_numbers:
+        for i, issue in enumerate(args.issue_numbers):
+            logging.debug("issue_test: {} {}".format(issue, i))
+            if ":" in issue:
+                issue_id, pr_id = issue.split(":")
+                # magic number for pull request id custom field(21)
+                out = redmine.issue.update(int(issue_id),
+                        status_id=pending_backport_status_id,
+                        custom_fields=[{'id': 21, 'value': int(pr_id)},],)
+                args.issue_numbers[i] = issue_id
+
         issue_list = ','.join(args.issue_numbers)
         logging.info("Processing issue list ->{}<-".format(issue_list))
         if args.force:
