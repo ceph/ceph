@@ -4,16 +4,16 @@ from ..exceptions import DashboardException
 from ..grafana import GrafanaRestClient, push_local_dashboards
 from ..security import Scope
 from ..settings import Settings
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, ReadPermission, UpdatePermission
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    ReadPermission, UpdatePermission
 
 URL_SCHEMA = {
     "instance": (str, "grafana instance")
 }
 
 
-@ApiController('/grafana', Scope.GRAFANA)
-@ControllerDoc("Grafana Management API", "Grafana")
+@APIRouter('/grafana', Scope.GRAFANA)
+@APIDoc("Grafana Management API", "Grafana")
 class Grafana(BaseController):
     @Endpoint()
     @ReadPermission

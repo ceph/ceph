@@ -6,7 +6,7 @@ import cherrypy
 from ..security import Scope
 from ..settings import Options
 from ..settings import Settings as SettingsModule
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController, UiApiController
+from . import APIDoc, APIRouter, EndpointDoc, RESTController, UIRouter
 
 SETTINGS_SCHEMA = [{
     "name": (str, 'Settings Name'),
@@ -16,8 +16,8 @@ SETTINGS_SCHEMA = [{
 }]
 
 
-@ApiController('/settings', Scope.CONFIG_OPT)
-@ControllerDoc("Settings Management API", "Settings")
+@APIRouter('/settings', Scope.CONFIG_OPT)
+@APIDoc("Settings Management API", "Settings")
 class Settings(RESTController):
     """
     Enables to manage the settings of the dashboard (not the Ceph cluster).
@@ -102,7 +102,7 @@ class Settings(RESTController):
                 setattr(SettingsModule, self._to_native(name), value)
 
 
-@UiApiController('/standard_settings')
+@UIRouter('/standard_settings')
 class StandardSettings(RESTController):
     def list(self):
         """

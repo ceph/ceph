@@ -4,7 +4,7 @@ import json
 
 from .. import mgr
 from ..security import Scope
-from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc, ReadPermission
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, ReadPermission
 
 MONITOR_SCHEMA = {
     "mon_status": ({
@@ -98,8 +98,8 @@ MONITOR_SCHEMA = {
 }
 
 
-@ApiController('/monitor', Scope.MONITOR)
-@ControllerDoc("Get Monitor Details", "Monitor")
+@APIRouter('/monitor', Scope.MONITOR)
+@APIDoc("Get Monitor Details", "Monitor")
 class Monitor(BaseController):
     @Endpoint()
     @ReadPermission

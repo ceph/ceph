@@ -10,15 +10,15 @@ try:
 except ImportError:
     from unittest.mock import patch
 
-from ..controllers import ApiController, APIVersion, BaseController, \
-    Controller, Proxy, RESTController
+from ..controllers import APIRouter, BaseController, Proxy, RESTController, Router
+from ..controllers._version import APIVersion
 from ..services.exception import handle_rados_error
 from ..tools import dict_contains_path, dict_get, json_str_to_object, partial_dict
 from . import ControllerTestCase  # pylint: disable=no-name-in-module
 
 
 # pylint: disable=W0613
-@Controller('/foo', secure=False)
+@Router('/foo', secure=False)
 class FooResource(RESTController):
     elems = []
 
@@ -43,20 +43,20 @@ class FooResource(RESTController):
         return dict(key=key, newdata=newdata)
 
 
-@Controller('/foo/:key/:method', secure=False)
+@Router('/foo/:key/:method', secure=False)
 class FooResourceDetail(RESTController):
     def list(self, key, method):
         return {'detail': (key, [method])}
 
 
-@ApiController('/rgw/proxy', secure=False)
+@APIRouter('/rgw/proxy', secure=False)
 class GenerateControllerRoutesController(BaseController):
     @Proxy()
     def __call__(self, path, **params):
         pass
 
 
-@ApiController('/fooargs', secure=False)
+@APIRouter('/fooargs', secure=False)
 class FooArgs(RESTController):
     def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}

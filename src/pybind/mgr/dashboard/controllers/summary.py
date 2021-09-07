@@ -8,7 +8,7 @@ from ..exceptions import ViewCacheNoDataException
 from ..security import Permission, Scope
 from ..services import progress
 from ..tools import TaskManager
-from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc
 
 SUMMARY_SCHEMA = {
     "health_status": (str, ""),
@@ -37,8 +37,8 @@ SUMMARY_SCHEMA = {
 }
 
 
-@ApiController('/summary')
-@ControllerDoc("Get Ceph Summary Details", "Summary")
+@APIRouter('/summary')
+@APIDoc("Get Ceph Summary Details", "Summary")
 class Summary(BaseController):
     def _health_status(self):
         health_data = mgr.get("health")
