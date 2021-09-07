@@ -85,7 +85,7 @@ void WriteLog<I>::collect_read_extents(
   ldout(m_image_ctx.cct, 5) << dendl;
   auto write_entry = static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
   buffer::list hit_bl;
-  hit_bl = write_entry->get_cache_bl();
+  write_entry->copy_cache_bl(&hit_bl);
   bool writesame = write_entry->is_writesame_entry();
   auto hit_extent_buf = std::make_shared<ImageExtentBuf>(
       hit_extent, hit_bl, true, read_buffer_offset, writesame);

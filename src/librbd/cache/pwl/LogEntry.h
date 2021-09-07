@@ -219,7 +219,6 @@ public:
   BlockExtent block_extent();
   virtual unsigned int reader_count() const = 0;
   /* Constructs a new bl containing copies of cache_bp */
-  void copy_cache_bl(bufferlist *out_bl) override {};
   bool can_retire() const override {
     return (this->completed && this->get_flushed() && (0 == reader_count()));
   }

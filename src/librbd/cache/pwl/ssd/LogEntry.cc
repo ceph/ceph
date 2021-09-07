@@ -24,6 +24,11 @@ buffer::list& WriteLogEntry::get_cache_bl() {
   return cache_bl;
 }
 
+void  WriteLogEntry::copy_cache_bl(bufferlist *out) {
+  std::lock_guard locker(m_entry_bl_lock);
+  *out = cache_bl;
+}
+
 void WriteLogEntry::remove_cache_bl() {
     std::lock_guard locker(m_entry_bl_lock);
     cache_bl.clear();
