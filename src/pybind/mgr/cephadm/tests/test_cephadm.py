@@ -839,23 +839,55 @@ spec:
                 with with_daemon(cephadm_module, spec, 'test'):
                     pass
 
-    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_daemon_add_fail(self, _run_cephadm, cephadm_module):
-        _run_cephadm.return_value = '{}', '', 0
-        with with_host(cephadm_module, 'test'):
-            spec = ServiceSpec(
+    @pytest.mark.parametrize(
+        "entity,success,spec",
+        [
+            ('mgr.x', True, ServiceSpec(
                 service_type='mgr',
                 placement=PlacementSpec(hosts=[HostPlacementSpec('test', '', 'x')], count=1),
-                unmanaged=True
-            )
+                unmanaged=True)
+            ),  # noqa: E124
+            ('client.rgw.x', True, ServiceSpec(
+                service_type='rgw',
+                service_id='id',
+                placement=PlacementSpec(hosts=[HostPlacementSpec('test', '', 'x')], count=1),
+                unmanaged=True)
+            ),  # noqa: E124
+            ('client.nfs.x', True, ServiceSpec(
+                service_type='nfs',
+                service_id='id',
+                placement=PlacementSpec(hosts=[HostPlacementSpec('test', '', 'x')], count=1),
+                unmanaged=True)
+            ),  # noqa: E124
+            ('mon.', False, ServiceSpec(
+                service_type='mon',
+                placement=PlacementSpec(hosts=[HostPlacementSpec('test', '127.0.0.0/24', 'x')], count=1),
+                unmanaged=True)
+            ),  # noqa: E124
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
+    @mock.patch("cephadm.services.nfs.NFSService.purge", mock.MagicMock())
+    @mock.patch("cephadm.services.nfs.NFSService.create_rados_config_obj", mock.MagicMock())
+    def test_daemon_add_fail(self, _run_cephadm, entity, success, spec, cephadm_module):
+        _run_cephadm.return_value = '{}', '', 0
+        with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec):
                 _run_cephadm.side_effect = OrchestratorError('fail')
                 with pytest.raises(OrchestratorError):
                     wait(cephadm_module, cephadm_module.add_daemon(spec))
-                cephadm_module.assert_issued_mon_command({
-                    'prefix': 'auth rm',
-                    'entity': 'mgr.x',
-                })
+                if success:
+                    cephadm_module.assert_issued_mon_command({
+                        'prefix': 'auth rm',
+                        'entity': entity,
+                    })
+                else:
+                    with pytest.raises(AssertionError):
+                        cephadm_module.assert_issued_mon_command({
+                            'prefix': 'auth rm',
+                            'entity': entity,
+                        })
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
@@ -1300,6 +1332,46 @@ Traceback (most recent call last):
                               '--config-json', '-', '--osd-fsid', 'uuid'],
                           stdin=mock.ANY, image=''),
             ]
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_osd_activate_datadevice_fail(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test', refresh_hosts=False):
+            cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+                'osds': [
+                    {
+                        'osd': 1,
+                        'up_from': 0,
+                        'uuid': 'uuid'
+                    }
+                ]
+            })
+
+            ceph_volume_lvm_list = {
+                '1': [{
+                    'tags': {
+                        'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                        'ceph.osd_fsid': 'uuid'
+                    },
+                    'type': 'data'
+                }]
+            }
+            _run_cephadm.reset_mock(return_value=True)
+
+            def _r_c(*args, **kwargs):
+                if 'ceph-volume' in args:
+                    return (json.dumps(ceph_volume_lvm_list), '', 0)
+                else:
+                    assert 'deploy' in args
+                    raise OrchestratorError("let's fail somehow")
+            _run_cephadm.side_effect = _r_c
+            assert cephadm_module._osd_activate(
+                ['test']).stderr == "let's fail somehow"
+            with pytest.raises(AssertionError):
+                cephadm_module.assert_issued_mon_command({
+                    'prefix': 'auth rm',
+                    'entity': 'osd.1',
+                })
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_osd_activate_datadevice_dbdevice(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
