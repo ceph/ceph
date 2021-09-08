@@ -323,8 +323,19 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 	t,
 	laddr).si_then([=, &t] (LBAPinRef pin) -> inner_ret {
 	  ceph_assert(pin->get_laddr() == laddr);
-	  ceph_assert(pin->get_length() == (extent_len_t)len);
 	  if (pin->get_paddr() == addr) {
+	    if (pin->get_length() != (extent_len_t)len) {
+	      ERRORT(
+		"Invalid pin laddr {} paddr {} len {} found for "
+		"extent laddr {} len{}",
+		t,
+		pin->get_laddr(),
+		pin->get_paddr(),
+		pin->get_length(),
+		laddr,
+		len);
+	    }
+	    ceph_assert(pin->get_length() == (extent_len_t)len);
 	    return cache->get_extent_by_type(
 	      t,
 	      type,
