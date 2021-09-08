@@ -12863,7 +12863,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // osd pool delete/rm <poolname> <poolname again> --yes-i-really-really-mean-it
     string poolstr, poolstr2, sure;
     cmd_getval(cmdmap, "pool", poolstr);
-    cmd_getval(cmdmap, "pool2", poolstr2);
+    cmd_getval(cmdmap, "confirm_pool", poolstr2);
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "pool '" << poolstr << "' does not exist";

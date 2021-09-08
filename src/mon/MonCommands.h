@@ -1065,8 +1065,8 @@ COMMAND_WITH_FLAG("osd pool delete "
     FLAG(DEPRECATED))
 COMMAND("osd pool rm "
 	"name=pool,type=CephPoolname "
-	"name=pool2,type=CephPoolname,req=false "
-	"name=yes_i_really_really_mean_it,type=CephBool,req=false "
+	"name=confirm_pool,type=CephPoolname "
+	"name=yes_i_really_really_mean_it,type=CephBool "
 	"name=yes_i_really_really_mean_it_not_faking,type=CephBool,req=false ",
 	"remove pool",
 	"osd", "rw")
