@@ -44,6 +44,12 @@
 :Type:  32-bit Integer
 :Default: ``10``
 
+``mds_dir_max_entries``
+
+:Description: The maximum number of entries before any new entries are rejected
+              with ENOSPC.
+:Type:  64-bit Integer Unsigned
+:Default: ``0``
 
 ``mds_decay_halflife``
 
