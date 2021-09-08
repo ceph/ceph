@@ -9193,34 +9193,84 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         }
       }
       fm->enumerate_reset();
-      size_t count = used_blocks.count();
-      if (used_blocks.size() != count) {
-        ceph_assert(used_blocks.size() > count);
-        used_blocks.flip();
-        size_t start = used_blocks.find_first();
-        while (start != decltype(used_blocks)::npos) {
-	  size_t cur = start;
-	  while (true) {
-	    size_t next = used_blocks.find_next(cur);
-	    if (next != cur + 1) {
-	      ++errors;
-	      derr << "fsck error: leaked extent 0x" << std::hex
-		   << ((uint64_t)start * fm->get_alloc_size()) << "~"
-		   << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
-		   << dendl;
-	      if (repair) {
-	        repairer.fix_leaked(db,
-				    fm,
-				    start * min_alloc_size,
-				    (cur + 1 - start) * min_alloc_size);
-	      }
-	      start = next;
-	      break;
-	    }
-	    cur = next;
+
+#ifdef HAVE_LIBZBD
+      if (freelist_type == "zoned") {
+	// verify per-zone state: count "dead" blocks in zone (neither allocator nor
+	// free space past the write pointer)
+	auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+	used_blocks.flip();
+	auto num_zones = bdev->get_size() / zone_size;
+
+	uint64_t pos = used_blocks.find_first();
+
+	// skip conventional zones
+	while (pos != decltype(used_blocks)::npos &&
+	       (pos * min_alloc_size) / zone_size < first_sequential_zone) {
+	  dout(40) << " (conventional) zone 0x" << std::hex
+		   << (pos * min_alloc_size) / zone_size
+		   << " dead 0x" << (pos * min_alloc_size) << "~" << min_alloc_size
+		   << std::dec << dendl;
+	  pos = used_blocks.find_next(pos);
+	}
+
+	uint64_t zone_dead = 0;
+	for (uint32_t zone = first_sequential_zone;
+	     zone < num_zones;
+	     ++zone, zone_dead = 0) {
+	  while (pos != decltype(used_blocks)::npos &&
+		 (pos * min_alloc_size) / zone_size == zone) {
+	    dout(40) << " zone 0x" << std::hex << zone
+		     << " dead 0x" << (pos * min_alloc_size) << "~" << min_alloc_size
+		     << std::dec << dendl;
+	    zone_dead += min_alloc_size;
+	    pos = used_blocks.find_next(pos);
 	  }
-        }
-        used_blocks.flip();
+	  dout(20) << " zone 0x" << std::hex << zone << " dead is 0x" << zone_dead
+		   << std::dec << dendl;
+	  // cross-check dead bytes against zone state
+	  if (a->get_dead_bytes(zone) != zone_dead) {
+	    derr << "fsck error: zone 0x" << std::hex << zone << " has 0x" << zone_dead
+		 << " dead bytes but freelist says 0x" << a->get_dead_bytes(zone)
+		 << dendl;
+	    ++errors;
+	    // TODO: repair
+	  }
+	}
+	used_blocks.flip();
+      } else
+#endif
+      {
+	// check for leaked extents
+	size_t count = used_blocks.count();
+	if (used_blocks.size() != count) {
+	  ceph_assert(used_blocks.size() > count);
+	  used_blocks.flip();
+	  size_t start = used_blocks.find_first();
+	  while (start != decltype(used_blocks)::npos) {
+	    size_t cur = start;
+	    while (true) {
+	      size_t next = used_blocks.find_next(cur);
+	      if (next != cur + 1) {
+		++errors;
+		derr << "fsck error: leaked extent 0x" << std::hex
+		     << ((uint64_t)start * fm->get_alloc_size()) << "~"
+		     << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
+		     << dendl;
+		if (repair) {
+		  repairer.fix_leaked(db,
+				      fm,
+				      start * min_alloc_size,
+				      (cur + 1 - start) * min_alloc_size);
+		}
+		start = next;
+		break;
+	      }
+	      cur = next;
+	    }
+	  }
+	  used_blocks.flip();
+	}
       }
     }
   }
