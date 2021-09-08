@@ -576,21 +576,3 @@ void RADOS::wait_for_latest_osd_map(std::unique_ptr<Op::Completion> c) {
 
 } // namespace neorados
 
-namespace librados {
-
-MockLRemMemIoCtxImpl& get_mock_io_ctx(neorados::RADOS& rados,
-                                      neorados::IOContext& io_context) {
-  auto& impl = *reinterpret_cast<std::unique_ptr<neorados::detail::Client>*>(
-    &rados);
-  auto io_ctx = impl->get_io_ctx(io_context);
-  ceph_assert(io_ctx != nullptr);
-  return *reinterpret_cast<MockLRemMemIoCtxImpl*>(io_ctx);
-}
-
-MockLRemMemRadosClient& get_mock_rados_client(neorados::RADOS& rados) {
-  auto& impl = *reinterpret_cast<std::unique_ptr<neorados::detail::Client>*>(
-    &rados);
-  return *reinterpret_cast<MockLRemMemRadosClient*>(impl->lrem_rados_client);
-}
-
-} // namespace librados

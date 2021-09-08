@@ -18,7 +18,6 @@
 #include "LRemIoCtxImpl.h"
 #include "LRemRadosClient.h"
 #include "LRemMemCluster.h"
-#include "LRemMemRadosClient.h"
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
 #include <arpa/inet.h>
@@ -33,15 +32,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
-namespace librados {
-
-MockLRemMemIoCtxImpl &get_mock_io_ctx(IoCtx &ioctx) {
-  MockLRemMemIoCtxImpl **mock =
-    reinterpret_cast<MockLRemMemIoCtxImpl **>(&ioctx);
-  return **mock;
-}
-
-} // namespace librados
 
 namespace librados_stub {
 
