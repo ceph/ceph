@@ -566,6 +566,8 @@ class CephadmServe:
                 assert e.hostname
                 try:
                     self._remove_daemon(e.name(), e.hostname)
+                    self.mgr.events.for_daemon(
+                        e.name(), 'INFO', f"Removed duplicated daemon on host '{e.hostname}'")
                 except OrchestratorError as ex:
                     self.mgr.events.from_orch_error(ex)
                     logger.exception(f'failed to remove duplicated daemon {e}')
