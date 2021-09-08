@@ -73,7 +73,6 @@ void SyncPointLogOperation::clear_earlier_sync_point() {
   ceph_assert(sync_point->later_sync_point->earlier_sync_point == sync_point);
   sync_point->later_sync_point->earlier_sync_point = nullptr;
   sync_point->later_sync_point = nullptr;
-  sync_point->log_entry->next_sync_point_entry = nullptr;
 }
 
 std::vector<Context*> SyncPointLogOperation::swap_on_sync_point_persisted() {
