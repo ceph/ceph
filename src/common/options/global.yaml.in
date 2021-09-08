@@ -163,9 +163,7 @@ options:
   type: str
   level: basic
   desc: list of hosts or addresses to search for a monitor
-  long_desc: This is a comma, whitespace, or semicolon separated list of IP addresses
-    or hostnames. Hostnames are resolved via DNS and all A or AAAA records are included
-    in the search list.
+  long_desc: This is a list of IP addresses or hostnames that are separated by commas, whitespace, or semicolons. Hostnames are resolved via DNS. All A and AAAA records are included in the search list.
   services:
   - common
   flags:
@@ -175,11 +173,7 @@ options:
   type: str
   level: advanced
   desc: monitor(s) to use overriding the MonMap
-  fmt_desc: the list of monitors for the cluster to
-    **initially** contact when beginning a new instance of communication with the
-    Ceph cluster.  This overrides the known monitor list derived from MonMap
-    updates sent to older Ceph instances (like librados cluster handles).  It is
-    expected this option is primarily useful for debugging.
+  fmt_desc: This is the list of monitors that the Ceph process **initially** contacts when first establishing communication with the Ceph cluster. This overrides the known monitor list that is derived from MonMap updates sent to older Ceph instances (like librados cluster handles). This option is expected to be useful primarily for debugging.
   services:
   - common
   flags:
