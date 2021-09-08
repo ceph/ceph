@@ -396,8 +396,9 @@ do a full scale e2e run.
 It will verify if everything needed is installed, start a new vstart cluster
 and run the full test suite.
 
-Start all frontend E2E tests by running::
+Start all frontend E2E tests with::
 
+  $ cd src/pybind/mgr/dashboard
   $ ./run-frontend-e2e-tests.sh
 
 Report:
