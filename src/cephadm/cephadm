@@ -3465,12 +3465,12 @@ def _pull_image(ctx, image):
             return
 
         if not any(pattern in err for pattern in ignorelist):
-            raise RuntimeError('Failed command: %s' % cmd_str)
+            raise Error('Failed command: %s' % cmd_str)
 
         logger.info('`%s` failed transiently. Retrying. waiting %s seconds...' % (cmd_str, sleep_secs))
         time.sleep(sleep_secs)
 
-    raise RuntimeError('Failed command: %s: maximum retries reached' % cmd_str)
+    raise Error('Failed command: %s: maximum retries reached' % cmd_str)
 
 ##################################
 

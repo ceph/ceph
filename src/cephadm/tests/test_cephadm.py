@@ -1548,3 +1548,29 @@ class TestRmRepo:
 
         ctx.container_engine = mock_docker()
         cd.command_rm_repo(ctx)
+
+
+class TestPull:
+
+    @mock.patch('time.sleep')
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
+    def test_error(self, get_image_info_from_inspect, call, sleep):
+        ctx = cd.CephadmContext()
+        ctx.container_engine = mock_podman()
+
+        call.return_value = ('', '', 0)
+        retval = cd.command_pull(ctx)
+        assert retval == 0
+
+        err = 'maximum retries reached'
+
+        call.return_value = ('', 'foobar', 1)
+        with pytest.raises(cd.Error) as e:
+            cd.command_pull(ctx)
+        assert err not in str(e.value)
+
+        call.return_value = ('', 'net/http: TLS handshake timeout', 1)
+        with pytest.raises(cd.Error) as e:
+            cd.command_pull(ctx)
+        assert err in str(e.value)
