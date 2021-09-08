@@ -208,7 +208,7 @@ logging_config = {
     'disable_existing_loggers': True,
     'formatters': {
         'cephadm': {
-            'format': '%(asctime)s %(levelname)s %(message)s'
+            'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
         },
     },
     'handlers': {
@@ -8464,7 +8464,7 @@ def cephadm_init(args: List[str]) -> CephadmContext:
         for handler in logger.handlers:
             if handler.name == 'console':
                 handler.setLevel(logging.DEBUG)
-
+    logger.debug('%s\ncephadm %s' % ('-' * 80, args))
     return ctx
 
 
