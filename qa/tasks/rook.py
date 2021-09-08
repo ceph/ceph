@@ -22,6 +22,14 @@ from tasks.cephadm import update_archive_setting
 
 log = logging.getLogger(__name__)
 
+def path_to_examples(ctx, cluster_name : str) -> str:
+    for p in ['rook/deploy/examples/', 'rook/cluster/examples/kubernetes/ceph/']:
+        try: 
+           ctx.rook[cluster_name].remote.get_file(p + 'operator.yaml')
+           return p
+        except:
+            pass 
+    assert False, 'Path to examples not found'
 
 def _kubectl(ctx, config, args, **kwargs):
     cluster_name = config.get('cluster', 'ceph')
@@ -94,8 +102,12 @@ def rook_operator(ctx, config):
     )
 
     # operator.yaml
+    log.info(os.path.abspath(os.getcwd()))
+    object_methods = [method_name for method_name in dir(ctx.rook[cluster_name].remote)
+                  if callable(getattr(ctx.rook[cluster_name].remote, method_name))]
+    log.info(object_methods)
     operator_yaml = ctx.rook[cluster_name].remote.read_file(
-        'rook/cluster/examples/kubernetes/ceph/operator.yaml'
+        (path_to_examples(ctx, cluster_name) + 'operator.yaml')
     )
     rook_image = config.get('rook_image')
     if rook_image:
@@ -111,8 +123,8 @@ def rook_operator(ctx, config):
         log.info('Deploying operator')
         _kubectl(ctx, config, [
             'create',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/crds.yaml',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/common.yaml',
+            '-f', (path_to_examples(ctx, cluster_name) + 'crds.yaml'),
+            '-f', (path_to_examples(ctx, cluster_name) + 'common.yaml'),
             '-f', 'operator.yaml',
         ])
 
@@ -165,11 +177,11 @@ def rook_operator(ctx, config):
             # fails sometimes when deleting some of the CRDs... not sure why!)
             _kubectl(ctx, config, [
                 'delete',
-                '-f', 'rook/cluster/examples/kubernetes/ceph/common.yaml',
+                '-f', (path_to_examples() + 'common.yaml'),
             ])
             _kubectl(ctx, config, [
                 'delete',
-                '-f', 'rook/cluster/examples/kubernetes/ceph/crds.yaml',
+                '-f', (path_to_examples() + 'crds.yaml'),
             ])
         ctx.rook[cluster_name].remote.run(args=['rm', '-rf', 'rook', 'operator.yaml'])
         if op_job:
@@ -409,7 +421,7 @@ def rook_toolbox(ctx, config):
     try:
         _kubectl(ctx, config, [
             'create',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/toolbox.yaml',
+            '-f', (path_to_examples(ctx, cluster_name) + 'toolbox.yaml'),
         ])
 
         log.info('Waiting for tools container to start')
@@ -436,7 +448,7 @@ def rook_toolbox(ctx, config):
     finally:
         _kubectl(ctx, config, [
             'delete',
-            '-f', 'rook/cluster/examples/kubernetes/ceph/toolbox.yaml',
+            '-f', (path_to_examples(ctx, cluster_name) + 'toolbox.yaml'),
         ], check_status=False)
 
 
@@ -492,7 +504,6 @@ def wait_for_osds(ctx, config):
                 log.info(f' have {have}/{want} OSDs')
 
     yield
-
 
 @contextlib.contextmanager
 def ceph_config_keyring(ctx, config):
