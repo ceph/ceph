@@ -566,6 +566,17 @@ private:
       });
   }
 
+  /**
+   * handle_split
+   *
+   * Prepare iter for insertion.  iter should begin pointing at
+   * the valid insertion point (lower_bound(laddr)).
+   *
+   * Upon completion, iter will point at the
+   * position at which laddr should be inserted.  iter may, upon completion,
+   * point at the end of a leaf other than the end leaf if that's the correct
+   * insertion point.
+   */
   using find_insertion_iertr = base_iertr;
   using find_insertion_ret = find_insertion_iertr::future<>;
   static find_insertion_ret find_insertion(
@@ -573,6 +584,16 @@ private:
     laddr_t laddr,
     iterator &iter);
 
+  /**
+   * handle_split
+   *
+   * Split nodes in iter as needed for insertion. First, scan iter from leaf
+   * to find first non-full level.  Then, split from there towards leaf.
+   *
+   * Upon completion, iter will point at the newly split insertion point.  As
+   * with find_insertion, iter's leaf pointer may be end without iter being
+   * end.
+   */
   using handle_split_iertr = base_iertr;
   using handle_split_ret = handle_split_iertr::future<>;
   handle_split_ret handle_split(
