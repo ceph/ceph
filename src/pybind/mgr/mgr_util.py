@@ -13,6 +13,7 @@ import logging
 import sys
 from threading import Lock, Condition, Event
 from typing import no_type_check
+import urllib
 from functools import wraps
 if sys.version_info >= (3, 3):
     from threading import Timer
@@ -20,6 +21,9 @@ else:
     from threading import _Timer as Timer
 
 from typing import Tuple, Any, Callable, Optional, Dict, TYPE_CHECKING, TypeVar, List, Iterable, Generator, Generic, Iterator
+
+from ceph.deployment.utils import wrap_ipv6
+
 T = TypeVar('T')
 
 if TYPE_CHECKING:
@@ -429,6 +433,45 @@ def get_default_addr():
         result = '::' if is_ipv6_enabled() else '0.0.0.0'
         get_default_addr.result = result  # type: ignore
         return result
+
+
+def build_url(host: str, scheme: Optional[str] = None, port: Optional[int] = None, path: str = '') -> str:
+    """
+    Build a valid URL. IPv6 addresses specified in host will be enclosed in brackets
+    automatically.
+
+    >>> build_url('example.com', 'https', 443)
+    'https://example.com:443'
+
+    >>> build_url(host='example.com', port=443)
+    '//example.com:443'
+
+    >>> build_url('fce:9af7:a667:7286:4917:b8d3:34df:8373', port=80, scheme='http')
+    'http://[fce:9af7:a667:7286:4917:b8d3:34df:8373]:80'
+
+    >>> build_url('example.com', 'https', 443, path='/metrics')
+    'https://example.com:443/metrics'
+
+
+    :param scheme: The scheme, e.g. http, https or ftp.
+    :type scheme: str
+    :param host: Consisting of either a registered name (including but not limited to
+                 a hostname) or an IP address.
+    :type host: str
+    :type port: int
+    :rtype: str
+    """
+    netloc = wrap_ipv6(host)
+    if port:
+        netloc += ':{}'.format(port)
+    pr = urllib.parse.ParseResult(
+        scheme=scheme if scheme else '',
+        netloc=netloc,
+        path=path,
+        params='',
+        query='',
+        fragment='')
+    return pr.geturl()
 
 
 class ServerConfigException(Exception):

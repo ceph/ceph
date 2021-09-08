@@ -8,13 +8,11 @@ import re
 import threading
 import time
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT
-from mgr_util import get_default_addr, profile_method
+from mgr_util import get_default_addr, profile_method, build_url
 from rbd import RBD
 from collections import namedtuple
-try:
-    from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List
-except ImportError:
-    pass
+
+from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
@@ -1365,10 +1363,10 @@ class Module(MgrModule):
                                              self.STALE_CACHE_RETURN]:
             self.stale_cache_strategy = self.STALE_CACHE_FAIL
 
-        server_addr = self.get_localized_module_option(
-            'server_addr', get_default_addr())
-        server_port = self.get_localized_module_option(
-            'server_port', DEFAULT_PORT)
+        server_addr = cast(str, self.get_localized_module_option(
+            'server_addr', get_default_addr()))
+        server_port = cast(int, self.get_localized_module_option(
+            'server_port', DEFAULT_PORT))
         self.log.info(
             "server_addr: %s server_port: %s" %
             (server_addr, server_port)
@@ -1380,7 +1378,7 @@ class Module(MgrModule):
         # about to start serving
         if server_addr in ['::', '0.0.0.0']:
             server_addr = self.get_mgr_ip()
-        self.set_uri('http://{0}:{1}/'.format(server_addr, server_port))
+        self.set_uri(build_url(scheme='http', host=server_addr, port=server_port, path='/'))
 
         cherrypy.config.update({
             'server.socket_host': server_addr,

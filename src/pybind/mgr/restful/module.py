@@ -25,6 +25,7 @@ from werkzeug.serving import make_server, make_ssl_devcert
 
 from .hooks import ErrorHook
 from mgr_module import MgrModule, CommandResult
+from mgr_util import build_url
 
 
 class CannotServe(Exception):
@@ -312,10 +313,8 @@ class Module(MgrModule):
 
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        self.set_uri("https://{0}:{1}/".format(
-            self.get_mgr_ip() if server_addr == "::" else server_addr,
-            server_port
-        ))
+        addr = self.get_mgr_ip() if server_addr == "::" else server_addr
+        self.set_uri(build_url(scheme='https', host=addr, port=server_port, path='/'))
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(

@@ -9,12 +9,14 @@ import xml.etree.ElementTree as ET  # noqa: N814
 from distutils.util import strtobool
 from subprocess import SubprocessError
 
+from mgr_util import build_url
+
 from .. import mgr
 from ..awsauth import S3Auth
 from ..exceptions import DashboardException
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
-from ..tools import build_url, dict_contains_path, dict_get, json_str_to_object
+from ..tools import dict_contains_path, dict_get, json_str_to_object
 
 try:
     from typing import Any, Dict, List, Optional, Tuple, Union
@@ -386,10 +388,10 @@ class RgwClient(RestClient):
                            service_url=self.service_url)
 
     def __init__(self,
-                 access_key,
-                 secret_key,
-                 daemon_name,
-                 user_id=None):
+                 access_key: str,
+                 secret_key: str,
+                 daemon_name: str,
+                 user_id: Optional[str] = None) -> None:
         try:
             daemon = RgwClient._daemons[daemon_name]
         except KeyError as error:

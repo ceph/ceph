@@ -23,8 +23,8 @@ if TYPE_CHECKING:
 
 from mgr_module import CLIWriteCommand, HandleCommandResult, MgrModule, \
     MgrStandbyModule, Option, _get_localized_key
-from mgr_util import ServerConfigException, create_self_signed_cert, \
-    get_default_addr, verify_tls_files
+from mgr_util import ServerConfigException, build_url, \
+    create_self_signed_cert, get_default_addr, verify_tls_files
 
 from . import mgr
 from .controllers import generate_routes, json_error_page
@@ -193,13 +193,12 @@ class CherryPyConfig(object):
         self._url_prefix = prepare_url_prefix(self.get_module_option(  # type: ignore
             'url_prefix', default=''))
 
-        uri = "{0}://{1}:{2}{3}/".format(
-            'https' if use_ssl else 'http',
-            server_addr,
-            server_port,
-            self.url_prefix
+        base_url = build_url(
+            scheme='https' if use_ssl else 'http',
+            host=server_addr,
+            port=server_port,
         )
-
+        uri = f'{base_url}{self.url_prefix}/'
         return uri
 
     def await_configuration(self):
