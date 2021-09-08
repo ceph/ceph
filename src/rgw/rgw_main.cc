@@ -53,6 +53,9 @@
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include "rgw_lua.h"
 #endif
+#ifdef WITH_RADOSGW_DBSTORE
+#include "rgw_sal_dbstore.h"
+#endif
 
 #include "services/svc_zone.h"
 
