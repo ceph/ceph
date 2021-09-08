@@ -199,6 +199,7 @@ class TestList(object):
         patched_get_devices.side_effect = _devices_side_effect
 
         result = raw.list.List([]).generate()
+        patched_call.assert_any_call(['lsblk', '--paths', '--output=NAME', '--noheadings', '--list'])
         assert len(result) == 2
 
         sdb = result['sdb-uuid']
