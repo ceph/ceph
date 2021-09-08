@@ -44,7 +44,7 @@ CreateImageRequest<I>::CreateImageRequest(
     const std::string &local_image_name,
     const std::string &local_image_id,
     I *remote_image_ctx,
-    PoolMetaCache* pool_meta_cache,
+    PoolMetaCache<I>* pool_meta_cache,
     cls::rbd::MirrorImageMode mirror_image_mode,
     Context *on_finish)
   : m_threads(threads), m_local_io_ctx(local_io_ctx),

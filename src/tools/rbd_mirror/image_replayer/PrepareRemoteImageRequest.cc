@@ -233,6 +233,12 @@ void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
     *m_state_builder = state_builder;
   }
 
+  dout(10) << "remote_mirror_uuid=" << m_remote_pool_meta.mirror_uuid << ", "
+           << "remote_mirror_peer_uuid="
+           << m_remote_pool_meta.mirror_peer_uuid << ", "
+           << "remote_image_id=" << m_remote_image_id << ", "
+           << "remote_promotion_state=" << m_promotion_state << dendl;
+
   state_builder->remote_mirror_uuid = m_remote_pool_meta.mirror_uuid;
   state_builder->remote_image_id = m_remote_image_id;
   state_builder->remote_promotion_state = m_promotion_state;

@@ -110,7 +110,7 @@ Replayer<I>::Replayer(
     Threads<I>* threads,
     InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
-    PoolMetaCache* pool_meta_cache,
+    PoolMetaCache<I>* pool_meta_cache,
     StateBuilder<I>* state_builder,
     ReplayerListener* replayer_listener)
   : m_threads(threads),
@@ -146,7 +146,8 @@ void Replayer<I>::init(Context* on_finish) {
 
   RemotePoolMeta remote_pool_meta;
   int r = m_pool_meta_cache->get_remote_pool_meta(
-    m_state_builder->remote_image_ctx->md_ctx.get_id(), &remote_pool_meta);
+    m_state_builder->remote_image_ctx->md_ctx.get_id(),
+    m_state_builder->remote_image_peer.uuid, &remote_pool_meta);
   if (r < 0 || remote_pool_meta.mirror_peer_uuid.empty()) {
     derr << "failed to retrieve mirror peer uuid from remote pool" << dendl;
     m_state = STATE_COMPLETE;

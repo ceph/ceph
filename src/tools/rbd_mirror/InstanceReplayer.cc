@@ -39,7 +39,7 @@ InstanceReplayer<I>::InstanceReplayer(
     Threads<I> *threads, ServiceDaemon<I>* service_daemon,
     MirrorStatusUpdater<I>* local_status_updater,
     journal::CacheManagerHandler *cache_manager_handler,
-    PoolMetaCache* pool_meta_cache)
+    PoolMetaCache<I>* pool_meta_cache)
   : m_local_io_ctx(local_io_ctx), m_local_mirror_uuid(local_mirror_uuid),
     m_threads(threads), m_service_daemon(service_daemon),
     m_local_status_updater(local_status_updater),
@@ -114,10 +114,30 @@ void InstanceReplayer<I>::shut_down(Context *on_finish) {
 template <typename I>
 void InstanceReplayer<I>::add_peer(const Peer<I>& peer) {
   dout(10) << "peer=" << peer << dendl;
-
   std::lock_guard locker{m_lock};
+
   auto result = m_peers.insert(peer).second;
-  ceph_assert(result);
+  if (result) {
+    for (auto& kv : m_image_replayers) {
+      kv.second->add_peer(peer);
+    }
+  }
+}
+
+template <typename I>
+void InstanceReplayer<I>::remove_peer(const Peer<I>& peer, Context *on_finish) {
+  dout(10) << "peer=" << peer << dendl;
+  std::lock_guard locker{m_lock};
+
+  auto count = m_peers.erase(peer);
+  ceph_assert(count > 0);
+
+  C_Gather *gather_ctx = new C_Gather(g_ceph_context, on_finish);
+  for (auto& kv : m_image_replayers) {
+    auto ctx = gather_ctx->new_sub();
+    kv.second->remove_peer(peer, ctx);
+  }
+  gather_ctx->activate();
 }
 
 template <typename I>
@@ -156,19 +176,15 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
     auto image_replayer = ImageReplayer<I>::create(
         m_local_io_ctx, m_local_mirror_uuid, global_image_id,
         m_threads, instance_watcher, m_local_status_updater,
-        m_cache_manager_handler, m_pool_meta_cache);
+        m_cache_manager_handler, m_pool_meta_cache, m_peers);
 
     dout(10) << global_image_id << ": creating replayer " << image_replayer
              << dendl;
 
-    it = m_image_replayers.insert(std::make_pair(global_image_id,
-                                                 image_replayer)).first;
-
-    // TODO only a single peer is currently supported
-    ceph_assert(m_peers.size() == 1);
-    auto peer = *m_peers.begin();
-    image_replayer->add_peer(peer);
-    start_image_replayer(image_replayer);
+    m_image_replayers.insert(std::make_pair(global_image_id,
+                                            image_replayer));
+    start_image_replayer(image_replayer, new C_TrackedOp(m_async_op_tracker,
+                                                         nullptr));
   } else {
     // A duplicate acquire notification implies (1) connection hiccup or
     // (2) new leader election. For the second case, restart the replayer to
@@ -219,10 +235,9 @@ void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
 
   auto it = m_image_replayers.find(global_image_id);
   if (it != m_image_replayers.end()) {
-    // TODO only a single peer is currently supported, therefore
-    // we can just interrupt the current image replayer and
-    // it will eventually detect that the peer image is missing and
-    // determine if a delete propagation is required.
+    // Interrupt the current image replayer and it will eventually detect
+    // that the peer image is missing and determine if a delete propagation
+    // is required.
     auto image_replayer = it->second;
     image_replayer->restart(new C_TrackedOp(m_async_op_tracker, nullptr));
   }
@@ -329,16 +344,18 @@ void InstanceReplayer<I>::flush()
 
 template <typename I>
 void InstanceReplayer<I>::start_image_replayer(
-    ImageReplayer<I> *image_replayer) {
+    ImageReplayer<I> *image_replayer, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   std::string global_image_id = image_replayer->get_global_image_id();
   if (!image_replayer->is_stopped()) {
+    m_threads->work_queue->queue(on_finish, 0);
     return;
   } else if (image_replayer->is_blocklisted()) {
     derr << "global_image_id=" << global_image_id << ": blocklisted detected "
          << "during image replay" << dendl;
     m_blocklisted = true;
+    m_threads->work_queue->queue(on_finish, 0);
     return;
   } else if (image_replayer->is_finished()) {
     // TODO temporary until policy integrated
@@ -346,13 +363,15 @@ void InstanceReplayer<I>::start_image_replayer(
             << global_image_id << dendl;
     m_image_replayers.erase(image_replayer->get_global_image_id());
     image_replayer->destroy();
+    m_threads->work_queue->queue(on_finish, 0);
     return;
   } else if (m_manual_stop) {
+    m_threads->work_queue->queue(on_finish, 0);
     return;
   }
 
   dout(10) << "global_image_id=" << global_image_id << dendl;
-  image_replayer->start(new C_TrackedOp(m_async_op_tracker, nullptr), false);
+  image_replayer->start(on_finish, false);
 }
 
 template <typename I>
@@ -378,6 +397,11 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
   uint64_t image_count = 0;
   uint64_t warning_count = 0;
   uint64_t error_count = 0;
+
+  Context *ctx = new LambdaContext([this] (int r) {
+    m_async_op_tracker.finish_op();
+  });
+  C_Gather *gather_ctx = new C_Gather(g_ceph_context, ctx);
   for (auto it = m_image_replayers.begin();
        it != m_image_replayers.end();) {
     auto current_it(it);
@@ -391,7 +415,7 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
       ++error_count;
     }
 
-    start_image_replayer(current_it->second);
+    start_image_replayer(current_it->second, gather_ctx->new_sub());
   }
 
   m_service_daemon->add_or_update_namespace_attribute(
@@ -404,7 +428,7 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
     m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
     SERVICE_DAEMON_ERROR_COUNT_KEY, error_count);
 
-  m_async_op_tracker.finish_op();
+  gather_ctx->activate();
 }
 
 template <typename I>

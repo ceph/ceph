@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 
+#include "tools/rbd_mirror/ClusterWatcher.h"
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/NamespaceReplayer.h"
 #include "tools/rbd_mirror/Throttler.h"
@@ -34,22 +35,29 @@ namespace mirror {
 template <typename> class RemotePoolPoller;
 namespace remote_pool_poller { struct Listener; }
 
-struct PoolMetaCache;
+template <typename> struct PoolMetaCache;
 template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
+template <typename ImageCtxT = librbd::ImageCtx>
+struct RemotePeerRessource {
+  std::unique_ptr<RemotePoolPoller<ImageCtxT>> remote_pool_poller;
+  Peer<ImageCtxT> peer;
+};
 
 /**
- * Controls mirroring for a single remote cluster.
+ * Controls mirroring for a Pool.
  */
 template <typename ImageCtxT = librbd::ImageCtx>
 class PoolReplayer {
 public:
+  typedef ClusterWatcher::Peers Peers;
+  typedef ClusterWatcher::PeerSpecCompare PeerSpecCompare;
   PoolReplayer(Threads<ImageCtxT> *threads,
                ServiceDaemon<ImageCtxT> *service_daemon,
                journal::CacheManagerHandler *cache_manager_handler,
-               PoolMetaCache* pool_meta_cache,
-	       int64_t local_pool_id, const PeerSpec &peer,
+               PoolMetaCache<ImageCtxT>* pool_meta_cache,
+	       int64_t local_pool_id, const Peers &peers,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
   PoolReplayer(const PoolReplayer&) = delete;
@@ -60,6 +68,11 @@ public:
   bool is_running() const;
 
   void init(const std::string& site_name);
+  int update_peers(const Peers& peers);
+  void remove_peer(
+    typename std::map<PeerSpec, RemotePeerRessource<ImageCtxT>>::iterator& kv_it,
+    C_Gather* gather_ctx);
+  int add_peer(const PeerSpec& peer_spec, C_Gather* gather_ctx);
   void shut_down();
 
   void run();
@@ -80,6 +93,14 @@ private:
    *    |
    *    v
    *  INIT
+   *    |
+   *    |---> UPDATE_PEERS
+   *    |         |
+   *    |         |-------------------------> ADD_PEER
+   *    |         | (for every missing peer)
+   *    |         |
+   *    |         \-------------------------> REMOVE_PEER
+   *    |           (for every removed peer)
    *    |
    *    v
    * <follower> <---------------------\
@@ -190,14 +211,15 @@ private:
     m_threads->work_queue->queue(on_lock);
   }
 
-  void handle_remote_pool_meta_updated(const RemotePoolMeta& remote_pool_meta);
+  void handle_remote_pool_meta_updated(const RemotePoolMeta& remote_pool_meta, const PeerSpec& peer);
 
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   journal::CacheManagerHandler *m_cache_manager_handler;
-  PoolMetaCache* m_pool_meta_cache;
+  PoolMetaCache<ImageCtxT>* m_pool_meta_cache;
   int64_t m_local_pool_id = -1;
-  PeerSpec m_peer;
+  Peers m_peers;
+  std::map<PeerSpec, RemotePeerRessource<ImageCtxT>, PeerSpecCompare> m_remote_peers_ressource{};
   std::vector<const char*> m_args;
 
   mutable ceph::mutex m_lock;
@@ -208,16 +230,10 @@ private:
   bool m_blocklisted = false;
 
   RadosRef m_local_rados;
-  RadosRef m_remote_rados;
-
   librados::IoCtx m_local_io_ctx;
-  librados::IoCtx m_remote_io_ctx;
-
   std::string m_local_mirror_uuid;
 
-  RemotePoolMeta m_remote_pool_meta;
   std::unique_ptr<remote_pool_poller::Listener> m_remote_pool_poller_listener;
-  std::unique_ptr<RemotePoolPoller<ImageCtxT>> m_remote_pool_poller;
 
   std::unique_ptr<NamespaceReplayer<ImageCtxT>> m_default_namespace_replayer;
   std::map<std::string, NamespaceReplayer<ImageCtxT> *> m_namespace_replayers;

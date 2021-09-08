@@ -26,7 +26,7 @@ class ProgressContext;
 
 template <typename> class ImageSync;
 template <typename> class InstanceWatcher;
-struct PoolMetaCache;
+template <typename> struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -37,37 +37,36 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class BootstrapRequest : public CancelableRequest {
 public:
   typedef rbd::mirror::ProgressContext ProgressContext;
+  typedef std::set<Peer<ImageCtxT>> Peers;
 
   static BootstrapRequest* create(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
-      librados::IoCtx& remote_io_ctx,
+      Peers peers,
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
-      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
       Context* on_finish) {
     return new BootstrapRequest(
-      threads, local_io_ctx, remote_io_ctx, instance_watcher, global_image_id,
-      local_mirror_uuid, remote_pool_meta, cache_manager_handler,
+      threads, local_io_ctx, peers, instance_watcher,
+      global_image_id, local_mirror_uuid, cache_manager_handler,
       pool_meta_cache, progress_ctx, state_builder, do_resync, on_finish);
   }
 
   BootstrapRequest(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
-      librados::IoCtx& remote_io_ctx,
+      Peers peers,
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
-      const RemotePoolMeta& remote_pool_meta,
       ::journal::CacheManagerHandler* cache_manager_handler,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>** state_builder,
       bool* do_resync,
@@ -89,7 +88,10 @@ private:
    *    v                                           (error)
    * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
    *    |                                                   *
-   *    v                                           (error) *
+   *    |       -----                                       *
+   *    |       |   | (until the primary image is found)    *
+   *    |       |   |                                       *
+   *    v       v   |                               (error) *
    * PREPARE_REMOTE_IMAGE * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                           (error) *
@@ -123,15 +125,15 @@ private:
    */
   Threads<ImageCtxT>* m_threads;
   librados::IoCtx &m_local_io_ctx;
-  librados::IoCtx &m_remote_io_ctx;
+  Peers m_peers;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
-  RemotePoolMeta m_remote_pool_meta;
   ::journal::CacheManagerHandler *m_cache_manager_handler;
-  PoolMetaCache* m_pool_meta_cache;
+  PoolMetaCache<ImageCtxT>* m_pool_meta_cache;
   ProgressContext *m_progress_ctx;
   StateBuilder<ImageCtxT>** m_state_builder;
+  typename std::set<Peer<ImageCtxT>>::iterator m_it_peer;
   bool *m_do_resync;
 
   mutable ceph::mutex m_lock;

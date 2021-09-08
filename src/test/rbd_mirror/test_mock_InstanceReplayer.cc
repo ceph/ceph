@@ -61,6 +61,8 @@ struct InstanceWatcher<librbd::MockTestImageCtx> {
 
 template<>
 struct ImageReplayer<librbd::MockTestImageCtx> {
+  typedef std::set<Peer<librbd::MockTestImageCtx>> Peers;
+
   static ImageReplayer* s_instance;
   std::string global_image_id;
 
@@ -71,7 +73,8 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
       InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
       MirrorStatusUpdater<librbd::MockTestImageCtx>* local_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
-      PoolMetaCache* pool_meta_cache) {
+      PoolMetaCache<librbd::MockTestImageCtx>* pool_meta_cache,
+      Peers peers) {
     ceph_assert(s_instance != nullptr);
     s_instance->global_image_id = global_image_id;
     return s_instance;
@@ -197,7 +200,6 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   // Acquire
 
   C_SaferCond on_acquire;
-  EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blocklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
@@ -268,7 +270,6 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   // Acquire
 
   C_SaferCond on_acquire;
-  EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blocklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
@@ -303,6 +304,7 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   EXPECT_CALL(mock_image_replayer, is_blocklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, destroy());
+  expect_work_queue(mock_threads);
   EXPECT_CALL(mock_service_daemon,
               add_or_update_namespace_attribute(_, _, _, _)).Times(3);
 
@@ -342,7 +344,6 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
 
   // Acquire
 
-  EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blocklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));

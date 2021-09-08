@@ -126,6 +126,33 @@ struct Threads<librbd::MockTestImageCtx> {
   }
 };
 
+template<>
+struct PoolMetaCache<librbd::MockTestImageCtx> {
+  static PoolMetaCache* s_instance;
+
+  MOCK_CONST_METHOD2(get_local_pool_meta, int(int64_t, LocalPoolMeta*));
+  MOCK_METHOD2(set_local_pool_meta, void(int64_t, const LocalPoolMeta&));
+  MOCK_METHOD1(remove_local_pool_meta, void(int64_t));
+
+  MOCK_CONST_METHOD3(get_remote_pool_meta, int(int64_t, const std::string&,
+                                               RemotePoolMeta*));
+  MOCK_METHOD3(set_remote_pool_meta, void(int64_t, const std::string&,
+                                          const RemotePoolMeta&));
+  MOCK_METHOD2(remove_remote_pool_meta, void(int64_t, const std::string&));
+
+  PoolMetaCache(CephContext* cct) {
+    ceph_assert(s_instance == nullptr);
+    s_instance = this;
+  }
+
+  virtual ~PoolMetaCache() {
+    ceph_assert(s_instance == this);
+    s_instance = nullptr;
+  }
+};
+
+PoolMetaCache<librbd::MockTestImageCtx>* PoolMetaCache<librbd::MockTestImageCtx>::s_instance = nullptr;
+
 namespace image_replayer {
 
 template<>
@@ -215,6 +242,7 @@ MATCHER_P(IsSameIoCtx, io_ctx, "") {
 class TestMockImageReplayerCreateImageRequest : public TestMockFixture {
 public:
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
+  typedef PoolMetaCache<librbd::MockTestImageCtx> MockPoolMetaCache;
   typedef librbd::image::CreateRequest<librbd::MockTestImageCtx> MockCreateRequest;
   typedef librbd::image::CloneRequest<librbd::MockTestImageCtx> MockCloneRequest;
   typedef CreateImageRequest<librbd::MockTestImageCtx> MockCreateImageRequest;
@@ -332,6 +360,17 @@ public:
         }));
   }
 
+  void expect_local_pool_meta_cache_get(
+      MockPoolMetaCache& mock_pool_meta_cache,
+      const LocalPoolMeta& expected_meta, int r) {
+    EXPECT_CALL(mock_pool_meta_cache, get_local_pool_meta(_, _))
+      .WillOnce(Invoke(
+          [expected_meta, r](int64_t, LocalPoolMeta* local_pool_meta) {
+        *local_pool_meta = expected_meta;
+        return r;
+      }));
+  }
+
   MockCreateImageRequest *create_request(MockThreads* mock_threads,
                                          const std::string &global_image_id,
                                          const std::string &remote_mirror_uuid,
@@ -348,7 +387,7 @@ public:
                                       on_finish);
   }
 
-  PoolMetaCache m_pool_meta_cache{g_ceph_context};
+  MockPoolMetaCache m_pool_meta_cache{g_ceph_context};
   librbd::ImageCtx *m_remote_image_ctx;
 };
 
@@ -487,9 +526,6 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneParentImageSyncing) {
   ASSERT_EQ(0, open_image(m_remote_io_ctx, clone_image_name,
                &remote_clone_image_ctx));
 
-  m_pool_meta_cache.set_local_pool_meta(
-    m_local_io_ctx.get_id(), {"local parent uuid"});
-
   librbd::MockTestImageCtx mock_remote_parent_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_remote_clone_image_ctx(*remote_clone_image_ctx);
   MockOpenImageRequest mock_open_image_request;
@@ -503,6 +539,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneParentImageSyncing) {
 
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     m_remote_image_ctx->id, mock_remote_parent_image_ctx, 0);
+  expect_local_pool_meta_cache_get(m_pool_meta_cache, {"local parent uuid"}, 0);
   expect_close_image(mock_close_image_request, mock_remote_parent_image_ctx, 0);
 
   C_SaferCond ctx;
@@ -530,9 +567,6 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneError) {
   ASSERT_EQ(0, open_image(m_remote_io_ctx, clone_image_name,
                &remote_clone_image_ctx));
 
-  m_pool_meta_cache.set_local_pool_meta(
-    m_local_io_ctx.get_id(), {"local parent uuid"});
-
   librbd::MockTestImageCtx mock_remote_parent_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_remote_clone_image_ctx(*remote_clone_image_ctx);
   MockCloneRequest mock_clone_request;
@@ -547,8 +581,10 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneError) {
 
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     m_remote_image_ctx->id, mock_remote_parent_image_ctx, 0);
+  expect_local_pool_meta_cache_get(m_pool_meta_cache, {"local parent uuid"}, 0);
   expect_test_op_features(mock_remote_clone_image_ctx, false);
   expect_clone_image(mock_clone_request, -EINVAL);
+
   expect_close_image(mock_close_image_request, mock_remote_parent_image_ctx, 0);
 
   C_SaferCond ctx;
@@ -576,9 +612,6 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneRemoteParentCloseError) {
   ASSERT_EQ(0, open_image(m_remote_io_ctx, clone_image_name,
                &remote_clone_image_ctx));
 
-  m_pool_meta_cache.set_local_pool_meta(
-    m_local_io_ctx.get_id(), {"local parent uuid"});
-
   librbd::MockTestImageCtx mock_remote_parent_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_remote_clone_image_ctx(*remote_clone_image_ctx);
   MockCloneRequest mock_clone_request;
@@ -593,6 +626,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneRemoteParentCloseError) {
 
   expect_open_image(mock_open_image_request, m_remote_io_ctx,
                     m_remote_image_ctx->id, mock_remote_parent_image_ctx, 0);
+  expect_local_pool_meta_cache_get(m_pool_meta_cache, {"local parent uuid"}, 0);
   expect_test_op_features(mock_remote_clone_image_ctx, false);
   expect_clone_image(mock_clone_request, 0);
   expect_close_image(mock_close_image_request, mock_remote_parent_image_ctx,

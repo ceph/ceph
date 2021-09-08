@@ -80,7 +80,7 @@ BaseRequest* StateBuilder<I>::create_local_image_request(
     Threads<I>* threads,
     librados::IoCtx& local_io_ctx,
     const std::string& global_image_id,
-    PoolMetaCache* pool_meta_cache,
+    PoolMetaCache<I>* pool_meta_cache,
     ProgressContext* progress_ctx,
     Context* on_finish) {
   return CreateLocalImageRequest<I>::create(
@@ -105,7 +105,7 @@ image_replayer::Replayer* StateBuilder<I>::create_replayer(
     Threads<I>* threads,
     InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
-    PoolMetaCache* pool_meta_cache,
+    PoolMetaCache<I>* pool_meta_cache,
     ReplayerListener* replayer_listener) {
   return Replayer<I>::create(
     threads, instance_watcher, local_mirror_uuid, pool_meta_cache, this,

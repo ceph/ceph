@@ -55,11 +55,10 @@ bool StateBuilder<I>::is_remote_primary() const {
 
 template <typename I>
 bool StateBuilder<I>::is_linked() const {
-  if (local_promotion_state == librbd::mirror::PROMOTION_STATE_NON_PRIMARY) {
-    ceph_assert(!local_image_id.empty());
-    return is_linked_impl();
-  }
-  return false;
+  return local_promotion_state ==
+            librbd::mirror::PROMOTION_STATE_NON_PRIMARY &&
+         local_primary_mirror_uuid == remote_mirror_uuid &&
+         is_linked_impl();
 }
 
 template <typename I>

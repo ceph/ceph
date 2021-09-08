@@ -18,7 +18,7 @@ namespace librbd { class ImageOptions; }
 namespace rbd {
 namespace mirror {
 
-class PoolMetaCache;
+template <typename> class PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -34,7 +34,7 @@ public:
       const std::string &local_image_name,
       const std::string &local_image_id,
       ImageCtxT *remote_image_ctx,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       cls::rbd::MirrorImageMode mirror_image_mode,
       Context *on_finish) {
     return new CreateImageRequest(threads, local_io_ctx, global_image_id,
@@ -51,7 +51,7 @@ public:
       const std::string &local_image_name,
       const std::string &local_image_id,
       ImageCtxT *remote_image_ctx,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       cls::rbd::MirrorImageMode mirror_image_mode,
       Context *on_finish);
 
@@ -92,7 +92,7 @@ private:
   std::string m_local_image_name;
   std::string m_local_image_id;
   ImageCtxT *m_remote_image_ctx;
-  PoolMetaCache* m_pool_meta_cache;
+  PoolMetaCache<ImageCtxT>* m_pool_meta_cache;
   cls::rbd::MirrorImageMode m_mirror_image_mode;
   Context *m_on_finish;
 

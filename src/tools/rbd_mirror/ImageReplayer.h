@@ -24,7 +24,7 @@ namespace mirror {
 
 template <typename> struct InstanceWatcher;
 template <typename> struct MirrorStatusUpdater;
-struct PoolMetaCache;
+template <typename> struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -36,21 +36,23 @@ template <typename> class StateBuilder;
 } // namespace image_replayer
 
 /**
- * Replays changes from a remote cluster for a single image.
+ * Replays changes for a single image.
  */
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
+  typedef std::set<Peer<ImageCtxT>> Peers;
+
   static ImageReplayer *create(
       librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
       const std::string &global_image_id, Threads<ImageCtxT> *threads,
       InstanceWatcher<ImageCtxT> *instance_watcher,
       MirrorStatusUpdater<ImageCtxT>* local_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
-      PoolMetaCache* pool_meta_cache) {
+      PoolMetaCache<ImageCtxT>* pool_meta_cache, Peers peers) {
     return new ImageReplayer(local_io_ctx, local_mirror_uuid, global_image_id,
                              threads, instance_watcher, local_status_updater,
-                             cache_manager_handler, pool_meta_cache);
+                             cache_manager_handler, pool_meta_cache, peers);
   }
   void destroy() {
     delete this;
@@ -63,7 +65,7 @@ public:
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 MirrorStatusUpdater<ImageCtxT>* local_status_updater,
                 journal::CacheManagerHandler *cache_manager_handler,
-                PoolMetaCache* pool_meta_cache);
+                PoolMetaCache<ImageCtxT>* pool_meta_cache, Peers peers);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -93,6 +95,7 @@ public:
   image_replayer::HealthState get_health_state() const;
 
   void add_peer(const Peer<ImageCtxT>& peer);
+  void remove_peer(const Peer<ImageCtxT>& peer, Context *on_finish);
 
   inline int64_t get_local_pool_id() const {
     return m_local_io_ctx.get_id();
@@ -147,7 +150,6 @@ protected:
   bool on_replay_interrupted();
 
 private:
-  typedef std::set<Peer<ImageCtxT>> Peers;
   typedef std::list<Context *> Contexts;
 
   enum State {
@@ -184,10 +186,7 @@ private:
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
-  PoolMetaCache* m_pool_meta_cache;
-
-  Peers m_peers;
-  Peer<ImageCtxT> m_remote_image_peer;
+  PoolMetaCache<ImageCtxT>* m_pool_meta_cache;
 
   std::string m_local_image_name;
   std::string m_image_spec;
@@ -226,6 +225,8 @@ private:
   AsyncOpTracker m_in_flight_op_tracker;
 
   Context* m_update_status_task = nullptr;
+
+  Peers m_peers;
 
   static std::string to_string(const State state);
 

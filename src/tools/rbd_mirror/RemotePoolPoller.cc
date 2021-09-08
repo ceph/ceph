@@ -218,7 +218,7 @@ void RemotePoolPoller<I>::notify_listener() {
   std::swap(updated, m_updated);
   if (updated) {
     dout(10) << dendl;
-    m_listener.handle_updated(m_remote_pool_meta);
+    m_listener.handle_updated(m_remote_pool_meta, m_peer_spec);
   }
 
   schedule_task(0);

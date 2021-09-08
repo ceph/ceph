@@ -7,6 +7,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/Types.h"
+#include "tools/rbd_mirror/Types.h"
 
 struct Context;
 namespace librbd { struct ImageCtx; }
@@ -16,7 +17,7 @@ namespace mirror {
 
 struct BaseRequest;
 template <typename> class InstanceWatcher;
-struct PoolMetaCache;
+template <typename> struct PoolMetaCache;
 struct ProgressContext;
 template <typename> class Threads;
 
@@ -60,7 +61,7 @@ public:
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
       const std::string& global_image_id,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       ProgressContext* progress_ctx,
       Context* on_finish) = 0;
 
@@ -75,12 +76,14 @@ public:
       Threads<ImageCtxT>* threads,
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& local_mirror_uuid,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       ReplayerListener* replayer_listener) = 0;
 
   std::string global_image_id;
 
   std::string local_image_id;
+  std::string local_primary_mirror_uuid;
+
   librbd::mirror::PromotionState local_promotion_state =
     librbd::mirror::PROMOTION_STATE_UNKNOWN;
   ImageCtxT* local_image_ctx = nullptr;
@@ -90,6 +93,7 @@ public:
   librbd::mirror::PromotionState remote_promotion_state =
     librbd::mirror::PROMOTION_STATE_UNKNOWN;
   ImageCtxT* remote_image_ctx = nullptr;
+  Peer<ImageCtxT> remote_image_peer;
 
 protected:
   image_sync::SyncPointHandler* m_sync_point_handler = nullptr;

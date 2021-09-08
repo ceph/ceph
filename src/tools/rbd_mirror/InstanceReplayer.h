@@ -22,19 +22,20 @@ namespace mirror {
 template <typename> class ImageReplayer;
 template <typename> class InstanceWatcher;
 template <typename> class MirrorStatusUpdater;
-struct PoolMetaCache;
+template <typename> struct PoolMetaCache;
 template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class InstanceReplayer {
 public:
+  typedef std::set<Peer<ImageCtxT>> Peers;
   static InstanceReplayer* create(
       librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
       Threads<ImageCtxT> *threads, ServiceDaemon<ImageCtxT> *service_daemon,
       MirrorStatusUpdater<ImageCtxT>* local_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
-      PoolMetaCache* pool_meta_cache) {
+      PoolMetaCache<ImageCtxT>* pool_meta_cache) {
     return new InstanceReplayer(local_io_ctx, local_mirror_uuid, threads,
                                 service_daemon, local_status_updater,
                                 cache_manager_handler, pool_meta_cache);
@@ -49,7 +50,7 @@ public:
                    ServiceDaemon<ImageCtxT> *service_daemon,
                    MirrorStatusUpdater<ImageCtxT>* local_status_updater,
                    journal::CacheManagerHandler *cache_manager_handler,
-                   PoolMetaCache* pool_meta_cache);
+                   PoolMetaCache<ImageCtxT>* pool_meta_cache);
   ~InstanceReplayer();
 
   bool is_blocklisted() const;
@@ -61,6 +62,7 @@ public:
   void shut_down(Context *on_finish);
 
   void add_peer(const Peer<ImageCtxT>& peer);
+  void remove_peer(const Peer<ImageCtxT>& peer, Context *on_finish);
 
   void acquire_image(InstanceWatcher<ImageCtxT> *instance_watcher,
                      const std::string &global_image_id, Context *on_finish);
@@ -93,16 +95,13 @@ private:
    *
    * @endverbatim
    */
-
-  typedef std::set<Peer<ImageCtxT>> Peers;
-
   librados::IoCtx &m_local_io_ctx;
   std::string m_local_mirror_uuid;
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
-  PoolMetaCache* m_pool_meta_cache;
+  PoolMetaCache<ImageCtxT>* m_pool_meta_cache;
 
   mutable ceph::mutex m_lock;
   AsyncOpTracker m_async_op_tracker;
@@ -116,7 +115,8 @@ private:
   void wait_for_ops();
   void handle_wait_for_ops(int r);
 
-  void start_image_replayer(ImageReplayer<ImageCtxT> *image_replayer);
+  void start_image_replayer(ImageReplayer<ImageCtxT> *image_replayer,
+                            Context *on_finish);
   void queue_start_image_replayers();
   void start_image_replayers(int r);
 

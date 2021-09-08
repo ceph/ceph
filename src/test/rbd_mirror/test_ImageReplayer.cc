@@ -125,12 +125,14 @@ public:
                                                    RBD_MIRROR_MODE_POOL));
       EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_local_ioctx,
                                                    RBD_MIRROR_MODE_POOL));
+      m_pool_meta_cache.set_remote_pool_meta(
+        m_remote_ioctx.get_id(), "peer uuid",
+        {m_remote_mirror_uuid, ""});
     } else {
       EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
                                                    RBD_MIRROR_MODE_IMAGE));
       EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_local_ioctx,
                                                    RBD_MIRROR_MODE_IMAGE));
-
 
       uuid_d uuid_gen;
       uuid_gen.generate_random();
@@ -142,13 +144,14 @@ public:
                           "siteA", "client", m_local_mirror_uuid}));
 
       m_pool_meta_cache.set_remote_pool_meta(
-        m_remote_ioctx.get_id(), {m_remote_mirror_uuid, remote_peer_uuid});
+        m_remote_ioctx.get_id(), "peer uuid",
+        {m_remote_mirror_uuid, remote_peer_uuid});
     }
 
-    EXPECT_EQ(0, librbd::api::Mirror<>::uuid_get(m_remote_ioctx,
-                                                 &m_remote_mirror_uuid));
     EXPECT_EQ(0, librbd::api::Mirror<>::uuid_get(m_local_ioctx,
                                                  &m_local_mirror_uuid));
+    m_pool_meta_cache.set_local_pool_meta(
+      m_local_ioctx.get_id(), {m_local_mirror_uuid});
 
     m_image_name = get_temp_image_name();
     int order = 0;
@@ -187,6 +190,12 @@ public:
     C_SaferCond status_updater_ctx;
     m_local_status_updater->init(&status_updater_ctx);
     EXPECT_EQ(0, status_updater_ctx.wait());
+
+    m_remote_status_updater = MirrorStatusUpdater<>::create(
+      m_remote_ioctx, m_threads.get(), "");
+    C_SaferCond remote_status_updater_ctx;
+    m_remote_status_updater->init(&remote_status_updater_ctx);
+    EXPECT_EQ(0, remote_status_updater_ctx.wait());
   }
 
   ~TestImageReplayer() override
@@ -203,6 +212,11 @@ public:
     EXPECT_EQ(0, status_updater_ctx.wait());
     delete m_local_status_updater;
 
+    C_SaferCond remote_status_updater_ctx;
+    m_remote_status_updater->shut_down(&remote_status_updater_ctx);
+    EXPECT_EQ(0, remote_status_updater_ctx.wait());
+    delete m_remote_status_updater;
+
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
   }
@@ -211,10 +225,9 @@ public:
     m_replayer = new ImageReplayer<>(m_local_ioctx, m_local_mirror_uuid,
                                      m_global_image_id, m_threads.get(),
                                      m_instance_watcher, m_local_status_updater,
-                                     nullptr, &m_pool_meta_cache);
+                                     nullptr, &m_pool_meta_cache, {});
     m_replayer->add_peer({"peer uuid", m_remote_ioctx,
-                         {m_remote_mirror_uuid, "remote mirror peer uuid"},
-                         nullptr});
+                          m_remote_status_updater});
   }
 
   void start()
@@ -544,7 +557,7 @@ public:
 
   static int _image_number;
 
-  PoolMetaCache m_pool_meta_cache{g_ceph_context};
+  PoolMetaCache<librbd::ImageCtx> m_pool_meta_cache{g_ceph_context};
 
   std::shared_ptr<librados::Rados> m_local_cluster;
   std::unique_ptr<Threads<>> m_threads;
@@ -552,6 +565,7 @@ public:
   librados::Rados m_remote_cluster;
   InstanceWatcher<> *m_instance_watcher;
   MirrorStatusUpdater<> *m_local_status_updater;
+  MirrorStatusUpdater<> *m_remote_status_updater;
   std::string m_local_mirror_uuid = "local mirror uuid";
   std::string m_remote_mirror_uuid = "remote mirror uuid";
   std::string m_local_pool_name, m_remote_pool_name;
@@ -679,7 +693,7 @@ TYPED_TEST(TestImageReplayer, BootstrapDemoted)
   this->create_replayer();
   C_SaferCond cond;
   this->m_replayer->start(&cond);
-  ASSERT_EQ(-EREMOTEIO, cond.wait());
+  ASSERT_EQ(-ENOENT, cond.wait());
   ASSERT_TRUE(this->m_replayer->is_stopped());
 }
 
@@ -694,6 +708,29 @@ TYPED_TEST(TestImageReplayer, StartInterrupted)
   // TODO: improve the test to avoid this race
   ASSERT_TRUE(r == -ECANCELED || r == 0);
   ASSERT_EQ(0, stop_cond.wait());
+}
+
+TYPED_TEST(TestImageReplayer, StartRemovePeer)
+{
+  this->create_replayer();
+  C_SaferCond cond;
+  this->m_replayer->remove_peer({"peer uuid", this->m_remote_ioctx,
+                                 this->m_remote_status_updater}, &cond);
+  ASSERT_EQ(0, cond.wait());
+  ASSERT_TRUE(this->m_replayer->is_stopped());
+}
+
+TYPED_TEST(TestImageReplayer, StartRemovePeerInterrupt)
+{
+  this->create_replayer();
+  C_SaferCond start_cond;
+  this->m_replayer->start(&start_cond);
+  ASSERT_TRUE(start_cond.wait() == 0);
+
+  C_SaferCond peer_cond;
+  this->m_replayer->remove_peer({"peer uuid", this->m_remote_ioctx,
+                                 this->m_remote_status_updater}, &peer_cond);
+  ASSERT_EQ(0, peer_cond.wait());
 }
 
 TEST_F(TestImageReplayerJournal, JournalReset)

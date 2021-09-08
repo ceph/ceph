@@ -139,11 +139,7 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
   switch (m_mirror_image.mode) {
   case cls::rbd::MIRROR_IMAGE_MODE_JOURNAL:
     // journal-based local image exists
-    {
-      auto state_builder = journal::StateBuilder<I>::create(m_global_image_id);
-      state_builder->local_primary_mirror_uuid = m_primary_mirror_uuid;
-      *m_state_builder = state_builder;
-    }
+    *m_state_builder = journal::StateBuilder<I>::create(m_global_image_id);
     break;
   case cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT:
     // snapshot-based local image exists
@@ -161,6 +157,7 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
            << "local_primary_mirror_uuid=" << m_primary_mirror_uuid << dendl;
   (*m_state_builder)->local_image_id = m_local_image_id;
   (*m_state_builder)->local_promotion_state = m_promotion_state;
+  (*m_state_builder)->local_primary_mirror_uuid = m_primary_mirror_uuid;
   finish(0);
 }
 

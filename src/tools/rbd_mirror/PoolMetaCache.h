@@ -12,6 +12,7 @@
 namespace rbd {
 namespace mirror {
 
+template <typename ImageCtxT = librbd::ImageCtx>
 class PoolMetaCache {
 public:
   PoolMetaCache(CephContext* cct)
@@ -26,11 +27,11 @@ public:
                            const LocalPoolMeta& local_pool_meta);
   void remove_local_pool_meta(int64_t pool_id);
 
-  int get_remote_pool_meta(int64_t pool_id,
+  int get_remote_pool_meta(int64_t pool_id, const std::string& peer_uuid,
                            RemotePoolMeta* remote_pool_meta) const;
-  void set_remote_pool_meta(int64_t pool_id,
+  void set_remote_pool_meta(int64_t pool_id, const std::string& peer_uuid,
                             const RemotePoolMeta& remote_pool_meta);
-  void remove_remote_pool_meta(int64_t pool_id);
+  void remove_remote_pool_meta(int64_t pool_id, const std::string& peer_uuid);
 
 private:
   CephContext* m_cct;
@@ -38,7 +39,7 @@ private:
   mutable ceph::shared_mutex m_lock =
     ceph::make_shared_mutex("rbd::mirror::PoolMetaCache::m_lock");
   std::map<int64_t, LocalPoolMeta> m_local_pool_metas;
-  std::map<int64_t, RemotePoolMeta> m_remote_pool_metas;
+  std::map<std::pair<int64_t, std::string>, RemotePoolMeta> m_remote_pool_metas;
 };
 
 } // namespace mirror

@@ -55,7 +55,7 @@ public:
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
       const std::string& global_image_id,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       ProgressContext* progress_ctx,
       Context* on_finish) override;
 
@@ -70,7 +70,7 @@ public:
       Threads<ImageCtxT>* threads,
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& local_mirror_uuid,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       ReplayerListener* replayer_listener) override;
 
   SyncPointHandler<ImageCtxT>* sync_point_handler = nullptr;

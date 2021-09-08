@@ -32,6 +32,7 @@ public:
 
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
+  librados::IoCtx m_remote_io_ctx2;
 
   std::string m_image_name;
   uint64_t m_image_size = 1 << 24;
@@ -54,6 +55,7 @@ public:
 
   static std::string _local_pool_name;
   static std::string _remote_pool_name;
+  static std::string _remote_pool_name2;
   static std::shared_ptr<librados::Rados> _rados;
   static uint64_t _image_number;
   static std::string _data_pool;

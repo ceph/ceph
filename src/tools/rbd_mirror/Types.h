@@ -65,6 +65,9 @@ struct LocalPoolMeta {
   }
 
   std::string mirror_uuid;
+  bool operator==(const LocalPoolMeta& rhs) const {
+    return mirror_uuid == rhs.mirror_uuid;
+  }
 };
 
 std::ostream& operator<<(std::ostream& lhs,
@@ -80,37 +83,55 @@ struct RemotePoolMeta {
 
   std::string mirror_uuid;
   std::string mirror_peer_uuid;
+
+  bool operator==(const RemotePoolMeta& rhs) const {
+    return mirror_uuid == rhs.mirror_uuid &&
+           mirror_peer_uuid == rhs.mirror_peer_uuid;
+  }
 };
 
 std::ostream& operator<<(std::ostream& lhs,
                          const RemotePoolMeta& remote_pool_meta);
 
+template<typename I>
+struct PoolWatcher;
+
 template <typename I>
 struct Peer {
   std::string uuid;
   mutable librados::IoCtx io_ctx;
-  RemotePoolMeta remote_pool_meta;
-  MirrorStatusUpdater<I>* mirror_status_updater = nullptr;
+  MirrorStatusUpdater<I>* status_updater = nullptr;
+  PoolWatcher<I>* pool_watcher = nullptr;
+  RadosRef rados = nullptr;
 
   Peer() {
   }
+  Peer(const std::string& uuid): uuid(uuid) {
+  }
   Peer(const std::string& uuid,
        librados::IoCtx& io_ctx,
-       const RemotePoolMeta& remote_pool_meta,
-       MirrorStatusUpdater<I>* mirror_status_updater)
-    : io_ctx(io_ctx),
-      remote_pool_meta(remote_pool_meta),
-      mirror_status_updater(mirror_status_updater) {
+       MirrorStatusUpdater<I>* status_updater = nullptr,
+       PoolWatcher<I>* pool_watcher = nullptr,
+       RadosRef rados = nullptr)
+    : uuid(uuid),
+      io_ctx(io_ctx),
+      status_updater(status_updater),
+      pool_watcher(pool_watcher),
+      rados(rados) {
   }
 
   inline bool operator<(const Peer &rhs) const {
     return uuid < rhs.uuid;
   }
+
+  bool operator==(const Peer& rhs) const {
+    return uuid == rhs.uuid;
+  }
 };
 
 template <typename I>
 std::ostream& operator<<(std::ostream& lhs, const Peer<I>& peer) {
-  return lhs << peer.remote_pool_meta;
+  return lhs << peer.uuid;
 }
 
 struct PeerSpec {

@@ -216,8 +216,10 @@ struct PoolReplayer<I>::RemotePoolPollerListener
     : m_pool_replayer(pool_replayer) {
   }
 
-  void handle_updated(const RemotePoolMeta& remote_pool_meta) override {
-    m_pool_replayer->handle_remote_pool_meta_updated(remote_pool_meta);
+  void handle_updated(const RemotePoolMeta& remote_pool_meta,
+                      const PeerSpec& peer_spec) override {
+    m_pool_replayer->handle_remote_pool_meta_updated(remote_pool_meta,
+                                                     peer_spec);
   }
 };
 
@@ -225,16 +227,17 @@ template <typename I>
 PoolReplayer<I>::PoolReplayer(
     Threads<I> *threads, ServiceDaemon<I> *service_daemon,
     journal::CacheManagerHandler *cache_manager_handler,
-    PoolMetaCache* pool_meta_cache, int64_t local_pool_id,
-    const PeerSpec &peer, const std::vector<const char*> &args) :
+    PoolMetaCache<I>* pool_meta_cache, int64_t local_pool_id,
+    const Peers &peers, const std::vector<const char*> &args) :
   m_threads(threads),
   m_service_daemon(service_daemon),
   m_cache_manager_handler(cache_manager_handler),
   m_pool_meta_cache(pool_meta_cache),
   m_local_pool_id(local_pool_id),
-  m_peer(peer),
+  m_peers(peers),
   m_args(args),
-  m_lock(ceph::make_mutex("rbd::mirror::PoolReplayer " + stringify(peer))),
+  m_lock(ceph::make_mutex("rbd::mirror::PoolReplayer " +
+                          stringify(local_pool_id))),
   m_pool_replayer_thread(this),
   m_leader_listener(this) {
 }
@@ -266,141 +269,287 @@ bool PoolReplayer<I>::is_running() const {
 
 template <typename I>
 void PoolReplayer<I>::init(const std::string& site_name) {
-  std::lock_guard locker{m_lock};
+  {
+    std::lock_guard locker{m_lock};
 
-  ceph_assert(!m_pool_replayer_thread.is_started());
+    ceph_assert(!m_pool_replayer_thread.is_started());
 
-  // reset state
-  m_stopping = false;
-  m_blocklisted = false;
-  m_site_name = site_name;
+    // reset state
+    m_stopping = false;
+    m_blocklisted = false;
+    m_site_name = site_name;
 
-  dout(10) << "replaying for " << m_peer << dendl;
-  int r = init_rados(g_ceph_context->_conf->cluster,
-                     g_ceph_context->_conf->name.to_str(),
-                     "", "", "local cluster", &m_local_rados, false);
+    int r = init_rados(g_ceph_context->_conf->cluster,
+                       g_ceph_context->_conf->name.to_str(),
+                       "", "", "local cluster", &m_local_rados, false);
+    if (r < 0) {
+      m_callout_id = m_service_daemon->add_or_update_callout(
+        m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+        "unable to connect to local cluster");
+      return;
+    }
+
+    r = m_local_rados->ioctx_create2(m_local_pool_id, m_local_io_ctx);
+    if (r < 0) {
+      derr << "error accessing local pool " << m_local_pool_id << ": "
+           << cpp_strerror(r) << dendl;
+      return;
+    }
+
+    auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
+    librbd::api::Config<I>::apply_pool_overrides(m_local_io_ctx, &cct->_conf);
+
+    r = librbd::cls_client::mirror_uuid_get(&m_local_io_ctx,
+                                            &m_local_mirror_uuid);
+    if (r < 0) {
+      derr << "failed to retrieve local mirror uuid from pool "
+           << m_local_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
+      m_callout_id = m_service_daemon->add_or_update_callout(
+        m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+        "unable to query local mirror uuid");
+      return;
+    }
+    m_remote_pool_poller_listener.reset(new RemotePoolPollerListener(this));
+    m_pool_meta_cache->set_local_pool_meta(
+      m_local_io_ctx.get_id(), {m_local_mirror_uuid});
+  }
+
+  int r = update_peers(m_peers);
   if (r < 0) {
+    derr << "failed to update peers " << ": " << cpp_strerror(r) << dendl;
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
-      "unable to connect to local cluster");
+      "failed to updated peers");
     return;
   }
 
-  r = init_rados(m_peer.cluster_name, m_peer.client_name,
-                 m_peer.mon_host, m_peer.key,
-                 std::string("remote peer ") + stringify(m_peer),
-                 &m_remote_rados, true);
-  if (r < 0) {
-    m_callout_id = m_service_daemon->add_or_update_callout(
-      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
-      "unable to connect to remote cluster");
-    return;
-  }
+  {
+    std::lock_guard locker{m_lock};
+    auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
 
-  r = m_local_rados->ioctx_create2(m_local_pool_id, m_local_io_ctx);
-  if (r < 0) {
-    derr << "error accessing local pool " << m_local_pool_id << ": "
-         << cpp_strerror(r) << dendl;
-    return;
-  }
+    m_image_sync_throttler.reset(
+        Throttler<I>::create(cct, "rbd_mirror_concurrent_image_syncs"));
 
+    m_image_deletion_throttler.reset(
+        Throttler<I>::create(cct, "rbd_mirror_concurrent_image_deletions"));
+
+
+    m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
+        "", m_local_io_ctx, m_local_mirror_uuid, m_threads,
+        m_image_sync_throttler.get(), m_image_deletion_throttler.get(),
+        m_service_daemon, m_cache_manager_handler, m_pool_meta_cache));
+
+    C_SaferCond on_init;
+    m_default_namespace_replayer->init(&on_init);
+    int r = on_init.wait();
+    if (r < 0) {
+      derr << "error initializing default namespace replayer: " << cpp_strerror(r)
+           << dendl;
+      m_callout_id = m_service_daemon->add_or_update_callout(
+        m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+        "unable to initialize default namespace replayer");
+      m_default_namespace_replayer.reset();
+      return;
+    }
+
+    C_SaferCond on_add_peer;
+    auto gather_ctx = new C_Gather(cct, &on_add_peer);
+    for (const auto& kv : m_remote_peers_ressource) {
+      m_default_namespace_replayer->add_peer(kv.second.peer,
+                                             gather_ctx->new_sub());
+    }
+    gather_ctx->activate();
+    r = on_add_peer.wait();
+    if (r < 0) {
+      derr << "error adding peers: " << cpp_strerror(r) << dendl;
+      m_callout_id = m_service_daemon->add_or_update_callout(
+        m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+        "unable to add peers");
+      return;
+    }
+
+    m_leader_watcher.reset(LeaderWatcher<I>::create(m_threads, m_local_io_ctx,
+                                                    &m_leader_listener));
+    r = m_leader_watcher->init();
+    if (r < 0) {
+      derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
+      m_callout_id = m_service_daemon->add_or_update_callout(
+        m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+        "unable to initialize leader messenger object");
+      m_leader_watcher.reset();
+      return;
+    }
+
+    if (m_callout_id != service_daemon::CALLOUT_ID_NONE) {
+      m_service_daemon->remove_callout(m_local_pool_id, m_callout_id);
+      m_callout_id = service_daemon::CALLOUT_ID_NONE;
+    }
+
+    m_service_daemon->add_or_update_attribute(
+      m_local_io_ctx.get_id(), SERVICE_DAEMON_INSTANCE_ID_KEY,
+      stringify(m_local_io_ctx.get_instance_id()));
+
+    m_pool_replayer_thread.create("pool replayer");
+  }
+}
+
+template <typename I>
+int PoolReplayer<I>::update_peers(const Peers& peers)
+{
+  dout(20) << "peers=" << peers << dendl;
   auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-  librbd::api::Config<I>::apply_pool_overrides(m_local_io_ctx, &cct->_conf);
 
-  r = librbd::cls_client::mirror_uuid_get(&m_local_io_ctx,
-                                          &m_local_mirror_uuid);
-  if (r < 0) {
-    derr << "failed to retrieve local mirror uuid from pool "
-         << m_local_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
-    m_callout_id = m_service_daemon->add_or_update_callout(
-      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
-      "unable to query local mirror uuid");
-    return;
+  std::lock_guard locker{m_lock};
+  C_SaferCond cond_remove;
+  auto gather_remove_ctx = new C_Gather(cct, &cond_remove);
+
+  m_peers = peers;
+
+  std::set<PeerSpec, PeerSpecCompare> to_remove;
+  // Peer removal
+  for (auto kv_it = m_remote_peers_ressource.begin();
+       kv_it != m_remote_peers_ressource.end(); ++kv_it) {
+    auto peer_it = m_peers.find(kv_it->first);
+    if (peer_it != m_peers.end() && *peer_it == kv_it->first) {
+      continue;
+    }
+
+    to_remove.insert(kv_it->first);
+    remove_peer(kv_it, gather_remove_ctx);
+  }
+  gather_remove_ctx->activate();
+  m_lock.unlock();
+  cond_remove.wait();
+
+  for (const auto& peer_spec : to_remove) {
+    m_remote_peers_ressource.erase(peer_spec);
   }
 
-  r = m_remote_rados->ioctx_create(m_local_io_ctx.get_pool_name().c_str(),
-                                   m_remote_io_ctx);
+  // Peer add
+  m_lock.lock();
+  for (const auto& peer_spec : m_peers) {
+    C_SaferCond cond_add;
+    auto gather_add_ctx = new C_Gather(cct, &cond_add);
+    auto peer_it = m_remote_peers_ressource.find(peer_spec);
+    if (peer_it != m_remote_peers_ressource.end()) {
+      continue;
+    }
+
+    int r = add_peer(peer_spec, gather_add_ctx);
+    if (r < 0) {
+      m_remote_peers_ressource.erase(peer_spec);
+      return r;
+    }
+    gather_add_ctx->activate();
+    m_lock.unlock();
+    r = cond_add.wait();
+    m_lock.lock();
+    if (r < 0) {
+      m_remote_peers_ressource.erase(peer_spec);
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+template <typename I>
+void PoolReplayer<I>::remove_peer(
+    typename std::map<PeerSpec, RemotePeerRessource<I>>::iterator& kv_it,
+    C_Gather* gather_ctx) {
+  dout(10) << "peer_spec=" << kv_it->first << dendl;
+  ceph_assert(ceph_mutex_is_locked(m_lock));
+  if (kv_it->second.remote_pool_poller) {
+    C_SaferCond ctx;
+    kv_it->second.remote_pool_poller->shut_down(&ctx);
+    m_lock.unlock();
+    ctx.wait();
+    m_lock.lock();
+
+    m_pool_meta_cache->remove_remote_pool_meta(
+        kv_it->second.peer.io_ctx.get_id(), kv_it->first.uuid);
+  }
+  for (auto &namespace_replayer : m_namespace_replayers) {
+    namespace_replayer.second->remove_peer(kv_it->second.peer,
+                                           gather_ctx->new_sub());
+  }
+  if (m_default_namespace_replayer) {
+    m_default_namespace_replayer->remove_peer(kv_it->second.peer,
+                                              gather_ctx->new_sub());
+  }
+}
+
+template <typename I>
+int PoolReplayer<I>::add_peer(const PeerSpec& peer_spec, C_Gather* gather_ctx) {
+  dout(10) << "peer_spec=" << peer_spec << dendl;
+  ceph_assert(ceph_mutex_is_locked(m_lock));
+
+  auto result = m_remote_peers_ressource.insert(
+    {peer_spec, std::move(RemotePeerRessource<I>{})});
+  ceph_assert(result.second);
+  RemotePeerRessource<I>* peer_ressource = &result.first->second;
+  Peer<I>* peer = &peer_ressource->peer;
+  peer->uuid = peer_spec.uuid;
+  dout(10) << "init " << *peer << dendl;
+
+  int r = init_rados(peer_spec.cluster_name, peer_spec.client_name,
+                     peer_spec.mon_host, peer_spec.key,
+                     std::string("remote peer ") + stringify(peer_spec),
+                     &peer->rados, true);
+  if (r < 0) {
+      m_callout_id = m_service_daemon->add_or_update_callout(
+        m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+        "unable to connect to remote cluster");
+      goto err;
+  }
+  r = peer->rados->ioctx_create(m_local_io_ctx.get_pool_name().c_str(),
+                                peer->io_ctx);
   if (r < 0) {
     derr << "error accessing remote pool " << m_local_io_ctx.get_pool_name()
          << ": " << cpp_strerror(r) << dendl;
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_WARNING,
       "unable to access remote pool");
-    return;
+    goto err;
   }
 
-  dout(10) << "connected to " << m_peer << dendl;
+  dout(10) << "connected to " << *peer << dendl;
 
-  m_image_sync_throttler.reset(
-      Throttler<I>::create(cct, "rbd_mirror_concurrent_image_syncs"));
-
-  m_image_deletion_throttler.reset(
-      Throttler<I>::create(cct, "rbd_mirror_concurrent_image_deletions"));
-
-  m_remote_pool_poller_listener.reset(new RemotePoolPollerListener(this));
-  m_remote_pool_poller.reset(RemotePoolPoller<I>::create(
-    m_threads, m_remote_io_ctx, m_site_name, m_local_mirror_uuid,
-    *m_remote_pool_poller_listener));
-
-  C_SaferCond on_pool_poller_init;
-  m_remote_pool_poller->init(&on_pool_poller_init);
-  r = on_pool_poller_init.wait();
+  peer_ressource->remote_pool_poller.reset(RemotePoolPoller<I>::create(
+    m_threads, peer->io_ctx, m_site_name, m_local_mirror_uuid,
+    *m_remote_pool_poller_listener, peer_spec));
+  {
+    C_SaferCond on_pool_poller_init;
+    peer_ressource->remote_pool_poller->init(&on_pool_poller_init);
+    r = on_pool_poller_init.wait();
+  }
   if (r < 0) {
     derr << "failed to initialize remote pool poller: " << cpp_strerror(r)
          << dendl;
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
       "unable to initialize remote pool poller");
-    m_remote_pool_poller.reset();
-    return;
+    goto err;
   }
-  ceph_assert(!m_remote_pool_meta.mirror_uuid.empty());
-  m_pool_meta_cache->set_remote_pool_meta(
-    m_remote_io_ctx.get_id(), m_remote_pool_meta);
-  m_pool_meta_cache->set_local_pool_meta(
-    m_local_io_ctx.get_id(), {m_local_mirror_uuid});
-
-  m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
-      "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-      m_remote_pool_meta, m_threads, m_image_sync_throttler.get(),
-      m_image_deletion_throttler.get(), m_service_daemon,
-      m_cache_manager_handler, m_pool_meta_cache));
-
-  C_SaferCond on_init;
-  m_default_namespace_replayer->init(&on_init);
-  r = on_init.wait();
-  if (r < 0) {
-    derr << "error initializing default namespace replayer: " << cpp_strerror(r)
-         << dendl;
-    m_callout_id = m_service_daemon->add_or_update_callout(
-      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
-      "unable to initialize default namespace replayer");
-    m_default_namespace_replayer.reset();
-    return;
+  {
+    RemotePoolMeta remote_pool_meta;
+    ceph_assert(m_pool_meta_cache->get_remote_pool_meta(peer->io_ctx.get_id(),
+      peer_spec.uuid, &remote_pool_meta) == 0);
+    ceph_assert(!remote_pool_meta.mirror_uuid.empty());
+  }
+  for (auto &namespace_replayer : m_namespace_replayers) {
+    namespace_replayer.second->add_peer(*peer, gather_ctx->new_sub());
+  }
+  if (m_default_namespace_replayer) {
+    m_default_namespace_replayer->add_peer(*peer, gather_ctx->new_sub());
   }
 
-  m_leader_watcher.reset(LeaderWatcher<I>::create(m_threads, m_local_io_ctx,
-                                                  &m_leader_listener));
-  r = m_leader_watcher->init();
-  if (r < 0) {
-    derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
-    m_callout_id = m_service_daemon->add_or_update_callout(
-      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
-      "unable to initialize leader messenger object");
-    m_leader_watcher.reset();
-    return;
-  }
+  return 0;
+err:
+  peer_ressource->remote_pool_poller.reset();
+  m_remote_peers_ressource.erase(peer_spec);
 
-  if (m_callout_id != service_daemon::CALLOUT_ID_NONE) {
-    m_service_daemon->remove_callout(m_local_pool_id, m_callout_id);
-    m_callout_id = service_daemon::CALLOUT_ID_NONE;
-  }
-
-  m_service_daemon->add_or_update_attribute(
-    m_local_io_ctx.get_id(), SERVICE_DAEMON_INSTANCE_ID_KEY,
-    stringify(m_local_io_ctx.get_instance_id()));
-
-  m_pool_replayer_thread.create("pool replayer");
+  return r;
 }
 
 template <typename I>
@@ -419,29 +568,35 @@ void PoolReplayer<I>::shut_down() {
   }
   m_leader_watcher.reset();
 
+  C_SaferCond cond_remove;
+  auto gather_ctx = new C_Gather(g_ceph_context, &cond_remove);
+  {
+    std::lock_guard l{m_lock};
+    for (auto kv_it = m_remote_peers_ressource.begin();
+         kv_it != m_remote_peers_ressource.end(); ++kv_it) {
+      remove_peer(kv_it, gather_ctx);
+    }
+  }
+  gather_ctx->activate();
+  cond_remove.wait();
+
   if (m_default_namespace_replayer) {
     C_SaferCond on_shut_down;
     m_default_namespace_replayer->shut_down(&on_shut_down);
     on_shut_down.wait();
   }
   m_default_namespace_replayer.reset();
-
-  if (m_remote_pool_poller) {
-    C_SaferCond ctx;
-    m_remote_pool_poller->shut_down(&ctx);
-    ctx.wait();
-
-    m_pool_meta_cache->remove_remote_pool_meta(m_remote_io_ctx.get_id());
+  if (m_local_io_ctx.is_valid()) {
     m_pool_meta_cache->remove_local_pool_meta(m_local_io_ctx.get_id());
   }
-  m_remote_pool_poller.reset();
+  m_remote_peers_ressource.clear();
+
   m_remote_pool_poller_listener.reset();
 
   m_image_sync_throttler.reset();
   m_image_deletion_throttler.reset();
 
   m_local_rados.reset();
-  m_remote_rados.reset();
 }
 
 template <typename I>
@@ -575,8 +730,7 @@ void PoolReplayer<I>::run() {
   dout(20) << dendl;
 
   while (true) {
-    std::string asok_hook_name = m_local_io_ctx.get_pool_name() + " " +
-                                 m_peer.cluster_name;
+    std::string asok_hook_name = m_local_io_ctx.get_pool_name();
     if (m_asok_hook_name != asok_hook_name || m_asok_hook == nullptr) {
       m_asok_hook_name = asok_hook_name;
       delete m_asok_hook;
@@ -657,10 +811,9 @@ void PoolReplayer<I>::update_namespace_replayers() {
 
   for (auto &name : mirroring_namespaces) {
     auto namespace_replayer = NamespaceReplayer<I>::create(
-        name, m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-        m_remote_pool_meta, m_threads, m_image_sync_throttler.get(),
-        m_image_deletion_throttler.get(), m_service_daemon,
-        m_cache_manager_handler, m_pool_meta_cache);
+        name, m_local_io_ctx, m_local_mirror_uuid, m_threads,
+        m_image_sync_throttler.get(), m_image_deletion_throttler.get(),
+        m_service_daemon, m_cache_manager_handler, m_pool_meta_cache);
     auto on_init = new LambdaContext(
         [this, namespace_replayer, name, &mirroring_namespaces,
          ctx=gather_ctx->new_sub()](int r) {
@@ -677,6 +830,20 @@ void PoolReplayer<I>::update_namespace_replayers() {
           ctx->complete(r);
         });
     namespace_replayer->init(on_init);
+    {
+      C_SaferCond add_peer_cond;
+      auto add_peer_gather_ctx = new C_Gather(cct, &add_peer_cond);
+      for (const auto& kv : m_remote_peers_ressource) {
+        // add peers
+        namespace_replayer->add_peer(kv.second.peer,
+                                     add_peer_gather_ctx->new_sub());
+      }
+
+      add_peer_gather_ctx->activate();
+      m_lock.unlock();
+      add_peer_cond.wait();
+      m_lock.lock();
+    }
   }
 
   gather_ctx->activate();
@@ -760,8 +927,11 @@ void PoolReplayer<I>::reopen_logs()
   if (m_local_rados) {
     reinterpret_cast<CephContext *>(m_local_rados->cct())->reopen_logs();
   }
-  if (m_remote_rados) {
-    reinterpret_cast<CephContext *>(m_remote_rados->cct())->reopen_logs();
+  for (auto& it : m_remote_peers_ressource) {
+    if (it.second.peer.rados) {
+      reinterpret_cast<CephContext *>
+        (it.second.peer.rados->cct())->reopen_logs();
+    }
   }
 }
 
@@ -810,7 +980,11 @@ void PoolReplayer<I>::print_status(Formatter *f) {
   std::lock_guard l{m_lock};
 
   f->open_object_section("pool_replayer_status");
-  f->dump_stream("peer") << m_peer;
+  f->open_array_section("peers");
+  for (auto& it : m_peers) {
+    f->dump_stream("peer") << it;
+  }
+  f->close_section(); // peers
   if (m_local_io_ctx.is_valid()) {
     f->dump_string("pool", m_local_io_ctx.get_pool_name());
     f->dump_stream("instance_id") << m_local_io_ctx.get_instance_id();
@@ -849,11 +1023,14 @@ void PoolReplayer<I>::print_status(Formatter *f) {
     f->dump_string("local_cluster_admin_socket",
                    cct->_conf.get_val<std::string>("admin_socket"));
   }
-  if (m_remote_rados) {
-    auto cct = reinterpret_cast<CephContext *>(m_remote_rados->cct());
+  f->open_array_section("remote_cluster_admin_sockets");
+  for (auto& it : m_remote_peers_ressource) {
+    auto cct = reinterpret_cast<CephContext *>
+      (it.second.peer.rados->cct());
     f->dump_string("remote_cluster_admin_socket",
                    cct->_conf.get_val<std::string>("admin_socket"));
   }
+  f->close_section(); // remote_cluster_admin_sockets
 
   if (m_image_sync_throttler) {
     f->open_object_section("sync_throttler");
@@ -1089,11 +1266,16 @@ void PoolReplayer<I>::handle_instances_removed(
 
 template <typename I>
 void PoolReplayer<I>::handle_remote_pool_meta_updated(
-    const RemotePoolMeta& remote_pool_meta) {
+    const RemotePoolMeta& remote_pool_meta, const PeerSpec& peer) {
   dout(5) << "remote_pool_meta=" << remote_pool_meta << dendl;
 
-  if (!m_default_namespace_replayer) {
-    m_remote_pool_meta = remote_pool_meta;
+  auto kv_it = m_remote_peers_ressource.find(peer);
+  ceph_assert(kv_it != m_remote_peers_ressource.end());
+  if (!m_default_namespace_replayer ||
+      m_pool_meta_cache->get_remote_pool_meta(
+        kv_it->second.peer.io_ctx.get_id(), peer.uuid, nullptr) < 0) {
+    m_pool_meta_cache->set_remote_pool_meta(
+      kv_it->second.peer.io_ctx.get_id(), peer.uuid, remote_pool_meta);
     return;
   }
 

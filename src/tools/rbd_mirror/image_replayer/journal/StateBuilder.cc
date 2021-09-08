@@ -60,7 +60,7 @@ bool StateBuilder<I>::is_disconnected() const {
 template <typename I>
 bool StateBuilder<I>::is_linked_impl() const {
   ceph_assert(!this->remote_mirror_uuid.empty());
-  return (local_primary_mirror_uuid == this->remote_mirror_uuid);
+  return true;
 }
 
 template <typename I>
@@ -81,7 +81,7 @@ BaseRequest* StateBuilder<I>::create_local_image_request(
     Threads<I>* threads,
     librados::IoCtx& local_io_ctx,
     const std::string& global_image_id,
-    PoolMetaCache* pool_meta_cache,
+    PoolMetaCache<I>* pool_meta_cache,
     ProgressContext* progress_ctx,
     Context* on_finish) {
   return CreateLocalImageRequest<I>::create(
@@ -106,7 +106,7 @@ image_replayer::Replayer* StateBuilder<I>::create_replayer(
     Threads<I>* threads,
     InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
-    PoolMetaCache* pool_meta_cache,
+    PoolMetaCache<I>* pool_meta_cache,
     ReplayerListener* replayer_listener) {
   return Replayer<I>::create(
     threads, local_mirror_uuid, this, replayer_listener);

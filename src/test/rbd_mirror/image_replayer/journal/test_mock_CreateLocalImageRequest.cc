@@ -69,7 +69,7 @@ struct CreateImageRequest<librbd::MockTestImageCtx> {
                                     const std::string &local_image_name,
 				    const std::string &local_image_id,
                                     librbd::MockTestImageCtx *remote_image_ctx,
-                                    PoolMetaCache* pool_meta_cache,
+                                    PoolMetaCache<librbd::MockTestImageCtx>* pool_meta_cache,
                                     cls::rbd::MirrorImageMode mirror_image_mode,
                                     Context *on_finish) {
     ceph_assert(s_instance != nullptr);

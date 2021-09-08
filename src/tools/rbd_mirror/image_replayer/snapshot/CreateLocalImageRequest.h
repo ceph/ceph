@@ -14,7 +14,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-class PoolMetaCache;
+template <typename> class PoolMetaCache;
 class ProgressContext;
 template <typename> struct Threads;
 
@@ -33,7 +33,7 @@ public:
       librados::IoCtx& local_io_ctx,
       ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>* state_builder,
       Context* on_finish) {
@@ -47,7 +47,7 @@ public:
       librados::IoCtx& local_io_ctx,
       ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
-      PoolMetaCache* pool_meta_cache,
+      PoolMetaCache<ImageCtxT>* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>* state_builder,
       Context* on_finish)
@@ -91,7 +91,7 @@ private:
   librados::IoCtx& m_local_io_ctx;
   ImageCtxT* m_remote_image_ctx;
   std::string m_global_image_id;
-  PoolMetaCache* m_pool_meta_cache;
+  PoolMetaCache<ImageCtxT>* m_pool_meta_cache;
   ProgressContext* m_progress_ctx;
   StateBuilder<ImageCtxT>* m_state_builder;
 

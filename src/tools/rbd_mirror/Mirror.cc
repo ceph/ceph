@@ -499,7 +499,7 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_args(args),
   m_local(new librados::Rados()),
   m_cache_manager_handler(new CacheManagerHandler(cct)),
-  m_pool_meta_cache(new PoolMetaCache(cct)),
+  m_pool_meta_cache(new PoolMetaCache<librbd::ImageCtx>(cct)),
   m_asok_hook(new MirrorAdminSocketHook(cct, this)) {
 }
 
@@ -700,11 +700,9 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
 
   // remove stale pool replayers before creating new pool replayers
   for (auto it = m_pool_replayers.begin(); it != m_pool_replayers.end();) {
-    auto &peer = it->first.second;
-    auto pool_peer_it = pool_peers.find(it->first.first);
-    if (pool_peer_it == pool_peers.end() ||
-        pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
-      dout(20) << "removing pool replayer for " << peer << dendl;
+    auto pool_peer_it = pool_peers.find(it->first);
+    if (pool_peer_it == pool_peers.end()) {
+      dout(20) << "removing pool replayer " << it->first << dendl;
       // TODO: make async
       it->second->shut_down();
       it = m_pool_replayers.erase(it);
@@ -714,45 +712,42 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
   }
 
   for (auto &kv : pool_peers) {
-    for (auto &peer : kv.second) {
-      PoolPeer pool_peer(kv.first, peer);
-
-      auto pool_replayers_it = m_pool_replayers.find(pool_peer);
-      if (pool_replayers_it != m_pool_replayers.end()) {
-        auto& pool_replayer = pool_replayers_it->second;
-        if (!m_site_name.empty() && !site_name.empty() &&
-            m_site_name != site_name) {
-          dout(0) << "restarting pool replayer for " << peer << " due to "
-                  << "updated site name" << dendl;
-          // TODO: make async
-          pool_replayer->shut_down();
-          pool_replayer->init(site_name);
-        } else if (pool_replayer->is_blocklisted()) {
-          derr << "restarting blocklisted pool replayer for " << peer << dendl;
-          // TODO: make async
-          pool_replayer->shut_down();
-          pool_replayer->init(site_name);
-        } else if (!pool_replayer->is_running()) {
-          derr << "restarting failed pool replayer for " << peer << dendl;
-          // TODO: make async
-          pool_replayer->shut_down();
-          pool_replayer->init(site_name);
-        }
-      } else {
-        dout(20) << "starting pool replayer for " << peer << dendl;
-        unique_ptr<PoolReplayer<>> pool_replayer(
-            new PoolReplayer<>(m_threads, m_service_daemon.get(),
-                               m_cache_manager_handler.get(),
-                               m_pool_meta_cache.get(), kv.first, peer,
-                               m_args));
-
+    auto pool_replayers_it = m_pool_replayers.find(kv.first);
+    if (pool_replayers_it != m_pool_replayers.end()) {
+      auto& pool_replayer = pool_replayers_it->second;
+      if (!m_site_name.empty() && !site_name.empty() &&
+          m_site_name != site_name) {
+        dout(0) << "restarting pool replayer for " << kv.first << " due to "
+                << "updated site name" << dendl;
         // TODO: make async
+        pool_replayer->shut_down();
         pool_replayer->init(site_name);
-        m_pool_replayers.emplace(pool_peer, std::move(pool_replayer));
+      } else if (pool_replayer->is_blocklisted()) {
+        derr << "restarting blocklisted pool replayer for "
+             << kv.first << dendl;
+        // TODO: make async
+        pool_replayer->shut_down();
+        pool_replayer->init(site_name);
+      } else if (!pool_replayer->is_running()) {
+        derr << "restarting failed pool replayer for " << kv.first << dendl;
+        // TODO: make async
+        pool_replayer->shut_down();
+        pool_replayer->init(site_name);
       }
-    }
+      // TODO: make async
+      pool_replayer->update_peers(kv.second);
+    } else {
+      dout(20) << "starting pool replayer for " << kv.first << dendl;
+      unique_ptr<PoolReplayer<>> pool_replayer(
+          new PoolReplayer<>(m_threads, m_service_daemon.get(),
+                             m_cache_manager_handler.get(),
+                             m_pool_meta_cache.get(), kv.first, kv.second,
+                             m_args));
 
-    // TODO currently only support a single peer
+      // TODO: make async
+      pool_replayer->init(site_name);
+      m_pool_replayers.emplace(kv.first, std::move(pool_replayer));
+    }
   }
 
   m_site_name = site_name;

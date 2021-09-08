@@ -21,7 +21,8 @@ namespace remote_pool_poller {
 struct Listener {
   virtual ~Listener() {}
 
-  virtual void handle_updated(const RemotePoolMeta& remote_pool_meta) = 0;
+  virtual void handle_updated(const RemotePoolMeta& remote_pool_meta,
+                              const PeerSpec& peer_spec) = 0;
 };
 
 }; // namespace remote_pool_poller
@@ -34,9 +35,10 @@ public:
       librados::IoCtx& remote_io_ctx,
       const std::string& site_name,
       const std::string& local_mirror_uuid,
-      remote_pool_poller::Listener& listener) {
+      remote_pool_poller::Listener& listener,
+      const PeerSpec& peer_spec) {
     return new RemotePoolPoller(threads, remote_io_ctx, site_name,
-                                local_mirror_uuid, listener);
+                                local_mirror_uuid, listener, peer_spec);
   }
 
   RemotePoolPoller(
@@ -44,12 +46,14 @@ public:
       librados::IoCtx& remote_io_ctx,
       const std::string& site_name,
       const std::string& local_mirror_uuid,
-      remote_pool_poller::Listener& listener)
+      remote_pool_poller::Listener& listener,
+      const PeerSpec& peer_spec)
     : m_threads(threads),
       m_remote_io_ctx(remote_io_ctx),
       m_site_name(site_name),
       m_local_mirror_uuid(local_mirror_uuid),
-      m_listener(listener) {
+      m_listener(listener),
+      m_peer_spec(peer_spec) {
   }
   ~RemotePoolPoller();
 
@@ -99,6 +103,7 @@ private:
   std::string m_site_name;
   std::string m_local_mirror_uuid;
   remote_pool_poller::Listener& m_listener;
+  PeerSpec m_peer_spec;
 
   bufferlist m_out_bl;
 
