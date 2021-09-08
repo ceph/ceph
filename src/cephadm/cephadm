@@ -176,6 +176,9 @@ class ContainerEngine:
     def EXE(cls) -> str:
         raise NotImplementedError()
 
+    def __str__(self) -> str:
+        return f'{self.EXE} ({self.path})'
+
 
 class Podman(ContainerEngine):
     EXE = 'podman'
@@ -193,6 +196,10 @@ class Podman(ContainerEngine):
     def get_version(self, ctx: CephadmContext) -> None:
         out, _, _ = call_throws(ctx, [self.path, 'version', '--format', '{{.Client.Version}}'])
         self._version = _parse_podman_version(out)
+
+    def __str__(self) -> str:
+        version = '.'.join(map(str, self.version))
+        return f'{self.EXE} ({self.path}) version {version}'
 
 
 class Docker(ContainerEngine):
@@ -2000,8 +2007,7 @@ def find_container_engine(ctx: CephadmContext) -> Optional[ContainerEngine]:
     return None
 
 
-def check_container_engine(ctx):
-    # type: (CephadmContext) -> None
+def check_container_engine(ctx: CephadmContext) -> ContainerEngine:
     engine = ctx.container_engine
     if not isinstance(engine, CONTAINER_PREFERENCE):
         # See https://github.com/python/mypy/issues/8993
@@ -2011,6 +2017,7 @@ def check_container_engine(ctx):
         engine.get_version(ctx)
         if engine.version < MIN_PODMAN_VERSION:
             raise Error('podman version %d.%d.%d or later is required' % MIN_PODMAN_VERSION)
+    return engine
 
 
 def get_unit_name(fsid, daemon_type, daemon_id=None):
@@ -5796,14 +5803,12 @@ def check_time_sync(ctx, enabler=None):
 
 
 def command_check_host(ctx: CephadmContext) -> None:
-    container_path = ctx.container_engine.path
-
     errors = []
     commands = ['systemctl', 'lvcreate']
 
     try:
-        check_container_engine(ctx)
-        logger.info('podman|docker (%s) is present' % container_path)
+        engine = check_container_engine(ctx)
+        logger.info(f'{engine} is present')
     except Error as e:
         errors.append(str(e))
 
