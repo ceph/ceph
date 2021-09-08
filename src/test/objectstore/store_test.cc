@@ -276,6 +276,17 @@ TEST_P(StoreTest, TrivialRemount) {
   ASSERT_EQ(0, r);
 }
 
+TEST_P(StoreTest, TrivialRemountFsck) {
+  if(string(GetParam()) != "bluestore")
+    return;
+  int r = store->umount();
+  ASSERT_EQ(0, r);
+  r = store->fsck(false);
+  ASSERT_EQ(0, r);
+  r = store->mount();
+  ASSERT_EQ(0, r);
+}
+
 TEST_P(StoreTest, SimpleRemount) {
   coll_t cid;
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
