@@ -12,6 +12,7 @@ overrides:
       osd:
         filestore xfs extsize: true
         osd objectstore: filestore
+        osd op queue: wpq
 
 tasks:
 - install:

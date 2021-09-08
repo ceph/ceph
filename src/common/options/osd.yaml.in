@@ -1061,6 +1061,19 @@ options:
   - osd_mclock_max_capacity_iops_ssd
   flags:
   - startup
+- name: osd_mclock_skip_benchmark
+  type: bool
+  level: dev
+  desc: Skip the OSD benchmark on OSD initialization/boot-up
+  long_desc: This option specifies whether the OSD benchmark must be skipped during
+    the OSD boot-up sequence. Only considered for osd_op_queue = mclock_scheduler.
+  fmt_desc: Skip the OSD benchmark on OSD initialization/boot-up
+  default: false
+  see_also:
+  - osd_mclock_max_capacity_iops_hdd
+  - osd_mclock_max_capacity_iops_ssd
+  flags:
+  - runtime
 - name: osd_mclock_profile
   type: str
   level: advanced
