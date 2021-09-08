@@ -53,7 +53,7 @@ seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
   return Messenger::set_myaddrs(my_addrs);
 }
 
-SocketMessenger::bind_ertr::future<> SocketMessenger::do_bind(const entity_addrvec_t& addrs)
+SocketMessenger::bind_ertr::future<> SocketMessenger::do_listen(const entity_addrvec_t& addrs)
 {
   assert(seastar::this_shard_id() == master_sid);
   ceph_assert(addrs.front().get_family() == AF_INET);
@@ -67,9 +67,9 @@ SocketMessenger::bind_ertr::future<> SocketMessenger::do_bind(const entity_addrv
     }
   }).then([this] () -> bind_ertr::future<> {
     const entity_addr_t listen_addr = get_myaddr();
-    logger().debug("{} do_bind: try listen {}...", *this, listen_addr);
+    logger().debug("{} do_listen: try listen {}...", *this, listen_addr);
     if (!listener) {
-      logger().warn("{} do_bind: listener doesn't exist", *this);
+      logger().warn("{} do_listen: listener doesn't exist", *this);
       return bind_ertr::now();
     }
     return listener->listen(listen_addr);
@@ -90,7 +90,7 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
 {
   auto addr = addrs.front();
   if (addr.get_port() != 0) {
-    return do_bind(addrs).safe_then([this] {
+    return do_listen(addrs).safe_then([this] {
       logger().info("{} try_bind: done", *this);
     });
   }
@@ -100,7 +100,7 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
     return seastar::repeat_until_value([this, max_port, addr, &port] {
       auto to_bind = addr;
       to_bind.set_port(port);
-      return do_bind(entity_addrvec_t{to_bind}
+      return do_listen(entity_addrvec_t{to_bind}
       ).safe_then([this] () -> seastar::future<std::optional<bool>> {
         logger().info("{} try_bind: done", *this);
         return seastar::make_ready_future<std::optional<bool>>(
