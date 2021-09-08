@@ -160,6 +160,10 @@ class Socket
   friend class FixedCPUServerSocket;
 };
 
+using listen_ertr = crimson::errorator<
+  crimson::ct_error::address_in_use // The address is already bound
+  >;
+
 class FixedCPUServerSocket
     : public seastar::peering_sharded_service<FixedCPUServerSocket> {
   const seastar::shard_id cpu;
@@ -196,9 +200,6 @@ public:
   FixedCPUServerSocket(const FixedCPUServerSocket&) = delete;
   FixedCPUServerSocket& operator=(const FixedCPUServerSocket&) = delete;
 
-  using listen_ertr = crimson::errorator<
-    crimson::ct_error::address_in_use // The address is already bound
-    >;
   listen_ertr::future<> listen(entity_addr_t addr);
 
   // fn_accept should be a nothrow function of type
