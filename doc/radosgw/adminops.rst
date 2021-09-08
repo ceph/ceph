@@ -1972,8 +1972,7 @@ Binding libraries
 
 ``Golang``
 
- - `IrekFasikhov/go-rgwadmin`_
- - `QuentinPerez/go-radosgw`_
+ - `ceph/go-ceph`_
 
 ``Java``
  
@@ -1988,8 +1987,7 @@ Binding libraries
 
 .. _Admin Guide: ../admin
 .. _Quota Management: ../admin#quota-management
-.. _IrekFasikhov/go-rgwadmin: https://github.com/IrekFasikhov/go-rgwadmin
-.. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
+.. _ceph/go-ceph: https://github.com/ceph/go-ceph/
 .. _twonote/radosgw-admin4j: https://github.com/twonote/radosgw-admin4j
 .. _UMIACS/rgwadmin: https://github.com/UMIACS/rgwadmin
 .. _valerytschopp/python-radosgw-admin: https://github.com/valerytschopp/python-radosgw-admin
