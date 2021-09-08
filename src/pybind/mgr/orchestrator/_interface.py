@@ -1366,6 +1366,9 @@ class OrchestratorEvent:
         return self.created == other.created and self.kind == other.kind \
             and self.subject == other.subject and self.message == other.message
 
+    def __repr__(self) -> str:
+        return f'OrchestratorEvent.from_json({self.to_json()!r})'
+
 
 def _mk_orch_methods(cls: Any) -> Any:
     # Needs to be defined outside of for.

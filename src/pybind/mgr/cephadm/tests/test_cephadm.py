@@ -20,7 +20,7 @@ from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now
 from orchestrator import DaemonDescription, InventoryHost, \
-    HostSpec, OrchestratorError, DaemonDescriptionStatus
+    HostSpec, OrchestratorError, DaemonDescriptionStatus, OrchestratorEvent
 from tests import mock
 from .fixtures import wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, _deploy_cephadm_binary
@@ -919,6 +919,15 @@ class TestCephadm(object):
                         CephadmServe(cephadm_module)._check_for_moved_osds()
 
                         assert len(cephadm_module.cache.get_daemons()) == 1
+
+                        assert cephadm_module.events.get_for_daemon('osd.1') == [
+                            OrchestratorEvent(mock.ANY, 'daemon', 'osd.1', 'INFO',
+                                              "Deployed osd.1 on host 'host1'"),
+                            OrchestratorEvent(mock.ANY, 'daemon', 'osd.1', 'INFO',
+                                              "Deployed osd.1 on host 'host2'"),
+                            OrchestratorEvent(mock.ANY, 'daemon', 'osd.1', 'INFO',
+                                              "Removed duplicated daemon on host 'host2'"),
+                        ]
 
     @pytest.mark.parametrize(
         "spec",
