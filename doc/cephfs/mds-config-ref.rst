@@ -4,6 +4,7 @@
 
 .. confval:: mds_cache_mid
 .. confval:: mds_dir_max_commit_size
+.. confval:: mds_dir_max_entries
 .. confval:: mds_decay_halflife
 .. confval:: mds_beacon_interval
 .. confval:: mds_beacon_grace
