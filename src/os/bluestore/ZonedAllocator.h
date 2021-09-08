@@ -80,6 +80,10 @@ public:
     return "zoned";
   }
 
+  uint64_t get_dead_bytes(uint32_t zone) {
+    return zone_states[zone].num_dead_bytes;
+  }
+
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
     int64_t hint, PExtentVector *extents) override;

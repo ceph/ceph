@@ -9218,77 +9218,153 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       }
     }
 
-    dout(1) << __func__ << " checking freelist vs allocated" << dendl;
     // skip freelist vs allocated compare when we have Null fm
     if (!fm->is_null_manager()) {
-      fm->enumerate_reset();
-      uint64_t offset, length;
-      while (fm->enumerate_next(db, &offset, &length)) {
-        bool intersects = false;
-        apply_for_bitset_range(
-          offset, length, alloc_size, used_blocks,
-          [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	    ceph_assert(pos < bs.size());
-            if (bs.test(pos) && !bluefs_used_blocks.test(pos)) {
-	      if (offset == SUPER_RESERVED &&
-	          length == min_alloc_size - SUPER_RESERVED) {
-	        // this is due to the change just after luminous to min_alloc_size
-	        // granularity allocations, and our baked in assumption at the top
-	        // of _fsck that 0~round_up_to(SUPER_RESERVED,min_alloc_size) is used
-	        // (vs luminous's round_up_to(SUPER_RESERVED,block_size)).  harmless,
-	        // since we will never allocate this region below min_alloc_size.
-	        dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
-		         << " and min_alloc_size, 0x" << std::hex << offset << "~"
-		         << length << std::dec << dendl;
-	      } else {
-                intersects = true;
-	        if (repair) {
-		  repairer.fix_false_free(db, fm,
-					  pos * min_alloc_size,
-					  min_alloc_size);
-	        }
-	      }
-            } else {
-	      bs.set(pos);
-            }
-          }
-        );
-        if (intersects) {
-	  derr << "fsck error: free extent 0x" << std::hex << offset
-	        << "~" << length << std::dec
-	        << " intersects allocated blocks" << dendl;
-	  ++errors;
-        }
-      }
-      fm->enumerate_reset();
-      size_t count = used_blocks.count();
-      if (used_blocks.size() != count) {
-        ceph_assert(used_blocks.size() > count);
-        used_blocks.flip();
-        size_t start = used_blocks.find_first();
-        while (start != decltype(used_blocks)::npos) {
-	  size_t cur = start;
-	  while (true) {
-	    size_t next = used_blocks.find_next(cur);
-	    if (next != cur + 1) {
-	      ++errors;
-	      derr << "fsck error: leaked extent 0x" << std::hex
-		   << ((uint64_t)start * fm->get_alloc_size()) << "~"
-		   << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
-		   << dendl;
-	      if (repair) {
-	        repairer.fix_leaked(db,
-				    fm,
-				    start * min_alloc_size,
-				    (cur + 1 - start) * min_alloc_size);
-	      }
-	      start = next;
-	      break;
-	    }
-	    cur = next;
+      dout(1) << __func__ << " checking freelist vs allocated" << dendl;
+#ifdef HAVE_LIBZBD
+      if (freelist_type == "zoned") {
+	// verify per-zone state
+	//  - verify no allocations beyond write pointer
+	//  - verify num_dead_bytes count (neither allocated nor
+	//    free space past the write pointer)
+	auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+	auto num_zones = bdev->get_size() / zone_size;
+
+	// mark the free space past the write pointer
+	for (uint32_t zone = first_sequential_zone; zone < num_zones; ++zone) {
+	  auto wp = a->get_write_pointer(zone);
+	  uint64_t offset = zone_size * zone + wp;
+	  uint64_t length = zone_size - wp;
+	  if (!length) {
+	    continue;
 	  }
-        }
-        used_blocks.flip();
+	  bool intersects = false;
+	  dout(10) << "  marking zone 0x" << std::hex << zone
+		   << " region after wp 0x" << offset << "~" << length
+		   << std::dec << dendl;
+	  apply_for_bitset_range(
+	    offset, length, alloc_size, used_blocks,
+	    [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	      if (bs.test(pos)) {
+		derr << "fsck error: zone 0x" << std::hex << zone
+		     << " has used space at 0x" << pos * alloc_size
+		     << " beyond write pointer 0x" << wp
+		     << std::dec << dendl;
+		intersects = true;
+	      } else {
+		bs.set(pos);
+	      }
+	    }
+	    );
+	  if (intersects) {
+	    ++errors;
+	  }
+	}
+
+	used_blocks.flip();
+
+	// skip conventional zones
+	uint64_t pos = (first_sequential_zone * zone_size) / min_alloc_size - 1;
+	pos = used_blocks.find_next(pos);
+
+	uint64_t zone_dead = 0;
+	for (uint32_t zone = first_sequential_zone;
+	     zone < num_zones;
+	     ++zone, zone_dead = 0) {
+	  while (pos != decltype(used_blocks)::npos &&
+		 (pos * min_alloc_size) / zone_size == zone) {
+	    dout(40) << " zone 0x" << std::hex << zone
+		     << " dead 0x" << (pos * min_alloc_size) << "~" << min_alloc_size
+		     << std::dec << dendl;
+	    zone_dead += min_alloc_size;
+	    pos = used_blocks.find_next(pos);
+	  }
+	  dout(20) << " zone 0x" << std::hex << zone << " dead is 0x" << zone_dead
+		   << std::dec << dendl;
+	  // cross-check dead bytes against zone state
+	  if (a->get_dead_bytes(zone) != zone_dead) {
+	    derr << "fsck error: zone 0x" << std::hex << zone << " has 0x" << zone_dead
+		 << " dead bytes but freelist says 0x" << a->get_dead_bytes(zone)
+		 << dendl;
+	    ++errors;
+	    // TODO: repair
+	  }
+	}
+	used_blocks.flip();
+      } else
+#endif
+      {
+	fm->enumerate_reset();
+	uint64_t offset, length;
+	while (fm->enumerate_next(db, &offset, &length)) {
+	  bool intersects = false;
+	  apply_for_bitset_range(
+	    offset, length, alloc_size, used_blocks,
+	    [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	      ceph_assert(pos < bs.size());
+	      if (bs.test(pos) && !bluefs_used_blocks.test(pos)) {
+		if (offset == SUPER_RESERVED &&
+		    length == min_alloc_size - SUPER_RESERVED) {
+		  // this is due to the change just after luminous to min_alloc_size
+		  // granularity allocations, and our baked in assumption at the top
+		  // of _fsck that 0~round_up_to(SUPER_RESERVED,min_alloc_size) is used
+		  // (vs luminous's round_up_to(SUPER_RESERVED,block_size)).  harmless,
+		  // since we will never allocate this region below min_alloc_size.
+		  dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
+			   << " and min_alloc_size, 0x" << std::hex << offset << "~"
+			   << length << std::dec << dendl;
+		} else {
+		  intersects = true;
+		  if (repair) {
+		    repairer.fix_false_free(db, fm,
+					    pos * min_alloc_size,
+					    min_alloc_size);
+		  }
+		}
+	      } else {
+		bs.set(pos);
+	      }
+	    }
+	    );
+	  if (intersects) {
+	    derr << "fsck error: free extent 0x" << std::hex << offset
+		 << "~" << length << std::dec
+		 << " intersects allocated blocks" << dendl;
+	    ++errors;
+	  }
+	}
+	fm->enumerate_reset();
+
+	// check for leaked extents
+	size_t count = used_blocks.count();
+	if (used_blocks.size() != count) {
+	  ceph_assert(used_blocks.size() > count);
+	  used_blocks.flip();
+	  size_t start = used_blocks.find_first();
+	  while (start != decltype(used_blocks)::npos) {
+	    size_t cur = start;
+	    while (true) {
+	      size_t next = used_blocks.find_next(cur);
+	      if (next != cur + 1) {
+		++errors;
+		derr << "fsck error: leaked extent 0x" << std::hex
+		     << ((uint64_t)start * fm->get_alloc_size()) << "~"
+		     << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
+		     << dendl;
+		if (repair) {
+		  repairer.fix_leaked(db,
+				      fm,
+				      start * min_alloc_size,
+				      (cur + 1 - start) * min_alloc_size);
+		}
+		start = next;
+		break;
+	      }
+	      cur = next;
+	    }
+	  }
+	  used_blocks.flip();
+	}
       }
     }
   }
