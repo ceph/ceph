@@ -726,23 +726,24 @@ class HostCache():
     def get_facts(self, host: str) -> Dict[str, Any]:
         return self.facts.get(host, {})
 
+    def _get_daemons(self) -> Iterator[orchestrator.DaemonDescription]:
+        for dm in self.daemons.values():
+            yield from dm.values()
+
     def get_daemons(self):
         # type: () -> List[orchestrator.DaemonDescription]
-        r = []
-        for host, dm in self.daemons.items():
-            for name, dd in dm.items():
-                r.append(dd)
-        return r
+        return list(self._get_daemons())
 
     def get_daemons_by_host(self, host: str) -> List[orchestrator.DaemonDescription]:
         return list(self.daemons.get(host, {}).values())
 
-    def get_daemon(self, daemon_name: str) -> orchestrator.DaemonDescription:
+    def get_daemon(self, daemon_name: str, host: Optional[str] = None) -> orchestrator.DaemonDescription:
         assert not daemon_name.startswith('ha-rgw.')
-        for _, dm in self.daemons.items():
-            for _, dd in dm.items():
-                if dd.name() == daemon_name:
-                    return dd
+        dds = self.get_daemons_by_host(host) if host else self._get_daemons()
+        for dd in dds:
+            if dd.name() == daemon_name:
+                return dd
+
         raise orchestrator.OrchestratorError(f'Unable to find {daemon_name} daemon(s)')
 
     def has_daemon(self, daemon_name: str) -> bool:
@@ -774,12 +775,7 @@ class HostCache():
         assert not service_name.startswith('keepalived.')
         assert not service_name.startswith('haproxy.')
 
-        result = []   # type: List[orchestrator.DaemonDescription]
-        for host, dm in self.daemons.items():
-            for name, d in dm.items():
-                if d.service_name() == service_name:
-                    result.append(d)
-        return result
+        return list(dd for dd in self._get_daemons() if dd.service_name() == service_name)
 
     def get_daemons_by_type(self, service_type):
         # type: (str) -> List[orchestrator.DaemonDescription]

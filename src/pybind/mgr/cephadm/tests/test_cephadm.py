@@ -20,7 +20,7 @@ from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now
 from orchestrator import DaemonDescription, InventoryHost, \
-    HostSpec, OrchestratorError
+    HostSpec, OrchestratorError, DaemonDescriptionStatus
 from tests import mock
 from .fixtures import wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, _deploy_cephadm_binary
@@ -66,6 +66,44 @@ def with_daemon(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, host: st
             return
 
     assert False, 'Daemon not found'
+
+
+@contextmanager
+def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str, osd_id: int, ceph_volume_lvm_list=None):
+    cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+        'osds': [
+            {
+                'osd': 1,
+                'up_from': 0,
+                'uuid': 'uuid'
+            }
+        ]
+    })
+
+    ceph_volume_lvm_list = ceph_volume_lvm_list or {
+        str(osd_id): [{
+            'tags': {
+                'ceph.cluster_fsid': cephadm_module._cluster_fsid,
+                'ceph.osd_fsid': 'uuid'
+            },
+            'type': 'data'
+        }]
+    }
+    _run_cephadm.return_value = (json.dumps(ceph_volume_lvm_list), '', 0)
+    _run_cephadm.reset_mock()
+    assert cephadm_module._osd_activate(
+        [host]).stdout == f"Created osd(s) 1 on host '{host}'"
+    assert _run_cephadm.mock_calls == [
+        mock.call(host, 'osd', 'ceph-volume',
+                  ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, image=''),
+        mock.call(host, f'osd.{osd_id}', 'deploy',
+                  ['--name', f'osd.{osd_id}', '--meta-json', mock.ANY,
+                   '--config-json', '-', '--osd-fsid', 'uuid'],
+                  stdin=mock.ANY, image=''),
+    ]
+    dd = cephadm_module.cache.get_daemon(f'osd.{osd_id}', host=host)
+    assert dd.name() == f'osd.{osd_id}'
+    yield dd
 
 
 class TestCephadm(object):
@@ -862,6 +900,22 @@ class TestCephadm(object):
             c = cephadm_module.remove_daemons(['rgw.myrgw.myhost.myid'])
             out = wait(cephadm_module, c)
             assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_remove_duplicate_osds(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'host1'):
+            with with_host(cephadm_module, 'host2'):
+                with with_osd_daemon(cephadm_module, _run_cephadm, 'host1', 1) as dd1:  # type: DaemonDescription
+                    with with_osd_daemon(cephadm_module, _run_cephadm, 'host2', 1) as dd2:  # type: DaemonDescription
+                        dd1.status = DaemonDescriptionStatus.running
+                        dd2.status = DaemonDescriptionStatus.error
+                        cephadm_module.cache.update_host_daemons(dd1.hostname, {dd1.name(): dd1})
+                        cephadm_module.cache.update_host_daemons(dd2.hostname, {dd2.name(): dd2})
+
+                        CephadmServe(cephadm_module)._check_for_moved_osds()
+
+                        assert len(cephadm_module.cache.get_daemons()) == 1
 
     @pytest.mark.parametrize(
         "spec",
