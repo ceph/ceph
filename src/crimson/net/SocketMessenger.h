@@ -48,7 +48,7 @@ class SocketMessenger final : public Messenger {
   uint32_t global_seq = 0;
   bool started = false;
 
-  bind_ertr::future<> do_listen(const entity_addrvec_t& addr);
+  listen_ertr::future<> do_listen(const entity_addrvec_t& addr);
 
  public:
   SocketMessenger(const entity_name_t& myname,
