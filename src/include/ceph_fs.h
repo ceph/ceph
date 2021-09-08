@@ -474,6 +474,7 @@ int ceph_flags_sys2wire(int flags);
 #define CEPH_READDIR_FRAG_COMPLETE	(1<<8)
 #define CEPH_READDIR_HASH_ORDER		(1<<9)
 #define CEPH_READDIR_OFFSET_HASH       (1<<10)
+#define CEPH_READDIR_SNAPDIFF          (1<<11)
 
 /* Note that this is embedded wthin ceph_mds_request_head_legacy. */
 union ceph_mds_request_args_legacy {
