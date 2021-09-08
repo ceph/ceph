@@ -299,14 +299,16 @@ class TestCephadm(object):
             with with_service(cephadm_module, RGWSpec(service_id='myrgw.foobar', unmanaged=True)) as _, \
                     with_daemon(cephadm_module, RGWSpec(service_id='myrgw.foobar'), 'test') as daemon_id:
 
-                c = cephadm_module.daemon_action('redeploy', 'rgw.' + daemon_id)
+                d_name = 'rgw.' + daemon_id
+
+                c = cephadm_module.daemon_action('redeploy', d_name)
                 assert wait(cephadm_module,
                             c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
 
                 for what in ('start', 'stop', 'restart'):
-                    c = cephadm_module.daemon_action(what, 'rgw.' + daemon_id)
+                    c = cephadm_module.daemon_action(what, d_name)
                     assert wait(cephadm_module,
-                                c) == F"Scheduled to {what} rgw.{daemon_id} on host 'test'"
+                                c) == F"Scheduled to {what} {d_name} on host 'test'"
 
                 # Make sure, _check_daemons does a redeploy due to monmap change:
                 cephadm_module._store['_ceph_get/mon_map'] = {
@@ -316,6 +318,13 @@ class TestCephadm(object):
                 cephadm_module.notify('mon_map', None)
 
                 CephadmServe(cephadm_module)._check_daemons()
+
+                assert cephadm_module.events.get_for_daemon(d_name) == [
+                    OrchestratorEvent(mock.ANY, 'daemon', d_name, 'INFO',
+                                      f"Deployed {d_name} on host \'test\'"),
+                    OrchestratorEvent(mock.ANY, 'daemon', d_name, 'INFO',
+                                      f"stop {d_name} from host \'test\'"),
+                ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_daemon_action_fail(self, cephadm_module: CephadmOrchestrator):
@@ -1004,6 +1013,12 @@ class TestCephadm(object):
                             'prefix': 'auth rm',
                             'entity': entity,
                         })
+                    assert cephadm_module.events.get_for_service(spec.service_name()) == [
+                        OrchestratorEvent(mock.ANY, 'service', spec.service_name(), 'INFO',
+                                          "service was created"),
+                        OrchestratorEvent(mock.ANY, 'service', spec.service_name(), 'ERROR',
+                                          "fail"),
+                    ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_daemon_place_fail_health_warning(self, _run_cephadm, cephadm_module):
