@@ -5622,9 +5622,7 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
       }
     }
 
-    a->init_from_zone_pointers(zones,
-			       &zoned_cleaner_lock,
-			       &zoned_cleaner_cond);
+    a->init_from_zone_pointers(zones);
     dout(1) << __func__
 	    << " loaded zone pointers: "
 	    << std::hex
@@ -12840,26 +12838,14 @@ void BlueStore::_kv_finalize_thread()
 }
 
 #ifdef HAVE_LIBZBD
-void BlueStore::_zoned_cleaner_start() {
+void BlueStore::_zoned_cleaner_start()
+{
   dout(10) << __func__ << dendl;
-
-  auto f = dynamic_cast<ZonedFreelistManager*>(fm);
-  ceph_assert(f);
-
-  auto zones_to_clean = f->get_cleaning_in_progress_zones(db);
-  if (!zones_to_clean.empty()) {
-    dout(10) << __func__ << " resuming cleaning after unclean shutdown." << dendl;
-    for (auto zone_num : zones_to_clean) {
-      _zoned_clean_zone(zone_num);
-    }
-    bdev->reset_zones(zones_to_clean);
-    f->mark_zones_to_clean_free(zones_to_clean, db);
-  }
-
   zoned_cleaner_thread.create("bstore_zcleaner");
 }
 
-void BlueStore::_zoned_cleaner_stop() {
+void BlueStore::_zoned_cleaner_stop()
+{
   dout(10) << __func__ << dendl;
   {
     std::unique_lock l{zoned_cleaner_lock};
@@ -12877,7 +12863,8 @@ void BlueStore::_zoned_cleaner_stop() {
   dout(10) << __func__ << " done" << dendl;
 }
 
-void BlueStore::_zoned_cleaner_thread() {
+void BlueStore::_zoned_cleaner_thread()
+{
   dout(10) << __func__ << " start" << dendl;
   std::unique_lock l{zoned_cleaner_lock};
   ceph_assert(!zoned_cleaner_started);
@@ -12888,8 +12875,8 @@ void BlueStore::_zoned_cleaner_thread() {
   auto f = dynamic_cast<ZonedFreelistManager*>(fm);
   ceph_assert(f);
   while (true) {
-    const auto *zones_to_clean = a->get_zones_to_clean();
-    if (!zones_to_clean) {
+    auto zone_to_clean = a->pick_zone_to_clean();
+    if (zone_to_clean < 0) {
       if (zoned_cleaner_stop) {
 	break;
       }
@@ -12898,13 +12885,10 @@ void BlueStore::_zoned_cleaner_thread() {
       dout(20) << __func__ << " wake" << dendl;
     } else {
       l.unlock();
-      f->mark_zones_to_clean_in_progress(*zones_to_clean, db);
-      for (auto zone_num : *zones_to_clean) {
-	_zoned_clean_zone(zone_num);
-      }
-      bdev->reset_zones(*zones_to_clean);
-      f->mark_zones_to_clean_free(*zones_to_clean, db);
-      a->mark_zones_to_clean_free();
+      _zoned_clean_zone(zone_to_clean);
+      bdev->reset_zone(zone_to_clean);
+      f->mark_zone_to_clean_free(zone_to_clean, db);
+      //a->mark_zone_to_clean_free();
       l.lock();
     }
   }
@@ -12912,7 +12896,8 @@ void BlueStore::_zoned_cleaner_thread() {
   zoned_cleaner_started = false;
 }
 
-void BlueStore::_zoned_clean_zone(uint64_t zone_num) {
+void BlueStore::_zoned_clean_zone(uint64_t zone_num)
+{
   dout(10) << __func__ << " cleaning zone " << zone_num << dendl;
   // TODO: (1) copy live objects from zone_num to a new zone, (2) issue a RESET
   // ZONE operation to the device for the corresponding zone.

@@ -34,8 +34,7 @@ ZonedAllocator::ZonedAllocator(CephContext* cct,
       zone_size(_zone_size),
       first_seq_zone_num(_first_sequential_zone),
       starting_zone_num(first_seq_zone_num),
-      num_zones(size / zone_size),
-      num_zones_to_clean(0)
+      num_zones(size / zone_size)
 {
   ldout(cct, 10) << " size 0x" << std::hex << size
 		 << " zone size 0x" << zone_size << std::dec
@@ -68,14 +67,7 @@ int64_t ZonedAllocator::allocate(
 		 << std::hex << want_size << std::dec << dendl;
 
   uint64_t zone_num = starting_zone_num;
-  auto p = zones_to_clean.lower_bound(zone_num);
   for ( ; zone_num < num_zones; ++zone_num) {
-    if (p != zones_to_clean.cend() && *p == zone_num) {
-      ldout(cct, 10) << " skipping zone 0x" << std::hex << zone_num
-		     << " because it is being cleaned" << std::dec << dendl;
-      ++p;
-      continue;
-    }
     if (fits(want_size, zone_num)) {
       break;
     }
@@ -109,8 +101,6 @@ int64_t ZonedAllocator::allocate(
 		 << " from zone 0x" << zone_num
 		 << " and zone offset 0x" << (offset % zone_size)
 		 << std::dec << dendl;
-
-  find_zones_to_clean();
 
   extents->emplace_back(bluestore_pextent_t(offset, want_size));
   return want_size;
@@ -151,15 +141,11 @@ void ZonedAllocator::dump(std::function<void(uint64_t offset,
 }
 
 void ZonedAllocator::init_from_zone_pointers(
-  std::vector<zone_state_t> _zone_states,
-  ceph::mutex *_cleaner_lock,
-  ceph::condition_variable *_cleaner_cond)
+  std::vector<zone_state_t> _zone_states)
 {
   // this is called once, based on the device's zone pointers
   std::lock_guard l(lock);
   ldout(cct, 10) << dendl;
-  cleaner_lock = _cleaner_lock;
-  cleaner_cond = _cleaner_cond;
   zone_states = std::move(_zone_states);
   num_free = 0;
   for (size_t i = first_seq_zone_num; i < num_zones; ++i) {
@@ -172,16 +158,34 @@ void ZonedAllocator::init_from_zone_pointers(
 		 << dendl;
 }
 
-const std::set<uint64_t> *ZonedAllocator::get_zones_to_clean(void)
+int64_t ZonedAllocator::pick_zone_to_clean(void)
 {
-  ldout(cct, 10) << dendl;
-  return num_zones_to_clean ? &zones_to_clean : nullptr;
+  int32_t best = -1;
+  int64_t best_score = 0;
+  for (size_t i = first_seq_zone_num; i < num_zones; ++i) {
+    int64_t score = zone_states[i].num_dead_bytes;
+    // discount by remaining space so we will tend to clean full zones
+    score -= (zone_size - zone_states[i].write_pointer) / 2;
+    if (score > 0 && (best < 0 || score > best_score)) {
+      best = i;
+      best_score = score;
+    }
+  }
+  if (best >= 0) {
+    ldout(cct, 10) << " zone 0x" << std::hex << best << " with score 0x" << best_score
+		   << ": 0x" << zone_states[best].num_dead_bytes
+		   << " dead and 0x"
+		   << zone_states[best].write_pointer - zone_states[best].num_dead_bytes
+		   << " live bytes" << std::dec << dendl;
+  } else {
+    ldout(cct, 10) << " no zones found that are good cleaning candidates" << dendl;
+  }
+  return best;
 }
 
 bool ZonedAllocator::low_on_space(void)
 {
-  ceph_assert(zones_to_clean.empty());
-
+  std::lock_guard l(lock);
   uint64_t sequential_num_free = num_free - conventional_size;
   double free_ratio = static_cast<double>(sequential_num_free) / sequential_size;
 
@@ -192,67 +196,6 @@ bool ZonedAllocator::low_on_space(void)
 
   // TODO: make 0.25 tunable
   return free_ratio <= 0.25;
-}
-
-void ZonedAllocator::find_zones_to_clean(void)
-{
-  ldout(cct, 40) << dendl;
-
-  if (num_zones_to_clean || !low_on_space())
-    return;
-
-  ceph_assert(zones_to_clean.empty());
-  
-  // TODO: make this tunable; handle the case when there aren't this many zones
-  // to clean.
-  const int64_t num_zones_to_clean_at_once = 1;
-
-  std::vector<uint64_t> idx(num_zones);
-  std::iota(idx.begin(), idx.end(), 0);
-  
-  if (cct->_conf->subsys.should_gather<ceph_subsys_bluestore, 40>()) {
-    for (size_t i = 0; i < zone_states.size(); ++i) {
-      dout(40) << " zone 0x" << std::hex << i << std::dec << " "
-	       << zone_states[i] << dendl;
-    }
-  }
-
-  std::partial_sort(idx.begin(), idx.begin() + num_zones_to_clean_at_once, idx.end(),
-		    [this](uint64_t i1, uint64_t i2) {
-		      return zone_states[i1].num_dead_bytes > zone_states[i2].num_dead_bytes;
-		    });
-
-  ldout(cct, 10) << " the zone that needs cleaning is 0x"
-		 << std::hex << *idx.begin() << " num_dead_bytes = 0x"
-		 << zone_states[*idx.begin()].num_dead_bytes
-		 << std::dec
-		 << dendl;
-
-  zones_to_clean = {idx.begin(), idx.begin() + num_zones_to_clean_at_once};
-  num_zones_to_clean = num_zones_to_clean_at_once;
-
-  // TODO: handle the case of disk being full.
-  ceph_assert(!zones_to_clean.empty());
-  ceph_assert(num_zones_to_clean != 0);
-
-  cleaner_lock->lock();
-  cleaner_cond->notify_one();
-  cleaner_lock->unlock();
-}
- 
-void ZonedAllocator::mark_zones_to_clean_free(void)
-{
-  std::lock_guard l(lock);
-  ldout(cct, 10) << dendl;
-  for (auto zone_num : zones_to_clean) {
-    ldout(cct, 10) << " zone 0x" << std::hex << zone_num
-		   << " is now clean" << std::dec << dendl;
-    num_free += zone_states[zone_num].write_pointer;
-    zone_states[zone_num].num_dead_bytes = 0;
-    zone_states[zone_num].write_pointer = 0;
-  }
-  zones_to_clean.clear();
-  num_zones_to_clean = 0;
 }
 
 void ZonedAllocator::shutdown()

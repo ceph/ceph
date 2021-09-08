@@ -100,14 +100,13 @@ void HMSMRDevice::reset_all_zones()
   zbd_reset_zones(zbd_fd, conventional_region_size, 0);
 }
 
-void HMSMRDevice::reset_zones(const std::set<uint64_t>& zones)
+void HMSMRDevice::reset_zone(uint64_t zone)
 {
-  dout(10) << __func__ << " 0x" << std::hex << zones << std::dec << dendl;
-  for (auto zone_num : zones) {
-    if (zbd_reset_zones(zbd_fd, zone_num * zone_size, zone_size) != 0) {
-      derr << __func__ << " resetting zone failed for zone 0x" << std::hex
-	   << zone_num << std::dec << dendl;
-    }
+  dout(10) << __func__ << " zone 0x" << std::hex << zone << std::dec << dendl;
+  if (zbd_reset_zones(zbd_fd, zone * zone_size, zone_size) != 0) {
+    derr << __func__ << " resetting zone failed for zone 0x" << std::hex
+	 << zone << std::dec << dendl;
+    ceph_abort("zbd_reset_zones failed");
   }
 }
 
