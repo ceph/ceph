@@ -72,7 +72,7 @@ class List(object):
             # the parent disk has a bluestore header, but children may be the most appropriate
             # devices to return if the parent disk does not have a bluestore header.
             out, err, ret = process.call([
-                'lsblk', '--paths', '--output=NAME', '--noheadings',
+                'lsblk', '--paths', '--output=NAME', '--noheadings', '--list'
             ])
             assert not ret
             devs = out
