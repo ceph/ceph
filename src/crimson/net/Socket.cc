@@ -198,7 +198,7 @@ void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocke
 }
 #endif
 
-FixedCPUServerSocket::listen_ertr::future<>
+crimson::net::listen_ertr::future<>
 FixedCPUServerSocket::listen(entity_addr_t addr)
 {
   assert(seastar::this_shard_id() == cpu);
