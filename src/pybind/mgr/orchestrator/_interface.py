@@ -965,6 +965,9 @@ class DaemonDescription(object):
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)
 
+    def __str__(self) -> str:
+        return f"{self.name()} in status {self.status_desc} on {self.hostname}"
+
     def to_json(self) -> dict:
         out: Dict[str, Any] = OrderedDict()
         out['daemon_type'] = self.daemon_type
