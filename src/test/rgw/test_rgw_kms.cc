@@ -62,11 +62,11 @@ protected:
 
 TEST_F(TestSSEKMS, vault_token_file_unset)
 {
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   cct->_conf.set_val("rgw_crypt_vault_auth", "token");
   EngineParmMap old_parms, kv_parms;
   TransitSecretEngine te(cct, std::move(old_parms));
   KvSecretEngine kv(cct, std::move(kv_parms));
+  const NoDoutPrefix no_dpp(cct, 1);
 
   std::string_view key_id("my_key");
   std::string actual_key;
@@ -78,12 +78,12 @@ TEST_F(TestSSEKMS, vault_token_file_unset)
 
 TEST_F(TestSSEKMS, non_existent_vault_token_file)
 {
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   cct->_conf.set_val("rgw_crypt_vault_auth", "token");
   cct->_conf.set_val("rgw_crypt_vault_token_file", "/nonexistent/file");
   EngineParmMap old_parms, kv_parms;
   TransitSecretEngine te(cct, std::move(old_parms));
   KvSecretEngine kv(cct, std::move(kv_parms));
+  const NoDoutPrefix no_dpp(cct, 1);
 
   std::string_view key_id("my_key/1");
   std::string actual_key;
@@ -93,7 +93,7 @@ TEST_F(TestSSEKMS, non_existent_vault_token_file)
 }
 
 
-typedef int SendRequestMethod(const char *,
+typedef int SendRequestMethod(const DoutPrefixProvider *dpp, const char *,
   std::string_view, std::string_view,
   const std::string &, bufferlist &);
 
@@ -105,12 +105,13 @@ class SetPointedValueAction : public ActionInterface<SendRequestMethod> {
     this->json = json;
   }
 
-  int Perform(const ::std::tuple<const char *, std::string_view, std::string_view, const std::string &, bufferlist &>& args) override {
-//    const char *method = ::std::get<0>(args);
-//    std::string_view infix = ::std::get<1>(args);
-//    std::string_view key_id = ::std::get<2>(args);
-//    const std::string& postdata = ::std::get<3>(args);
-    bufferlist& bl = ::std::get<4>(args);
+  int Perform(const ::std::tuple<const DoutPrefixProvider*, const char *, std::string_view, std::string_view, const std::string &, bufferlist &>& args) override {
+//    const DoutPrefixProvider *dpp = ::std::get<0>(args);
+//    const char *method = ::std::get<1>(args);
+//    std::string_view infix = ::std::get<2>(args);
+//    std::string_view key_id = ::std::get<3>(args);
+//    const std::string& postdata = ::std::get<4>(args);
+    bufferlist& bl = ::std::get<5>(args);
 
 // std::cout << "method = " << method << " infix = " << infix << " key_id = " << key_id
 // << " postdata = " << postdata
@@ -131,7 +132,7 @@ Action<SendRequestMethod> SetPointedValue(std::string json) {
 
 
 TEST_F(TestSSEKMS, test_transit_key_version_extraction){
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
+  const NoDoutPrefix no_dpp(cct, 1);
   string json = R"({"data": {"keys": {"6": "8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="}}})";
   EXPECT_CALL(*old_engine, send_request(&no_dpp, StrEq("GET"), StrEq(""), StrEq("1/2/3/4/5/6"), StrEq(""), _)).WillOnce(SetPointedValue(json));
 
@@ -154,12 +155,12 @@ TEST_F(TestSSEKMS, test_transit_key_version_extraction){
 
 TEST_F(TestSSEKMS, test_transit_backend){
 
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("my_key/1");
   std::string actual_key;
 
   // Mocks the expected return Value from Vault Server using custom Argument Action
   string json = R"({"data": {"keys": {"1": "8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="}}})";
+  const NoDoutPrefix no_dpp(cct, 1);
   EXPECT_CALL(*old_engine, send_request(&no_dpp, StrEq("GET"), StrEq(""), StrEq("my_key/1"), StrEq(""), _)).WillOnce(SetPointedValue(json));
 
   int res = old_engine->get_key(&no_dpp, my_key, actual_key);
@@ -171,10 +172,10 @@ TEST_F(TestSSEKMS, test_transit_backend){
 
 TEST_F(TestSSEKMS, test_transit_makekey){
 
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("my_key");
   std::string actual_key;
   map<string, bufferlist> attrs;
+  const NoDoutPrefix no_dpp(cct, 1);
 
   // Mocks the expected return Value from Vault Server using custom Argument Action
   string post_json = R"({"data": {"ciphertext": "vault:v2:HbdxLnUztGVo+RseCIaYVn/4wEUiJNT6GQfw57KXQmhXVe7i1/kgLWegEPg1I6lexhIuXAM6Q2YvY0aZ","key_version": 1,"plaintext": "3xfTra/dsIf3TMa3mAT2IxPpM7YWm/NvUb4gDfSDX4g="}})";
@@ -194,10 +195,10 @@ TEST_F(TestSSEKMS, test_transit_makekey){
 
 TEST_F(TestSSEKMS, test_transit_reconstitutekey){
 
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("my_key");
   std::string actual_key;
   map<string, bufferlist> attrs;
+  const NoDoutPrefix no_dpp(cct, 1);
 
   // Mocks the expected return Value from Vault Server using custom Argument Action
   set_attr(attrs, RGW_ATTR_CRYPT_DATAKEY, "vault:v2:HbdxLnUztGVo+RseCIaYVn/4wEUiJNT6GQfw57KXQmhXVe7i1/kgLWegEPg1I6lexhIuXAM6Q2YvY0aZ");
@@ -216,9 +217,9 @@ TEST_F(TestSSEKMS, test_transit_reconstitutekey){
 
 TEST_F(TestSSEKMS, test_kv_backend){
 
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("my_key");
   std::string actual_key;
+  const NoDoutPrefix no_dpp(cct, 1);
 
   // Mocks the expected return value from Vault Server using custom Argument Action
   string json = R"({"data": {"data": {"key": "8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="}}})";
@@ -275,9 +276,9 @@ TEST_F(TestSSEKMS, string_ends_maybe_slash)
 
 TEST_F(TestSSEKMS, test_transit_backend_empty_response)
 {
-  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   std::string_view my_key("/key/nonexistent/1");
   std::string actual_key;
+  const NoDoutPrefix no_dpp(cct, 1);
 
   // Mocks the expected return Value from Vault Server using custom Argument Action
   string json = R"({"errors": ["version does not exist or cannot be found"]})";
