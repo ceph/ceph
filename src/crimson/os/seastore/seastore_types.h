@@ -55,6 +55,8 @@ constexpr segment_id_t FAKE_SEG_ID =
  */
 constexpr segment_id_t ZERO_SEG_ID =
   std::numeric_limits<segment_id_t>::max() - 5;
+constexpr segment_id_t DELAYED_TEMP_SEG_ID =
+  std::numeric_limits<segment_id_t>::max() - 6;
 
 std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 
@@ -215,6 +217,9 @@ constexpr paddr_t make_fake_paddr(segment_off_t off) {
 constexpr paddr_t zero_paddr() {
   return paddr_t{ZERO_SEG_ID, 0};
 }
+constexpr paddr_t delayed_temp_paddr(segment_off_t off) {
+  return paddr_t{DELAYED_TEMP_SEG_ID, off};
+}
 
 struct __attribute((packed)) paddr_le_t {
   ceph_le32 segment = ceph_le32(NULL_SEG_ID);
@@ -237,6 +242,21 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
 using objaddr_t = uint32_t;
 constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
 constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX - 1;
+
+enum class ool_placement_hint_t {
+  NONE,     /// Denotes empty hint
+  NUM_HINTS /// Constant for number of hints
+};
+
+enum device_type_t {
+  NONE = 0,
+  SEGMENTED, // i.e. Hard_Disk, SATA_SSD, NAND_NVME
+  RANDOM_BLOCK, // i.e. RANDOM_BD
+  PMEM, // i.e. NVDIMM, PMEM
+  NUM_TYPES
+};
+
+bool need_delayed_allocation(device_type_t type);
 
 /* Monotonically increasing identifier for the location of a
  * journal_record.
@@ -721,9 +741,148 @@ struct rbm_alloc_delta_t {
   op_types_t op;
 };
 
+struct extent_info_t {
+  extent_types_t type = extent_types_t::NONE;
+  laddr_t addr = L_ADDR_NULL;
+  extent_len_t len = 0;
+
+  extent_info_t() = default;
+  extent_info_t(const extent_t &et)
+    : type(et.type), addr(et.addr), len(et.bl.length()) {}
+
+  DENC(extent_info_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.type, p);
+    denc(v.addr, p);
+    denc(v.len, p);
+    DENC_FINISH(p);
+  }
+};
+
+using segment_nonce_t = uint32_t;
+
+/**
+ * Segment header
+ *
+ * Every segment contains and encode segment_header_t in the first block.
+ * Our strategy for finding the journal replay point is:
+ * 1) Find the segment with the highest journal_segment_seq
+ * 2) Replay starting at record located at that segment's journal_tail
+ */
+struct segment_header_t {
+  segment_seq_t journal_segment_seq;
+  segment_id_t physical_segment_id; // debugging
+
+  journal_seq_t journal_tail;
+  segment_nonce_t segment_nonce;
+  bool out_of_line;
+
+  DENC(segment_header_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.journal_segment_seq, p);
+    denc(v.physical_segment_id, p);
+    denc(v.journal_tail, p);
+    denc(v.segment_nonce, p);
+    denc(v.out_of_line, p);
+    DENC_FINISH(p);
+  }
+};
+std::ostream &operator<<(std::ostream &out, const segment_header_t &header);
+
+struct record_header_t {
+  // Fixed portion
+  extent_len_t  mdlength;       // block aligned, length of metadata
+  extent_len_t  dlength;        // block aligned, length of data
+  uint32_t deltas;                // number of deltas
+  uint32_t extents;               // number of extents
+  segment_nonce_t segment_nonce;// nonce of containing segment
+  segment_off_t committed_to;   // records in this segment prior to committed_to
+                                // have been fully written
+  checksum_t data_crc;          // crc of data payload
+
+
+  DENC(record_header_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.mdlength, p);
+    denc(v.dlength, p);
+    denc(v.deltas, p);
+    denc(v.extents, p);
+    denc(v.segment_nonce, p);
+    denc(v.committed_to, p);
+    denc(v.data_crc, p);
+    DENC_FINISH(p);
+  }
+};
+
+std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
+
+struct record_size_t {
+  extent_len_t mdlength = 0;
+  extent_len_t dlength = 0;
+
+  record_size_t(
+    extent_len_t mdlength,
+    extent_len_t dlength)
+    : mdlength(mdlength), dlength(dlength) {}
+};
+
+extent_len_t get_encoded_record_raw_mdlength(
+  const record_t &record,
+  size_t block_size);
+
+/**
+ * Return <mdlength, dlength> pair denoting length of
+ * metadata and blocks respectively.
+ */
+record_size_t get_encoded_record_length(
+  const record_t &record,
+  size_t block_size);
+
+ceph::bufferlist encode_record(
+  record_size_t rsize,
+  record_t &&record,
+  size_t block_size,
+  segment_off_t committed_to,
+  segment_nonce_t current_segment_nonce = 0);
+
+/// scan segment for end incrementally
+struct scan_valid_records_cursor {
+  bool last_valid_header_found = false;
+  paddr_t offset;
+  paddr_t last_committed;
+
+  struct found_record_t {
+    paddr_t offset;
+    record_header_t header;
+    bufferlist mdbuffer;
+
+    found_record_t(
+      paddr_t offset,
+      const record_header_t &header,
+      const bufferlist &mdbuffer)
+      : offset(offset), header(header), mdbuffer(mdbuffer) {}
+  };
+  std::deque<found_record_t> pending_records;
+
+  bool is_complete() const {
+    return last_valid_header_found && pending_records.empty();
+  }
+
+  paddr_t get_offset() const {
+    return offset;
+  }
+
+  scan_valid_records_cursor(
+    paddr_t offset)
+    : offset(offset) {}
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)

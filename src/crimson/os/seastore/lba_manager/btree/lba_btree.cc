@@ -549,7 +549,12 @@ LBABtree::handle_split_ret LBABtree::handle_split(
 
     if (split_from > 1) {
       auto &pos = iter.get_internal(split_from);
-      DEBUGT("splitting internal {} at depth {}", c.trans, *pos.node, split_from);
+      DEBUGT("splitting internal {} at depth {}, parent: {} at pos: {}",
+	c.trans,
+	*pos.node,
+	split_from,
+	*parent_pos.node,
+	parent_pos.pos);
       auto [left, right] = split_level(parent_pos, pos);
 
       if (pos.pos < left->get_size()) {
@@ -562,7 +567,11 @@ LBABtree::handle_split_ret LBABtree::handle_split(
       }
     } else {
       auto &pos = iter.leaf;
-      DEBUGT("splitting leaf {}", c.trans, *pos.node);
+      DEBUGT("splitting leaf {}, parent: {} at pos: {}",
+	c.trans,
+	*pos.node,
+	*parent_pos.node,
+	parent_pos.pos);
       auto [left, right] = split_level(parent_pos, pos);
 
       /* right->get_node_meta().begin == pivot == right->begin()->get_key()

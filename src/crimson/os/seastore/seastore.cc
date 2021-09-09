@@ -119,15 +119,17 @@ seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
   }).safe_then([this] {
     return transaction_manager->mount();
   }).safe_then([this] {
-    return transaction_manager->with_transaction_intr(
-        Transaction::src_t::MUTATE, [this](auto& t) {
-      return onode_manager->mkfs(t
-      ).si_then([this, &t] {
-        return collection_manager->mkfs(t);
-      }).si_then([this, &t](auto coll_root) {
-        transaction_manager->write_collection_root(
-          t, coll_root);
-        return transaction_manager->submit_transaction(t);
+    return repeat_eagain([this] {
+      return transaction_manager->with_transaction_intr(
+	  Transaction::src_t::MUTATE, [this](auto& t) {
+	return onode_manager->mkfs(t
+	).si_then([this, &t] {
+	  return collection_manager->mkfs(t);
+	}).si_then([this, &t](auto coll_root) {
+	  transaction_manager->write_collection_root(
+	    t, coll_root);
+	  return transaction_manager->submit_transaction(t);
+	});
       });
     });
   }).safe_then([this] {
@@ -1173,13 +1175,27 @@ std::unique_ptr<SeaStore> make_seastore(
     segment_manager::block::BlockSegmentManager
     >(device + "/block");
 
+  auto scanner = std::make_unique<Scanner>(*sm);
+  auto& scanner_ref = *scanner.get();
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
+    std::move(scanner),
     false /* detailed */);
 
-  auto journal = std::make_unique<Journal>(*sm);
+  auto journal = std::make_unique<Journal>(*sm, scanner_ref);
   auto cache = std::make_unique<Cache>(*sm);
   auto lba_manager = lba_manager::create_lba_manager(*sm, *cache);
+
+  auto epm = std::make_unique<ExtentPlacementManager>(*cache, *lba_manager);
+
+  epm->add_allocator(
+    device_type_t::SEGMENTED,
+    std::make_unique<SegmentedAllocator>(
+      *segment_cleaner,
+      *sm,
+      *lba_manager,
+      *journal,
+      *cache));
 
   journal->set_segment_provider(&*segment_cleaner);
 
@@ -1188,7 +1204,8 @@ std::unique_ptr<SeaStore> make_seastore(
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
-    std::move(lba_manager));
+    std::move(lba_manager),
+    std::move(epm));
 
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(

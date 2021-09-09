@@ -16,12 +16,14 @@ TransactionManager::TransactionManager(
   SegmentCleanerRef _segment_cleaner,
   JournalRef _journal,
   CacheRef _cache,
-  LBAManagerRef _lba_manager)
+  LBAManagerRef _lba_manager,
+  ExtentPlacementManagerRef&& epm)
   : segment_manager(_segment_manager),
     segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
-    journal(std::move(_journal))
+    journal(std::move(_journal)),
+    epm(std::move(epm))
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -63,8 +65,16 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   LOG_PREFIX(TransactionManager::mount);
   cache->init();
   segment_cleaner->mount(segment_manager);
-  return journal->replay([this](auto seq, auto paddr, const auto &e) {
-    return cache->replay_delta(seq, paddr, e);
+  return segment_cleaner->init_segments().safe_then(
+    [this](auto&& segments) {
+    return journal->replay(
+      std::move(segments),
+      [this](auto seq, auto paddr, const auto &e) {
+      auto fut = cache->replay_delta(seq, paddr, e);
+      segment_cleaner->update_journal_tail_target(
+	cache->get_oldest_dirty_from().value_or(seq));
+      return fut;
+    });
   }).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this, FNAME](auto addr) {
@@ -227,10 +237,15 @@ TransactionManager::submit_transaction_direct(
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   DEBUGT("about to prepare", tref);
-  return trans_intr::make_interruptible(
-    tref.get_handle().enter(write_pipeline.prepare)
-  ).then_interruptible([this, FNAME, &tref]() mutable
-		       -> submit_transaction_iertr::future<> {
+
+  return epm->delayed_alloc_or_ool_write(tref)
+  .handle_error_interruptible(
+    crimson::ct_error::input_output_error::pass_further(),
+    crimson::ct_error::assert_all("invalid error")
+  ).si_then([&tref, this] {
+    return tref.get_handle().enter(write_pipeline.prepare);
+  }).si_then([this, FNAME, &tref]() mutable
+	      -> submit_transaction_iertr::future<> {
     auto record = cache->prepare_record(tref);
 
     tref.get_handle().maybe_release_collection_lock();
@@ -276,6 +291,49 @@ TransactionManager::get_next_dirty_extents(
   return cache->get_next_dirty_extents(t, seq, max_bytes);
 }
 
+TransactionManager::rewrite_extent_ret
+TransactionManager::rewrite_logical_extent(
+  Transaction& t,
+  LogicalCachedExtentRef extent)
+{
+  LOG_PREFIX(TransactionManager::rewrite_logical_extent);
+  if (extent->has_been_invalidated()) {
+    ERRORT("{} has been invalidated", t, *extent);
+  }
+  assert(!extent->has_been_invalidated());
+  DEBUGT("rewriting {}", t, *extent);
+
+  auto lextent = extent->cast<LogicalCachedExtent>();
+  cache->retire_extent(t, extent);
+  auto nlextent = epm->alloc_new_extent_by_type(
+    t,
+    lextent->get_type(),
+    lextent->get_length())->cast<LogicalCachedExtent>();
+  lextent->get_bptr().copy_out(
+    0,
+    lextent->get_length(),
+    nlextent->get_bptr().c_str());
+  nlextent->set_laddr(lextent->get_laddr());
+  nlextent->set_pin(lextent->get_pin().duplicate());
+
+  DEBUGT(
+    "rewriting {} into {}",
+    t,
+    *lextent,
+    *nlextent);
+
+  if (need_delayed_allocation(extent->backend_type)) {
+    // hold old poffset for later mapping updating assert check
+    nlextent->set_paddr(lextent->get_paddr());
+    return rewrite_extent_iertr::now();
+  }
+  return lba_manager->update_mapping(
+    t,
+    lextent->get_laddr(),
+    lextent->get_paddr(),
+    nlextent->get_paddr());
+}
+
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
@@ -295,7 +353,12 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     cache->duplicate_for_write(t, extent);
     return rewrite_extent_iertr::now();
   }
-  return lba_manager->rewrite_extent(t, extent);
+
+  if (extent->is_logical()) {
+    return rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
+  } else {
+    return lba_manager->rewrite_extent(t, extent);
+  }
 }
 
 TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_live(

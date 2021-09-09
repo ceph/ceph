@@ -40,3 +40,8 @@ options:
   default: true
   see_also:
   - seastore_device_size
+- name: seastore_init_rewrite_segments_num_per_device
+  type: uint
+  level: dev
+  desc: Initial number of segments for rewriting extents per device
+  default: 6

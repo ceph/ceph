@@ -208,6 +208,7 @@ int main(int argc, char* argv[])
               "This is normally used in combination with --mkfs")
     ("mkfs", "create a [new] data directory")
     ("debug", "enable debug output on all loggers")
+    ("trace", "enable trace output on all loggers")
     ("no-mon-config", "do not retrieve configuration from monitors on boot")
     ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
      "Prometheus port. Set to zero to disable")
@@ -247,6 +248,11 @@ int main(int argc, char* argv[])
               seastar::log_level::debug
             );
           }
+	  if (config.count("trace")) {
+	    seastar::global_logger_registry().set_all_loggers_level(
+              seastar::log_level::trace
+            );
+	  }
           sharded_conf().start(init_params.name, cluster_name).get();
           auto stop_conf = seastar::defer([] {
             sharded_conf().stop().get();
