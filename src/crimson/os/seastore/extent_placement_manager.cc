@@ -44,9 +44,10 @@ SegmentedAllocator::Writer::finish_write(
   ool_record_t& record) {
   return trans_intr::do_for_each(record.get_extents(),
     [this, &t](auto& ool_extent) {
+    LOG_PREFIX(SegmentedAllocator::Writer::finish_write);
     auto& lextent = ool_extent.get_lextent();
-    logger().debug("SegmentedAllocator::Writer::finish_write: "
-      "extent: {}, ool_paddr: {}",
+    DEBUGT("extent: {}, ool_paddr: {}",
+      t,
       *lextent,
       ool_extent.get_ool_paddr());
     return lba_manager.update_mapping(
@@ -74,10 +75,11 @@ SegmentedAllocator::Writer::_write(
   bufferlist bl = record.encode(current_segment->segment->get_segment_id(), 0);
   seastar::promise<> pr;
   current_segment->inflight_writes.emplace_back(pr.get_future());
+  LOG_PREFIX(SegmentedAllocator::Writer::_write);
 
-  logger().debug(
-    "SegmentedAllocator::Writer::write: written {} extents,"
-    " {} bytes to segment {} at {}",
+  DEBUGT(
+    "written {} extents, {} bytes to segment {} at {}",
+    t,
     record.get_num_extents(),
     bl.length(),
     current_segment->segment->get_segment_id(),
@@ -85,12 +87,15 @@ SegmentedAllocator::Writer::_write(
 
   return trans_intr::make_interruptible(
     current_segment->segment->write(record.get_base(), bl).safe_then(
-      [this, pr=std::move(pr),
+      [this, pr=std::move(pr), &t,
       it=(--current_segment->inflight_writes.end()),
       cs=current_segment]() mutable {
+        LOG_PREFIX(SegmentedAllocator::Writer::_write);
         if (cs->outdated) {
+          DEBUGT("segment rolled", t);
           pr.set_value();
         } else{
+          DEBUGT("segment not rolled", t);
           current_segment->inflight_writes.erase(it);
         }
         return seastar::now();
@@ -131,6 +136,7 @@ SegmentedAllocator::Writer::write(
             return !rolling_segment;
           },
           [this, &record, &extents, &t]() -> write_iertr::future<> {
+            LOG_PREFIX(SegmentedAllocator::Writer::write);
             record.set_base(allocated_to);
             for (auto it = extents.begin();
                  it != extents.end();) {
@@ -142,8 +148,9 @@ SegmentedAllocator::Writer::write(
                 assert(!rolling_segment);
                 rolling_segment = true;
                 auto num_extents = record.get_num_extents();
-                logger().debug(
-                  "SegmentedAllocator::Writer::write: end of segment, writing {} extents to segment {} at {}",
+                DEBUGT(
+                  "end of segment, writing {} extents to segment {} at {}",
+                  t,
                   num_extents,
                   current_segment->segment->get_segment_id(),
                   allocated_to);
@@ -152,6 +159,9 @@ SegmentedAllocator::Writer::write(
                         write_iertr::now()
                 ).si_then([this]() mutable {
                   return roll_segment(false);
+                }).finally([this] {
+                  rolling_segment = false;
+                  segment_rotation_guard.broadcast();
                 });
               }
               add_extent_to_write(record, extent);
@@ -159,8 +169,9 @@ SegmentedAllocator::Writer::write(
             }
             record_size_t rsize = record.get_encoded_record_length();
 
-            logger().debug(
-              "SegmentedAllocator::Writer::write: writing {} extents to segment {} at {}",
+            DEBUGT(
+              "writing {} extents to segment {} at {}",
+              t,
               record.get_num_extents(),
               current_segment->segment->get_segment_id(),
               allocated_to);
@@ -222,6 +233,8 @@ SegmentedAllocator::Writer::init_segment(Segment& segment) {
 
 SegmentedAllocator::Writer::roll_segment_ertr::future<>
 SegmentedAllocator::Writer::roll_segment(bool set_rolling) {
+  LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
+  DEBUG("set_rolling {}", set_rolling);
   if (set_rolling) {
     rolling_segment = true;
   }
@@ -238,15 +251,16 @@ SegmentedAllocator::Writer::roll_segment(bool set_rolling) {
       return fut.then(
         [cs=std::move(current_segment), this, it=(--open_segments.end())] {
         return cs->segment->close().safe_then([this, cs, it] {
+          LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
           assert((*it).get() == cs.get());
           segment_provider.close_segment(cs->segment->get_segment_id());
           open_segments.erase(it);
+          DEBUG("closed segment: {}", cs->segment->get_segment_id());
         });
       });
     }).handle_exception_type([](seastar::gate_closed_exception e) {
-      logger().debug(
-        "SegmentedAllocator::Writer::roll_segment:"
-        " writer_guard closed, should be stopping");
+      LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
+      DEBUG(" writer_guard closed, should be stopping");
       return seastar::now();
     });
   }
@@ -254,13 +268,17 @@ SegmentedAllocator::Writer::roll_segment(bool set_rolling) {
   return segment_provider.get_segment().safe_then([this](auto segment) {
     return segment_manager.open(segment);
   }).safe_then([this](auto segref) {
+    LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
+    DEBUG("opened new segment: {}", segref->get_segment_id());
     return init_segment(*segref).safe_then([segref=std::move(segref), this] {
+      LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
       assert(!current_segment.get());
       current_segment.reset(new open_segment_wrapper_t());
       current_segment->segment = segref;
       open_segments.emplace_back(current_segment);
       rolling_segment = false;
       segment_rotation_guard.broadcast();
+      DEBUG("inited new segment: {}", segref->get_segment_id());
     });
   }).handle_error(
     roll_segment_ertr::pass_further{},
