@@ -662,13 +662,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 if s.status_desc:
                     status = s.status_desc
                 else:
-                    status = {
-                        DaemonDescriptionStatus.error: 'error',
-                        DaemonDescriptionStatus.stopped: 'stopped',
-                        DaemonDescriptionStatus.running: 'running',
-                        None: '<unknown>'
-                    }[s.status]
-                if s.status == DaemonDescriptionStatus.running and s.started:
+                    status = DaemonDescriptionStatus.to_str(s.status)
+                if s.status == DaemonDescriptionStatus.running and s.started:  # See DDS.starting
                     status += ' (%s)' % to_pretty_timedelta(now - s.started)
 
                 table.add_row((
