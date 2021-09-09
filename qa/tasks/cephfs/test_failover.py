@@ -518,6 +518,22 @@ class TestStandbyReplay(CephFSTestCase):
         time.sleep(30)
         self._confirm_single_replay()
 
+    def test_standby_replay_damaged(self):
+        """
+        That a standby-replay daemon can cause the rank to go damaged correctly.
+        """
+
+        self._confirm_no_replay()
+        self.config_set("mds", "mds_standby_replay_damaged", True)
+        self.fs.set_allow_standby_replay(True)
+        self.wait_until_true(
+            lambda: len(self.fs.get_damaged()) > 0,
+            timeout=30
+        )
+        status = self.fs.status()
+        self.assertListEqual([], list(self.fs.get_ranks(status=status)))
+        self.assertListEqual([0], self.fs.get_damaged(status=status))
+
     def test_standby_replay_disable(self):
         """
         That turning off allow_standby_replay fails all standby-replay daemons.

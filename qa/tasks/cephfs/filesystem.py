@@ -148,6 +148,13 @@ class FSStatus(object):
             if info['rank'] >= 0 and info['state'] != 'up:standby-replay':
                 yield info
 
+    def get_damaged(self, fscid):
+        """
+        Get the damaged ranks for the given FSCID.
+        """
+        fs = self.get_fsmap(fscid)
+        return fs['mdsmap']['damaged']
+
     def get_rank(self, fscid, rank):
         """
         Get the rank for the given FSCID.
@@ -1044,6 +1051,11 @@ class Filesystem(MDSCluster):
         if status is None:
             status = self.getinfo()
         return status.get_ranks(self.id)
+
+    def get_damaged(self, status=None):
+        if status is None:
+            status = self.getinfo()
+        return status.get_damaged(self.id)
 
     def get_replays(self, status=None):
         if status is None:
