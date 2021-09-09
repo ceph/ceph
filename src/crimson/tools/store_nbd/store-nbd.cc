@@ -298,7 +298,7 @@ int main(int argc, char** argv)
         crimson::common::sharded_conf().stop().get();
       });
 
-      auto backend = get_backend(backend_config, app.alien());
+      auto backend = get_backend(backend_config);
       NBDHandler nbd(*backend, nbd_config);
       backend->mount().get();
       auto close_backend = seastar::defer([&] {
