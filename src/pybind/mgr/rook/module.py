@@ -1,3 +1,5 @@
+from logging import error
+import logging
 import threading
 import functools
 import os
@@ -441,6 +443,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return self.rook_cluster.rm_service('cephnfses', service_name)
         else:
             raise orchestrator.OrchestratorError(f'Service type {service_type} not supported')
+
+    def zap_device(self, host: str, path: str) -> OrchResult[str]:
+        try:
+            self.rook_cluster.create_zap_job(host, path)
+        except Exception as e:
+            logging.error(e)
+            return OrchResult(None, Exception("Unable to zap device: " + str(e.with_traceback(None))))
+        return OrchResult(f'{path} on {host} zapped') 
 
     @handle_orch_error
     def apply_mon(self, spec):
