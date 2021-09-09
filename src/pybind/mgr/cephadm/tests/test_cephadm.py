@@ -23,7 +23,7 @@ from orchestrator import DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError, DaemonDescriptionStatus, OrchestratorEvent
 from tests import mock
 from .fixtures import wait, _run_cephadm, match_glob, with_host, \
-    with_cephadm_module, with_service, _deploy_cephadm_binary
+    with_cephadm_module, with_service, _deploy_cephadm_binary, make_daemons_running
 from cephadm.module import CephadmOrchestrator
 
 """
@@ -159,14 +159,16 @@ class TestCephadm(object):
                         'service_name': 'mds.name',
                         'daemon_type': 'mds',
                         'hostname': 'test',
-                        'status': 1,
+                        'status': 2,
                         'status_desc': 'starting',
                         'is_active': False,
                         'ports': [],
                     }
                 ]
 
-                with with_service(cephadm_module, ServiceSpec('rgw', 'r.z'), CephadmOrchestrator.apply_rgw, 'test'):
+                with with_service(cephadm_module, ServiceSpec('rgw', 'r.z'),
+                                  CephadmOrchestrator.apply_rgw, 'test', status_running=True):
+                    make_daemons_running(cephadm_module, 'mds.name')
 
                     c = cephadm_module.describe_service()
                     out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
@@ -200,8 +202,10 @@ class TestCephadm(object):
     def test_service_ls_service_type_flag(self, cephadm_module):
         with with_host(cephadm_module, 'host1'):
             with with_host(cephadm_module, 'host2'):
-                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), CephadmOrchestrator.apply_mgr, ''):
-                    with with_service(cephadm_module, ServiceSpec('mds', 'test-id', placement=PlacementSpec(count=2)), CephadmOrchestrator.apply_mds, ''):
+                with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)),
+                                  CephadmOrchestrator.apply_mgr, '', status_running=True):
+                    with with_service(cephadm_module, ServiceSpec('mds', 'test-id', placement=PlacementSpec(count=2)),
+                                      CephadmOrchestrator.apply_mds, '', status_running=True):
 
                         # with no service-type. Should provide info fot both services
                         c = cephadm_module.describe_service()
@@ -920,13 +924,15 @@ class TestCephadm(object):
             with with_host(cephadm_module, 'host2'):
                 with with_osd_daemon(cephadm_module, _run_cephadm, 'host1', 1) as dd1:  # type: DaemonDescription
                     with with_osd_daemon(cephadm_module, _run_cephadm, 'host2', 1) as dd2:  # type: DaemonDescription
+                        CephadmServe(cephadm_module)._check_for_moved_osds()
+                        # both are in status "starting"
+                        assert len(cephadm_module.cache.get_daemons()) == 2
+
                         dd1.status = DaemonDescriptionStatus.running
                         dd2.status = DaemonDescriptionStatus.error
                         cephadm_module.cache.update_host_daemons(dd1.hostname, {dd1.name(): dd1})
                         cephadm_module.cache.update_host_daemons(dd2.hostname, {dd2.name(): dd2})
-
                         CephadmServe(cephadm_module)._check_for_moved_osds()
-
                         assert len(cephadm_module.cache.get_daemons()) == 1
 
                         assert cephadm_module.events.get_for_daemon('osd.1') == [
