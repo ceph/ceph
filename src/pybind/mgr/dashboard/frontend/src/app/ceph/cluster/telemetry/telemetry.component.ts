@@ -90,7 +90,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
 
   private createPreviewForm() {
 
-    let replacer = (key: string, value: any) => {
+    const replacer = (key: string, value: any) => {
       if ((key === 'ranges' || key === 'values') && Array.isArray(value)) {
         const x = [];
         for (let i = 0; i < value.length; i++) {
