@@ -58,6 +58,18 @@ class TestActivate(object):
         with pytest.raises(RuntimeError):
             activate.Activate([]).activate(args)
 
+    def test_osd_id_no_osd_fsid(self, is_root):
+        args = Args(osd_id=42, osd_fsid=None)
+        with pytest.raises(RuntimeError) as result:
+            activate.Activate([]).activate(args)
+        assert result.value.args[0] == 'could not activate osd.42, please provide the osd_fsid too'
+
+    def test_no_osd_id_no_osd_fsid(self, is_root):
+        args = Args(osd_id=None, osd_fsid=None)
+        with pytest.raises(RuntimeError) as result:
+            activate.Activate([]).activate(args)
+        assert result.value.args[0] == 'Please provide both osd_id and osd_fsid'
+
     def test_filestore_no_systemd(self, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
