@@ -51,6 +51,8 @@ typedef boost::mt11213b gen_type;
 const uint64_t DEF_STORE_TEST_BLOCKDEV_SIZE = 10240000000;
 #define dout_context g_ceph_context
 
+bool smr = false;
+
 static bool bl_eq(bufferlist& expected, bufferlist& actual)
 {
   if (expected.contents_equal(actual))
@@ -1109,6 +1111,10 @@ void StoreTest::doCompressionTest()
 TEST_P(StoreTest, CompressionTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "TODO: need to adjust statfs check for smr" << std::endl;
+    return;
+  }
 
   SetVal(g_conf(), "bluestore_compression_algorithm", "snappy");
   SetVal(g_conf(), "bluestore_compression_mode", "force");
@@ -8362,6 +8368,10 @@ namespace {
 TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  if (smr) {
+    cout << "TODO: repair mismatched write pointer (+ dead bytes mismatch)" << std::endl;
+    return;
+  }
   const size_t offs_base = 65536 / 2;
 
 
@@ -9529,6 +9539,13 @@ int main(int argc, char **argv) {
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
+
+  for (auto& i : args) {
+    if (i == "--smr"s) {
+      derr << "smr" << dendl;
+      smr = true;
+    }
+  }
 
   // make sure we can adjust any config settings
   g_ceph_context->_conf._clear_safe_to_start_threads();
