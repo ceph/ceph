@@ -69,10 +69,6 @@ public:
   /// bind to the given address
   virtual bind_ertr::future<> bind(const entity_addrvec_t& addr) = 0;
 
-  /// try to bind to the first unused port of given address
-  virtual bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
-                                       uint32_t min_port, uint32_t max_port) = 0;
-
   /// start the messenger
   virtual seastar::future<> start(const dispatchers_t&) = 0;
 
