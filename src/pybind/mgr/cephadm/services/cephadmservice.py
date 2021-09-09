@@ -1033,7 +1033,7 @@ class CephadmAgent(CephService):
             raise OrchestratorError(
                 'Cannot deploy agent daemons until cephadm endpoint has finished generating certs')
         listener_cert, listener_key = self.mgr.cherrypy_thread.ssl_certs.generate_cert(
-            daemon_spec.host)
+            self.mgr.inventory.get_addr(daemon_spec.host))
         config = {
             'agent.json': json.dumps(cfg),
             'cephadm': self.mgr._cephadm,

@@ -3481,30 +3481,33 @@ class MgrListener(Thread):
         secureListenSocket = ssl_ctx.wrap_socket(listenSocket, server_side=True)
         while not self.stop:
             try:
-                conn, _ = secureListenSocket.accept()
-            except socket.timeout:
-                continue
-            try:
-                length: int = int(conn.recv(10).decode())
-            except Exception as e:
-                err_str = f'Failed to extract length of payload from message: {e}'
-                conn.send(err_str.encode())
-                logger.error(err_str)
-            while True:
-                payload = conn.recv(length).decode()
-                if not payload:
-                    break
                 try:
-                    data: Dict[Any, Any] = json.loads(payload)
-                    self.handle_json_payload(data)
+                    conn, _ = secureListenSocket.accept()
+                except socket.timeout:
+                    continue
+                try:
+                    length: int = int(conn.recv(10).decode())
                 except Exception as e:
-                    err_str = f'Failed to extract json payload from message: {e}'
+                    err_str = f'Failed to extract length of payload from message: {e}'
                     conn.send(err_str.encode())
                     logger.error(err_str)
-                else:
-                    conn.send(b'ACK')
-                    self.agent.wakeup()
-                    logger.debug(f'Got mgr message {data}')
+                while True:
+                    payload = conn.recv(length).decode()
+                    if not payload:
+                        break
+                    try:
+                        data: Dict[Any, Any] = json.loads(payload)
+                        self.handle_json_payload(data)
+                    except Exception as e:
+                        err_str = f'Failed to extract json payload from message: {e}'
+                        conn.send(err_str.encode())
+                        logger.error(err_str)
+                    else:
+                        conn.send(b'ACK')
+                        self.agent.wakeup()
+                        logger.debug(f'Got mgr message {data}')
+            except Exception as e:
+                logger.error(f'Mgr Listener encountered exception: {e}')
 
     def shutdown(self) -> None:
         self.stop = True
@@ -3645,8 +3648,8 @@ WantedBy=ceph-{fsid}.target
             self.mgr_listener.start()
 
         ssl_ctx = ssl.create_default_context()
-        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
         ssl_ctx.check_hostname = True
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
         ssl_ctx.load_verify_locations(self.ca_path)
 
         while not self.stop:
