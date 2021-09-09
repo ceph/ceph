@@ -2324,6 +2324,15 @@ class CephManager:
         except KeyError:
             return j['pg_stats']
 
+    def get_osd_df(self, osdid):
+        """
+        Get the osd df stats
+        """
+        out = self.raw_cluster_cmd('osd', 'df', 'name', 'osd.{}'.format(osdid),
+                                   '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return j['nodes'][0]
+
     def get_pgids_to_force(self, backfill):
         """
         Return the randomized list of PGs that can have their recovery/backfill forced
