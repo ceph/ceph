@@ -91,13 +91,6 @@ export class TelemetryComponent extends CdForm implements OnInit {
   private createPreviewForm() {
 
     const replacer = (key: string, value: any) => {
-      if ((key === 'ranges' || key === 'values') && Array.isArray(value)) {
-        const x = [];
-        for (let i = 0; i < value.length; i++) {
-          x.push(JSON.stringify(value[i]));
-        }
-        return x;
-      }
       return value;
     }
 
