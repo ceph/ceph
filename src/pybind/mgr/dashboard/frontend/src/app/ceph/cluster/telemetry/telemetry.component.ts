@@ -89,18 +89,17 @@ export class TelemetryComponent extends CdForm implements OnInit {
   }
 
   private createPreviewForm() {
-
     const replacer = (key: string, value: any) => {
-      if (key === 'hello_world') {
+      if (key === "hello_world") {
         return key;
       }
       return value;
-    }
+    };
 
     const controls = {
       report: JSON.stringify(this.report, replacer, 2),
       reportId: this.reportId,
-      licenseAgrmt: [this.licenseAgrmt, Validators.requiredTrue]
+      licenseAgrmt: [this.licenseAgrmt, Validators.requiredTrue],
     };
     this.previewForm = this.formBuilder.group(controls);
   }
