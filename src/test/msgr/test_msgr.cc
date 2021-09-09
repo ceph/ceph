@@ -16,27 +16,30 @@
 
 #include <atomic>
 #include <iostream>
+#include <list>
 #include <memory>
-#include <unistd.h>
+#include <set>
 #include <stdlib.h>
 #include <time.h>
-#include <set>
-#include <list>
-#include "common/ceph_mutex.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "msg/Dispatcher.h"
-#include "msg/msg_types.h"
-#include "msg/Message.h"
-#include "msg/Messenger.h"
-#include "msg/Connection.h"
-#include "messages/MPing.h"
-#include "messages/MCommand.h"
+#include <unistd.h>
 
+#include <boost/random/binomial_distribution.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
-#include <boost/random/binomial_distribution.hpp>
 #include <gtest/gtest.h>
+
+#define MSG_POLICY_UNIT_TESTING
+
+#include "common/ceph_argparse.h"
+#include "common/ceph_mutex.h"
+#include "global/global_init.h"
+#include "messages/MCommand.h"
+#include "messages/MPing.h"
+#include "msg/Connection.h"
+#include "msg/Dispatcher.h"
+#include "msg/Message.h"
+#include "msg/Messenger.h"
+#include "msg/msg_types.h"
 
 typedef boost::mt11213b gen_type;
 
