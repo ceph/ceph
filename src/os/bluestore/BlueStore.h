@@ -3400,6 +3400,7 @@ public:
 
     mempool_dynamic_bitset* used_blocks;
     uint64_t_btree_t* used_omap_head;
+    std::vector<std::unordered_map<ghobject_t, uint64_t>> *zone_refs;
 
     ceph::mutex* sb_info_lock;
     sb_info_map_t& sb_info;
@@ -3417,7 +3418,8 @@ public:
                    uint64_t& _num_spanning_blobs,
                    mempool_dynamic_bitset* _ub,
                    uint64_t_btree_t* _used_omap_head,
-                   ceph::mutex* _sb_info_lock,
+		   std::vector<std::unordered_map<ghobject_t, uint64_t>> *_zone_refs,
+		   ceph::mutex* _sb_info_lock,
                    sb_info_map_t& _sb_info,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
@@ -3431,6 +3433,7 @@ public:
       num_spanning_blobs(_num_spanning_blobs),
       used_blocks(_ub),
       used_omap_head(_used_omap_head),
+      zone_refs(_zone_refs),
       sb_info_lock(_sb_info_lock),
       sb_info(_sb_info),
       expected_store_statfs(_store_statfs),

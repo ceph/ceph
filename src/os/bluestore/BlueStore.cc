@@ -7699,6 +7699,8 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
     &ctx.expected_pool_statfs[pool_id] :
     &ctx.expected_store_statfs;
 
+  map<uint32_t, uint64_t> zone_first_offsets;  // for zoned/smr devices
+
   dout(10) << __func__ << "  " << oid << dendl;
   OnodeRef o;
   o.reset(Onode::decode(c, oid, key, value));
@@ -7753,6 +7755,22 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
     res_statfs->data_stored += l.length;
     ceph_assert(l.blob);
     const bluestore_blob_t& blob = l.blob->get_blob();
+
+#ifdef HAVE_LIBZBD
+    if (bdev->is_smr() && depth != FSCK_SHALLOW) {
+      for (auto& e : blob.get_extents()) {
+	if (e.is_valid()) {
+	  uint32_t zone = e.offset / zone_size;
+	  uint64_t offset = e.offset % zone_size;
+	  auto p = zone_first_offsets.find(zone);
+	  if (p == zone_first_offsets.end() || p->second > offset) {
+	    // FIXME: use interator for guided insert?
+	    zone_first_offsets[zone] = offset;
+	  }
+	}
+      }
+    }
+#endif
 
     auto& ref = ref_map[l.blob];
     if (ref.is_empty()) {
@@ -7872,6 +7890,34 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
         }
       }
     }
+
+#ifdef HAVE_LIBZBD
+    if (bdev->is_smr() && depth != FSCK_SHALLOW) {
+      for (auto& [zone, first_offset] : zone_first_offsets) {
+	auto p = (*ctx.zone_refs)[zone].find(oid);
+	if (p != (*ctx.zone_refs)[zone].end()) {
+	  if (first_offset < p->second) {
+	    dout(20) << " slightly wonky zone ref 0x" << std::hex << zone
+		 << " offset 0x" << p->second
+		 << " but first offset is 0x" << first_offset
+		 << "; this can happen due to clone_range"
+		 << dendl;
+	  } else {
+	    dout(20) << " good zone ref 0x" << std::hex << zone << " offset 0x" << p->second
+		     << " <= first offset 0x" << first_offset
+		     << std::dec << dendl;
+	  }
+	  (*ctx.zone_refs)[zone].erase(p);
+	} else {
+	  derr << "fsck error: " << oid << " references zone 0x" << std::hex << zone
+	       << " but there is no zone ref" << std::dec << dendl;
+	  // FIXME: add repair
+	  ++errors;
+	}
+      }
+    }
+#endif
+
     if (broken) {
       derr << "fsck error: " << oid << " - " << broken
            << " zombie spanning blob(s) found, the first one: "
@@ -8014,6 +8060,7 @@ public:
         batch->num_spanning_blobs,
         nullptr, // used_blocks
         nullptr, //used_omap_head
+	nullptr,
         sb_info_lock,
         *sb_info,
         batch->expected_store_statfs,
@@ -8281,7 +8328,8 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
   }
 }
 
-void BlueStore::_fsck_check_objects(FSCKDepth depth,
+void BlueStore::_fsck_check_objects(
+  FSCKDepth depth,
   BlueStore::FSCK_ObjectCtx& ctx)
 {
   auto& errors = ctx.errors;
@@ -8316,7 +8364,7 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
       thread_pool.start();
     }
 
-    //fill global if not overriden below
+    // fill global if not overriden below
     CollectionRef c;
     int64_t pool_id = -1;
     spg_t pgid;
@@ -8646,6 +8694,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   sb_info_map_t sb_info;
 
+  /// map of oid -> (first_)offset for each zone
+  std::vector<std::unordered_map<ghobject_t, uint64_t>> zone_refs;   // FIXME: this may be a lot of RAM!
+
   uint64_t num_objects = 0;
   uint64_t num_extents = 0;
   uint64_t num_blobs = 0;
@@ -8761,6 +8812,44 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	++errors;
       }
     }
+
+    if (depth != FSCK_SHALLOW) {
+      // load zone refs
+      zone_refs.resize(bdev->get_size() / zone_size);
+      it = db->get_iterator(PREFIX_ZONED_CL_INFO, KeyValueDB::ITERATOR_NOCACHE);
+      if (it) {
+	for (it->lower_bound(string());
+	     it->valid();
+	     it->next()) {
+	  uint32_t zone = 0;
+	  uint64_t offset = 0;
+	  ghobject_t oid;
+	  string key = it->key();
+	  int r = get_key_zone_offset_object(key, &zone, &offset, &oid);
+	  if (r < 0) {
+	    derr << "fsck error: invalid zone ref key " << pretty_binary_string(key)
+		 << dendl;
+	    if (repair) {
+	      repairer.remove_key(db, PREFIX_ZONED_CL_INFO, key);
+	    }
+	    ++errors;
+	    continue;
+	  }
+	  dout(30) << " zone ref 0x" << std::hex << zone << " offset 0x" << offset
+		   << " -> " << std::dec << oid << dendl;
+	  if (zone_refs[zone].count(oid)) {
+	    derr << "fsck error: second zone ref in zone 0x" << std::hex << zone
+		 << " offset 0x" << offset << std::dec << " for " << oid << dendl;
+	    if (repair) {
+	      repairer.remove_key(db, PREFIX_ZONED_CL_INFO, key);
+	    }
+	    ++errors;
+	    continue;
+	  }
+	  zone_refs[zone][oid] = offset;
+	}
+      }
+    }
   }
 #endif
 
@@ -8778,6 +8867,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       num_spanning_blobs,
       &used_blocks,
       &used_omap_head,
+      &zone_refs,
       //no need for the below lock when in non-shallow mode as
       // there is no multithreading in this case
       depth == FSCK_SHALLOW ? &sb_info_lock : nullptr,
@@ -8788,6 +8878,20 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
     _fsck_check_objects(depth, ctx);
   }
+
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr() && depth != FSCK_SHALLOW) {
+    dout(1) << __func__ << " checking for leaked zone refs" << dendl;
+    for (uint32_t zone = 0; zone < zone_refs.size(); ++zone) {
+      for (auto& [oid, offset] : zone_refs[zone]) {
+	derr << "fsck error: stray zone ref 0x" << std::hex << zone
+	     << " offset 0x" << offset << " -> " << std::dec << oid << dendl;
+	// FIXME: add repair
+	++errors;
+      }
+    }
+  }
+#endif
 
   dout(1) << __func__ << " checking shared_blobs" << dendl;
   it = db->get_iterator(PREFIX_SHARED_BLOB, KeyValueDB::ITERATOR_NOCACHE);
@@ -16021,6 +16125,27 @@ int BlueStore::_rename(TransContext *txc,
   // it from the cache before this txc commits (or else someone may come along
   // and read newo's metadata via the old name).
   txc->note_modified_object(oldo);
+
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    // adjust zone refs
+    for (auto& [zone, offset] : newo->onode.zone_offset_refs) {
+      dout(20) << __func__ << " rm ref zone 0x" << std::hex << zone
+	       << " offset 0x" << offset << std::dec
+	       << " -> " << oldo->oid << dendl;
+      string key;
+      get_zone_offset_object_key(zone, offset, oldo->oid, &key);
+      txc->t->rmkey(PREFIX_ZONED_CL_INFO, key);
+
+      dout(20) << __func__ << " add ref zone 0x" << std::hex << zone
+	       << " offset 0x" << offset << std::dec
+	       << " -> " << newo->oid << dendl;
+      get_zone_offset_object_key(zone, offset, newo->oid, &key);
+      bufferlist v;
+      txc->t->set(PREFIX_ZONED_CL_INFO, key, v);
+    }
+  }
+#endif
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "
