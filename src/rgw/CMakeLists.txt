@@ -212,6 +212,14 @@ target_include_directories(rgw_common
   SYSTEM PUBLIC "services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PRIVATE "${LUA_INCLUDE_DIR}")
+
+if(WITH_CPP_REDIS)
+  add_dependencies(rgw_common cpp_redis)
+  target_link_libraries(rgw_common PRIVATE cpp_redis)
+  target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/includes")
+  target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/tacopie/includes")
+endif()
+
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
   target_link_libraries(rgw_common
@@ -363,6 +371,7 @@ target_link_libraries(radosgwd radosgw librados
   ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
+
 set_target_properties(radosgwd PROPERTIES OUTPUT_NAME radosgw)
 install(TARGETS radosgwd DESTINATION bin)
 
