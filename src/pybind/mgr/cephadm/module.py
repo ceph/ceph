@@ -2255,6 +2255,15 @@ Then run the following:
                 r[str(osd_id)] = o.get('uuid', '')
         return r
 
+    def get_osd_by_id(self, osd_id: int) -> Optional[Dict[str, Any]]:
+        osd = [x for x in self.get('osd_map')['osds']
+               if x['osd'] == osd_id]
+
+        if len(osd) != 1:
+            return None
+
+        return osd[0]
+
     def _trigger_preview_refresh(self,
                                  specs: Optional[List[DriveGroupSpec]] = None,
                                  service_name: Optional[str] = None,

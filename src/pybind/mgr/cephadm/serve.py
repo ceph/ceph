@@ -553,7 +553,7 @@ class CephadmServe:
         for dd in self.mgr.cache.get_daemons_by_type('osd'):
             assert dd.daemon_id
             all_osds[int(dd.daemon_id)].append(dd)
-        for dds in all_osds.values():
+        for osd_id, dds in all_osds.items():
             if len(dds) <= 1:
                 continue
             running = [dd for dd in dds if dd.status == DaemonDescriptionStatus.running]
@@ -561,6 +561,9 @@ class CephadmServe:
             msg = f'Found duplicate OSDs: {", ".join(str(dd) for dd in dds)}'
             logger.info(msg)
             if len(running) != 1:
+                continue
+            osd = self.mgr.get_osd_by_id(osd_id)
+            if not osd or not osd['up']:
                 continue
             for e in error:
                 assert e.hostname
