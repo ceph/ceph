@@ -15,7 +15,7 @@ from .fixtures import _run_cephadm, wait, with_host, with_service
 def test_upgrade_start(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'test'):
         with with_host(cephadm_module, 'test2'):
-            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2))):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
                 assert wait(cephadm_module, cephadm_module.upgrade_start(
                     'image_id', None)) == 'Initiating upgrade to docker.io/image_id'
 
@@ -43,7 +43,8 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'host2'):
             cephadm_module.set_container_image('global', 'from_image')
             cephadm_module.use_repo_digest = use_repo_digest
-            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)), CephadmOrchestrator.apply_mgr, ''),\
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
+                              CephadmOrchestrator.apply_mgr, '', status_running=True),\
                 mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name",
                            return_value='foo'),\
                 mock.patch("cephadm.module.CephadmOrchestrator.version",
