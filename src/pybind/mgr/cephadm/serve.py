@@ -1095,7 +1095,7 @@ class CephadmServe:
                         # prime cached service state with what we (should have)
                         # just created
                         sd = daemon_spec.to_daemon_description(
-                            DaemonDescriptionStatus.running, 'starting')
+                            DaemonDescriptionStatus.starting, 'starting')
                         self.mgr.cache.add_daemon(daemon_spec.host, sd)
                         if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
                             self.mgr.requires_post_actions.add(daemon_spec.name())
