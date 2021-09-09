@@ -10,6 +10,7 @@ from ceph_volume.api import lvm as api
 from ceph_volume.util import system, encryption, disk, arg_validators, str_to_int, merge_dict
 from ceph_volume.util.device import Device
 from ceph_volume.systemd import systemctl
+from ceph_volume.devices.lvm.common import valid_osd_id
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -376,6 +377,7 @@ class Zap(object):
 
         parser.add_argument(
             '--osd-id',
+            type=valid_osd_id,
             help='Specify an OSD ID to detect associated devices for zapping',
         )
 

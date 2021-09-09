@@ -158,6 +158,10 @@ class TestPrepare(object):
                                                     'ceph.data_uuid': 'fake-uuid',
                                                     'ceph.data_device': '/dev/sdx'})
 
+    def test_invalid_osd_id_passed(self):
+        with pytest.raises(SystemExit):
+            lvm.prepare.Prepare(argv=['--osd-id', 'foo']).main()
+
 
 class TestActivate(object):
 
