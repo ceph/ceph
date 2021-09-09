@@ -444,6 +444,9 @@ public:
     return get_state_gid(it->second);
   }
 
+  auto get_gid(mds_rank_t r) const {
+    return up.at(r);
+  }
   const auto& get_info(mds_rank_t m) const {
     return mds_info.at(up.at(m));
   }
