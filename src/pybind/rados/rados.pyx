@@ -2056,6 +2056,8 @@ cdef class Watch(object):
         return False
 
     def __dealloc__(self):
+        if self.id == 0:
+            return
         self.ioctx.rados.require_state("connected")
         self.close()
 
