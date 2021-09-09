@@ -572,20 +572,33 @@ static int get_key_pool_stat(const string& key, uint64_t* pool_id)
 }
 
 #ifdef HAVE_LIBZBD
-static void get_zone_offset_key(uint32_t zone, uint64_t offset, std::string *key)
+static void get_zone_offset_object_key(
+  uint32_t zone,
+  uint64_t offset,
+  ghobject_t oid,
+  std::string *key)
 {
   key->clear();
   _key_encode_u32(zone, key);
   _key_encode_u64(offset, key);
+  _get_object_key(oid, key);
 }
 
-static int get_key_zone_offset(const string& key, uint32_t *zone, uint64_t *offset)
+static int get_key_zone_offset_object(
+  const string& key,
+  uint32_t *zone,
+  uint64_t *offset,
+  ghobject_t *oid)
 {
   const char *p = key.c_str();
   if (key.length() < sizeof(uint64_t) + sizeof(uint32_t) + ENCODED_KEY_PREFIX_LEN + 1)
     return -1;
-  _key_decode_u32(p, zone);
-  _key_decode_u64(p, offset);
+  p = _key_decode_u32(p, zone);
+  p = _key_decode_u64(p, offset);
+  int r = _get_key_object(p, oid);
+  if (r < 0) {
+    return r;
+  }
   return 0;
 }
 #endif
@@ -12124,9 +12137,10 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
     for (auto& i : txc->old_zone_offset_refs) {
       for (auto& j : i.second) {
 	dout(20) << __func__ << " rm ref zone 0x" << std::hex << j.first
-		 << " offset 0x" << j.second << std::dec << dendl;
+		 << " offset 0x" << j.second << std::dec
+		 << " -> " << i.first->oid << dendl;
 	string key;
-	get_zone_offset_key(j.first, j.second, &key);
+	get_zone_offset_object_key(j.first, j.second, i.first->oid, &key);
 	txc->t->rmkey(PREFIX_ZONED_CL_INFO, key);
       }
     }
@@ -12137,9 +12151,8 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 		 << " offset 0x" << j.second << std::dec
 		 << " -> " << i.first->oid << dendl;
 	string key;
-	get_zone_offset_key(j.first, j.second, &key);
+	get_zone_offset_object_key(j.first, j.second, i.first->oid, &key);
 	bufferlist v;
-	encode(i.first->oid, v);
 	txc->t->set(PREFIX_ZONED_CL_INFO, key, v);
       }
     }
