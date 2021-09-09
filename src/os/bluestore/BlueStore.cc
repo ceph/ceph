@@ -5606,8 +5606,7 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
 	derr << __func__ << " zone 0x" << std::hex << i
 	     << " bluestore write pointer 0x" << zones[i].write_pointer
 	     << " > device write pointer 0x" << p
-	     << std::dec << dendl;
-	ceph_abort("bad write pointer");
+	     << std::dec << " -- VERY SUSPICIOUS!" << dendl;
       } else if (zones[i].write_pointer < p) {
 	// this is "normal" in that it can happen after any crash (if we have a
 	// write in flight but did not manage to commit the transaction)
@@ -8720,6 +8719,30 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     dout(1) << __func__ << " debug abort" << dendl;
     goto out_scan;
   }
+
+#ifdef HAVE_LIBZBD
+  if (bdev->is_smr()) {
+    auto a = dynamic_cast<ZonedAllocator*>(shared_alloc.a);
+    ceph_assert(a);
+    auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+    ceph_assert(f);
+    vector<uint64_t> wp = bdev->get_zones();
+    vector<zone_state_t> zones = f->get_zone_states(db);
+    ceph_assert(wp.size() == zones.size());
+    auto num_zones = bdev->get_size() / zone_size;
+    for (unsigned i = first_sequential_zone; i < num_zones; ++i) {
+      uint64_t p = wp[i] == (i + 1) * zone_size ? zone_size : wp[i] % zone_size;
+      if (zones[i].write_pointer > p) {
+	derr << "fsck error: zone 0x" << std::hex << i
+	     << " bluestore write pointer 0x" << zones[i].write_pointer
+	     << " > device write pointer 0x" << p
+	     << std::dec << dendl;
+	++errors;
+      }
+    }
+  }
+#endif
+
   // walk PREFIX_OBJ
   {
     dout(1) << __func__ << " walking object keyspace" << dendl;
