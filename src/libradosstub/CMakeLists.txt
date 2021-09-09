@@ -1,9 +1,20 @@
+add_library(lrem_mod_db STATIC
+  mod/db/LRemDBCluster.cc
+  mod/db/LRemDBIoCtxImpl.cc
+  mod/db/LRemDBRadosClient.cc)
+target_include_directories(lrem_mod_db PUBLIC "${CMAKE_SOURCE_DIR}/src/libradosstub")
+ 
+add_library(lrem_mod_mem STATIC
+  mod/mem/LRemMemCluster.cc
+  mod/mem/LRemMemIoCtxImpl.cc
+  mod/mem/LRemMemRadosClient.cc)
+target_include_directories(lrem_mod_mem PUBLIC "${CMAKE_SOURCE_DIR}/src/libradosstub")
+target_link_libraries(lrem_mod_mem PRIVATE
+  lrem_mod_db)
+ 
 add_library(librados_stub_impl STATIC
   LRemClassHandler.cc
   LRemIoCtxImpl.cc
-  LRemMemCluster.cc
-  LRemMemIoCtxImpl.cc
-  LRemMemRadosClient.cc
   LRemRadosClient.cc
   LRemWatchNotify.cc)
 
@@ -34,5 +45,6 @@ if(ENABLE_SHARED)
 endif()
 target_link_libraries(librados_stub PRIVATE
   librados_stub_impl
+  lrem_mod_mem
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS} ${GSSAPI_LIBRARIES})
 install(TARGETS librados_stub DESTINATION ${CMAKE_INSTALL_LIBDIR})

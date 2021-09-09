@@ -17,7 +17,7 @@
 #include "LRemClassHandler.h"
 #include "LRemIoCtxImpl.h"
 #include "LRemRadosClient.h"
-#include "LRemMemCluster.h"
+#include "mod/mem/LRemMemCluster.h"
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
 #include <arpa/inet.h>
