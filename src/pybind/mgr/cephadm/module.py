@@ -2264,8 +2264,10 @@ Then run the following:
             deps = [d.name() for d in daemons if d.daemon_type == 'haproxy']
         elif daemon_type == 'agent':
             root_cert = ''
-            if self.cherrypy_thread and self.cherrypy_thread.ssl_certs.root_cert:
+            try:
                 root_cert = self.cherrypy_thread.ssl_certs.get_root_cert()
+            except Exception:
+                pass
             deps = sorted([self.get_mgr_ip(), str(self.endpoint_port), root_cert,
                           str(self.get_module_option('device_enhanced_scan'))])
         else:
