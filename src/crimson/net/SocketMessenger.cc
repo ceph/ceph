@@ -78,14 +78,6 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
 }
 
 SocketMessenger::bind_ertr::future<>
-SocketMessenger::bind(const entity_addrvec_t& addrs)
-{
-  return do_bind(addrs).safe_then([this] {
-    logger().info("{} bind: done", *this);
-  });
-}
-
-SocketMessenger::bind_ertr::future<>
 SocketMessenger::try_bind(const entity_addrvec_t& addrs,
                           uint32_t min_port, uint32_t max_port)
 {
@@ -126,6 +118,53 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
       } else if (e == std::errc::address_not_available) {
         return crimson::ct_error::address_not_available::make();
       }
+      ceph_abort();
+    });
+  });
+}
+
+SocketMessenger::bind_ertr::future<>
+SocketMessenger::bind(const entity_addrvec_t& addrs)
+{
+  using crimson::common::local_conf;
+  return seastar::do_with(int64_t{local_conf()->ms_bind_retry_count},
+                          [this, &addrs] (auto& count) {
+    return seastar::repeat_until_value([this, &addrs, &count] {
+      assert(count >= 0);
+      return try_bind(addrs,
+                      local_conf()->ms_bind_port_min,
+                      local_conf()->ms_bind_port_max)
+      .safe_then([this] {
+        logger().info("{} try_bind: done", *this);
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::make_optional<std::error_code>(std::error_code{/* success! */}));
+      }, bind_ertr::all_same_way([this, &count] (const std::error_code error) {
+        if (count-- > 0) {
+	  logger().info("{} was unable to bind. Trying again in {} seconds",
+                        *this, local_conf()->ms_bind_retry_delay);
+          return seastar::sleep(
+            std::chrono::seconds(local_conf()->ms_bind_retry_delay)
+          ).then([] {
+            // one more time, please
+            return seastar::make_ready_future<std::optional<std::error_code>>(
+              std::optional<std::error_code>{std::nullopt});
+          });
+        } else {
+          logger().info("{} was unable to bind after {} attempts: {}",
+                        *this, local_conf()->ms_bind_retry_count, error);
+          return seastar::make_ready_future<std::optional<std::error_code>>(
+            std::make_optional<std::error_code>(error));
+        }
+      }));
+    }).then([] (const std::error_code error) -> bind_ertr::future<> {
+      if (!error) {
+        return bind_ertr::now(); // success!
+      } else if (error == std::errc::address_in_use) {
+        return crimson::ct_error::address_in_use::make();
+      } else if (error == std::errc::address_not_available) {
+        return crimson::ct_error::address_not_available::make();
+      }
+      ceph_abort();
     });
   });
 }
