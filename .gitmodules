@@ -70,6 +70,9 @@
 	path = src/jaegertracing/jaeger-client-cpp
 	url = https://github.com/ceph/jaeger-client-cpp.git
 	branch = hunter-disabled
+[submodule "src/cpp_redis"]
+	path = src/cpp_redis
+	url = https://github.com/alimaredia/cpp_redis.git
 [submodule "src/libkmip"]
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
