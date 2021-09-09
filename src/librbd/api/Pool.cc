@@ -252,11 +252,8 @@ int Pool<I>::init(librados::IoCtx& io_ctx, bool force) {
     return 0;
   }
 
-  AsioEngine asio_engine(io_ctx);
-
   C_SaferCond ctx;
-  auto req = image::ValidatePoolRequest<I>::create(
-    io_ctx, asio_engine.get_work_queue(), &ctx);
+  auto req = image::ValidatePoolRequest<I>::create(io_ctx, &ctx);
   req->send();
 
   return ctx.wait();
