@@ -102,27 +102,29 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
       auto to_bind = addr;
       to_bind.set_port(port);
       return do_listen(entity_addrvec_t{to_bind}
-      ).safe_then([this] () -> seastar::future<std::optional<bool>> {
+      ).safe_then([this] () -> seastar::future<std::optional<std::error_code>> {
         logger().info("{} try_bind: done", *this);
-        return seastar::make_ready_future<std::optional<bool>>(
-            std::make_optional<bool>(true));
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::make_optional<std::error_code>(std::error_code{/* success! */}));
       }, listen_ertr::all_same_way([this, max_port, &port]
-                                 (const std::error_code& e) mutable
-                                 -> seastar::future<std::optional<bool>> {
-        assert(e == std::errc::address_in_use);
-        logger().trace("{} try_bind: {} already used", *this, port);
+                                   (const std::error_code& e) mutable
+                                   -> seastar::future<std::optional<std::error_code>> {
+        logger().trace("{} try_bind: {} got error {}", *this, port, e);
         if (port == max_port) {
-          return seastar::make_ready_future<std::optional<bool>>(
-              std::make_optional<bool>(false));
+          return seastar::make_ready_future<std::optional<std::error_code>>(
+            std::make_optional<std::error_code>(e));
         }
         ++port;
-        return seastar::make_ready_future<std::optional<bool>>();
+        return seastar::make_ready_future<std::optional<std::error_code>>(
+          std::optional<std::error_code>{std::nullopt});
       }));
-    }).then([] (bool success) -> bind_ertr::future<> {
-      if (success) {
-        return bind_ertr::now();
-      } else {
+    }).then([] (const std::error_code e) -> bind_ertr::future<> {
+      if (!e) {
+        return bind_ertr::now(); // success!
+      } else if (e == std::errc::address_in_use) {
         return crimson::ct_error::address_in_use::make();
+      } else if (e == std::errc::address_not_available) {
+        return crimson::ct_error::address_not_available::make();
       }
     });
   });
