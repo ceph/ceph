@@ -1060,30 +1060,84 @@ class TestMigrate(object):
             lambda osd_id, osd_fsid: devices)
 
 
-        m = migrate.Migrate(argv=[
+        argv = [
             '--osd-id', '2',
             '--osd-fsid', '55BD4219-16A7-4037-BC20-0F158EFCC83D',
             '--from', 'data', 'wal',
-            '--target', 'vgname/new_wal'])
-        m.parse_argv()
+            '--target', 'vgname/new_wal'
+        ]
+        m = migrate.Migrate(argv=argv)
+        m.args = m.make_parser('ceph-volume lvm migation', 'help').parse_args(argv)
         res_devices = m.get_source_devices(devices)
 
         assert 2 == len(res_devices)
         assert devices[0] == res_devices[0]
         assert devices[2] == res_devices[1]
 
-        m = migrate.Migrate(argv=[
+        argv = [
             '--osd-id', '2',
             '--osd-fsid', '55BD4219-16A7-4037-BC20-0F158EFCC83D',
             '--from', 'db', 'wal', 'data',
-            '--target', 'vgname/new_wal'])
-        m.parse_argv()
+            '--target', 'vgname/new_wal'
+        ]
+        m = migrate.Migrate(argv=argv)
+        m.args = m.make_parser('ceph-volume lvm migation', 'help').parse_args(argv)
         res_devices = m.get_source_devices(devices)
 
         assert 3 == len(res_devices)
         assert devices[0] == res_devices[0]
         assert devices[1] == res_devices[1]
         assert devices[2] == res_devices[2]
+
+
+    def test_migrate_without_args(self, capsys):
+        help_msg = """
+Moves BlueFS data from source volume(s) to the target one, source
+volumes (except the main (i.e. data or block) one) are removed on
+success. LVM volumes are permitted for Target only, both already
+attached or new logical one. In the latter case it is attached to OSD
+replacing one of the source devices. Following replacement rules apply
+(in the order of precedence, stop on the first match):
+* if source list has DB volume - target device replaces it.
+* if source list has WAL volume - target device replace it.
+* if source list has slow volume only - operation is not permitted,
+  requires explicit allocation via new-db/new-wal command.
+
+Example calls for supported scenarios:
+
+  Moves BlueFS data from main device to LV already attached as DB:
+
+    ceph-volume lvm migrate --osd-id 1 --osd-fsid <uuid> --from data --target vgname/db
+
+  Moves BlueFS data from shared main device to LV which will be attached
+   as a new DB:
+
+    ceph-volume lvm migrate --osd-id 1 --osd-fsid <uuid> --from data --target vgname/new_db
+
+  Moves BlueFS data from DB device to new LV, DB is replaced:
+
+    ceph-volume lvm migrate --osd-id 1 --osd-fsid <uuid> --from db --target vgname/new_db
+
+  Moves BlueFS data from main and DB devices to new LV, DB is replaced:
+
+    ceph-volume lvm migrate --osd-id 1 --osd-fsid <uuid> --from data db --target vgname/new_db
+
+  Moves BlueFS data from main, DB and WAL devices to new LV, WAL is
+   removed and DB is replaced:
+
+    ceph-volume lvm migrate --osd-id 1 --osd-fsid <uuid> --from data db wal --target vgname/new_db
+
+  Moves BlueFS data from main, DB and WAL devices to main device, WAL
+   and DB are removed:
+
+    ceph-volume lvm migrate --osd-id 1 --osd-fsid <uuid> --from db wal --target vgname/data
+
+"""
+        m = migrate.Migrate(argv=[])
+        m.main()
+        stdout, stderr = capsys.readouterr()
+        assert help_msg in stdout
+        assert not stderr
 
 
     @patch('os.getuid')
