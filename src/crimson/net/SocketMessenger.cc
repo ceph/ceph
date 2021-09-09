@@ -88,7 +88,11 @@ SocketMessenger::bind_ertr::future<>
 SocketMessenger::try_bind(const entity_addrvec_t& addrs,
                           uint32_t min_port, uint32_t max_port)
 {
-  auto addr = addrs.front();
+  // the classical OSD iterates over the addrvec and tries to listen on each
+  // addr. crimson doesn't need to follow as there is a consensus we need to
+  // worry only about proto v2.
+  assert(addrs.size() == 1);
+  auto addr = addrs.msgr2_addr();
   if (addr.get_port() != 0) {
     return do_bind(addrs).safe_then([this] {
       logger().info("{} try_bind: done", *this);
