@@ -612,6 +612,7 @@ private:
 template <typename InterruptCond, typename Errorator>
 struct interruptible_errorator {
   using base_ertr = Errorator;
+  using intr_cond_t = InterruptCond;
 
   template <typename ValueT = void>
   using future = interruptible_future_detail<InterruptCond,
@@ -659,6 +660,9 @@ class [[nodiscard]] interruptible_future_detail<
 public:
   using core_type = ErroratedFuture<crimson::errorated_future_marker<T>>;
   using errorator_type = typename core_type::errorator_type;
+  using interrupt_errorator_type =
+    interruptible_errorator<InterruptCond, errorator_type>;
+  using interrupt_cond_type = InterruptCond;
 
   template <typename U>
   using interrupt_futurize_t =

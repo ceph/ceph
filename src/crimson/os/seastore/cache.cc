@@ -593,11 +593,13 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
   extents.replace(*next, *prev);
 
   if (prev->get_type() == extent_types_t::ROOT) {
-    assert(prev->primary_ref_list_hook.is_linked());
-    assert(prev->is_dirty());
-    stats.dirty_bytes -= prev->get_length();
-    dirty.erase(dirty.s_iterator_to(*prev));
-    intrusive_ptr_release(&*prev);
+    assert(prev->is_clean()
+      || prev->primary_ref_list_hook.is_linked());
+    if (prev->is_dirty()) {
+      stats.dirty_bytes -= prev->get_length();
+      dirty.erase(dirty.s_iterator_to(*prev));
+      intrusive_ptr_release(&*prev);
+    }
     add_to_dirty(next);
   } else if (prev->is_dirty()) {
     assert(prev->get_dirty_from() == next->get_dirty_from());
@@ -660,6 +662,7 @@ void Cache::invalidate(Transaction& t, CachedExtent& conflicting_extent)
       if (!i->is_valid()) {
         continue;
       }
+      DEBUGT("was mutating extent: {}", t, *i);
       efforts.mutate.increment(i->get_length());
       efforts.mutate_delta_bytes += i->get_delta().length();
     }
@@ -710,7 +713,8 @@ void Cache::on_transaction_destruct(Transaction& t)
 CachedExtentRef Cache::alloc_new_extent_by_type(
   Transaction &t,       ///< [in, out] current transaction
   extent_types_t type,  ///< [in] type tag
-  segment_off_t length  ///< [in] length
+  segment_off_t length, ///< [in] length
+  bool delay 		///< [in] whether to delay paddr alloc
 )
 {
   switch (type) {
@@ -718,26 +722,26 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
     assert(0 == "ROOT is never directly alloc'd");
     return CachedExtentRef();
   case extent_types_t::LADDR_INTERNAL:
-    return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length);
+    return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length, delay);
   case extent_types_t::LADDR_LEAF:
-    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length);
+    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length, delay);
   case extent_types_t::ONODE_BLOCK_STAGED:
-    return alloc_new_extent<onode::SeastoreNodeExtent>(t, length);
+    return alloc_new_extent<onode::SeastoreNodeExtent>(t, length, delay);
   case extent_types_t::OMAP_INNER:
-    return alloc_new_extent<omap_manager::OMapInnerNode>(t, length);
+    return alloc_new_extent<omap_manager::OMapInnerNode>(t, length, delay);
   case extent_types_t::OMAP_LEAF:
-    return alloc_new_extent<omap_manager::OMapLeafNode>(t, length);
+    return alloc_new_extent<omap_manager::OMapLeafNode>(t, length, delay);
   case extent_types_t::COLL_BLOCK:
-    return alloc_new_extent<collection_manager::CollectionNode>(t, length);
+    return alloc_new_extent<collection_manager::CollectionNode>(t, length, delay);
   case extent_types_t::OBJECT_DATA_BLOCK:
-    return alloc_new_extent<ObjectDataBlock>(t, length);
+    return alloc_new_extent<ObjectDataBlock>(t, length, delay);
   case extent_types_t::RETIRED_PLACEHOLDER:
     ceph_assert(0 == "impossible");
     return CachedExtentRef();
   case extent_types_t::TEST_BLOCK:
-    return alloc_new_extent<TestBlock>(t, length);
+    return alloc_new_extent<TestBlock>(t, length, delay);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
-    return alloc_new_extent<TestBlockPhysical>(t, length);
+    return alloc_new_extent<TestBlockPhysical>(t, length, delay);
   case extent_types_t::NONE: {
     ceph_assert(0 == "NONE is an invalid extent type");
     return CachedExtentRef();
@@ -801,7 +805,10 @@ record_t Cache::prepare_record(Transaction &t)
 
   // Should be valid due to interruptible future
   for (auto &i: t.read_set) {
-    assert(i.ref->is_valid());
+    if (!i.ref->is_valid()) {
+      DEBUGT("read_set invalid extent: {}, aborting", t, *i.ref);
+      ceph_abort("no invalid extent allowed in transactions' read_set");
+    }
     get_by_ext(efforts.read_by_ext,
                i.ref->get_type()).increment(i.ref->get_length());
   }
@@ -879,6 +886,9 @@ record_t Cache::prepare_record(Transaction &t)
   record.extents.reserve(t.fresh_block_list.size());
   for (auto &i: t.fresh_block_list) {
     DEBUGT("fresh block {}", t, *i);
+    if (!i->is_inline()) {
+      continue;
+    }
     get_by_ext(efforts.fresh_by_ext,
                i->get_type()).increment(i->get_length());
     bufferlist bl;
@@ -911,7 +921,9 @@ void Cache::complete_commit(
   DEBUGT("enter", t);
 
   for (auto &i: t.fresh_block_list) {
-    i->set_paddr(final_block_start.add_relative(i->get_paddr()));
+    if (i->is_inline()) {
+      i->set_paddr(final_block_start.add_relative(i->get_paddr()));
+    }
     i->last_committed_crc = i->get_crc32c();
     i->on_initial_write();
 
@@ -974,7 +986,7 @@ void Cache::init() {
     root = nullptr;
   }
   root = new RootBlock();
-  root->state = CachedExtent::extent_state_t::DIRTY;
+  root->state = CachedExtent::extent_state_t::CLEAN;
   add_extent(root);
 }
 
@@ -1016,6 +1028,7 @@ Cache::replay_delta(
     remove_extent(root);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
     root->dirty_from_or_retired_at = journal_seq;
+    root->state = CachedExtent::extent_state_t::DIRTY;
     add_extent(root);
     return replay_delta_ertr::now();
   } else {

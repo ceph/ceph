@@ -27,6 +27,7 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/extent_placement_manager.h"
 
 namespace crimson::os::seastore {
 class Journal;
@@ -69,7 +70,8 @@ public:
     SegmentCleanerRef segment_cleaner,
     JournalRef journal,
     CacheRef cache,
-    LBAManagerRef lba_manager);
+    LBAManagerRef lba_manager,
+    ExtentPlacementManagerRef&& epm);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -282,7 +284,7 @@ public:
     Transaction &t,
     laddr_t hint,
     extent_len_t len) {
-    auto ext = cache->alloc_new_extent<T>(
+    auto ext = epm->alloc_new_extent<T>(
       t,
       len);
     return lba_manager->alloc_extent(
@@ -290,10 +292,12 @@ public:
       hint,
       len,
       ext->get_paddr()
-    ).si_then([ext=std::move(ext), len, this](auto &&ref) mutable {
+    ).si_then([ext=std::move(ext), len, hint, &t, this](auto &&ref) mutable {
+      LOG_PREFIX(TransactionManager::alloc_extent);
       ext->set_pin(std::move(ref));
       stats.extents_allocated_total++;
       stats.extents_allocated_bytes += len;
+      DEBUGT("new extent: {}, hint: {}", t, *ext, hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
@@ -372,18 +376,6 @@ public:
     paddr_t addr,
     laddr_t laddr,
     segment_off_t len) final;
-
-  using scan_extents_cursor =
-    SegmentCleaner::ExtentCallbackInterface::scan_extents_cursor;
-  using scan_extents_ertr =
-    SegmentCleaner::ExtentCallbackInterface::scan_extents_ertr;
-  using scan_extents_ret =
-    SegmentCleaner::ExtentCallbackInterface::scan_extents_ret;
-  scan_extents_ret scan_extents(
-    scan_extents_cursor &cursor,
-    extent_len_t bytes_to_read) final {
-    return journal->scan_extents(cursor, bytes_to_read);
-  }
 
   using release_segment_ret =
     SegmentCleaner::ExtentCallbackInterface::release_segment_ret;
@@ -509,6 +501,7 @@ private:
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
+  ExtentPlacementManagerRef epm;
 
   WritePipeline write_pipeline;
 
@@ -523,6 +516,9 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
+  rewrite_extent_ret rewrite_logical_extent(
+    Transaction& t,
+    LogicalCachedExtentRef extent);
 public:
   // Testing interfaces
   auto get_segment_cleaner() {
