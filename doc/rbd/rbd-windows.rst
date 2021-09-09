@@ -142,10 +142,34 @@ initializes a partition::
 Limitations
 -----------
 
+CSV support
+~~~~~~~~~~~
+
 At the moment, the Microsoft Failover Cluster can't use WNBD disks as
 Cluster Shared Volumes (CSVs) underlying storage. The main reason is that
 ``WNBD`` and ``rbd-wnbd`` don't support the *SCSI Persistent Reservations*
 feature yet.
+
+Hyper-V disk addressing
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. warning::
+  Hyper-V identifies passthrough VM disks by number instead of SCSI ID, although
+  the disk number can change across host reboots. This means that the VMs can end
+  up using incorrect disks after rebooting the host, which is an important
+  security concern. This issue also affects iSCSI and Fibre Channel disks.
+
+There are a few possible ways of avoding this Hyper-V limitation:
+
+* use an NTFS/ReFS partition to store VHDX image files instead of directly
+  attaching the RBD image. This may slightly impact the IO performance.
+* use the Hyper-V ``AutomaticStartAction`` setting to prevent the VMs from
+  booting with the incorrect disks and have a script that updates VM disks
+  attachments before powering them back on. The ``ElementName`` field of the
+  `Msvm_StorageAllocationSettingData`_ `WMI`_ class may be used to label VM
+  disk attachments.
+* use the Openstack Hyper-V driver, which automatically refreshes the VM disk
+  attachments before powering them back on.
 
 Troubleshooting
 ===============
@@ -156,3 +180,5 @@ Please consult the `Windows troubleshooting`_ page.
 .. _installation guide: ../../install/windows-install
 .. _RBD basic commands: ../rados-rbd-cmds
 .. _WNBD driver: https://github.com/cloudbase/wnbd
+.. _Msvm_StorageAllocationSettingData: https://docs.microsoft.com/en-us/windows/win32/hyperv_v2/msvm-storageallocationsettingdata
+.. _WMI: https://docs.microsoft.com/en-us/windows/win32/wmisdk/wmi-start-page
