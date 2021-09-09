@@ -159,6 +159,9 @@ SegmentedAllocator::Writer::write(
                         write_iertr::now()
                 ).si_then([this]() mutable {
                   return roll_segment(false);
+                }).finally([this] {
+                  rolling_segment = false;
+                  segment_rotation_guard.broadcast();
                 });
               }
               add_extent_to_write(record, extent);
