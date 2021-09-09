@@ -12989,12 +12989,14 @@ void BlueStore::_kv_finalize_thread()
 void BlueStore::_zoned_cleaner_start()
 {
   dout(10) << __func__ << dendl;
+  return; // temporarily disable cleaner until it actually works
   zoned_cleaner_thread.create("bstore_zcleaner");
 }
 
 void BlueStore::_zoned_cleaner_stop()
 {
   dout(10) << __func__ << dendl;
+  return; // temporarily disable cleaner until it actually works
   {
     std::unique_lock l{zoned_cleaner_lock};
     while (!zoned_cleaner_started) {
@@ -13046,7 +13048,7 @@ void BlueStore::_zoned_cleaner_thread()
 
 void BlueStore::_zoned_clean_zone(uint64_t zone_num)
 {
-  dout(10) << __func__ << " cleaning zone " << zone_num << dendl;
+  dout(10) << __func__ << " cleaning zone 0x" << std::hex << zone_num << std::dec << dendl;
   // TODO: (1) copy live objects from zone_num to a new zone, (2) issue a RESET
   // ZONE operation to the device for the corresponding zone.
 }
