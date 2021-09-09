@@ -217,6 +217,10 @@ FixedCPUServerSocket::listen(entity_addr_t addr)
     if (e.code() == std::errc::address_in_use) {
       logger().trace("FixedCPUServerSocket::listen({}): address in use", addr);
       return crimson::ct_error::address_in_use::make();
+    } else if (e.code() == std::errc::address_not_available) {
+      logger().trace("FixedCPUServerSocket::listen({}): address not available",
+                     addr);
+      return crimson::ct_error::address_not_available::make();
     }
     logger().error("FixedCPUServerSocket::listen({}): "
                    "got unexpeted error {}", addr, e);

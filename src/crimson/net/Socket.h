@@ -161,7 +161,8 @@ class Socket
 };
 
 using listen_ertr = crimson::errorator<
-  crimson::ct_error::address_in_use // The address is already bound
+  crimson::ct_error::address_in_use, // The address is already bound
+  crimson::ct_error::address_not_available // https://techoverflow.net/2021/08/06/how-i-fixed-python-oserror-errno-99-cannot-assign-requested-address/
   >;
 
 class FixedCPUServerSocket

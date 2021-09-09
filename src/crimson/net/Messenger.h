@@ -63,7 +63,8 @@ public:
   }
 
   using bind_ertr = crimson::errorator<
-    crimson::ct_error::address_in_use // The address (range) is already bound
+    crimson::ct_error::address_in_use, // The address (range) is already bound
+    crimson::ct_error::address_not_available
     >;
   /// bind to the given address
   virtual bind_ertr::future<> bind(const entity_addrvec_t& addr) = 0;
