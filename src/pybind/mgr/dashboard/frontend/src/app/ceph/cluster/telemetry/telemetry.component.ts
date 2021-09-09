@@ -91,6 +91,9 @@ export class TelemetryComponent extends CdForm implements OnInit {
   private createPreviewForm() {
 
     const replacer = (key: string, value: any) => {
+      if (key === 'hello_world') {
+        return key;
+      }
       return value;
     }
 
