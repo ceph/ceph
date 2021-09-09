@@ -379,19 +379,11 @@ static const char *_key_decode_prefix(const char *p, ghobject_t *oid)
 
 #define ENCODED_KEY_PREFIX_LEN (1 + 8 + 4)
 
-template<typename S>
-static int get_key_object(const S& key, ghobject_t *oid)
+static int _get_key_object(const char *p, ghobject_t *oid)
 {
   int r;
-  const char *p = key.c_str();
-
-  if (key.length() < ENCODED_KEY_PREFIX_LEN)
-    return -1;
 
   p = _key_decode_prefix(p, oid);
-
-  if (key.length() == ENCODED_KEY_PREFIX_LEN)
-    return -2;
 
   r = decode_escaped(p, &oid->hobj.nspace);
   if (r < 0)
@@ -437,10 +429,19 @@ static int get_key_object(const S& key, ghobject_t *oid)
 }
 
 template<typename S>
-static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
+static int get_key_object(const S& key, ghobject_t *oid)
 {
-  key->clear();
+  if (key.length() < ENCODED_KEY_PREFIX_LEN)
+    return -1;
+  if (key.length() == ENCODED_KEY_PREFIX_LEN)
+    return -2;
+  const char *p = key.c_str();
+  return _get_key_object(p, oid);
+}
 
+template<typename S>
+static void _get_object_key(const ghobject_t& oid, S *key)
+{
   size_t max_len = ENCODED_KEY_PREFIX_LEN +
                   (oid.hobj.nspace.length() * 3 + 1) +
                   (oid.hobj.get_key().length() * 3 + 1) +
@@ -475,6 +476,13 @@ static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
   _key_encode_u64(oid.generation, key);
 
   key->push_back(ONODE_KEY_SUFFIX);
+}
+
+template<typename S>
+static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
+{
+  key->clear();
+  _get_object_key(oid, key);
 
   // sanity check
   if (true) {
