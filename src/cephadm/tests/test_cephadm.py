@@ -12,6 +12,7 @@ import threading
 import unittest
 
 from http.server import HTTPServer
+from textwrap import dedent
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
@@ -1464,11 +1465,9 @@ class TestCheckHost:
 
     @mock.patch('cephadm.find_executable', return_value='foo')
     def test_container_engine(self, find_executable):
-        cmd = ['check-host']
-
         ctx = cd.CephadmContext()
-        ctx.container_engine = None
 
+        ctx.container_engine = None
         err = r'No container engine binary found'
         with pytest.raises(cd.Error, match=err):
             cd.command_check_host(ctx)
@@ -1478,3 +1477,74 @@ class TestCheckHost:
 
         ctx.container_engine = mock_docker()
         cd.command_check_host(ctx)
+
+
+class TestRmRepo:
+
+    @pytest.mark.parametrize('os_release',
+        [
+            # Apt
+            dedent("""
+            NAME="Ubuntu"
+            VERSION="20.04 LTS (Focal Fossa)"
+            ID=ubuntu
+            ID_LIKE=debian
+            PRETTY_NAME="Ubuntu 20.04 LTS"
+            VERSION_ID="20.04"
+            HOME_URL="https://www.ubuntu.com/"
+            SUPPORT_URL="https://help.ubuntu.com/"
+            BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+            PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+            VERSION_CODENAME=focal
+            UBUNTU_CODENAME=focal
+            """),
+
+            # YumDnf
+            dedent("""
+            NAME="CentOS Linux"
+            VERSION="8 (Core)"
+            ID="centos"
+            ID_LIKE="rhel fedora"
+            VERSION_ID="8"
+            PLATFORM_ID="platform:el8"
+            PRETTY_NAME="CentOS Linux 8 (Core)"
+            ANSI_COLOR="0;31"
+            CPE_NAME="cpe:/o:centos:centos:8"
+            HOME_URL="https://www.centos.org/"
+            BUG_REPORT_URL="https://bugs.centos.org/"
+
+            CENTOS_MANTISBT_PROJECT="CentOS-8"
+            CENTOS_MANTISBT_PROJECT_VERSION="8"
+            REDHAT_SUPPORT_PRODUCT="centos"
+            REDHAT_SUPPORT_PRODUCT_VERSION="8"
+            """),
+
+            # Zypper
+            dedent("""
+            NAME="openSUSE Tumbleweed"
+            # VERSION="20210810"
+            ID="opensuse-tumbleweed"
+            ID_LIKE="opensuse suse"
+            VERSION_ID="20210810"
+            PRETTY_NAME="openSUSE Tumbleweed"
+            ANSI_COLOR="0;32"
+            CPE_NAME="cpe:/o:opensuse:tumbleweed:20210810"
+            BUG_REPORT_URL="https://bugs.opensuse.org"
+            HOME_URL="https://www.opensuse.org/"
+            DOCUMENTATION_URL="https://en.opensuse.org/Portal:Tumbleweed"
+            LOGO="distributor-logo"
+            """),
+        ])
+    @mock.patch('cephadm.find_executable', return_value='foo')
+    def test_container_engine(self, find_executable, os_release, cephadm_fs):
+        cephadm_fs.create_file('/etc/os-release', contents=os_release)
+        ctx = cd.CephadmContext()
+
+        ctx.container_engine = None
+        cd.command_rm_repo(ctx)
+
+        ctx.container_engine = mock_podman()
+        cd.command_rm_repo(ctx)
+
+        ctx.container_engine = mock_docker()
+        cd.command_rm_repo(ctx)
