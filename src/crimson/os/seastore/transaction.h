@@ -92,7 +92,7 @@ public:
     } else {
       ref->set_paddr(make_record_relative_paddr(offset));
       offset += ref->get_length();
-      fresh_block_list.push_back(ref);
+      inline_block_list.push_back(ref);
     }
     write_set.insert(*ref);
   }
@@ -101,7 +101,7 @@ public:
     write_set.erase(*ref);
     ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
-    fresh_block_list.push_back(ref);
+    inline_block_list.push_back(ref);
     write_set.insert(*ref);
   }
 
@@ -110,7 +110,7 @@ public:
     ref->set_paddr(final_addr);
     assert(!ref->get_paddr().is_null());
     assert(!ref->is_inline());
-    fresh_block_list.push_back(ref);
+    ool_block_list.push_back(ref);
     write_set.insert(*ref);
   }
 
@@ -152,10 +152,6 @@ public:
     return to_release;
   }
 
-  const auto &get_fresh_block_list() {
-    return fresh_block_list;
-  }
-
   auto& get_delayed_alloc_list() {
     return delayed_alloc_list;
   }
@@ -166,6 +162,16 @@ public:
 
   const auto &get_retired_set() {
     return retired_set;
+  }
+
+  template <typename F>
+  auto for_each_fresh_block(F &&f) {
+    std::for_each(ool_block_list.begin(), ool_block_list.end(), f);
+    std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
+  }
+
+  auto get_num_fresh_blocks() const {
+    return inline_block_list.size() + ool_block_list.size();
   }
 
   enum class src_t : uint8_t {
@@ -228,9 +234,10 @@ public:
     delayed_temp_offset = 0;
     read_set.clear();
     invalidate_clear_write_set();
-    fresh_block_list.clear();
     mutated_block_list.clear();
     delayed_alloc_list.clear();
+    inline_block_list.clear();
+    ool_block_list.clear();
     retired_set.clear();
     onode_tree_stats = {};
     lba_tree_stats = {};
@@ -278,16 +285,43 @@ private:
   segment_off_t offset = 0; ///< relative offset of next block
   segment_off_t delayed_temp_offset = 0;
 
+  /**
+   * read_set
+   *
+   * Holds a reference (with a refcount) to every extent read via *this.
+   * Submitting a transaction mutating any contained extent/addr will
+   * invalidate *this.
+   */
   read_set_t<Transaction> read_set; ///< set of extents read by paddr
-  ExtentIndex write_set;            ///< set of extents written by paddr
 
-  std::list<CachedExtentRef> fresh_block_list;   ///< list of fresh blocks
-  std::list<CachedExtentRef> mutated_block_list; ///< list of mutated blocks
-  ///< list of ool extents whose addresses are not
-  //   determine until transaction submission
+  /**
+   * write_set
+   *
+   * Contains a reference (without a refcount) to every extent mutated
+   * as part of *this.  No contained extent may be referenced outside
+   * of *this.  Every contained extent will be in one of inline_block_list,
+   * ool_block_list, mutated_block_list, or delayed_alloc_list.
+   */
+  ExtentIndex write_set;
+
+  /// list of fresh blocks, holds refcounts, subset of write_set
+  std::list<CachedExtentRef> inline_block_list;
+
+  /// list of fresh blocks, holds refcounts, subset of write_set
+  std::list<CachedExtentRef> ool_block_list;
+
+  /// extents with delayed allocation, may become inline or ool
   std::list<LogicalCachedExtentRef> delayed_alloc_list;
 
-  pextent_set_t retired_set; ///< list of extents mutated by this transaction
+  /// list of mutated blocks, holds refcounts, subset of write_set
+  std::list<CachedExtentRef> mutated_block_list;
+
+  /**
+   * retire_set
+   *
+   * Set of extents retired by *this.
+   */
+  pextent_set_t retired_set;
 
   tree_stats_t onode_tree_stats;
   tree_stats_t lba_tree_stats;
