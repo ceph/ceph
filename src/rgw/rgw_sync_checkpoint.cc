@@ -88,8 +88,8 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
                                   ceph::timespan retry_delay,
                                   ceph::coarse_mono_time timeout_at)
 {
-  const auto num_shards = source_bucket_info.layout.current_index.layout.normal.num_shards;
 
+  const int num_shards = remote_markers.get().size();
   rgw_bucket_sync_status full_status;
   int r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, null_yield);
   if (r < 0 && r != -ENOENT) { // retry on ENOENT
