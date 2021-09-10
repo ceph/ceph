@@ -5727,7 +5727,9 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
       store(store), sc(sc), env(sc->env), gen(gen),
       i(status->begin()), end(status->end())
   {
-    sync_pair.source_bs = rgw_bucket_shard(source_bucket_info.bucket, source_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? 0 : -1);
+    // This function doesn't need to know the remote shard count, but
+    // callers of read_bucket_inc_sync_status do
+    sync_pair.source_bs = rgw_bucket_shard(source_bucket_info.bucket, 0);
     sync_pair.dest_bucket = dest_bucket_info.bucket;
   }
 
