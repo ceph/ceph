@@ -562,6 +562,7 @@ public:
 
   void insert(CachedExtent &extent) {
     // sanity check
+    ceph_assert(!extent.parent_index);
     auto [a, b] = get_overlap(
       extent.get_paddr(),
       extent.get_length());
