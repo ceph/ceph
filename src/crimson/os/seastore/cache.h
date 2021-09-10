@@ -251,9 +251,13 @@ public:
     paddr_t offset,
     extent_types_t type) {
     CachedExtentRef ret;
+    LOG_PREFIX(Cache::get_extent_if_cached);
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
       // including get_extent_ret::RETIRED
+      DEBUGT(
+	"Found extent at offset {} on transaction: {}",
+	t, offset, *ret);
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>(ret);
     }
@@ -264,11 +268,17 @@ public:
     if (!ret ||
         // retired_placeholder is not really cached yet
         ret->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
+      DEBUGT(
+	"No extent at offset {}, retired_placeholder: {}",
+	t, offset, !!ret);
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>();
     }
 
     // present in cache and is not a retired_placeholder
+    DEBUGT(
+      "Found extent at offset {} in cache: {}",
+      t, offset, *ret);
     t.add_to_read_set(ret);
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
@@ -297,19 +307,25 @@ public:
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
       assert(result != Transaction::get_extent_ret::RETIRED);
+      DEBUGT(
+	"Found extent at offset {} on transaction: {}",
+	t, offset, *ret);
       return seastar::make_ready_future<TCachedExtentRef<T>>(
 	ret->cast<T>());
     } else {
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
 	get_extent<T>(offset, length, &metric_key)
-      ).si_then([this, FNAME, &t](auto ref) {
+      ).si_then([this, FNAME, offset, &t](auto ref) {
 	(void)this; // silence incorrect clang warning about capture
 	if (!ref->is_valid()) {
 	  DEBUGT("got invalid extent: {}", t, ref);
 	  invalidate(t, *ref);
 	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
 	} else {
+	  DEBUGT(
+	    "Found extent at offset {} in cache: {}",
+	    t, offset, *ref);
 	  t.add_to_read_set(ref);
 	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	    std::move(ref));
