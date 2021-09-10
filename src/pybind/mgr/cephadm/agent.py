@@ -172,7 +172,7 @@ class HostData:
             else:
                 # we got old counter value with message, inform agent of new timestamp
                 self.mgr.agent_helpers._request_agent_acks({host})
-                self.mgr.log.debug(
+                self.mgr.log.info(
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
 
             if 'ls' in data and data['ls']:
@@ -187,7 +187,7 @@ class HostData:
 
             if up_to_date:
                 self.mgr.cache.metadata_up_to_date[host] = True
-                self.mgr.log.debug(
+                self.mgr.log.info(
                     f'Received up-to-date metadata from agent on host {host}.')
 
         except Exception as e:
@@ -205,6 +205,7 @@ class AgentMessageThread(threading.Thread):
         super(AgentMessageThread, self).__init__(target=self.run)
 
     def run(self) -> None:
+        self.mgr.log.info(f'Sending message to agent on host {self.host}')
         try:
             assert self.mgr.cherrypy_thread
             root_cert = self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
@@ -250,7 +251,7 @@ class AgentMessageThread(threading.Thread):
                 msg = (bytes_len + self.data)
                 secure_agent_socket.sendall(msg.encode('utf-8'))
                 agent_response = secure_agent_socket.recv(1024).decode()
-                self.mgr.log.debug(f'Received "{agent_response}" from agent on host {self.host}')
+                self.mgr.log.info(f'Received "{agent_response}" from agent on host {self.host}')
                 return
             except ConnectionError as e:
                 # if it's a connection error, possibly try to connect again.
