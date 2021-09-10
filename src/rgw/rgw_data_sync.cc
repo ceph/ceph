@@ -832,6 +832,42 @@ struct bucket_instance_meta_info {
   }
 };
 
+class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
+  RGWDataSyncCtx *sc;
+  RGWDataSyncEnv *sync_env;
+  const string instance_key;
+
+  rgw_bucket_index_marker_info *info;
+
+public:
+  RGWReadRemoteBucketIndexLogInfoCR(RGWDataSyncCtx *_sc,
+                                  const rgw_bucket& bucket,
+                                  rgw_bucket_index_marker_info *_info)
+    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
+      instance_key(bucket.get_key()), info(_info) {}
+
+  int operate(const DoutPrefixProvider *dpp) override {
+    reenter(this) {
+      yield {
+        rgw_http_param_pair pairs[] = { { "type" , "bucket-index" },
+	                                { "bucket-instance", instance_key.c_str() },
+					{ "info" , NULL },
+	                                { NULL, NULL } };
+
+        string p = "/admin/log/";
+        call(new RGWReadRESTResourceCR<rgw_bucket_index_marker_info>(sync_env->cct, sc->conn, sync_env->http_manager, p, pairs, info));
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+
+      return set_cr_done();
+    }
+    return 0;
+  }
+};
+
+
 class RGWListBucketIndexesCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
@@ -906,19 +942,38 @@ public:
 
             call(new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, &meta_info));
           }
+	  if (retcode < 0) {
+	    ldpp_dout(dpp, 0) << "ERROR: failed to fetch metadata for key: "
+			      << key << dendl;
+	    return set_cr_error(retcode);
+	  }
+	  yield {
+	    rgw_bucket_index_marker_info marker_info;
+	    BucketIndexShardsManager marker_mgr;
+	    auto& bucket = meta_info.data.get_bucket_info().bucket;
+	    call(new RGWReadRemoteBucketIndexLogInfoCR(sc, bucket,
+						       &marker_info));
+	    if (retcode < 0) {
+	      ldpp_dout(dpp, 0) << "ERROR: failed to fetch markers for bucket: "
+				<< bucket << dendl;
+	      return set_cr_error(retcode);
+	    }
+	    retcode = marker_mgr.from_string(marker_info.max_marker, -1);
+	    if (retcode < 0) {
+	      ldpp_dout(dpp, 0) << "ERROR: failed to decode markers for bucket: "
+				<< bucket << dendl;
+	      return set_cr_error(retcode);
+	    }
+	    num_shards = marker_mgr.get().size();
+	  }
 
-          num_shards = meta_info.data.get_bucket_info().layout.current_index.layout.normal.num_shards;
-          if (num_shards > 0) {
-            for (i = 0; i < num_shards; i++) {
-              char buf[16];
-              snprintf(buf, sizeof(buf), ":%d", i);
-              s = key + buf;
-              yield entries_index->append(s, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
-            }
-          } else {
-            yield entries_index->append(key, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
-          }
-        }
+	  for (i = 0; i < num_shards; i++) {
+	    char buf[16];
+	    snprintf(buf, sizeof(buf), ":%d", i);
+	    s = key + buf;
+	    yield entries_index->append(s, sync_env->svc->datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
+	  }
+	}
         truncated = result.truncated;
       } while (truncated);
 
@@ -2710,41 +2765,6 @@ string RGWDataSyncStatusManager::shard_obj_name(const rgw_zone_id& source_zone, 
 
   return string(buf);
 }
-
-class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
-  const string instance_key;
-
-  rgw_bucket_index_marker_info *info;
-
-public:
-  RGWReadRemoteBucketIndexLogInfoCR(RGWDataSyncCtx *_sc,
-                                  const rgw_bucket& bucket,
-                                  rgw_bucket_index_marker_info *_info)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      instance_key(bucket.get_key()), info(_info) {}
-
-  int operate(const DoutPrefixProvider *dpp) override {
-    reenter(this) {
-      yield {
-        rgw_http_param_pair pairs[] = { { "type" , "bucket-index" },
-	                                { "bucket-instance", instance_key.c_str() },
-					{ "info" , NULL },
-	                                { NULL, NULL } };
-
-        string p = "/admin/log/";
-        call(new RGWReadRESTResourceCR<rgw_bucket_index_marker_info>(sync_env->cct, sc->conn, sync_env->http_manager, p, pairs, info));
-      }
-      if (retcode < 0) {
-        return set_cr_error(retcode);
-      }
-
-      return set_cr_done();
-    }
-    return 0;
-  }
-};
 
 class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncCtx *sc;
