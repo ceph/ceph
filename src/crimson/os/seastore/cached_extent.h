@@ -550,14 +550,13 @@ public:
     );
   }
 
-  template <typename Disposer>
-  void clear_and_dispose(Disposer disposer) {
-    extent_index.clear_and_dispose(disposer);
-    bytes = 0;
-  }
-
   void clear() {
-    extent_index.clear();
+    struct cached_extent_disposer {
+      void operator() (CachedExtent* extent) {
+	extent->parent_index = nullptr;
+      }
+    };
+    extent_index.clear_and_dispose(cached_extent_disposer());
     bytes = 0;
   }
 

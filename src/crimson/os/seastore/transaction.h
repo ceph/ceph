@@ -24,12 +24,6 @@ class Transaction;
  * Representation of in-progress mutation. Used exclusively through Cache methods.
  */
 class Transaction {
-  struct cached_extent_disposer {
-    void operator() (CachedExtent* extent) {
-      extent->parent_index = nullptr;
-      extent->state = CachedExtent::extent_state_t::INVALID;
-    }
-  };
 public:
   using Ref = std::unique_ptr<Transaction>;
   using on_destruct_func_t = std::function<void(Transaction&)>;
@@ -213,10 +207,16 @@ public:
       src(src)
   {}
 
+  void invalidate_clear_write_set() {
+    for (auto &&i: write_set) {
+      i.state = CachedExtent::extent_state_t::INVALID;
+    }
+    write_set.clear();
+  }
 
   ~Transaction() {
     on_destruct(*this);
-    write_set.clear_and_dispose(cached_extent_disposer());
+    invalidate_clear_write_set();
   }
 
   friend class crimson::os::seastore::SeaStore;
@@ -227,7 +227,7 @@ public:
     offset = 0;
     delayed_temp_offset = 0;
     read_set.clear();
-    write_set.clear_and_dispose(cached_extent_disposer());
+    invalidate_clear_write_set();
     fresh_block_list.clear();
     mutated_block_list.clear();
     delayed_alloc_list.clear();
