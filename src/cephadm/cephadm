@@ -8466,7 +8466,13 @@ def main() -> None:
         # podman or docker?
         ctx.container_engine = find_container_engine(ctx)
         if ctx.func not in \
-                [command_check_host, command_prepare_host, command_add_repo, command_install]:
+                [
+                    command_check_host,
+                    command_prepare_host,
+                    command_add_repo,
+                    command_rm_repo,
+                    command_install
+                ]:
             check_container_engine(ctx)
         # command handler
         r = ctx.func(ctx)
