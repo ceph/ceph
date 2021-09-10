@@ -1567,7 +1567,7 @@ void CDir::fetch(std::string_view dname, snapid_t last,
 
   // FIXME: to fetch a snap dentry, we need to get omap key in range
   //       [(name, last), (name, CEPH_NOSNAP))
-  if (!dname.empty() && last == CEPH_NOSNAP) {
+  if (!dname.empty() && last == CEPH_NOSNAP && !g_conf().get_val<bool>("mds_dir_prefetch")) {
     dentry_key_t key(last, dname, inode->hash_dentry_name(dname));
     fetch_keys({key}, c);
     return;
@@ -1594,7 +1594,7 @@ void CDir::fetch(std::string_view dname, snapid_t last,
 
 void CDir::fetch_keys(const std::vector<dentry_key_t>& keys, MDSContext *c)
 {
-  dout(10) << "fetch " << keys.size() << " keys on " << *this << dendl;
+  dout(10) << __func__ << " " << keys.size() << " keys on " << *this << dendl;
   ceph_assert(is_auth());
   ceph_assert(!is_complete());
 
@@ -2132,7 +2132,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   for (auto p = omap.rbegin(); p != omap.rend(); ++p, --pos) {
     string_snap_t key;
     dentry_key_t::decode_helper(p->first, key.name, key.snapid);
-    bool touch;
+    bool touch = false;
 
     if (key.snapid == CEPH_NOSNAP) {
       if (complete) {
@@ -2141,8 +2141,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	touch = proc_nulls_and_waiters(p->first, key);
       }
       last_name = std::string_view(p->first.c_str(), key.name.length());
-    } else {
-      touch = false;
     }
 
     CDentry *dn = nullptr;

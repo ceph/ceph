@@ -5974,19 +5974,28 @@ bool MDCache::open_undef_inodes_dirfrags()
   map<CDir*, pair<bool, std::vector<dentry_key_t> > > fetch_queue;
   for (auto& dir : rejoin_undef_dirfrags) {
     ceph_assert(dir->get_version() == 0);
-    (void)fetch_queue[dir];
+    fetch_queue.emplace(std::piecewise_construct, std::make_tuple(dir), std::make_tuple());
   }
 
-  for (auto& in : rejoin_undef_inodes) {
-    assert(!in->is_base());
-    CDentry *dn = in->get_parent_dn();
-    auto& p = fetch_queue[dn->get_dir()];
-    if (dn->last != CEPH_NOSNAP) {
-      p.first = true;
-      p.second.clear();
-    } else if (!p.first) {
-      p.second.push_back(dn->key());
+  if (g_conf().get_val<bool>("mds_dir_prefetch")) {
+    for (auto& in : rejoin_undef_inodes) {
+      ceph_assert(!in->is_base());
+      ceph_assert(in->get_parent_dir());
+      fetch_queue.emplace(std::piecewise_construct, std::make_tuple(in->get_parent_dir()), std::make_tuple());
     }
+  } else {
+    for (auto& in : rejoin_undef_inodes) {
+      assert(!in->is_base());
+      CDentry *dn = in->get_parent_dn();
+      auto& p = fetch_queue[dn->get_dir()];
+
+      if (dn->last != CEPH_NOSNAP) {
+        p.first = true;
+        p.second.clear();
+      } else if (!p.first) {
+        p.second.push_back(dn->key());
+      }
+         }
   }
 
   if (fetch_queue.empty())
