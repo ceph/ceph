@@ -361,6 +361,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=4721,
             desc='First port agent will try to bind to (will also try up to next 1000 subsequent ports if blocked)'
         ),
+        Option(
+            'max_osd_draining_count',
+            type='int',
+            default=10,
+            desc='max number of osds that will be drained simultaneously when osds are removed'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -426,6 +432,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.endpoint_port = 0
             self.agent_starting_port = 0
             self.apply_spec_fails: List[Tuple[str, str]] = []
+            self.max_osd_draining_count = 10
 
         self.notify('mon_map', None)
         self.config_notify()
@@ -2591,7 +2598,8 @@ Then run the following:
     @handle_orch_error
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
-                    force: bool = False) -> str:
+                    force: bool = False,
+                    zap: bool = False) -> str:
         """
         Takes a list of OSDs and schedules them for removal.
         The function that takes care of the actual removal is
@@ -2612,6 +2620,7 @@ Then run the following:
                 self.to_remove_osds.enqueue(OSD(osd_id=int(daemon.daemon_id),
                                                 replace=replace,
                                                 force=force,
+                                                zap=zap,
                                                 hostname=daemon.hostname,
                                                 process_started_at=datetime_now(),
                                                 remove_util=self.to_remove_osds.rm_util))
